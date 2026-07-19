@@ -4,9 +4,7 @@
 }
 
 body.website-builder-editor-mode .editor-sections {
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 6px;
+  overflow: visible;
 }
 
 .editor-section {

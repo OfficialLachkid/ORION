@@ -32,6 +32,12 @@ import {
   setupPanoramaTopBarState,
   setupScrollReveal,
 } from './runtime/preview-motion.js';
+import {
+  setupPublishedReferenceFrame,
+  syncPublishedReferenceFrame,
+} from './runtime/published-reference-frame.js';
+import { setupPublishedReferencePreviews } from './runtime/published-reference-overview.js';
+import { createWebsiteAutosave } from './runtime/website-autosave.js';
 
 const initialSession = loadSession();
 const initialLibrary = loadLibrary();
@@ -96,6 +102,23 @@ const elements = {
 };
 
 let teardownPreviewMotion = () => {};
+let publishedReferenceFrame = null;
+let teardownOverviewReferenceFrames = () => {};
+
+const websiteAutosave = createWebsiteAutosave({
+  persist: (entry) => persistLibraryEntry('website', entry),
+  onPending: () => updateStatus('Saving website changes...'),
+  onSettled: (result, entry) => {
+    replaceLibrary(result.library, {
+      persistenceMode: result.persistenceMode,
+    });
+    updateStatus(
+      `Autosaved ${entry.title}. ${describePersistenceMode(result.persistenceMode)}`,
+      'success'
+    );
+  },
+  onError: () => updateStatus('Autosave failed. Your latest changes remain stored locally.'),
+});
 
 function isEditorView() {
   return state.workspaceView === 'editor';
@@ -119,6 +142,21 @@ function getCurrentSession() {
 
 function persistSessionState() {
   saveSession(getCurrentSession());
+}
+
+function stageCurrentWebsiteAutosave() {
+  if (state.recordKind !== 'website' || !state.recordId) {
+    persistSessionState();
+    updateStatus('Draft updated locally. Build or save the website before remote autosave can start.');
+    return null;
+  }
+
+  const result = saveEntryFromSession(state.library, getCurrentSession(), 'website');
+  replaceLibrary(result.library);
+  saveLibrary(result.library);
+  replaceSession(result.session);
+  websiteAutosave.schedule(result.entry);
+  return result;
 }
 
 function replaceSession(nextSession) {
@@ -234,7 +272,7 @@ function renderEntryMetaPanel() {
   elements.entryCompanyNameInput.value = state.companyName || '';
   elements.entrySummaryRow.hidden = true;
   elements.entrySourceNote.textContent = usesReferenceTemplate
-    ? 'This design is currently a reusable reference layout. Full field-level editing for this imported family is a separate import step.'
+    ? 'Edit text, images, and contact details here. The selected design keeps its layout, styling, cards, and animations locked.'
     : sourceDesign
       ? `Based on reusable design: ${sourceDesign.title}. Replace the mock copy with real company information before delivery.`
       : 'This is a company-specific website draft. Add real business details before delivery.';
@@ -264,9 +302,9 @@ function renderTemplateGrid() {
       state.draft = reseedDraftForTemplate(state.draft, templateId);
       state.activeTargetId = '';
       state.expandedSections = new Set();
-      persistSessionState();
+      stageCurrentWebsiteAutosave();
       renderAll({ resetPreviewScroll: true });
-      updateStatus(`Switched to ${getTemplateById(templateId).name}.`, 'success');
+      updateStatus(`Switched to ${getTemplateById(templateId).name}. Autosaving...`, 'success');
     });
   });
 }
@@ -279,9 +317,16 @@ function bindFieldEvents(container) {
     const handleChange = () => {
       const rawValue = input.type === 'checkbox' ? input.checked : input.value;
       state.draft = setValueByPath(state.draft, fieldPath, normalizeFieldValue(field, rawValue));
-      persistSessionState();
-      renderPreview();
-      updateStatus('Website draft updated locally. Save it to My websites when ready.');
+      stageCurrentWebsiteAutosave();
+      if (isReferenceTemplateDraft(state.draft)) {
+        syncPublishedReferenceFrame(
+          elements.previewRoot,
+          state.draft,
+          getTemplateById(state.draft.templateId)
+        );
+      } else {
+        renderPreview();
+      }
     };
 
     const handleFocus = () => {
@@ -298,11 +343,10 @@ function bindFieldEvents(container) {
 
     button.addEventListener('click', () => {
       state.draft = setValueByPath(state.draft, fieldPath, button.dataset.positionValue || 'center');
-      persistSessionState();
+      stageCurrentWebsiteAutosave();
       renderPreview();
       renderEditor();
       handleEditorSelection(fieldPath);
-      updateStatus('Website draft updated locally. Save it to My websites when ready.');
     });
 
     button.addEventListener('focus', () => {
@@ -357,6 +401,8 @@ function renderEditor() {
 }
 
 function renderPreview({ resetScroll = false } = {}) {
+  publishedReferenceFrame?.teardown();
+  publishedReferenceFrame = null;
   elements.previewShell.className = `preview-shell viewport-${state.viewport}`;
   elements.previewRoot.dataset.templateId = state.draft.templateId;
   elements.previewRoot.style.setProperty('--theme-background', state.draft.theme.backgroundColor);
@@ -365,6 +411,13 @@ function renderPreview({ resetScroll = false } = {}) {
   elements.previewRoot.style.setProperty('--theme-text', state.draft.theme.textColor);
   elements.previewRoot.style.setProperty('--theme-panel', state.draft.theme.panelColor);
   elements.previewRoot.innerHTML = renderTemplate(state.draft);
+
+  publishedReferenceFrame = setupPublishedReferenceFrame(
+    elements.previewRoot,
+    state.draft,
+    getTemplateById(state.draft.templateId),
+    { onSelect: (path) => handlePreviewSelection(path) }
+  );
 
   bindPreviewEvents();
   teardownPreviewMotion();
@@ -523,6 +576,9 @@ async function buildSelectedDesign() {
 }
 
 function renderOverview() {
+  teardownOverviewReferenceFrames();
+  teardownOverviewReferenceFrames = () => {};
+
   if (isEditorView()) {
     return;
   }
@@ -536,6 +592,11 @@ function renderOverview() {
       renderTemplate,
       getTemplateName: (templateId) => getTemplateById(templateId).name,
     });
+    teardownOverviewReferenceFrames = setupPublishedReferencePreviews(
+      elements.overviewGrid,
+      entries,
+      getTemplateById
+    );
 
     elements.overviewGrid.querySelectorAll('[data-build-action]').forEach((button) => {
       const entryId = button.dataset.entryId || '';
@@ -571,6 +632,11 @@ function renderOverview() {
     getTemplateName: (templateId) => getTemplateById(templateId).name,
     getSourceDesignTitle: (designId) => getDesignById(designId)?.title || '',
   });
+  teardownOverviewReferenceFrames = setupPublishedReferencePreviews(
+    elements.overviewGrid,
+    entries,
+    getTemplateById
+  );
 
   elements.overviewGrid.querySelectorAll('[data-card-action]').forEach((button) => {
     const entryId = button.dataset.entryId || '';
@@ -635,9 +701,9 @@ function importDraft(file) {
       state.draft = hydrateDraft(parsed);
       state.activeTargetId = '';
       state.expandedSections = new Set();
-      persistSessionState();
+      stageCurrentWebsiteAutosave();
       renderAll({ resetPreviewScroll: true });
-      updateStatus('Draft imported into the current website session.', 'success');
+      updateStatus('Draft imported into the current website session. Autosaving...', 'success');
     } catch {
       updateStatus('Import failed. The selected file is not valid Website Builder JSON.');
     }
@@ -693,6 +759,9 @@ function handleEditorSelection(targetId) {
   }
 
   activateTarget(targetId);
+  if (publishedReferenceFrame?.navigate(targetId)) {
+    return;
+  }
   scrollPreviewNodeIntoView(findPreviewNode(targetId));
 }
 
@@ -758,17 +827,9 @@ async function saveCurrentWebsite() {
   saveLibrary(state.library);
   replaceSession(result.session);
   renderAll();
-  updateStatus(`Saved ${result.entry.title} to My websites. Syncing the latest draft...`, 'success');
-
-  const persistenceResult = await persistLibraryEntry('website', result.entry);
-  replaceLibrary(persistenceResult.library, {
-    persistenceMode: persistenceResult.persistenceMode,
-  });
-  renderAll();
-  updateStatus(
-    `Saved ${result.entry.title} to My websites. ${describePersistenceMode(persistenceResult.persistenceMode)}`,
-    'success'
-  );
+  websiteAutosave.schedule(result.entry);
+  updateStatus(`Saving ${result.entry.title} to My websites...`);
+  await websiteAutosave.flush();
 }
 
 async function syncLibraryFromPersistence() {
@@ -789,19 +850,19 @@ function bindWorkspaceEvents() {
 
   elements.entryTitleInput.addEventListener('input', () => {
     state.entryTitle = elements.entryTitleInput.value.trim();
-    persistSessionState();
+    stageCurrentWebsiteAutosave();
     renderTopbar();
   });
 
   elements.entryCompanyNameInput.addEventListener('input', () => {
     state.companyName = elements.entryCompanyNameInput.value.trim();
-    persistSessionState();
+    stageCurrentWebsiteAutosave();
     renderTopbar();
   });
 
   elements.entrySummaryInput.addEventListener('input', () => {
     state.summary = elements.entrySummaryInput.value.trim();
-    persistSessionState();
+    stageCurrentWebsiteAutosave();
   });
 
   elements.saveWebsiteButton.addEventListener('click', () => {
@@ -816,8 +877,9 @@ function bindWorkspaceEvents() {
     replaceSession(resetSession(getCurrentSession()));
     state.activeTargetId = '';
     state.expandedSections = new Set();
+    stageCurrentWebsiteAutosave();
     renderAll({ resetPreviewScroll: true });
-    updateStatus('Reset the current website session to its template seed.', 'success');
+    updateStatus('Reset the current website session to its template seed. Autosaving...', 'success');
   });
 
   elements.exportDraftButton.addEventListener('click', exportDraft);
@@ -840,6 +902,8 @@ function renderAll({ resetPreviewScroll = false } = {}) {
   renderLayoutVisibility();
 
   if (isEditorView()) {
+    teardownOverviewReferenceFrames();
+    teardownOverviewReferenceFrames = () => {};
     renderEntryMetaPanel();
     renderTemplateGrid();
     renderEditor();

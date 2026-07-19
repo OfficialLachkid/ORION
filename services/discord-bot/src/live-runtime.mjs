@@ -892,7 +892,8 @@ export async function runLiveDiscordBot(config) {
               decision: result.decision.decision,
               actor: actorName,
             });
-            pendingApprovalTask = pendingTasks.get(result.decision.taskId);
+            pendingApprovalTask = pendingTasks.get(result.decision.taskId)
+              || findPersistedPendingTask(config, result.decision.taskId);
             const approvalWaitMs = computeElapsedMs(pendingApprovalTask?.submitted_at);
             safeRecordMetric('approval_button_resolution', {
               taskId: result.decision.taskId,
@@ -1109,7 +1110,8 @@ export async function runLiveDiscordBot(config) {
               decision: result.decision.decision,
               actor: actorName,
             });
-            pendingApprovalTask = pendingTasks.get(result.decision.taskId);
+            pendingApprovalTask = pendingTasks.get(result.decision.taskId)
+              || findPersistedPendingTask(config, result.decision.taskId);
             const approvalWaitMs = computeElapsedMs(pendingApprovalTask?.submitted_at);
             safeRecordMetric('approval_text_resolution', {
               taskId: result.decision.taskId,

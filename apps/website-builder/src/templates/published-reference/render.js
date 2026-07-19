@@ -16,14 +16,52 @@ function normalizeUrl(value) {
   return url || 'about:blank';
 }
 
+const LOCAL_PREVIEW_PATHS = [
+  '/ruflo/sites/vink-elektrotechniek/',
+  '/ruflo/sites/newman-partners-v2/',
+  '/ruflo/sites/vbj-services/',
+];
+
+function shouldUseLocalPreviews(location = globalThis.location) {
+  const hostname = location?.hostname || '';
+  if (!['localhost', '127.0.0.1'].includes(hostname)) {
+    return false;
+  }
+
+  return location?.port === '4173'
+    || new URLSearchParams(location?.search || '').get('localPreviews') === '1';
+}
+
+export function resolvePublishedPreviewUrl(value, location = globalThis.location) {
+  const previewUrl = normalizeUrl(value);
+  if (!shouldUseLocalPreviews(location)) {
+    return previewUrl;
+  }
+
+  try {
+    const parsed = new URL(previewUrl);
+    if (
+      parsed.hostname === 'officiallachkid.github.io'
+      && LOCAL_PREVIEW_PATHS.some((path) => parsed.pathname.startsWith(path))
+    ) {
+      return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+  } catch {
+    return previewUrl;
+  }
+
+  return previewUrl;
+}
+
 export function renderPublishedReferenceTemplate(draft) {
   const reference = draft?.reference || {};
   const title = normalizeText(draft?.site?.title) || 'Imported reference layout';
   const subtitle = normalizeText(draft?.site?.subtitle);
-  const previewUrl = normalizeUrl(reference.previewUrl);
+  const sourcePreviewUrl = normalizeUrl(reference.previewUrl);
+  const previewUrl = resolvePublishedPreviewUrl(sourcePreviewUrl);
   const sourceLabel = normalizeText(reference.sourceLabel);
   const previewNote = normalizeText(reference.previewNote)
-    || 'Reference preview only. Template-specific field editing comes next.';
+    || 'Edit content from the left panel. Layout, styling, and motion remain locked to this design.';
 
   return `
     <section
@@ -46,6 +84,7 @@ export function renderPublishedReferenceTemplate(draft) {
         <iframe
           class="reference-preview-frame"
           src="${escapeHtml(previewUrl)}"
+          data-fallback-src="${escapeHtml(sourcePreviewUrl)}"
           title="${escapeHtml(title)}"
           loading="lazy"
           referrerpolicy="no-referrer-when-downgrade"

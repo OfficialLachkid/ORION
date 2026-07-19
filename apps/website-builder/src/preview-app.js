@@ -6,6 +6,8 @@ import {
   setupScrollReveal,
   setupStandalonePreviewNavigation,
 } from './runtime/preview-motion.js';
+import { setupPublishedReferenceFrame } from './runtime/published-reference-frame.js';
+import { getTemplateById } from './schema.js';
 
 const root = document.getElementById('standalone-preview-root');
 
@@ -64,6 +66,7 @@ async function initializePreview() {
   root.className = 'preview-root standalone-preview-root';
   root.dataset.templateId = draft.templateId;
   root.innerHTML = renderTemplate(draft);
+  setupPublishedReferenceFrame(root, draft, getTemplateById(draft.templateId));
   setupScrollReveal(root, null);
   setupPanoramaTopBarState(root, null);
   setupStandalonePreviewNavigation(root, null);
