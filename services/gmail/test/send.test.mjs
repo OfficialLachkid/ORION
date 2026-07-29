@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGmailDraft, getGmailDraft, sendGmailMessage } from '../src/send.mjs';
+import { createGmailDraft, getGmailDraft, listGmailDraftsSummary, sendGmailMessage } from '../src/send.mjs';
 
 function baseConfig(overrides = {}) {
   return {
@@ -142,6 +142,42 @@ test('getGmailDraft extracts subject and text/plain body from a multipart Gmail 
   assert.equal(result.subject, 'uw website');
   assert.equal(result.bodyText, bodyText);
   assert.ok(result.bodyPreview.startsWith('Beste Acme, Uw website'));
+});
+
+test('listGmailDraftsSummary lists ids then fetches metadata per draft, normalising the To header', async () => {
+  const listPayload = { drafts: [{ id: 'd-alpha' }, { id: 'd-beta' }] };
+  const details = {
+    'd-alpha': {
+      message: {
+        internalDate: '1000',
+        payload: { headers: [{ name: 'To', value: 'Foo Bar <foo@example.com>' }, { name: 'Subject', value: 'hello' }] },
+      },
+    },
+    'd-beta': {
+      message: {
+        internalDate: '2000',
+        payload: { headers: [{ name: 'To', value: 'bar@example.com' }, { name: 'Subject', value: 'world' }] },
+      },
+    },
+  };
+  const calls = [];
+  const stubFetch = async (url) => {
+    calls.push(url);
+    if (url.includes('?maxResults=')) {
+      return { ok: true, status: 200, json: async () => listPayload };
+    }
+    const m = url.match(/\/drafts\/([^?]+)/u);
+    return { ok: true, status: 200, json: async () => details[m[1]] };
+  };
+  const result = await listGmailDraftsSummary(
+    baseConfig(),
+    { maxResults: 25, fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() }
+  );
+  assert.ok(calls[0].includes('maxResults=25'));
+  assert.deepEqual(result, [
+    { id: 'd-alpha', to: 'foo@example.com', subject: 'hello', internalDate: 1000 },
+    { id: 'd-beta',  to: 'bar@example.com', subject: 'world', internalDate: 2000 },
+  ]);
 });
 
 test('sendGmailMessage attaches configured bccAudit when the draft has no explicit bcc', async () => {
