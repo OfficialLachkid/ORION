@@ -27,8 +27,8 @@ const template = {
   },
   layout: {
     type_icons: {
-      spacing_px: 28,
-      icon_size_px: 168,
+      spacing_px: 42,
+      icon_size_px: 252,
     },
     timer: {
       countdown_from: 5,
@@ -86,19 +86,20 @@ test('phase schedule accumulates the Poke Quizz timeline deterministically', () 
 
 test('prompt wrapping keeps long quiz text inside a centered two-line block', () => {
   const wrapped = wrapTextBlock('Which Pokemon matches these two types?', {
-    maxCharactersPerLine: estimateWrapCharacterLimit(template, 54),
-    maxLines: 2,
+    maxCharactersPerLine: estimateWrapCharacterLimit(template, 81),
+    maxLines: 3,
   });
   assert.deepEqual(wrapped.lines, [
-    'Which Pokemon matches these',
-    'two types?',
+    'Which Pokemon',
+    'matches these two',
+    'types?',
   ]);
 });
 
 test('type icon layout stays centered in the upper middle', () => {
   const layout = buildTypeIconLayout(template, 2);
-  assert.deepEqual(layout[0], { x: 358, y: 320, width: 168, height: 168 });
-  assert.deepEqual(layout[1], { x: 554, y: 320, width: 168, height: 168 });
+  assert.deepEqual(layout[0], { x: 267, y: 320, width: 252, height: 252 });
+  assert.deepEqual(layout[1], { x: 561, y: 320, width: 252, height: 252 });
 });
 
 test('timer layout stays top-left with centered number anchors', () => {
@@ -131,7 +132,7 @@ test('render plan derives battle-music lead-in and preserves grid geometry', () 
   assert.equal(renderPlan.output_path.endsWith('grass-poison-preview.mp4'), true);
 });
 
-test('audio filter script chains labeled inputs directly into amix', () => {
+test('audio filter script repeats short tick assets when no long countdown bed exists', () => {
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
@@ -147,6 +148,27 @@ test('audio filter script chains labeled inputs directly into amix', () => {
   assert.doesNotMatch(script, /\]\]amix/u);
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[music\]\[cd0\]\[cd1\]\[cd2\]\[cd3\]\[cd4\]\[timerend\]amix/u);
   assert.match(script, /\[c4\]atrim=0:0\.95,adelay=6800\|6800,volume=0\.72\[cd4\]/u);
+});
+
+test('audio filter script time-warps a full countdown bed to the reveal boundary', () => {
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const script = buildAudioFilterScript({
+    narrationPaths: ['/tmp/hook.wav', '/tmp/prompt.wav', '/tmp/reveal.wav'],
+    musicPath: '/tmp/music.mp3',
+    countdownPath: '/tmp/countdown.mp3',
+    timerEndPath: '/tmp/timer_finished.mp3',
+    renderPlan,
+    mediaDurations: {
+      countdown_audio_duration_seconds: 5.533,
+    },
+  });
+  assert.doesNotMatch(script, /asplit=5/u);
+  assert.match(script, /\[4:a\]atrim=0:5\.533,atempo=1\.107,atrim=0:5/u);
+  assert.match(script, /\[n0\]\[n1\]\[n2\]\[music\]\[countdown\]\[timerend\]amix/u);
 });
 
 test('escaped enable windows are safe for ffmpeg filter parsing', () => {
@@ -168,6 +190,6 @@ test('escaped enable windows are safe for ffmpeg filter parsing', () => {
 test('drawtext escaping preserves apostrophes for ffmpeg filter parsing', () => {
   assert.equal(
     escapeDrawtextText("Who's that Pokemon?"),
-    "Who'\\''s that Pokemon?",
+    "Who\\'s that Pokemon?",
   );
 });

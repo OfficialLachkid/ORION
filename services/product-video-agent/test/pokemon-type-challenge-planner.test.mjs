@@ -22,7 +22,7 @@ const template = {
       ],
       min_catalog_matches: 1,
       selected_subjects_min: 1,
-      selected_subjects_max: 12,
+      selected_subjects_max: 9,
     },
   },
   question_contract: {
@@ -32,8 +32,8 @@ const template = {
   },
   layout: {
     pokeball_grid: {
-      max_items: 12,
-      max_columns: 4,
+      max_items: 9,
+      max_columns: 3,
       item_size_px: 180,
       column_gap_px: 28,
       row_gap_px: 28,
@@ -326,4 +326,70 @@ test('planner centers incomplete pokeball rows within the stage bounds', async (
   assert.equal(plan.assets.overlays.pokeball_grid.rows, 2);
   assert.equal(plan.assets.overlays.pokeball_grid.cells[3].x, 346);
   assert.equal(plan.assets.overlays.pokeball_grid.cells[4].x, 554);
+});
+
+test('planner caps large compatible groups to a centered 3x3 grid', async () => {
+  const manyMatches = [
+    ...Array.from({ length: 10 }, (_, index) => ({
+      id: `pokedex-${String(index + 1).padStart(4, '0')}`,
+      national_dex_number: index + 1,
+      name: `GrassPoison${index + 1}`,
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: `/tmp/${String(index + 1).padStart(4, '0')}.png`,
+      silhouette_path: `/tmp/${String(index + 1).padStart(4, '0')}-silhouette.png`,
+      shiny_sprite_path: `/tmp/${String(index + 1).padStart(4, '0')}-shiny.png`,
+      cry_path: `/tmp/${String(index + 1).padStart(4, '0')}.wav`,
+      sprite_source_url: `https://example.test/${String(index + 1).padStart(4, '0')}.png`,
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    })),
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows: manyMatches,
+    seed: 'ten-match-grid',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-07-28T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.equal(plan.selection.catalog_match_count, 10);
+  assert.equal(plan.selection.compatible_display_count, 9);
+  assert.equal(plan.selection.selected_subject_count, 9);
+  assert.equal(plan.assets.overlays.pokeball_grid.item_count, 9);
+  assert.equal(plan.assets.overlays.pokeball_grid.columns, 3);
+  assert.equal(plan.assets.overlays.pokeball_grid.rows, 3);
 });

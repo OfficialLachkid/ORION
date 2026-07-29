@@ -79,7 +79,7 @@
       ],
       "min_catalog_matches": 1,
       "selected_subjects_min": 1,
-      "selected_subjects_max": 12
+      "selected_subjects_max": 9
     }
   },
   "question_contract": {
@@ -99,8 +99,8 @@
       "count": 2,
       "asset_source": "local_icon_archive",
       "position": "upper_middle",
-      "spacing_px": 28,
-      "icon_size_px": 168
+      "spacing_px": 42,
+      "icon_size_px": 252
     },
     "silhouettes": {
       "presentation": "center_stage_grid",
@@ -109,13 +109,13 @@
         "sprite_path"
       ],
       "fallback_visual_treatment": "black_fill_mask_from_sprite",
-      "max_subjects": 12
+      "max_subjects": 9
     },
     "pokeball_grid": {
       "overlay_asset_role": "selected_primary_pokeball_overlay_path",
-      "count_basis": "compatible_amount_capped_to_12",
-      "max_items": 12,
-      "max_columns": 4,
+      "count_basis": "compatible_amount_capped_to_9",
+      "max_items": 9,
+      "max_columns": 3,
       "item_size_px": 180,
       "column_gap_px": 28,
       "row_gap_px": 28,

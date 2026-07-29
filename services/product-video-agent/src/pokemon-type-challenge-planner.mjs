@@ -311,7 +311,7 @@ export async function planPokemonTypeChallenge({
         selected_primary_pokeball_overlay_path: inventory.overlay_presets?.pokeball_primary || null,
         pokeball_grid: {
           overlay_path: inventory.overlay_presets?.pokeball_primary || null,
-          count_basis: 'compatible_catalog_match_count_capped_to_12',
+          count_basis: `compatible_catalog_match_count_capped_to_${template.layout?.pokeball_grid?.max_items || 9}`,
           ...pokeballGridLayout,
         },
         available_paths: inventory.overlays,

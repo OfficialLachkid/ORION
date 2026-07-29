@@ -9,9 +9,9 @@ const DEFAULT_TYPE_ICON_Y = 320;
 const DEFAULT_TIMER_SIZE = 240;
 const DEFAULT_TIMER_MARGIN_TOP = 20;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
-const DEFAULT_HOOK_FONT_SIZE = 92;
-const DEFAULT_PROMPT_FONT_SIZE = 54;
-const DEFAULT_REVEAL_FONT_SIZE = 88;
+const DEFAULT_HOOK_FONT_SIZE = 138;
+const DEFAULT_PROMPT_FONT_SIZE = 81;
+const DEFAULT_REVEAL_FONT_SIZE = 132;
 const DEFAULT_TEXT_BORDER = 6;
 const DEFAULT_TEXT_LINE_SPACING = 12;
 const DEFAULT_MUSIC_LEAD_SECONDS = 0.6;
@@ -19,6 +19,7 @@ const DEFAULT_MUSIC_VOLUME = 0.18;
 const DEFAULT_VOICE_VOLUME = 1;
 const DEFAULT_COUNTDOWN_VOLUME = 0.72;
 const DEFAULT_TIMER_END_VOLUME = 0.9;
+const DEFAULT_REVEAL_TRANSITION_SECONDS = 0.42;
 const DEFAULT_FONT_CANDIDATES = [
   '/System/Library/Fonts/Supplemental/Avenir Next.ttc',
   '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
@@ -33,7 +34,7 @@ export function escapeDrawtextText(value) {
   return String(value || '')
     .replaceAll('\\', '\\\\')
     .replaceAll(':', '\\:')
-    .replaceAll("'", "'\\''")
+    .replaceAll("'", "\\'")
     .replaceAll('%', '\\%')
     .replaceAll(',', '\\,');
 }
@@ -233,6 +234,12 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const timerLayout = buildTimerLayout(template);
   const countdownPhase = schedule.phases.countdown || { start_seconds: 0, end_seconds: 0 };
   const revealPhase = schedule.phases.reveal || { start_seconds: schedule.total_duration_seconds, end_seconds: schedule.total_duration_seconds };
+  const revealTransitionDuration = roundTime(
+    Math.min(
+      0.52,
+      Math.max(0.36, ensureNumber(revealPhase.duration_seconds, 2.4) * 0.18),
+    ),
+  );
   return {
     canvas: {
       width: ensureNumber(template?.canvas?.width, 1080),
@@ -248,6 +255,9 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       template?.layout?.timer?.countdown_from,
       template?.layout?.timer?.countdown_to,
     ),
+    transitions: {
+      reveal_cross_scale_seconds: revealTransitionDuration || DEFAULT_REVEAL_TRANSITION_SECONDS,
+    },
     grid: plan.assets.overlays?.pokeball_grid || { cells: [], item_count: 0, columns: 0, rows: 0 },
     audio_cues: {
       hook_start_seconds: schedule.phases.hook?.start_seconds ?? 0,
@@ -319,6 +329,13 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
   const { width, height, fps } = renderPlan.canvas;
   const countdownDuration = Math.max(0.5, ensureNumber(renderPlan.phases.countdown?.duration_seconds, 0));
   const countdownStart = ensureNumber(renderPlan.phases.countdown?.start_seconds, 0);
+  const revealTransitionDuration = ensureNumber(
+    renderPlan.transitions?.reveal_cross_scale_seconds,
+    DEFAULT_REVEAL_TRANSITION_SECONDS,
+  );
+  const revealTransitionEnd = roundTime(
+    Math.min(renderPlan.total_duration_seconds, ensureNumber(renderPlan.phases.reveal?.start_seconds, 0) + revealTransitionDuration),
+  );
   filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
 
   for (let index = 0; index < plan.assets.type_icons.length; index += 1) {
@@ -333,16 +350,25 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
   let currentVideoLabel = `v${plan.assets.type_icons.length}`;
 
   const gridItemSize = ensureNumber(renderPlan.grid.item_size_px, 180);
-  const pokeballSplitLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pb', index));
-  if (pokeballSplitLabels.length > 0) {
-    filters.push(`[${inputRefs.timer}:v]fps=${fps},trim=duration=${countdownDuration},setpts=PTS-STARTPTS+${countdownStart}/TB,scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timer]`);
+  const pokeballStaticLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbs', index));
+  const pokeballTransitionLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbt', index));
+  const timerSourceDuration = Math.max(
+    countdownDuration,
+    ensureNumber(plan.assets.overlays?.selected_timer_duration_seconds, countdownDuration),
+  );
+  const timerSetpts = timerSourceDuration > 0
+    ? `(PTS-STARTPTS)*${roundTime(countdownDuration / timerSourceDuration)}+${countdownStart}/TB`
+    : `PTS-STARTPTS+${countdownStart}/TB`;
+  if (pokeballStaticLabels.length > 0) {
+    filters.push(`[${inputRefs.timer}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timer]`);
     filters.push(`[${inputRefs.pokeball}:v]fps=${fps},trim=duration=${countdownDuration},setpts=PTS-STARTPTS+${countdownStart}/TB,scale=${gridItemSize}:${gridItemSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[pokeballbase]`);
+    const pokeballSplitLabels = [...pokeballStaticLabels, ...pokeballTransitionLabels];
     filters.push(`[pokeballbase]split=${pokeballSplitLabels.length}${pokeballSplitLabels.map((label) => `[${label}]`).join('')}`);
     for (let index = 0; index < renderPlan.grid.cells.length; index += 1) {
       const cell = renderPlan.grid.cells[index];
       const nextVideoLabel = safeFilterLabel('vg', index);
       filters.push(
-        `[${currentVideoLabel}][${pokeballSplitLabels[index]}]overlay=${cell.x}:${cell.y}:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${nextVideoLabel}]`,
+        `[${currentVideoLabel}][${pokeballStaticLabels[index]}]overlay=${cell.x}:${cell.y}:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${nextVideoLabel}]`,
       );
       currentVideoLabel = nextVideoLabel;
     }
@@ -353,21 +379,54 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     currentVideoLabel = timerVideoLabel;
   }
 
-  const spriteLabels = [];
+  const spriteHoldLabels = [];
+  const spriteTransitionLabels = [];
   for (let index = 0; index < plan.assets.pokemon.length; index += 1) {
-    const spriteLabel = safeFilterLabel('sprite', index);
-    spriteLabels.push(spriteLabel);
+    const spriteSourceLabel = safeFilterLabel('spritebase', index);
+    const spriteHoldSourceLabel = safeFilterLabel('spriteholdbase', index);
+    const spriteHoldLabel = safeFilterLabel('spritehold', index);
+    const spriteTransitionLabel = safeFilterLabel('spritetransition', index);
+    spriteHoldLabels.push(spriteHoldLabel);
+    spriteTransitionLabels.push(spriteTransitionLabel);
     filters.push(
-      `[${inputRefs.pokemon[index]}:v]scale=${gridItemSize}:${gridItemSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteLabel}]`,
+      `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${renderPlan.phases.reveal.start_seconds}/TB,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
+    );
+    filters.push(
+      `[${spriteHoldSourceLabel}]scale=${gridItemSize}:${gridItemSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteHoldLabel}]`,
+    );
+    const progressExpression = `min(max((t-${renderPlan.phases.reveal.start_seconds})/${revealTransitionDuration},0),1)`;
+    const pokeballScaleFactor = `if(lt(${progressExpression},0.18),1+(${progressExpression}/0.18)*0.14,max(0.04,1.14-(((${progressExpression}-0.18)/0.82)*1.14)))`;
+    const spriteScaleFactor = `max(0.04,if(lt(${progressExpression},0.22),0.08+(${progressExpression}/0.22)*0.26,0.34+(((${progressExpression}-0.22)/0.78)*0.74)))`;
+    const pokeballScaleExpression = `max(6,${gridItemSize}*(${pokeballScaleFactor}))`;
+    const spriteScaleExpression = `max(6,${gridItemSize}*(${spriteScaleFactor}))`;
+    filters.push(
+      `[${pokeballTransitionLabels[index]}]scale=w='${pokeballScaleExpression}':h='${pokeballScaleExpression}':eval=frame,setsar=1[${safeFilterLabel('pokeballpop', index)}]`,
+    );
+    filters.push(
+      `[${spriteSourceLabel}]scale=w='${spriteScaleExpression}':h='${spriteScaleExpression}':eval=frame,setsar=1[${spriteTransitionLabel}]`,
     );
   }
 
-  for (let index = 0; index < renderPlan.grid.cells.length && index < spriteLabels.length; index += 1) {
+  for (let index = 0; index < renderPlan.grid.cells.length && index < spriteTransitionLabels.length; index += 1) {
+    const cell = renderPlan.grid.cells[index];
+    const pokeballTransitionLabel = safeFilterLabel('pokeballpop', index);
+    const withPokeballTransitionLabel = safeFilterLabel('vxp', index);
+    const withSpriteTransitionLabel = safeFilterLabel('vxs', index);
+    filters.push(
+      `[${currentVideoLabel}][${pokeballTransitionLabel}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, revealTransitionEnd)}'[${withPokeballTransitionLabel}]`,
+    );
+    filters.push(
+      `[${withPokeballTransitionLabel}][${spriteTransitionLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, revealTransitionEnd)}'[${withSpriteTransitionLabel}]`,
+    );
+    currentVideoLabel = withSpriteTransitionLabel;
+  }
+
+  for (let index = 0; index < renderPlan.grid.cells.length && index < spriteHoldLabels.length; index += 1) {
     const cell = renderPlan.grid.cells[index];
     const nextVideoLabel = safeFilterLabel('vr', index);
     filters.push(
-      `[${currentVideoLabel}][${spriteLabels[index]}]overlay=${cell.x}:${cell.y}:enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}'[${nextVideoLabel}]`,
-    );
+      `[${currentVideoLabel}][${spriteHoldLabels[index]}]overlay=${cell.x}:${cell.y}:enable='${formatEnableBetween(revealTransitionEnd, renderPlan.total_duration_seconds)}'[${nextVideoLabel}]`,
+      );
     currentVideoLabel = nextVideoLabel;
   }
 
@@ -417,7 +476,7 @@ function buildTextArtifacts({ renderPlan, template }) {
     prompt: buildTextLineArtifacts(renderPlan.text.prompt, {
       template,
       fontSize: DEFAULT_PROMPT_FONT_SIZE,
-      maxLines: 2,
+      maxLines: 3,
       baseY: DEFAULT_PROMPT_TEXT_Y,
     }),
     reveal: buildTextLineArtifacts(renderPlan.text.reveal, {
@@ -429,7 +488,14 @@ function buildTextArtifacts({ renderPlan, template }) {
   };
 }
 
-export function buildAudioFilterScript({ narrationPaths, musicPath, countdownPath, timerEndPath, renderPlan }) {
+export function buildAudioFilterScript({
+  narrationPaths,
+  musicPath,
+  countdownPath,
+  timerEndPath,
+  renderPlan,
+  mediaDurations = {},
+}) {
   const filters = [];
   const mixLabels = [];
 
@@ -453,14 +519,28 @@ export function buildAudioFilterScript({ narrationPaths, musicPath, countdownPat
   }
 
   if (countdownPath) {
-    filters.push(`[${inputIndex}:a]asplit=5[c0][c1][c2][c3][c4]`);
-    for (let tickIndex = 0; tickIndex < 5; tickIndex += 1) {
-      const delayMs = Math.max(0, Math.round((renderPlan.audio_cues.countdown_start_seconds + tickIndex) * 1000));
-      const remainingWindowSeconds = renderPlan.audio_cues.timer_end_seconds - (renderPlan.audio_cues.countdown_start_seconds + tickIndex);
-      const clipDurationSeconds = Math.max(0.12, Math.min(0.95, remainingWindowSeconds - 0.03));
-      const label = `cd${tickIndex}`;
-      filters.push(`[c${tickIndex}]atrim=0:${clipDurationSeconds},adelay=${delayMs}|${delayMs},volume=${DEFAULT_COUNTDOWN_VOLUME}[${label}]`);
-      mixLabels.push(label);
+    const countdownDurationSeconds = Math.max(
+      0,
+      renderPlan.audio_cues.timer_end_seconds - renderPlan.audio_cues.countdown_start_seconds,
+    );
+    const countdownAssetDurationSeconds = ensureNumber(mediaDurations.countdown_audio_duration_seconds, 0);
+    const countdownDelayMs = Math.max(0, Math.round(renderPlan.audio_cues.countdown_start_seconds * 1000));
+    if (countdownAssetDurationSeconds > 1.5) {
+      const atempo = roundTime(countdownAssetDurationSeconds / Math.max(0.1, countdownDurationSeconds));
+      filters.push(
+        `[${inputIndex}:a]atrim=0:${countdownAssetDurationSeconds},atempo=${atempo},atrim=0:${countdownDurationSeconds},afade=t=out:st=${Math.max(0, countdownDurationSeconds - 0.08)}:d=0.08,adelay=${countdownDelayMs}|${countdownDelayMs},volume=${DEFAULT_COUNTDOWN_VOLUME}[countdown]`,
+      );
+      mixLabels.push('countdown');
+    } else {
+      filters.push(`[${inputIndex}:a]asplit=5[c0][c1][c2][c3][c4]`);
+      for (let tickIndex = 0; tickIndex < 5; tickIndex += 1) {
+        const delayMs = Math.max(0, Math.round((renderPlan.audio_cues.countdown_start_seconds + tickIndex) * 1000));
+        const remainingWindowSeconds = renderPlan.audio_cues.timer_end_seconds - (renderPlan.audio_cues.countdown_start_seconds + tickIndex);
+        const clipDurationSeconds = Math.max(0.12, Math.min(0.95, remainingWindowSeconds - 0.03));
+        const label = `cd${tickIndex}`;
+        filters.push(`[c${tickIndex}]atrim=0:${clipDurationSeconds},adelay=${delayMs}|${delayMs},volume=${DEFAULT_COUNTDOWN_VOLUME}[${label}]`);
+        mixLabels.push(label);
+      }
     }
     inputIndex += 1;
   }
@@ -478,6 +558,35 @@ export function buildAudioFilterScript({ narrationPaths, musicPath, countdownPat
 async function verifyReadableFiles(paths) {
   for (const filePath of paths) {
     await access(filePath);
+  }
+}
+
+function resolveFfprobeExecutable(ffmpegExecutable) {
+  const normalized = String(ffmpegExecutable || 'ffmpeg');
+  const executableName = normalized.toLowerCase().endsWith('.exe') ? 'ffprobe.exe' : 'ffprobe';
+  return resolve(dirname(normalized), executableName);
+}
+
+async function probeMediaDurationSeconds({ ffmpegExecutable, mediaPath, cwd }) {
+  try {
+    const { stdout } = await runLocalProcess({
+      executable: resolveFfprobeExecutable(ffmpegExecutable),
+      args: [
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration',
+        '-of',
+        'json',
+        mediaPath,
+      ],
+      cwd,
+      timeoutMs: 60_000,
+    });
+    const duration = Number(JSON.parse(stdout || '{}')?.format?.duration);
+    return Number.isFinite(duration) && duration > 0 ? roundTime(duration) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -560,12 +669,32 @@ export async function renderPokeQuizzVideo({
   ]);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
+  const [timerDurationSeconds, countdownDurationSeconds] = await Promise.all([
+    probeMediaDurationSeconds({
+      ffmpegExecutable,
+      mediaPath: plan.assets.overlays.selected_timer_path,
+      cwd: projectRoot,
+    }),
+    countdownPath
+      ? probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: countdownPath,
+        cwd: projectRoot,
+      })
+      : Promise.resolve(null),
+  ]);
+  if (timerDurationSeconds) {
+    plan.assets.overlays.selected_timer_duration_seconds = timerDurationSeconds;
+  }
   const audioFilterScript = buildAudioFilterScript({
     narrationPaths,
     musicPath,
     countdownPath,
     timerEndPath,
     renderPlan,
+    mediaDurations: {
+      countdown_audio_duration_seconds: countdownDurationSeconds,
+    },
   });
   await writeFile(audioFilterScriptPath, audioFilterScript, 'utf8');
   await runLocalProcess({
