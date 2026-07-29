@@ -96,7 +96,7 @@ test('buildMacSyncDescription summarizes pull, restart, and health state', () =>
     didPull: true,
     dryRun: false,
     restartedDiscordBot: true,
-    restartedRufloWorkerService: false,
+    restartedOrionWorkerService: false,
     healthSummary: {
       healthyCount: 5,
       unhealthyCount: 0,
@@ -117,7 +117,7 @@ test('buildMacSyncDescription notes when the worker service is not installed', (
     didPull: false,
     dryRun: false,
     restartedDiscordBot: false,
-    rufloWorkerServiceStatus: 'not_installed',
+    orionWorkerServiceStatus: 'not_installed',
     healthSummary: {
       healthyCount: 4,
       unhealthyCount: 0,

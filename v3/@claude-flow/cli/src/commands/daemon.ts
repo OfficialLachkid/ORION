@@ -947,13 +947,13 @@ const installSupervisorCommand: Command = {
 
     if (platform === 'darwin') {
       const plistDir = join(home, 'Library', 'LaunchAgents');
-      const plistPath = join(plistDir, 'io.ruv.ruflo.daemon.plist');
+      const plistPath = join(plistDir, 'io.vbj.orion.daemon.plist');
       const logDir = join(projectRoot, '.claude-flow', 'logs');
       const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key><string>io.ruv.ruflo.daemon</string>
+    <key>Label</key><string>io.vbj.orion.daemon</string>
     <key>ProgramArguments</key>
     <array>
         <string>${nodeBin}</string>
@@ -1071,7 +1071,7 @@ const uninstallSupervisorCommand: Command = {
     const home = process.env.HOME ?? process.env.USERPROFILE ?? '';
 
     if (platform === 'darwin') {
-      const plistPath = join(home, 'Library', 'LaunchAgents', 'io.ruv.ruflo.daemon.plist');
+      const plistPath = join(home, 'Library', 'LaunchAgents', 'io.vbj.orion.daemon.plist');
       try {
         const { execFileSync } = await import('child_process');
         try { execFileSync('launchctl', ['unload', plistPath], { encoding: 'utf-8', timeout: 5000 }); } catch { /* ok */ }

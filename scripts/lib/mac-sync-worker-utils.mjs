@@ -1,5 +1,5 @@
 export const MAC_SYNC_HEALTH_ACTIONS = [
-  'ruflo_daemon_health_check',
+  'orion_daemon_health_check',
   'discord_bot_runtime_health_check',
   'tailscale_health_check',
   'docker_colima_health_check',
@@ -149,13 +149,13 @@ export function buildMacSyncDescription({
   dryRun,
   restartedDiscordBot,
   restartDiscordBotDeferred,
-  rufloWorkerServiceStatus,
-  restartedRufloWorkerService,
+  orionWorkerServiceStatus,
+  restartedOrionWorkerService,
   healthSummary,
 }) {
   const parts = [];
-  const workerServiceStatus = rufloWorkerServiceStatus
-    || (restartedRufloWorkerService ? 'restarted' : 'unchanged');
+  const workerServiceStatus = orionWorkerServiceStatus
+    || (restartedOrionWorkerService ? 'restarted' : 'unchanged');
 
   if (dryRun) {
     parts.push('Dry run completed.');
@@ -176,11 +176,11 @@ export function buildMacSyncDescription({
   }
 
   if (workerServiceStatus === 'restarted') {
-    parts.push('Ruflo worker service restarted.');
+    parts.push('ORION worker service restarted.');
   } else if (workerServiceStatus === 'not_installed') {
-    parts.push('Ruflo worker service is not installed in this session; restart skipped.');
+    parts.push('ORION worker service is not installed in this session; restart skipped.');
   } else if (workerServiceStatus === 'disabled') {
-    parts.push('Ruflo worker service checks are disabled for this session.');
+    parts.push('ORION worker service checks are disabled for this session.');
   }
 
   if (healthSummary) {

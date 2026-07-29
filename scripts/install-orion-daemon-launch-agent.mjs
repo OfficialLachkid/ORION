@@ -7,7 +7,7 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-const PLIST_LABEL = 'io.ruv.ruflo.daemon';
+const PLIST_LABEL = 'io.vbj.orion.daemon';
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -27,7 +27,7 @@ function resolveGlobalCliScriptPath() {
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {
-    throw new Error('Could not resolve the global npm root for the Ruflo daemon LaunchAgent.');
+    throw new Error('Could not resolve the global npm root for the ORION daemon LaunchAgent.');
   }
 
   const cliScriptPath = resolve(npmRoot, '@claude-flow', 'cli', 'bin', 'cli.js');
@@ -91,32 +91,47 @@ function buildPlistContent({
 }
 
 function loadLaunchAgent(plistPath) {
+  const launchdTarget = `gui/${process.getuid()}/${PLIST_LABEL}`;
+
   try {
     execFileSync('launchctl', ['unload', plistPath], { stdio: 'ignore' });
   } catch {
     // Already unloaded or not present.
   }
 
+  execFileSync('launchctl', ['enable', launchdTarget], { stdio: 'ignore' });
   execFileSync('launchctl', ['load', '-w', plistPath], { stdio: 'ignore' });
+}
+
+function disableLaunchAgent(plistPath) {
+  const launchdTarget = `gui/${process.getuid()}/${PLIST_LABEL}`;
+
+  try {
+    execFileSync('launchctl', ['unload', plistPath], { stdio: 'ignore' });
+  } catch {
+    // Already unloaded or not present.
+  }
+
+  execFileSync('launchctl', ['disable', launchdTarget], { stdio: 'ignore' });
 }
 
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-ruflo-daemon-launch-agent.mjs [--no-load]',
+      'Usage: node scripts/install-orion-daemon-launch-agent.mjs [--enable|--no-load]',
       '',
-      'Writes ~/Library/LaunchAgents/io.ruv.ruflo.daemon.plist and loads it by default.',
-      'The LaunchAgent uses RunAtLoad + KeepAlive so the Ruflo daemon auto-starts and relaunches on exit.',
+      'Writes ~/Library/LaunchAgents/io.vbj.orion.daemon.plist and disables it by default.',
+      'Use --enable only when autonomous claude-flow workers are explicitly wanted.',
     ].join('\n'));
     return;
   }
 
   if (process.platform !== 'darwin') {
-    throw new Error('Ruflo daemon LaunchAgent installation is supported only on macOS.');
+    throw new Error('ORION daemon LaunchAgent installation is supported only on macOS.');
   }
 
   const config = loadRuntimeConfig();
-  const shouldLoad = !hasFlag('--no-load');
+  const shouldLoad = hasFlag('--enable') && !hasFlag('--no-load');
 
   const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
   const plistPath = resolve(launchAgentsDir, `${PLIST_LABEL}.plist`);
@@ -143,11 +158,13 @@ function main() {
 
   if (shouldLoad) {
     loadLaunchAgent(plistPath);
+  } else {
+    disableLaunchAgent(plistPath);
   }
 
   process.stdout.write([
     `Installed ${basename(plistPath)}.`,
-    `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
+    `Load state: ${shouldLoad ? 'loaded' : 'disabled'}.`,
     `Plist: ${plistPath}`,
     `Stdout: ${stdoutPath}`,
     `Stderr: ${stderrPath}`,

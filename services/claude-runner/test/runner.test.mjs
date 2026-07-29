@@ -5,7 +5,18 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadRuntimeConfig } from '../../lib/runtime-config.mjs';
 import { buildClaudeTaskPayload, isValidClaudeSessionId } from '../src/payload-store.mjs';
-import { executeClaudeTask, parseClaudeStructuredResponse } from '../src/runner.mjs';
+import {
+  executeClaudeTask,
+  parseClaudeStructuredResponse,
+  resolveClaudeRunnerConfig,
+} from '../src/runner.mjs';
+
+test('resolveClaudeRunnerConfig keeps general Claude delegation opt-in', () => {
+  assert.equal(resolveClaudeRunnerConfig({ env: {} }).enabled, false);
+  assert.equal(resolveClaudeRunnerConfig({
+    env: { CLAUDE_RUNNER_ENABLED: 'true' },
+  }).enabled, true);
+});
 
 test('buildClaudeTaskPayload keeps approval, attachment, and context refs', () => {
   const config = loadRuntimeConfig();
@@ -118,6 +129,7 @@ test('executeClaudeTask classifies auth-blocked Claude runs clearly', async () =
     ...config,
     env: {
       ...config.env,
+      CLAUDE_RUNNER_ENABLED: 'true',
       CLAUDE_CHECKPOINTS_PATH: join(tempRoot, 'checkpoints'),
     },
     runtimePaths: {
@@ -126,6 +138,7 @@ test('executeClaudeTask classifies auth-blocked Claude runs clearly', async () =
     },
     claude: {
       ...config.claude,
+      enabled: true,
       workingDirectory: tempRoot,
     },
   }, {

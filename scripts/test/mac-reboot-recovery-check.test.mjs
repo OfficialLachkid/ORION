@@ -47,7 +47,7 @@ test('runMacRebootRecoveryCheck reports ready when all required checks pass', as
   const config = buildConfig();
   const report = await runMacRebootRecoveryCheck(config, {
     executeHealthAction: stubHealthExecutor({
-      ruflo_daemon_health_check: 'ready',
+      orion_daemon_health_check: 'ready',
       discord_bot_runtime_health_check: 'running',
       session_checkpoint_health_check: 'healthy',
       memory_bridge_sync_health_check: 'healthy',
@@ -67,7 +67,7 @@ test('runMacRebootRecoveryCheck reports blocked when a required check fails', as
   const report = await runMacRebootRecoveryCheck(config, {
     executeHealthAction: stubHealthExecutor({
       discord_bot_runtime_health_check: 'not running',
-      ruflo_daemon_health_check: 'ready',
+      orion_daemon_health_check: 'ready',
       session_checkpoint_health_check: 'healthy',
       memory_bridge_sync_health_check: 'healthy',
       claude_runtime_health_check: 'ready',
@@ -87,7 +87,7 @@ test('runMacRebootRecoveryCheck degrades softly when only optional checks fail',
     executeHealthAction: stubHealthExecutor({
       tailscale_health_check: 'Stopped',
       disk_space_health_check: 'ready',
-      ruflo_daemon_health_check: 'ready',
+      orion_daemon_health_check: 'ready',
       discord_bot_runtime_health_check: 'running',
       session_checkpoint_health_check: 'healthy',
       memory_bridge_sync_health_check: 'healthy',
@@ -103,7 +103,7 @@ test('runMacRebootRecoveryCheck reports blocked when a check throws', async () =
   const config = buildConfig();
   const report = await runMacRebootRecoveryCheck(config, {
     executeHealthAction: stubHealthExecutor({
-      ruflo_daemon_health_check: 'THROW',
+      orion_daemon_health_check: 'THROW',
       discord_bot_runtime_health_check: 'running',
       session_checkpoint_health_check: 'healthy',
       memory_bridge_sync_health_check: 'healthy',
@@ -115,5 +115,5 @@ test('runMacRebootRecoveryCheck reports blocked when a check throws', async () =
     }),
   });
   assert.equal(report.readiness, 'blocked');
-  assert.ok(report.detail.find((entry) => entry.action === 'ruflo_daemon_health_check').error);
+  assert.ok(report.detail.find((entry) => entry.action === 'orion_daemon_health_check').error);
 });

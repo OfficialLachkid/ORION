@@ -58,7 +58,7 @@ const DISCORD_INTERACTION_CALLBACK_UPDATE_MESSAGE = 7;
 const DISCORD_INTERACTION_CALLBACK_MODAL = 9;
 const DISCORD_MESSAGE_FLAG_EPHEMERAL = 1 << 6;
 const IMAGE_CONTEXT_WINDOW_MS = 10 * 60 * 1000;
-const DISCORD_BOT_LAUNCH_AGENT = 'io.ruv.ruflo.discord-bot';
+const DISCORD_BOT_LAUNCH_AGENT = 'io.vbj.orion.discord-bot';
 
 function assertLiveRuntimeConfig(config) {
   const missing = [];

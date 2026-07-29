@@ -41,16 +41,16 @@ function lowerText(task) {
   return normalizeWhitespace(task.full_text || task.summary || '').toLowerCase();
 }
 
-function isRufloDaemonHealthCheck(task) {
+function isOrionDaemonHealthCheck(task) {
   const text = lowerText(task);
-  const mentionsRuflo = text.includes('ruflo');
+  const mentionsOrionRuntime = text.includes('orion') || text.includes('ruflo');
   const mentionsDaemon = text.includes('daemon');
   const mentionsHealthOrStatus =
     text.includes('health') ||
     text.includes('status') ||
     text.includes('check');
 
-  return mentionsRuflo && mentionsDaemon && mentionsHealthOrStatus;
+  return mentionsOrionRuntime && mentionsDaemon && mentionsHealthOrStatus;
 }
 
 function isDiscordBotRuntimeHealthCheck(task) {
@@ -375,10 +375,10 @@ export function buildExecutionPlan(task) {
     };
   }
 
-  if (isRufloDaemonHealthCheck(task)) {
+  if (isOrionDaemonHealthCheck(task)) {
     return {
-      action: 'ruflo_daemon_health_check',
-      description: 'Check Ruflo daemon health on the Mac runtime.',
+      action: 'orion_daemon_health_check',
+      description: 'Check ORION daemon health on the Mac runtime.',
     };
   }
 
@@ -581,16 +581,29 @@ export function parseLaunchctlReport(output) {
   };
 }
 
-async function executeRufloDaemonHealthCheck(commandRunner) {
+async function executeOrionDaemonHealthCheck(commandRunner, config) {
+  if (config?.orionWorkerService?.expected === false) {
+    return {
+      rawStdout: '',
+      report: {
+        state: 'disabled',
+        activeCount: 0,
+        lastExitCode: 0,
+        runs: 0,
+        intentionallyDisabled: true,
+      },
+    };
+  }
+
   const uidResult = await commandRunner('id', ['-u']);
   if (uidResult.code !== 0) {
     throw new Error(uidResult.stderr.trim() || 'Could not determine current user ID for launchctl health check.');
   }
 
   const uid = normalizeWhitespace(uidResult.stdout);
-  const launchctlResult = await commandRunner('launchctl', ['print', `gui/${uid}/io.ruv.ruflo.daemon`]);
+  const launchctlResult = await commandRunner('launchctl', ['print', `gui/${uid}/io.vbj.orion.daemon`]);
   if (launchctlResult.code !== 0) {
-    throw new Error(launchctlResult.stderr.trim() || 'launchctl could not inspect io.ruv.ruflo.daemon.');
+    throw new Error(launchctlResult.stderr.trim() || 'launchctl could not inspect io.vbj.orion.daemon.');
   }
 
   return {
@@ -918,7 +931,7 @@ async function executeClaudeRuntimeHealthCheck(commandRunner, config) {
   };
 }
 
-async function executeLaunchAgentsHealthCheck(commandRunner) {
+async function executeLaunchAgentsHealthCheck(commandRunner, config) {
   const uidResult = await commandRunner('id', ['-u']);
   if (uidResult.code !== 0) {
     throw new Error(uidResult.stderr.trim() || 'Could not determine current user ID for LaunchAgent health check.');
@@ -926,10 +939,10 @@ async function executeLaunchAgentsHealthCheck(commandRunner) {
 
   const uid = normalizeWhitespace(uidResult.stdout);
   const labels = [
-    'io.ruv.ruflo.daemon',
-    'io.ruv.ruflo.discord-bot',
-    'io.ruv.ruflo.daily-summary',
-    'io.ruv.ruflo.health-monitor',
+    ...(config?.orionWorkerService?.expected === false ? [] : ['io.vbj.orion.daemon']),
+    'io.vbj.orion.discord-bot',
+    'io.vbj.orion.daily-summary',
+    'io.vbj.orion.health-monitor',
   ];
 
   const checkedAgents = [];
@@ -1355,7 +1368,7 @@ async function executeMacRuntimeSafeSync(commandRunner) {
       dryRun: parsed.dryRun === true,
       restartedDiscordBot: parsed.restartedDiscordBot === true,
       restartDiscordBotDeferred: parsed.restartDiscordBotDeferred === true,
-      restartedRufloWorkerService: parsed.restartedRufloWorkerService === true,
+      restartedOrionWorkerService: parsed.restartedOrionWorkerService === true,
       healthyCount: healthSummary.healthyCount || 0,
       unhealthyCount: healthSummary.unhealthyCount || 0,
       unhealthyChecks: healthSummary.unhealthyChecks || [],
@@ -1821,7 +1834,7 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
         didPull: report.didPull === true,
         restartedDiscordBot: report.restartedDiscordBot === true,
         restartDiscordBotDeferred: report.restartDiscordBotDeferred === true,
-        restartedRufloWorkerService: report.restartedRufloWorkerService === true,
+        restartedOrionWorkerService: report.restartedOrionWorkerService === true,
         healthyCount: report.healthyCount || 0,
         unhealthyCount: report.unhealthyCount || 0,
         unhealthyChecks: report.unhealthyChecks || [],
@@ -1856,7 +1869,7 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
 
   return buildCompletedResultEvents(
     'agentResults',
-    `Execution result for ${task.task_id}: Ruflo daemon state is ${state}.`,
+    `Execution result for ${task.task_id}: ORION daemon state is ${state}.`,
     {
       taskId: task.task_id,
       action: executionPlan.action,
@@ -2029,8 +2042,8 @@ export async function executeHealthAction(action, config, options = {}) {
   try {
     let executionResult = null;
 
-    if (action === 'ruflo_daemon_health_check') {
-      executionResult = await executeRufloDaemonHealthCheck(commandRunner);
+    if (action === 'orion_daemon_health_check') {
+      executionResult = await executeOrionDaemonHealthCheck(commandRunner, config);
     } else if (action === 'mac_runtime_safe_sync') {
       executionResult = await executeMacRuntimeSafeSync(commandRunner);
     } else if (action === 'ops_tool_run') {
@@ -2050,7 +2063,7 @@ export async function executeHealthAction(action, config, options = {}) {
     } else if (action === 'github_auth_health_check') {
       executionResult = await executeGitHubAuthHealthCheck(commandRunner);
     } else if (action === 'launch_agents_health_check') {
-      executionResult = await executeLaunchAgentsHealthCheck(commandRunner);
+      executionResult = await executeLaunchAgentsHealthCheck(commandRunner, config);
     } else if (action === 'session_checkpoint_health_check') {
       executionResult = await executeSessionCheckpointHealthCheck(commandRunner, config);
     } else if (action === 'runtime_logs_health_check') {

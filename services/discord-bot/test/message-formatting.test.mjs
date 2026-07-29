@@ -159,10 +159,10 @@ test('buildOutboundEventDiscordPayload renders final PR merge approval details',
 test('formatOutboundEventMessage renders execution results without raw JSON', () => {
   const message = formatOutboundEventMessage({
     type: 'task_execution_result',
-    body: 'Execution result for TASK-123: Ruflo daemon state is running.',
+    body: 'Execution result for TASK-123: ORION daemon state is running.',
     metadata: {
       taskId: 'TASK-123',
-      action: 'ruflo_daemon_health_check',
+      action: 'orion_daemon_health_check',
       state: 'running',
       activeCount: 1,
       runs: 2,
@@ -178,10 +178,10 @@ test('formatOutboundEventMessage renders execution results without raw JSON', ()
 test('buildOutboundEventDiscordPayload renders execution results as embed cards', () => {
   const payload = buildOutboundEventDiscordPayload({
     type: 'task_execution_result',
-    body: 'Execution result for TASK-123: Ruflo daemon state is running.',
+    body: 'Execution result for TASK-123: ORION daemon state is running.',
     metadata: {
       taskId: 'TASK-123',
-      action: 'ruflo_daemon_health_check',
+      action: 'orion_daemon_health_check',
       state: 'running',
       activeCount: 1,
       runs: 2,
@@ -191,7 +191,7 @@ test('buildOutboundEventDiscordPayload renders execution results as embed cards'
 
   assert.equal(payload.embeds.length, 1);
   assert.match(payload.embeds[0].title, /Execution Result .*TASK-123/u);
-  assert.equal(payload.embeds[0].description, 'Ruflo daemon state is running.');
+  assert.equal(payload.embeds[0].description, 'ORION daemon state is running.');
   assert.doesNotMatch(payload.embeds[0].description, /Execution result for TASK-123/u);
 });
 

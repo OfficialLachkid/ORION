@@ -40,7 +40,7 @@ test('evaluateHealthCheckResult points Discord bot recovery to launchctl kicksta
   }, config);
 
   assert.equal(check.severity, 'critical');
-  assert.match(check.recoveryCommand, /io\.ruv\.ruflo\.discord-bot/u);
+  assert.match(check.recoveryCommand, /io\.vbj\.orion\.discord-bot/u);
 });
 
 test('evaluateHealthCheckResult marks disk usage critical above critical threshold', () => {
@@ -80,9 +80,9 @@ test('evaluateHealthCheckResult marks Docker context drift as warning', () => {
   assert.match(check.recoveryCommand, /docker context use colima/u);
 });
 
-test('evaluateHealthCheckResult marks Ruflo daemon not running as critical', () => {
+test('evaluateHealthCheckResult marks ORION daemon not running as critical', () => {
   const config = loadRuntimeConfig();
-  const check = evaluateHealthCheckResult('ruflo_daemon_health_check', {
+  const check = evaluateHealthCheckResult('orion_daemon_health_check', {
     outcome: 'completed',
     executionResult: {
       report: {
@@ -95,7 +95,7 @@ test('evaluateHealthCheckResult marks Ruflo daemon not running as critical', () 
   }, config);
 
   assert.equal(check.severity, 'critical');
-  assert.match(check.summary, /Ruflo daemon is not running/u);
+  assert.match(check.summary, /ORION daemon is not running/u);
   assert.match(check.recoveryCommand, /launchctl kickstart/u);
 });
 
@@ -240,9 +240,9 @@ test('formatHealthMonitorReport renders readable monitor output', () => {
   assert.match(content, /Notifications planned: 1/u);
 });
 
-test('runHealthMonitor skips Ruflo worker service checks when the service is not expected', async () => {
+test('runHealthMonitor skips ORION worker service checks when the service is not expected', async () => {
   const config = loadRuntimeConfig();
-  config.rufloWorkerService = { expected: false };
+  config.orionWorkerService = { expected: false };
   const seenActions = [];
 
   const result = await runHealthMonitor(config, {
@@ -257,6 +257,6 @@ test('runHealthMonitor skips Ruflo worker service checks when the service is not
     },
   });
 
-  assert.equal(seenActions.includes('ruflo_daemon_health_check'), false);
-  assert.equal(result.checks.some((check) => check.action === 'ruflo_daemon_health_check'), false);
+  assert.equal(seenActions.includes('orion_daemon_health_check'), false);
+  assert.equal(result.checks.some((check) => check.action === 'orion_daemon_health_check'), false);
 });

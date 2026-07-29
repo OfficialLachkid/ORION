@@ -14,7 +14,7 @@ import {
 } from './lib/ruflo-wrapper-utils.mjs';
 
 const execFileAsync = promisify(execFile);
-const SERVICE_LABEL = 'io.ruv.ruflo.discord-bot';
+const SERVICE_LABEL = 'io.vbj.orion.discord-bot';
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ''), 10);

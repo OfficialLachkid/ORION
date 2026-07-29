@@ -7,7 +7,7 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-const PLIST_LABEL = 'io.ruv.ruflo.health-monitor';
+const PLIST_LABEL = 'io.vbj.orion.health-monitor';
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -83,7 +83,7 @@ function main() {
     process.stdout.write([
       'Usage: node scripts/install-health-monitor-schedule.mjs [--interval-seconds 600] [--no-load]',
       '',
-      'Writes ~/Library/LaunchAgents/io.ruv.ruflo.health-monitor.plist and loads it by default.',
+      'Writes ~/Library/LaunchAgents/io.vbj.orion.health-monitor.plist and loads it by default.',
       'Schedule uses a fixed StartInterval on macOS.',
     ].join('\n'));
     return;

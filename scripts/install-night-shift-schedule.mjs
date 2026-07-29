@@ -3,18 +3,18 @@
 // qualification schedule into the 07:00 fallback.
 //
 // After this runs:
-//   io.ruv.ruflo.night-shift          01:30 → run-night-shift.mjs (primary)
-//   io.ruv.ruflo.qualification-schedule 07:00 → run-night-shift.mjs --fallback
+//   io.vbj.orion.night-shift          01:30 → run-night-shift.mjs (primary)
+//   io.vbj.orion.qualification-schedule 07:00 → run-night-shift.mjs --fallback
 //     (no-op if the 01:30 run already succeeded; recovers it if not)
 //
-// The 07:00 LEADGEN sweep (io.ruv.ruflo.leadgen-schedule) is left untouched —
+// The 07:00 LEADGEN sweep (io.vbj.orion.leadgen-schedule) is left untouched —
 // leadgen is tokenless (local Ollama) and has no reason to move; and at 01:30
 // leadgen is not running, so the screenshot-heavy qualification has the
 // machine to itself instead of overlapping the sweep the way 07:00 did.
 //
 // Fully reversible: `node scripts/install-qualification-schedule.mjs` restores
 // the original standalone 07:00 qualification job, and
-// `launchctl unload ~/Library/LaunchAgents/io.ruv.ruflo.night-shift.plist`
+// `launchctl unload ~/Library/LaunchAgents/io.vbj.orion.night-shift.plist`
 // removes the night shift.
 
 import { execFileSync } from 'node:child_process';
@@ -24,8 +24,8 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-const NIGHT_SHIFT_LABEL = 'io.ruv.ruflo.night-shift';
-const FALLBACK_LABEL = 'io.ruv.ruflo.qualification-schedule';
+const NIGHT_SHIFT_LABEL = 'io.vbj.orion.night-shift';
+const FALLBACK_LABEL = 'io.vbj.orion.qualification-schedule';
 const DEFAULT_LIMIT = 10;
 
 function hasFlag(flag) {
@@ -91,8 +91,8 @@ function main() {
     process.stdout.write([
       'Usage: node scripts/install-night-shift-schedule.mjs [--hour 1] [--minute 30] [--limit 10] [--no-load]',
       '',
-      'Installs io.ruv.ruflo.night-shift (default 01:30) and reconfigures',
-      'io.ruv.ruflo.qualification-schedule (07:00) as its rate-limit fallback.',
+      'Installs io.vbj.orion.night-shift (default 01:30) and reconfigures',
+      'io.vbj.orion.qualification-schedule (07:00) as its rate-limit fallback.',
     ].join('\n') + '\n');
     return;
   }
@@ -149,7 +149,7 @@ function main() {
     `Installed ${basename(nightPlistPath)} — ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} nightly, qualify up to ${limit}.`,
     `Reconfigured ${basename(fallbackPlistPath)} — 07:00 fallback (no-op if the night shift already ran).`,
     `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
-    `Leadgen sweep (io.ruv.ruflo.leadgen-schedule) left unchanged at 07:00.`,
+    `Leadgen sweep (io.vbj.orion.leadgen-schedule) left unchanged at 07:00.`,
   ].join('\n') + '\n');
 }
 

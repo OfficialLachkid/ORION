@@ -171,11 +171,16 @@ export function loadRuntimeConfig(options = {}) {
       alertConsecutiveUnhealthy: getPositiveInteger(env.HEALTH_ALERT_CONSECUTIVE_UNHEALTHY, 2),
       recoveryConsecutiveHealthy: getPositiveInteger(env.HEALTH_RECOVERY_CONSECUTIVE_HEALTHY, 2),
     },
-    rufloWorkerService: {
-      expected: parseBoolean(env.RUFLO_WORKER_SERVICE_EXPECTED ?? env.RUFLO_DAEMON_EXPECTED, true),
+    orionWorkerService: {
+      expected: parseBoolean(
+        env.ORION_WORKER_SERVICE_EXPECTED
+          ?? env.RUFLO_WORKER_SERVICE_EXPECTED
+          ?? env.RUFLO_DAEMON_EXPECTED,
+        false
+      ),
     },
     claude: {
-      enabled: parseBoolean(env.CLAUDE_RUNNER_ENABLED, true),
+      enabled: parseBoolean(env.CLAUDE_RUNNER_ENABLED, false),
       command: env.CLAUDE_COMMAND || 'claude',
       model: env.CLAUDE_MODEL || '',
       fallbackModel: env.CLAUDE_FALLBACK_MODEL || '',

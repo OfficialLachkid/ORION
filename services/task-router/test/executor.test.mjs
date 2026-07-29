@@ -11,14 +11,14 @@ import {
   parseLaunchctlReport,
 } from '../src/executor.mjs';
 
-test('buildExecutionPlan recognizes Ruflo daemon health checks', () => {
+test('buildExecutionPlan recognizes ORION daemon health checks', () => {
   const plan = buildExecutionPlan({
-    full_text: 'Check the current Ruflo daemon health on the Mac mini.',
+    full_text: 'Check the current ORION daemon health on the Mac mini.',
   });
 
   assert.deepEqual(plan, {
-    action: 'ruflo_daemon_health_check',
-    description: 'Check Ruflo daemon health on the Mac runtime.',
+    action: 'orion_daemon_health_check',
+    description: 'Check ORION daemon health on the Mac runtime.',
   });
 });
 
@@ -201,7 +201,7 @@ test('buildExecutionPlan prefers explicit Gmail runtime actions over text heuris
 
 test('parseLaunchctlReport extracts daemon state fields', () => {
   const report = parseLaunchctlReport(`
-gui/502/io.ruv.ruflo.daemon = {
+gui/502/io.vbj.orion.daemon = {
   active count = 0
   state = not running
   stdout path = /tmp/out.log
@@ -222,7 +222,7 @@ gui/502/io.ruv.ruflo.daemon = {
 test('buildExecutionStartedEvents marks task as running', () => {
   const events = buildExecutionStartedEvents(
     { task_id: 'TASK-123' },
-    { action: 'ruflo_daemon_health_check' }
+    { action: 'orion_daemon_health_check' }
   );
 
   assert.equal(events[0].channelKey, 'taskQueue');
@@ -231,7 +231,10 @@ test('buildExecutionStartedEvents marks task as running', () => {
 });
 
 test('executeTask returns completed events for daemon health checks', async () => {
-  const config = loadRuntimeConfig();
+  const config = {
+    ...loadRuntimeConfig(),
+    orionWorkerService: { expected: true },
+  };
   const calls = [];
   const commandRunner = async (command, args) => {
     calls.push({ command, args });
@@ -243,7 +246,7 @@ test('executeTask returns completed events for daemon health checks', async () =
     return {
       code: 0,
       stdout: `
-gui/502/io.ruv.ruflo.daemon = {
+gui/502/io.vbj.orion.daemon = {
   active count = 1
   state = running
   stdout path = /tmp/out.log
@@ -258,17 +261,40 @@ gui/502/io.ruv.ruflo.daemon = {
 
   const result = await executeTask({
     task_id: 'TASK-123',
-    full_text: 'Check the current Ruflo daemon health on the Mac mini.',
+    full_text: 'Check the current ORION daemon health on the Mac mini.',
   }, config, { commandRunner });
 
   assert.equal(result.handled, true);
   assert.equal(result.outcome, 'completed');
-  assert.equal(result.executionPlan.action, 'ruflo_daemon_health_check');
+  assert.equal(result.executionPlan.action, 'orion_daemon_health_check');
   assert.equal(result.executionResult.report.state, 'running');
   assert.equal(result.outboundEvents[0].channelKey, 'taskQueue');
   assert.equal(result.outboundEvents[1].channelKey, 'agentResults');
   assert.equal(calls[0].command, 'id');
   assert.equal(calls[1].command, 'launchctl');
+});
+
+test('executeTask reports an intentionally disabled daemon without invoking launchctl', async () => {
+  const config = {
+    ...loadRuntimeConfig(),
+    orionWorkerService: { expected: false },
+  };
+  const calls = [];
+
+  const result = await executeTask({
+    task_id: 'TASK-DAEMON-DISABLED',
+    full_text: 'Check the current ORION daemon health on the Mac mini.',
+  }, config, {
+    commandRunner: async (command, args) => {
+      calls.push({ command, args });
+      return { code: 1, stdout: '', stderr: 'must not run' };
+    },
+  });
+
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.executionResult.report.state, 'disabled');
+  assert.equal(result.executionResult.report.intentionallyDisabled, true);
+  assert.deepEqual(calls, []);
 });
 
 test('executeTask returns completed events for Discord bot runtime health checks', async () => {
@@ -310,7 +336,7 @@ test('executeTask returns structured results for safe Mac sync requests', async 
     didPull: false,
     restartedDiscordBot: false,
     restartDiscordBotDeferred: false,
-    restartedRufloWorkerService: false,
+    restartedOrionWorkerService: false,
     syncState: {
       status: 'blocked_dirty',
       summary: 'Local worktree is dirty, so automated pull is blocked.',
@@ -373,7 +399,7 @@ test('executeTask routes successful Mac sync apply results into deployments', as
     didPull: true,
     restartedDiscordBot: true,
     restartDiscordBotDeferred: false,
-    restartedRufloWorkerService: false,
+    restartedOrionWorkerService: false,
     syncState: {
       status: 'pulled',
       summary: 'Fast-forward pull applied.',
@@ -833,14 +859,17 @@ test('executeTask returns completed events for Claude runtime health checks', as
 });
 
 test('executeTask returns completed events for launch agents health checks', async () => {
-  const config = loadRuntimeConfig();
+  const config = {
+    ...loadRuntimeConfig(),
+    orionWorkerService: { expected: true },
+  };
   const commandRunner = async (command, args) => {
     if (command === 'id') {
       return { code: 0, stdout: '502\n', stderr: '' };
     }
 
     const label = args[1].split('/').at(-1);
-    if (label === 'io.ruv.ruflo.health-monitor') {
+    if (label === 'io.vbj.orion.health-monitor') {
       return { code: 1, stdout: '', stderr: 'service not found' };
     }
 
@@ -867,6 +896,36 @@ gui/502/${label} = {
   assert.equal(result.executionResult.report.presentCount, 3);
   assert.equal(result.executionResult.report.missingCount, 1);
   assert.equal(result.outboundEvents[1].metadata.checkedAgents.length, 4);
+});
+
+test('launch agents health checks omit an intentionally disabled daemon', async () => {
+  const config = {
+    ...loadRuntimeConfig(),
+    orionWorkerService: { expected: false },
+  };
+  const checkedLabels = [];
+  const commandRunner = async (command, args) => {
+    if (command === 'id') {
+      return { code: 0, stdout: '502\n', stderr: '' };
+    }
+
+    const label = args[1].split('/').at(-1);
+    checkedLabels.push(label);
+    return {
+      code: 0,
+      stdout: `gui/502/${label} = { state = not running runs = 0 last exit code = 0 }`,
+      stderr: '',
+    };
+  };
+
+  const result = await executeTask({
+    task_id: 'TASK-LAUNCH-DISABLED',
+    full_text: 'Check current launch agents health on the Mac mini.',
+  }, config, { commandRunner });
+
+  assert.equal(result.executionResult.report.presentCount, 3);
+  assert.equal(result.executionResult.report.missingCount, 0);
+  assert.equal(checkedLabels.includes('io.vbj.orion.daemon'), false);
 });
 
 test('executeTask returns completed events for session checkpoint health checks', async () => {

@@ -58,7 +58,7 @@ test('parseLaunchAgentPlistText extracts key fields', () => {
   <plist version="1.0">
   <dict>
     <key>Label</key>
-    <string>io.ruv.ruflo.discord-bot</string>
+    <string>io.vbj.orion.discord-bot</string>
     <key>WorkingDirectory</key>
     <string>/Users/Agent/Workspace/ORION</string>
     <key>ProgramArguments</key>
@@ -79,7 +79,7 @@ test('parseLaunchAgentPlistText extracts key fields', () => {
   </dict>
   </plist>`;
   const parsed = parseLaunchAgentPlistText(plist);
-  assert.equal(parsed.label, 'io.ruv.ruflo.discord-bot');
+  assert.equal(parsed.label, 'io.vbj.orion.discord-bot');
   assert.equal(parsed.workingDirectory, '/Users/Agent/Workspace/ORION');
   assert.equal(parsed.runAtLoad, true);
   assert.equal(parsed.keepAlive, true);

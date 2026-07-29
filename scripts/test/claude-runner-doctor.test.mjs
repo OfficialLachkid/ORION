@@ -70,7 +70,7 @@ test('runClaudeRunnerDoctor returns ready when everything passes', async () => {
   const config = buildConfig();
   const plist = `<plist>
     <dict>
-      <key>Label</key><string>io.ruv.ruflo.discord-bot</string>
+      <key>Label</key><string>io.vbj.orion.discord-bot</string>
       <key>WorkingDirectory</key><string>${config.claude.workingDirectory}</string>
       <key>RunAtLoad</key><true/>
       <key>KeepAlive</key><true/>
