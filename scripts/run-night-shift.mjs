@@ -220,7 +220,7 @@ async function main() {
       title: `${label} — Failed`,
       description: `Qualification failed systemically (likely a usage/rate limit or startup error). No leads were processed. This will retry automatically at the next scheduled slot${isFallback ? ' (tomorrow 01:30)' : ' (07:00 today)'} — nothing is lost.`,
       color: 0xED4245,
-      footerText: 'Ruflo night shift',
+      footerText: 'ORION night shift',
     }));
     process.exitCode = 1;
     return;
@@ -287,7 +287,7 @@ async function main() {
     title: label,
     description: buildDigest(outcomes, backlog, openDrafts, { redrafted, reconciled, editedInGmail, repointedInGmail, followedUp, replyResult }),
     color: 0x5865F2,
-    footerText: 'Ruflo night shift',
+    footerText: 'ORION night shift',
   }));
 
   process.stdout.write(`${JSON.stringify({ processed: outcomes.length, redrafted, reconciled, editedInGmail, repointedInGmail, followedUp, backlog, openDrafts }, null, 2)}\n`);

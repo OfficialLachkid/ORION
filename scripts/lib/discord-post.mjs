@@ -80,7 +80,7 @@ export function buildToolReportEmbed(tool, verdict, summary, fields = []) {
     description: summary ? truncateForDiscord(summary, 4096) : undefined,
     color,
     fields: embedFields,
-    footer: { text: 'O.R.I.O.N. runtime · Ruflo Mac mini' },
+    footer: { text: 'O.R.I.O.N. runtime · Mac mini' },
     timestamp: new Date().toISOString(),
   };
 }

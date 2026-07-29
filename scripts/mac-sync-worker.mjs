@@ -153,10 +153,10 @@ function cleanAllowedRuntimeDrift(gitState) {
 
 async function runSyncHealthChecks(config, options = {}) {
   const checks = [];
-  const includeRufloWorkerService = options.includeRufloWorkerService !== false;
+  const includeOrionWorkerService = options.includeOrionWorkerService !== false;
 
   for (const action of MAC_SYNC_HEALTH_ACTIONS) {
-    if (action === 'ruflo_daemon_health_check' && !includeRufloWorkerService) {
+    if (action === 'orion_daemon_health_check' && !includeOrionWorkerService) {
       continue;
     }
 
@@ -174,8 +174,8 @@ function buildMacSyncResult({
   dryRun,
   restartedDiscordBot,
   restartDiscordBotDeferred,
-  rufloWorkerServiceStatus,
-  restartedRufloWorkerService,
+  orionWorkerServiceStatus,
+  restartedOrionWorkerService,
   healthChecks,
 }) {
   const normalizedHealthChecks = normalizeHealthChecks(healthChecks);
@@ -188,16 +188,16 @@ function buildMacSyncResult({
       dryRun,
       restartedDiscordBot,
       restartDiscordBotDeferred,
-      rufloWorkerServiceStatus,
-      restartedRufloWorkerService,
+      orionWorkerServiceStatus,
+      restartedOrionWorkerService,
       healthSummary,
     }),
     dryRun,
     didPull,
     restartedDiscordBot,
     restartDiscordBotDeferred,
-    rufloWorkerServiceStatus,
-    restartedRufloWorkerService,
+    orionWorkerServiceStatus,
+    restartedOrionWorkerService,
     syncState,
     gitState,
     healthSummary,
@@ -213,12 +213,12 @@ function buildDiscordSyncPayload({
   dryRun,
   restartedDiscordBot,
   restartDiscordBotDeferred,
-  rufloWorkerServiceStatus,
-  restartedRufloWorkerService,
+  orionWorkerServiceStatus,
+  restartedOrionWorkerService,
   healthSummary,
 }) {
-  const workerServiceStatus = rufloWorkerServiceStatus
-    || (restartedRufloWorkerService ? 'restarted' : 'unchanged');
+  const workerServiceStatus = orionWorkerServiceStatus
+    || (restartedOrionWorkerService ? 'restarted' : 'unchanged');
   return buildNoticeDiscordPayload({
     title: 'Mac Sync Worker',
     description: summary,
@@ -264,7 +264,7 @@ function buildDiscordSyncPayload({
         inline: true,
       },
       {
-        name: 'Ruflo Worker Service',
+        name: 'ORION Worker Service',
         value: workerServiceStatus === 'restarted'
           ? 'Restarted'
           : workerServiceStatus === 'not_installed'
@@ -282,7 +282,7 @@ function buildDiscordSyncPayload({
         inline: false,
       },
     ],
-    footerText: 'Ruflo safe sync',
+    footerText: 'ORION safe sync',
   });
 }
 
@@ -312,7 +312,7 @@ async function main() {
       '- inspect dirty / ahead / behind state',
       '- fast-forward pull only when safe',
       '- restart the Discord bot after a pull unless deferred for an automation caller',
-      '- restart the Ruflo worker service if health shows it unhealthy',
+      '- restart the ORION worker service if health shows it unhealthy',
       '- validate post-sync runtime health',
       '- optionally post the result into Discord system logs',
       '- emit structured JSON for automation callers when --json is used',
@@ -342,13 +342,13 @@ async function main() {
   let didPull = false;
   let restartedDiscordBot = false;
   let restartDiscordBotDeferred = false;
-  let restartedRufloWorkerService = false;
-  let rufloWorkerServiceStatus = config.rufloWorkerService?.expected === false ? 'disabled' : 'unchanged';
-  const includeRufloWorkerService = config.rufloWorkerService?.expected !== false
+  let restartedOrionWorkerService = false;
+  let orionWorkerServiceStatus = config.orionWorkerService?.expected === false ? 'disabled' : 'unchanged';
+  const includeOrionWorkerService = config.orionWorkerService?.expected !== false
     && isLaunchAgentInstalled(ORION_WORKER_SERVICE_LAUNCH_AGENT);
 
-  if (config.rufloWorkerService?.expected !== false && !includeRufloWorkerService) {
-    rufloWorkerServiceStatus = 'not_installed';
+  if (config.orionWorkerService?.expected !== false && !includeOrionWorkerService) {
+    orionWorkerServiceStatus = 'not_installed';
   }
 
   if (syncState.canPull && !dryRun) {
@@ -363,9 +363,9 @@ async function main() {
   }
 
   let healthChecks = await runSyncHealthChecks(config, {
-    includeRufloWorkerService,
+    includeOrionWorkerService,
   });
-  const workerCheck = healthChecks.find((check) => check.action === 'ruflo_daemon_health_check');
+  const workerCheck = healthChecks.find((check) => check.action === 'orion_daemon_health_check');
   const discordCheck = healthChecks.find((check) => check.action === 'discord_bot_runtime_health_check');
 
   if (!dryRun && discordCheck?.severity !== 'healthy' && !restartedDiscordBot) {
@@ -377,15 +377,15 @@ async function main() {
     }
   }
 
-  if (!dryRun && includeRufloWorkerService && workerCheck?.severity !== 'healthy') {
+  if (!dryRun && includeOrionWorkerService && workerCheck?.severity !== 'healthy') {
     restartLaunchAgent(ORION_WORKER_SERVICE_LAUNCH_AGENT);
-    restartedRufloWorkerService = true;
-    rufloWorkerServiceStatus = 'restarted';
+    restartedOrionWorkerService = true;
+    orionWorkerServiceStatus = 'restarted';
   }
 
-  if (!dryRun && (restartedDiscordBot || restartedRufloWorkerService)) {
+  if (!dryRun && (restartedDiscordBot || restartedOrionWorkerService)) {
     healthChecks = await runSyncHealthChecks(config, {
-      includeRufloWorkerService,
+      includeOrionWorkerService,
     });
   }
 
@@ -396,8 +396,8 @@ async function main() {
     dryRun,
     restartedDiscordBot,
     restartDiscordBotDeferred,
-    rufloWorkerServiceStatus,
-    restartedRufloWorkerService,
+    orionWorkerServiceStatus,
+    restartedOrionWorkerService,
     healthChecks,
   });
   const payload = buildDiscordSyncPayload(result);
@@ -417,8 +417,8 @@ async function main() {
     restoredRuntimeDriftPaths,
     restartedDiscordBot: result.restartedDiscordBot === true,
     restartDiscordBotDeferred: result.restartDiscordBotDeferred === true,
-    rufloWorkerServiceStatus: result.rufloWorkerServiceStatus || '',
-    restartedRufloWorkerService: result.restartedRufloWorkerService === true,
+    orionWorkerServiceStatus: result.orionWorkerServiceStatus || '',
+    restartedOrionWorkerService: result.restartedOrionWorkerService === true,
     healthyCount: result.healthSummary.healthyCount || 0,
     unhealthyCount: result.healthSummary.unhealthyCount || 0,
     unhealthyChecks: result.healthSummary.unhealthyChecks || [],

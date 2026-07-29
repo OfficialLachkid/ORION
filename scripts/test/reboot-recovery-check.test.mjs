@@ -31,7 +31,7 @@ test('classifyCheckState maps disk percent against thresholds', () => {
 
 test('summarizeRebootRecoveryChecks counts verdicts per action', () => {
   const { summary, detail } = summarizeRebootRecoveryChecks([
-    { action: 'ruflo_daemon_health_check', state: 'ready' },
+    { action: 'orion_daemon_health_check', state: 'ready' },
     { action: 'discord_bot_runtime_health_check', state: 'not running' },
     { action: 'session_checkpoint_health_check', state: 'empty' },
     { action: 'tailscale_health_check', state: 'Running' },
@@ -58,13 +58,13 @@ test('classifyOverallReadiness reports blocked when a required check fails', () 
   const detail = getRequiredRebootChecks().map((action) => ({
     action,
     required: true,
-    verdict: action === 'ruflo_daemon_health_check' ? 'blocked' : 'healthy',
+    verdict: action === 'orion_daemon_health_check' ? 'blocked' : 'healthy',
     state: 'ready',
   }));
   const readiness = classifyOverallReadiness(detail);
   assert.equal(readiness.readiness, 'blocked');
   assert.equal(readiness.failingRequired.length, 1);
-  assert.equal(readiness.failingRequired[0].action, 'ruflo_daemon_health_check');
+  assert.equal(readiness.failingRequired[0].action, 'orion_daemon_health_check');
 });
 
 test('classifyOverallReadiness reports blocked when a required check is missing', () => {

@@ -413,7 +413,7 @@ async function main() {
       title: runTitle,
       description: `${header}\n\n${bodyLines.join('\n')}`,
       color: 0x5865F2,
-      footerText: 'Ruflo lead qualification',
+      footerText: 'ORION lead qualification',
     }));
   }
 

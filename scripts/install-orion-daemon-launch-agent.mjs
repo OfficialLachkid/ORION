@@ -27,7 +27,7 @@ function resolveGlobalCliScriptPath() {
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
   } catch {
-    throw new Error('Could not resolve the global npm root for the Ruflo daemon LaunchAgent.');
+    throw new Error('Could not resolve the global npm root for the ORION daemon LaunchAgent.');
   }
 
   const cliScriptPath = resolve(npmRoot, '@claude-flow', 'cli', 'bin', 'cli.js');
@@ -106,13 +106,13 @@ function main() {
       'Usage: node scripts/install-orion-daemon-launch-agent.mjs [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.daemon.plist and loads it by default.',
-      'The LaunchAgent uses RunAtLoad + KeepAlive so the Ruflo daemon auto-starts and relaunches on exit.',
+      'The LaunchAgent uses RunAtLoad + KeepAlive so the ORION daemon auto-starts and relaunches on exit.',
     ].join('\n'));
     return;
   }
 
   if (process.platform !== 'darwin') {
-    throw new Error('Ruflo daemon LaunchAgent installation is supported only on macOS.');
+    throw new Error('ORION daemon LaunchAgent installation is supported only on macOS.');
   }
 
   const config = loadRuntimeConfig();

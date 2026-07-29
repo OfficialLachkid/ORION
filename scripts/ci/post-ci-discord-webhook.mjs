@@ -56,7 +56,7 @@ function buildRunUrl() {
 function buildPayload() {
   const status = env('CI_STATUS', 'unknown').toLowerCase();
   const emoji = STATUS_EMOJI[status] || '';
-  const workflowName = env('CI_WORKFLOW_NAME', 'Ruflo CI');
+  const workflowName = env('CI_WORKFLOW_NAME', 'ORION CI');
   const jobName = env('CI_JOB_NAME', 'Runtime Validation');
   const repository = env('CI_REPOSITORY', env('GITHUB_REPOSITORY', 'unknown'));
   const refName = env('CI_REF_NAME', env('GITHUB_REF_NAME', 'unknown'));
@@ -121,7 +121,7 @@ function buildPayload() {
           : `${workflowName} finished for \`${refContext.displayRef}\`.`,
         fields,
         footer: {
-          text: 'Ruflo GitHub CI',
+          text: 'ORION GitHub CI',
         },
       },
     ],

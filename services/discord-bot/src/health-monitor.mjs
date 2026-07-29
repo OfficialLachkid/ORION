@@ -15,15 +15,15 @@ function getHealthCheckActions(config) {
     'disk_space_health_check',
   ];
 
-  if (config?.rufloWorkerService?.expected !== false) {
-    actions.unshift('ruflo_daemon_health_check');
+  if (config?.orionWorkerService?.expected !== false) {
+    actions.unshift('orion_daemon_health_check');
   }
 
   return actions;
 }
 
 const HEALTH_CHECK_LABELS = {
-  ruflo_daemon_health_check: 'Ruflo daemon',
+  orion_daemon_health_check: 'ORION daemon',
   discord_bot_runtime_health_check: 'Discord bot runtime',
   tailscale_health_check: 'Tailscale',
   docker_colima_health_check: 'Docker and Colima',
@@ -119,7 +119,7 @@ function buildCheckSignature(check) {
 }
 
 function buildRecoveryCommand(action, check) {
-  if (action === 'ruflo_daemon_health_check') {
+  if (action === 'orion_daemon_health_check') {
     return 'launchctl kickstart -k gui/$(id -u)/io.vbj.orion.daemon';
   }
 
@@ -166,7 +166,7 @@ function describeFailedCheck(action, error) {
 function evaluateSuccessfulCheck(action, report, config) {
   const label = HEALTH_CHECK_LABELS[action] || action;
 
-  if (action === 'ruflo_daemon_health_check') {
+  if (action === 'orion_daemon_health_check') {
     const rawState = String(report.state || 'unknown').toLowerCase();
     const isRunning = rawState.includes('running') && !rawState.includes('not');
     return {
@@ -175,8 +175,8 @@ function evaluateSuccessfulCheck(action, report, config) {
       severity: isRunning ? 'healthy' : 'critical',
       state: report.state || 'unknown',
       summary: isRunning
-        ? `Ruflo daemon is ${report.state || 'running'}.`
-        : `Ruflo daemon is ${report.state || 'not running'}.`,
+        ? `ORION daemon is ${report.state || 'running'}.`
+        : `ORION daemon is ${report.state || 'not running'}.`,
       details: [
         report.activeCount !== undefined ? `Active count: ${report.activeCount}` : '',
         report.runs !== undefined ? `Runs: ${report.runs}` : '',

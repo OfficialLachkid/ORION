@@ -6,12 +6,12 @@ import { processTranscriptionRequest } from '../src/worker.mjs';
 test('processTranscriptionRequest returns completed for mock transcripts', async () => {
   const config = loadRuntimeConfig();
   const result = await processTranscriptionRequest({
-    mockTranscript: 'Check the current Ruflo daemon health on the Mac mini.',
+    mockTranscript: 'Check the current ORION daemon health on the Mac mini.',
     attachments: [],
   }, config);
 
   assert.equal(result.status, 'completed');
-  assert.equal(result.transcript, 'Check the current Ruflo daemon health on the Mac mini.');
+  assert.equal(result.transcript, 'Check the current ORION daemon health on the Mac mini.');
   assert.equal(result.provider, config.transcription.provider);
   assert.equal(result.segmentCount, 1);
 });

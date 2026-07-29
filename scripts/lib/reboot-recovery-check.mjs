@@ -1,7 +1,7 @@
 const REQUIRED_CHECKS = [
   'launch_agents_health_check',
   'discord_bot_runtime_health_check',
-  'ruflo_daemon_health_check',
+  'orion_daemon_health_check',
   'session_checkpoint_health_check',
   'memory_bridge_sync_health_check',
   'claude_runtime_health_check',

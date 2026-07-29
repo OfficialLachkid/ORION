@@ -58,7 +58,7 @@ test('summarizeOpsEvents aggregates workflow, transcription, approval, and execu
     {
       timestamp: '2026-06-30T11:09:00.000Z',
       type: 'task_execution_finished',
-      payload: { outcome: 'completed', action: 'ruflo_daemon_health_check', durationMs: 3200 },
+      payload: { outcome: 'completed', action: 'orion_daemon_health_check', durationMs: 3200 },
     },
     {
       timestamp: '2026-06-30T11:09:10.000Z',
@@ -83,7 +83,7 @@ test('summarizeOpsEvents aggregates workflow, transcription, approval, and execu
     {
       timestamp: '2026-06-30T11:07:00.000Z',
       type: 'task_state_changed',
-      payload: { taskId: 'TASK-3', status: 'running', domain: 'infra', action: 'ruflo_daemon_health_check', queueDwellMs: 45000 },
+      payload: { taskId: 'TASK-3', status: 'running', domain: 'infra', action: 'orion_daemon_health_check', queueDwellMs: 45000 },
     },
     {
       timestamp: '2026-06-30T11:10:00.000Z',
@@ -177,10 +177,10 @@ test('summarizeOpsEvents aggregates workflow, transcription, approval, and execu
   assert.deepEqual(summary.topDomains, [['infra', 2]]);
   assert.deepEqual(summary.topRejectionReasons, [['operator_not_allowed', 1]]);
   assert.deepEqual(summary.avgQueueDwellByDomain, [['infra', 45000]]);
-  assert.deepEqual(summary.avgQueueDwellByAction, [['ruflo_daemon_health_check', 45000]]);
+  assert.deepEqual(summary.avgQueueDwellByAction, [['orion_daemon_health_check', 45000]]);
   assert.deepEqual(summary.avgExecutionDurationByAction, [
     ['mac_runtime_safe_sync', 15000],
-    ['ruflo_daemon_health_check', 3200],
+    ['orion_daemon_health_check', 3200],
   ]);
   assert.deepEqual(summary.avgLifecycleByAction, [['mac_runtime_safe_sync', 600000]]);
   assert.deepEqual(summary.alertCountByComponent, [['tailscale_health_check', 1]]);
@@ -191,7 +191,7 @@ test('summarizeOpsEvents separates workflow events from health-monitor per-check
   const now = '2026-07-11T22:00:00.000Z';
   const noisyEvents = [
     { timestamp: '2026-07-11T21:55:00.000Z', type: 'health_monitor_run_completed', payload: {} },
-    { timestamp: '2026-07-11T21:55:01.000Z', type: 'health_monitor_check', payload: { action: 'ruflo_daemon_health_check' } },
+    { timestamp: '2026-07-11T21:55:01.000Z', type: 'health_monitor_check', payload: { action: 'orion_daemon_health_check' } },
     { timestamp: '2026-07-11T21:55:02.000Z', type: 'health_monitor_check', payload: { action: 'discord_bot_runtime_health_check' } },
     { timestamp: '2026-07-11T21:55:03.000Z', type: 'health_monitor_check', payload: { action: 'tailscale_health_check' } },
     { timestamp: '2026-07-11T21:56:00.000Z', type: 'claude_runner_canary_run', payload: { verdict: 'ok' } },
@@ -302,8 +302,8 @@ test('formatDailySummary renders a human-readable digest', () => {
     topDomains: [['infra', 3]],
     topRejectionReasons: [['operator_not_allowed', 1]],
     avgQueueDwellByDomain: [['infra', 45000]],
-    avgQueueDwellByAction: [['ruflo_daemon_health_check', 45000]],
-    avgExecutionDurationByAction: [['ruflo_daemon_health_check', 3200]],
+    avgQueueDwellByAction: [['orion_daemon_health_check', 45000]],
+    avgExecutionDurationByAction: [['orion_daemon_health_check', 3200]],
     avgLifecycleByAction: [['mac_runtime_safe_sync', 180000]],
     alertCountByComponent: [['tailscale_health_check', 2]],
     recoveryCountByComponent: [['tailscale_health_check', 1]],

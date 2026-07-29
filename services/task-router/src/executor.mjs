@@ -41,16 +41,16 @@ function lowerText(task) {
   return normalizeWhitespace(task.full_text || task.summary || '').toLowerCase();
 }
 
-function isRufloDaemonHealthCheck(task) {
+function isOrionDaemonHealthCheck(task) {
   const text = lowerText(task);
-  const mentionsRuflo = text.includes('ruflo');
+  const mentionsOrionRuntime = text.includes('orion') || text.includes('ruflo');
   const mentionsDaemon = text.includes('daemon');
   const mentionsHealthOrStatus =
     text.includes('health') ||
     text.includes('status') ||
     text.includes('check');
 
-  return mentionsRuflo && mentionsDaemon && mentionsHealthOrStatus;
+  return mentionsOrionRuntime && mentionsDaemon && mentionsHealthOrStatus;
 }
 
 function isDiscordBotRuntimeHealthCheck(task) {
@@ -375,10 +375,10 @@ export function buildExecutionPlan(task) {
     };
   }
 
-  if (isRufloDaemonHealthCheck(task)) {
+  if (isOrionDaemonHealthCheck(task)) {
     return {
-      action: 'ruflo_daemon_health_check',
-      description: 'Check Ruflo daemon health on the Mac runtime.',
+      action: 'orion_daemon_health_check',
+      description: 'Check ORION daemon health on the Mac runtime.',
     };
   }
 
@@ -581,7 +581,7 @@ export function parseLaunchctlReport(output) {
   };
 }
 
-async function executeRufloDaemonHealthCheck(commandRunner) {
+async function executeOrionDaemonHealthCheck(commandRunner) {
   const uidResult = await commandRunner('id', ['-u']);
   if (uidResult.code !== 0) {
     throw new Error(uidResult.stderr.trim() || 'Could not determine current user ID for launchctl health check.');
@@ -1355,7 +1355,7 @@ async function executeMacRuntimeSafeSync(commandRunner) {
       dryRun: parsed.dryRun === true,
       restartedDiscordBot: parsed.restartedDiscordBot === true,
       restartDiscordBotDeferred: parsed.restartDiscordBotDeferred === true,
-      restartedRufloWorkerService: parsed.restartedRufloWorkerService === true,
+      restartedOrionWorkerService: parsed.restartedOrionWorkerService === true,
       healthyCount: healthSummary.healthyCount || 0,
       unhealthyCount: healthSummary.unhealthyCount || 0,
       unhealthyChecks: healthSummary.unhealthyChecks || [],
@@ -1821,7 +1821,7 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
         didPull: report.didPull === true,
         restartedDiscordBot: report.restartedDiscordBot === true,
         restartDiscordBotDeferred: report.restartDiscordBotDeferred === true,
-        restartedRufloWorkerService: report.restartedRufloWorkerService === true,
+        restartedOrionWorkerService: report.restartedOrionWorkerService === true,
         healthyCount: report.healthyCount || 0,
         unhealthyCount: report.unhealthyCount || 0,
         unhealthyChecks: report.unhealthyChecks || [],
@@ -1856,7 +1856,7 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
 
   return buildCompletedResultEvents(
     'agentResults',
-    `Execution result for ${task.task_id}: Ruflo daemon state is ${state}.`,
+    `Execution result for ${task.task_id}: ORION daemon state is ${state}.`,
     {
       taskId: task.task_id,
       action: executionPlan.action,
@@ -2029,8 +2029,8 @@ export async function executeHealthAction(action, config, options = {}) {
   try {
     let executionResult = null;
 
-    if (action === 'ruflo_daemon_health_check') {
-      executionResult = await executeRufloDaemonHealthCheck(commandRunner);
+    if (action === 'orion_daemon_health_check') {
+      executionResult = await executeOrionDaemonHealthCheck(commandRunner);
     } else if (action === 'mac_runtime_safe_sync') {
       executionResult = await executeMacRuntimeSafeSync(commandRunner);
     } else if (action === 'ops_tool_run') {

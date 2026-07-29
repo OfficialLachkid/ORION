@@ -236,7 +236,7 @@ function buildActivityPayload() {
       {
         ...embed,
         footer: {
-          text: 'Ruflo GitHub Feed',
+          text: 'ORION GitHub Feed',
         },
       },
     ],

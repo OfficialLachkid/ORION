@@ -708,7 +708,7 @@ function buildExecutionFields(metadata = {}) {
     createField('Behind', metadata.behindCount !== undefined ? `\`${metadata.behindCount}\`` : '', true),
     createField('Pull Applied', metadata.didPull !== undefined ? (metadata.didPull ? 'Yes' : 'No') : '', true),
     createField('Discord Bot Restarted', metadata.restartedDiscordBot !== undefined ? (metadata.restartedDiscordBot ? 'Yes' : 'No') : '', true),
-    createField('Worker Restarted', metadata.restartedRufloWorkerService !== undefined ? (metadata.restartedRufloWorkerService ? 'Yes' : 'No') : '', true),
+    createField('Worker Restarted', metadata.restartedOrionWorkerService !== undefined ? (metadata.restartedOrionWorkerService ? 'Yes' : 'No') : '', true),
     createField('Healthy Checks', metadata.healthyCount !== undefined ? `\`${metadata.healthyCount}\`` : '', true),
     createField('Unhealthy Checks', metadata.unhealthyCount !== undefined ? `\`${metadata.unhealthyCount}\`` : '', true),
     createField(

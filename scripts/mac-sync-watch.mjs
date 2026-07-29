@@ -147,9 +147,9 @@ function buildWatchTask(config, gitState) {
     content: `Sync the Mac mini runtime with the latest changes from ${upstreamRef}.`,
     submittedAt: new Date().toISOString(),
     author: {
-      id: 'ruflo-sync-watch',
-      username: 'ruflo-sync-watch',
-      displayName: 'Ruflo sync watcher',
+      id: 'orion-sync-watch',
+      username: 'orion-sync-watch',
+      displayName: 'ORION sync watcher',
     },
   }, config);
 

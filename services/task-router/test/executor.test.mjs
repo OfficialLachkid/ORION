@@ -11,14 +11,14 @@ import {
   parseLaunchctlReport,
 } from '../src/executor.mjs';
 
-test('buildExecutionPlan recognizes Ruflo daemon health checks', () => {
+test('buildExecutionPlan recognizes ORION daemon health checks', () => {
   const plan = buildExecutionPlan({
-    full_text: 'Check the current Ruflo daemon health on the Mac mini.',
+    full_text: 'Check the current ORION daemon health on the Mac mini.',
   });
 
   assert.deepEqual(plan, {
-    action: 'ruflo_daemon_health_check',
-    description: 'Check Ruflo daemon health on the Mac runtime.',
+    action: 'orion_daemon_health_check',
+    description: 'Check ORION daemon health on the Mac runtime.',
   });
 });
 
@@ -222,7 +222,7 @@ gui/502/io.vbj.orion.daemon = {
 test('buildExecutionStartedEvents marks task as running', () => {
   const events = buildExecutionStartedEvents(
     { task_id: 'TASK-123' },
-    { action: 'ruflo_daemon_health_check' }
+    { action: 'orion_daemon_health_check' }
   );
 
   assert.equal(events[0].channelKey, 'taskQueue');
@@ -258,12 +258,12 @@ gui/502/io.vbj.orion.daemon = {
 
   const result = await executeTask({
     task_id: 'TASK-123',
-    full_text: 'Check the current Ruflo daemon health on the Mac mini.',
+    full_text: 'Check the current ORION daemon health on the Mac mini.',
   }, config, { commandRunner });
 
   assert.equal(result.handled, true);
   assert.equal(result.outcome, 'completed');
-  assert.equal(result.executionPlan.action, 'ruflo_daemon_health_check');
+  assert.equal(result.executionPlan.action, 'orion_daemon_health_check');
   assert.equal(result.executionResult.report.state, 'running');
   assert.equal(result.outboundEvents[0].channelKey, 'taskQueue');
   assert.equal(result.outboundEvents[1].channelKey, 'agentResults');
@@ -310,7 +310,7 @@ test('executeTask returns structured results for safe Mac sync requests', async 
     didPull: false,
     restartedDiscordBot: false,
     restartDiscordBotDeferred: false,
-    restartedRufloWorkerService: false,
+    restartedOrionWorkerService: false,
     syncState: {
       status: 'blocked_dirty',
       summary: 'Local worktree is dirty, so automated pull is blocked.',
@@ -373,7 +373,7 @@ test('executeTask routes successful Mac sync apply results into deployments', as
     didPull: true,
     restartedDiscordBot: true,
     restartDiscordBotDeferred: false,
-    restartedRufloWorkerService: false,
+    restartedOrionWorkerService: false,
     syncState: {
       status: 'pulled',
       summary: 'Fast-forward pull applied.',
