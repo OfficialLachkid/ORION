@@ -1,0 +1,197 @@
+{
+  "template_id": "pokemon-type-challenge-v1",
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 100,
+      "bottom": 260,
+      "left": 100
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [
+      1,
+      2,
+      3
+    ],
+    "typing_basis": "current_canonical_types_from_serebii_gen1_gen2_gen3_pages",
+    "require_truth_fields": [
+      "national_dex_number",
+      "name",
+      "types"
+    ],
+    "preferred_asset_fields": [
+      "silhouette_path",
+      "sprite_path",
+      "cry_path"
+    ],
+    "skip_subject_when_missing": [
+      "national_dex_number",
+      "name",
+      "types"
+    ],
+    "type_pair_policy": {
+      "mode": "random_dual_type_pair",
+      "selection_basis": "observed_pairs_in_catalog_only",
+      "exclude_zero_match_pairs": true,
+      "disallowed_type_pairs": [
+        [
+          "normal",
+          "ice"
+        ],
+        [
+          "normal",
+          "bug"
+        ],
+        [
+          "normal",
+          "rock"
+        ],
+        [
+          "normal",
+          "steel"
+        ],
+        [
+          "fire",
+          "fairy"
+        ],
+        [
+          "ice",
+          "poison"
+        ],
+        [
+          "ground",
+          "fairy"
+        ],
+        [
+          "bug",
+          "dragon"
+        ],
+        [
+          "rock",
+          "ghost"
+        ]
+      ],
+      "min_catalog_matches": 1,
+      "selected_subjects_min": 1,
+      "selected_subjects_max": 12
+    }
+  },
+  "question_contract": {
+    "hook_text": "Guess the Pokemon",
+    "hook_voice_required": true,
+    "type_prompt_text": "Which Pokemon matches these two types?",
+    "reveal_text": "Who's that Pokemon?",
+    "answer_text_mode": "pokemon_name_after_timer"
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_rights_cleared",
+      "media_type": "image_or_looping_video",
+      "fit": "cover"
+    },
+    "type_icons": {
+      "count": 2,
+      "asset_source": "local_icon_archive",
+      "position": "upper_middle",
+      "spacing_px": 28,
+      "icon_size_px": 168
+    },
+    "silhouettes": {
+      "presentation": "center_stage_grid",
+      "asset_priority": [
+        "silhouette_path",
+        "sprite_path"
+      ],
+      "fallback_visual_treatment": "black_fill_mask_from_sprite",
+      "max_subjects": 12
+    },
+    "pokeball_grid": {
+      "overlay_asset_role": "selected_primary_pokeball_overlay_path",
+      "count_basis": "compatible_amount_capped_to_12",
+      "max_items": 12,
+      "max_columns": 4,
+      "item_size_px": 180,
+      "column_gap_px": 28,
+      "row_gap_px": 28,
+      "anchor": "canvas_middle",
+      "stage_bounds_px": {
+        "left": 120,
+        "top": 520,
+        "width": 840,
+        "height": 760
+      }
+    },
+    "timer": {
+      "countdown_from": 5,
+      "countdown_to": 0,
+      "position": "lower_middle",
+      "display_mode": "numeric_with_small_ring",
+      "tick_interval_seconds": 1
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 1.2,
+      "duck_under_voice": true,
+      "stop_at_reveal": true
+    },
+    "sound_effects": {
+      "countdown_tick": {
+        "enabled": true,
+        "trigger": "each_second"
+      },
+      "timer_end": {
+        "enabled": true,
+        "trigger": "countdown_complete"
+      },
+      "reveal": {
+        "enabled": true,
+        "trigger": "answer_starts"
+      }
+    }
+  },
+  "reveal": {
+    "trigger_seconds": 5,
+    "default_mode": "silhouette_hold_then_answer",
+    "supported_variants": [
+      "silhouette_hold_then_answer",
+      "question_marks_transform_into_pokemon"
+    ],
+    "answer_assets": [
+      "name",
+      "sprite_path",
+      "cry_path"
+    ],
+    "fallback_answer_assets": [
+      "name",
+      "sprite_source_url"
+    ]
+  },
+  "captions": {
+    "max_words_per_line": 4,
+    "max_lines": 2,
+    "position": "lower_middle",
+    "animation": "ass_audio_timed_active_word_highlight",
+    "font_family": "Avenir Next",
+    "font_size": 74,
+    "outline_size": 6
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true
+  }
+}

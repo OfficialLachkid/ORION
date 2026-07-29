@@ -123,7 +123,7 @@ const STARTER_DESIGN_SPECS = Object.freeze([
       },
       reference: {
         sourceLabel: 'Source preview: Vink Elektrotechniek',
-        previewUrl: 'https://officiallachkid.github.io/ORION/sites/vink-elektrotechniek/',
+        previewUrl: 'https://officiallachkid.github.io/ruflo/sites/vink-elektrotechniek/',
       },
     },
   },
@@ -140,7 +140,7 @@ const STARTER_DESIGN_SPECS = Object.freeze([
       },
       reference: {
         sourceLabel: 'Source preview: Newman & Partners v1',
-        previewUrl: 'https://officiallachkid.github.io/ORION/sites/newman-partners/',
+        previewUrl: 'https://officiallachkid.github.io/ruflo/sites/newman-partners/',
       },
     },
   },
@@ -157,7 +157,7 @@ const STARTER_DESIGN_SPECS = Object.freeze([
       },
       reference: {
         sourceLabel: 'Source preview: Newman & Partners v2',
-        previewUrl: 'https://officiallachkid.github.io/ORION/sites/newman-partners-v2/',
+        previewUrl: 'https://officiallachkid.github.io/ruflo/sites/newman-partners-v2/',
       },
     },
   },
@@ -174,7 +174,7 @@ const STARTER_DESIGN_SPECS = Object.freeze([
       },
       reference: {
         sourceLabel: 'Source preview: VBJ Services',
-        previewUrl: 'https://officiallachkid.github.io/ORION/sites/vbj-services/',
+        previewUrl: 'https://officiallachkid.github.io/ruflo/sites/vbj-services/',
       },
     },
   },

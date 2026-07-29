@@ -95,7 +95,7 @@ The benchmark runs five products and every configured script angle through seeds
 
 `ProductPageMediaIntakeAdapter` is the boundary between page observation and editor assets. It records an image or video candidate with its source page, optional direct media URL, observation method, timestamp, retrieval method, rights state, approval, local path, SHA-256, and intended usage. A page reference without a direct media URL stays reference-only. A direct URL can create an asset-provenance record, but all existing acquisition and render gates still apply; promotion never means download or publication approval.
 
-`ProductVideoStateStore` is the persistence boundary. `FileProductVideoStateStore` is active. `SupabaseProductVideoStateStore` is an explicit non-operational stub so later persistence can be added without changing pipeline entities. Backend Supabase credentials must remain runtime-only.
+`ProductVideoStateStore` is the persistence boundary. `FileProductVideoStateStore` is active for local manifests, and `SupabaseProductVideoStateStore` is active for the compact video tables described below. Backend Supabase credentials must remain runtime-only.
 
 ## Asset and Amazon video policy
 
@@ -262,13 +262,63 @@ For normal Mac operation, create the ignored `config/product-video/.env` from `c
 
 The initial normalized migration created 21 tables plus one view and was too granular for the current scale. The operator confirmed that `supabase/migrations/20260726_compact_video_generation_tables.sql` was applied on 2026-07-26, replacing it with five durable tables.
 
-- `video_channels`: one logical content brand/lane such as `poke-quizzz`, including its destination-account settings.
+- `video_channels`: one logical ORION channel/account such as `techy-gadgets` or `poke-quizz`, including its destination-account settings plus the workflow family it uses.
 - `videos`: one row per planned or produced video; subjects and temporary pipeline state are compact JSONB documents.
 - `video_assets`: lightweight metadata only. Actual footage lives on the external SSD; the row stores paths, SHA-256, rights, approval, size, and archive verification.
 - `video_publications`: lightweight per-platform state. A YouTube, TikTok, Instagram, or Facebook upload has its own external ID, URL, visibility, schedule, status, error, and timestamps, so these records should not become platform-prefixed columns on `videos`.
 - `video_analytics`: append-only metric snapshots linked to a publication.
 
-This follows the compact principle used by `leads`: one primary entity row with flexible extraction/workflow documents. The four supporting tables remain because assets, publications, and analytics are genuine one-to-many records rather than columns of one video. Product and Pokemon lanes both use `videos.subjects`; marketplace scoring and affiliate data are optional JSONB fields. One finished `Poke Quizzz` master is one `videos` row. Publishing it to YouTube, TikTok, Instagram, and Facebook creates four `video_publications` rows linked to that master, not four duplicate video rows. RLS remains enabled, `anon`/`authenticated` access is revoked, and only `postgres` plus backend `service_role` receive access.
+This follows the compact principle used by `leads`: one primary entity row with flexible extraction/workflow documents. The four supporting tables remain because assets, publications, and analytics are genuine one-to-many records rather than columns of one video. `Techy Gadgets` and `Poke Quizz` both use `videos.subjects`; their niche-specific assembly workflows can differ while the same ORION core persists scripts, narration, captions, renders, approvals, archives, publications, and analytics. One finished `Poke Quizz` master is one `videos` row. Publishing it to YouTube, TikTok, Instagram, and Facebook creates four `video_publications` rows linked to that master, not four duplicate video rows. RLS remains enabled, `anon`/`authenticated` access is revoked, and only `postgres` plus backend `service_role` receive access.
+
+Every ORION channel should keep the same production pillars so expansion stays plug-and-play:
+
+- strategy and ideation, including niche, channel format, hooks, and later analytics-driven iteration;
+- subject grounding, so product facts or Pokemon facts are structured before script generation;
+- script generation with deterministic review and approval gates;
+- narration and timing, including Kokoro speech plus faster-whisper alignment;
+- visual assembly, including approved templates, backgrounds, sprites, footage, captions, music, and sound effects;
+- render, archive, and verification, including FFmpeg output checks plus T7-first media storage;
+- publication and analytics, including per-platform state, review copies, metric snapshots, and strategy switching.
+
+Each niche-specific assembly workflow should reuse these pillars rather than introduce a parallel engine. Product-specific scoring, affiliate links, marketplace metadata, source-footage intake, Pokemon type-pair selection, and sprite-driven reveal rules remain optional workflow modules layered on top of the same core workflow.
+
+The Poke Quizz channel needs one additional catalog table, not a second video-state schema. The live follow-up migration renames the first draft `pokemon_species` table to `pokedex`. That `pokedex` table holds Gen 1+ canonical facts such as national dex number, generation, types, and local asset paths for sprite, silhouette, shiny sprite, and cry. Those rows give script and render jobs a deterministic selector while keeping actual media files on T7 instead of in Supabase storage.
+
+Use the repeatable generation sync when the table needs refreshing:
+
+```bash
+npm run product-video:sync-pokedex -- --generation 1 --write-json data/runtime/product-video-agent/pokedex/gen1-serebii.json
+npm run product-video:sync-pokedex -- --generation 2 --write-json data/runtime/product-video-agent/pokedex/gen2-serebii.json
+npm run product-video:sync-pokedex -- --generation 1 --persist-supabase
+npm run product-video:sync-pokedex -- --generation 2 --persist-supabase
+```
+
+The current sources are Serebii's Generation I and Generation II pages. On July 28, 2026, Playwright verification confirmed that those pages expose both current small-sprite URLs and type-icon URLs for the listed species. The sync stores those truth-safe fields in `sprite_source_url` and `metadata.type_icon_source_urls`. Current canonical typings shown on the page are preserved, so species such as Magnemite/Magneton (`electric`,`steel`) and Mr. Mime (`psychic`,`fairy`) remain truthful to the current Pokédex rather than the original 1996-only typings. Missing silhouette, shiny-sprite, or cry sources stay null until a later verified source is added.
+
+The first Poke Quizz workflow contract now lives at `services/product-video-agent/pokemon-type-challenge-v1.template.json`. It locks the shared rules for type-pair eligibility, impossible pair exclusions, countdown timing, silhouette presentation, SFX hooks, battle-intro music timing, and reveal behavior without turning one Pokemon prompt into the engine itself.
+
+Generate a deterministic first video package without calling any hosted model:
+
+```bash
+npm run product-video:plan-poke-quizz -- \
+  --catalog-json data/runtime/product-video-agent/pokedex/gen1-serebii.json \
+  --output data/runtime/product-video-agent/poke-quizz/first-type-challenge-plan.json
+```
+
+The planner uses only grounded `pokedex` rows, no paid API, and no hosted inference. It selects an observed dual-type pair, samples one to four matching species, records the exact T7 asset directories, and flags what is still missing before narration or render execution should begin.
+
+Create and use these Poke Quizz asset directories on T7:
+
+- `Backgrounds`: `/Volumes/T7/O.R.I.O.N. Video Generation/Assets/Pokemon/Poke Quizz/Backgrounds`
+- `Sprites`: `/Volumes/T7/O.R.I.O.N. Video Generation/Assets/Pokemon/Poke Quizz/Sprites`
+- `Silhouettes`: `/Volumes/T7/O.R.I.O.N. Video Generation/Assets/Pokemon/Poke Quizz/Silhouettes`
+- `Type Icons`: `/Volumes/T7/O.R.I.O.N. Video Generation/Assets/Pokemon/Poke Quizz/Type Icons`
+- `Overlays`: `/Volumes/T7/O.R.I.O.N. Video Generation/Assets/Pokemon/Poke Quizz/Overlays`
+- `Transitions`: `/Volumes/T7/O.R.I.O.N. Video Generation/Assets/Pokemon/Poke Quizz/Transitions`
+- `Battle Intro Music`: `/Volumes/T7/O.R.I.O.N. Video Generation/Assets/Audio/Music/Poke Quizz`
+- `Sound Effects`: `/Volumes/T7/O.R.I.O.N. Video Generation/Assets/Audio/Sound Effects/Poke Quizz`
+- `Preview Outputs`: `/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz`
+- `Master Outputs`: `/Volumes/T7/O.R.I.O.N. Video Generation/Masters/Poke Quizz`
 
 Live compact persistence is explicit:
 

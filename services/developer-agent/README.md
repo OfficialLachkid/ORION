@@ -42,6 +42,14 @@ DISCORD_PULL_REQUESTS_CHANNEL_ID=1529090227627495517
 
 The paths are optional. By default they resolve under the existing Ruflo runtime temporary directory.
 
+For local Codex or Windows sessions that need to open a pull request without a local authenticated `gh`, use:
+
+```bash
+npm run github:open-pr -- --title "feat: example" --base main --body-file path/to/pr-body.md
+```
+
+The helper prefers local `gh`. If `gh` is missing or unauthenticated, it falls back to the Mac mini's authenticated session through `ssh Agent@vbj-orchestrator-01.tail1e55f3.ts.net`. Override that target with `GITHUB_PR_FALLBACK_SSH_TARGET` when needed.
+
 ## Safety And Recovery
 
 - Approval is checked again inside the workflow before any Claude or GitHub write.
