@@ -479,7 +479,7 @@ export async function executeClaudeTaskFromPayloadFile(taskFilePath, config, opt
 
 export function resolveClaudeRunnerConfig(config) {
   return {
-    enabled: parseBoolean(config?.env?.CLAUDE_RUNNER_ENABLED, true),
+    enabled: parseBoolean(config?.env?.CLAUDE_RUNNER_ENABLED, false),
     command: config?.env?.CLAUDE_COMMAND || 'claude',
     model: config?.env?.CLAUDE_MODEL || '',
     fallbackModel: config?.env?.CLAUDE_FALLBACK_MODEL || '',

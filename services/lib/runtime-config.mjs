@@ -180,7 +180,7 @@ export function loadRuntimeConfig(options = {}) {
       ),
     },
     claude: {
-      enabled: parseBoolean(env.CLAUDE_RUNNER_ENABLED, true),
+      enabled: parseBoolean(env.CLAUDE_RUNNER_ENABLED, false),
       command: env.CLAUDE_COMMAND || 'claude',
       model: env.CLAUDE_MODEL || '',
       fallbackModel: env.CLAUDE_FALLBACK_MODEL || '',
