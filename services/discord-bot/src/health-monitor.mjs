@@ -144,7 +144,7 @@ function buildRecoveryCommand(action, check) {
   }
 
   if (action === 'disk_space_health_check') {
-    return 'du -sh ~/Library/Logs/vbj ~/Workspace/ruflo ~/.ollama 2>/dev/null';
+    return 'du -sh ~/Library/Logs/vbj ~/Workspace/ORION ~/.ollama 2>/dev/null';
   }
 
   return '';

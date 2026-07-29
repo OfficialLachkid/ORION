@@ -60,11 +60,11 @@ test('parseLaunchAgentPlistText extracts key fields', () => {
     <key>Label</key>
     <string>io.ruv.ruflo.discord-bot</string>
     <key>WorkingDirectory</key>
-    <string>/Users/Agent/Workspace/ruflo</string>
+    <string>/Users/Agent/Workspace/ORION</string>
     <key>ProgramArguments</key>
     <array>
       <string>/opt/homebrew/bin/node</string>
-      <string>/Users/Agent/Workspace/ruflo/services/discord-bot/index.mjs</string>
+      <string>/Users/Agent/Workspace/ORION/services/discord-bot/index.mjs</string>
       <string>--live</string>
     </array>
     <key>RunAtLoad</key>
@@ -80,12 +80,12 @@ test('parseLaunchAgentPlistText extracts key fields', () => {
   </plist>`;
   const parsed = parseLaunchAgentPlistText(plist);
   assert.equal(parsed.label, 'io.ruv.ruflo.discord-bot');
-  assert.equal(parsed.workingDirectory, '/Users/Agent/Workspace/ruflo');
+  assert.equal(parsed.workingDirectory, '/Users/Agent/Workspace/ORION');
   assert.equal(parsed.runAtLoad, true);
   assert.equal(parsed.keepAlive, true);
   assert.deepEqual(parsed.programArguments, [
     '/opt/homebrew/bin/node',
-    '/Users/Agent/Workspace/ruflo/services/discord-bot/index.mjs',
+    '/Users/Agent/Workspace/ORION/services/discord-bot/index.mjs',
     '--live',
   ]);
   assert.equal(parsed.environmentVariables.PATH, '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin');
