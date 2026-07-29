@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGmailDraft, sendGmailMessage } from '../src/send.mjs';
+import { createGmailDraft, getGmailDraft, listGmailDraftsSummary, sendGmailMessage } from '../src/send.mjs';
 
 function baseConfig(overrides = {}) {
   return {
@@ -93,6 +93,91 @@ test('createGmailDraft posts to the drafts endpoint and returns the draft id', a
   assert.equal(result.mode, 'draft_created');
   assert.equal(result.draftId, 'd-9');
   assert.equal(result.messageId, 'm-9');
+});
+
+test('getGmailDraft returns null when the draft is gone (404)', async () => {
+  const stubFetch = async () => ({ ok: false, status: 404, text: async () => 'not found' });
+  const result = await getGmailDraft(
+    baseConfig(),
+    'd-missing',
+    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() }
+  );
+  assert.equal(result, null);
+});
+
+test('getGmailDraft extracts subject and text/plain body from a multipart Gmail draft payload', async () => {
+  const bodyText = 'Beste Acme,\n\nUw website mag frisser.\n\nVBJ Services';
+  const b64 = Buffer.from(bodyText, 'utf8').toString('base64')
+    .replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/gu, '');
+  const draftPayload = {
+    id: 'd-42',
+    message: {
+      id: 'm-42',
+      threadId: 't-42',
+      payload: {
+        mimeType: 'multipart/alternative',
+        headers: [
+          { name: 'From', value: 'sender@example.com' },
+          { name: 'Subject', value: 'uw website' },
+        ],
+        parts: [
+          { mimeType: 'text/html', body: { data: '' } },
+          { mimeType: 'text/plain', body: { data: b64 } },
+        ],
+      },
+    },
+  };
+  let capturedUrl = '';
+  const stubFetch = async (url) => {
+    capturedUrl = url;
+    return { ok: true, status: 200, json: async () => draftPayload };
+  };
+  const result = await getGmailDraft(
+    baseConfig(),
+    'd-42',
+    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() }
+  );
+  assert.ok(capturedUrl.includes('/drafts/d-42'));
+  assert.ok(capturedUrl.includes('format=full'));
+  assert.equal(result.subject, 'uw website');
+  assert.equal(result.bodyText, bodyText);
+  assert.ok(result.bodyPreview.startsWith('Beste Acme, Uw website'));
+});
+
+test('listGmailDraftsSummary lists ids then fetches metadata per draft, normalising the To header', async () => {
+  const listPayload = { drafts: [{ id: 'd-alpha' }, { id: 'd-beta' }] };
+  const details = {
+    'd-alpha': {
+      message: {
+        internalDate: '1000',
+        payload: { headers: [{ name: 'To', value: 'Foo Bar <foo@example.com>' }, { name: 'Subject', value: 'hello' }] },
+      },
+    },
+    'd-beta': {
+      message: {
+        internalDate: '2000',
+        payload: { headers: [{ name: 'To', value: 'bar@example.com' }, { name: 'Subject', value: 'world' }] },
+      },
+    },
+  };
+  const calls = [];
+  const stubFetch = async (url) => {
+    calls.push(url);
+    if (url.includes('?maxResults=')) {
+      return { ok: true, status: 200, json: async () => listPayload };
+    }
+    const m = url.match(/\/drafts\/([^?]+)/u);
+    return { ok: true, status: 200, json: async () => details[m[1]] };
+  };
+  const result = await listGmailDraftsSummary(
+    baseConfig(),
+    { maxResults: 25, fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() }
+  );
+  assert.ok(calls[0].includes('maxResults=25'));
+  assert.deepEqual(result, [
+    { id: 'd-alpha', to: 'foo@example.com', subject: 'hello', internalDate: 1000 },
+    { id: 'd-beta',  to: 'bar@example.com', subject: 'world', internalDate: 2000 },
+  ]);
 });
 
 test('sendGmailMessage attaches configured bccAudit when the draft has no explicit bcc', async () => {

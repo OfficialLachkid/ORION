@@ -1,4 +1,4 @@
-name: Ruflo Runtime Validation
+name: ORION Runtime Validation
 
 on:
   workflow_dispatch:

@@ -24,7 +24,7 @@ import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
 import { fetchLeads } from './lib/leadgen-supabase.mjs';
-import { reconcileManuallySentDrafts } from './lib/draft-reconciler.mjs';
+import { reconcileDrafts } from './lib/draft-reconciler.mjs';
 import { detectReplies } from './lib/reply-detector.mjs';
 import { buildNoticeDiscordPayload } from '../services/discord-bot/src/message-formatting.mjs';
 
@@ -139,7 +139,7 @@ function buildDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
   const unreachable = outcomes.filter((o) => o.status === 'site_unreachable').length;
   const extractionError = outcomes.filter((o) => o.status === 'extraction_error').length;
   const failed = outcomes.filter((o) => o.error).length;
-  const { redrafted = 0, reconciled = 0, followedUp = 0, replyResult = null } = extras;
+  const { redrafted = 0, reconciled = 0, editedInGmail = 0, repointedInGmail = 0, followedUp = 0, replyResult = null } = extras;
 
   const parts = [
     drafted > 0 ? `**${drafted}** new draft(s) awaiting approval in #outreach-agent` : '',
@@ -161,6 +161,8 @@ function buildDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
     followedUp > 0 ? `Drafted **${followedUp}** follow-up(s) for unanswered leads (approval-gated in #outreach-followups).` : '',
     redrafted > 0 ? `Re-drafted **${redrafted}** previously-rejected lead(s) using your feedback.` : '',
     reconciled > 0 ? `Reconciled **${reconciled}** draft(s) you sent manually in Gmail (marked sent, closed the approval).` : '',
+    editedInGmail > 0 ? `Mirrored **${editedInGmail}** draft edit(s) you made in Gmail back into the Discord approval card.` : '',
+    repointedInGmail > 0 ? `Repointed **${repointedInGmail}** draft(s) after mobile Gmail created a new draft on edit — the approval card now reflects your latest version.` : '',
   ].filter(Boolean);
 
   return [
@@ -255,13 +257,22 @@ async function main() {
     process.stderr.write(`Follow-up step failed (non-fatal): ${error.message}\n`);
   }
 
-  // Reconcile drafts the operator sent/deleted manually in Gmail — flip their
-  // Discord approval to "sent", mark the lead sent, drop the pending task.
+  // Reconcile drafts the operator touched in Gmail:
+  //   - Drafts sent/deleted by hand → flip Discord approval to "sent", mark
+  //     the lead sent, drop the pending task.
+  //   - Drafts still pending but with edited subject/body → mirror the current
+  //     Gmail content back into the pending-task store and rewrite the
+  //     approval card's Subject/Body fields so the preview matches reality.
   let reconciled = 0;
+  let editedInGmail = 0;
+  let repointedInGmail = 0;
   try {
-    reconciled = await reconcileManuallySentDrafts(config);
+    const result = await reconcileDrafts(config);
+    reconciled = result.sent;
+    editedInGmail = result.edited;
+    repointedInGmail = result.repointed;
   } catch (error) {
-    process.stderr.write(`Manual-send reconcile step failed (non-fatal): ${error.message}\n`);
+    process.stderr.write(`Draft reconcile step failed (non-fatal): ${error.message}\n`);
   }
 
   // Success (even a partial batch with a couple of timeouts counts) — mark
@@ -274,12 +285,12 @@ async function main() {
 
   await postDiscord(config, config.channelIds.leadQualificationAgent || config.channelIds.leadGeneration, buildNoticeDiscordPayload({
     title: label,
-    description: buildDigest(outcomes, backlog, openDrafts, { redrafted, reconciled, followedUp, replyResult }),
+    description: buildDigest(outcomes, backlog, openDrafts, { redrafted, reconciled, editedInGmail, repointedInGmail, followedUp, replyResult }),
     color: 0x5865F2,
     footerText: 'Ruflo night shift',
   }));
 
-  process.stdout.write(`${JSON.stringify({ processed: outcomes.length, redrafted, reconciled, followedUp, backlog, openDrafts }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ processed: outcomes.length, redrafted, reconciled, editedInGmail, repointedInGmail, followedUp, backlog, openDrafts }, null, 2)}\n`);
 }
 
 main().catch((error) => {
