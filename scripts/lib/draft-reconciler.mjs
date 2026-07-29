@@ -20,7 +20,7 @@
 // current content is regardless — so the risk here is a stale-looking
 // preview, not a wrong send. Repointing DOES change which draftId gets sent
 // on approval, so the guard on (3) matters.
-import { getGmailDraft, listGmailDraftsSummary } from '../../services/gmail/src/send.mjs';
+import { deleteGmailDraft, getGmailDraft, listGmailDraftsSummary } from '../../services/gmail/src/send.mjs';
 import { loadPersistedPendingTasks, removePersistedPendingTask, upsertPersistedPendingTask } from '../../services/discord-bot/src/pending-task-store.mjs';
 import { updateLead } from './leadgen-supabase.mjs';
 
@@ -276,6 +276,7 @@ export async function reconcileDrafts(config) {
     // never wrote to the stored draft at all).
     const superseding = await findSupersedingDraft(config, task, draftsByRecipient);
     if (superseding) {
+      const previousDraftId = task.gmail_draft.draftId;
       syncPendingTaskContent(config, task, {
         subject: superseding.subject,
         bodyText: superseding.bodyText,
@@ -290,6 +291,16 @@ export async function reconcileDrafts(config) {
       });
       if (patched) {
         repointed += 1;
+        // Repoint succeeded end-to-end; the previous draft is now an orphan
+        // in the operator's Gmail (nothing in our pipeline references it,
+        // it's a leftover of the mobile-edit fork). Delete it so it doesn't
+        // clutter Gmail. Best-effort — if this fails Gmail is still safe
+        // because the pending task already points at the current version.
+        try {
+          await deleteGmailDraft(config.env, previousDraftId);
+        } catch {
+          // orphan deletion is a cleanup nicety, never critical
+        }
       }
       continue;
     }
