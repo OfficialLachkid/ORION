@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { executeApprovedPullRequestMerge } from '../src/pr-merge.mjs';
 
-const repository = 'OfficialLachkid/ORION';
+const repository = 'OfficialLachkid/ruflo';
 const fullHeadSha = '1234567890abcdef1234567890abcdef12345678';
 
 function buildTask(overrides = {}) {

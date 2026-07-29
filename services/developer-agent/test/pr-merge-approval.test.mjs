@@ -18,12 +18,12 @@ const successfulObservation = {
   isRuntimeValidation: true,
   status: 'success',
   eventName: 'pull_request',
-  repository: 'OfficialLachkid/ORION',
+  repository: 'OfficialLachkid/ruflo',
   prNumber: 42,
   sourceBranch: 'agent/task-42-fix-runtime',
   targetBranch: 'main',
   commit: '1234567890abcdef1234567890abcdef12345678',
-  detailsUrl: 'https://github.com/OfficialLachkid/ORION/actions/runs/123',
+  detailsUrl: 'https://github.com/OfficialLachkid/ruflo/actions/runs/123',
   runNumber: 108,
   workflowName: 'Ruflo Runtime Validation',
 };
@@ -39,7 +39,7 @@ test('buildDeveloperMergeApprovalTask creates a deterministic final-merge approv
   assert.equal(task.runtime_action, 'github_merge_pull_request');
   assert.equal(task.approval_state, 'pending');
   assert.equal(task.github_merge_request.expectedHeadSha, successfulObservation.commit);
-  assert.equal(task.github_merge_request.pullRequestUrl, 'https://github.com/OfficialLachkid/ORION/pull/42');
+  assert.equal(task.github_merge_request.pullRequestUrl, 'https://github.com/OfficialLachkid/ruflo/pull/42');
 
   const events = buildDeveloperMergeApprovalEvents(task);
   assert.equal(events.length, 2);

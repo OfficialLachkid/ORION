@@ -15,20 +15,20 @@ test('parseGitHubCiObservation extracts pull request branches from the CI channe
     webhook_id: 'webhook-1',
     embeds: [
       {
-        title: 'GitHub CI SUCCESS - OfficialLachkid/ORION',
+        title: 'GitHub CI SUCCESS - OfficialLachkid/ruflo',
         fields: [
           { name: 'Workflow', value: '`Ruflo Runtime Validation`' },
           { name: 'Job', value: '`Runtime Validation`' },
           { name: 'Status', value: '✅ `success`' },
-          { name: 'Repository', value: '`OfficialLachkid/ORION`' },
+          { name: 'Repository', value: '`OfficialLachkid/ruflo`' },
           { name: 'Source Branch', value: '`feature/developer-agent-github-flow`' },
           { name: 'Target Branch', value: '`main`' },
           { name: 'Event', value: '`pull_request`' },
           { name: 'Actor', value: '`lachkid`' },
-          { name: 'Commit', value: '[`1138303`](https://github.com/OfficialLachkid/ORION/commit/1138303abcdef1138303abcdef1138303abcdef1)' },
+          { name: 'Commit', value: '[`1138303`](https://github.com/OfficialLachkid/ruflo/commit/1138303abcdef1138303abcdef1138303abcdef1)' },
           { name: 'PR', value: '#42' },
           { name: 'Run', value: '#108' },
-          { name: 'Details', value: 'https://github.com/OfficialLachkid/ORION/actions/runs/123' },
+          { name: 'Details', value: 'https://github.com/OfficialLachkid/ruflo/actions/runs/123' },
         ],
       },
     ],
@@ -38,14 +38,14 @@ test('parseGitHubCiObservation extracts pull request branches from the CI channe
     workflowName: 'Ruflo Runtime Validation',
     jobName: 'Runtime Validation',
     status: 'success',
-    repository: 'OfficialLachkid/ORION',
+    repository: 'OfficialLachkid/ruflo',
     refName: 'feature/developer-agent-github-flow',
     sourceBranch: 'feature/developer-agent-github-flow',
     targetBranch: 'main',
     eventName: 'pull_request',
     actor: 'lachkid',
     commit: '1138303abcdef1138303abcdef1138303abcdef1',
-    detailsUrl: 'https://github.com/OfficialLachkid/ORION/actions/runs/123',
+    detailsUrl: 'https://github.com/OfficialLachkid/ruflo/actions/runs/123',
     prNumber: 42,
     runNumber: 108,
     isRuntimeValidation: true,
@@ -61,7 +61,7 @@ test('parseGitHubCiObservation falls back to the embed title status for bot mess
     },
     embeds: [
       {
-        title: 'GitHub CI FAILURE - OfficialLachkid/ORION',
+        title: 'GitHub CI FAILURE - OfficialLachkid/ruflo',
         fields: [
           { name: 'Workflow', value: '`Ruflo Runtime Validation`' },
           { name: 'Job', value: '`Runtime Validation`' },
@@ -96,7 +96,7 @@ test('parseGitHubCiObservation supports legacy Ref cards when CI uses the GitHub
     channel_id: 'github-channel',
     webhook_id: 'webhook-legacy',
     embeds: [{
-      title: 'GitHub CI SUCCESS - OfficialLachkid/ORION',
+      title: 'GitHub CI SUCCESS - OfficialLachkid/ruflo',
       fields: [
         { name: 'Workflow', value: '`Ruflo Runtime Validation`' },
         { name: 'Ref', value: '`development`' },

@@ -9,7 +9,7 @@ export const newmanPartnersEditorialReferenceTemplate = createPublishedReference
   siteSubtitle:
     'Reference-first layout for premium recruitment, consulting, and advisory websites that need a calmer editorial story.',
   sourceLabel: 'Source preview: Newman & Partners v2',
-  previewUrl: 'https://officiallachkid.github.io/ORION/sites/newman-partners-v2/',
+  previewUrl: 'https://officiallachkid.github.io/ruflo/sites/newman-partners-v2/',
   previewNote:
     'This design is currently a reusable reference layout. Full field-level editing for this imported family is a separate import step.',
   theme: {

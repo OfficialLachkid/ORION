@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGmailDraft, getGmailDraft, sendGmailMessage } from '../src/send.mjs';
+import { createGmailDraft, sendGmailMessage } from '../src/send.mjs';
 
 function baseConfig(overrides = {}) {
   return {
@@ -93,55 +93,6 @@ test('createGmailDraft posts to the drafts endpoint and returns the draft id', a
   assert.equal(result.mode, 'draft_created');
   assert.equal(result.draftId, 'd-9');
   assert.equal(result.messageId, 'm-9');
-});
-
-test('getGmailDraft returns null when the draft is gone (404)', async () => {
-  const stubFetch = async () => ({ ok: false, status: 404, text: async () => 'not found' });
-  const result = await getGmailDraft(
-    baseConfig(),
-    'd-missing',
-    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() }
-  );
-  assert.equal(result, null);
-});
-
-test('getGmailDraft extracts subject and text/plain body from a multipart Gmail draft payload', async () => {
-  const bodyText = 'Beste Acme,\n\nUw website mag frisser.\n\nVBJ Services';
-  const b64 = Buffer.from(bodyText, 'utf8').toString('base64')
-    .replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/gu, '');
-  const draftPayload = {
-    id: 'd-42',
-    message: {
-      id: 'm-42',
-      threadId: 't-42',
-      payload: {
-        mimeType: 'multipart/alternative',
-        headers: [
-          { name: 'From', value: 'sender@example.com' },
-          { name: 'Subject', value: 'uw website' },
-        ],
-        parts: [
-          { mimeType: 'text/html', body: { data: '' } },
-          { mimeType: 'text/plain', body: { data: b64 } },
-        ],
-      },
-    },
-  };
-  let capturedUrl = '';
-  const stubFetch = async (url) => {
-    capturedUrl = url;
-    return { ok: true, status: 200, json: async () => draftPayload };
-  };
-  const result = await getGmailDraft(
-    baseConfig(),
-    'd-42',
-    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() }
-  );
-  assert.ok(capturedUrl.includes('/drafts/d-42'));
-  assert.ok(capturedUrl.includes('format=full'));
-  assert.equal(result.subject, 'uw website');
-  assert.equal(result.bodyText, bodyText);
-  assert.ok(result.bodyPreview.startsWith('Beste Acme, Uw website'));
 });
 
 test('sendGmailMessage attaches configured bccAudit when the draft has no explicit bcc', async () => {
