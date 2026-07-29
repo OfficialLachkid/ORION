@@ -222,6 +222,7 @@ config/gmail/.env
 
 # Local Product Video Agent runtime
 /.venv-product-video/
+/.venv-product-video-kokoro/
 
 # Night-shift per-day run markers (local runtime state)
 /data/night-shift/
