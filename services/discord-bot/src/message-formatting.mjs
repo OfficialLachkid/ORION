@@ -10,6 +10,9 @@ export const EMBED_COLORS = {
   approval: 0xFEE75C,
   queue: 0x3498DB,
   queued: 0xFEE75C,
+  // Distinct from `queued` yellow so a drafted email awaiting operator review
+  // reads visually as "ready, needs your click" instead of "still processing".
+  awaitingReview: 0x9B59B6,
   running: 0x3498DB,
   voice: 0x1ABC9C,
   memory: 0x1ABC9C,
@@ -171,8 +174,9 @@ function queueStatusColor(status) {
     case 'running':
     case 'starting':
       return EMBED_COLORS.running;
-    case 'queued':
     case 'awaiting_approval':
+      return EMBED_COLORS.awaitingReview;
+    case 'queued':
     case 'pending':
     case 'paused':
       return EMBED_COLORS.queued;

@@ -9,7 +9,7 @@ export const vbjServicesReferenceTemplate = createPublishedReferenceTemplate({
   siteSubtitle:
     'Reference-first layout for modern AI, automation, and high-end service offers that need a sharper cinematic sales flow.',
   sourceLabel: 'Source preview: VBJ Services',
-  previewUrl: 'https://officiallachkid.github.io/ruflo/sites/vbj-services/',
+  previewUrl: 'https://officiallachkid.github.io/ORION/sites/vbj-services/',
   previewNote:
     'This design is currently a reusable reference layout. Full field-level editing for this imported family is a separate import step.',
   theme: {

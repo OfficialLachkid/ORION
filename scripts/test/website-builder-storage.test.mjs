@@ -31,13 +31,13 @@ test('imported starter designs use the published sites as their own source previ
   ;
 
   assert.equal(vinkDesign?.templateId, 'vink-elektrotechniek-reference');
-  assert.equal(vinkDesign?.draft.reference.previewUrl, 'https://officiallachkid.github.io/ruflo/sites/vink-elektrotechniek/');
+  assert.equal(vinkDesign?.draft.reference.previewUrl, 'https://officiallachkid.github.io/ORION/sites/vink-elektrotechniek/');
   assert.equal(newmanDesign?.templateId, 'vink-elektrotechniek-reference');
-  assert.equal(newmanDesign?.draft.reference.previewUrl, 'https://officiallachkid.github.io/ruflo/sites/newman-partners/');
+  assert.equal(newmanDesign?.draft.reference.previewUrl, 'https://officiallachkid.github.io/ORION/sites/newman-partners/');
   assert.equal(editorialDesign?.templateId, 'newman-partners-editorial-reference');
   assert.equal(
     editorialDesign?.draft.reference.previewUrl,
-    'https://officiallachkid.github.io/ruflo/sites/newman-partners-v2/'
+    'https://officiallachkid.github.io/ORION/sites/newman-partners-v2/'
   );
 });
 

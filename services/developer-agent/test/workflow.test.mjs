@@ -45,13 +45,13 @@ test('executeDeveloperAgentWorkflow creates issue, isolated branch, commit, and 
   const commandRunner = async (command, args, options = {}) => {
     calls.push({ command, args, cwd: options.cwd });
     if (command === 'gh' && args[0] === 'repo') {
-      return { code: 0, stdout: 'OfficialLachkid/ruflo\n', stderr: '' };
+      return { code: 0, stdout: 'OfficialLachkid/ORION\n', stderr: '' };
     }
     if (command === 'gh' && args[0] === 'issue') {
-      return { code: 0, stdout: 'https://github.com/OfficialLachkid/ruflo/issues/12\n', stderr: '' };
+      return { code: 0, stdout: 'https://github.com/OfficialLachkid/ORION/issues/12\n', stderr: '' };
     }
     if (command === 'gh' && args[0] === 'pr') {
-      return { code: 0, stdout: 'https://github.com/OfficialLachkid/ruflo/pull/13\n', stderr: '' };
+      return { code: 0, stdout: 'https://github.com/OfficialLachkid/ORION/pull/13\n', stderr: '' };
     }
     if (command === 'git' && args[0] === 'show-ref') {
       return { code: 1, stdout: '', stderr: '' };

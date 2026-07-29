@@ -16,7 +16,7 @@
  *   - Each site is a Vite React project with a package.json + "build" script.
  *   - Each site reads its subpath from import.meta.env.BASE_URL
  *     (react-router's basename should be set from BASE_URL for SPA routes).
- *   - GH Pages base path is /ruflo/ (repo name).
+ *   - GH Pages base path is /ORION/ (repo name).
  */
 import { execSync } from 'node:child_process'
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs'
@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url'
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const SITES_DIR = join(REPO_ROOT, 'sites')
 const SOURCES_DIR = join(REPO_ROOT, 'websites')
-const REPO_NAME = 'ruflo'
+const REPO_NAME = 'ORION'
 const PAGES_BASE = `/${REPO_NAME}/sites`
 
 /* ---------------------------------------------------------------- helpers */
@@ -461,7 +461,7 @@ function renderGallery(sites) {
       VBJ Services · Website gallery
     </span>
     <nav>
-      <a href="https://github.com/ruvnet/ruflo">GitHub</a>
+      <a href="https://github.com/OfficialLachkid/ORION">GitHub</a>
       <a href="../">Docs</a>
     </nav>
   </footer>

@@ -202,7 +202,10 @@ export async function runLeadgenSearch(query, max, config, options = {}) {
   try {
     // The Supabase table is the authoritative denylist; the Python-side
     // hardcoded set stays as the fallback seed when this fetch fails.
-    const blockedDomains = await fetchBlockedDomains();
+    // Newest-first so search_leads.py can safely take the top N entries as
+    // the DuckDuckGo `-site:` prefilter — recent blocks are the ones most
+    // likely to re-surface for a similar-region query the next day.
+    const blockedDomains = await fetchBlockedDomains({ order: 'newest' });
     if (blockedDomains.length > 0) {
       tempDir = tempDir || mkdtempSync(join(tmpdir(), 'leadgen-'));
       blockedDomainsFile = join(tempDir, 'blocked-domains.txt');

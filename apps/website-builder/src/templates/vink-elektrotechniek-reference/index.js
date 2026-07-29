@@ -9,7 +9,7 @@ export const vinkElektrotechniekReferenceTemplate = createPublishedReferenceTemp
   siteSubtitle:
     'Reference-first template family for service businesses that need a premium hero, trust band, and structured conversion path.',
   sourceLabel: 'Source preview: Vink Elektrotechniek',
-  previewUrl: 'https://officiallachkid.github.io/ruflo/sites/vink-elektrotechniek/',
+  previewUrl: 'https://officiallachkid.github.io/ORION/sites/vink-elektrotechniek/',
   previewNote:
     'This design is currently a reusable reference layout. Full field-level editing for this imported family is a separate import step.',
   theme: {
