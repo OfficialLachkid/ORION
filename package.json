@@ -76,7 +76,6 @@
     "claude:doctor": "node scripts/claude-runner-doctor.mjs",
     "claude:canary": "node scripts/claude-runner-canary.mjs",
     "claude:resume": "node scripts/claude-runner-resume.mjs",
-    "claude:install-resume-watch-schedule": "node scripts/install-claude-resume-watch-schedule.mjs",
     "mac:reboot-recovery-check": "node scripts/mac-reboot-recovery-check.mjs",
     "website-builder:dev": "node scripts/website-builder-dev-server.mjs",
     "runtime:mac-sync": "node scripts/mac-sync-worker.mjs",
