@@ -101,12 +101,14 @@ test('type icon layout stays centered in the upper middle', () => {
   assert.deepEqual(layout[1], { x: 554, y: 320, width: 168, height: 168 });
 });
 
-test('timer layout stays lower-middle above the safe bottom zone', () => {
+test('timer layout stays top-left with centered number anchors', () => {
   const layout = buildTimerLayout(template);
-  assert.equal(layout.x, 420);
-  assert.equal(layout.y, 1360);
+  assert.equal(layout.x, 100);
+  assert.equal(layout.y, 180);
   assert.equal(layout.width, 240);
   assert.equal(layout.height, 240);
+  assert.equal(layout.number_center_x, 220);
+  assert.equal(layout.number_center_y, 300);
 });
 
 test('countdown moments include the 0 card at reveal time', () => {

@@ -7,7 +7,7 @@ const DEFAULT_PROMPT_TEXT_Y = 170;
 const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
 const DEFAULT_TIMER_SIZE = 240;
-const DEFAULT_TIMER_MARGIN_BOTTOM = 60;
+const DEFAULT_TIMER_MARGIN_TOP = 20;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
 const DEFAULT_HOOK_FONT_SIZE = 92;
 const DEFAULT_PROMPT_FONT_SIZE = 54;
@@ -121,6 +121,38 @@ function computeTextBlockY(baseY, lineCount, fontSize, template) {
   return Math.max(safeTop - 10, Math.floor(baseY - (((lineCount - 1) * lineHeight) / 2)));
 }
 
+function buildAnimatedTextAlphaExpression(startSeconds, endSeconds) {
+  const start = roundTime(startSeconds);
+  const end = roundTime(endSeconds);
+  const fadeInDuration = roundTime(Math.min(0.24, Math.max(0.14, (end - start) * 0.16)));
+  const fadeOutDuration = roundTime(Math.min(0.18, Math.max(0.12, (end - start) * 0.12)));
+  const fadeInEnd = roundTime(start + fadeInDuration);
+  const fadeOutStart = roundTime(Math.max(start + fadeInDuration, end - fadeOutDuration));
+  return `if(lt(t,${start}),0,if(lt(t,${fadeInEnd}),(t-${start})/${fadeInDuration},if(lt(t,${fadeOutStart}),1,if(lt(t,${end}),(${end}-t)/${fadeOutDuration},0))))`;
+}
+
+function buildAnimatedTextYExpression(baseY, startSeconds) {
+  const start = roundTime(startSeconds);
+  const settleEnd = roundTime(start + 0.32);
+  return `${baseY}+if(lt(t,${settleEnd}),(1-((t-${start})/0.32))*18*sin((t-${start})*20),0)`;
+}
+
+function buildTextLineArtifacts(text, { template, fontSize, maxLines, baseY }) {
+  const wrapped = wrapTextBlock(text, {
+    maxCharactersPerLine: estimateWrapCharacterLimit(template, fontSize),
+    maxLines,
+  });
+  const lineHeight = fontSize + DEFAULT_TEXT_LINE_SPACING;
+  const blockY = computeTextBlockY(baseY, wrapped.lines.length, fontSize, template);
+  return {
+    line_height: lineHeight,
+    lines: wrapped.lines.map((lineText, index) => ({
+      text: lineText,
+      y: blockY + (index * lineHeight),
+    })),
+  };
+}
+
 export function formatEnableBetween(startSeconds, endSeconds) {
   return `between(t,${startSeconds},${endSeconds})`;
 }
@@ -159,17 +191,17 @@ export function buildTypeIconLayout(template, count = 2) {
 }
 
 export function buildTimerLayout(template) {
-  const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
-  const canvasHeight = ensureNumber(template?.canvas?.height, 1920);
-  const safeZoneBottom = ensureNumber(template?.canvas?.safe_zone?.bottom, 260);
+  const safeZone = template?.canvas?.safe_zone || {};
+  const safeTop = ensureNumber(safeZone.top, 160);
+  const safeLeft = ensureNumber(safeZone.left, 100);
   const size = DEFAULT_TIMER_SIZE;
   return {
-    x: Math.floor((canvasWidth - size) / 2),
-    y: canvasHeight - safeZoneBottom - size - DEFAULT_TIMER_MARGIN_BOTTOM,
+    x: safeLeft,
+    y: safeTop + DEFAULT_TIMER_MARGIN_TOP,
     width: size,
     height: size,
-    number_center_x: Math.floor(canvasWidth / 2),
-    number_y: canvasHeight - safeZoneBottom - size - 2,
+    number_center_x: safeLeft + Math.floor(size / 2),
+    number_center_y: safeTop + DEFAULT_TIMER_MARGIN_TOP + Math.floor(size / 2),
   };
 }
 
@@ -341,18 +373,24 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
 
   const drawtextParts = [];
   const fontPart = fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
-  drawtextParts.push(
-    `drawtext=textfile='${escapeFilterPath(textArtifacts.hook.path)}':reload=0${fontPart}:fontcolor=white:fontsize=${DEFAULT_HOOK_FONT_SIZE}:line_spacing=${DEFAULT_TEXT_LINE_SPACING}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${textArtifacts.hook.y}:enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}'`,
-  );
-  drawtextParts.push(
-    `drawtext=textfile='${escapeFilterPath(textArtifacts.prompt.path)}':reload=0${fontPart}:fontcolor=white:fontsize=${DEFAULT_PROMPT_FONT_SIZE}:line_spacing=${DEFAULT_TEXT_LINE_SPACING}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${textArtifacts.prompt.y}:enable='${formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, renderPlan.phases.reveal.start_seconds)}'`,
-  );
-  drawtextParts.push(
-    `drawtext=textfile='${escapeFilterPath(textArtifacts.reveal.path)}':reload=0${fontPart}:fontcolor=white:fontsize=${DEFAULT_REVEAL_FONT_SIZE}:line_spacing=${DEFAULT_TEXT_LINE_SPACING}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${textArtifacts.reveal.y}:enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}'`,
-  );
+  for (const line of textArtifacts.hook.lines) {
+    drawtextParts.push(
+      `drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_HOOK_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.hook.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}'`,
+    );
+  }
+  for (const line of textArtifacts.prompt.lines) {
+    drawtextParts.push(
+      `drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_PROMPT_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.type_prompt.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.type_prompt.start_seconds, renderPlan.phases.reveal.start_seconds)}':enable='${formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, renderPlan.phases.reveal.start_seconds)}'`,
+    );
+  }
+  for (const line of textArtifacts.reveal.lines) {
+    drawtextParts.push(
+      `drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_REVEAL_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.reveal.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}':enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}'`,
+    );
+  }
   for (const countdown of renderPlan.countdown_numbers) {
     drawtextParts.push(
-      `drawtext=text='${escapeDrawtextText(countdown.value)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_TIMER_NUMBER_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=(w-text_w)/2:y=${renderPlan.timer_layout.number_y}:enable='${formatEnableBetween(countdown.start_seconds, countdown.end_seconds)}'`,
+      `drawtext=text='${escapeDrawtextText(countdown.value)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_TIMER_NUMBER_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=${renderPlan.timer_layout.number_center_x}-text_w/2:y=${renderPlan.timer_layout.number_center_y}-text_h/2:enable='${formatEnableBetween(countdown.start_seconds, countdown.end_seconds)}'`,
     );
   }
 
@@ -368,47 +406,27 @@ function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
 }
 
-async function writeDrawtextArtifacts({ renderPlan, template, runtimeRoot }) {
-  const textRoot = resolve(runtimeRoot, 'text');
-  await mkdir(textRoot, { recursive: true });
-  const hook = wrapTextBlock(renderPlan.text.hook, {
-    maxCharactersPerLine: estimateWrapCharacterLimit(template, DEFAULT_HOOK_FONT_SIZE),
-    maxLines: 2,
-  });
-  const prompt = wrapTextBlock(renderPlan.text.prompt, {
-    maxCharactersPerLine: estimateWrapCharacterLimit(template, DEFAULT_PROMPT_FONT_SIZE),
-    maxLines: 2,
-  });
-  const reveal = wrapTextBlock(renderPlan.text.reveal, {
-    maxCharactersPerLine: estimateWrapCharacterLimit(template, DEFAULT_REVEAL_FONT_SIZE),
-    maxLines: 2,
-  });
-
-  const artifacts = {
-    hook: {
-      path: resolve(textRoot, 'hook.txt'),
-      text: hook.wrapped_text,
-      y: computeTextBlockY(DEFAULT_HOOK_TEXT_Y, hook.lines.length, DEFAULT_HOOK_FONT_SIZE, template),
-    },
-    prompt: {
-      path: resolve(textRoot, 'prompt.txt'),
-      text: prompt.wrapped_text,
-      y: computeTextBlockY(DEFAULT_PROMPT_TEXT_Y, prompt.lines.length, DEFAULT_PROMPT_FONT_SIZE, template),
-    },
-    reveal: {
-      path: resolve(textRoot, 'reveal.txt'),
-      text: reveal.wrapped_text,
-      y: computeTextBlockY(DEFAULT_REVEAL_TEXT_Y, reveal.lines.length, DEFAULT_REVEAL_FONT_SIZE, template),
-    },
+function buildTextArtifacts({ renderPlan, template }) {
+  return {
+    hook: buildTextLineArtifacts(renderPlan.text.hook, {
+      template,
+      fontSize: DEFAULT_HOOK_FONT_SIZE,
+      maxLines: 2,
+      baseY: DEFAULT_HOOK_TEXT_Y,
+    }),
+    prompt: buildTextLineArtifacts(renderPlan.text.prompt, {
+      template,
+      fontSize: DEFAULT_PROMPT_FONT_SIZE,
+      maxLines: 2,
+      baseY: DEFAULT_PROMPT_TEXT_Y,
+    }),
+    reveal: buildTextLineArtifacts(renderPlan.text.reveal, {
+      template,
+      fontSize: DEFAULT_REVEAL_FONT_SIZE,
+      maxLines: 2,
+      baseY: DEFAULT_REVEAL_TEXT_Y,
+    }),
   };
-
-  await Promise.all([
-    writeFile(artifacts.hook.path, `${artifacts.hook.text}\n`, 'utf8'),
-    writeFile(artifacts.prompt.path, `${artifacts.prompt.text}\n`, 'utf8'),
-    writeFile(artifacts.reveal.path, `${artifacts.reveal.text}\n`, 'utf8'),
-  ]);
-
-  return artifacts;
 }
 
 export function buildAudioFilterScript({ narrationPaths, musicPath, countdownPath, timerEndPath, renderPlan }) {
@@ -586,7 +604,7 @@ export async function renderPokeQuizzVideo({
     pokemon: plan.assets.pokemon.map((_, index) => plan.assets.type_icons.length + 3 + index),
   };
   const fontPath = await resolveFontPath(fontCandidates);
-  const textArtifacts = await writeDrawtextArtifacts({ renderPlan, template, runtimeRoot });
+  const textArtifacts = buildTextArtifacts({ renderPlan, template });
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts);
   await writeFile(filterScriptPath, visualFilter.script, 'utf8');
 
