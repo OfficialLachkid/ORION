@@ -1,0 +1,21 @@
+{
+  "voice_id": "en_US-ljspeech-high",
+  "display_name": "LJ Speech US English Female",
+  "language": "en-US",
+  "speaker_gender": "female",
+  "quality": "medium",
+  "model_source_url": "https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/high",
+  "model_repository_license": "MIT",
+  "training_dataset": "LJ Speech Dataset",
+  "dataset_source_url": "https://keithito.com/LJ-Speech-Dataset/",
+  "dataset_license": "public_domain",
+  "engine_license": "GPL-3.0",
+  "commercial_use_status": "approved",
+  "reviewed_at": "2026-07-20T00:00:00.000Z",
+  "review_notes": [
+    "Selected as a human-sounding single-speaker US English female voice for short-form narration.",
+    "The upstream Piper model card identifies the LJ Speech training dataset as public domain.",
+    "The voice repository is MIT-licensed; the local Piper engine is GPL-3.0 and is invoked as a separate CLI process.",
+    "Re-review upstream terms before redistributing model or engine files. This record is an operational review, not legal advice."
+  ]
+}

@@ -1,0 +1,205 @@
+.editor-sections {
+  display: grid;
+  gap: 14px;
+}
+
+body.website-builder-editor-mode .editor-sections {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.editor-section {
+  border-radius: 18px;
+  border: 1px solid rgba(23, 33, 31, 0.08);
+  background: rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+}
+
+.editor-section summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+
+.editor-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.editor-section-summary-copy {
+  min-width: 0;
+}
+
+.editor-section-icon {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  transition: transform 220ms ease;
+}
+
+.editor-section-icon::before,
+.editor-section-icon::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 2px;
+  background: rgba(23, 33, 31, 0.56);
+  border-radius: 999px;
+  transition: background 220ms ease;
+}
+
+.editor-section-icon::before {
+  left: 1px;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.editor-section-icon::after {
+  right: 1px;
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.editor-section[open] .editor-section-icon {
+  transform: rotate(180deg);
+}
+
+.editor-section-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 220ms ease,
+    opacity 180ms ease;
+}
+
+.editor-section[open] .editor-section-body {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.field-grid {
+  display: grid;
+  gap: 12px;
+  padding: 0 18px 18px;
+  overflow: hidden;
+}
+
+.field,
+.checkbox-field,
+.position-matrix-field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span,
+.checkbox-field span,
+.position-matrix-field legend {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+input[type="text"],
+input[type="url"],
+input[type="email"],
+textarea,
+select {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px 14px;
+  color: var(--text);
+}
+
+input[type="color"] {
+  width: 100%;
+  height: 48px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 6px;
+}
+
+textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.checkbox-field {
+  grid-template-columns: 20px 1fr;
+  align-items: center;
+}
+
+.checkbox-field .field-help {
+  grid-column: 2;
+}
+
+.position-matrix-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.position-matrix-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.position-matrix-button {
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(23, 33, 31, 0.08);
+}
+
+.position-matrix-button-frame {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 54px;
+  border-radius: 14px;
+  border: 1px dashed rgba(35, 76, 61, 0.28);
+  background:
+    radial-gradient(circle at center, rgba(35, 76, 61, 0.08), transparent 55%),
+    #fffefb;
+}
+
+.position-matrix-button-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(35, 76, 61, 0.22);
+}
+
+.position-matrix-button.is-selected {
+  border-color: rgba(35, 76, 61, 0.28);
+  background: rgba(219, 233, 225, 0.75);
+}
+
+.position-matrix-button.is-selected .position-matrix-button-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 8px rgba(35, 76, 61, 0.12);
+}
+
+[data-editor-target-id].is-active {
+  border-radius: 18px;
+  box-shadow:
+    0 0 0 3px rgba(31, 78, 121, 0.18),
+    0 14px 32px rgba(31, 78, 121, 0.12);
+  transform: translateY(-1px);
+}
+
+[data-path]:focus,
+.position-matrix-button:focus-visible,
+.editor-section summary:focus-visible {
+  outline: 2px solid rgba(31, 78, 121, 0.38);
+  outline-offset: 3px;
+}

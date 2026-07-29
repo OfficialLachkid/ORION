@@ -1,0 +1,25 @@
+{
+  "guildId": "DISCORD_GUILD_ID",
+  "channelKey": "voiceCommands",
+  "channelId": "DISCORD_VOICE_COMMANDS_CHANNEL_ID",
+  "channelName": "#voice-commands",
+  "messageId": "1234567892",
+  "submittedAt": "2026-06-25T10:10:00.000Z",
+  "content": "",
+  "author": {
+    "id": "operator-1",
+    "username": "vbjservices",
+    "displayName": "VBJ Services",
+    "roleIds": [],
+    "isOperator": true
+  },
+  "attachments": [
+    {
+      "id": "audio-1",
+      "name": "voice-note.m4a",
+      "contentType": "audio/mp4",
+      "url": "https://example.invalid/voice-note.m4a",
+      "size": 203104
+    }
+  ]
+}

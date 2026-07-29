@@ -1,0 +1,210 @@
+{
+  "fixture_version": "1.0.0",
+  "source": {
+    "provider": "manual-fixture",
+    "marketplace": "amazon",
+    "source_product_id": "EXAMPLE001",
+    "source_url": "https://www.amazon.com/dp/EXAMPLE001",
+    "retrieved_at": "2026-07-20T00:00:00.000Z",
+    "retrieval_method": "fixture",
+    "source_access_permitted": true
+  },
+  "product": {
+    "name": "Cordless Mini Air Duster",
+    "brand": "Example Labs",
+    "category": "Electronics Cleaning",
+    "description": "A rechargeable handheld air duster intended for keyboards, desks, and small electronics.",
+    "specifications": {
+      "Battery": "6000 mAh",
+      "Charging": "USB-C",
+      "Motor speed": "100000 RPM",
+      "Modes": "3"
+    },
+    "current_price": {
+      "amount": 59.99,
+      "currency": "USD"
+    },
+    "list_price": {
+      "amount": 69.99,
+      "currency": "USD"
+    },
+    "rating": 4.3,
+    "review_count": 2184,
+    "tags": [
+      "desk setup",
+      "cleaning",
+      "rechargeable"
+    ]
+  },
+  "claim_guardrails": {
+    "script_facts": [
+      "This is a rechargeable handheld air duster intended for keyboards, desks, and small electronics.",
+      "It charges over USB-C.",
+      "It has three selectable modes.",
+      "It provides a reusable air source instead of disposable canned air."
+    ],
+    "prohibited_claims": [
+      "Do not claim an exact cleaning time, instant result, or one-button operation; none was verified.",
+      "Do not imply the product can be used everywhere or on every surface."
+    ],
+    "blocked_phrases": [
+      "in just one second",
+      "single press of a button",
+      "use it anywhere",
+      "instant",
+      "in seconds",
+      "battery lasts",
+      "battery life",
+      "motor speed",
+      "computer or wall adapter",
+      "standard USB port",
+      "looks like new",
+      "now visible",
+      "targeted cleaning",
+      "traditional cleaning methods",
+      "dust-free",
+      "user blows into",
+      "you blow into",
+      "draws air",
+      "compressed air",
+      "visible dust particles",
+      "visible cleaning behavior",
+      "power its internal air source",
+      "adjust airflow",
+      "clean surfaces",
+      "work surfaces",
+      "100000 RPM",
+      "6000 mAh"
+    ],
+    "editorial_direction": [
+      "Lead with clearing dust from a keyboard without disposable canned air.",
+      "Focus on the rechargeable handheld format, USB-C charging, and three selectable modes.",
+      "Use keyboards, desks, and small electronics as the only documented use cases.",
+      "Describe the visible cleaning behavior directly without naming the brand, company, or marketplace title.",
+      "Close on a concrete use-case payoff rather than a viewer question or engagement request.",
+      "Do not infer cleaning speed, battery life, charging power source, motor performance, or a before-and-after condition.",
+      "Do not narrate battery capacity, motor RPM, price, rating, review count, or affiliate details."
+    ]
+  },
+  "score_signals": {
+    "visual_appeal": 88,
+    "problem_solving_value": 92,
+    "virality": 84,
+    "novelty": 80,
+    "competition_opportunity": 65,
+    "affiliate_potential": 78
+  },
+  "economics": {
+    "estimated_clicks": 1000,
+    "conversion_rate": 0.02,
+    "commission_rate": 0.04,
+    "production_cost": 0
+  },
+  "assets": [
+    {
+      "media_type": "video",
+      "source_provider": "amazon-product-page",
+      "source_url": "https://www.amazon.com/vdp/example-product-video",
+      "source_page_url": "https://www.amazon.com/dp/EXAMPLE001",
+      "retrieval_method": "reference_only",
+      "rights_status": "unverified",
+      "rights_basis": "unknown",
+      "rights_evidence": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "approval_status": "pending",
+      "download_status": "blocked",
+      "usage_scope": "internal_editor_test",
+      "usage_notes": [
+        "A video being visible on an Amazon page does not establish reuse rights.",
+        "Do not download until the rights holder and permitted reuse terms are documented."
+      ]
+    },
+    {
+      "media_type": "image",
+      "source_provider": "merchant-product-page",
+      "source_url": "https://example.com/products/mini-air-duster/image-1.jpg",
+      "source_page_url": "https://example.com/products/mini-air-duster",
+      "retrieval_method": "reference_only",
+      "rights_status": "unverified",
+      "rights_basis": "unknown",
+      "rights_evidence": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "approval_status": "pending",
+      "download_status": "blocked",
+      "usage_scope": "publication",
+      "usage_notes": [
+        "Fixture metadata only; no asset is downloaded."
+      ]
+    },
+    {
+      "media_type": "image",
+      "source_provider": "orion-owned-fixture",
+      "source_url": "https://fixtures.orion.local/owned-mini-air-duster-card.ppm",
+      "source_page_url": "https://fixtures.orion.local/product-video-agent",
+      "retrieval_method": "fixture",
+      "local_path": "services/product-video-agent/fixtures/owned-mini-air-duster-card.ppm",
+      "content_sha256": "d9291d52033cfd2ab657f74ab57e0678f8d57004280c41bacb2abd5f8e81e5bf",
+      "rights_status": "verified",
+      "rights_basis": "owned",
+      "rights_evidence": "Repository fixture authored for O.R.I.O.N. renderer tests; no third-party media is included.",
+      "attribution_required": false,
+      "attribution_text": null,
+      "approval_status": "approved",
+      "download_status": "downloaded",
+      "usage_scope": "publication",
+      "usage_notes": [
+        "Synthetic development fixture only.",
+        "Not evidence that the example marketplace product or its media may be published."
+      ]
+    },
+    {
+      "media_type": "image",
+      "source_provider": "orion-owned-fixture",
+      "source_url": "https://fixtures.orion.local/owned-mini-air-duster-detail.ppm",
+      "source_page_url": "https://fixtures.orion.local/product-video-agent",
+      "retrieval_method": "fixture",
+      "local_path": "services/product-video-agent/fixtures/owned-mini-air-duster-detail.ppm",
+      "content_sha256": "abc3483cb39cc0696dd2ec17f6dc72d187cecf64941dd75b4c00c0f658531593",
+      "rights_status": "verified",
+      "rights_basis": "owned",
+      "rights_evidence": "Repository fixture authored for O.R.I.O.N. renderer tests; no third-party media is included.",
+      "attribution_required": false,
+      "attribution_text": null,
+      "approval_status": "approved",
+      "download_status": "downloaded",
+      "usage_scope": "publication",
+      "usage_notes": [
+        "Synthetic development fixture only.",
+        "Used to validate ordered detail/B-roll timeline behavior."
+      ]
+    },
+    {
+      "media_type": "image",
+      "source_provider": "orion-owned-fixture",
+      "source_url": "https://fixtures.orion.local/owned-mini-air-duster-payoff.ppm",
+      "source_page_url": "https://fixtures.orion.local/product-video-agent",
+      "retrieval_method": "fixture",
+      "local_path": "services/product-video-agent/fixtures/owned-mini-air-duster-payoff.ppm",
+      "content_sha256": "8ba10dc4eea195eb25ff0e9a3332fe709aaf0b706f57daf83cba3c2f25fbda70",
+      "rights_status": "verified",
+      "rights_basis": "owned",
+      "rights_evidence": "Repository fixture authored for O.R.I.O.N. renderer tests; no third-party media is included.",
+      "attribution_required": false,
+      "attribution_text": null,
+      "approval_status": "approved",
+      "download_status": "downloaded",
+      "usage_scope": "publication",
+      "usage_notes": [
+        "Synthetic development fixture only.",
+        "Used to validate the final visual payoff in a multi-clip timeline."
+      ]
+    }
+  ],
+  "affiliate": {
+    "provider": "amazon-associates",
+    "destination_url": "https://www.amazon.com/dp/EXAMPLE001",
+    "tracking_url": null
+  }
+}

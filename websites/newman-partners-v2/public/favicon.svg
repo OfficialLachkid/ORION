@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#F4F1EA"/>
+  <text x="32" y="46" font-family="Instrument Serif, Fraunces, serif" font-weight="700"
+        font-size="44" fill="#141414" text-anchor="middle">N</text>
+  <circle cx="50" cy="18" r="3" fill="#1F3A5F"/>
+</svg>

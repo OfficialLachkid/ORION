@@ -1,0 +1,306 @@
+.template-site-trust-signals {
+  gap: 0;
+  background:
+    radial-gradient(circle at top left, rgba(84, 112, 59, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(255, 250, 244, 0.96), rgba(242, 238, 229, 0.98));
+}
+
+.trust-signals-top-bar-shell {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+
+.trust-signals-top-bar {
+  border-bottom-color: rgba(84, 112, 59, 0.14);
+}
+
+.trust-signals-top-bar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.trust-signals-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(84, 112, 59, 0.16);
+  background: rgba(255, 250, 244, 0.92);
+  color: rgba(31, 38, 31, 0.88);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.trust-signals-shell {
+  display: grid;
+  gap: 24px;
+  padding: 28px;
+}
+
+.trust-signals-intro-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+  gap: 24px;
+  align-items: stretch;
+}
+
+.trust-signals-intro-copy,
+.trust-signals-hero-visual,
+.trust-availability-card,
+.trust-soft-callout {
+  border-radius: 28px;
+  border: 1px solid rgba(84, 112, 59, 0.12);
+  background: rgba(255, 250, 244, 0.94);
+  box-shadow: 0 26px 58px rgba(42, 52, 42, 0.08);
+}
+
+.trust-signals-intro-copy {
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  padding: 36px;
+}
+
+.trust-signals-eyebrow,
+.trust-availability-eyebrow {
+  margin: 0;
+  color: var(--theme-accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.trust-signals-title,
+.trust-availability-title {
+  margin: 0;
+  max-width: 13ch;
+  color: var(--theme-text);
+  font-size: clamp(2.3rem, 4vw, 4.2rem);
+  line-height: 0.92;
+  letter-spacing: -0.05em;
+}
+
+.trust-signals-description {
+  margin: 0;
+  max-width: 54ch;
+  color: rgba(31, 38, 31, 0.78);
+  font-size: 1.02rem;
+  line-height: 1.7;
+}
+
+.trust-signals-hero-visual {
+  min-height: 460px;
+  overflow: hidden;
+}
+
+.trust-signals-hero-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.trust-signals-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.trust-signals-card {
+  display: grid;
+  gap: 18px;
+  min-height: 220px;
+  padding: 24px;
+  border-radius: 24px;
+  border: 1px solid rgba(84, 112, 59, 0.12);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 244, 0.98), rgba(239, 233, 220, 0.98)),
+    var(--theme-surface);
+  box-shadow: 0 18px 42px rgba(42, 52, 42, 0.07);
+}
+
+.trust-signals-card-mark {
+  display: flex;
+  gap: 6px;
+}
+
+.trust-signals-card-mark span {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(84, 112, 59, 0.26);
+}
+
+.trust-signals-card-mark span:first-child {
+  background: var(--theme-accent);
+}
+
+.trust-signals-card-copy {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.trust-signals-card-title {
+  margin: 0;
+  color: var(--theme-text);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.trust-signals-card-description {
+  margin: 0;
+  color: rgba(31, 38, 31, 0.74);
+  line-height: 1.65;
+}
+
+.trust-availability-card {
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+}
+
+.trust-availability-card-plain {
+  background: rgba(255, 250, 244, 0.8);
+  box-shadow: none;
+}
+
+.trust-availability-copy {
+  display: grid;
+  gap: 10px;
+}
+
+.trust-availability-panel {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border-radius: 22px;
+  background: rgba(84, 112, 59, 0.08);
+}
+
+.trust-availability-panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.trust-availability-month {
+  color: var(--theme-text);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.trust-availability-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(84, 112, 59, 0.16);
+  color: var(--theme-accent);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.trust-availability-highlight-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.trust-availability-highlight {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 14px;
+  background: rgba(255, 250, 244, 0.95);
+  color: rgba(31, 38, 31, 0.8);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.trust-signals-footer {
+  display: grid;
+}
+
+.trust-soft-callout {
+  display: grid;
+  gap: 10px;
+  padding: 26px 28px;
+}
+
+.trust-soft-callout strong {
+  color: var(--theme-text);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.trust-soft-callout-note {
+  margin: 0;
+  color: rgba(31, 38, 31, 0.74);
+  line-height: 1.65;
+}
+
+@media (max-width: 980px) {
+  .trust-signals-intro-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trust-signals-hero-visual {
+    min-height: 320px;
+  }
+
+  .trust-signals-stack {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .trust-signals-shell {
+    padding: 18px;
+  }
+
+  .trust-signals-intro-copy,
+  .trust-signals-hero-visual,
+  .trust-availability-card,
+  .trust-soft-callout,
+  .trust-signals-card {
+    border-radius: 22px;
+  }
+
+  .trust-signals-intro-copy,
+  .trust-availability-card,
+  .trust-soft-callout,
+  .trust-signals-card {
+    padding: 22px;
+  }
+
+  .trust-signals-title,
+  .trust-availability-title {
+    max-width: none;
+    font-size: clamp(2rem, 10vw, 2.8rem);
+  }
+
+  .trust-signals-top-bar {
+    align-items: flex-start;
+  }
+
+  .trust-signals-top-bar-meta {
+    justify-content: flex-start;
+  }
+
+  .trust-availability-panel-header {
+    align-items: flex-start;
+  }
+}

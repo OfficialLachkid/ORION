@@ -1,0 +1,113 @@
+{
+  "rules": {
+    "patterns": {
+      "capture_mode": "validated_reuse",
+      "review_after_days": 14,
+      "stale_after_days": 60,
+      "freshness_rule": "Reconfirm after repeated successful reuse or when the runtime, provider, or host behavior changed.",
+      "promote_when": [
+        "execution succeeded and the same approach is expected to be reusable",
+        "a failure exposed a durable gotcha or constraint worth reusing",
+        "an existing pattern was revised because it became stale"
+      ],
+      "do_not_promote": [
+        "raw command text",
+        "raw transcript text",
+        "temporary planning chatter"
+      ],
+      "review_required": true
+    },
+    "learnings": {
+      "capture_mode": "result_inspection",
+      "review_after_days": 7,
+      "stale_after_days": 21,
+      "freshness_rule": "Retire or promote after the next validating run; do not let unverified hypotheses persist indefinitely.",
+      "promote_when": [
+        "an observation changed the likely next step but is not validated enough to become a pattern",
+        "a session produced a new hypothesis that should be checked later"
+      ],
+      "do_not_promote": [
+        "duplicate observations",
+        "confusion that did not change any action"
+      ],
+      "review_required": true
+    },
+    "results": {
+      "capture_mode": "automatic_audit",
+      "review_after_days": 0,
+      "stale_after_days": 0,
+      "freshness_rule": "Keep as audit output; only review if a result is reused as guidance instead of retained as history.",
+      "promote_when": [
+        "a task completed with a meaningful output",
+        "a normalized task or execution result is needed for resume or audit"
+      ],
+      "do_not_promote": [
+        "every intermediate state change",
+        "heartbeat or trace noise"
+      ],
+      "review_required": false
+    },
+    "decisions": {
+      "capture_mode": "manual_confirmation",
+      "review_after_days": 30,
+      "stale_after_days": 180,
+      "freshness_rule": "Revisit only when an explicit policy, architecture, or operating constraint changes.",
+      "promote_when": [
+        "an architecture or policy decision changed the allowed operating path",
+        "a constraint was explicitly accepted or rejected"
+      ],
+      "do_not_promote": [
+        "speculation that never became a decision"
+      ],
+      "review_required": true
+    },
+    "approvals": {
+      "capture_mode": "automatic_outcome",
+      "review_after_days": 0,
+      "stale_after_days": 30,
+      "freshness_rule": "Keep the outcome as audit history; only treat it as reusable policy if the same approval rationale repeats.",
+      "promote_when": [
+        "a human approval or rejection was explicitly recorded",
+        "the approval scope or rationale changed policy for future work"
+      ],
+      "do_not_promote": [
+        "pending approval requests without an outcome",
+        "raw back-and-forth that did not change the approval result"
+      ],
+      "review_required": false
+    },
+    "products": {
+      "capture_mode": "manual_confirmation",
+      "review_after_days": 30,
+      "stale_after_days": 120,
+      "freshness_rule": "Revalidate when the offer, delivery constraint, or storage model changes.",
+      "promote_when": [
+        "a sellable offer, delivery rule, or product fact became durable"
+      ],
+      "do_not_promote": [
+        "draft copy fragments that are still being explored"
+      ],
+      "review_required": true
+    },
+    "infra": {
+      "capture_mode": "runtime_verified",
+      "review_after_days": 14,
+      "stale_after_days": 60,
+      "freshness_rule": "Reconfirm after host changes, reboots, auth changes, or provider/runtime upgrades.",
+      "promote_when": [
+        "a host, runtime, path, restart, or recovery rule was verified",
+        "a service behavior matters for future recovery or deployment"
+      ],
+      "do_not_promote": [
+        "one-off debug output without a durable operating consequence"
+      ],
+      "review_required": false
+    }
+  },
+  "default_candidate_policy": {
+    "status": "pending_review",
+    "requires_result_inspection": true,
+    "review_after_days": 7,
+    "stale_after_days": 30
+  }
+}

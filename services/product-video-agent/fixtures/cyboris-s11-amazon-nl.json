@@ -1,0 +1,199 @@
+{
+  "fixture_version": "1.0.0",
+  "source": {
+    "provider": "manual-research",
+    "marketplace": "amazon-nl",
+    "source_product_id": "B0F1CCLZGT",
+    "source_url": "https://www.amazon.nl/dp/B0F1CCLZGT",
+    "retrieved_at": "2026-07-21T10:00:00.000Z",
+    "retrieval_method": "manual",
+    "source_access_permitted": true
+  },
+  "product": {
+    "name": "S11-M 2-in-1 Magnetic Split Bluetooth Speaker",
+    "brand": "CYBORIS",
+    "category": "Portable Bluetooth Speakers",
+    "description": "A portable speaker made from two magnetically joined 10 W speaker units that can be separated for wider stereo placement.",
+    "specifications": {
+      "Model": "S11-M",
+      "Output power": "20 W total",
+      "Bluetooth": "5.3",
+      "Bluetooth range": "Up to 18 m",
+      "Water resistance": "IPX6",
+      "Advertised playtime": "Up to 24 hours",
+      "Battery": "2 x 2000 mAh",
+      "Audio mode": "Stereo",
+      "Weight": "0.7 kg"
+    },
+    "current_price": null,
+    "list_price": null,
+    "rating": 4.2,
+    "review_count": 49,
+    "tags": [
+      "magnetic speaker",
+      "split speaker",
+      "portable audio",
+      "outdoor"
+    ]
+  },
+  "source_media_observations": {
+    "listing_images_observed": true,
+    "listing_video_observed": false,
+    "remote_media_acquisition_attempted": false,
+    "notes": [
+      "The operator reported no product video visible on the supplied listing.",
+      "No Amazon-hosted image or video was downloaded by this fixture import."
+    ]
+  },
+  "research_sources": [
+    {
+      "url": "https://device.report/cyboris/s11-m",
+      "retrieved_at": "2026-07-21T10:00:00.000Z",
+      "used_for": ["model", "brand", "rating", "review_count", "core specifications"]
+    },
+    {
+      "url": "https://manuals.plus/asin/B0F1CCLZGT",
+      "retrieved_at": "2026-07-21T10:00:00.000Z",
+      "used_for": ["battery", "dimensions", "playback modes", "core specifications"]
+    }
+  ],
+  "claim_guardrails": {
+    "script_facts": [
+      "One magnetic speaker separates into two speaker units for wider placement.",
+      "A phone connects to the speaker over Bluetooth 5.3.",
+      "The separated halves can be placed on opposite sides of a room.",
+      "The advertised phone-to-speaker Bluetooth range is up to 18 meters.",
+      "The speaker supports stereo playback and has an IPX6 water-resistance rating."
+    ],
+    "prohibited_claims": [
+      "Do not claim simultaneous connections to multiple source devices; this was not verified.",
+      "Do not present advertised playtime or range as independently tested results."
+    ],
+    "blocked_phrases": [
+      "connect two devices",
+      "connect multiple devices",
+      "simultaneous device connections",
+      "18 meters apart",
+      "eighteen meters apart",
+      "Bluetooth connects to one half",
+      "phone connects to one half",
+      "pair with one half",
+      "without extra wires",
+      "without adapters",
+      "without gaps",
+      "clear audio separation"
+    ],
+    "editorial_direction": [
+      "Lead with the curiosity hook that one magnetic speaker separates into two speakers.",
+      "Explain connecting a phone over Bluetooth and placing each half on opposite sides of a room.",
+      "Mention the advertised phone-to-speaker Bluetooth range of up to 18 meters only if it supports the use case.",
+      "Keep the range relationship exact: it is from the phone to the speaker, not between the separated halves.",
+      "Frame parties, the garden, or room-filling placement as relatable use cases.",
+      "Do not mention wattage, battery capacity, the model code, review score, or affiliate details in narration."
+    ]
+  },
+  "score_signals": {
+    "visual_appeal": 88,
+    "problem_solving_value": 64,
+    "virality": 82,
+    "novelty": 90,
+    "competition_opportunity": 58,
+    "affiliate_potential": 60
+  },
+  "economics": {
+    "currency": "EUR",
+    "estimated_clicks": 0,
+    "conversion_rate": 0,
+    "commission_rate": 0,
+    "production_cost": 0
+  },
+  "media_candidates": [
+    {
+      "media_type": "image",
+      "source_provider": "amazon-product-page",
+      "source_page_url": "https://www.amazon.nl/dp/B0F1CCLZGT",
+      "source_url": null,
+      "observation_method": "manual",
+      "retrieval_method": "reference_only",
+      "rights_status": "unverified",
+      "rights_basis": "unknown",
+      "rights_evidence": null,
+      "approval_status": "pending",
+      "usage_scope": "publication",
+      "label": "Listing image gallery reference",
+      "page_position": 0,
+      "usage_notes": [
+        "The listing image gallery was observed, but no direct image URL was collected.",
+        "This page-level reference cannot be downloaded or rendered."
+      ]
+    },
+    {
+      "media_type": "image",
+      "source_provider": "orion-owned-fixture",
+      "source_page_url": "https://fixtures.orion.local/product-video-agent",
+      "source_url": "https://fixtures.orion.local/owned-cyboris-s11-card.ppm",
+      "observation_method": "fixture",
+      "retrieval_method": "fixture",
+      "local_path": "services/product-video-agent/fixtures/owned-cyboris-s11-card.ppm",
+      "content_sha256": "1988af722581304fd6da98a7cd22c223089a2c82adb9e3fced7cad53139460f2",
+      "rights_status": "verified",
+      "rights_basis": "owned",
+      "rights_evidence": "Repository fixture authored for O.R.I.O.N. renderer tests; no third-party product media is included.",
+      "approval_status": "approved",
+      "usage_scope": "publication",
+      "label": "Owned renderer fixture",
+      "page_position": 1,
+      "usage_notes": [
+        "Synthetic color-card fixture for pipeline validation only.",
+        "It is not a depiction of the CYBORIS product."
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "media_type": "image",
+      "source_provider": "amazon-product-page",
+      "source_url": "https://www.amazon.nl/dp/B0F1CCLZGT",
+      "source_page_url": "https://www.amazon.nl/dp/B0F1CCLZGT",
+      "retrieval_method": "reference_only",
+      "rights_status": "unverified",
+      "rights_basis": "unknown",
+      "rights_evidence": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "approval_status": "pending",
+      "download_status": "blocked",
+      "usage_scope": "publication",
+      "usage_notes": [
+        "Page-level reference only; no listing image was downloaded.",
+        "A direct image asset requires permitted acquisition plus a separate usage decision."
+      ]
+    },
+    {
+      "media_type": "image",
+      "source_provider": "orion-owned-fixture",
+      "source_url": "https://fixtures.orion.local/owned-cyboris-s11-card.ppm",
+      "source_page_url": "https://fixtures.orion.local/product-video-agent",
+      "retrieval_method": "fixture",
+      "local_path": "services/product-video-agent/fixtures/owned-cyboris-s11-card.ppm",
+      "content_sha256": "1988af722581304fd6da98a7cd22c223089a2c82adb9e3fced7cad53139460f2",
+      "rights_status": "verified",
+      "rights_basis": "owned",
+      "rights_evidence": "Repository fixture authored for O.R.I.O.N. renderer tests; no third-party product media is included.",
+      "attribution_required": false,
+      "attribution_text": null,
+      "approval_status": "approved",
+      "download_status": "downloaded",
+      "usage_scope": "publication",
+      "usage_notes": [
+        "Synthetic color-card fixture for pipeline validation only.",
+        "It is not a depiction of the CYBORIS product."
+      ]
+    }
+  ],
+  "affiliate": {
+    "provider": "amazon-associates",
+    "destination_url": "https://www.amazon.nl/dp/B0F1CCLZGT",
+    "tracking_url": null
+  }
+}

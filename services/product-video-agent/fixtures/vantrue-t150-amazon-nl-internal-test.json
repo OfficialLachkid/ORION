@@ -1,0 +1,135 @@
+{
+  "fixture_version": "1.0.0",
+  "source": {
+    "provider": "playwright-permitted-browser",
+    "marketplace": "amazon-nl",
+    "source_product_id": "B0FMX5NGY9",
+    "source_url": "https://www.amazon.nl/dp/B0FMX5NGY9",
+    "retrieved_at": "2026-07-26T13:41:18.992Z",
+    "retrieval_method": "permitted_browser",
+    "source_access_permitted": true
+  },
+  "product": {
+    "name": "T150 Rechargeable Electric Air Duster",
+    "brand": "VANTRUE POWER",
+    "category": "Electronics Cleaning",
+    "description": "A rechargeable handheld air duster intended for keyboards, computers, cars, and other dust-clearing tasks.",
+    "specifications": {
+      "Charging": "USB-C",
+      "Battery": "2500 mAh",
+      "Weight": "Approximately 209 g",
+      "Accessories": "Four nozzles and two brush heads"
+    },
+    "current_price": {
+      "amount": 32.28,
+      "currency": "EUR"
+    },
+    "list_price": {
+      "amount": 39.99,
+      "currency": "EUR"
+    },
+    "rating": 4.7,
+    "review_count": 325,
+    "tags": [
+      "air duster",
+      "keyboard cleaning",
+      "rechargeable",
+      "electronics"
+    ]
+  },
+  "claim_guardrails": {
+    "script_facts": [
+      "This is a rechargeable handheld air duster intended for clearing dust from keyboards, computers, and desks.",
+      "It charges over USB-C.",
+      "The product includes four nozzles and two brush heads for different dust-clearing tasks.",
+      "It provides a reusable air source instead of disposable canned air."
+    ],
+    "prohibited_claims": [
+      "Do not claim exact cleaning speed, battery runtime, air pressure, instant results, or independently tested performance.",
+      "Do not imply the product is safe for every surface or device."
+    ],
+    "blocked_phrases": [
+      "instant",
+      "in seconds",
+      "dust-free",
+      "looks like new",
+      "battery lasts",
+      "240 minutes",
+      "2500 mAh",
+      "powerful",
+      "ultralight",
+      "safe for all electronics",
+      "no risk",
+      "no chemicals"
+    ],
+    "editorial_direction": [
+      "Lead with dust trapped around keyboard keys and desk equipment.",
+      "Focus on the reusable handheld format, USB-C charging, and interchangeable nozzles.",
+      "Describe only visible dust-clearing use cases shown in the merchant demonstration.",
+      "Do not name the brand, model, marketplace, price, rating, or review count in narration.",
+      "Close on a concrete desk-cleaning use case without a viewer question or sales prompt."
+    ]
+  },
+  "score_signals": {
+    "visual_appeal": 84,
+    "problem_solving_value": 90,
+    "virality": 80,
+    "novelty": 74,
+    "competition_opportunity": 65,
+    "affiliate_potential": 76
+  },
+  "economics": {
+    "currency": "EUR",
+    "estimated_clicks": 0,
+    "conversion_rate": 0,
+    "commission_rate": 0,
+    "production_cost": 0
+  },
+  "media_candidates": [
+    {
+      "media_type": "video",
+      "source_provider": "amazon-merchant-product-video",
+      "source_page_url": "https://www.amazon.nl/dp/B0FMX5NGY9",
+      "source_url": "https://m.media-amazon.com/images/S/vse-vms-transcoding-artifact-eu-west-1-prod/926bdb11-f085-4f74-813f-4a9b0ed440df/default.jobtemplate.hls.m3u8",
+      "observed_at": "2026-07-26T13:41:18.992Z",
+      "observation_method": "permitted_browser",
+      "retrieval_method": "permitted_browser",
+      "local_path": "data/runtime/product-video-agent/internal-tests/B0FMX5NGY9/amazon-merchant-video.mp4",
+      "content_sha256": "9984498da877950bce500ddf395090362371f1606e0eb2fc9a3e3c86d947743b",
+      "rights_status": "unverified",
+      "rights_basis": "unknown",
+      "rights_evidence": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "approval_status": "approved",
+      "usage_scope": "internal_editor_test",
+      "label": "Amazon merchant demonstration video",
+      "page_position": 6,
+      "usage_notes": [
+        "Observed through a normal Playwright browser session without login, CAPTCHA, DRM, or anti-bot bypass.",
+        "The 28-second merchant demonstration was selected; customer-review videos were excluded.",
+        "Approved only for a watermarked internal editor workflow test.",
+        "This asset and every derivative remain non-publishable while reuse rights are unverified."
+      ],
+      "video_analysis": {
+        "analyzer": "ffmpeg_scene_detection",
+        "analyzed_at": "2026-07-27T09:00:00.000Z",
+        "duration_seconds": 27.696,
+        "frame_rate": 29.97,
+        "width": 642,
+        "height": 360,
+        "scene_threshold": 0.2,
+        "scene_boundaries_seconds": [
+          16.751,
+          23.725
+        ]
+      }
+    }
+  ],
+  "assets": [],
+  "affiliate": {
+    "provider": "amazon-associates",
+    "destination_url": "https://www.amazon.nl/dp/B0FMX5NGY9",
+    "tracking_url": null
+  }
+}

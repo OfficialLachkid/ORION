@@ -1,0 +1,92 @@
+{
+  "fixture_version": "1.0.0",
+  "benchmark_only": true,
+  "source": {
+    "provider": "benchmark-fixture",
+    "marketplace": "synthetic-benchmark",
+    "source_product_id": "BENCH-TRIPOD-001",
+    "source_url": "https://fixtures.orion.local/benchmark/foldable-phone-tripod",
+    "retrieved_at": "2026-07-26T00:00:00.000Z",
+    "retrieval_method": "fixture",
+    "source_access_permitted": true
+  },
+  "product": {
+    "name": "Foldable Magnetic Phone Tripod",
+    "brand": "Benchmark Fixture",
+    "category": "Phone Stands",
+    "description": "A compact magnetic phone stand that unfolds into a small tripod.",
+    "specifications": {
+      "Mount": "Magnetic",
+      "Controls": "Bluetooth remote shutter",
+      "Adjustment": "Adjustable viewing angle"
+    },
+    "current_price": null,
+    "list_price": null,
+    "rating": null,
+    "review_count": 0,
+    "tags": [
+      "phone stand",
+      "tripod",
+      "foldable"
+    ]
+  },
+  "claim_guardrails": {
+    "script_facts": [
+      "The compact phone stand unfolds into a small tripod.",
+      "Its magnetic mount requires a compatible phone or magnetic case.",
+      "The viewing angle can be adjusted.",
+      "An included Bluetooth remote shutter can trigger the paired phone camera."
+    ],
+    "prohibited_claims": [
+      "Do not claim universal phone compatibility.",
+      "Do not describe the stand as a gimbal or claim electronic stabilization.",
+      "Do not claim that the mount charges the phone.",
+      "Do not claim a tested load capacity, grip strength, or drop protection."
+    ],
+    "blocked_phrases": [
+      "works with every phone",
+      "works with any phone",
+      "wireless charging",
+      "charges your phone",
+      "stabilizes footage",
+      "gimbal",
+      "drop-proof",
+      "never falls",
+      "secure attachment",
+      "attach securely",
+      "in seconds",
+      "optimal positioning",
+      "suit your needs",
+      "versatile tripod",
+      "remains compact"
+    ],
+    "editorial_direction": [
+      "Lead with the visual change from a compact folded object into a phone tripod.",
+      "Explain the magnetic compatibility limitation plainly.",
+      "Use a group photo or hands-free camera setup only as a relatable use case, not as a performance claim.",
+      "Mention the remote shutter only with the requirement that it is paired to the phone.",
+      "Do not mention a brand, price, rating, or affiliate details."
+    ]
+  },
+  "score_signals": {
+    "visual_appeal": 86,
+    "problem_solving_value": 72,
+    "virality": 79,
+    "novelty": 76,
+    "competition_opportunity": 60,
+    "affiliate_potential": 65
+  },
+  "economics": {
+    "currency": "USD",
+    "estimated_clicks": 0,
+    "conversion_rate": 0,
+    "commission_rate": 0,
+    "production_cost": 0
+  },
+  "assets": [],
+  "affiliate": {
+    "provider": "benchmark-only",
+    "destination_url": "https://fixtures.orion.local/benchmark/foldable-phone-tripod",
+    "tracking_url": null
+  }
+}

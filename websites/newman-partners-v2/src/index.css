@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: #1F3A5F;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-paper text-ink font-serif;
+    overflow-x: hidden;
+  }
+  ::selection { background-color: var(--accent); color: #F4F1EA; }
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: #F4F1EA; }
+  ::-webkit-scrollbar-thumb { background: #D8D3C8; border-radius: 0; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+}
+
+@layer components {
+  .rule { @apply h-px bg-rule w-full; }
+  .eyebrow { @apply font-mono text-[11px] uppercase tracking-wide28 text-muted; }
+  .caption { @apply font-mono text-[12px] tracking-wide14 text-muted; }
+
+  /* Underline draw — Manifesto + Index rows */
+  .underline-path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    transition: stroke-dashoffset 1.4s cubic-bezier(0.65, 0, 0.35, 1);
+    vector-effect: non-scaling-stroke;
+  }
+  .underline-active .underline-path { stroke-dashoffset: 0; }
+  .index-row:hover .underline-path {
+    stroke-dashoffset: 0;
+    transition-duration: 0.4s;
+  }
+
+  /* Marquee */
+  .marquee { overflow: hidden; }
+  .marquee-track {
+    display: inline-flex;
+    white-space: nowrap;
+    animation: marquee-scroll 40s linear infinite;
+    will-change: transform;
+  }
+  .marquee:hover .marquee-track { animation-direction: reverse; }
+  @keyframes marquee-scroll {
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-50%, 0, 0); }
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+}

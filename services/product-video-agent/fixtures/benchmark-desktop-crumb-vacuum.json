@@ -1,0 +1,98 @@
+{
+  "fixture_version": "1.0.0",
+  "benchmark_only": true,
+  "source": {
+    "provider": "benchmark-fixture",
+    "marketplace": "synthetic-benchmark",
+    "source_product_id": "BENCH-VACUUM-001",
+    "source_url": "https://fixtures.orion.local/benchmark/desktop-crumb-vacuum",
+    "retrieved_at": "2026-07-26T00:00:00.000Z",
+    "retrieval_method": "fixture",
+    "source_access_permitted": true
+  },
+  "product": {
+    "name": "USB-C Desktop Crumb Vacuum",
+    "brand": "Benchmark Fixture",
+    "category": "Desktop Cleaning",
+    "description": "A small rechargeable vacuum intended for loose crumbs and eraser shavings on dry desk surfaces.",
+    "specifications": {
+      "Charging": "USB-C",
+      "Attachments": "Two removable nozzles",
+      "Collection": "Manual-empty collection bin"
+    },
+    "current_price": null,
+    "list_price": null,
+    "rating": null,
+    "review_count": 0,
+    "tags": [
+      "desk cleaning",
+      "crumb vacuum",
+      "rechargeable"
+    ]
+  },
+  "claim_guardrails": {
+    "script_facts": [
+      "This is a small rechargeable vacuum for loose crumbs and eraser shavings on dry desk surfaces.",
+      "It charges over USB-C.",
+      "It includes two removable nozzles.",
+      "The collection bin must be emptied manually."
+    ],
+    "prohibited_claims": [
+      "Do not claim a deep clean, instant result, or exact suction power.",
+      "Do not claim that the vacuum handles liquids, embedded dirt, or every surface.",
+      "Do not claim that it sanitizes, disinfects, or removes allergens.",
+      "Do not infer battery runtime or charging speed."
+    ],
+    "blocked_phrases": [
+      "deep clean",
+      "deep cleaning",
+      "instant",
+      "in seconds",
+      "powerful suction",
+      "wet and dry",
+      "liquid spills",
+      "every surface",
+      "sanitizes",
+      "disinfects",
+      "allergens",
+      "battery lasts",
+      "fast charging",
+      "spotless",
+      "disposable air cans",
+      "canned air",
+      "different angles",
+      "flat surfaces",
+      "ready to go",
+      "compact tool",
+      "different cleaning tasks"
+    ],
+    "editorial_direction": [
+      "Lead with loose crumbs or eraser shavings interrupting a clean desk setup.",
+      "Describe only pickup of loose dry debris.",
+      "Show the two nozzle choices and manual-empty bin as concrete mechanisms.",
+      "Keep the limitation to dry desk surfaces explicit when relevant.",
+      "Do not mention a brand, price, rating, or affiliate details."
+    ]
+  },
+  "score_signals": {
+    "visual_appeal": 75,
+    "problem_solving_value": 83,
+    "virality": 71,
+    "novelty": 67,
+    "competition_opportunity": 62,
+    "affiliate_potential": 61
+  },
+  "economics": {
+    "currency": "USD",
+    "estimated_clicks": 0,
+    "conversion_rate": 0,
+    "commission_rate": 0,
+    "production_cost": 0
+  },
+  "assets": [],
+  "affiliate": {
+    "provider": "benchmark-only",
+    "destination_url": "https://fixtures.orion.local/benchmark/desktop-crumb-vacuum",
+    "tracking_url": null
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "guildId": "DISCORD_GUILD_ID",
+  "channelKey": "commands",
+  "channelId": "DISCORD_COMMANDS_CHANNEL_ID",
+  "channelName": "#commands",
+  "messageId": "1234567890",
+  "submittedAt": "2026-06-25T10:00:00.000Z",
+  "content": "Please deploy the latest task-router fix to production and merge the PR once it passes.",
+  "author": {
+    "id": "operator-1",
+    "username": "vbjservices",
+    "displayName": "VBJ Services",
+    "roleIds": [],
+    "isOperator": true
+  },
+  "attachments": []
+}

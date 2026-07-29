@@ -1,0 +1,169 @@
+.workspace-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.workspace-tab-button {
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 0 12px;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.workspace-tab-button.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.overview-stage {
+  display: grid;
+  align-content: start;
+  min-height: 0;
+}
+
+.workspace-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.workspace-empty-state,
+.workspace-card {
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.workspace-empty-state {
+  display: grid;
+  gap: 10px;
+  padding: 28px;
+}
+
+.workspace-empty-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.workspace-empty-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.workspace-card {
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+
+.workspace-card-selectable {
+  transition:
+    transform 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    background-color 0.22s ease;
+}
+
+.workspace-card-selectable.is-selected {
+  border-color: rgba(35, 76, 61, 0.32);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(244, 239, 229, 0.94)),
+    rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 0 0 1px rgba(35, 76, 61, 0.08),
+    0 20px 40px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+.workspace-card-preview-shell {
+  position: relative;
+  height: 250px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.52), rgba(241, 234, 222, 0.72));
+}
+
+.workspace-card-preview-scale {
+  width: 1280px;
+  transform: scale(0.2);
+  transform-origin: top left;
+  pointer-events: none;
+}
+
+.workspace-card-preview-root {
+  border-radius: 0;
+  min-height: 1240px;
+}
+
+.workspace-card-preview-root .preview-target {
+  box-shadow: none !important;
+  cursor: default;
+  pointer-events: none;
+  transform: none !important;
+}
+
+.workspace-card-copy {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+}
+
+.workspace-card-copy h3,
+.workspace-card-summary,
+.workspace-card-company,
+.workspace-card-label {
+  margin: 0;
+}
+
+.workspace-card-label {
+  color: var(--accent);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.workspace-card-copy h3 {
+  color: var(--text);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.workspace-card-company {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.workspace-card-summary {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.workspace-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.workspace-card-actions {
+  margin-top: 4px;
+}
+
+#topbar-actions[hidden] {
+  display: none;
+}

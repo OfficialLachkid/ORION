@@ -1,0 +1,21 @@
+{
+  "voice_id": "en_US-norman-medium",
+  "display_name": "Norman US English Male",
+  "language": "en-US",
+  "speaker_gender": "male",
+  "quality": "medium",
+  "model_source_url": "https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/norman/medium",
+  "model_repository_license": "MIT",
+  "training_dataset": "Norman LibriVox single-speaker dataset",
+  "dataset_source_url": "https://librivox.org/",
+  "dataset_license": "public_domain",
+  "engine_license": "GPL-3.0",
+  "commercial_use_status": "approved",
+  "reviewed_at": "2026-07-20T00:00:00.000Z",
+  "review_notes": [
+    "Selected as a single-speaker US English male alternative for short-form narration.",
+    "The upstream Piper model card states that the voice was trained from scratch using public-domain LibriVox recordings.",
+    "The voice repository is MIT-licensed; the local Piper engine is GPL-3.0 and is invoked as a separate CLI process.",
+    "Re-review upstream terms before redistributing model or engine files. This record is an operational review, not legal advice."
+  ]
+}

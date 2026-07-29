@@ -1,0 +1,40 @@
+.standalone-preview-body {
+  min-height: 100vh;
+}
+
+.standalone-preview-shell {
+  min-height: 100vh;
+  padding: 18px;
+}
+
+.standalone-preview-root {
+  min-height: calc(100vh - 36px);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+}
+
+.standalone-preview-empty {
+  display: grid;
+  place-items: center;
+  min-height: calc(100vh - 36px);
+  padding: 32px;
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background: rgba(255, 251, 245, 0.94);
+  text-align: center;
+}
+
+.standalone-preview-empty h1,
+.standalone-preview-empty p {
+  margin: 0;
+}
+
+.standalone-preview-empty h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.9rem;
+}
+
+.standalone-preview-empty p {
+  color: var(--muted);
+  line-height: 1.65;
+}

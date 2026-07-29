@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0.0",
+  "run_at": "2026-07-20T00:00:00.000Z",
+  "output_directory": "data/runtime/product-video-agent",
+  "content_strategy": {
+    "primary": "short_form",
+    "platforms": [
+      "youtube_shorts",
+      "instagram_reels",
+      "tiktok"
+    ],
+    "long_form": {
+      "enabled": false,
+      "target_duration_minutes": {
+        "min": 2,
+        "max": 5
+      }
+    }
+  },
+  "script": {
+    "provider": "ollama",
+    "model": "llama3.1:8b",
+    "endpoint": "http://127.0.0.1:11434",
+    "prompt_version": "short-form-editorial-v4",
+    "keep_alive": "0s",
+    "operator_review_required": true,
+    "variants": [
+      {
+        "angle": "problem_solution",
+        "target_duration_seconds": 20
+      },
+      {
+        "angle": "demonstration",
+        "target_duration_seconds": 22
+      },
+      {
+        "angle": "novelty",
+        "target_duration_seconds": 18
+      }
+    ]
+  },
+  "voice": {
+    "provider": "kokoro",
+    "executable": ".venv-product-video-kokoro/bin/python",
+    "data_directory": "data/runtime/product-video-agent/models/kokoro",
+    "script_path": "services/product-video-agent/scripts/kokoro-synthesize.py",
+    "assignment_strategy": "round_robin",
+    "default_profile_id": "us-female-kokoro-heart",
+    "profiles": [
+      {
+        "profile_id": "us-female-kokoro-heart",
+        "model": "Kokoro-82M-v1.0",
+        "runtime_model": "hexgrad/Kokoro-82M",
+        "voice": "af_heart",
+        "language": "en-US",
+        "license_record_path": "services/product-video-agent/voices/Kokoro-82M-v1.0.license.json",
+        "synthesis": {
+          "speed": 1.04,
+          "prosody_mode": "full_context",
+          "sentence_pause_ms": 0
+        }
+      },
+      {
+        "profile_id": "us-male-kokoro-deep",
+        "model": "Kokoro-82M-v1.0",
+        "runtime_model": "hexgrad/Kokoro-82M",
+        "voice": "am_fenrir,am_onyx",
+        "language": "en-US",
+        "license_record_path": "services/product-video-agent/voices/Kokoro-82M-v1.0.license.json",
+        "synthesis": {
+          "speed": 1.08,
+          "prosody_mode": "full_context",
+          "sentence_pause_ms": 0
+        }
+      }
+    ]
+  },
+  "captions": {
+    "provider": "faster_whisper",
+    "executable": ".venv-product-video/bin/python",
+    "script_path": "services/transcription-worker/local-transcribe.py",
+    "model": "small.en",
+    "max_words_per_line": 4
+  },
+  "render": {
+    "renderer": "ffmpeg",
+    "executable": "auto",
+    "purpose": "publication_candidate",
+    "template_id": "vertical-product-v1",
+    "template_path": "services/product-video-agent/vertical-product-v1.template.json",
+    "fps": 30
+  },
+  "archive": {
+    "enabled": true,
+    "preferred_root": null,
+    "fallback_root": null,
+    "device_id": "vbj-orchestrator-01",
+    "cleanup_verified_working_media": true,
+    "temporary_source_retention_days": {
+      "after_final_approval": 14,
+      "after_rejection": 7
+    }
+  },
+  "affiliate_disclosure": "This content contains affiliate links. We may earn a commission at no extra cost to you.",
+  "operator": "orion-operator"
+}

@@ -1,0 +1,32 @@
+{
+  "approvalRequiredFor": [
+    {
+      "rule": "external_outreach",
+      "description": "Any outbound message or campaign that reaches customers, leads, or partners."
+    },
+    {
+      "rule": "production_change",
+      "description": "Deployments, infrastructure changes, or live workflow changes."
+    },
+    {
+      "rule": "destructive_operation",
+      "description": "Deletes, resets, irreversible edits, or data removal."
+    },
+    {
+      "rule": "spending_action",
+      "description": "Anything that incurs cost, purchases software, or changes billing state."
+    },
+    {
+      "rule": "security_sensitive",
+      "description": "Credential handling, permission changes, or exposure-related changes."
+    },
+    {
+      "rule": "code_merge",
+      "description": "Merging code into protected or production-facing branches."
+    }
+  ],
+  "responsePattern": {
+    "approve": "approve TASK-123",
+    "reject": "reject TASK-123 because <reason>"
+  }
+}

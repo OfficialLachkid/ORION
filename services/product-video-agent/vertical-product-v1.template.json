@@ -1,0 +1,66 @@
+{
+  "template_id": "vertical-product-v1",
+  "version": "1.3.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 180,
+      "right": 120,
+      "bottom": 300,
+      "left": 120
+    }
+  },
+  "timeline": [
+    {
+      "segment": "hook",
+      "duration_seconds": 3,
+      "caption_emphasis": "high"
+    },
+    {
+      "segment": "demonstration",
+      "duration_seconds": 22,
+      "caption_emphasis": "normal"
+    },
+    {
+      "segment": "proof_and_specs",
+      "duration_seconds": 10,
+      "caption_emphasis": "normal"
+    },
+    {
+      "segment": "closing_payoff",
+      "duration_seconds": 5,
+      "caption_emphasis": "high"
+    }
+  ],
+  "captions": {
+    "max_words_per_line": 4,
+    "max_lines": 2,
+    "position": "lower_middle",
+    "animation": "ass_audio_timed_active_word_highlight",
+    "font_family": "Avenir Next",
+    "font_size": 74,
+    "outline_size": 6
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "music_target_lufs": -24,
+    "duck_music_under_voice": true,
+    "music_enabled": false,
+    "music_blocker": "No rights-approved local music fixture is configured."
+  },
+  "renderer": {
+    "visual_inputs": 3,
+    "input_policy": "ordered_rights_approved_timeline",
+    "fit": "cover",
+    "transition": "fade",
+    "transition_duration_seconds": 0.35,
+    "video_codec": "libx264",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true
+  }
+}

@@ -1,0 +1,122 @@
+{
+  "fixture_version": "1.0.0",
+  "source": {
+    "provider": "playwright-permitted-browser",
+    "marketplace": "amazon-nl",
+    "source_product_id": "B07YN44WLV",
+    "source_url": "https://www.amazon.nl/dp/B07YN44WLV",
+    "retrieved_at": "2026-07-27T11:58:23.587Z",
+    "retrieval_method": "permitted_browser",
+    "source_access_permitted": true
+  },
+  "product": {
+    "name": "M110 Bluetooth Thermal Label Maker",
+    "brand": "Phomemo",
+    "category": "Label Makers",
+    "description": "A compact phone-connected thermal printer for small black-and-white labels used to organize items such as cables, containers, folders, and retail stock.",
+    "specifications": {
+      "Connection": "Bluetooth companion app",
+      "Printing": "Black-and-white direct thermal",
+      "Label width": "20-50 mm",
+      "Weight": "Approximately 223 g"
+    },
+    "current_price": {
+      "amount": 57.49,
+      "currency": "EUR"
+    },
+    "list_price": null,
+    "rating": 4.3,
+    "review_count": 4623,
+    "tags": [
+      "label maker",
+      "thermal printer",
+      "organization",
+      "bluetooth"
+    ]
+  },
+  "claim_guardrails": {
+    "script_facts": [
+      "This compact label maker prints small black-and-white labels using direct thermal paper instead of an ink cartridge.",
+      "A companion phone app is required to design and send labels over Bluetooth.",
+      "The supported label-width range is 20 to 50 millimetres.",
+      "Small labels can be used to organize items such as cables, containers, and folders."
+    ],
+    "prohibited_claims": [
+      "Do not claim color printing or operation without the companion app.",
+      "Do not claim that every label size or third-party roll is compatible.",
+      "Do not claim waterproof, fade-proof, archival, or shipping-label performance.",
+      "Do not claim that the printer or its templates are free to use."
+    ],
+    "blocked_phrases": [
+      "prints in color",
+      "color labels",
+      "works without an app",
+      "no app required",
+      "any label roll",
+      "every label size",
+      "waterproof",
+      "fade-proof",
+      "shipping labels",
+      "free templates",
+      "never buy ink again",
+      "must-have",
+      "game changer"
+    ],
+    "editorial_direction": [
+      "Lead with an unlabeled drawer, cable, or container becoming easy to identify.",
+      "Show the phone-app step and the printed label as one compact workflow.",
+      "Focus on the visible organization use case rather than specifications or sales language.",
+      "Do not name the brand, model, marketplace, price, rating, or review count in narration.",
+      "Close on a concrete organization result without a viewer question or sales prompt."
+    ]
+  },
+  "score_signals": {
+    "visual_appeal": 82,
+    "problem_solving_value": 79,
+    "virality": 70,
+    "novelty": 68,
+    "competition_opportunity": 61,
+    "affiliate_potential": 66
+  },
+  "economics": {
+    "currency": "EUR",
+    "estimated_clicks": 0,
+    "conversion_rate": 0,
+    "commission_rate": 0,
+    "production_cost": 0
+  },
+  "media_candidates": [
+    {
+      "media_type": "video",
+      "source_provider": "amazon-seller-product-video",
+      "source_page_url": "https://www.amazon.nl/dp/B07YN44WLV",
+      "source_url": "https://m.media-amazon.com/images/S/vse-vms-transcoding-artifact-eu-west-1-prod/650e704f-bca3-4812-be71-ff49c51c30ff/default.jobtemplate.hls.m3u8",
+      "observed_at": "2026-07-27T11:58:23.587Z",
+      "observation_method": "permitted_browser",
+      "retrieval_method": "permitted_browser",
+      "local_path": "data/runtime/product-video-agent/internal-tests/B07YN44WLV/amazon-seller-video.mp4",
+      "content_sha256": "3a7c1f37923015e13e4a2ba867f5b7bbf65b997506039f867fe20283a3eab453",
+      "rights_status": "unverified",
+      "rights_basis": "unknown",
+      "rights_evidence": null,
+      "attribution_required": false,
+      "attribution_text": null,
+      "approval_status": "approved",
+      "usage_scope": "internal_editor_test",
+      "label": "Amazon seller gallery video: M110 label printer",
+      "page_position": 1,
+      "usage_notes": [
+        "Observed through a normal Playwright browser session without login, CAPTCHA, DRM, or anti-bot bypass.",
+        "The selected 33-second gallery video was labeled as uploaded by seller label-online; customer-review videos were excluded.",
+        "Approved only for a watermarked internal editor workflow test.",
+        "This asset and every derivative remain non-publishable while reuse rights are unverified."
+      ]
+    }
+  ],
+  "assets": [],
+  "affiliate": {
+    "provider": "amazon-associates",
+    "destination_url": "https://www.amazon.nl/dp/B07YN44WLV",
+    "tracking_url": null
+  }
+}

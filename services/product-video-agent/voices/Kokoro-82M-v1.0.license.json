@@ -1,0 +1,21 @@
+{
+  "voice_id": "Kokoro-82M-v1.0",
+  "display_name": "Kokoro 82M v1.0 US Voice Collection",
+  "language": "en-US",
+  "speaker_gender": "unspecified",
+  "quality": "high",
+  "model_source_url": "https://huggingface.co/hexgrad/Kokoro-82M",
+  "model_repository_license": "Apache-2.0",
+  "training_dataset": "Permissive and non-copyrighted audio sources documented by the model card",
+  "dataset_source_url": "https://huggingface.co/hexgrad/Kokoro-82M",
+  "dataset_license": "permissive_and_non_copyrighted_sources",
+  "engine_license": "Apache-2.0",
+  "commercial_use_status": "approved",
+  "reviewed_at": "2026-07-21T00:00:00.000Z",
+  "review_notes": [
+    "The upstream model repository identifies Kokoro-82M weights as Apache-2.0 and documents production deployment.",
+    "The upstream model card states that training audio was permissive or non-copyrighted, including public-domain and permissively licensed sources.",
+    "The selected af_heart, am_fenrir, and am_onyx voices are part of the same upstream model repository.",
+    "Re-review upstream terms before redistributing model or voice files. This is an operational review, not legal advice."
+  ]
+}

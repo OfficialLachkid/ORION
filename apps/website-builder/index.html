@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>O.R.I.O.N. Website Builder</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar">
+        <div class="brand-block">
+          <p class="eyebrow">O.R.I.O.N.</p>
+          <h1>Website Builder</h1>
+          <p class="lede">
+            Build reusable website designs first, then turn the strongest concepts into company-specific website drafts.
+          </p>
+        </div>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Workspace</h2>
+          </div>
+          <div id="workspace-tabs" class="workspace-tabs" role="tablist" aria-label="Website Builder workspace">
+            <button class="workspace-tab-button is-active" data-workspace-view="designs" type="button">
+              Design library
+            </button>
+            <button class="workspace-tab-button" data-workspace-view="build" type="button">
+              Build
+            </button>
+            <button class="workspace-tab-button" data-workspace-view="websites" type="button">
+              My websites
+            </button>
+          </div>
+        </section>
+
+        <section id="entry-meta-panel" class="panel">
+          <div class="panel-header">
+            <h2 id="entry-meta-title">Design details</h2>
+          </div>
+          <div class="field-grid">
+            <label class="field">
+              <span id="entry-title-label">Design name</span>
+              <input id="entry-title" type="text" />
+            </label>
+            <label id="entry-company-row" class="field">
+              <span>Company name</span>
+              <input id="entry-company-name" type="text" />
+            </label>
+            <label id="entry-summary-row" class="field" hidden>
+              <span id="entry-summary-label">Summary</span>
+              <textarea id="entry-summary" rows="4"></textarea>
+            </label>
+          </div>
+          <p id="entry-source-note" class="field-help"></p>
+        </section>
+
+        <section id="template-panel" class="panel">
+          <div class="panel-header">
+            <h2>Template</h2>
+          </div>
+          <div id="template-grid" class="template-grid"></div>
+        </section>
+
+        <section id="controls-panel" class="panel">
+          <div class="panel-header">
+            <h2>Controls</h2>
+          </div>
+          <div class="button-row stacked">
+            <button id="save-website" class="primary-button" type="button">Save website</button>
+            <button id="open-preview" class="secondary-button" type="button">Open full preview</button>
+            <button id="reset-draft" class="ghost-button" type="button">Reset</button>
+          </div>
+          <div class="button-row stacked">
+            <button id="export-draft" class="secondary-button" type="button">Export JSON</button>
+            <label class="secondary-button file-button">
+              Import JSON
+              <input id="import-draft" type="file" accept="application/json" />
+            </label>
+          </div>
+          <p id="draft-status" class="muted"></p>
+        </section>
+
+        <section id="editor-panel" class="panel">
+          <div class="panel-header">
+            <h2>Editor</h2>
+          </div>
+          <div id="editor-sections" class="editor-sections"></div>
+        </section>
+      </aside>
+
+      <main class="main-stage">
+        <section class="topbar panel">
+          <div>
+            <p id="topbar-eyebrow" class="eyebrow">Workspace</p>
+            <h2 id="topbar-title">Website Builder</h2>
+            <p id="topbar-description" class="muted"></p>
+          </div>
+          <div id="topbar-actions" class="button-row"></div>
+          <div id="viewport-switcher" class="viewport-switcher">
+            <button class="viewport-button is-active" data-viewport="desktop" type="button">Desktop</button>
+            <button class="viewport-button" data-viewport="tablet" type="button">Tablet</button>
+            <button class="viewport-button" data-viewport="mobile" type="button">Mobile</button>
+          </div>
+        </section>
+
+        <section id="overview-stage" class="overview-stage panel">
+          <div id="overview-grid" class="workspace-card-grid"></div>
+        </section>
+
+        <section id="preview-stage">
+          <section id="preview-frame" class="preview-frame">
+            <div id="preview-shell" class="preview-shell viewport-desktop">
+              <div id="preview-root" class="preview-root"></div>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

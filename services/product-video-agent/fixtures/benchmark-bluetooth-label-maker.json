@@ -1,0 +1,90 @@
+{
+  "fixture_version": "1.0.0",
+  "benchmark_only": true,
+  "source": {
+    "provider": "benchmark-fixture",
+    "marketplace": "synthetic-benchmark",
+    "source_product_id": "BENCH-LABEL-001",
+    "source_url": "https://fixtures.orion.local/benchmark/bluetooth-label-maker",
+    "retrieved_at": "2026-07-26T00:00:00.000Z",
+    "retrieval_method": "fixture",
+    "source_access_permitted": true
+  },
+  "product": {
+    "name": "Bluetooth Thermal Label Maker",
+    "brand": "Benchmark Fixture",
+    "category": "Label Makers",
+    "description": "A rechargeable phone-connected printer for small black-and-white thermal labels.",
+    "specifications": {
+      "Connection": "Bluetooth",
+      "Input": "Companion phone app required",
+      "Printing": "Black-and-white direct thermal",
+      "Charging": "USB-C"
+    },
+    "current_price": null,
+    "list_price": null,
+    "rating": null,
+    "review_count": 0,
+    "tags": [
+      "label maker",
+      "thermal printer",
+      "organization"
+    ]
+  },
+  "claim_guardrails": {
+    "script_facts": [
+      "The label maker prints small black-and-white labels using direct thermal paper instead of an ink cartridge.",
+      "A companion phone app is required to design and send a label over Bluetooth.",
+      "The printer is rechargeable and charges over USB-C.",
+      "Compatible thermal label rolls are consumable supplies."
+    ],
+    "prohibited_claims": [
+      "Do not claim color printing or operation without the companion app.",
+      "Do not claim that every label size or third-party roll is compatible.",
+      "Do not claim waterproof, fade-proof, archival, or shipping-label performance.",
+      "Do not claim free templates or permanent savings."
+    ],
+    "blocked_phrases": [
+      "prints in color",
+      "color labels",
+      "works without an app",
+      "no app required",
+      "any label roll",
+      "every label size",
+      "waterproof labels",
+      "fade-proof",
+      "shipping labels",
+      "free templates",
+      "saves money",
+      "never buy ink again"
+    ],
+    "editorial_direction": [
+      "Lead with a label appearing without an ink cartridge.",
+      "Explain the required phone-app and Bluetooth step rather than hiding it.",
+      "Use drawers, cables, or containers only as examples of small-label organization.",
+      "Mention thermal label rolls as a consumable limitation if discussing the lack of ink.",
+      "Do not mention a brand, price, rating, or affiliate details."
+    ]
+  },
+  "score_signals": {
+    "visual_appeal": 81,
+    "problem_solving_value": 78,
+    "virality": 68,
+    "novelty": 70,
+    "competition_opportunity": 59,
+    "affiliate_potential": 63
+  },
+  "economics": {
+    "currency": "USD",
+    "estimated_clicks": 0,
+    "conversion_rate": 0,
+    "commission_rate": 0,
+    "production_cost": 0
+  },
+  "assets": [],
+  "affiliate": {
+    "provider": "benchmark-only",
+    "destination_url": "https://fixtures.orion.local/benchmark/bluetooth-label-maker",
+    "tracking_url": null
+  }
+}

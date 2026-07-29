@@ -1,0 +1,22 @@
+{
+  "media_type": "video",
+  "source_provider": "operator-supplied-amazon-test-footage",
+  "source_url": "https://www.amazon.com/vdp/REPLACE_WITH_SOURCE_REFERENCE",
+  "source_page_url": "https://www.amazon.com/dp/REPLACE_WITH_PRODUCT_ID",
+  "retrieval_method": "manual_upload",
+  "local_path": "data/runtime/product-video-agent/internal-tests/REPLACE_WITH_FILENAME.mp4",
+  "content_sha256": "REPLACE_WITH_64_CHARACTER_SHA256",
+  "rights_status": "unverified",
+  "rights_basis": "unknown",
+  "rights_evidence": null,
+  "attribution_required": false,
+  "attribution_text": null,
+  "approval_status": "approved",
+  "download_status": "downloaded",
+  "usage_scope": "internal_editor_test",
+  "usage_notes": [
+    "Operator supplied this local file for an internal editor-agent test only.",
+    "The asset and every derived render are excluded from publishing.",
+    "Do not use automated acquisition or bypass marketplace access controls."
+  ]
+}

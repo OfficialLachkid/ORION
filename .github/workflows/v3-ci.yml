@@ -1,0 +1,15 @@
+name: V3 CI/CD Pipeline
+
+on:
+  # Legacy V3 pipeline kept manual-only while Ruflo runtime validation is the active gate.
+  workflow_dispatch:
+
+jobs:
+  archived:
+    name: Archived V3 Pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain archived state
+        run: |
+          echo "This legacy V3 workflow is intentionally manual-only."
+          echo "Use Ruflo Runtime Validation for the active repository gate."

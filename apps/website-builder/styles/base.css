@@ -1,0 +1,219 @@
+:root {
+  --bg: #efe8db;
+  --panel: rgba(255, 251, 245, 0.94);
+  --line: rgba(28, 42, 38, 0.12);
+  --text: #17211f;
+  --muted: #556260;
+  --accent: #234c3d;
+  --accent-soft: #dbe9e1;
+  --shadow: 0 18px 40px rgba(23, 33, 31, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 28%),
+    linear-gradient(135deg, #efe8db 0%, #f6f0e5 42%, #ebe2d0 100%);
+}
+
+body.website-builder-editor-mode {
+  height: 100vh;
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 390px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+body.website-builder-editor-mode .shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar,
+.main-stage {
+  padding: 28px;
+}
+
+.sidebar {
+  border-right: 1px solid var(--line);
+  background: rgba(255, 249, 241, 0.78);
+  overflow-y: auto;
+}
+
+body.website-builder-editor-mode .sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.main-stage {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 20px;
+  min-height: 100vh;
+}
+
+body.website-builder-editor-mode .main-stage {
+  height: 100vh;
+}
+
+.brand-block h1,
+.topbar h2,
+.panel h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 600;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.lede,
+.muted,
+.field-help {
+  color: var(--muted);
+}
+
+.success-text {
+  color: var(--accent);
+}
+
+.panel,
+.preview-frame {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+
+.panel {
+  padding: 18px;
+  margin-bottom: 16px;
+}
+
+body.website-builder-editor-mode #editor-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-bottom: 0;
+  min-height: 0;
+}
+
+.topbar {
+  margin: 0;
+}
+
+.panel-header,
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+}
+
+.button-row.stacked {
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button,
+.template-card,
+.viewport-button,
+.position-matrix-button,
+.panorama-amenity-show-all-button {
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition:
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.primary-button {
+  background: var(--accent);
+  color: #fff;
+  padding: 10px 16px;
+}
+
+.secondary-button,
+.ghost-button,
+.viewport-button {
+  padding: 9px 14px;
+  background: rgba(255, 255, 255, 0.72);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.template-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.template-card {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  border-color: var(--line);
+}
+
+.template-card.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.template-state {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.file-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}

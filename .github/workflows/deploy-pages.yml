@@ -1,0 +1,123 @@
+name: Deploy Pages
+
+# Builds every site under websites/ (Vite + React sources) into sites/,
+# regenerates the sites/index.html gallery, then deploys the redirect
+# page + gallery to GitHub Pages. sites/ is build output only — it is
+# not committed to the repo, this workflow is the only thing that
+# produces it for the live site.
+#
+# Requires the repo's Pages source to be set to "GitHub Actions" under
+# Settings → Pages → Build and deployment → Source.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'websites/**'
+      - 'index.html'
+      - 'scripts/publish-websites.mjs'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: websites/*/package-lock.json
+
+      - name: Install site dependencies
+        run: |
+          set -e
+          for dir in websites/*/; do
+            echo "::group::npm ci — $dir"
+            (cd "$dir" && npm ci)
+            echo "::endgroup::"
+          done
+
+      - name: Build all sites + regenerate gallery
+        run: node scripts/publish-websites.mjs
+
+      - name: Assemble Pages artifact
+        run: |
+          mkdir -p _site
+          cp index.html _site/index.html
+          cp -R sites _site/sites
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  notify-ci-channel:
+    name: Notify CI Channel
+    runs-on: ubuntu-latest
+    needs:
+      - build
+      - deploy
+    if: always()
+    env:
+      DISCORD_CI_WEBHOOK_URL: ${{ secrets.DISCORD_GITHUB_CI_WEBHOOK_URL || secrets.DISCORD_CI_WEBHOOK_URL || secrets.DISCORD_GITHUB_WEBHOOK_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Post CI result to Discord
+        if: env.DISCORD_CI_WEBHOOK_URL != ''
+        continue-on-error: true
+        env:
+          DISCORD_WEBHOOK_URL: ${{ env.DISCORD_CI_WEBHOOK_URL }}
+          CI_STATUS: ${{ needs.deploy.result }}
+          CI_WORKFLOW_NAME: ${{ github.workflow }}
+          CI_JOB_NAME: Deploy Pages
+          CI_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_REF_NAME: ${{ github.ref_name }}
+          CI_SHA: ${{ github.sha }}
+          CI_EVENT_NAME: ${{ github.event_name }}
+          CI_ACTOR: ${{ github.actor }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: node scripts/ci/post-ci-discord-webhook.mjs

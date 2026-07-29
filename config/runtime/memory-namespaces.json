@@ -1,0 +1,49 @@
+{
+  "namespaces": {
+    "patterns": {
+      "purpose": "Reusable operating patterns and successful execution methods.",
+      "write_standard": [
+        "Store concise what-worked summaries.",
+        "Include constraints, expected format, and known gotchas."
+      ]
+    },
+    "learnings": {
+      "purpose": "Session-level discoveries that may later harden into patterns or playbooks.",
+      "write_standard": [
+        "Capture observations with context.",
+        "Promote to patterns only after reuse or validation."
+      ]
+    },
+    "results": {
+      "purpose": "Task outputs, completion markers, and meaningful delivery artifacts.",
+      "write_standard": [
+        "Store high-signal outcomes, not every intermediate step."
+      ]
+    },
+    "decisions": {
+      "purpose": "Architecture, policy, and operating model decisions.",
+      "write_standard": [
+        "Explain what changed and why it changed."
+      ]
+    },
+    "approvals": {
+      "purpose": "Human approval outcomes and approval-gated workflow context.",
+      "write_standard": [
+        "Store approval reason, decision, and scope.",
+        "Do not store raw conversational back-and-forth unless it changed policy."
+      ]
+    },
+    "products": {
+      "purpose": "Sellable offer context, delivery constraints, and product-specific operating knowledge.",
+      "write_standard": [
+        "Capture durable commercial and implementation facts."
+      ]
+    },
+    "infra": {
+      "purpose": "Infrastructure, deployment, host setup, and runtime behavior.",
+      "write_standard": [
+        "Store host rules, runtime paths, service behavior, and recovery guidance."
+      ]
+    }
+  }
+}

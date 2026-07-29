@@ -1,0 +1,16 @@
+{
+  "guildId": "DISCORD_GUILD_ID",
+  "channelKey": "approvals",
+  "channelId": "DISCORD_APPROVALS_CHANNEL_ID",
+  "channelName": "#approvals",
+  "messageId": "1234567891",
+  "submittedAt": "2026-06-25T10:05:00.000Z",
+  "content": "approve TASK-202606251000-ABC123",
+  "author": {
+    "id": "operator-1",
+    "username": "vbjservices",
+    "displayName": "VBJ Services",
+    "roleIds": [],
+    "isOperator": true
+  }
+}

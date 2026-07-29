@@ -1,0 +1,32 @@
+{
+  "guildId": "DISCORD_GUILD_ID",
+  "channels": {
+    "orchestrator": "DISCORD_ORCHESTRATOR_CHANNEL_ID",
+    "commands": "DISCORD_COMMANDS_CHANNEL_ID",
+    "voiceCommands": "DISCORD_VOICE_COMMANDS_CHANNEL_ID",
+    "parsedTasks": "DISCORD_PARSED_TASKS_CHANNEL_ID",
+    "taskQueue": "DISCORD_TASK_QUEUE_CHANNEL_ID",
+    "approvals": "DISCORD_APPROVALS_CHANNEL_ID",
+    "pullRequests": "DISCORD_PULL_REQUESTS_CHANNEL_ID",
+    "alerts": "DISCORD_ALERTS_CHANNEL_ID",
+    "dailySummary": "DISCORD_DAILY_SUMMARY_CHANNEL_ID",
+    "agentResults": "DISCORD_AGENT_RESULTS_CHANNEL_ID",
+    "memoryUpdates": "DISCORD_MEMORY_UPDATES_CHANNEL_ID",
+    "systemLogs": "DISCORD_SYSTEM_LOGS_CHANNEL_ID",
+    "agentLogs": "DISCORD_AGENT_LOGS_CHANNEL_ID",
+    "securityLogs": "DISCORD_SECURITY_LOGS_CHANNEL_ID",
+    "github": "DISCORD_GITHUB_CHANNEL_ID",
+    "ci": "DISCORD_CI_CHANNEL_ID",
+    "deployments": "DISCORD_DEPLOYMENTS_CHANNEL_ID",
+    "leadGeneration": "DISCORD_LEAD_GENERATION_CHANNEL_ID",
+    "leadQualificationAgent": "DISCORD_SALES_AGENT_CHANNEL_ID",
+    "outreachAgent": "DISCORD_OUTREACH_AGENT_CHANNEL_ID",
+    "outreachFollowups": "DISCORD_OUTREACH_FOLLOWUPS_AGENT_THREAD_ID",
+    "orionIntake": "DISCORD_ORION_INTAKE_CHANNEL_ID",
+    "orionReview": "DISCORD_ORION_REVIEW_CHANNEL_ID",
+    "orionRenders": "DISCORD_ORION_RENDERS_CHANNEL_ID",
+    "orionLab": "DISCORD_ORION_LAB_CHANNEL_ID",
+    "orionOps": "DISCORD_ORION_OPS_CHANNEL_ID",
+    "orionAnalytics": "DISCORD_ORION_ANALYTICS_CHANNEL_ID"
+  }
+}
