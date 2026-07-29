@@ -1,5 +1,6 @@
 name: Deploy Pages
 
+# Publishes ORION at https://officiallachkid.github.io/ORION/.
 # Builds every site under websites/ (Vite + React sources) into sites/,
 # regenerates the sites/index.html gallery, then deploys the redirect
 # page + gallery to GitHub Pages. sites/ is build output only — it is

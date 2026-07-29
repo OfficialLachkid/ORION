@@ -218,6 +218,155 @@ export async function deleteGmailDraft(envOrConfig, draftId, options = {}) {
   return { deleted: true, draftId: draftIdentifier };
 }
 
+// Reads a still-unsent draft's current subject/body from Gmail. The Gmail
+// draft is the source of truth once the operator opens Gmail and starts
+// editing — our stored copy is only the snapshot we produced. Returns null if
+// the draft is gone (sent/deleted); returns { subject, bodyText, bodyPreview }
+// if it still exists. Uses format=full and walks the MIME tree for the first
+// text/plain part, base64url-decoded. gmail.compose scope covers reading own
+// drafts, so no new OAuth scope is needed.
+export async function getGmailDraft(envOrConfig, draftId, options = {}) {
+  const gmailConfig = resolveInputConfig(envOrConfig);
+  assertGmailRuntimeConfig(gmailConfig);
+  const draftIdentifier = String(draftId || '').trim();
+  if (!draftIdentifier) {
+    return null;
+  }
+
+  const fetchImpl = options.fetch || options.fetchImpl || fetch;
+  const fetchAccessTokenImpl = options.fetchAccessToken || fetchAccessToken;
+  const { accessToken } = await fetchAccessTokenImpl(gmailConfig, { fetch: fetchImpl });
+  const url = `${GMAIL_DRAFTS_URL}/${encodeURIComponent(draftIdentifier)}?format=full`;
+  const response = await fetchImpl(url, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    const errorText = typeof response.text === 'function' ? await response.text() : '';
+    throw new Error(`Gmail draft read failed (${response.status}): ${errorText || 'no body'}`);
+  }
+
+  const payload = await response.json();
+  const messagePayload = payload?.message?.payload || {};
+  const headers = Array.isArray(messagePayload.headers) ? messagePayload.headers : [];
+  const subjectHeader = headers.find((h) => String(h?.name || '').toLowerCase() === 'subject');
+  const subject = String(subjectHeader?.value || '').trim();
+  const bodyText = extractTextPlainBody(messagePayload);
+  const preserved = preserveBodyText(bodyText);
+  return {
+    subject,
+    bodyText: preserved,
+    bodyPreview: previewBody(preserved),
+  };
+}
+
+function decodeBase64Url(data) {
+  const normalized = String(data || '').replace(/-/gu, '+').replace(/_/gu, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  try {
+    return Buffer.from(padded, 'base64').toString('utf8');
+  } catch {
+    return '';
+  }
+}
+
+// Walks a Gmail message payload tree looking for the first text/plain part.
+// Our own drafts are always plain text (buildRfc822Message writes text/plain),
+// but if the operator's Gmail client rewrites the draft as multipart/alternative
+// on edit, the text/plain part will still be inside — this handles both.
+function extractTextPlainBody(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return '';
+  }
+  const mimeType = String(payload.mimeType || '').toLowerCase();
+  if (mimeType === 'text/plain' && payload.body?.data) {
+    return decodeBase64Url(payload.body.data);
+  }
+  if (Array.isArray(payload.parts)) {
+    for (const part of payload.parts) {
+      const found = extractTextPlainBody(part);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  // Last resort: single-part message with no explicit mimeType handling.
+  if (payload.body?.data) {
+    return decodeBase64Url(payload.body.data);
+  }
+  return '';
+}
+
+// Enumerates every unsent Gmail draft with light metadata (id, To, subject,
+// internalDate). Used by the reconciler to detect the "mobile Gmail edit"
+// pattern — the operator opens a draft on their phone/iPad, edits, saves,
+// and Gmail creates a NEW draft under the hood instead of updating the
+// existing one in place. Our stored draftId then points at the untouched
+// original while the actual edited version lives under a new id. Matching
+// by recipient (+ newer internalDate) lets us find and repoint to the edit.
+// Uses format=metadata so we don't decode bodies for drafts we won't touch.
+export async function listGmailDraftsSummary(envOrConfig, options = {}) {
+  const gmailConfig = resolveInputConfig(envOrConfig);
+  assertGmailRuntimeConfig(gmailConfig);
+  const fetchImpl = options.fetch || options.fetchImpl || fetch;
+  const fetchAccessTokenImpl = options.fetchAccessToken || fetchAccessToken;
+  const maxResults = Math.max(1, Math.min(500, options.maxResults || 200));
+  const { accessToken } = await fetchAccessTokenImpl(gmailConfig, { fetch: fetchImpl });
+
+  const listUrl = `${GMAIL_DRAFTS_URL}?maxResults=${maxResults}`;
+  const listResponse = await fetchImpl(listUrl, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!listResponse.ok) {
+    const errorText = typeof listResponse.text === 'function' ? await listResponse.text() : '';
+    throw new Error(`Gmail draft list failed (${listResponse.status}): ${errorText || 'no body'}`);
+  }
+  const listPayload = await listResponse.json();
+  const ids = Array.isArray(listPayload.drafts)
+    ? listPayload.drafts.map((d) => String(d?.id || '')).filter(Boolean)
+    : [];
+
+  const summaries = [];
+  for (const id of ids) {
+    const detailUrl = `${GMAIL_DRAFTS_URL}/${encodeURIComponent(id)}?format=metadata&metadataHeaders=To&metadataHeaders=Subject`;
+    const res = await fetchImpl(detailUrl, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      // One draft failing to fetch shouldn't kill the whole enumeration —
+      // reconciler treats a missing summary as "no candidate found" and skips.
+      continue;
+    }
+    const detail = await res.json();
+    const headers = detail?.message?.payload?.headers || [];
+    const to = normalizeEmail(findHeader(headers, 'To'));
+    const subject = String(findHeader(headers, 'Subject') || '').trim();
+    const internalDate = Number(detail?.message?.internalDate || 0);
+    summaries.push({ id, to, subject, internalDate });
+  }
+  return summaries;
+}
+
+function findHeader(headers, name) {
+  const lowered = String(name || '').toLowerCase();
+  const match = headers.find((h) => String(h?.name || '').toLowerCase() === lowered);
+  return match ? String(match.value || '') : '';
+}
+
+// Strip display name + angle brackets, lowercase — so "Foo <a@b.com>" and
+// "a@b.com" compare equal.
+function normalizeEmail(raw) {
+  const value = String(raw || '').trim().toLowerCase();
+  const angle = value.match(/<([^>]+)>/u);
+  return angle ? angle[1].trim() : value;
+}
+
 // Checks whether an unsent draft still exists (GET /drafts/{id}). Returns
 // true if it's still a draft, false if it's gone (sent — via API or the Gmail
 // UI — or deleted). The reconciler uses this to detect drafts the operator
