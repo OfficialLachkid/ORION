@@ -172,7 +172,7 @@ The first approved Kokoro narration downloads and caches the model under `data/r
 
 ### Mac resource profile
 
-The lead Mac mini is an Apple M4 with 10 CPU cores and 16 GB unified memory. Its durable O.R.I.O.N. worktree is `/Users/Agent/Workspace/ruflo-product-video-agent`; phase-numbered worktree names are not used. Keep local assembly sequential: Llama used about 5.0 GB while loaded at a 4096-token context in the 2026-07-26 benchmark. Production sends `keep_alive: 0s` to unload it after each script response; Kokoro, faster-whisper `small.en` on CPU with `int8`, and FFmpeg then run one after another.
+The lead Mac mini is an Apple M4 with 10 CPU cores and 16 GB unified memory. Its durable O.R.I.O.N. worktree is `/Users/Agent/Workspace/ORION-product-video-agent`; phase-numbered worktree names are not used. Keep local assembly sequential: Llama used about 5.0 GB while loaded at a 4096-token context in the 2026-07-26 benchmark. Production sends `keep_alive: 0s` to unload it after each script response; Kokoro, faster-whisper `small.en` on CPU with `int8`, and FFmpeg then run one after another.
 
 O.R.I.O.N. serializes its own local model, narration, caption, and render work with a service-local media lock. It also calls Ollama's local `/api/ps` endpoint immediately before work and stops when any model is already loaded. It does not inspect, reschedule, lock, or modify leadgen, qualification, or other agent workflows.
 
