@@ -208,7 +208,7 @@
       "enabled": true
     },
     "daemon": {
-      "autoStart": true,
+      "autoStart": false,
       "workers": [
         "map",
         "audit",
