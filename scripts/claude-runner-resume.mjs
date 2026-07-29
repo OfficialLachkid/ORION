@@ -1,8 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
+import { loadRuntimeConfig } from '../services/lib/runtime-config.mjs';
 import { executeClaudeTaskFromPayloadFile } from '../services/claude-runner/src/runner.mjs';
 import { writeCheckpointFile } from './lib/session-checkpoint-utils.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
@@ -20,24 +18,6 @@ import {
   printUsage,
   printWarn,
 } from './lib/ruflo-wrapper-utils.mjs';
-
-const HEARTBEAT_STATE_FILE = resolve(projectRoot, 'data', 'runtime', 'resume-watch-heartbeat.json');
-
-function readHeartbeatState() {
-  if (!existsSync(HEARTBEAT_STATE_FILE)) {
-    return { lastPostAtMs: 0 };
-  }
-  try {
-    return JSON.parse(readFileSync(HEARTBEAT_STATE_FILE, 'utf8')) || { lastPostAtMs: 0 };
-  } catch {
-    return { lastPostAtMs: 0 };
-  }
-}
-
-function writeHeartbeatState(state) {
-  mkdirSync(dirname(HEARTBEAT_STATE_FILE), { recursive: true });
-  writeFileSync(HEARTBEAT_STATE_FILE, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
-}
 
 function parsePositiveInt(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
@@ -189,8 +169,6 @@ async function main() {
       '  --json                  Print the report as JSON.',
       '  --post-to-discord       Post the resume report to the agent-results Discord channel.',
       '  --quiet-if-empty        Skip the Discord post when there is nothing to resume or mark.',
-      '  --heartbeat-hours <n>   Force a heartbeat post at least every N hours even if empty. Default: 0 (disabled).',
-      '  --launchagent           Marker for LaunchAgent-triggered runs; adds a trigger field to Discord.',
     ]);
     return;
   }
@@ -211,12 +189,9 @@ async function main() {
     printSummary(report);
   }
 
-  const heartbeatHours = parsePositiveInt(getStringOption(options, 'heartbeat-hours', '0'), 0);
   await maybePostResumeReport(config, report, {
     explicit: getBooleanOption(options, 'post-to-discord', false),
     quiet: getBooleanOption(options, 'quiet-if-empty', false),
-    triggeredByLaunchAgent: getBooleanOption(options, 'launchagent', false),
-    heartbeatHours,
   });
 }
 
@@ -228,39 +203,18 @@ async function maybePostResumeReport(config, report, options = {}) {
     + report.stalledRunningWithCommands.length
     + report.actions.length;
 
-  const heartbeatState = readHeartbeatState();
-  const heartbeatIntervalMs = Number.isFinite(options.heartbeatHours) && options.heartbeatHours > 0
-    ? options.heartbeatHours * 60 * 60 * 1000
-    : 0;
-  const nowMs = Date.now();
-  const heartbeatDue = heartbeatIntervalMs > 0
-    && (heartbeatState.lastPostAtMs === 0 || (nowMs - heartbeatState.lastPostAtMs) >= heartbeatIntervalMs);
-
-  if (options.quiet && totalActionable === 0 && !heartbeatDue) {
+  if (options.quiet && totalActionable === 0) {
     return;
   }
-  const isHeartbeatOnly = totalActionable === 0 && heartbeatDue;
-  const verdict = isHeartbeatOnly
-    ? 'ok'
-    : report.actions.some((action) => action.resumed === false)
-      ? 'degraded'
-      : totalActionable === 0
-        ? 'ok'
-        : 'ready';
-  const summary = isHeartbeatOnly
-    ? `Heartbeat: auto-resume watch is alive. Last ${report.scannedSessionCount} checkpoints scanned cleanly.`
+  const verdict = report.actions.some((action) => action.resumed === false)
+    ? 'degraded'
     : totalActionable === 0
-      ? `Scanned ${report.scannedSessionCount} session checkpoint(s). Nothing to resume.`
-      : `Scanned ${report.scannedSessionCount} session checkpoint(s). Resume candidates: ${report.resumeCandidatesWithCommands.length}. Stalled: ${report.stalledRunningWithCommands.length}. Actions: ${report.actions.length}.`;
+      ? 'ok'
+      : 'ready';
+  const summary = totalActionable === 0
+    ? `Scanned ${report.scannedSessionCount} session checkpoint(s). Nothing to resume.`
+    : `Scanned ${report.scannedSessionCount} session checkpoint(s). Resume candidates: ${report.resumeCandidatesWithCommands.length}. Stalled: ${report.stalledRunningWithCommands.length}. Actions: ${report.actions.length}.`;
   const fields = [];
-  if (isHeartbeatOnly) {
-    fields.push({ name: 'kind', value: 'heartbeat', inline: true });
-    fields.push({
-      name: 'nextHeartbeatAtUtc',
-      value: new Date(nowMs + heartbeatIntervalMs).toISOString(),
-      inline: true,
-    });
-  }
   if (report.resumeCandidatesWithCommands.length > 0) {
     fields.push({
       name: 'resume_candidates',
@@ -285,14 +239,10 @@ async function maybePostResumeReport(config, report, options = {}) {
         .join('\n'),
     });
   }
-  if (options.triggeredByLaunchAgent) {
-    fields.push({ name: 'trigger', value: 'launchagent (claude-resume-watch)', inline: true });
-  }
   try {
     const post = await postToolReport(config, 'claude_runner_resume', verdict, summary, fields, { explicit: true });
     if (post.posted) {
-      writeHeartbeatState({ lastPostAtMs: nowMs, lastPostAtUtc: new Date(nowMs).toISOString(), lastPostKind: isHeartbeatOnly ? 'heartbeat' : 'action' });
-      printInfo(`Posted resume report to Discord channel ${post.channelKey}${isHeartbeatOnly ? ' (heartbeat)' : ''}.`);
+      printInfo(`Posted resume report to Discord channel ${post.channelKey}.`);
     } else if (post.reason !== 'disabled') {
       printWarn(`Discord post skipped: ${post.reason || 'unknown reason'}.`);
     }
