@@ -9,6 +9,8 @@ import {
   buildPokeQuizzRenderPlan,
   buildTimerLayout,
   buildTypeIconLayout,
+  estimateWrapCharacterLimit,
+  wrapTextBlock,
 } from '../src/poke-quizz-renderer.mjs';
 
 const template = {
@@ -82,6 +84,17 @@ test('phase schedule accumulates the Poke Quizz timeline deterministically', () 
   assert.equal(schedule.phases.reveal.start_seconds, 7.8);
 });
 
+test('prompt wrapping keeps long quiz text inside a centered two-line block', () => {
+  const wrapped = wrapTextBlock('Which Pokemon matches these two types?', {
+    maxCharactersPerLine: estimateWrapCharacterLimit(template, 54),
+    maxLines: 2,
+  });
+  assert.deepEqual(wrapped.lines, [
+    'Which Pokemon matches these',
+    'two types?',
+  ]);
+});
+
 test('type icon layout stays centered in the upper middle', () => {
   const layout = buildTypeIconLayout(template, 2);
   assert.deepEqual(layout[0], { x: 358, y: 320, width: 168, height: 168 });
@@ -131,6 +144,7 @@ test('audio filter script chains labeled inputs directly into amix', () => {
   });
   assert.doesNotMatch(script, /\]\]amix/u);
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[music\]\[cd0\]\[cd1\]\[cd2\]\[cd3\]\[cd4\]\[timerend\]amix/u);
+  assert.match(script, /\[c4\]atrim=0:0\.95,adelay=6800\|6800,volume=0\.72\[cd4\]/u);
 });
 
 test('escaped enable windows are safe for ffmpeg filter parsing', () => {

@@ -3,16 +3,17 @@ import { dirname, extname, resolve } from 'node:path';
 import { runLocalProcess } from './process-runner.mjs';
 
 const DEFAULT_HOOK_TEXT_Y = 150;
-const DEFAULT_PROMPT_TEXT_Y = 260;
+const DEFAULT_PROMPT_TEXT_Y = 170;
 const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
 const DEFAULT_TIMER_SIZE = 240;
 const DEFAULT_TIMER_MARGIN_BOTTOM = 60;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
 const DEFAULT_HOOK_FONT_SIZE = 92;
-const DEFAULT_PROMPT_FONT_SIZE = 60;
+const DEFAULT_PROMPT_FONT_SIZE = 54;
 const DEFAULT_REVEAL_FONT_SIZE = 88;
 const DEFAULT_TEXT_BORDER = 6;
+const DEFAULT_TEXT_LINE_SPACING = 12;
 const DEFAULT_MUSIC_LEAD_SECONDS = 0.6;
 const DEFAULT_MUSIC_VOLUME = 0.18;
 const DEFAULT_VOICE_VOLUME = 1;
@@ -37,6 +38,10 @@ export function escapeDrawtextText(value) {
     .replaceAll(',', '\\,');
 }
 
+function normalizeDrawtextText(value) {
+  return String(value || '').replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+}
+
 function escapeFilterPath(filePath) {
   return String(filePath || '')
     .replaceAll('\\', '/')
@@ -59,6 +64,61 @@ function slugify(value) {
 
 function safeFilterLabel(prefix, index) {
   return `${prefix}${index}`;
+}
+
+export function estimateWrapCharacterLimit(template, fontSize) {
+  const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
+  const safeZone = template?.canvas?.safe_zone || {};
+  const maxTextWidth = canvasWidth - ensureNumber(safeZone.left, 100) - ensureNumber(safeZone.right, 100);
+  return Math.max(12, Math.floor(maxTextWidth / Math.max(1, ensureNumber(fontSize, 60) * 0.56)));
+}
+
+export function wrapTextBlock(value, { maxCharactersPerLine, maxLines = 2 }) {
+  const sourceText = normalizeDrawtextText(value).trim();
+  if (!sourceText) {
+    return {
+      wrapped_text: '',
+      lines: [],
+    };
+  }
+
+  const normalizedMaxCharacters = Math.max(8, Math.floor(ensureNumber(maxCharactersPerLine, 24)));
+  const tokens = sourceText.split(/\s+/u).filter(Boolean);
+  const lines = [];
+  let currentLine = '';
+
+  for (const token of tokens) {
+    const nextLine = currentLine ? `${currentLine} ${token}` : token;
+    if (!currentLine || nextLine.length <= normalizedMaxCharacters) {
+      currentLine = nextLine;
+      continue;
+    }
+    lines.push(currentLine);
+    currentLine = token;
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  if (lines.length > maxLines) {
+    const preservedLines = lines.slice(0, Math.max(0, maxLines - 1));
+    const lastLine = lines.slice(Math.max(0, maxLines - 1)).join(' ');
+    lines.length = 0;
+    lines.push(...preservedLines, lastLine);
+  }
+
+  return {
+    wrapped_text: lines.join('\n'),
+    lines,
+  };
+}
+
+function computeTextBlockY(baseY, lineCount, fontSize, template) {
+  const safeTop = ensureNumber(template?.canvas?.safe_zone?.top, 160);
+  if (lineCount <= 1) return baseY;
+  const lineHeight = ensureNumber(fontSize, 60) + DEFAULT_TEXT_LINE_SPACING;
+  return Math.max(safeTop - 10, Math.floor(baseY - (((lineCount - 1) * lineHeight) / 2)));
 }
 
 export function formatEnableBetween(startSeconds, endSeconds) {
@@ -202,13 +262,13 @@ function buildVisualInputs(plan, renderPlan) {
   inputs.push({
     role: 'timer',
     path: plan.assets.overlays.selected_timer_path,
-    args: ['-ignore_loop', '0', '-t', String(Math.max(0.5, renderPlan.phases.countdown?.duration_seconds || 0)), '-i', plan.assets.overlays.selected_timer_path],
+    args: ['-stream_loop', '-1', '-ignore_loop', '0', '-t', String(totalDuration), '-i', plan.assets.overlays.selected_timer_path],
   });
 
   inputs.push({
     role: 'pokeball-grid',
     path: plan.assets.overlays.selected_primary_pokeball_overlay_path,
-    args: ['-ignore_loop', '0', '-t', String(Math.max(0.5, renderPlan.phases.countdown?.duration_seconds || 0)), '-i', plan.assets.overlays.selected_primary_pokeball_overlay_path],
+    args: ['-stream_loop', '-1', '-ignore_loop', '0', '-t', String(totalDuration), '-i', plan.assets.overlays.selected_primary_pokeball_overlay_path],
   });
 
   for (const pokemon of plan.assets.pokemon) {
@@ -222,9 +282,11 @@ function buildVisualInputs(plan, renderPlan) {
   return inputs;
 }
 
-function buildVisualFilterScript(plan, template, renderPlan, inputRefs, audioMixPath, fontPath) {
+function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts) {
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
+  const countdownDuration = Math.max(0.5, ensureNumber(renderPlan.phases.countdown?.duration_seconds, 0));
+  const countdownStart = ensureNumber(renderPlan.phases.countdown?.start_seconds, 0);
   filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
 
   for (let index = 0; index < plan.assets.type_icons.length; index += 1) {
@@ -241,8 +303,8 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, audioMix
   const gridItemSize = ensureNumber(renderPlan.grid.item_size_px, 180);
   const pokeballSplitLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pb', index));
   if (pokeballSplitLabels.length > 0) {
-    filters.push(`[${inputRefs.timer}:v]fps=${fps},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,setsar=1[timer]`);
-    filters.push(`[${inputRefs.pokeball}:v]fps=${fps},scale=${gridItemSize}:${gridItemSize}:force_original_aspect_ratio=decrease,setsar=1[pokeballbase]`);
+    filters.push(`[${inputRefs.timer}:v]fps=${fps},trim=duration=${countdownDuration},setpts=PTS-STARTPTS+${countdownStart}/TB,scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timer]`);
+    filters.push(`[${inputRefs.pokeball}:v]fps=${fps},trim=duration=${countdownDuration},setpts=PTS-STARTPTS+${countdownStart}/TB,scale=${gridItemSize}:${gridItemSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[pokeballbase]`);
     filters.push(`[pokeballbase]split=${pokeballSplitLabels.length}${pokeballSplitLabels.map((label) => `[${label}]`).join('')}`);
     for (let index = 0; index < renderPlan.grid.cells.length; index += 1) {
       const cell = renderPlan.grid.cells[index];
@@ -280,13 +342,13 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, audioMix
   const drawtextParts = [];
   const fontPart = fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
   drawtextParts.push(
-    `drawtext=text='${escapeDrawtextText(renderPlan.text.hook)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_HOOK_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=(w-text_w)/2:y=${DEFAULT_HOOK_TEXT_Y}:enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}'`,
+    `drawtext=textfile='${escapeFilterPath(textArtifacts.hook.path)}':reload=0${fontPart}:fontcolor=white:fontsize=${DEFAULT_HOOK_FONT_SIZE}:line_spacing=${DEFAULT_TEXT_LINE_SPACING}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${textArtifacts.hook.y}:enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}'`,
   );
   drawtextParts.push(
-    `drawtext=text='${escapeDrawtextText(renderPlan.text.prompt)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_PROMPT_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=(w-text_w)/2:y=${DEFAULT_PROMPT_TEXT_Y}:enable='${formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, renderPlan.phases.reveal.start_seconds)}'`,
+    `drawtext=textfile='${escapeFilterPath(textArtifacts.prompt.path)}':reload=0${fontPart}:fontcolor=white:fontsize=${DEFAULT_PROMPT_FONT_SIZE}:line_spacing=${DEFAULT_TEXT_LINE_SPACING}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${textArtifacts.prompt.y}:enable='${formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, renderPlan.phases.reveal.start_seconds)}'`,
   );
   drawtextParts.push(
-    `drawtext=text='${escapeDrawtextText(renderPlan.text.reveal)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_REVEAL_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=(w-text_w)/2:y=${DEFAULT_REVEAL_TEXT_Y}:enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}'`,
+    `drawtext=textfile='${escapeFilterPath(textArtifacts.reveal.path)}':reload=0${fontPart}:fontcolor=white:fontsize=${DEFAULT_REVEAL_FONT_SIZE}:line_spacing=${DEFAULT_TEXT_LINE_SPACING}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${textArtifacts.reveal.y}:enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}'`,
   );
   for (const countdown of renderPlan.countdown_numbers) {
     drawtextParts.push(
@@ -299,12 +361,54 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, audioMix
   return {
     script: `${filters.join(';\n')}\n`,
     outputLabel: 'vout',
-    audioMixPath,
   };
 }
 
 function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
+}
+
+async function writeDrawtextArtifacts({ renderPlan, template, runtimeRoot }) {
+  const textRoot = resolve(runtimeRoot, 'text');
+  await mkdir(textRoot, { recursive: true });
+  const hook = wrapTextBlock(renderPlan.text.hook, {
+    maxCharactersPerLine: estimateWrapCharacterLimit(template, DEFAULT_HOOK_FONT_SIZE),
+    maxLines: 2,
+  });
+  const prompt = wrapTextBlock(renderPlan.text.prompt, {
+    maxCharactersPerLine: estimateWrapCharacterLimit(template, DEFAULT_PROMPT_FONT_SIZE),
+    maxLines: 2,
+  });
+  const reveal = wrapTextBlock(renderPlan.text.reveal, {
+    maxCharactersPerLine: estimateWrapCharacterLimit(template, DEFAULT_REVEAL_FONT_SIZE),
+    maxLines: 2,
+  });
+
+  const artifacts = {
+    hook: {
+      path: resolve(textRoot, 'hook.txt'),
+      text: hook.wrapped_text,
+      y: computeTextBlockY(DEFAULT_HOOK_TEXT_Y, hook.lines.length, DEFAULT_HOOK_FONT_SIZE, template),
+    },
+    prompt: {
+      path: resolve(textRoot, 'prompt.txt'),
+      text: prompt.wrapped_text,
+      y: computeTextBlockY(DEFAULT_PROMPT_TEXT_Y, prompt.lines.length, DEFAULT_PROMPT_FONT_SIZE, template),
+    },
+    reveal: {
+      path: resolve(textRoot, 'reveal.txt'),
+      text: reveal.wrapped_text,
+      y: computeTextBlockY(DEFAULT_REVEAL_TEXT_Y, reveal.lines.length, DEFAULT_REVEAL_FONT_SIZE, template),
+    },
+  };
+
+  await Promise.all([
+    writeFile(artifacts.hook.path, `${artifacts.hook.text}\n`, 'utf8'),
+    writeFile(artifacts.prompt.path, `${artifacts.prompt.text}\n`, 'utf8'),
+    writeFile(artifacts.reveal.path, `${artifacts.reveal.text}\n`, 'utf8'),
+  ]);
+
+  return artifacts;
 }
 
 export function buildAudioFilterScript({ narrationPaths, musicPath, countdownPath, timerEndPath, renderPlan }) {
@@ -334,8 +438,10 @@ export function buildAudioFilterScript({ narrationPaths, musicPath, countdownPat
     filters.push(`[${inputIndex}:a]asplit=5[c0][c1][c2][c3][c4]`);
     for (let tickIndex = 0; tickIndex < 5; tickIndex += 1) {
       const delayMs = Math.max(0, Math.round((renderPlan.audio_cues.countdown_start_seconds + tickIndex) * 1000));
+      const remainingWindowSeconds = renderPlan.audio_cues.timer_end_seconds - (renderPlan.audio_cues.countdown_start_seconds + tickIndex);
+      const clipDurationSeconds = Math.max(0.12, Math.min(0.95, remainingWindowSeconds - 0.03));
       const label = `cd${tickIndex}`;
-      filters.push(`[c${tickIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_COUNTDOWN_VOLUME}[${label}]`);
+      filters.push(`[c${tickIndex}]atrim=0:${clipDurationSeconds},adelay=${delayMs}|${delayMs},volume=${DEFAULT_COUNTDOWN_VOLUME}[${label}]`);
       mixLabels.push(label);
     }
     inputIndex += 1;
@@ -480,7 +586,8 @@ export async function renderPokeQuizzVideo({
     pokemon: plan.assets.pokemon.map((_, index) => plan.assets.type_icons.length + 3 + index),
   };
   const fontPath = await resolveFontPath(fontCandidates);
-  const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, audioMixPath, fontPath);
+  const textArtifacts = await writeDrawtextArtifacts({ renderPlan, template, runtimeRoot });
+  const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts);
   await writeFile(filterScriptPath, visualFilter.script, 'utf8');
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });

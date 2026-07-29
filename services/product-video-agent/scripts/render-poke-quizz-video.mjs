@@ -59,7 +59,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --plan <path>            Required Poke Quizz plan JSON path',
       '  --template <path>        Template JSON path. Default: pokemon-type-challenge-v1.template.json',
       '  --config <path>          Product-video config JSON path. Default: services/product-video-agent/config.example.json',
-      '  --output <path>          Output video path. Default: T7 Previews/Poke Quizz/<type-pair>-<seed>.mp4',
+      '  --output <path>          Output video path. Default: T7 Pokemon/Poke Quizz/Previews/<type-pair>-<seed>.mp4',
       '  --voice-python <path>    Override Kokoro Python executable',
       '  --voice-script <path>    Override kokoro-synthesize.py path',
       '  --voice-cache-dir <path> Override Kokoro cache/model directory',

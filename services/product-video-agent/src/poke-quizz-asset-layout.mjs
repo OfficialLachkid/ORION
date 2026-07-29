@@ -8,11 +8,12 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   silhouettes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Silhouettes`,
   pixelTypes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Pixel Types`,
   threeDTypes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/3D Types`,
+  threeDTypeSources: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/3D Type Sources`,
   overlays: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Overlays`,
   transitions: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Transitions`,
   battleIntroMusic: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Music`,
   soundEffects: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Sound Effects`,
-  previews: `${ORION_T7_ROOT}/Previews/Poke Quizz`,
+  previews: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Previews`,
   masters: `${ORION_T7_ROOT}/Masters/Poke Quizz`,
   templates: `${ORION_T7_ROOT}/Templates/Poke Quizz`,
 });

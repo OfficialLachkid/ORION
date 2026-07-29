@@ -90,12 +90,13 @@ function pickPair(pairCatalog, forcedTypePair, random) {
   return pairCatalog[Math.floor(random() * pairCatalog.length)];
 }
 
-function buildTypeIconRecord(type, sourceUrl, localPath, style) {
+function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
   return {
     type,
     local_path: localPath,
     source_url: sourceUrl || null,
     style,
+    style_variant: styleVariant || style,
   };
 }
 
@@ -216,6 +217,7 @@ export async function planPokemonTypeChallenge({
       firstSubjectTypeIcons[index],
       selectedTypeIconSet.file_paths[index],
       selectedTypeIconSet.style,
+      selectedTypeIconSet.style_variant,
     )
   ));
 
