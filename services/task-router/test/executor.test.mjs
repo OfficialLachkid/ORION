@@ -231,7 +231,10 @@ test('buildExecutionStartedEvents marks task as running', () => {
 });
 
 test('executeTask returns completed events for daemon health checks', async () => {
-  const config = loadRuntimeConfig();
+  const config = {
+    ...loadRuntimeConfig(),
+    orionWorkerService: { expected: true },
+  };
   const calls = [];
   const commandRunner = async (command, args) => {
     calls.push({ command, args });
@@ -269,6 +272,29 @@ gui/502/io.vbj.orion.daemon = {
   assert.equal(result.outboundEvents[1].channelKey, 'agentResults');
   assert.equal(calls[0].command, 'id');
   assert.equal(calls[1].command, 'launchctl');
+});
+
+test('executeTask reports an intentionally disabled daemon without invoking launchctl', async () => {
+  const config = {
+    ...loadRuntimeConfig(),
+    orionWorkerService: { expected: false },
+  };
+  const calls = [];
+
+  const result = await executeTask({
+    task_id: 'TASK-DAEMON-DISABLED',
+    full_text: 'Check the current ORION daemon health on the Mac mini.',
+  }, config, {
+    commandRunner: async (command, args) => {
+      calls.push({ command, args });
+      return { code: 1, stdout: '', stderr: 'must not run' };
+    },
+  });
+
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.executionResult.report.state, 'disabled');
+  assert.equal(result.executionResult.report.intentionallyDisabled, true);
+  assert.deepEqual(calls, []);
 });
 
 test('executeTask returns completed events for Discord bot runtime health checks', async () => {
@@ -833,7 +859,10 @@ test('executeTask returns completed events for Claude runtime health checks', as
 });
 
 test('executeTask returns completed events for launch agents health checks', async () => {
-  const config = loadRuntimeConfig();
+  const config = {
+    ...loadRuntimeConfig(),
+    orionWorkerService: { expected: true },
+  };
   const commandRunner = async (command, args) => {
     if (command === 'id') {
       return { code: 0, stdout: '502\n', stderr: '' };
@@ -867,6 +896,36 @@ gui/502/${label} = {
   assert.equal(result.executionResult.report.presentCount, 3);
   assert.equal(result.executionResult.report.missingCount, 1);
   assert.equal(result.outboundEvents[1].metadata.checkedAgents.length, 4);
+});
+
+test('launch agents health checks omit an intentionally disabled daemon', async () => {
+  const config = {
+    ...loadRuntimeConfig(),
+    orionWorkerService: { expected: false },
+  };
+  const checkedLabels = [];
+  const commandRunner = async (command, args) => {
+    if (command === 'id') {
+      return { code: 0, stdout: '502\n', stderr: '' };
+    }
+
+    const label = args[1].split('/').at(-1);
+    checkedLabels.push(label);
+    return {
+      code: 0,
+      stdout: `gui/502/${label} = { state = not running runs = 0 last exit code = 0 }`,
+      stderr: '',
+    };
+  };
+
+  const result = await executeTask({
+    task_id: 'TASK-LAUNCH-DISABLED',
+    full_text: 'Check current launch agents health on the Mac mini.',
+  }, config, { commandRunner });
+
+  assert.equal(result.executionResult.report.presentCount, 3);
+  assert.equal(result.executionResult.report.missingCount, 0);
+  assert.equal(checkedLabels.includes('io.vbj.orion.daemon'), false);
 });
 
 test('executeTask returns completed events for session checkpoint health checks', async () => {

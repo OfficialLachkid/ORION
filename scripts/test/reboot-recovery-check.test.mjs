@@ -11,6 +11,7 @@ test('classifyCheckState routes healthy/degraded/blocked states correctly', () =
   assert.equal(classifyCheckState('ready'), 'healthy');
   assert.equal(classifyCheckState('healthy'), 'healthy');
   assert.equal(classifyCheckState('running'), 'healthy');
+  assert.equal(classifyCheckState('disabled'), 'healthy');
   assert.equal(classifyCheckState('degraded'), 'degraded');
   assert.equal(classifyCheckState('empty'), 'degraded');
   assert.equal(classifyCheckState('blocked'), 'blocked');

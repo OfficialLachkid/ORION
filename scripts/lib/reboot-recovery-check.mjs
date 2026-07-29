@@ -19,6 +19,7 @@ const HEALTHY_STATES = new Set([
   'running',
   'authenticated',
   'active',
+  'disabled',
 ]);
 
 const DEGRADED_STATES = new Set([

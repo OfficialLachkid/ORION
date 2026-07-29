@@ -91,22 +91,37 @@ function buildPlistContent({
 }
 
 function loadLaunchAgent(plistPath) {
+  const launchdTarget = `gui/${process.getuid()}/${PLIST_LABEL}`;
+
   try {
     execFileSync('launchctl', ['unload', plistPath], { stdio: 'ignore' });
   } catch {
     // Already unloaded or not present.
   }
 
+  execFileSync('launchctl', ['enable', launchdTarget], { stdio: 'ignore' });
   execFileSync('launchctl', ['load', '-w', plistPath], { stdio: 'ignore' });
+}
+
+function disableLaunchAgent(plistPath) {
+  const launchdTarget = `gui/${process.getuid()}/${PLIST_LABEL}`;
+
+  try {
+    execFileSync('launchctl', ['unload', plistPath], { stdio: 'ignore' });
+  } catch {
+    // Already unloaded or not present.
+  }
+
+  execFileSync('launchctl', ['disable', launchdTarget], { stdio: 'ignore' });
 }
 
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-orion-daemon-launch-agent.mjs [--no-load]',
+      'Usage: node scripts/install-orion-daemon-launch-agent.mjs [--enable|--no-load]',
       '',
-      'Writes ~/Library/LaunchAgents/io.vbj.orion.daemon.plist and loads it by default.',
-      'The LaunchAgent uses RunAtLoad + KeepAlive so the ORION daemon auto-starts and relaunches on exit.',
+      'Writes ~/Library/LaunchAgents/io.vbj.orion.daemon.plist and disables it by default.',
+      'Use --enable only when autonomous claude-flow workers are explicitly wanted.',
     ].join('\n'));
     return;
   }
@@ -116,7 +131,7 @@ function main() {
   }
 
   const config = loadRuntimeConfig();
-  const shouldLoad = !hasFlag('--no-load');
+  const shouldLoad = hasFlag('--enable') && !hasFlag('--no-load');
 
   const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
   const plistPath = resolve(launchAgentsDir, `${PLIST_LABEL}.plist`);
@@ -143,11 +158,13 @@ function main() {
 
   if (shouldLoad) {
     loadLaunchAgent(plistPath);
+  } else {
+    disableLaunchAgent(plistPath);
   }
 
   process.stdout.write([
     `Installed ${basename(plistPath)}.`,
-    `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
+    `Load state: ${shouldLoad ? 'loaded' : 'disabled'}.`,
     `Plist: ${plistPath}`,
     `Stdout: ${stdoutPath}`,
     `Stderr: ${stderrPath}`,

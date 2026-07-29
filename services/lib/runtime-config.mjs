@@ -176,7 +176,7 @@ export function loadRuntimeConfig(options = {}) {
         env.ORION_WORKER_SERVICE_EXPECTED
           ?? env.RUFLO_WORKER_SERVICE_EXPECTED
           ?? env.RUFLO_DAEMON_EXPECTED,
-        true
+        false
       ),
     },
     claude: {

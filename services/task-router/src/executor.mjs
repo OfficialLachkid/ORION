@@ -581,7 +581,20 @@ export function parseLaunchctlReport(output) {
   };
 }
 
-async function executeOrionDaemonHealthCheck(commandRunner) {
+async function executeOrionDaemonHealthCheck(commandRunner, config) {
+  if (config?.orionWorkerService?.expected === false) {
+    return {
+      rawStdout: '',
+      report: {
+        state: 'disabled',
+        activeCount: 0,
+        lastExitCode: 0,
+        runs: 0,
+        intentionallyDisabled: true,
+      },
+    };
+  }
+
   const uidResult = await commandRunner('id', ['-u']);
   if (uidResult.code !== 0) {
     throw new Error(uidResult.stderr.trim() || 'Could not determine current user ID for launchctl health check.');
@@ -918,7 +931,7 @@ async function executeClaudeRuntimeHealthCheck(commandRunner, config) {
   };
 }
 
-async function executeLaunchAgentsHealthCheck(commandRunner) {
+async function executeLaunchAgentsHealthCheck(commandRunner, config) {
   const uidResult = await commandRunner('id', ['-u']);
   if (uidResult.code !== 0) {
     throw new Error(uidResult.stderr.trim() || 'Could not determine current user ID for LaunchAgent health check.');
@@ -926,7 +939,7 @@ async function executeLaunchAgentsHealthCheck(commandRunner) {
 
   const uid = normalizeWhitespace(uidResult.stdout);
   const labels = [
-    'io.vbj.orion.daemon',
+    ...(config?.orionWorkerService?.expected === false ? [] : ['io.vbj.orion.daemon']),
     'io.vbj.orion.discord-bot',
     'io.vbj.orion.daily-summary',
     'io.vbj.orion.health-monitor',
@@ -2030,7 +2043,7 @@ export async function executeHealthAction(action, config, options = {}) {
     let executionResult = null;
 
     if (action === 'orion_daemon_health_check') {
-      executionResult = await executeOrionDaemonHealthCheck(commandRunner);
+      executionResult = await executeOrionDaemonHealthCheck(commandRunner, config);
     } else if (action === 'mac_runtime_safe_sync') {
       executionResult = await executeMacRuntimeSafeSync(commandRunner);
     } else if (action === 'ops_tool_run') {
@@ -2050,7 +2063,7 @@ export async function executeHealthAction(action, config, options = {}) {
     } else if (action === 'github_auth_health_check') {
       executionResult = await executeGitHubAuthHealthCheck(commandRunner);
     } else if (action === 'launch_agents_health_check') {
-      executionResult = await executeLaunchAgentsHealthCheck(commandRunner);
+      executionResult = await executeLaunchAgentsHealthCheck(commandRunner, config);
     } else if (action === 'session_checkpoint_health_check') {
       executionResult = await executeSessionCheckpointHealthCheck(commandRunner, config);
     } else if (action === 'runtime_logs_health_check') {
