@@ -201,7 +201,7 @@ test('buildExecutionPlan prefers explicit Gmail runtime actions over text heuris
 
 test('parseLaunchctlReport extracts daemon state fields', () => {
   const report = parseLaunchctlReport(`
-gui/502/io.ruv.ruflo.daemon = {
+gui/502/io.vbj.orion.daemon = {
   active count = 0
   state = not running
   stdout path = /tmp/out.log
@@ -243,7 +243,7 @@ test('executeTask returns completed events for daemon health checks', async () =
     return {
       code: 0,
       stdout: `
-gui/502/io.ruv.ruflo.daemon = {
+gui/502/io.vbj.orion.daemon = {
   active count = 1
   state = running
   stdout path = /tmp/out.log
@@ -840,7 +840,7 @@ test('executeTask returns completed events for launch agents health checks', asy
     }
 
     const label = args[1].split('/').at(-1);
-    if (label === 'io.ruv.ruflo.health-monitor') {
+    if (label === 'io.vbj.orion.health-monitor') {
       return { code: 1, stdout: '', stderr: 'service not found' };
     }
 

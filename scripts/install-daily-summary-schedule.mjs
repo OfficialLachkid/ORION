@@ -10,7 +10,7 @@ import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.m
 const DEFAULT_HOUR = 22;
 const DEFAULT_MINUTE = 0;
 const DEFAULT_WINDOW_HOURS = 24;
-const PLIST_LABEL = 'io.ruv.ruflo.daily-summary';
+const PLIST_LABEL = 'io.vbj.orion.daily-summary';
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -93,7 +93,7 @@ function main() {
     process.stdout.write([
       'Usage: node scripts/install-daily-summary-schedule.mjs [--hour 22] [--minute 0] [--window-hours 24] [--no-load]',
       '',
-      'Writes ~/Library/LaunchAgents/io.ruv.ruflo.daily-summary.plist and loads it by default.',
+      'Writes ~/Library/LaunchAgents/io.vbj.orion.daily-summary.plist and loads it by default.',
       'Schedule uses macOS local time.',
     ].join('\n'));
     return;

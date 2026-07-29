@@ -10,7 +10,7 @@ import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.m
 const DEFAULT_HOUR = 7;
 const DEFAULT_MINUTE = 0;
 const DEFAULT_LIMIT = 10; // conservative — this spends real Claude usage, not free like leadgen search
-const PLIST_LABEL = 'io.ruv.ruflo.qualification-schedule';
+const PLIST_LABEL = 'io.vbj.orion.qualification-schedule';
 
 function getArgValue(flag, fallbackValue = '') {
   const index = process.argv.indexOf(flag);
@@ -93,7 +93,7 @@ function main() {
     process.stdout.write([
       'Usage: node scripts/install-qualification-schedule.mjs [--hour 7] [--minute 0] [--limit 10] [--no-load]',
       '',
-      'Writes ~/Library/LaunchAgents/io.ruv.ruflo.qualification-schedule.plist and loads it by default.',
+      'Writes ~/Library/LaunchAgents/io.vbj.orion.qualification-schedule.plist and loads it by default.',
       'Each run qualifies the oldest N leads with status=new via Claude (claude -p), drafts',
       'Gmail outreach for fits with an email, and posts a summary to #sales-agent.',
       '',

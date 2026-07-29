@@ -7,7 +7,7 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-const PLIST_LABEL = 'io.ruv.ruflo.daemon';
+const PLIST_LABEL = 'io.vbj.orion.daemon';
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -103,9 +103,9 @@ function loadLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-ruflo-daemon-launch-agent.mjs [--no-load]',
+      'Usage: node scripts/install-orion-daemon-launch-agent.mjs [--no-load]',
       '',
-      'Writes ~/Library/LaunchAgents/io.ruv.ruflo.daemon.plist and loads it by default.',
+      'Writes ~/Library/LaunchAgents/io.vbj.orion.daemon.plist and loads it by default.',
       'The LaunchAgent uses RunAtLoad + KeepAlive so the Ruflo daemon auto-starts and relaunches on exit.',
     ].join('\n'));
     return;

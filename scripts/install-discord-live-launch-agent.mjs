@@ -7,7 +7,7 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-const PLIST_LABEL = 'io.ruv.ruflo.discord-bot';
+const PLIST_LABEL = 'io.vbj.orion.discord-bot';
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -62,7 +62,7 @@ function main() {
     process.stdout.write([
       'Usage: node scripts/install-discord-live-launch-agent.mjs [--no-load]',
       '',
-      'Writes ~/Library/LaunchAgents/io.ruv.ruflo.discord-bot.plist and loads it by default.',
+      'Writes ~/Library/LaunchAgents/io.vbj.orion.discord-bot.plist and loads it by default.',
       'The LaunchAgent uses RunAtLoad + KeepAlive so the Discord bot auto-starts and relaunches on exit.',
     ].join('\n'));
     return;

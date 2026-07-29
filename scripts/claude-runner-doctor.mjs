@@ -145,7 +145,7 @@ export async function runClaudeRunnerDoctor(config, options = {}) {
     ));
   }
 
-  const discordPlistPath = resolve(homedir(), 'Library', 'LaunchAgents', 'io.ruv.ruflo.discord-bot.plist');
+  const discordPlistPath = resolve(homedir(), 'Library', 'LaunchAgents', 'io.vbj.orion.discord-bot.plist');
   const plistText = readPlist(discordPlistPath);
   if (!plistText) {
     checks.push(degraded(

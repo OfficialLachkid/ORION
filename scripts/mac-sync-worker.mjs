@@ -17,8 +17,8 @@ import {
 } from './lib/mac-sync-worker-utils.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
-const DISCORD_BOT_LAUNCH_AGENT = 'io.ruv.ruflo.discord-bot';
-const RUFLO_WORKER_SERVICE_LAUNCH_AGENT = 'io.ruv.ruflo.daemon';
+const DISCORD_BOT_LAUNCH_AGENT = 'io.vbj.orion.discord-bot';
+const ORION_WORKER_SERVICE_LAUNCH_AGENT = 'io.vbj.orion.daemon';
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -345,7 +345,7 @@ async function main() {
   let restartedRufloWorkerService = false;
   let rufloWorkerServiceStatus = config.rufloWorkerService?.expected === false ? 'disabled' : 'unchanged';
   const includeRufloWorkerService = config.rufloWorkerService?.expected !== false
-    && isLaunchAgentInstalled(RUFLO_WORKER_SERVICE_LAUNCH_AGENT);
+    && isLaunchAgentInstalled(ORION_WORKER_SERVICE_LAUNCH_AGENT);
 
   if (config.rufloWorkerService?.expected !== false && !includeRufloWorkerService) {
     rufloWorkerServiceStatus = 'not_installed';
@@ -378,7 +378,7 @@ async function main() {
   }
 
   if (!dryRun && includeRufloWorkerService && workerCheck?.severity !== 'healthy') {
-    restartLaunchAgent(RUFLO_WORKER_SERVICE_LAUNCH_AGENT);
+    restartLaunchAgent(ORION_WORKER_SERVICE_LAUNCH_AGENT);
     restartedRufloWorkerService = true;
     rufloWorkerServiceStatus = 'restarted';
   }

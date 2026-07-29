@@ -40,7 +40,7 @@ test('evaluateHealthCheckResult points Discord bot recovery to launchctl kicksta
   }, config);
 
   assert.equal(check.severity, 'critical');
-  assert.match(check.recoveryCommand, /io\.ruv\.ruflo\.discord-bot/u);
+  assert.match(check.recoveryCommand, /io\.vbj\.orion\.discord-bot/u);
 });
 
 test('evaluateHealthCheckResult marks disk usage critical above critical threshold', () => {

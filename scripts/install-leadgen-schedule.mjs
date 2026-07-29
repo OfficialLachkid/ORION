@@ -9,7 +9,7 @@ import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.m
 
 const DEFAULT_HOUR = 7;
 const DEFAULT_MINUTE = 0;
-const PLIST_LABEL = 'io.ruv.ruflo.leadgen-schedule';
+const PLIST_LABEL = 'io.vbj.orion.leadgen-schedule';
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -89,7 +89,7 @@ function main() {
     process.stdout.write([
       'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--no-load]',
       '',
-      'Writes ~/Library/LaunchAgents/io.ruv.ruflo.leadgen-schedule.plist and loads it by default.',
+      'Writes ~/Library/LaunchAgents/io.vbj.orion.leadgen-schedule.plist and loads it by default.',
       'Each run rotates to the next niche in scripts/run-scheduled-leadgen.mjs and searches',
       'the Dutch market for candidate leads, saving results to the Supabase leads table.',
       'Schedule uses macOS local time.',

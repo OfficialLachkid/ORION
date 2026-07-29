@@ -120,11 +120,11 @@ function buildCheckSignature(check) {
 
 function buildRecoveryCommand(action, check) {
   if (action === 'ruflo_daemon_health_check') {
-    return 'launchctl kickstart -k gui/$(id -u)/io.ruv.ruflo.daemon';
+    return 'launchctl kickstart -k gui/$(id -u)/io.vbj.orion.daemon';
   }
 
   if (action === 'discord_bot_runtime_health_check') {
-    return 'launchctl kickstart -k gui/$(id -u)/io.ruv.ruflo.discord-bot';
+    return 'launchctl kickstart -k gui/$(id -u)/io.vbj.orion.discord-bot';
   }
 
   if (action === 'tailscale_health_check') {

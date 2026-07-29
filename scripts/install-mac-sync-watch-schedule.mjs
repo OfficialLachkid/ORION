@@ -7,7 +7,7 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-const PLIST_LABEL = 'io.ruv.ruflo.mac-sync-watch';
+const PLIST_LABEL = 'io.vbj.orion.mac-sync-watch';
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -154,7 +154,7 @@ function main() {
     process.stdout.write([
       'Usage: node scripts/install-mac-sync-watch-schedule.mjs [--interval-seconds 1800] [--hours 6,10,14,18,22 --minute 0] [--no-load]',
       '',
-      'Writes ~/Library/LaunchAgents/io.ruv.ruflo.mac-sync-watch.plist and loads it by default.',
+      'Writes ~/Library/LaunchAgents/io.vbj.orion.mac-sync-watch.plist and loads it by default.',
       'Schedule is detect-only: it can raise approval-gated sync requests, but it does not auto-pull.',
     ].join('\n'));
     return;

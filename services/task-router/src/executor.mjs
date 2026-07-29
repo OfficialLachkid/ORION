@@ -588,9 +588,9 @@ async function executeRufloDaemonHealthCheck(commandRunner) {
   }
 
   const uid = normalizeWhitespace(uidResult.stdout);
-  const launchctlResult = await commandRunner('launchctl', ['print', `gui/${uid}/io.ruv.ruflo.daemon`]);
+  const launchctlResult = await commandRunner('launchctl', ['print', `gui/${uid}/io.vbj.orion.daemon`]);
   if (launchctlResult.code !== 0) {
-    throw new Error(launchctlResult.stderr.trim() || 'launchctl could not inspect io.ruv.ruflo.daemon.');
+    throw new Error(launchctlResult.stderr.trim() || 'launchctl could not inspect io.vbj.orion.daemon.');
   }
 
   return {
@@ -926,10 +926,10 @@ async function executeLaunchAgentsHealthCheck(commandRunner) {
 
   const uid = normalizeWhitespace(uidResult.stdout);
   const labels = [
-    'io.ruv.ruflo.daemon',
-    'io.ruv.ruflo.discord-bot',
-    'io.ruv.ruflo.daily-summary',
-    'io.ruv.ruflo.health-monitor',
+    'io.vbj.orion.daemon',
+    'io.vbj.orion.discord-bot',
+    'io.vbj.orion.daily-summary',
+    'io.vbj.orion.health-monitor',
   ];
 
   const checkedAgents = [];

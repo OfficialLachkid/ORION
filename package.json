@@ -63,7 +63,7 @@
     "discord:restart": "node scripts/discord-bot-restart.mjs",
     "gmail:authorize": "node scripts/gmail-authorize.mjs",
     "gmail:send-test": "node scripts/gmail-send-test.mjs",
-    "ruflo:install-daemon-launch-agent": "node scripts/install-ruflo-daemon-launch-agent.mjs",
+    "orion:install-daemon-launch-agent": "node scripts/install-orion-daemon-launch-agent.mjs",
     "discord:simulate": "node services/discord-bot/index.mjs",
     "discord:live": "node services/discord-bot/index.mjs --live",
     "discord:register-commands": "node scripts/register-discord-commands.mjs",
