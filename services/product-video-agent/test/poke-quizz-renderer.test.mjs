@@ -104,11 +104,11 @@ test('type icon layout stays centered in the upper middle', () => {
 
 test('timer layout stays top-left with centered number anchors', () => {
   const layout = buildTimerLayout(template);
-  assert.equal(layout.x, 100);
+  assert.equal(layout.x, 30);
   assert.equal(layout.y, 180);
   assert.equal(layout.width, 240);
   assert.equal(layout.height, 240);
-  assert.equal(layout.number_center_x, 220);
+  assert.equal(layout.number_center_x, 150);
   assert.equal(layout.number_center_y, 300);
 });
 
@@ -127,7 +127,7 @@ test('render plan derives battle-music lead-in and preserves grid geometry', () 
     outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
   });
   assert.equal(renderPlan.audio_cues.reveal_start_seconds, 7.8);
-  assert.equal(renderPlan.audio_cues.battle_music_start_seconds, 7.2);
+  assert.equal(renderPlan.audio_cues.battle_music_start_seconds, 0);
   assert.equal(renderPlan.grid.cells.length, 6);
   assert.equal(renderPlan.output_path.endsWith('grass-poison-preview.mp4'), true);
 });

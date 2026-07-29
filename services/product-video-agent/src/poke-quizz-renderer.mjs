@@ -8,6 +8,7 @@ const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
 const DEFAULT_TIMER_SIZE = 240;
 const DEFAULT_TIMER_MARGIN_TOP = 20;
+const DEFAULT_TIMER_LEFT_OFFSET = 72;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
 const DEFAULT_HOOK_FONT_SIZE = 138;
 const DEFAULT_PROMPT_FONT_SIZE = 81;
@@ -20,6 +21,7 @@ const DEFAULT_VOICE_VOLUME = 1;
 const DEFAULT_COUNTDOWN_VOLUME = 0.72;
 const DEFAULT_TIMER_END_VOLUME = 0.9;
 const DEFAULT_REVEAL_TRANSITION_SECONDS = 0.42;
+const DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER = 1.2;
 const DEFAULT_FONT_CANDIDATES = [
   '/System/Library/Fonts/Supplemental/Avenir Next.ttc',
   '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
@@ -196,12 +198,13 @@ export function buildTimerLayout(template) {
   const safeTop = ensureNumber(safeZone.top, 160);
   const safeLeft = ensureNumber(safeZone.left, 100);
   const size = DEFAULT_TIMER_SIZE;
+  const left = Math.max(30, safeLeft - DEFAULT_TIMER_LEFT_OFFSET);
   return {
-    x: safeLeft,
+    x: left,
     y: safeTop + DEFAULT_TIMER_MARGIN_TOP,
     width: size,
     height: size,
-    number_center_x: safeLeft + Math.floor(size / 2),
+    number_center_x: left + Math.floor(size / 2),
     number_center_y: safeTop + DEFAULT_TIMER_MARGIN_TOP + Math.floor(size / 2),
   };
 }
@@ -234,6 +237,9 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const timerLayout = buildTimerLayout(template);
   const countdownPhase = schedule.phases.countdown || { start_seconds: 0, end_seconds: 0 };
   const revealPhase = schedule.phases.reveal || { start_seconds: schedule.total_duration_seconds, end_seconds: schedule.total_duration_seconds };
+  const configuredBattleMusicStartSeconds = roundTime(
+    Math.max(0, ensureNumber(template?.audio?.battle_intro_music?.start_seconds, 0)),
+  );
   const revealTransitionDuration = roundTime(
     Math.min(
       0.52,
@@ -265,7 +271,9 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       countdown_start_seconds: countdownPhase.start_seconds,
       timer_end_seconds: revealPhase.start_seconds,
       reveal_start_seconds: revealPhase.start_seconds,
-      battle_music_start_seconds: roundTime(Math.max(0, revealPhase.start_seconds - DEFAULT_MUSIC_LEAD_SECONDS)),
+      battle_music_start_seconds: roundTime(
+        Math.min(schedule.total_duration_seconds, configuredBattleMusicStartSeconds),
+      ),
     },
     text: {
       hook: plan.timeline.find((entry) => entry.phase === 'hook')?.on_screen_text || '',
@@ -302,10 +310,18 @@ function buildVisualInputs(plan, renderPlan) {
   }
 
   inputs.push({
-    role: 'timer',
-    path: plan.assets.overlays.selected_timer_path,
-    args: ['-stream_loop', '-1', '-ignore_loop', '0', '-t', String(totalDuration), '-i', plan.assets.overlays.selected_timer_path],
+    role: 'timer-countdown',
+    path: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
+    args: ['-stream_loop', '-1', '-ignore_loop', '0', '-t', String(totalDuration), '-i', plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path],
   });
+
+  if (plan.assets.overlays.selected_timer_alarm_path) {
+    inputs.push({
+      role: 'timer-alarm',
+      path: plan.assets.overlays.selected_timer_alarm_path,
+      args: ['-stream_loop', '-1', '-ignore_loop', '0', '-t', String(totalDuration), '-i', plan.assets.overlays.selected_timer_alarm_path],
+    });
+  }
 
   inputs.push({
     role: 'pokeball-grid',
@@ -350,17 +366,23 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
   let currentVideoLabel = `v${plan.assets.type_icons.length}`;
 
   const gridItemSize = ensureNumber(renderPlan.grid.item_size_px, 180);
+  const spriteHoldSize = roundTime(
+    gridItemSize * Math.max(
+      1,
+      ensureNumber(template?.layout?.silhouettes?.reveal_scale_multiplier, DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER),
+    ),
+  );
   const pokeballStaticLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbs', index));
   const pokeballTransitionLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbt', index));
   const timerSourceDuration = Math.max(
     countdownDuration,
-    ensureNumber(plan.assets.overlays?.selected_timer_duration_seconds, countdownDuration),
+    ensureNumber(plan.assets.overlays?.selected_timer_countdown_duration_seconds, plan.assets.overlays?.selected_timer_duration_seconds ?? countdownDuration),
   );
   const timerSetpts = timerSourceDuration > 0
     ? `(PTS-STARTPTS)*${roundTime(countdownDuration / timerSourceDuration)}+${countdownStart}/TB`
     : `PTS-STARTPTS+${countdownStart}/TB`;
   if (pokeballStaticLabels.length > 0) {
-    filters.push(`[${inputRefs.timer}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timer]`);
+    filters.push(`[${inputRefs.timerCountdown}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timercountdown]`);
     filters.push(`[${inputRefs.pokeball}:v]fps=${fps},trim=duration=${countdownDuration},setpts=PTS-STARTPTS+${countdownStart}/TB,scale=${gridItemSize}:${gridItemSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[pokeballbase]`);
     const pokeballSplitLabels = [...pokeballStaticLabels, ...pokeballTransitionLabels];
     filters.push(`[pokeballbase]split=${pokeballSplitLabels.length}${pokeballSplitLabels.map((label) => `[${label}]`).join('')}`);
@@ -374,9 +396,24 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     }
     const timerVideoLabel = `${currentVideoLabel}t`;
     filters.push(
-      `[${currentVideoLabel}][timer]overlay=${renderPlan.timer_layout.x}:${renderPlan.timer_layout.y}:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${timerVideoLabel}]`,
+      `[${currentVideoLabel}][timercountdown]overlay=${renderPlan.timer_layout.x}:${renderPlan.timer_layout.y}:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${timerVideoLabel}]`,
     );
     currentVideoLabel = timerVideoLabel;
+  }
+
+  const timerAlarmDuration = ensureNumber(plan.assets.overlays?.selected_timer_alarm_duration_seconds, 0);
+  if (inputRefs.timerAlarm != null && timerAlarmDuration > 0) {
+    const timerAlarmLabel = 'timeralarm';
+    const timerAlarmStart = renderPlan.phases.reveal.start_seconds;
+    const timerAlarmEnd = roundTime(Math.min(renderPlan.total_duration_seconds, timerAlarmStart + timerAlarmDuration));
+    filters.push(
+      `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[${timerAlarmLabel}]`,
+    );
+    const timerAlarmVideoLabel = `${currentVideoLabel}a`;
+    filters.push(
+      `[${currentVideoLabel}][${timerAlarmLabel}]overlay=${renderPlan.timer_layout.x}:${renderPlan.timer_layout.y}:enable='${formatEnableBetween(timerAlarmStart, timerAlarmEnd)}'[${timerAlarmVideoLabel}]`,
+    );
+    currentVideoLabel = timerAlarmVideoLabel;
   }
 
   const spriteHoldLabels = [];
@@ -392,13 +429,13 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${renderPlan.phases.reveal.start_seconds}/TB,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
     );
     filters.push(
-      `[${spriteHoldSourceLabel}]scale=${gridItemSize}:${gridItemSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteHoldLabel}]`,
+      `[${spriteHoldSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteHoldLabel}]`,
     );
     const progressExpression = `min(max((t-${renderPlan.phases.reveal.start_seconds})/${revealTransitionDuration},0),1)`;
-    const pokeballScaleFactor = `if(lt(${progressExpression},0.18),1+(${progressExpression}/0.18)*0.14,max(0.04,1.14-(((${progressExpression}-0.18)/0.82)*1.14)))`;
-    const spriteScaleFactor = `max(0.04,if(lt(${progressExpression},0.22),0.08+(${progressExpression}/0.22)*0.26,0.34+(((${progressExpression}-0.22)/0.78)*0.74)))`;
+    const pokeballScaleFactor = `if(lt(${progressExpression},0.16),1+(${progressExpression}/0.16)*0.28,max(0.03,1.28-(((${progressExpression}-0.16)/0.84)*1.28)))`;
+    const spriteScaleFactor = `max(0.03,if(lt(${progressExpression},0.22),0.06+(${progressExpression}/0.22)*0.34,0.40+(((${progressExpression}-0.22)/0.78)*0.80)))`;
     const pokeballScaleExpression = `max(6,${gridItemSize}*(${pokeballScaleFactor}))`;
-    const spriteScaleExpression = `max(6,${gridItemSize}*(${spriteScaleFactor}))`;
+    const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;
     filters.push(
       `[${pokeballTransitionLabels[index]}]scale=w='${pokeballScaleExpression}':h='${pokeballScaleExpression}':eval=frame,setsar=1[${safeFilterLabel('pokeballpop', index)}]`,
     );
@@ -412,8 +449,10 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const pokeballTransitionLabel = safeFilterLabel('pokeballpop', index);
     const withPokeballTransitionLabel = safeFilterLabel('vxp', index);
     const withSpriteTransitionLabel = safeFilterLabel('vxs', index);
+    const progressExpression = `min(max((t-${renderPlan.phases.reveal.start_seconds})/${revealTransitionDuration},0),1)`;
+    const pokeballBounceExpression = `if(lt(${progressExpression},0.24),(${progressExpression}/0.24)*26,max(0,26-(((${progressExpression}-0.24)/0.76)*26)))`;
     filters.push(
-      `[${currentVideoLabel}][${pokeballTransitionLabel}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, revealTransitionEnd)}'[${withPokeballTransitionLabel}]`,
+      `[${currentVideoLabel}][${pokeballTransitionLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2-${pokeballBounceExpression}':enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, revealTransitionEnd)}'[${withPokeballTransitionLabel}]`,
     );
     filters.push(
       `[${withPokeballTransitionLabel}][${spriteTransitionLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, revealTransitionEnd)}'[${withSpriteTransitionLabel}]`,
@@ -425,26 +464,27 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const cell = renderPlan.grid.cells[index];
     const nextVideoLabel = safeFilterLabel('vr', index);
     filters.push(
-      `[${currentVideoLabel}][${spriteHoldLabels[index]}]overlay=${cell.x}:${cell.y}:enable='${formatEnableBetween(revealTransitionEnd, renderPlan.total_duration_seconds)}'[${nextVideoLabel}]`,
+      `[${currentVideoLabel}][${spriteHoldLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(revealTransitionEnd, renderPlan.total_duration_seconds)}'[${nextVideoLabel}]`,
       );
     currentVideoLabel = nextVideoLabel;
   }
 
   const drawtextParts = [];
   const fontPart = fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
+  const promptTextEndSeconds = renderPlan.phases.countdown?.start_seconds ?? renderPlan.phases.reveal.start_seconds;
   for (const line of textArtifacts.hook.lines) {
     drawtextParts.push(
-      `drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_HOOK_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.hook.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}'`,
+      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_HOOK_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.hook.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}'`,
     );
   }
   for (const line of textArtifacts.prompt.lines) {
     drawtextParts.push(
-      `drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_PROMPT_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.type_prompt.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.type_prompt.start_seconds, renderPlan.phases.reveal.start_seconds)}':enable='${formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, renderPlan.phases.reveal.start_seconds)}'`,
+      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_PROMPT_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.type_prompt.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.type_prompt.start_seconds, promptTextEndSeconds)}':enable='${formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, promptTextEndSeconds)}'`,
     );
   }
   for (const line of textArtifacts.reveal.lines) {
     drawtextParts.push(
-      `drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_REVEAL_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.reveal.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}':enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}'`,
+      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_REVEAL_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.reveal.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}':enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}'`,
     );
   }
   for (const countdown of renderPlan.countdown_numbers) {
@@ -485,6 +525,35 @@ function buildTextArtifacts({ renderPlan, template }) {
       maxLines: 2,
       baseY: DEFAULT_REVEAL_TEXT_Y,
     }),
+  };
+}
+
+async function writeDrawtextArtifacts({ runtimeRoot, plan, textArtifacts }) {
+  const drawtextRoot = resolve(runtimeRoot, 'drawtext');
+  await mkdir(drawtextRoot, { recursive: true });
+
+  const writeRoleLines = async (role, lines) => Promise.all(lines.map(async (line, index) => {
+    const filePath = resolve(drawtextRoot, `${slugify(plan.seed)}-${role}-${String(index + 1).padStart(2, '0')}.txt`);
+    await writeFile(filePath, `${line.text}\n`, 'utf8');
+    return {
+      ...line,
+      file_path: filePath,
+    };
+  }));
+
+  return {
+    hook: {
+      ...textArtifacts.hook,
+      lines: await writeRoleLines('hook', textArtifacts.hook.lines),
+    },
+    prompt: {
+      ...textArtifacts.prompt,
+      lines: await writeRoleLines('prompt', textArtifacts.prompt.lines),
+    },
+    reveal: {
+      ...textArtifacts.reveal,
+      lines: await writeRoleLines('reveal', textArtifacts.reveal.lines),
+    },
   };
 }
 
@@ -669,12 +738,19 @@ export async function renderPokeQuizzVideo({
   ]);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
-  const [timerDurationSeconds, countdownDurationSeconds] = await Promise.all([
+  const [timerCountdownDurationSeconds, timerAlarmDurationSeconds, countdownDurationSeconds] = await Promise.all([
     probeMediaDurationSeconds({
       ffmpegExecutable,
-      mediaPath: plan.assets.overlays.selected_timer_path,
+      mediaPath: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
       cwd: projectRoot,
     }),
+    plan.assets.overlays.selected_timer_alarm_path
+      ? probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: plan.assets.overlays.selected_timer_alarm_path,
+        cwd: projectRoot,
+      })
+      : Promise.resolve(null),
     countdownPath
       ? probeMediaDurationSeconds({
         ffmpegExecutable,
@@ -683,8 +759,12 @@ export async function renderPokeQuizzVideo({
       })
       : Promise.resolve(null),
   ]);
-  if (timerDurationSeconds) {
-    plan.assets.overlays.selected_timer_duration_seconds = timerDurationSeconds;
+  if (timerCountdownDurationSeconds) {
+    plan.assets.overlays.selected_timer_duration_seconds = timerCountdownDurationSeconds;
+    plan.assets.overlays.selected_timer_countdown_duration_seconds = timerCountdownDurationSeconds;
+  }
+  if (timerAlarmDurationSeconds) {
+    plan.assets.overlays.selected_timer_alarm_duration_seconds = timerAlarmDurationSeconds;
   }
   const audioFilterScript = buildAudioFilterScript({
     narrationPaths,
@@ -725,15 +805,21 @@ export async function renderPokeQuizzVideo({
 
   const visualInputs = buildVisualInputs(plan, renderPlan);
   await verifyReadableFiles(visualInputs.map((input) => input.path));
+  const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
   const inputRefs = {
-    background: 0,
-    typeIcons: plan.assets.type_icons.map((_, index) => index + 1),
-    timer: plan.assets.type_icons.length + 1,
-    pokeball: plan.assets.type_icons.length + 2,
-    pokemon: plan.assets.pokemon.map((_, index) => plan.assets.type_icons.length + 3 + index),
+    background: inputRoleIndex.get('background'),
+    typeIcons: plan.assets.type_icons.map((typeIcon) => inputRoleIndex.get(`type-icon-${typeIcon.type}`)),
+    timerCountdown: inputRoleIndex.get('timer-countdown'),
+    timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
+    pokeball: inputRoleIndex.get('pokeball-grid'),
+    pokemon: plan.assets.pokemon.map((pokemon) => inputRoleIndex.get(`pokemon-${pokemon.national_dex_number}`)),
   };
   const fontPath = await resolveFontPath(fontCandidates);
-  const textArtifacts = buildTextArtifacts({ renderPlan, template });
+  const textArtifacts = await writeDrawtextArtifacts({
+    runtimeRoot,
+    plan,
+    textArtifacts: buildTextArtifacts({ renderPlan, template }),
+  });
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts);
   await writeFile(filterScriptPath, visualFilter.script, 'utf8');
 

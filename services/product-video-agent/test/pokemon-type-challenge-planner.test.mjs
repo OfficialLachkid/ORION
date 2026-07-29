@@ -160,9 +160,11 @@ test('planner selects an observed dual-type pair and emits asset gap guidance', 
       },
       overlay_presets: {
         timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
         pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
       },
-      overlays: ['/tmp/Timer.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
       transitions: [],
     },
   });
@@ -174,7 +176,9 @@ test('planner selects an observed dual-type pair and emits asset gap guidance', 
   assert.equal(plan.assets.type_icons[0].local_path.includes('Pixel Types'), true);
   assert.equal(plan.assets.background.selected_path, '/tmp/background-1.png');
   assert.equal(plan.assets.audio.selected_battle_intro_music_path, '/tmp/battle-intro-1.mp3');
-  assert.equal(plan.assets.overlays.selected_timer_path, '/tmp/Timer.gif');
+  assert.equal(plan.assets.overlays.selected_timer_path, '/tmp/Timer Countdown.gif');
+  assert.equal(plan.assets.overlays.selected_timer_countdown_path, '/tmp/Timer Countdown.gif');
+  assert.equal(plan.assets.overlays.selected_timer_alarm_path, '/tmp/Timer Alarm.gif');
   assert.equal(plan.assets.overlays.selected_primary_pokeball_overlay_path, '/tmp/3D Pokeball Wiggle.gif');
   assert.equal(plan.assets.overlays.pokeball_grid.item_count, 2);
   assert.equal(plan.assets.overlays.pokeball_grid.centered_from_middle, true);
@@ -207,6 +211,8 @@ test('planner rejects disallowed or absent type pairs', async () => {
         },
         overlay_presets: {
           timer: null,
+          timer_countdown: null,
+          timer_alarm: null,
           pokeball_primary: null,
         },
         overlays: [],
@@ -313,9 +319,11 @@ test('planner centers incomplete pokeball rows within the stage bounds', async (
       },
       overlay_presets: {
         timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
         pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
       },
-      overlays: ['/tmp/Timer.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
       transitions: [],
     },
   });
@@ -379,9 +387,11 @@ test('planner caps large compatible groups to a centered 3x3 grid', async () => 
       },
       overlay_presets: {
         timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
         pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
       },
-      overlays: ['/tmp/Timer.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
       transitions: [],
     },
   });

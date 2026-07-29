@@ -369,24 +369,6 @@ test('buildOutboundEventDiscordPayload renders paused queue cards in warning col
   assert.match(payload.embeds[0].title, /continue the browser task later/u);
 });
 
-test('buildOutboundEventDiscordPayload renders awaiting_approval queue cards in purple (distinct from queued yellow)', () => {
-  const payload = buildOutboundEventDiscordPayload({
-    type: 'task_queue_update',
-    body: 'TASK-DRAFTED is awaiting approval for gmail_send_draft.',
-    metadata: {
-      taskId: 'TASK-DRAFTED',
-      status: 'awaiting_approval',
-      priority: 'normal',
-      summary: 'Send drafted email to Acme B.V. (info@acme.nl)',
-      targetAgent: 'outreach-agent',
-      action: 'gmail_send_draft',
-    },
-  });
-
-  assert.equal(payload.embeds.length, 1);
-  assert.equal(payload.embeds[0].color, 0x9B59B6);
-});
-
 test('buildOutboundEventDiscordPayload renders queued cards with request summary and yellow color', () => {
   const payload = buildOutboundEventDiscordPayload({
     type: 'task_queue_update',

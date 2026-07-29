@@ -121,8 +121,17 @@ function matchOverlay(files, keywords) {
 }
 
 export function selectOverlayPresets(overlays) {
+  const timerCountdown = matchOverlay(overlays, ['timer', 'countdown'])
+    || matchOverlay(overlays, ['timer-countdown'])
+    || matchOverlay(overlays, ['timer_countdown']);
+  const timerAlarm = matchOverlay(overlays, ['timer', 'alarm'])
+    || matchOverlay(overlays, ['timer-alarm'])
+    || matchOverlay(overlays, ['timer_alarm']);
+  const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
-    timer: matchOverlay(overlays, ['timer']),
+    timer,
+    timer_countdown: timerCountdown || timer,
+    timer_alarm: timerAlarm,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
       || matchOverlay(overlays, ['open', 'close', 'pokeball']),

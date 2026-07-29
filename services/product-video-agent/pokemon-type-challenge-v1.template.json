@@ -109,7 +109,8 @@
         "sprite_path"
       ],
       "fallback_visual_treatment": "black_fill_mask_from_sprite",
-      "max_subjects": 9
+      "max_subjects": 9,
+      "reveal_scale_multiplier": 1.2
     },
     "pokeball_grid": {
       "overlay_asset_role": "selected_primary_pokeball_overlay_path",
@@ -122,7 +123,7 @@
       "anchor": "canvas_middle",
       "stage_bounds_px": {
         "left": 120,
-        "top": 520,
+        "top": 620,
         "width": 840,
         "height": 760
       }
@@ -140,9 +141,9 @@
     "music_enabled": true,
     "music_source_policy": "local_rights_cleared_only",
     "battle_intro_music": {
-      "start_seconds": 1.2,
+      "start_seconds": 0,
       "duck_under_voice": true,
-      "stop_at_reveal": true
+      "stop_at_reveal": false
     },
     "sound_effects": {
       "countdown_tick": {
