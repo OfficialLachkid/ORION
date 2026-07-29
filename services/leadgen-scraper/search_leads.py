@@ -172,13 +172,51 @@ def is_mostly_empty(record: dict) -> bool:
     return str(record.get("business_type", "")).strip().upper() == "NA"
 
 
+# DuckDuckGo silently truncates very long queries; ~500 chars is a safe
+# working ceiling. We keep the actual niche+city query plus room for a
+# reasonable number of `-site:` negatives. Anything not squeezed into the
+# prefix is still caught by the post-search domain check below, so this cap
+# only affects search efficiency, never correctness.
+QUERY_PREFILTER_CHAR_BUDGET = 400
+
+
+def build_negative_site_prefix(recent_blocked: list[str]) -> str:
+    """Turn `["a.nl","b.com"]` into `"-site:a.nl -site:b.com "`, but stop
+    adding domains once the joined negatives would blow the char budget.
+    The domains list is expected to already be sorted newest-first so we
+    keep the ones most likely to re-surface for a similar-region search."""
+    if not recent_blocked:
+        return ""
+    parts: list[str] = []
+    running_len = 0
+    for domain in recent_blocked:
+        clean = domain.strip().lower()
+        if not clean:
+            continue
+        token = f"-site:{clean}"
+        # +1 for the separating space we'd add before the next token
+        if running_len + len(token) + 1 > QUERY_PREFILTER_CHAR_BUDGET:
+            break
+        parts.append(token)
+        running_len += len(token) + 1
+    return (" ".join(parts) + " ") if parts else ""
+
+
 def search_leads(
     query: str,
     max_results: int,
     skip_domains: set[str] | None = None,
     blocked_domains: set[str] | None = None,
+    prefilter_domains: list[str] | None = None,
 ) -> list[dict]:
-    urls = search_on_web_with_retry(query=query, search_engine="duckduckgo", max_results=max_results)
+    # Prepend `-site:` negatives so DuckDuckGo never returns blocked domains
+    # in the first place — that means every one of `max_results` search slots
+    # goes to a candidate that at least isn't in the blocklist. The post-
+    # search `is_blocked_domain` check below still runs as a safety net for
+    # anything beyond the budget-capped prefix (or if DDG ever quietly stops
+    # honouring a `-site:` operator).
+    effective_query = build_negative_site_prefix(prefilter_domains or []) + query
+    urls = search_on_web_with_retry(query=effective_query, search_engine="duckduckgo", max_results=max_results)
 
     records = []
     seen_domains = set()  # same business, different pages (e.g. site.nl/ and site.nl/region)
@@ -241,11 +279,28 @@ if __name__ == "__main__":
         with open(path, encoding="utf-8") as f:
             return {line.strip().lower() for line in f if line.strip()}
 
+    def load_domain_file_ordered(path: str | None) -> list[str]:
+        """Preserves file order (dedup on first occurrence). The worker writes
+        this file newest-first; the DuckDuckGo `-site:` prefilter takes from
+        the top."""
+        if not path:
+            return []
+        seen: set[str] = set()
+        ordered: list[str] = []
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                d = line.strip().lower()
+                if d and d not in seen:
+                    seen.add(d)
+                    ordered.append(d)
+        return ordered
+
     results = search_leads(
         args.query,
         args.max,
         skip_domains=load_domain_file(args.skip_domains_file),
         blocked_domains=load_domain_file(args.blocked_domains_file),
+        prefilter_domains=load_domain_file_ordered(args.blocked_domains_file),
     )
     print(json.dumps(results, indent=2))
     unload_model()  # release RAM once the whole batch is done, not between URLs

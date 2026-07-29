@@ -71,7 +71,7 @@ export async function fetchExistingLeadKeys(config = getLeadgenPersistenceConfig
   };
 }
 
-export async function fetchBlockedDomains(config = getLeadgenPersistenceConfig()) {
+export async function fetchBlockedDomains(filters = {}, config = getLeadgenPersistenceConfig()) {
   if (!isLeadgenPersistenceConfigured(config)) {
     throw new Error('Supabase is not configured (missing SUPABASE_URL or API key).');
   }
@@ -79,6 +79,14 @@ export async function fetchBlockedDomains(config = getLeadgenPersistenceConfig()
   const url = new URL('/rest/v1/blocked_domains', config.supabaseUrl);
   url.searchParams.set('select', 'domain');
   url.searchParams.set('limit', '10000');
+  // Optional ordering — the leadgen worker asks for newest-first so the
+  // most-recently-blocked domains sit at the top of the file it writes,
+  // which is what the search-query `-site:` prefilter reads.
+  if (filters.order === 'newest') {
+    url.searchParams.set('order', 'created_at.desc');
+  } else if (filters.order === 'oldest') {
+    url.searchParams.set('order', 'created_at.asc');
+  }
 
   const rows = await fetchJson(url.toString(), {
     headers: createHeaders(config.apiKey),
