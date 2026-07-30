@@ -110,22 +110,23 @@
       ],
       "fallback_visual_treatment": "black_fill_mask_from_sprite",
       "max_subjects": 9,
-      "reveal_scale_multiplier": 1.2
+      "reveal_scale_multiplier": 1.5
     },
     "pokeball_grid": {
       "overlay_asset_role": "selected_primary_pokeball_overlay_path",
       "count_basis": "compatible_amount_capped_to_9",
       "max_items": 9,
       "max_columns": 3,
-      "item_size_px": 270,
-      "column_gap_px": 28,
-      "row_gap_px": 28,
+      "item_size_px": 180,
+      "overlay_scale_multiplier": 1.2,
+      "column_gap_px": 36,
+      "row_gap_px": 36,
       "anchor": "canvas_middle",
       "stage_bounds_px": {
         "left": 100,
-        "top": 680,
+        "top": 720,
         "width": 880,
-        "height": 900
+        "height": 820
       }
     },
     "timer": {

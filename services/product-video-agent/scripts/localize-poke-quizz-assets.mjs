@@ -46,6 +46,13 @@ async function ensureDirectory(filePath) {
   await mkdir(dirname(filePath), { recursive: true });
 }
 
+async function writeJsonFile(outputPath, payload) {
+  const absoluteOutputPath = resolve(projectRoot, outputPath);
+  await ensureDirectory(absoluteOutputPath);
+  await writeFile(absoluteOutputPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  return absoluteOutputPath;
+}
+
 async function fileExists(filePath) {
   try {
     await access(filePath);
@@ -232,6 +239,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --persist-supabase        Upsert localized rows back into Supabase `pokedex`',
       '  --limit <n>               Optional row limit for testing',
       '  --write-json <path>       Write a localization report JSON under the repo root',
+      '  --write-rows-json <path>  Write planner-ready localized pokedex rows under the repo root',
     ]);
     process.exit(0);
   }
@@ -258,16 +266,20 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     printInfo(`Upserted ${Array.isArray(upserted) ? upserted.length : localized.rows.length} localized row(s) into pokedex.`);
   }
 
+  const rowsOutputPath = getStringOption(options, 'write-rows-json', '');
+  if (rowsOutputPath) {
+    const absoluteOutputPath = await writeJsonFile(rowsOutputPath, localized.rows);
+    printInfo(`Wrote localized pokedex rows to ${absoluteOutputPath}`);
+  }
+
   const outputPath = getStringOption(options, 'write-json', '');
   if (outputPath) {
-    const absoluteOutputPath = resolve(projectRoot, outputPath);
-    await ensureDirectory(absoluteOutputPath);
-    await writeFile(absoluteOutputPath, `${JSON.stringify({
+    const absoluteOutputPath = await writeJsonFile(outputPath, {
       generated_at: new Date().toISOString(),
       generations,
       type_icons_localized: localized.typeIconCount,
       localized_rows: localized.report,
-    }, null, 2)}\n`, 'utf8');
+    });
     printInfo(`Wrote localization report to ${absoluteOutputPath}`);
   }
 }

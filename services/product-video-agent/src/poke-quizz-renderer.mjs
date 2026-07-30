@@ -6,7 +6,7 @@ const DEFAULT_HOOK_TEXT_Y = 150;
 const DEFAULT_PROMPT_TEXT_Y = 170;
 const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
-const DEFAULT_TIMER_SIZE = 240;
+const DEFAULT_TIMER_SIZE = 320;
 const DEFAULT_TIMER_MARGIN_TOP = 20;
 const DEFAULT_TIMER_LEFT_OFFSET = 72;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
@@ -22,9 +22,11 @@ const DEFAULT_COUNTDOWN_VOLUME = 0.72;
 const DEFAULT_TIMER_END_VOLUME = 0.9;
 const DEFAULT_REVEAL_TRANSITION_SECONDS = 0.42;
 const DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER = 1.2;
+const DEFAULT_POKEBALL_SCALE_MULTIPLIER = 1.2;
 const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.55;
 const DEFAULT_TYPE_ICON_HOOK_Y = 620;
-const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.58;
+const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
+const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.22;
 const DEFAULT_FONT_CANDIDATES = [
   '/System/Library/Fonts/Supplemental/Avenir Next.ttc',
   '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
@@ -149,6 +151,21 @@ function buildAnimatedLerpExpression({ fromValue, toValue, holdUntilSeconds, tra
   const end = roundTime(start + duration);
   const progress = `min(max((t-${start})/${duration},0),1)`;
   return `if(lt(t,${start}),${fromValue},if(lt(t,${end}),${fromValue}+((${toValue}-${fromValue})*${progress}),${toValue}))`;
+}
+
+function buildAnimatedPopMultiplierExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS) {
+  const start = roundTime(startSeconds);
+  const duration = roundTime(Math.max(0.16, durationSeconds));
+  const peak = roundTime(start + (duration * 0.6));
+  const end = roundTime(start + duration);
+  return `if(lt(t,${start}),0.82,if(lt(t,${peak}),0.82+((t-${start})/${roundTime(peak - start)})*0.28,if(lt(t,${end}),1.10-((t-${peak})/${roundTime(end - peak)})*0.10,1)))`;
+}
+
+function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS, distancePx = 30) {
+  const start = roundTime(startSeconds);
+  const duration = roundTime(Math.max(0.16, durationSeconds));
+  const end = roundTime(start + duration);
+  return `if(lt(t,${start}),${distancePx},if(lt(t,${end}),${distancePx}*(1-((t-${start})/${duration})),0))`;
 }
 
 function buildTextLineArtifacts(text, { template, fontSize, maxLines, baseY }) {
@@ -277,10 +294,10 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   );
   const typeIconSettleDuration = roundTime(
     Math.min(
-      0.82,
+      0.3,
       Math.max(
         DEFAULT_TYPE_ICON_SETTLE_SECONDS,
-        ensureNumber(schedule.phases.type_prompt?.duration_seconds, 1.6) * 0.36,
+        ensureNumber(schedule.phases.type_prompt?.duration_seconds, 1.6) * 0.16,
       ),
     ),
   );
@@ -402,13 +419,15 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       renderPlan.transitions?.type_icon_settle_seconds,
       DEFAULT_TYPE_ICON_SETTLE_SECONDS,
     );
+    const hookStart = ensureNumber(renderPlan.phases.hook?.start_seconds, 0);
     const iconSettleStart = ensureNumber(renderPlan.phases.type_prompt?.start_seconds, 0);
-    const sizeExpression = buildAnimatedLerpExpression({
+    const baseSizeExpression = buildAnimatedLerpExpression({
       fromValue: introPosition.width,
       toValue: position.width,
       holdUntilSeconds: iconSettleStart,
       transitionDurationSeconds: settleDuration,
     });
+    const introPopMultiplierExpression = buildAnimatedPopMultiplierExpression(hookStart);
     const finalCenterX = position.x + Math.floor(position.width / 2);
     const finalCenterY = position.y + Math.floor(position.height / 2);
     const introCenterX = introPosition.x + Math.floor(introPosition.width / 2);
@@ -425,17 +444,24 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       holdUntilSeconds: iconSettleStart,
       transitionDurationSeconds: settleDuration,
     });
+    const introLiftExpression = buildAnimatedLiftExpression(hookStart);
     filters.push(
-      `[${inputRefs.typeIcons[index]}:v]scale=w='${sizeExpression}':h='${sizeExpression}':eval=frame:force_original_aspect_ratio=decrease,setsar=1[${iconLabel}]`,
+      `[${inputRefs.typeIcons[index]}:v]scale=w='(${baseSizeExpression})*(${introPopMultiplierExpression})':h='(${baseSizeExpression})*(${introPopMultiplierExpression})':eval=frame:force_original_aspect_ratio=decrease,setsar=1[${iconLabel}]`,
     );
     filters.push(
-      `[v${index}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      `[v${index}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
     );
   }
 
   let currentVideoLabel = `v${plan.assets.type_icons.length}`;
 
   const gridItemSize = ensureNumber(renderPlan.grid.item_size_px, 180);
+  const pokeballSize = roundTime(
+    gridItemSize * Math.max(
+      1,
+      ensureNumber(template?.layout?.pokeball_grid?.overlay_scale_multiplier, DEFAULT_POKEBALL_SCALE_MULTIPLIER),
+    ),
+  );
   const spriteHoldSize = roundTime(
     gridItemSize * Math.max(
       1,
@@ -456,14 +482,14 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     : `PTS-STARTPTS+${countdownStart}/TB`;
   if (pokeballStaticLabels.length > 0) {
     filters.push(`[${inputRefs.timerCountdown}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timercountdown]`);
-    filters.push(`[${inputRefs.pokeball}:v]fps=${fps},trim=duration=${countdownDuration},setpts=PTS-STARTPTS+${countdownStart}/TB,scale=${gridItemSize}:${gridItemSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[pokeballbase]`);
+    filters.push(`[${inputRefs.pokeball}:v]fps=${fps},trim=duration=${countdownDuration},setpts=PTS-STARTPTS+${countdownStart}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[pokeballbase]`);
     const pokeballSplitLabels = [...pokeballStaticLabels, ...pokeballTransitionLabels];
     filters.push(`[pokeballbase]split=${pokeballSplitLabels.length}${pokeballSplitLabels.map((label) => `[${label}]`).join('')}`);
     for (let index = 0; index < renderPlan.grid.cells.length; index += 1) {
       const cell = renderPlan.grid.cells[index];
       const nextVideoLabel = safeFilterLabel('vg', index);
       filters.push(
-        `[${currentVideoLabel}][${pokeballStaticLabels[index]}]overlay=${cell.x}:${cell.y}:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${nextVideoLabel}]`,
+        `[${currentVideoLabel}][${pokeballStaticLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${nextVideoLabel}]`,
       );
       currentVideoLabel = nextVideoLabel;
     }
@@ -507,7 +533,7 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const progressExpression = `min(max((t-${renderPlan.phases.reveal.start_seconds})/${revealTransitionDuration},0),1)`;
     const pokeballScaleFactor = `if(lt(${progressExpression},0.16),1+(${progressExpression}/0.16)*0.28,max(0.03,1.28-(((${progressExpression}-0.16)/0.84)*1.28)))`;
     const spriteScaleFactor = `max(0.03,if(lt(${progressExpression},0.22),0.06+(${progressExpression}/0.22)*0.34,0.40+(((${progressExpression}-0.22)/0.78)*0.80)))`;
-    const pokeballScaleExpression = `max(6,${gridItemSize}*(${pokeballScaleFactor}))`;
+    const pokeballScaleExpression = `max(6,${pokeballSize}*(${pokeballScaleFactor}))`;
     const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;
     filters.push(
       `[${pokeballTransitionLabels[index]}]scale=w='${pokeballScaleExpression}':h='${pokeballScaleExpression}':eval=frame,setsar=1[${safeFilterLabel('pokeballpop', index)}]`,
