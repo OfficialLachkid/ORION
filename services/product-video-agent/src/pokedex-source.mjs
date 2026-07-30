@@ -17,6 +17,18 @@ const SEREBII_POKEDEX_GENERATIONS = Object.freeze({
     sourceUrl: 'https://www.serebii.net/pokemon/gen3pokemon.shtml',
     typingBasis: 'current_canonical_types_from_serebii_gen3_page',
   },
+  4: {
+    generation: 4,
+    region: 'sinnoh',
+    sourceUrl: 'https://www.serebii.net/pokemon/gen4pokemon.shtml',
+    typingBasis: 'current_canonical_types_from_serebii_gen4_page',
+  },
+  5: {
+    generation: 5,
+    region: 'unova',
+    sourceUrl: 'https://www.serebii.net/pokemon/gen5pokemon.shtml',
+    typingBasis: 'current_canonical_types_from_serebii_gen5_page',
+  },
 });
 
 const ROW_PATTERN = /<tr>\s*<td align="center" class="fooinfo">\s*#(\d{4})\s*<\/td>\s*<td align="center" class="fooinfo">.*?<img src="([^"]+)"[^>]*>.*?<\/td>\s*<td align="center" class="fooinfo">\s*<a href="\/pokemon\/([^"]+)">([^<]+)<\/a>\s*<\/td>\s*<td align="center" class="fooinfo">(.*?)<\/td>\s*<td align="center" class="fooinfo">(.*?)<\/td>\s*<td align="center" class="fooinfo">(\d+)<\/td>\s*<td align="center" class="fooinfo">(\d+)<\/td>\s*<td align="center" class="fooinfo">(\d+)<\/td>\s*<td align="center" class="fooinfo">(\d+)<\/td>\s*<td align="center" class="fooinfo">(\d+)<\/td>\s*<td align="center" class="fooinfo">(\d+)<\/td>\s*<\/tr>/gsu;
@@ -164,6 +176,14 @@ export function parseSerebiiGen3Pokedex(html, options = {}) {
   return parseSerebiiPokedex(html, { ...options, generation: 3 });
 }
 
+export function parseSerebiiGen4Pokedex(html, options = {}) {
+  return parseSerebiiPokedex(html, { ...options, generation: 4 });
+}
+
+export function parseSerebiiGen5Pokedex(html, options = {}) {
+  return parseSerebiiPokedex(html, { ...options, generation: 5 });
+}
+
 export async function fetchSerebiiGen1Pokedex(options = {}) {
   return fetchSerebiiPokedex({ ...options, generation: 1 });
 }
@@ -176,9 +196,19 @@ export async function fetchSerebiiGen3Pokedex(options = {}) {
   return fetchSerebiiPokedex({ ...options, generation: 3 });
 }
 
+export async function fetchSerebiiGen4Pokedex(options = {}) {
+  return fetchSerebiiPokedex({ ...options, generation: 4 });
+}
+
+export async function fetchSerebiiGen5Pokedex(options = {}) {
+  return fetchSerebiiPokedex({ ...options, generation: 5 });
+}
+
 export const DEFAULT_SEREBII_GEN1_SOURCE_URL = SEREBII_POKEDEX_GENERATIONS[1].sourceUrl;
 export const DEFAULT_SEREBII_GEN2_SOURCE_URL = SEREBII_POKEDEX_GENERATIONS[2].sourceUrl;
 export const DEFAULT_SEREBII_GEN3_SOURCE_URL = SEREBII_POKEDEX_GENERATIONS[3].sourceUrl;
+export const DEFAULT_SEREBII_GEN4_SOURCE_URL = SEREBII_POKEDEX_GENERATIONS[4].sourceUrl;
+export const DEFAULT_SEREBII_GEN5_SOURCE_URL = SEREBII_POKEDEX_GENERATIONS[5].sourceUrl;
 
 export {
   SEREBII_POKEDEX_GENERATIONS,

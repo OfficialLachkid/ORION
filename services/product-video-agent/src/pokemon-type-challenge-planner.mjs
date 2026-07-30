@@ -37,8 +37,13 @@ function sampleArray(values, count, random) {
 
 function getTemplateSelectionConfig(template) {
   const typePairPolicy = template.selection_rules?.type_pair_policy || {};
+  const configuredGenerationScope = Array.isArray(template.selection_rules?.generation_scope)
+    ? template.selection_rules.generation_scope
+      .map((value) => Number.parseInt(String(value), 10))
+      .filter((value) => Number.isFinite(value) && value > 0)
+    : [];
   return {
-    generationScope: template.selection_rules?.generation_scope || [1],
+    generationScope: configuredGenerationScope.length > 0 ? configuredGenerationScope : null,
     disallowedPairs: new Set(
       (typePairPolicy.disallowed_type_pairs || [])
         .map((pair) => createTypePairKey(pair)),
@@ -53,7 +58,7 @@ function buildPairCatalog(rows, config) {
   const pairCatalog = new Map();
 
   for (const row of rows) {
-    if (!config.generationScope.includes(row.generation)) continue;
+    if (Array.isArray(config.generationScope) && !config.generationScope.includes(row.generation)) continue;
     if (!row.national_dex_number || !row.name || !Array.isArray(row.types)) continue;
     if (row.types.length !== 2) continue;
 
@@ -141,7 +146,12 @@ function buildCenteredGridLayout(template, itemCount) {
   const columns = selectGridColumns(cappedItemCount, maxColumns);
   const rows = columns > 0 ? Math.ceil(cappedItemCount / columns) : 0;
   const gridHeight = rows > 0 ? (rows * itemSize) + ((rows - 1) * rowGap) : 0;
-  const originY = stageTop + Math.max(0, Math.floor((stageHeight - gridHeight) / 2));
+  const sparseGridNudgeY = rows <= 1
+    ? Math.min(120, Math.floor(stageHeight * 0.14))
+    : rows === 2
+      ? Math.min(60, Math.floor(stageHeight * 0.07))
+      : 0;
+  const originY = stageTop + Math.max(0, Math.floor((stageHeight - gridHeight) / 2) - sparseGridNudgeY);
 
   const cells = [];
   for (let index = 0; index < cappedItemCount; index += 1) {
@@ -246,7 +256,7 @@ export async function planPokemonTypeChallenge({
       content_lane: 'pokemon_type_challenge',
     },
     template_id: template.template_id,
-    generation_scope: config.generationScope,
+    generation_scope: config.generationScope || [],
     seed: String(seed),
     selection: {
       type_pair: selectedPair.pair,

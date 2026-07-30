@@ -187,6 +187,79 @@ test('planner selects an observed dual-type pair and emits asset gap guidance', 
   assert.equal(plan.required_asset_gaps.includes('type_icons_missing'), false);
 });
 
+test('planner uses all localized generations when no generation scope is configured', async () => {
+  const unscopedTemplate = {
+    ...template,
+    selection_rules: {
+      ...template.selection_rules,
+      generation_scope: [],
+    },
+  };
+  const gen3Rows = [
+    ...pokedexRows,
+    {
+      id: 'pokedex-0343',
+      national_dex_number: 343,
+      name: 'Baltoy',
+      generation: 3,
+      region: 'hoenn',
+      types: ['ground', 'psychic'],
+      sprite_path: '/tmp/0343.png',
+      silhouette_path: '/tmp/0343-silhouette.png',
+      shiny_sprite_path: '/tmp/0343-shiny.png',
+      cry_path: '/tmp/0343.wav',
+      sprite_source_url: 'https://www.serebii.net/scarletviolet/pokemon/new/small/343.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/ground.gif',
+          'https://www.serebii.net/pokedex-bw/type/psychic.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: unscopedTemplate,
+    pokedexRows: gen3Rows,
+    seed: 'gen3-unscoped',
+    forcedTypePair: ['ground', 'psychic'],
+    assetInventory: {
+      scanned_at: '2026-07-28T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/ground.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/psychic.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.deepEqual(plan.generation_scope, []);
+  assert.deepEqual(plan.selection.type_pair, ['ground', 'psychic']);
+  assert.equal(plan.selection.selected_subjects[0].generation, 3);
+});
+
 test('planner rejects disallowed or absent type pairs', async () => {
   await assert.rejects(
     () => planPokemonTypeChallenge({

@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSerebiiGen1Pokedex, parseSerebiiGen2Pokedex, parseSerebiiGen3Pokedex } from '../src/pokedex-source.mjs';
+import {
+  parseSerebiiGen1Pokedex,
+  parseSerebiiGen2Pokedex,
+  parseSerebiiGen3Pokedex,
+  parseSerebiiGen4Pokedex,
+  parseSerebiiGen5Pokedex,
+} from '../src/pokedex-source.mjs';
 
 const SAMPLE_GEN1_HTML = `
 <table class="dextable" align="center">
@@ -95,6 +101,42 @@ const SAMPLE_GEN3_HTML = `
 </table>
 `;
 
+const SAMPLE_GEN4_HTML = `
+<table class="dextable" align="center">
+  <tr>
+    <td align="center" class="fooinfo">#0387</td>
+    <td align="center" class="fooinfo"><table class="pkmn"><tr><td><a href="/pokemon/turtwig"><img src="/scarletviolet/pokemon/new/small/387.png" loading="lazy" style="height:120px" /></a></td></tr></table></td>
+    <td align="center" class="fooinfo"><a href="/pokemon/turtwig">Turtwig</a></td>
+    <td align="center" class="fooinfo"><a href="/pokemon/type/grass"><img src="/pokedex-bw/type/grass.gif" /></a></td>
+    <td align="center" class="fooinfo"><a href="/abilitydex/overgrow.shtml">Overgrow</a> <br /><a href="/abilitydex/shellarmor.shtml">Shell Armor</a></td>
+    <td align="center" class="fooinfo">55</td>
+    <td align="center" class="fooinfo">68</td>
+    <td align="center" class="fooinfo">64</td>
+    <td align="center" class="fooinfo">45</td>
+    <td align="center" class="fooinfo">55</td>
+    <td align="center" class="fooinfo">31</td>
+  </tr>
+</table>
+`;
+
+const SAMPLE_GEN5_HTML = `
+<table class="dextable" align="center">
+  <tr>
+    <td align="center" class="fooinfo">#0551</td>
+    <td align="center" class="fooinfo"><table class="pkmn"><tr><td><a href="/pokemon/sandile"><img src="/scarletviolet/pokemon/new/small/551.png" loading="lazy" style="height:120px" /></a></td></tr></table></td>
+    <td align="center" class="fooinfo"><a href="/pokemon/sandile">Sandile</a></td>
+    <td align="center" class="fooinfo"><a href="/pokemon/type/ground"><img src="/pokedex-bw/type/ground.gif" /></a> <a href="/pokemon/type/dark"><img src="/pokedex-bw/type/dark.gif" /></a></td>
+    <td align="center" class="fooinfo"><a href="/abilitydex/intimidate.shtml">Intimidate</a> <br /><a href="/abilitydex/moxie.shtml">Moxie</a> <br /><a href="/abilitydex/angerpoint.shtml">Anger Point</a></td>
+    <td align="center" class="fooinfo">50</td>
+    <td align="center" class="fooinfo">72</td>
+    <td align="center" class="fooinfo">35</td>
+    <td align="center" class="fooinfo">35</td>
+    <td align="center" class="fooinfo">35</td>
+    <td align="center" class="fooinfo">65</td>
+  </tr>
+</table>
+`;
+
 test('Serebii Gen 1 parser emits truth-only pokedex rows', () => {
   const rows = parseSerebiiGen1Pokedex(SAMPLE_GEN1_HTML);
 
@@ -134,4 +176,29 @@ test('Serebii Gen 3 parser emits Hoenn rows with type icons', () => {
   assert.equal(rows[0].sprite_source_url, 'https://www.serebii.net/scarletviolet/pokemon/new/small/252.png');
   assert.deepEqual(rows[1].types, ['grass']);
   assert.deepEqual(rows[1].metadata.abilities, ['Overgrow', 'Unburden']);
+});
+
+test('Serebii Gen 4 parser emits Sinnoh rows with grounded type icons', () => {
+  const rows = parseSerebiiGen4Pokedex(SAMPLE_GEN4_HTML);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].generation, 4);
+  assert.equal(rows[0].region, 'sinnoh');
+  assert.equal(rows[0].metadata.typing_basis, 'current_canonical_types_from_serebii_gen4_page');
+  assert.equal(rows[0].sprite_source_url, 'https://www.serebii.net/scarletviolet/pokemon/new/small/387.png');
+  assert.deepEqual(rows[0].metadata.abilities, ['Overgrow', 'Shell Armor']);
+});
+
+test('Serebii Gen 5 parser emits Unova rows with dual types', () => {
+  const rows = parseSerebiiGen5Pokedex(SAMPLE_GEN5_HTML);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].generation, 5);
+  assert.equal(rows[0].region, 'unova');
+  assert.equal(rows[0].metadata.typing_basis, 'current_canonical_types_from_serebii_gen5_page');
+  assert.deepEqual(rows[0].types, ['ground', 'dark']);
+  assert.deepEqual(rows[0].metadata.type_icon_source_urls, [
+    'https://www.serebii.net/pokedex-bw/type/ground.gif',
+    'https://www.serebii.net/pokedex-bw/type/dark.gif',
+  ]);
 });

@@ -14,12 +14,8 @@
   },
   "selection_rules": {
     "subject_table": "pokedex",
-    "generation_scope": [
-      1,
-      2,
-      3
-    ],
-    "typing_basis": "current_canonical_types_from_serebii_gen1_gen2_gen3_pages",
+    "generation_scope": [],
+    "typing_basis": "current_canonical_types_from_all_localized_serebii_generation_pages",
     "require_truth_fields": [
       "national_dex_number",
       "name",
@@ -117,16 +113,16 @@
       "count_basis": "compatible_amount_capped_to_9",
       "max_items": 9,
       "max_columns": 3,
-      "item_size_px": 180,
-      "overlay_scale_multiplier": 1.2,
-      "column_gap_px": 36,
-      "row_gap_px": 36,
+      "item_size_px": 270,
+      "overlay_scale_multiplier": 1,
+      "column_gap_px": 60,
+      "row_gap_px": 80,
       "anchor": "canvas_middle",
       "stage_bounds_px": {
-        "left": 100,
-        "top": 720,
-        "width": 880,
-        "height": 820
+        "left": 60,
+        "top": 620,
+        "width": 960,
+        "height": 900
       }
     },
     "timer": {

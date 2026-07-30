@@ -6,7 +6,7 @@ const DEFAULT_HOOK_TEXT_Y = 150;
 const DEFAULT_PROMPT_TEXT_Y = 170;
 const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
-const DEFAULT_TIMER_SIZE = 320;
+const DEFAULT_TIMER_SIZE = 360;
 const DEFAULT_TIMER_MARGIN_TOP = 20;
 const DEFAULT_TIMER_LEFT_OFFSET = 72;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
@@ -26,7 +26,7 @@ const DEFAULT_POKEBALL_SCALE_MULTIPLIER = 1.2;
 const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.55;
 const DEFAULT_TYPE_ICON_HOOK_Y = 620;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
-const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.22;
+const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
 const DEFAULT_FONT_CANDIDATES = [
   '/System/Library/Fonts/Supplemental/Avenir Next.ttc',
   '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
@@ -158,7 +158,7 @@ function buildAnimatedPopMultiplierExpression(startSeconds, durationSeconds = DE
   const duration = roundTime(Math.max(0.16, durationSeconds));
   const peak = roundTime(start + (duration * 0.6));
   const end = roundTime(start + duration);
-  return `if(lt(t,${start}),0.82,if(lt(t,${peak}),0.82+((t-${start})/${roundTime(peak - start)})*0.28,if(lt(t,${end}),1.10-((t-${peak})/${roundTime(end - peak)})*0.10,1)))`;
+  return `if(lt(t,${start}),0.56,if(lt(t,${peak}),0.56+((t-${start})/${roundTime(peak - start)})*0.60,if(lt(t,${end}),1.16-((t-${peak})/${roundTime(end - peak)})*0.16,1)))`;
 }
 
 function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS, distancePx = 30) {
@@ -166,6 +166,14 @@ function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYP
   const duration = roundTime(Math.max(0.16, durationSeconds));
   const end = roundTime(start + duration);
   return `if(lt(t,${start}),${distancePx},if(lt(t,${end}),${distancePx}*(1-((t-${start})/${duration})),0))`;
+}
+
+function resolveRevealSpriteHoldSize({ gridItemSize, itemCount, configuredMultiplier }) {
+  const desiredSize = gridItemSize * Math.max(1, configuredMultiplier);
+  if (itemCount <= 2) return roundTime(desiredSize);
+  if (itemCount <= 4) return roundTime(Math.min(desiredSize, gridItemSize * 1.38));
+  if (itemCount <= 6) return roundTime(Math.min(desiredSize, gridItemSize * 1.26));
+  return roundTime(Math.min(desiredSize, gridItemSize * 1.14));
 }
 
 function buildTextLineArtifacts(text, { template, fontSize, maxLines, baseY }) {
@@ -413,6 +421,9 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
 
   for (let index = 0; index < plan.assets.type_icons.length; index += 1) {
     const iconLabel = safeFilterLabel('type', index);
+    const iconBackdropBaseLabel = safeFilterLabel('typebgbase', index);
+    const iconBackdropLabel = safeFilterLabel('typebg', index);
+    const iconBackdropVideoLabel = safeFilterLabel('vtbg', index);
     const position = renderPlan.type_icon_layout[index];
     const introPosition = renderPlan.type_icon_intro_layout[index] || position;
     const settleDuration = ensureNumber(
@@ -445,11 +456,21 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       transitionDurationSeconds: settleDuration,
     });
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
+    const iconBackdropScaleExpression = `((${baseSizeExpression})*(${introPopMultiplierExpression}))*1.08`;
+    filters.push(
+      `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),228,0)'[${iconBackdropBaseLabel}]`,
+    );
+    filters.push(
+      `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
+    );
     filters.push(
       `[${inputRefs.typeIcons[index]}:v]scale=w='(${baseSizeExpression})*(${introPopMultiplierExpression})':h='(${baseSizeExpression})*(${introPopMultiplierExpression})':eval=frame:force_original_aspect_ratio=decrease,setsar=1[${iconLabel}]`,
     );
     filters.push(
-      `[v${index}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
+    );
+    filters.push(
+      `[${iconBackdropVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
     );
   }
 
@@ -462,12 +483,14 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       ensureNumber(template?.layout?.pokeball_grid?.overlay_scale_multiplier, DEFAULT_POKEBALL_SCALE_MULTIPLIER),
     ),
   );
-  const spriteHoldSize = roundTime(
-    gridItemSize * Math.max(
-      1,
-      ensureNumber(template?.layout?.silhouettes?.reveal_scale_multiplier, DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER),
+  const spriteHoldSize = resolveRevealSpriteHoldSize({
+    gridItemSize,
+    itemCount: renderPlan.grid.item_count || renderPlan.grid.cells.length,
+    configuredMultiplier: ensureNumber(
+      template?.layout?.silhouettes?.reveal_scale_multiplier,
+      DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER,
     ),
-  );
+  });
   const pokeballStaticLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbs', index));
   const pokeballTransitionLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbt', index));
   const timerSourceDuration = Math.max(

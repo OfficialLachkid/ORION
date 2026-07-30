@@ -113,10 +113,10 @@ test('timer layout stays top-left with centered number anchors', () => {
   const layout = buildTimerLayout(template);
   assert.equal(layout.x, 30);
   assert.equal(layout.y, 180);
-  assert.equal(layout.width, 320);
-  assert.equal(layout.height, 320);
-  assert.equal(layout.number_center_x, 190);
-  assert.equal(layout.number_center_y, 340);
+  assert.equal(layout.width, 360);
+  assert.equal(layout.height, 360);
+  assert.equal(layout.number_center_x, 210);
+  assert.equal(layout.number_center_y, 360);
 });
 
 test('countdown moments include the 0 card at reveal time', () => {
