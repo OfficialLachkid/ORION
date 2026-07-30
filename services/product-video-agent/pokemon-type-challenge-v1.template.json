@@ -113,7 +113,7 @@
       "count_basis": "compatible_amount_capped_to_9",
       "max_items": 9,
       "max_columns": 3,
-      "item_size_px": 300,
+      "item_size_px": 240,
       "overlay_scale_multiplier": 1.2,
       "column_gap_px": 70,
       "row_gap_px": 90,
@@ -159,6 +159,7 @@
   },
   "reveal": {
     "trigger_seconds": 5,
+    "visual_delay_seconds": 0.5,
     "default_mode": "silhouette_hold_then_answer",
     "supported_variants": [
       "silhouette_hold_then_answer",

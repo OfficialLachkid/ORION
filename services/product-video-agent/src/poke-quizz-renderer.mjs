@@ -19,12 +19,15 @@ const DEFAULT_VOICE_VOLUME = 1;
 const DEFAULT_COUNTDOWN_VOLUME = 0.72;
 const DEFAULT_TIMER_END_VOLUME = 0.9;
 const DEFAULT_REVEAL_TRANSITION_SECONDS = 0.42;
+const DEFAULT_REVEAL_VISUAL_DELAY_SECONDS = 0.5;
 const DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER = 1.2;
 const DEFAULT_POKEBALL_SCALE_MULTIPLIER = 1.2;
 const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.55;
 const DEFAULT_TYPE_ICON_HOOK_Y = 620;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
 const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
+const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.88;
+const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 214;
 const DEFAULT_FONT_CANDIDATES = [
   '/System/Library/Fonts/Supplemental/Avenir Next.ttc',
   '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
@@ -245,18 +248,24 @@ export function buildHookTypeIconLayout(template, count = 2) {
 }
 
 export function buildTimerLayout(template, gridLayout = null) {
+  const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
   const safeZone = template?.canvas?.safe_zone || {};
   const safeTop = ensureNumber(safeZone.top, 160);
   const gridStage = gridLayout?.stage_bounds_px || template?.layout?.pokeball_grid?.stage_bounds_px || {};
   const gridTop = ensureNumber(gridStage.top, safeTop + 560);
-  const gridLeft = ensureNumber(gridStage.left, 40);
+  const typeIconBottom = DEFAULT_TYPE_ICON_Y + ensureNumber(template?.layout?.type_icons?.icon_size_px, 168);
+  const gridCellTop = Array.isArray(gridLayout?.cells) && gridLayout.cells.length > 0
+    ? Math.min(...gridLayout.cells.map((cell) => ensureNumber(cell?.y, gridTop)))
+    : gridTop;
+  const gridVisualTop = gridCellTop > (typeIconBottom + 40) ? gridCellTop : gridTop;
   const gridItemSize = ensureNumber(
     gridLayout?.item_size_px,
     ensureNumber(template?.layout?.pokeball_grid?.item_size_px, 240),
   );
   const size = Math.round(Math.max(DEFAULT_TIMER_SIZE, gridItemSize * 1.22));
-  const left = Math.max(24, gridLeft + 20);
-  const top = Math.max(safeTop + 110, gridTop - Math.round(size * 0.98));
+  const gapCenterY = Math.floor((typeIconBottom + gridVisualTop) / 2);
+  const left = Math.max(24, Math.floor((canvasWidth - size) / 2));
+  const top = Math.max(safeTop + 110, gapCenterY - Math.floor(size / 2));
   return {
     x: left,
     y: top,
@@ -348,6 +357,15 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       ),
     ),
   );
+  const revealVisualDelay = roundTime(
+    Math.max(
+      0,
+      ensureNumber(template?.reveal?.visual_delay_seconds, DEFAULT_REVEAL_VISUAL_DELAY_SECONDS),
+    ),
+  );
+  const revealVisualStart = roundTime(
+    Math.min(schedule.total_duration_seconds, revealPhase.start_seconds + revealVisualDelay),
+  );
   return {
     canvas: {
       width: ensureNumber(template?.canvas?.width, 1080),
@@ -373,8 +391,10 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       hook_start_seconds: schedule.phases.hook?.start_seconds ?? 0,
       prompt_start_seconds: schedule.phases.type_prompt?.start_seconds ?? 0,
       countdown_start_seconds: countdownPhase.start_seconds,
+      prompt_end_seconds: countdownPhase.start_seconds,
       timer_end_seconds: revealPhase.start_seconds,
       reveal_start_seconds: revealPhase.start_seconds,
+      reveal_visual_start_seconds: revealVisualStart,
       battle_music_start_seconds: roundTime(
         Math.min(schedule.total_duration_seconds, configuredBattleMusicStartSeconds),
       ),
@@ -385,6 +405,29 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       reveal: plan.timeline.find((entry) => entry.phase === 'reveal')?.spoken_text || '',
     },
     output_path: outputPath,
+  };
+}
+
+export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDurations = {}) {
+  const promptDurationSeconds = ensureNumber(narrationDurations.prompt_seconds, 0);
+  if (promptDurationSeconds <= 0) {
+    return renderPlan;
+  }
+
+  return {
+    ...renderPlan,
+    audio_cues: {
+      ...renderPlan.audio_cues,
+      prompt_end_seconds: roundTime(
+        Math.min(
+          renderPlan.audio_cues.timer_end_seconds,
+          Math.max(
+            ensureNumber(renderPlan.audio_cues.prompt_end_seconds, renderPlan.audio_cues.countdown_start_seconds),
+            renderPlan.audio_cues.prompt_start_seconds + promptDurationSeconds,
+          ),
+        ),
+      ),
+    },
   };
 }
 
@@ -449,12 +492,16 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
   const { width, height, fps } = renderPlan.canvas;
   const countdownDuration = Math.max(0.5, ensureNumber(renderPlan.phases.countdown?.duration_seconds, 0));
   const countdownStart = ensureNumber(renderPlan.phases.countdown?.start_seconds, 0);
+  const revealVisualStart = ensureNumber(
+    renderPlan.audio_cues?.reveal_visual_start_seconds,
+    ensureNumber(renderPlan.phases.reveal?.start_seconds, 0),
+  );
   const revealTransitionDuration = ensureNumber(
     renderPlan.transitions?.reveal_cross_scale_seconds,
     DEFAULT_REVEAL_TRANSITION_SECONDS,
   );
   const revealTransitionEnd = roundTime(
-    Math.min(renderPlan.total_duration_seconds, ensureNumber(renderPlan.phases.reveal?.start_seconds, 0) + revealTransitionDuration),
+    Math.min(renderPlan.total_duration_seconds, revealVisualStart + revealTransitionDuration),
   );
   filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
 
@@ -495,9 +542,9 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       transitionDurationSeconds: settleDuration,
     });
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
-    const iconBackdropScaleExpression = `((${baseSizeExpression})*(${introPopMultiplierExpression}))*1.08`;
+    const iconBackdropScaleExpression = `((${baseSizeExpression})*(${introPopMultiplierExpression}))*${DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER}`;
     filters.push(
-      `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),228,0)'[${iconBackdropBaseLabel}]`,
+      `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${DEFAULT_TYPE_ICON_BACKDROP_ALPHA},0)'[${iconBackdropBaseLabel}]`,
     );
     filters.push(
       `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
@@ -551,7 +598,7 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       const cell = renderPlan.grid.cells[index];
       const nextVideoLabel = safeFilterLabel('vg', index);
       filters.push(
-        `[${currentVideoLabel}][${pokeballStaticLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${nextVideoLabel}]`,
+        `[${currentVideoLabel}][${pokeballStaticLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, revealVisualStart)}'[${nextVideoLabel}]`,
       );
       currentVideoLabel = nextVideoLabel;
     }
@@ -566,7 +613,9 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
   if (inputRefs.timerAlarm != null && timerAlarmDuration > 0) {
     const timerAlarmLabel = 'timeralarm';
     const timerAlarmStart = renderPlan.phases.reveal.start_seconds;
-    const timerAlarmEnd = roundTime(Math.min(renderPlan.total_duration_seconds, timerAlarmStart + timerAlarmDuration));
+    const timerAlarmEnd = roundTime(
+      Math.min(renderPlan.total_duration_seconds, timerAlarmStart + timerAlarmDuration, revealVisualStart),
+    );
     filters.push(
       `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[${timerAlarmLabel}]`,
     );
@@ -587,12 +636,12 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     spriteHoldLabels.push(spriteHoldLabel);
     spriteTransitionLabels.push(spriteTransitionLabel);
     filters.push(
-      `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${renderPlan.phases.reveal.start_seconds}/TB,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
+      `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${revealVisualStart}/TB,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
     );
     filters.push(
       `[${spriteHoldSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteHoldLabel}]`,
     );
-    const progressExpression = `min(max((t-${renderPlan.phases.reveal.start_seconds})/${revealTransitionDuration},0),1)`;
+    const progressExpression = `min(max((t-${revealVisualStart})/${revealTransitionDuration},0),1)`;
     const pokeballScaleFactor = `if(lt(${progressExpression},0.16),1+(${progressExpression}/0.16)*0.28,max(0.03,1.28-(((${progressExpression}-0.16)/0.84)*1.28)))`;
     const spriteScaleFactor = `max(0.03,if(lt(${progressExpression},0.22),0.06+(${progressExpression}/0.22)*0.34,0.40+(((${progressExpression}-0.22)/0.78)*0.80)))`;
     const pokeballScaleExpression = `max(6,${pokeballSize}*(${pokeballScaleFactor}))`;
@@ -610,13 +659,13 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const pokeballTransitionLabel = safeFilterLabel('pokeballpop', index);
     const withPokeballTransitionLabel = safeFilterLabel('vxp', index);
     const withSpriteTransitionLabel = safeFilterLabel('vxs', index);
-    const progressExpression = `min(max((t-${renderPlan.phases.reveal.start_seconds})/${revealTransitionDuration},0),1)`;
+    const progressExpression = `min(max((t-${revealVisualStart})/${revealTransitionDuration},0),1)`;
     const pokeballBounceExpression = `if(lt(${progressExpression},0.24),(${progressExpression}/0.24)*26,max(0,26-(((${progressExpression}-0.24)/0.76)*26)))`;
     filters.push(
-      `[${currentVideoLabel}][${pokeballTransitionLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2-${pokeballBounceExpression}':enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, revealTransitionEnd)}'[${withPokeballTransitionLabel}]`,
+      `[${currentVideoLabel}][${pokeballTransitionLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2-${pokeballBounceExpression}':enable='${formatEnableBetween(revealVisualStart, revealTransitionEnd)}'[${withPokeballTransitionLabel}]`,
     );
     filters.push(
-      `[${withPokeballTransitionLabel}][${spriteTransitionLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, revealTransitionEnd)}'[${withSpriteTransitionLabel}]`,
+      `[${withPokeballTransitionLabel}][${spriteTransitionLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(revealVisualStart, revealTransitionEnd)}'[${withSpriteTransitionLabel}]`,
     );
     currentVideoLabel = withSpriteTransitionLabel;
   }
@@ -632,7 +681,10 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
 
   const drawtextParts = [];
   const fontPart = fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
-  const promptTextEndSeconds = renderPlan.phases.countdown?.start_seconds ?? renderPlan.phases.reveal.start_seconds;
+  const promptTextEndSeconds = ensureNumber(
+    renderPlan.audio_cues?.prompt_end_seconds,
+    renderPlan.phases.countdown?.start_seconds ?? renderPlan.phases.reveal.start_seconds,
+  );
   for (const line of textArtifacts.hook.lines) {
     drawtextParts.push(
       `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_HOOK_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.hook.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}'`,
@@ -874,7 +926,7 @@ export async function renderPokeQuizzVideo({
   runtimeRoot,
   fontCandidates = DEFAULT_FONT_CANDIDATES,
 }) {
-  const renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath });
+  let renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath });
   const outputAbsolutePath = resolve(projectRoot, outputPath);
   const audioMixPath = resolve(runtimeRoot, `${slugify(plan.selection.type_pair.join('-'))}-${slugify(plan.seed)}-audio.m4a`);
   const filterScriptPath = resolve(runtimeRoot, `${slugify(plan.selection.type_pair.join('-'))}-${slugify(plan.seed)}-video.filters.txt`);
@@ -903,7 +955,14 @@ export async function renderPokeQuizzVideo({
   ]);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
-  const [timerCountdownDurationSeconds, timerAlarmDurationSeconds, countdownDurationSeconds] = await Promise.all([
+  const [narrationDurations, timerCountdownDurationSeconds, timerAlarmDurationSeconds, countdownDurationSeconds] = await Promise.all([
+    Promise.all(narrationPaths.map((narrationPath) => (
+      probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: narrationPath,
+        cwd: projectRoot,
+      })
+    ))),
     probeMediaDurationSeconds({
       ffmpegExecutable,
       mediaPath: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
@@ -924,6 +983,9 @@ export async function renderPokeQuizzVideo({
       })
       : Promise.resolve(null),
   ]);
+  renderPlan = applyNarrationDurationsToRenderPlan(renderPlan, {
+    prompt_seconds: narrationDurations[1],
+  });
   if (timerCountdownDurationSeconds) {
     plan.assets.overlays.selected_timer_duration_seconds = timerCountdownDurationSeconds;
     plan.assets.overlays.selected_timer_countdown_duration_seconds = timerCountdownDurationSeconds;

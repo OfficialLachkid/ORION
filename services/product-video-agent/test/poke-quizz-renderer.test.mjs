@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  applyNarrationDurationsToRenderPlan,
   buildCountdownMoments,
   buildAudioFilterScript,
   buildHookTypeIconLayout,
@@ -120,7 +121,7 @@ test('hook type icon layout starts larger and centered before settling', () => {
 
 test('timer layout sits above the pokeball grid with centered number anchors', () => {
   const layout = buildTimerLayout(template, {
-    item_size_px: 300,
+    item_size_px: 240,
     stage_bounds_px: {
       left: 20,
       top: 760,
@@ -128,12 +129,12 @@ test('timer layout sits above the pokeball grid with centered number anchors', (
       height: 1040,
     },
   });
-  assert.equal(layout.x, 40);
-  assert.equal(layout.y, 401);
-  assert.equal(layout.width, 366);
-  assert.equal(layout.height, 366);
-  assert.equal(layout.number_center_x, 223);
-  assert.equal(layout.number_center_y, 584);
+  assert.equal(layout.x, 390);
+  assert.equal(layout.y, 516);
+  assert.equal(layout.width, 300);
+  assert.equal(layout.height, 300);
+  assert.equal(layout.number_center_x, 540);
+  assert.equal(layout.number_center_y, 666);
 });
 
 test('countdown moments include the 0 card at reveal time', () => {
@@ -151,12 +152,25 @@ test('render plan derives battle-music lead-in and preserves grid geometry', () 
     outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
   });
   assert.equal(renderPlan.audio_cues.reveal_start_seconds, 7.8);
+  assert.equal(renderPlan.audio_cues.reveal_visual_start_seconds, 8.3);
   assert.equal(renderPlan.audio_cues.battle_music_start_seconds, 0);
   assert.equal(renderPlan.grid.cells.length, 6);
   assert.equal(renderPlan.type_icon_intro_layout[0].width > renderPlan.type_icon_layout[0].width, true);
   assert.equal(renderPlan.transitions.type_icon_settle_seconds, 0.256);
   assert.equal(renderPlan.timer_layout.y < renderPlan.grid.cells[0].y, true);
   assert.equal(renderPlan.output_path.endsWith('grass-poison-preview.mp4'), true);
+});
+
+test('prompt cue window can extend to the measured narration duration', () => {
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const adjusted = applyNarrationDurationsToRenderPlan(renderPlan, {
+    prompt_seconds: 2.6,
+  });
+  assert.equal(adjusted.audio_cues.prompt_end_seconds, 3.8);
 });
 
 test('audio filter script repeats short tick assets when no long countdown bed exists', () => {
