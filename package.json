@@ -89,6 +89,7 @@
     "supabase:check": "node scripts/check-supabase-connection.mjs",
     "supabase:merge-bridge": "node scripts/supabase-merge-bridge.mjs",
     "supabase:sync-bridge": "node scripts/supabase-sync-bridge.mjs",
+    "leadgen:post-qualified-no-email-review": "node scripts/post-qualified-no-email-review.mjs",
     "task-router:simulate": "node services/task-router/index.mjs",
     "transcription:simulate": "node services/transcription-worker/index.mjs",
     "product-video:dry-run": "node services/product-video-agent/index.mjs",

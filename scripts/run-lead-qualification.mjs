@@ -29,6 +29,7 @@ import {
 } from '../services/discord-bot/src/message-formatting.mjs';
 import { buildApprovalButtons } from '../services/discord-bot/src/approval-buttons.mjs';
 import { postLeadQualificationReport } from './lib/lead-qualification-report.mjs';
+import { postQualifiedNoEmailReview } from './lib/qualified-no-email-review.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 
@@ -216,6 +217,7 @@ async function main() {
   }
 
   const outcomes = [];
+  const pendingNoEmailReviews = [];
   for (const lead of batch) {
     // Slow site = concrete website-builder signal; measured before the
     // judgment call so the real number can land in the draft.
@@ -286,24 +288,31 @@ async function main() {
       }
     }
 
+    let storedQualification = null;
     if (!dryRun) {
+      storedQualification = {
+        ...qualification,
+        ...(lead.qualification?.rejection_feedback ? {
+          rejection_feedback: lead.qualification.rejection_feedback,
+          rejected_by: lead.qualification.rejected_by,
+          rejected_at: lead.qualification.rejected_at,
+          redrafted_after_feedback_at: new Date().toISOString(),
+        } : {}),
+        ...(lead.qualification?.no_email_review_posted_at ? {
+          no_email_review_posted_at: lead.qualification.no_email_review_posted_at,
+          no_email_review_thread_id: lead.qualification.no_email_review_thread_id,
+          no_email_review_message_id: lead.qualification.no_email_review_message_id,
+        } : {}),
+        approval_task_id: approvalTaskId,
+        qualified_by: 'claude',
+      };
       await updateLead(lead.id, {
         status,
         // Re-qualifying REPLACES this jsonb, which silently wiped the operator's
         // rejection feedback (it had done its job feeding the redraft, but the
         // audit trail vanished — TFG lost its "te Engels / ziet er oud uit" note
         // this way). Carry the rejection history forward explicitly.
-        qualification: {
-          ...qualification,
-          ...(lead.qualification?.rejection_feedback ? {
-            rejection_feedback: lead.qualification.rejection_feedback,
-            rejected_by: lead.qualification.rejected_by,
-            rejected_at: lead.qualification.rejected_at,
-            redrafted_after_feedback_at: new Date().toISOString(),
-          } : {}),
-          approval_task_id: approvalTaskId,
-          qualified_by: 'claude',
-        },
+        qualification: storedQualification,
         qualified_at: new Date().toISOString(),
       });
     }
@@ -318,10 +327,12 @@ async function main() {
       dryRun,
     });
 
-    outcomes.push({
+    const outcome = {
       lead: lead.business_name,
       domain: lead.domain,
       sourceUrl: lead.source_url,
+      contactPhone: lead.contact_phone || '',
+      kvkNumber: lead.kvk_number || '',
       leadAgeDays: Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 86400000),
       decision: qualification.decision,
       status,
@@ -331,7 +342,20 @@ async function main() {
       screenshot_reviewed: qualification.screenshot_reviewed ?? null,
       reasoning: qualification.reasoning || '',
       approvalTaskId,
-    });
+    };
+    outcomes.push(outcome);
+
+    if (
+      !dryRun
+      && status === 'qualified_no_email'
+      && !lead.qualification?.no_email_review_posted_at
+    ) {
+      pendingNoEmailReviews.push({
+        leadId: lead.id,
+        qualification: storedQualification,
+        outcome,
+      });
+    }
   }
 
   // Summary goes to #lead-qualification-agent (operator request — #lead-
@@ -345,6 +369,9 @@ async function main() {
     const outreachChannel = config.channelIds.outreachAgent
       ? `<#${config.channelIds.outreachAgent}>`
       : '#outreach-agent';
+    const qualifiedNoEmailReviewChannel = config.channelIds.qualifiedNoEmailReview
+      ? `<#${config.channelIds.qualifiedNoEmailReview}>`
+      : '';
 
     // Title reflects WHICH mode ran — a redraft/recovery run posting as plain
     // "Lead Qualification" was misleading (operator flagged this, 2026-07-27).
@@ -356,9 +383,37 @@ async function main() {
       channelId,
       outcomes,
       outreachChannel,
+      qualifiedNoEmailReviewChannel,
       runTitle,
       postMessage: (payload) => postToChannel(config, channelId, payload),
     });
+
+    if (config.channelIds.qualifiedNoEmailReview && pendingNoEmailReviews.length > 0) {
+      try {
+        const threadId = config.channelIds.qualifiedNoEmailReview;
+        const firstMessage = await postQualifiedNoEmailReview({
+          channelId: threadId,
+          outcomes: pendingNoEmailReviews.map((record) => record.outcome),
+          postMessage: (payload) => postToChannel(config, threadId, payload),
+        });
+
+        if (firstMessage?.id) {
+          const postedAt = new Date().toISOString();
+          for (const record of pendingNoEmailReviews) {
+            await updateLead(record.leadId, {
+              qualification: {
+                ...record.qualification,
+                no_email_review_posted_at: postedAt,
+                no_email_review_thread_id: threadId,
+                no_email_review_message_id: firstMessage.id,
+              },
+            });
+          }
+        }
+      } catch (error) {
+        process.stderr.write(`Qualified no-email review post failed (non-fatal): ${error.message}\n`);
+      }
+    }
   }
 
   process.stdout.write(`${JSON.stringify(outcomes, null, 2)}\n`);

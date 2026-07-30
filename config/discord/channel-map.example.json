@@ -20,6 +20,7 @@
     "deployments": "DISCORD_DEPLOYMENTS_CHANNEL_ID",
     "leadGeneration": "DISCORD_LEAD_GENERATION_CHANNEL_ID",
     "leadQualificationAgent": "DISCORD_SALES_AGENT_CHANNEL_ID",
+    "qualifiedNoEmailReview": "DISCORD_QUALIFIED_NO_EMAIL_THREAD_ID",
     "outreachAgent": "DISCORD_OUTREACH_AGENT_CHANNEL_ID",
     "outreachFollowups": "DISCORD_OUTREACH_FOLLOWUPS_AGENT_THREAD_ID",
     "orionIntake": "DISCORD_ORION_INTAKE_CHANNEL_ID",

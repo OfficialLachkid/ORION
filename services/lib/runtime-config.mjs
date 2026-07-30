@@ -137,6 +137,11 @@ export function loadRuntimeConfig(options = {}) {
   const channelIds = Object.fromEntries(
     Object.entries(channelMap.channels || {}).map(([key, value]) => [key, substituteEnvPlaceholders(value, env)])
   );
+  // Migration fallback for existing gitignored channel-map.json files. New
+  // thread routes can be enabled by adding only the matching .env value.
+  if (!Object.prototype.hasOwnProperty.call(channelIds, 'qualifiedNoEmailReview')) {
+    channelIds.qualifiedNoEmailReview = env.DISCORD_QUALIFIED_NO_EMAIL_THREAD_ID || '';
+  }
 
   const resolvedTmpDir = env.RUNTIME_TMP_DIR || resolve(projectRoot, 'data', 'runtime', 'tmp');
   const resolvedLogDir = env.RUNTIME_LOG_DIR || resolve(projectRoot, 'data', 'runtime', 'logs');

@@ -12,6 +12,11 @@ import {
   buildLeadQualificationDescriptions,
   postLeadQualificationReport,
 } from '../lib/lead-qualification-report.mjs';
+import {
+  buildQualifiedNoEmailReviewDescriptions,
+  normalizePhoneForTel,
+  postQualifiedNoEmailReview,
+} from '../lib/qualified-no-email-review.mjs';
 
 function occurrenceCount(text, value) {
   return text.split(value).length - 1;
@@ -177,5 +182,83 @@ test('qualification continuation messages reply to the first Discord result', as
     });
     assert.match(payload.embeds[0].title, /Continued/u);
     assert.match(payload.embeds[0].description, /2026-07-30/u);
+  }
+});
+
+test('qualified no-email review keeps website, phone, and compliance guidance', () => {
+  const outcomes = [{
+    lead: 'Haarlem Plumbing BV',
+    sourceUrl: 'https://example.com/haarlem-plumbing',
+    status: 'qualified_no_email',
+    contactPhone: '+31 (0)23 123 45 67',
+    kvkNumber: '12345678',
+    offer_angle: 'Website conversion improvement',
+  }, {
+    lead: 'No Phone Plumbing',
+    sourceUrl: 'https://example.com/no-phone',
+    status: 'qualified_no_email',
+    contactPhone: '',
+    offer_angle: 'Voice receptionist',
+  }];
+  const pages = buildQualifiedNoEmailReviewDescriptions({
+    outcomes,
+    runDate: new Date(2026, 6, 30),
+  });
+  const combined = pages.join('\n');
+
+  assert.equal(pages.length, 1);
+  assert.match(combined, /\[Haarlem Plumbing BV\]\(https:\/\/example\.com\/haarlem-plumbing\)/u);
+  assert.match(combined, /\[\+31 \(0\)23 123 45 67\]\(tel:\+31231234567\)/u);
+  assert.match(combined, /copy: `\+31 \(0\)23 123 45 67`/u);
+  assert.match(combined, /KVK: `12345678` \(verify legal form\)/u);
+  assert.match(combined, /No public phone found/u);
+  assert.match(combined, /qualification confirms offer fit, not permission to call/u);
+  assert.equal(normalizePhoneForTel('0031 23 123 45 67'), '+31231234567');
+
+  const [qualificationSummary] = buildLeadQualificationDescriptions({
+    outcomes,
+    outreachChannel: '<#outreach-channel>',
+    qualifiedNoEmailReviewChannel: '<#qualified-no-email-thread>',
+    runTitle: 'Lead Qualification',
+    runDate: new Date(2026, 6, 30),
+  });
+  assert.match(
+    qualificationSummary,
+    /manual outreach review in <#qualified-no-email-thread>/u,
+  );
+});
+
+test('qualified no-email review paginates and replies to its first thread message', async () => {
+  const outcomes = Array.from({ length: 55 }, (_, index) => ({
+    lead: `Business ${index} ${'x'.repeat(50)}`,
+    sourceUrl: `https://example.com/business/${index}`,
+    status: 'qualified_no_email',
+    contactPhone: `+31 23 123 ${String(index).padStart(4, '0')}`,
+    kvkNumber: String(10000000 + index),
+    offer_angle: `Website improvement ${'y'.repeat(40)}`,
+  }));
+  const payloads = [];
+
+  await postQualifiedNoEmailReview({
+    channelId: 'qualified-no-email-thread',
+    outcomes,
+    runDate: new Date(2026, 6, 30),
+    postMessage: async (payload) => {
+      payloads.push(payload);
+      return { id: payloads.length === 1 ? 'no-email-first' : `no-email-${payloads.length}` };
+    },
+  });
+
+  assert.ok(payloads.length > 1);
+  assert.ok(payloads.every((payload) => (
+    payload.embeds[0].description.length <= DISCORD_EMBED_DESCRIPTION_BUDGET
+  )));
+  for (const payload of payloads.slice(1)) {
+    assert.deepEqual(payload.message_reference, {
+      message_id: 'no-email-first',
+      channel_id: 'qualified-no-email-thread',
+      fail_if_not_exists: false,
+    });
+    assert.match(payload.embeds[0].title, /Continued/u);
   }
 });

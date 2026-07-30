@@ -147,11 +147,16 @@ function buildDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
     followedUp = 0,
     replyResult = null,
     outreachChannel = '#outreach-agent',
+    qualifiedNoEmailReviewChannel = '',
   } = extras;
 
   const parts = [
     drafted > 0 ? `**${drafted}** new draft(s) awaiting approval in ${outreachChannel}` : '',
-    noEmail > 0 ? `**${noEmail}** qualified, no email` : '',
+    noEmail > 0
+      ? `**${noEmail}** qualified, no email${
+        qualifiedNoEmailReviewChannel ? ` (review in ${qualifiedNoEmailReviewChannel})` : ''
+      }`
+      : '',
     rejected > 0 ? `**${rejected}** rejected (weak fit)` : '',
     unreachable > 0 ? `**${unreachable}** site unreachable` : '',
     extractionError > 0 ? `**${extractionError}** extraction error` : '',
@@ -303,6 +308,9 @@ async function main() {
       outreachChannel: config.channelIds.outreachAgent
         ? `<#${config.channelIds.outreachAgent}>`
         : '#outreach-agent',
+      qualifiedNoEmailReviewChannel: config.channelIds.qualifiedNoEmailReview
+        ? `<#${config.channelIds.qualifiedNoEmailReview}>`
+        : '',
     }),
     color: 0x5865F2,
     footerText: 'ORION night shift',
