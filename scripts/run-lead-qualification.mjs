@@ -352,9 +352,12 @@ async function main() {
     const unreachableCount = outcomes.filter((o) => o.status === 'site_unreachable').length;
     const extractionErrorCount = outcomes.filter((o) => o.status === 'extraction_error').length;
     const failedCount = outcomes.filter((o) => o.error).length;
+    const outreachChannel = config.channelIds.outreachAgent
+      ? `<#${config.channelIds.outreachAgent}>`
+      : '#outreach-agent';
 
     const rollupParts = [
-      draftCount > 0 ? `**${draftCount}** draft(s) awaiting approval in #outreach-agent` : '',
+      draftCount > 0 ? `**${draftCount}** draft(s) awaiting approval in ${outreachChannel}` : '',
       noEmailCount > 0 ? `**${noEmailCount}** qualified but no email found (no draft possible)` : '',
       draftFailedCount > 0 ? `**${draftFailedCount}** qualified but draft creation failed` : '',
       rejectedCount > 0 ? `**${rejectedCount}** rejected — weak fit` : '',

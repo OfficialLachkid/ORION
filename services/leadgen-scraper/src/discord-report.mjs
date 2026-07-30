@@ -77,7 +77,7 @@ export async function postLeadgenQueued(config, { title, niche, query }) {
           title: `${title} — Queued`,
           description: `**${niche}** (query: "${query}") is queued.`,
           color: 0x99AAB5,
-          footerText: 'Ruflo leadgen',
+          footerText: 'ORION leadgen',
         }),
       },
     );
@@ -109,7 +109,7 @@ export function beginLeadgenProgress(config, message, { title, niche, query }) {
             title: `${title} — Running`,
             description: `Searching for **${niche}** (query: "${query}")... running for ${elapsedMinutes} min. Results will appear here when the batch finishes.`,
             color: 0xFEE75C,
-            footerText: 'Ruflo leadgen',
+            footerText: 'ORION leadgen',
           }),
         },
       );
@@ -194,7 +194,7 @@ export async function postSweepOverview(config, { statuses, totalLeads = null })
           title: 'Daily Leadgen Sweep',
           description: buildSweepOverviewDescription({ statuses, totalLeads }),
           color: 0x5865F2,
-          footerText: 'Ruflo leadgen sweep',
+          footerText: 'ORION leadgen sweep',
         }),
       },
     );
@@ -219,7 +219,7 @@ export async function updateSweepOverview(config, message, { statuses, totalLead
           title: 'Daily Leadgen Sweep',
           description: consumeRecoveryNote() + buildSweepOverviewDescription({ statuses, totalLeads }),
           color: statuses.every((s) => s.state === 'completed') ? 0x57F287 : 0x5865F2,
-          footerText: 'Ruflo leadgen sweep',
+          footerText: 'ORION leadgen sweep',
         }),
       },
     );
@@ -274,7 +274,7 @@ export async function reportLeadgenRunToDiscord(config, { title, niche, query, r
     title: runError ? `${title} — Failed` : title,
     description: consumeRecoveryNote() + buildResultDescription({ title, niche, query, result, runError, durationMinutes }),
     color: runError ? 0xED4245 : 0x57F287,
-    footerText: 'Ruflo leadgen',
+    footerText: 'ORION leadgen',
   });
 
   if (startedMessage?.messageId) {
