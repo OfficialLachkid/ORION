@@ -1,0 +1,116 @@
+{
+  "fixture_version": "1.0.0",
+  "source": {
+    "provider": "manual-licensed-media-research",
+    "marketplace": "wikimedia-commons",
+    "source_product_id": "gorillapod-flexible-camera-tripod",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Gorillapod_-_unboxing_-_gear_-_Mobile_-_action_cam_-_dslr.webm",
+    "retrieved_at": "2026-07-27T14:30:00.000Z",
+    "retrieval_method": "manual",
+    "source_access_permitted": true
+  },
+  "product": {
+    "name": "GorillaPod-Style Flexible Camera Tripod",
+    "brand": "Unspecified",
+    "category": "Camera Tripods",
+    "description": "A compact camera tripod with jointed legs that can stand on a surface or wrap around a support.",
+    "specifications": {
+      "Leg style": "Flexible segmented legs",
+      "Demonstrated mounts": "Phone holder and action-camera adapter",
+      "Demonstrated positions": "Tabletop and wrapped around a railing"
+    },
+    "current_price": null,
+    "list_price": null,
+    "rating": null,
+    "review_count": 0,
+    "tags": [
+      "flexible tripod",
+      "camera mount",
+      "phone filming",
+      "action camera"
+    ]
+  },
+  "claim_guardrails": {
+    "script_facts": [
+      "The tripod has flexible segmented legs.",
+      "The footage demonstrates the tripod standing on a table.",
+      "The footage demonstrates the legs wrapping around a railing.",
+      "The footage demonstrates mounts for a phone and an action camera.",
+      "The legs can be reshaped for different camera positions."
+    ],
+    "prohibited_claims": [
+      "Do not name a manufacturer or exact model because the footage does not verify one.",
+      "Do not claim a load capacity, universal compatibility, stability rating, or material specification.",
+      "Do not imply the creator endorses this content or product."
+    ],
+    "blocked_phrases": [
+      "JOBY",
+      "best tripod",
+      "perfectly stable",
+      "works with every camera",
+      "universal compatibility",
+      "professional quality",
+      "must have",
+      "game changer",
+      "buy this",
+      "would you try",
+      "what would you rate"
+    ],
+    "editorial_direction": [
+      "Open with the difficulty of placing a camera when there is no useful flat surface.",
+      "Show the legs changing from a tabletop stance to a wrapped railing position.",
+      "Mention phone and action-camera mounts only while those mounts are visible.",
+      "Keep the narration observational and curiosity-led, not promotional.",
+      "Do not mention a brand, marketplace, price, rating, affiliate link, or license in narration.",
+      "End with a concrete filming use case instead of a viewer question or sales prompt."
+    ]
+  },
+  "score_signals": {
+    "visual_appeal": 86,
+    "problem_solving_value": 82,
+    "virality": 74,
+    "novelty": 70,
+    "competition_opportunity": 68,
+    "affiliate_potential": 62
+  },
+  "economics": {
+    "currency": "EUR",
+    "estimated_clicks": 0,
+    "conversion_rate": 0,
+    "commission_rate": 0,
+    "production_cost": 0
+  },
+  "media_candidates": [
+    {
+      "media_type": "video",
+      "source_provider": "wikimedia-commons",
+      "source_page_url": "https://commons.wikimedia.org/wiki/File:Gorillapod_-_unboxing_-_gear_-_Mobile_-_action_cam_-_dslr.webm",
+      "source_url": "https://upload.wikimedia.org/wikipedia/commons/9/9d/Gorillapod_-_unboxing_-_gear_-_Mobile_-_action_cam_-_dslr.webm",
+      "observed_at": "2026-07-27T14:30:00.000Z",
+      "observation_method": "manual",
+      "retrieval_method": "permitted_download",
+      "local_path": "data/runtime/product-video-agent/licensed-sources/gorillapod/gorillapod-cc-by-3.webm",
+      "content_sha256": "fd4f4a731776ec125895298b6dff3e576bd0cad3d77eb81d538e215a8f29f220",
+      "rights_status": "verified",
+      "rights_basis": "licensed",
+      "rights_evidence": "Wikimedia Commons records the source as Creative Commons Attribution 3.0 Unported and records a YouTubeReviewBot license confirmation dated 2020-02-14.",
+      "attribution_required": true,
+      "attribution_text": "\"Gorillapod - unboxing - gear - Mobile - action cam - dslr\" by Chirags workspace, CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/), cropped and edited.",
+      "approval_status": "approved",
+      "usage_scope": "publication",
+      "label": "Licensed flexible-tripod demonstration footage",
+      "page_position": 0,
+      "usage_notes": [
+        "The license permits sharing and adaptation, including commercial use, with attribution.",
+        "The eventual publication description must include the stored attribution text and source page URL.",
+        "Approval covers local editing and a publication candidate; it does not approve publishing."
+      ]
+    }
+  ],
+  "assets": [],
+  "affiliate": {
+    "provider": "none-test-fixture",
+    "destination_url": "https://commons.wikimedia.org/wiki/Category:Gorillapod",
+    "tracking_url": null
+  }
+}

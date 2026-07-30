@@ -20,21 +20,25 @@
 // current content is regardless — so the risk here is a stale-looking
 // preview, not a wrong send. Repointing DOES change which draftId gets sent
 // on approval, so the guard on (3) matters.
+import process from 'node:process';
 import { deleteGmailDraft, getGmailDraft, listGmailDraftsSummary } from '../../services/gmail/src/send.mjs';
 import { loadPersistedPendingTasks, removePersistedPendingTask, upsertPersistedPendingTask } from '../../services/discord-bot/src/pending-task-store.mjs';
 import { updateLead } from './leadgen-supabase.mjs';
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
-async function findApprovalMessage(config, taskId) {
+async function findApprovalMessage(config, taskId, fetchImpl = fetch) {
   // Outreach drafts live in #outreach-agent; generic /email-draft ones in
   // #approvals. Check both, newest first.
   const channelIds = [config.channelIds.outreachAgent, config.channelIds.approvals].filter(Boolean);
   for (const channelId of channelIds) {
     try {
-      const res = await fetch(`${DISCORD_API}/channels/${channelId}/messages?limit=50`, {
+      const res = await fetchImpl(`${DISCORD_API}/channels/${channelId}/messages?limit=100`, {
         headers: { Authorization: `Bot ${config.env.DISCORD_BOT_TOKEN}` },
       });
+      if (!res.ok) {
+        continue;
+      }
       const msgs = await res.json();
       const match = Array.isArray(msgs)
         ? msgs.find((m) => m.embeds?.[0]?.title?.includes(taskId) && m.embeds[0].title.includes('Approval Needed'))
@@ -49,10 +53,10 @@ async function findApprovalMessage(config, taskId) {
   return null;
 }
 
-async function markDiscordMessageSent(config, taskId) {
-  const found = await findApprovalMessage(config, taskId);
+async function markDiscordMessageSent(config, taskId, fetchImpl = fetch) {
+  const found = await findApprovalMessage(config, taskId, fetchImpl);
   if (!found) {
-    return false;
+    return { found: false, ok: true };
   }
   const original = found.message.embeds[0];
   const updatedEmbed = {
@@ -61,7 +65,7 @@ async function markDiscordMessageSent(config, taskId) {
     color: 0x57F287,
   };
   try {
-    await fetch(`${DISCORD_API}/channels/${found.channelId}/messages/${found.message.id}`, {
+    const response = await fetchImpl(`${DISCORD_API}/channels/${found.channelId}/messages/${found.message.id}`, {
       method: 'PATCH',
       headers: { Authorization: `Bot ${config.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -70,9 +74,15 @@ async function markDiscordMessageSent(config, taskId) {
         components: [], // remove the Send/Give-Feedback buttons
       }),
     });
-    return true;
-  } catch {
-    return false;
+    if (!response.ok) {
+      const errorText = typeof response.text === 'function' ? await response.text() : '';
+      process.stderr.write(`Discord manual-send reconciliation failed for ${taskId} (${response.status}): ${errorText}\n`);
+      return { found: true, ok: false };
+    }
+    return { found: true, ok: true };
+  } catch (error) {
+    process.stderr.write(`Discord manual-send reconciliation failed for ${taskId}: ${error.message}\n`);
+    return { found: true, ok: false };
   }
 }
 
@@ -89,7 +99,7 @@ function normalizeEmail(raw) {
 // Rewrites Subject / Body / Draft-id fields on an existing approval embed —
 // preserves color, title, description, and every other field/link. Keeps the
 // approval buttons intact (still waiting for the operator's click).
-function rewriteApprovalEmbedFields(originalEmbed, { subject, bodyText, draftId } = {}) {
+export function rewriteApprovalEmbedFields(originalEmbed, { subject, bodyText, draftId } = {}) {
   const fields = Array.isArray(originalEmbed.fields) ? originalEmbed.fields.slice() : [];
   const setField = (name, value) => {
     const idx = fields.findIndex((f) => f?.name === name);
@@ -111,14 +121,46 @@ function rewriteApprovalEmbedFields(originalEmbed, { subject, bodyText, draftId 
   return { ...originalEmbed, fields };
 }
 
-async function updateApprovalEmbedContent(config, taskId, { subject, bodyText, draftId, note } = {}) {
-  const found = await findApprovalMessage(config, taskId);
+function expectedBodyField(bodyText) {
+  return bodyText.length > 1024 ? `${bodyText.slice(0, 1021)}...` : bodyText;
+}
+
+function getEmbedFieldValue(embed, name) {
+  const field = Array.isArray(embed?.fields)
+    ? embed.fields.find((candidate) => candidate?.name === name)
+    : null;
+  return String(field?.value || '');
+}
+
+export function approvalEmbedNeedsSync(originalEmbed, { subject, bodyText, draftId } = {}) {
+  if (subject && getEmbedFieldValue(originalEmbed, 'Subject') !== subject) {
+    return true;
+  }
+  if (bodyText && getEmbedFieldValue(originalEmbed, 'Body') !== expectedBodyField(bodyText)) {
+    return true;
+  }
+  if (draftId && getEmbedFieldValue(originalEmbed, 'Draft') !== `\`${draftId}\``) {
+    return true;
+  }
+  return false;
+}
+
+async function updateApprovalEmbedContent(
+  config,
+  taskId,
+  { subject, bodyText, draftId, note } = {},
+  fetchImpl = fetch,
+) {
+  const found = await findApprovalMessage(config, taskId, fetchImpl);
   if (!found) {
-    return false;
+    return { found: false, ok: false, changed: false };
   }
   const original = found.message.embeds?.[0];
   if (!original) {
-    return false;
+    return { found: true, ok: false, changed: false };
+  }
+  if (!approvalEmbedNeedsSync(original, { subject, bodyText, draftId })) {
+    return { found: true, ok: true, changed: false };
   }
   const updatedEmbed = rewriteApprovalEmbedFields(original, { subject, bodyText, draftId });
   // Strip any previous edit stamp so we don't keep appending them across runs.
@@ -127,18 +169,24 @@ async function updateApprovalEmbedContent(config, taskId, { subject, bodyText, d
     .trim();
   const stamp = `**Edited in Gmail on ${new Date().toISOString().slice(0, 10)}${note ? ` — ${note}` : ' — preview updated.'}**`;
   try {
-    await fetch(`${DISCORD_API}/channels/${found.channelId}/messages/${found.message.id}`, {
+    const response = await fetchImpl(`${DISCORD_API}/channels/${found.channelId}/messages/${found.message.id}`, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${config.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bot ${config.env.DISCORD_BOT_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         content: stampedContent ? `${stampedContent}\n\n${stamp}` : stamp,
         embeds: [updatedEmbed, ...(found.message.embeds.slice(1) || [])],
         // Deliberately DO NOT touch components — approval buttons stay live.
       }),
     });
-    return true;
-  } catch {
-    return false;
+    if (!response.ok) {
+      const errorText = typeof response.text === 'function' ? await response.text() : '';
+      process.stderr.write(`Discord draft reconciliation failed for ${taskId} (${response.status}): ${errorText}\n`);
+      return { found: true, ok: false, changed: false };
+    }
+    return { found: true, ok: true, changed: true };
+  } catch (error) {
+    process.stderr.write(`Discord draft reconciliation failed for ${taskId}: ${error.message}\n`);
+    return { found: true, ok: false, changed: false };
   }
 }
 
@@ -186,9 +234,9 @@ function looksLikeEditedVersion(bodyText, task) {
 // Map<recipient_email_lowercased, Array<{id, subject, internalDate}>>.
 // Returns an empty Map on failure — callers treat that as "no supersessions
 // detected" and fall back to the in-place-edit path.
-async function buildDraftsByRecipient(config) {
+async function buildDraftsByRecipient(config, listDrafts = listGmailDraftsSummary) {
   try {
-    const summaries = await listGmailDraftsSummary(config.env, { maxResults: 200 });
+    const summaries = await listDrafts(config.env, { maxResults: 200 });
     const map = new Map();
     for (const s of summaries) {
       const key = normalizeEmail(s.to);
@@ -207,7 +255,7 @@ async function buildDraftsByRecipient(config) {
 // is (a) NEWER than the task's stored draft, (b) still to the same recipient,
 // and (c) looks like an edited version of ours (`looksLikeEditedVersion`).
 // Returns the id of the superseding draft, or null if none qualifies.
-async function findSupersedingDraft(config, task, draftsByRecipient) {
+async function findSupersedingDraft(config, task, draftsByRecipient, getDraft = getGmailDraft) {
   const recipient = normalizeEmail(task?.gmail_draft?.to || task?.email_request?.to);
   if (!recipient) return null;
   const candidates = (draftsByRecipient.get(recipient) || []).filter((d) => d.id !== task.gmail_draft.draftId);
@@ -224,7 +272,7 @@ async function findSupersedingDraft(config, task, draftsByRecipient) {
   // Pick the newest and verify content shape before repointing.
   newer.sort((a, b) => b.internalDate - a.internalDate);
   const best = newer[0];
-  const detail = await getGmailDraft(config.env, best.id).catch(() => null);
+  const detail = await getDraft(config.env, best.id).catch(() => null);
   if (!detail || !looksLikeEditedVersion(detail.bodyText, task)) return null;
   return { id: best.id, subject: detail.subject, bodyText: detail.bodyText, bodyPreview: detail.bodyPreview };
 }
@@ -234,13 +282,18 @@ async function findSupersedingDraft(config, task, draftsByRecipient) {
 //   edited    = still-pending drafts whose subject/body changed in place
 //   repointed = pending tasks whose stored draftId was superseded by a
 //               newer draft to the same recipient (mobile Gmail edit)
-export async function reconcileDrafts(config) {
+export async function reconcileDrafts(config, options = {}) {
   if (!config.env.DISCORD_BOT_TOKEN) {
     return { sent: 0, edited: 0, repointed: 0 };
   }
 
+  const fetchImpl = options.fetch || fetch;
+  const getDraft = options.getGmailDraft || getGmailDraft;
+  const listDrafts = options.listGmailDraftsSummary || listGmailDraftsSummary;
+  const deleteDraft = options.deleteGmailDraft || deleteGmailDraft;
+  const updateLeadRecord = options.updateLead || updateLead;
   const pending = loadPersistedPendingTasks(config).filter((t) => t?.gmail_draft?.draftId);
-  const draftsByRecipient = await buildDraftsByRecipient(config);
+  const draftsByRecipient = await buildDraftsByRecipient(config, listDrafts);
   let sent = 0;
   let edited = 0;
   let repointed = 0;
@@ -248,7 +301,7 @@ export async function reconcileDrafts(config) {
   for (const task of pending) {
     let current;
     try {
-      current = await getGmailDraft(config.env, task.gmail_draft.draftId);
+      current = await getDraft(config.env, task.gmail_draft.draftId);
     } catch {
       // Transient lookup failure — leave for the next run rather than guessing.
       continue;
@@ -258,12 +311,15 @@ export async function reconcileDrafts(config) {
       // Draft is gone → sent or deleted manually.
       if (task.lead_id) {
         try {
-          await updateLead(task.lead_id, { status: 'sent', sent_at: new Date().toISOString() });
+          await updateLeadRecord(task.lead_id, { status: 'sent', sent_at: new Date().toISOString() });
         } catch {
           // reconcilable later from ops metrics
         }
       }
-      await markDiscordMessageSent(config, task.task_id);
+      const discordResult = await markDiscordMessageSent(config, task.task_id, fetchImpl);
+      if (!discordResult.ok) {
+        continue;
+      }
       removePersistedPendingTask(config, task.task_id);
       sent += 1;
       continue;
@@ -274,22 +330,22 @@ export async function reconcileDrafts(config) {
     // the in-place diff means we correctly repoint even when the stored
     // draft's body is byte-identical to what we wrote (typical, since mobile
     // never wrote to the stored draft at all).
-    const superseding = await findSupersedingDraft(config, task, draftsByRecipient);
+    const superseding = await findSupersedingDraft(config, task, draftsByRecipient, getDraft);
     if (superseding) {
       const previousDraftId = task.gmail_draft.draftId;
-      syncPendingTaskContent(config, task, {
-        subject: superseding.subject,
-        bodyText: superseding.bodyText,
-        bodyPreview: superseding.bodyPreview,
-        draftId: superseding.id,
-      });
-      const patched = await updateApprovalEmbedContent(config, task.task_id, {
+      const patchResult = await updateApprovalEmbedContent(config, task.task_id, {
         subject: superseding.subject,
         bodyText: superseding.bodyText,
         draftId: superseding.id,
         note: 'edited via Gmail on mobile — repointed to the newer draft.',
-      });
-      if (patched) {
+      }, fetchImpl);
+      if (patchResult.ok) {
+        syncPendingTaskContent(config, task, {
+          subject: superseding.subject,
+          bodyText: superseding.bodyText,
+          bodyPreview: superseding.bodyPreview,
+          draftId: superseding.id,
+        });
         repointed += 1;
         // Repoint succeeded end-to-end; the previous draft is now an orphan
         // in the operator's Gmail (nothing in our pipeline references it,
@@ -297,7 +353,7 @@ export async function reconcileDrafts(config) {
         // clutter Gmail. Best-effort — if this fails Gmail is still safe
         // because the pending task already points at the current version.
         try {
-          await deleteGmailDraft(config.env, previousDraftId);
+          await deleteDraft(config.env, previousDraftId);
         } catch {
           // orphan deletion is a cleanup nicety, never critical
         }
@@ -317,24 +373,30 @@ export async function reconcileDrafts(config) {
     // wipe our stored preview.
     const bodyChanged = currentBody.length > 0 && currentBody !== storedBody;
 
-    if (!subjectChanged && !bodyChanged) {
-      continue;
-    }
-
     const nextSubject = subjectChanged ? current.subject : task.gmail_draft.subject;
     const nextBodyText = bodyChanged ? current.bodyText : task.gmail_draft.bodyText;
     const nextBodyPreview = bodyChanged ? current.bodyPreview : task.gmail_draft.bodyPreview;
 
-    syncPendingTaskContent(config, task, {
+    // Check Discord even when Gmail already matches the stored snapshot. A
+    // previous HTTP failure may have left the card stale after local state
+    // advanced; comparing the live embed makes that failure retryable.
+    const patchResult = await updateApprovalEmbedContent(config, task.task_id, {
       subject: nextSubject,
       bodyText: nextBodyText,
-      bodyPreview: nextBodyPreview,
-    });
-    const patched = await updateApprovalEmbedContent(config, task.task_id, {
-      subject: nextSubject,
-      bodyText: nextBodyText,
-    });
-    if (patched) {
+      draftId: task.gmail_draft.draftId,
+    }, fetchImpl);
+    if (!patchResult.ok) {
+      continue;
+    }
+
+    if (subjectChanged || bodyChanged) {
+      syncPendingTaskContent(config, task, {
+        subject: nextSubject,
+        bodyText: nextBodyText,
+        bodyPreview: nextBodyPreview,
+      });
+    }
+    if (subjectChanged || bodyChanged || patchResult.changed) {
       edited += 1;
     }
   }

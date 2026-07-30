@@ -139,10 +139,18 @@ function buildDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
   const unreachable = outcomes.filter((o) => o.status === 'site_unreachable').length;
   const extractionError = outcomes.filter((o) => o.status === 'extraction_error').length;
   const failed = outcomes.filter((o) => o.error).length;
-  const { redrafted = 0, reconciled = 0, editedInGmail = 0, repointedInGmail = 0, followedUp = 0, replyResult = null } = extras;
+  const {
+    redrafted = 0,
+    reconciled = 0,
+    editedInGmail = 0,
+    repointedInGmail = 0,
+    followedUp = 0,
+    replyResult = null,
+    outreachChannel = '#outreach-agent',
+  } = extras;
 
   const parts = [
-    drafted > 0 ? `**${drafted}** new draft(s) awaiting approval in #outreach-agent` : '',
+    drafted > 0 ? `**${drafted}** new draft(s) awaiting approval in ${outreachChannel}` : '',
     noEmail > 0 ? `**${noEmail}** qualified, no email` : '',
     rejected > 0 ? `**${rejected}** rejected (weak fit)` : '',
     unreachable > 0 ? `**${unreachable}** site unreachable` : '',
@@ -285,7 +293,17 @@ async function main() {
 
   await postDiscord(config, config.channelIds.leadQualificationAgent || config.channelIds.leadGeneration, buildNoticeDiscordPayload({
     title: label,
-    description: buildDigest(outcomes, backlog, openDrafts, { redrafted, reconciled, editedInGmail, repointedInGmail, followedUp, replyResult }),
+    description: buildDigest(outcomes, backlog, openDrafts, {
+      redrafted,
+      reconciled,
+      editedInGmail,
+      repointedInGmail,
+      followedUp,
+      replyResult,
+      outreachChannel: config.channelIds.outreachAgent
+        ? `<#${config.channelIds.outreachAgent}>`
+        : '#outreach-agent',
+    }),
     color: 0x5865F2,
     footerText: 'ORION night shift',
   }));
