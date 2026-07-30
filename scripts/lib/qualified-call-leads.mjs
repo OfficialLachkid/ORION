@@ -88,7 +88,7 @@ export async function postQualifiedCallLeads({
         ? 'Qualified Call Leads'
         : `Qualified Call Leads — Continued (${pageIndex + 1}/${descriptions.length})`,
       description: descriptions[pageIndex],
-      color: 0xFEE75C,
+      color: 0x5865F2,
       footerText: 'ORION lead qualification',
     });
     if (pageIndex > 0 && firstMessage?.id) {

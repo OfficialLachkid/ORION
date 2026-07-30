@@ -254,6 +254,7 @@ test('qualified call leads paginate and reply to their first thread message', as
   assert.ok(payloads.every((payload) => (
     payload.embeds[0].description.length <= DISCORD_EMBED_DESCRIPTION_BUDGET
   )));
+  assert.ok(payloads.every((payload) => payload.embeds[0].color === 0x5865F2));
   for (const payload of payloads.slice(1)) {
     assert.deepEqual(payload.message_reference, {
       message_id: 'no-email-first',
