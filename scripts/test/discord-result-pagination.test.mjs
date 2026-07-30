@@ -192,7 +192,7 @@ test('qualified call leads keep website, phone, KVK, and fit details', () => {
     status: 'qualified_no_email',
     contactPhone: '+31 (0)23 123 45 67',
     kvkNumber: '12345678',
-    offer_angle: 'Website conversion improvement',
+    offer_angle: 'website_builder',
   }, {
     lead: 'No Phone Plumbing',
     sourceUrl: 'https://example.com/no-phone',
@@ -209,8 +209,9 @@ test('qualified call leads keep website, phone, KVK, and fit details', () => {
   assert.equal(pages.length, 1);
   assert.match(combined, /\[Haarlem Plumbing BV\]\(https:\/\/example\.com\/haarlem-plumbing\)/u);
   assert.match(combined, /\[\+31 \(0\)23 123 45 67\]\(tel:\+31231234567\)/u);
-  assert.match(combined, /copy: `\+31 \(0\)23 123 45 67`/u);
+  assert.doesNotMatch(combined, /copy:/u);
   assert.match(combined, /KVK: `12345678`/u);
+  assert.match(combined, /Fit: New website/u);
   assert.match(combined, /No public phone found/u);
   assert.doesNotMatch(combined, /permission to call|verify legal form|eligibility/iu);
   assert.equal(normalizePhoneForTel('0031 23 123 45 67'), '+31231234567');

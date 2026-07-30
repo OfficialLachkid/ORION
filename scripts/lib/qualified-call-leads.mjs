@@ -29,15 +29,23 @@ function formatPhone(value) {
     return '**No public phone found**';
   }
 
-  const copyValue = phone.replace(/`/gu, "'");
-  return `[${phone}](tel:${telTarget}) · copy: \`${copyValue}\``;
+  return `[${phone}](tel:${telTarget})`;
+}
+
+function formatFit(value) {
+  const fit = String(value || '').trim();
+  if (fit.toLowerCase() === 'website_builder') {
+    return 'New website';
+  }
+
+  return fit || 'Qualified fit; review the saved qualification details';
 }
 
 function renderCandidate(outcome) {
   const company = outcome.sourceUrl
     ? `[${outcome.lead}](${outcome.sourceUrl})`
     : outcome.lead;
-  const angle = outcome.offer_angle || 'Qualified fit; review the saved qualification details';
+  const angle = formatFit(outcome.offer_angle);
   const kvk = outcome.kvkNumber ? `\n  KVK: \`${outcome.kvkNumber}\`` : '';
 
   return `- ${company}\n  Phone: ${formatPhone(outcome.contactPhone)}${kvk}\n  Fit: ${angle}`;
