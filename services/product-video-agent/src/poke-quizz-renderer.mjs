@@ -22,6 +22,9 @@ const DEFAULT_COUNTDOWN_VOLUME = 0.72;
 const DEFAULT_TIMER_END_VOLUME = 0.9;
 const DEFAULT_REVEAL_TRANSITION_SECONDS = 0.42;
 const DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER = 1.2;
+const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.55;
+const DEFAULT_TYPE_ICON_HOOK_Y = 620;
+const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.58;
 const DEFAULT_FONT_CANDIDATES = [
   '/System/Library/Fonts/Supplemental/Avenir Next.ttc',
   '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
@@ -140,6 +143,14 @@ function buildAnimatedTextYExpression(baseY, startSeconds) {
   return `${baseY}+if(lt(t,${settleEnd}),(1-((t-${start})/0.32))*18*sin((t-${start})*20),0)`;
 }
 
+function buildAnimatedLerpExpression({ fromValue, toValue, holdUntilSeconds, transitionDurationSeconds }) {
+  const start = roundTime(holdUntilSeconds);
+  const duration = roundTime(Math.max(0.12, transitionDurationSeconds));
+  const end = roundTime(start + duration);
+  const progress = `min(max((t-${start})/${duration},0),1)`;
+  return `if(lt(t,${start}),${fromValue},if(lt(t,${end}),${fromValue}+((${toValue}-${fromValue})*${progress}),${toValue}))`;
+}
+
 function buildTextLineArtifacts(text, { template, fontSize, maxLines, baseY }) {
   const wrapped = wrapTextBlock(text, {
     maxCharactersPerLine: estimateWrapCharacterLimit(template, fontSize),
@@ -193,6 +204,23 @@ export function buildTypeIconLayout(template, count = 2) {
   }));
 }
 
+export function buildHookTypeIconLayout(template, count = 2) {
+  const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
+  const baseSpacing = ensureNumber(template?.layout?.type_icons?.spacing_px, 28);
+  const iconSize = Math.round(
+    ensureNumber(template?.layout?.type_icons?.icon_size_px, 168) * DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER,
+  );
+  const spacing = Math.max(60, Math.round(baseSpacing * 1.35));
+  const totalWidth = (count * iconSize) + (Math.max(0, count - 1) * spacing);
+  const startX = Math.floor((canvasWidth - totalWidth) / 2);
+  return Array.from({ length: count }, (_, index) => ({
+    x: startX + (index * (iconSize + spacing)),
+    y: DEFAULT_TYPE_ICON_HOOK_Y,
+    width: iconSize,
+    height: iconSize,
+  }));
+}
+
 export function buildTimerLayout(template) {
   const safeZone = template?.canvas?.safe_zone || {};
   const safeTop = ensureNumber(safeZone.top, 160);
@@ -234,6 +262,7 @@ export function buildCountdownMoments(schedule, countdownFrom, countdownTo = 0) 
 export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const schedule = buildPhaseSchedule(plan.timeline);
   const typeIconLayout = buildTypeIconLayout(template, plan.assets.type_icons.length);
+  const typeIconIntroLayout = buildHookTypeIconLayout(template, plan.assets.type_icons.length);
   const timerLayout = buildTimerLayout(template);
   const countdownPhase = schedule.phases.countdown || { start_seconds: 0, end_seconds: 0 };
   const revealPhase = schedule.phases.reveal || { start_seconds: schedule.total_duration_seconds, end_seconds: schedule.total_duration_seconds };
@@ -246,6 +275,15 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       Math.max(0.36, ensureNumber(revealPhase.duration_seconds, 2.4) * 0.18),
     ),
   );
+  const typeIconSettleDuration = roundTime(
+    Math.min(
+      0.82,
+      Math.max(
+        DEFAULT_TYPE_ICON_SETTLE_SECONDS,
+        ensureNumber(schedule.phases.type_prompt?.duration_seconds, 1.6) * 0.36,
+      ),
+    ),
+  );
   return {
     canvas: {
       width: ensureNumber(template?.canvas?.width, 1080),
@@ -255,6 +293,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     phases: schedule.phases,
     total_duration_seconds: schedule.total_duration_seconds,
     type_icon_layout: typeIconLayout,
+    type_icon_intro_layout: typeIconIntroLayout,
     timer_layout: timerLayout,
     countdown_numbers: buildCountdownMoments(
       schedule,
@@ -263,6 +302,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     ),
     transitions: {
       reveal_cross_scale_seconds: revealTransitionDuration || DEFAULT_REVEAL_TRANSITION_SECONDS,
+      type_icon_settle_seconds: typeIconSettleDuration || DEFAULT_TYPE_ICON_SETTLE_SECONDS,
     },
     grid: plan.assets.overlays?.pokeball_grid || { cells: [], item_count: 0, columns: 0, rows: 0 },
     audio_cues: {
@@ -312,14 +352,14 @@ function buildVisualInputs(plan, renderPlan) {
   inputs.push({
     role: 'timer-countdown',
     path: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
-    args: ['-stream_loop', '-1', '-ignore_loop', '0', '-t', String(totalDuration), '-i', plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path],
+    args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path],
   });
 
   if (plan.assets.overlays.selected_timer_alarm_path) {
     inputs.push({
       role: 'timer-alarm',
       path: plan.assets.overlays.selected_timer_alarm_path,
-      args: ['-stream_loop', '-1', '-ignore_loop', '0', '-t', String(totalDuration), '-i', plan.assets.overlays.selected_timer_alarm_path],
+      args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_alarm_path],
     });
   }
 
@@ -357,9 +397,39 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
   for (let index = 0; index < plan.assets.type_icons.length; index += 1) {
     const iconLabel = safeFilterLabel('type', index);
     const position = renderPlan.type_icon_layout[index];
-    filters.push(`[${inputRefs.typeIcons[index]}:v]scale=${position.width}:${position.height}:force_original_aspect_ratio=decrease,setsar=1[${iconLabel}]`);
+    const introPosition = renderPlan.type_icon_intro_layout[index] || position;
+    const settleDuration = ensureNumber(
+      renderPlan.transitions?.type_icon_settle_seconds,
+      DEFAULT_TYPE_ICON_SETTLE_SECONDS,
+    );
+    const iconSettleStart = ensureNumber(renderPlan.phases.type_prompt?.start_seconds, 0);
+    const sizeExpression = buildAnimatedLerpExpression({
+      fromValue: introPosition.width,
+      toValue: position.width,
+      holdUntilSeconds: iconSettleStart,
+      transitionDurationSeconds: settleDuration,
+    });
+    const finalCenterX = position.x + Math.floor(position.width / 2);
+    const finalCenterY = position.y + Math.floor(position.height / 2);
+    const introCenterX = introPosition.x + Math.floor(introPosition.width / 2);
+    const introCenterY = introPosition.y + Math.floor(introPosition.height / 2);
+    const iconCenterXExpression = buildAnimatedLerpExpression({
+      fromValue: introCenterX,
+      toValue: finalCenterX,
+      holdUntilSeconds: iconSettleStart,
+      transitionDurationSeconds: settleDuration,
+    });
+    const iconCenterYExpression = buildAnimatedLerpExpression({
+      fromValue: introCenterY,
+      toValue: finalCenterY,
+      holdUntilSeconds: iconSettleStart,
+      transitionDurationSeconds: settleDuration,
+    });
     filters.push(
-      `[v${index}][${iconLabel}]overlay=${position.x}:${position.y}:enable='${formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      `[${inputRefs.typeIcons[index]}:v]scale=w='${sizeExpression}':h='${sizeExpression}':eval=frame:force_original_aspect_ratio=decrease,setsar=1[${iconLabel}]`,
+    );
+    filters.push(
+      `[v${index}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
     );
   }
 
@@ -375,8 +445,11 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
   const pokeballStaticLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbs', index));
   const pokeballTransitionLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbt', index));
   const timerSourceDuration = Math.max(
-    countdownDuration,
-    ensureNumber(plan.assets.overlays?.selected_timer_countdown_duration_seconds, plan.assets.overlays?.selected_timer_duration_seconds ?? countdownDuration),
+    0.12,
+    ensureNumber(
+      plan.assets.overlays?.selected_timer_countdown_duration_seconds,
+      plan.assets.overlays?.selected_timer_duration_seconds ?? countdownDuration,
+    ),
   );
   const timerSetpts = timerSourceDuration > 0
     ? `(PTS-STARTPTS)*${roundTime(countdownDuration / timerSourceDuration)}+${countdownStart}/TB`

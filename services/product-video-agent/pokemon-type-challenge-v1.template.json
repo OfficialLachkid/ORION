@@ -117,15 +117,15 @@
       "count_basis": "compatible_amount_capped_to_9",
       "max_items": 9,
       "max_columns": 3,
-      "item_size_px": 180,
+      "item_size_px": 270,
       "column_gap_px": 28,
       "row_gap_px": 28,
       "anchor": "canvas_middle",
       "stage_bounds_px": {
-        "left": 120,
-        "top": 620,
-        "width": 840,
-        "height": 760
+        "left": 100,
+        "top": 680,
+        "width": 880,
+        "height": 900
       }
     },
     "timer": {

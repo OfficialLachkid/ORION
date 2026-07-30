@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildCountdownMoments,
   buildAudioFilterScript,
+  buildHookTypeIconLayout,
   escapeDrawtextText,
   formatEnableBetween,
   buildPhaseSchedule,
@@ -102,6 +103,12 @@ test('type icon layout stays centered in the upper middle', () => {
   assert.deepEqual(layout[1], { x: 561, y: 320, width: 252, height: 252 });
 });
 
+test('hook type icon layout starts larger and centered before settling', () => {
+  const layout = buildHookTypeIconLayout(template, 2);
+  assert.deepEqual(layout[0], { x: 119, y: 620, width: 391, height: 391 });
+  assert.deepEqual(layout[1], { x: 570, y: 620, width: 391, height: 391 });
+});
+
 test('timer layout stays top-left with centered number anchors', () => {
   const layout = buildTimerLayout(template);
   assert.equal(layout.x, 30);
@@ -129,6 +136,8 @@ test('render plan derives battle-music lead-in and preserves grid geometry', () 
   assert.equal(renderPlan.audio_cues.reveal_start_seconds, 7.8);
   assert.equal(renderPlan.audio_cues.battle_music_start_seconds, 0);
   assert.equal(renderPlan.grid.cells.length, 6);
+  assert.equal(renderPlan.type_icon_intro_layout[0].width > renderPlan.type_icon_layout[0].width, true);
+  assert.equal(renderPlan.transitions.type_icon_settle_seconds, 0.58);
   assert.equal(renderPlan.output_path.endsWith('grass-poison-preview.mp4'), true);
 });
 
