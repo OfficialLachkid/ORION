@@ -1,0 +1,74 @@
+{
+  "channels": [
+    {
+      "id": "video-channel-poke-quizz-youtube",
+      "name": "Poke Quizz",
+      "niche": "pokemon_quiz",
+      "content_lane": "poke-quizz",
+      "platform": "youtube_shorts",
+      "account_key": "poke-quizz-youtube",
+      "language": "en-US",
+      "timezone": "Europe/Amsterdam",
+      "status": "active",
+      "schedule_slots": [
+        { "hour": 8, "minute": 0 },
+        { "hour": 12, "minute": 0 },
+        { "hour": 16, "minute": 0 }
+      ],
+      "workflow": {
+        "preview_visibility": "unlisted",
+        "publish_visibility": "public",
+        "require_preview_approval": true,
+        "require_publish_approval": true,
+        "delete_preview_on_reject": true
+      },
+      "youtube": {
+        "channel_id": "",
+        "default_category_id": "24",
+        "oauth_client_secret_path": "config/youtube/client-secret.json",
+        "oauth_refresh_token_env": "YOUTUBE_POKE_QUIZZ_REFRESH_TOKEN"
+      },
+      "metadata": {
+        "title_generation_model": "local_ollama",
+        "description_generation_model": "local_ollama",
+        "review_channel": "orion-review",
+        "render_channel": "orion-renders"
+      }
+    },
+    {
+      "id": "video-channel-techy-gadgets-youtube",
+      "name": "Techy Gadgets",
+      "niche": "gadgets",
+      "content_lane": "product-discovery",
+      "platform": "youtube_shorts",
+      "account_key": "techy-gadgets-youtube",
+      "language": "en-US",
+      "timezone": "Europe/Amsterdam",
+      "status": "paused",
+      "schedule_slots": [
+        { "hour": 8, "minute": 0 },
+        { "hour": 12, "minute": 0 },
+        { "hour": 16, "minute": 0 }
+      ],
+      "workflow": {
+        "preview_visibility": "unlisted",
+        "publish_visibility": "public",
+        "require_preview_approval": true,
+        "require_publish_approval": true,
+        "delete_preview_on_reject": true
+      },
+      "youtube": {
+        "channel_id": "",
+        "default_category_id": "28",
+        "oauth_client_secret_path": "config/youtube/client-secret.json",
+        "oauth_refresh_token_env": "YOUTUBE_TECHY_GADGETS_REFRESH_TOKEN"
+      },
+      "metadata": {
+        "title_generation_model": "local_ollama",
+        "description_generation_model": "local_ollama",
+        "review_channel": "orion-review",
+        "render_channel": "orion-renders"
+      }
+    }
+  ]
+}

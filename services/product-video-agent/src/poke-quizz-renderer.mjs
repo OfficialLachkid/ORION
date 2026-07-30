@@ -6,9 +6,7 @@ const DEFAULT_HOOK_TEXT_Y = 150;
 const DEFAULT_PROMPT_TEXT_Y = 170;
 const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
-const DEFAULT_TIMER_SIZE = 360;
-const DEFAULT_TIMER_MARGIN_TOP = 20;
-const DEFAULT_TIMER_LEFT_OFFSET = 72;
+const DEFAULT_TIMER_SIZE = 300;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
 const DEFAULT_HOOK_FONT_SIZE = 138;
 const DEFAULT_PROMPT_FONT_SIZE = 81;
@@ -246,20 +244,61 @@ export function buildHookTypeIconLayout(template, count = 2) {
   }));
 }
 
-export function buildTimerLayout(template) {
+export function buildTimerLayout(template, gridLayout = null) {
   const safeZone = template?.canvas?.safe_zone || {};
   const safeTop = ensureNumber(safeZone.top, 160);
-  const safeLeft = ensureNumber(safeZone.left, 100);
-  const size = DEFAULT_TIMER_SIZE;
-  const left = Math.max(30, safeLeft - DEFAULT_TIMER_LEFT_OFFSET);
+  const gridStage = gridLayout?.stage_bounds_px || template?.layout?.pokeball_grid?.stage_bounds_px || {};
+  const gridTop = ensureNumber(gridStage.top, safeTop + 560);
+  const gridLeft = ensureNumber(gridStage.left, 40);
+  const gridItemSize = ensureNumber(
+    gridLayout?.item_size_px,
+    ensureNumber(template?.layout?.pokeball_grid?.item_size_px, 240),
+  );
+  const size = Math.round(Math.max(DEFAULT_TIMER_SIZE, gridItemSize * 1.22));
+  const left = Math.max(24, gridLeft + 20);
+  const top = Math.max(safeTop + 110, gridTop - Math.round(size * 0.98));
   return {
     x: left,
-    y: safeTop + DEFAULT_TIMER_MARGIN_TOP,
+    y: top,
     width: size,
     height: size,
     number_center_x: left + Math.floor(size / 2),
-    number_center_y: safeTop + DEFAULT_TIMER_MARGIN_TOP + Math.floor(size / 2),
+    number_center_y: top + Math.floor(size / 2),
   };
+}
+
+function buildCountdownNumberScaleMultiplierExpression(startSeconds, endSeconds) {
+  const start = roundTime(startSeconds);
+  const end = roundTime(endSeconds);
+  const duration = roundTime(Math.max(0.18, end - start));
+  const popDuration = roundTime(Math.min(0.24, Math.max(0.16, duration * 0.28)));
+  const peak = roundTime(start + (popDuration * 0.58));
+  const settle = roundTime(start + popDuration);
+  const outroDuration = roundTime(Math.min(0.18, Math.max(0.12, duration * 0.2)));
+  const outroStart = roundTime(Math.max(settle, end - outroDuration));
+  return `if(lt(t,${start}),0.78,if(lt(t,${peak}),0.78+((t-${start})/${roundTime(peak - start)})*0.44,if(lt(t,${settle}),1.22-((t-${peak})/${roundTime(settle - peak)})*0.22,if(lt(t,${outroStart}),1,if(lt(t,${end}),1-((t-${outroStart})/${outroDuration})*0.1,0.9)))))`;
+}
+
+function buildCountdownNumberAlphaExpression(startSeconds, endSeconds) {
+  const start = roundTime(startSeconds);
+  const end = roundTime(endSeconds);
+  const duration = roundTime(Math.max(0.18, end - start));
+  const fadeInDuration = roundTime(Math.min(0.16, Math.max(0.08, duration * 0.18)));
+  const fadeOutDuration = roundTime(Math.min(0.12, Math.max(0.08, duration * 0.14)));
+  const fadeInEnd = roundTime(start + fadeInDuration);
+  const fadeOutStart = roundTime(Math.max(fadeInEnd, end - fadeOutDuration));
+  return `if(lt(t,${start}),0,if(lt(t,${fadeInEnd}),(t-${start})/${fadeInDuration},if(lt(t,${fadeOutStart}),1,if(lt(t,${end}),(${end}-t)/${fadeOutDuration},0))))`;
+}
+
+function buildCountdownNumberYExpression(baseY, startSeconds, endSeconds) {
+  const start = roundTime(startSeconds);
+  const end = roundTime(endSeconds);
+  const duration = roundTime(Math.max(0.18, end - start));
+  const introDuration = roundTime(Math.min(0.22, Math.max(0.14, duration * 0.24)));
+  const outroDuration = roundTime(Math.min(0.18, Math.max(0.1, duration * 0.18)));
+  const introEnd = roundTime(start + introDuration);
+  const outroStart = roundTime(Math.max(introEnd, end - outroDuration));
+  return `${baseY}+if(lt(t,${introEnd}),(${introEnd}-t)/${introDuration}*20,if(lt(t,${outroStart}),sin((t-${start})*14)*2,-((t-${outroStart})/${outroDuration})*12))`;
 }
 
 export function buildCountdownMoments(schedule, countdownFrom, countdownTo = 0) {
@@ -288,7 +327,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const schedule = buildPhaseSchedule(plan.timeline);
   const typeIconLayout = buildTypeIconLayout(template, plan.assets.type_icons.length);
   const typeIconIntroLayout = buildHookTypeIconLayout(template, plan.assets.type_icons.length);
-  const timerLayout = buildTimerLayout(template);
+  const timerLayout = buildTimerLayout(template, plan.assets.overlays?.pokeball_grid || null);
   const countdownPhase = schedule.phases.countdown || { start_seconds: 0, end_seconds: 0 };
   const revealPhase = schedule.phases.reveal || { start_seconds: schedule.total_duration_seconds, end_seconds: schedule.total_duration_seconds };
   const configuredBattleMusicStartSeconds = roundTime(
@@ -610,8 +649,12 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     );
   }
   for (const countdown of renderPlan.countdown_numbers) {
+    const scaleMultiplierExpression = buildCountdownNumberScaleMultiplierExpression(
+      countdown.start_seconds,
+      countdown.end_seconds,
+    );
     drawtextParts.push(
-      `drawtext=text='${escapeDrawtextText(countdown.value)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_TIMER_NUMBER_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=${renderPlan.timer_layout.number_center_x}-text_w/2:y=${renderPlan.timer_layout.number_center_y}-text_h/2:enable='${formatEnableBetween(countdown.start_seconds, countdown.end_seconds)}'`,
+      `drawtext=text='${escapeDrawtextText(countdown.value)}'${fontPart}:fontcolor=white:fontsize='${DEFAULT_TIMER_NUMBER_SIZE}*(${scaleMultiplierExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=${renderPlan.timer_layout.number_center_x}-text_w/2:y='${buildCountdownNumberYExpression(renderPlan.timer_layout.number_center_y, countdown.start_seconds, countdown.end_seconds)}-text_h/2':alpha='${buildCountdownNumberAlphaExpression(countdown.start_seconds, countdown.end_seconds)}':enable='${formatEnableBetween(countdown.start_seconds, countdown.end_seconds)}'`,
     );
   }
 

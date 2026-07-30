@@ -31,6 +31,15 @@ const template = {
       spacing_px: 42,
       icon_size_px: 252,
     },
+    pokeball_grid: {
+      item_size_px: 300,
+      stage_bounds_px: {
+        left: 20,
+        top: 760,
+        width: 1040,
+        height: 1040,
+      },
+    },
     timer: {
       countdown_from: 5,
       countdown_to: 0,
@@ -109,14 +118,22 @@ test('hook type icon layout starts larger and centered before settling', () => {
   assert.deepEqual(layout[1], { x: 570, y: 620, width: 391, height: 391 });
 });
 
-test('timer layout stays top-left with centered number anchors', () => {
-  const layout = buildTimerLayout(template);
-  assert.equal(layout.x, 30);
-  assert.equal(layout.y, 180);
-  assert.equal(layout.width, 360);
-  assert.equal(layout.height, 360);
-  assert.equal(layout.number_center_x, 210);
-  assert.equal(layout.number_center_y, 360);
+test('timer layout sits above the pokeball grid with centered number anchors', () => {
+  const layout = buildTimerLayout(template, {
+    item_size_px: 300,
+    stage_bounds_px: {
+      left: 20,
+      top: 760,
+      width: 1040,
+      height: 1040,
+    },
+  });
+  assert.equal(layout.x, 40);
+  assert.equal(layout.y, 401);
+  assert.equal(layout.width, 366);
+  assert.equal(layout.height, 366);
+  assert.equal(layout.number_center_x, 223);
+  assert.equal(layout.number_center_y, 584);
 });
 
 test('countdown moments include the 0 card at reveal time', () => {
@@ -138,6 +155,7 @@ test('render plan derives battle-music lead-in and preserves grid geometry', () 
   assert.equal(renderPlan.grid.cells.length, 6);
   assert.equal(renderPlan.type_icon_intro_layout[0].width > renderPlan.type_icon_layout[0].width, true);
   assert.equal(renderPlan.transitions.type_icon_settle_seconds, 0.256);
+  assert.equal(renderPlan.timer_layout.y < renderPlan.grid.cells[0].y, true);
   assert.equal(renderPlan.output_path.endsWith('grass-poison-preview.mp4'), true);
 });
 

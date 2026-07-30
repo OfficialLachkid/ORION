@@ -113,16 +113,16 @@
       "count_basis": "compatible_amount_capped_to_9",
       "max_items": 9,
       "max_columns": 3,
-      "item_size_px": 270,
-      "overlay_scale_multiplier": 1,
-      "column_gap_px": 60,
-      "row_gap_px": 80,
+      "item_size_px": 300,
+      "overlay_scale_multiplier": 1.2,
+      "column_gap_px": 70,
+      "row_gap_px": 90,
       "anchor": "canvas_middle",
       "stage_bounds_px": {
-        "left": 60,
-        "top": 620,
-        "width": 960,
-        "height": 900
+        "left": 20,
+        "top": 760,
+        "width": 1040,
+        "height": 1040
       }
     },
     "timer": {

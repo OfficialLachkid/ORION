@@ -25,7 +25,7 @@ import { runLocalProcess } from '../src/process-runner.mjs';
 import { resolveFfmpegExecutable } from '../src/runtime-executables.mjs';
 
 function parseGenerationList(input) {
-  return String(input || '1,2,3,4,5')
+  return String(input || '1,2,3,4,5,6')
     .split(',')
     .map((value) => Number.parseInt(value.trim(), 10))
     .filter((value) => Number.isFinite(value) && value > 0);
@@ -235,7 +235,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       'Usage: node services/product-video-agent/scripts/localize-poke-quizz-assets.mjs [options]',
       '',
       'Options:',
-      '  --generations <csv>       Generations to fetch and localize. Default: 1,2,3,4,5',
+      '  --generations <csv>       Generations to fetch and localize. Default: 1,2,3,4,5,6',
       '  --persist-supabase        Upsert localized rows back into Supabase `pokedex`',
       '  --limit <n>               Optional row limit for testing',
       '  --write-json <path>       Write a localization report JSON under the repo root',
@@ -248,7 +248,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   const runtimeEnv = Object.fromEntries(
     Object.entries(runtimeConfig.env || {}).map(([key, value]) => [key, parseDotEnvValue(value)]),
   );
-  const generations = parseGenerationList(getStringOption(options, 'generations', '1,2,3,4,5'));
+  const generations = parseGenerationList(getStringOption(options, 'generations', '1,2,3,4,5,6'));
   const rows = [];
   for (const generation of generations) {
     const fetched = await fetchSerebiiPokedex({ generation });

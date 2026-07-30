@@ -6,6 +6,7 @@ import {
   parseSerebiiGen3Pokedex,
   parseSerebiiGen4Pokedex,
   parseSerebiiGen5Pokedex,
+  parseSerebiiGen6Pokedex,
 } from '../src/pokedex-source.mjs';
 
 const SAMPLE_GEN1_HTML = `
@@ -137,6 +138,24 @@ const SAMPLE_GEN5_HTML = `
 </table>
 `;
 
+const SAMPLE_GEN6_HTML = `
+<table class="dextable" align="center">
+  <tr>
+    <td align="center" class="fooinfo">#0700</td>
+    <td align="center" class="fooinfo"><table class="pkmn"><tr><td><a href="/pokemon/sylveon"><img src="/scarletviolet/pokemon/new/small/700.png" loading="lazy" style="height:120px" /></a></td></tr></table></td>
+    <td align="center" class="fooinfo"><a href="/pokemon/sylveon">Sylveon</a></td>
+    <td align="center" class="fooinfo"><a href="/pokemon/type/fairy"><img src="/pokedex-bw/type/fairy.gif" /></a></td>
+    <td align="center" class="fooinfo"><a href="/abilitydex/cutecharm.shtml">Cute Charm</a> <br /><a href="/abilitydex/pixilate.shtml">Pixilate</a></td>
+    <td align="center" class="fooinfo">95</td>
+    <td align="center" class="fooinfo">65</td>
+    <td align="center" class="fooinfo">65</td>
+    <td align="center" class="fooinfo">110</td>
+    <td align="center" class="fooinfo">130</td>
+    <td align="center" class="fooinfo">60</td>
+  </tr>
+</table>
+`;
+
 test('Serebii Gen 1 parser emits truth-only pokedex rows', () => {
   const rows = parseSerebiiGen1Pokedex(SAMPLE_GEN1_HTML);
 
@@ -201,4 +220,16 @@ test('Serebii Gen 5 parser emits Unova rows with dual types', () => {
     'https://www.serebii.net/pokedex-bw/type/ground.gif',
     'https://www.serebii.net/pokedex-bw/type/dark.gif',
   ]);
+});
+
+test('Serebii Gen 6 parser emits Kalos rows with grounded type icons', () => {
+  const rows = parseSerebiiGen6Pokedex(SAMPLE_GEN6_HTML);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].generation, 6);
+  assert.equal(rows[0].region, 'kalos');
+  assert.equal(rows[0].metadata.typing_basis, 'current_canonical_types_from_serebii_gen6_page');
+  assert.equal(rows[0].sprite_source_url, 'https://www.serebii.net/scarletviolet/pokemon/new/small/700.png');
+  assert.deepEqual(rows[0].types, ['fairy']);
+  assert.deepEqual(rows[0].metadata.abilities, ['Cute Charm', 'Pixilate']);
 });
