@@ -3,7 +3,7 @@
 import process from 'node:process';
 import { loadRuntimeConfig } from '../services/lib/runtime-config.mjs';
 import { fetchLeads, updateLead } from './lib/leadgen-supabase.mjs';
-import { postQualifiedNoEmailReview } from './lib/qualified-no-email-review.mjs';
+import { postQualifiedCallLeads } from './lib/qualified-call-leads.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 
@@ -40,13 +40,13 @@ async function main() {
     ? Math.max(1, Math.min(requestedLimit, 1000))
     : 500;
   const dryRun = hasFlag('--dry-run');
-  const threadId = config.channelIds.qualifiedNoEmailReview;
+  const threadId = config.channelIds.qualifiedCallLeads;
   const leads = await fetchLeads({
     status: 'qualified_no_email',
     limit,
     order: 'oldest',
   });
-  const pending = leads.filter((lead) => !lead.qualification?.no_email_review_posted_at);
+  const pending = leads.filter((lead) => !lead.qualification?.qualified_call_leads_posted_at);
 
   if (dryRun) {
     process.stdout.write(`${JSON.stringify({
@@ -58,10 +58,10 @@ async function main() {
   }
 
   if (!threadId || !config.env.DISCORD_BOT_TOKEN) {
-    throw new Error('Set DISCORD_QUALIFIED_NO_EMAIL_THREAD_ID before posting the review backlog.');
+    throw new Error('Set DISCORD_QUALIFIED_CALL_LEADS_THREAD_ID before posting the call-leads backlog.');
   }
   if (pending.length === 0) {
-    process.stdout.write('No unposted qualified-no-email leads found.\n');
+    process.stdout.write('No unposted qualified call leads found.\n');
     return;
   }
 
@@ -73,7 +73,7 @@ async function main() {
     kvkNumber: lead.kvk_number || '',
     offer_angle: lead.qualification?.offer_angle || '',
   }));
-  const firstMessage = await postQualifiedNoEmailReview({
+  const firstMessage = await postQualifiedCallLeads({
     channelId: threadId,
     outcomes,
     postMessage: (payload) => postToChannel(config, threadId, payload),
@@ -87,9 +87,9 @@ async function main() {
     await updateLead(lead.id, {
       qualification: {
         ...(lead.qualification || {}),
-        no_email_review_posted_at: postedAt,
-        no_email_review_thread_id: threadId,
-        no_email_review_message_id: firstMessage.id,
+        qualified_call_leads_posted_at: postedAt,
+        qualified_call_leads_thread_id: threadId,
+        qualified_call_leads_message_id: firstMessage.id,
       },
     });
   }
@@ -103,6 +103,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  process.stderr.write(`Qualified no-email review post failed: ${error.message}\n`);
+  process.stderr.write(`Qualified call-leads post failed: ${error.message}\n`);
   process.exitCode = 1;
 });

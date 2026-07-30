@@ -41,7 +41,7 @@ function renderOutcome(outcome) {
 export function buildLeadQualificationDescriptions({
   outcomes,
   outreachChannel,
-  qualifiedNoEmailReviewChannel = '',
+  qualifiedCallLeadsChannel = '',
   runTitle,
   runDate = new Date(),
 }) {
@@ -51,8 +51,8 @@ export function buildLeadQualificationDescriptions({
     draftCount > 0 ? `**${draftCount}** draft(s) awaiting approval in ${outreachChannel}` : '',
     countStatus(outcomes, 'qualified_no_email') > 0
       ? `**${countStatus(outcomes, 'qualified_no_email')}** qualified but no email found${
-        qualifiedNoEmailReviewChannel
-          ? ` (manual outreach review in ${qualifiedNoEmailReviewChannel})`
+        qualifiedCallLeadsChannel
+          ? ` (phone outreach in ${qualifiedCallLeadsChannel})`
           : ' (no draft possible)'
       }`
       : '',
@@ -89,7 +89,7 @@ export async function postLeadQualificationReport({
   channelId,
   outcomes,
   outreachChannel,
-  qualifiedNoEmailReviewChannel = '',
+  qualifiedCallLeadsChannel = '',
   runTitle,
   postMessage,
   runDate = new Date(),
@@ -97,7 +97,7 @@ export async function postLeadQualificationReport({
   const descriptions = buildLeadQualificationDescriptions({
     outcomes,
     outreachChannel,
-    qualifiedNoEmailReviewChannel,
+    qualifiedCallLeadsChannel,
     runTitle,
     runDate,
   });

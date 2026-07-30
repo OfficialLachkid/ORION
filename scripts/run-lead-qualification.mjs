@@ -29,7 +29,7 @@ import {
 } from '../services/discord-bot/src/message-formatting.mjs';
 import { buildApprovalButtons } from '../services/discord-bot/src/approval-buttons.mjs';
 import { postLeadQualificationReport } from './lib/lead-qualification-report.mjs';
-import { postQualifiedNoEmailReview } from './lib/qualified-no-email-review.mjs';
+import { postQualifiedCallLeads } from './lib/qualified-call-leads.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 
@@ -217,7 +217,7 @@ async function main() {
   }
 
   const outcomes = [];
-  const pendingNoEmailReviews = [];
+  const pendingQualifiedCallLeads = [];
   for (const lead of batch) {
     // Slow site = concrete website-builder signal; measured before the
     // judgment call so the real number can land in the draft.
@@ -298,10 +298,10 @@ async function main() {
           rejected_at: lead.qualification.rejected_at,
           redrafted_after_feedback_at: new Date().toISOString(),
         } : {}),
-        ...(lead.qualification?.no_email_review_posted_at ? {
-          no_email_review_posted_at: lead.qualification.no_email_review_posted_at,
-          no_email_review_thread_id: lead.qualification.no_email_review_thread_id,
-          no_email_review_message_id: lead.qualification.no_email_review_message_id,
+        ...(lead.qualification?.qualified_call_leads_posted_at ? {
+          qualified_call_leads_posted_at: lead.qualification.qualified_call_leads_posted_at,
+          qualified_call_leads_thread_id: lead.qualification.qualified_call_leads_thread_id,
+          qualified_call_leads_message_id: lead.qualification.qualified_call_leads_message_id,
         } : {}),
         approval_task_id: approvalTaskId,
         qualified_by: 'claude',
@@ -348,9 +348,9 @@ async function main() {
     if (
       !dryRun
       && status === 'qualified_no_email'
-      && !lead.qualification?.no_email_review_posted_at
+      && !lead.qualification?.qualified_call_leads_posted_at
     ) {
-      pendingNoEmailReviews.push({
+      pendingQualifiedCallLeads.push({
         leadId: lead.id,
         qualification: storedQualification,
         outcome,
@@ -369,8 +369,8 @@ async function main() {
     const outreachChannel = config.channelIds.outreachAgent
       ? `<#${config.channelIds.outreachAgent}>`
       : '#outreach-agent';
-    const qualifiedNoEmailReviewChannel = config.channelIds.qualifiedNoEmailReview
-      ? `<#${config.channelIds.qualifiedNoEmailReview}>`
+    const qualifiedCallLeadsChannel = config.channelIds.qualifiedCallLeads
+      ? `<#${config.channelIds.qualifiedCallLeads}>`
       : '';
 
     // Title reflects WHICH mode ran — a redraft/recovery run posting as plain
@@ -383,35 +383,35 @@ async function main() {
       channelId,
       outcomes,
       outreachChannel,
-      qualifiedNoEmailReviewChannel,
+      qualifiedCallLeadsChannel,
       runTitle,
       postMessage: (payload) => postToChannel(config, channelId, payload),
     });
 
-    if (config.channelIds.qualifiedNoEmailReview && pendingNoEmailReviews.length > 0) {
+    if (config.channelIds.qualifiedCallLeads && pendingQualifiedCallLeads.length > 0) {
       try {
-        const threadId = config.channelIds.qualifiedNoEmailReview;
-        const firstMessage = await postQualifiedNoEmailReview({
+        const threadId = config.channelIds.qualifiedCallLeads;
+        const firstMessage = await postQualifiedCallLeads({
           channelId: threadId,
-          outcomes: pendingNoEmailReviews.map((record) => record.outcome),
+          outcomes: pendingQualifiedCallLeads.map((record) => record.outcome),
           postMessage: (payload) => postToChannel(config, threadId, payload),
         });
 
         if (firstMessage?.id) {
           const postedAt = new Date().toISOString();
-          for (const record of pendingNoEmailReviews) {
+          for (const record of pendingQualifiedCallLeads) {
             await updateLead(record.leadId, {
               qualification: {
                 ...record.qualification,
-                no_email_review_posted_at: postedAt,
-                no_email_review_thread_id: threadId,
-                no_email_review_message_id: firstMessage.id,
+                qualified_call_leads_posted_at: postedAt,
+                qualified_call_leads_thread_id: threadId,
+                qualified_call_leads_message_id: firstMessage.id,
               },
             });
           }
         }
       } catch (error) {
-        process.stderr.write(`Qualified no-email review post failed (non-fatal): ${error.message}\n`);
+        process.stderr.write(`Qualified call-leads post failed (non-fatal): ${error.message}\n`);
       }
     }
   }

@@ -147,14 +147,14 @@ function buildDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
     followedUp = 0,
     replyResult = null,
     outreachChannel = '#outreach-agent',
-    qualifiedNoEmailReviewChannel = '',
+    qualifiedCallLeadsChannel = '',
   } = extras;
 
   const parts = [
     drafted > 0 ? `**${drafted}** new draft(s) awaiting approval in ${outreachChannel}` : '',
     noEmail > 0
       ? `**${noEmail}** qualified, no email${
-        qualifiedNoEmailReviewChannel ? ` (review in ${qualifiedNoEmailReviewChannel})` : ''
+        qualifiedCallLeadsChannel ? ` (phone outreach in ${qualifiedCallLeadsChannel})` : ''
       }`
       : '',
     rejected > 0 ? `**${rejected}** rejected (weak fit)` : '',
@@ -308,8 +308,8 @@ async function main() {
       outreachChannel: config.channelIds.outreachAgent
         ? `<#${config.channelIds.outreachAgent}>`
         : '#outreach-agent',
-      qualifiedNoEmailReviewChannel: config.channelIds.qualifiedNoEmailReview
-        ? `<#${config.channelIds.qualifiedNoEmailReview}>`
+      qualifiedCallLeadsChannel: config.channelIds.qualifiedCallLeads
+        ? `<#${config.channelIds.qualifiedCallLeads}>`
         : '',
     }),
     color: 0x5865F2,

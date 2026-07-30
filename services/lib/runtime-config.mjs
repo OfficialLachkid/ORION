@@ -139,8 +139,8 @@ export function loadRuntimeConfig(options = {}) {
   );
   // Migration fallback for existing gitignored channel-map.json files. New
   // thread routes can be enabled by adding only the matching .env value.
-  if (!Object.prototype.hasOwnProperty.call(channelIds, 'qualifiedNoEmailReview')) {
-    channelIds.qualifiedNoEmailReview = env.DISCORD_QUALIFIED_NO_EMAIL_THREAD_ID || '';
+  if (!Object.prototype.hasOwnProperty.call(channelIds, 'qualifiedCallLeads')) {
+    channelIds.qualifiedCallLeads = env.DISCORD_QUALIFIED_CALL_LEADS_THREAD_ID || '';
   }
 
   const resolvedTmpDir = env.RUNTIME_TMP_DIR || resolve(projectRoot, 'data', 'runtime', 'tmp');

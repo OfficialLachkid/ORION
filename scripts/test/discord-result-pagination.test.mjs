@@ -13,10 +13,10 @@ import {
   postLeadQualificationReport,
 } from '../lib/lead-qualification-report.mjs';
 import {
-  buildQualifiedNoEmailReviewDescriptions,
+  buildQualifiedCallLeadDescriptions,
   normalizePhoneForTel,
-  postQualifiedNoEmailReview,
-} from '../lib/qualified-no-email-review.mjs';
+  postQualifiedCallLeads,
+} from '../lib/qualified-call-leads.mjs';
 
 function occurrenceCount(text, value) {
   return text.split(value).length - 1;
@@ -185,7 +185,7 @@ test('qualification continuation messages reply to the first Discord result', as
   }
 });
 
-test('qualified no-email review keeps website, phone, and compliance guidance', () => {
+test('qualified call leads keep website, phone, KVK, and fit details', () => {
   const outcomes = [{
     lead: 'Haarlem Plumbing BV',
     sourceUrl: 'https://example.com/haarlem-plumbing',
@@ -200,7 +200,7 @@ test('qualified no-email review keeps website, phone, and compliance guidance', 
     contactPhone: '',
     offer_angle: 'Voice receptionist',
   }];
-  const pages = buildQualifiedNoEmailReviewDescriptions({
+  const pages = buildQualifiedCallLeadDescriptions({
     outcomes,
     runDate: new Date(2026, 6, 30),
   });
@@ -210,25 +210,25 @@ test('qualified no-email review keeps website, phone, and compliance guidance', 
   assert.match(combined, /\[Haarlem Plumbing BV\]\(https:\/\/example\.com\/haarlem-plumbing\)/u);
   assert.match(combined, /\[\+31 \(0\)23 123 45 67\]\(tel:\+31231234567\)/u);
   assert.match(combined, /copy: `\+31 \(0\)23 123 45 67`/u);
-  assert.match(combined, /KVK: `12345678` \(verify legal form\)/u);
+  assert.match(combined, /KVK: `12345678`/u);
   assert.match(combined, /No public phone found/u);
-  assert.match(combined, /qualification confirms offer fit, not permission to call/u);
+  assert.doesNotMatch(combined, /permission to call|verify legal form|eligibility/iu);
   assert.equal(normalizePhoneForTel('0031 23 123 45 67'), '+31231234567');
 
   const [qualificationSummary] = buildLeadQualificationDescriptions({
     outcomes,
     outreachChannel: '<#outreach-channel>',
-    qualifiedNoEmailReviewChannel: '<#qualified-no-email-thread>',
+    qualifiedCallLeadsChannel: '<#qualified-call-leads-thread>',
     runTitle: 'Lead Qualification',
     runDate: new Date(2026, 6, 30),
   });
   assert.match(
     qualificationSummary,
-    /manual outreach review in <#qualified-no-email-thread>/u,
+    /phone outreach in <#qualified-call-leads-thread>/u,
   );
 });
 
-test('qualified no-email review paginates and replies to its first thread message', async () => {
+test('qualified call leads paginate and reply to their first thread message', async () => {
   const outcomes = Array.from({ length: 55 }, (_, index) => ({
     lead: `Business ${index} ${'x'.repeat(50)}`,
     sourceUrl: `https://example.com/business/${index}`,
@@ -239,8 +239,8 @@ test('qualified no-email review paginates and replies to its first thread messag
   }));
   const payloads = [];
 
-  await postQualifiedNoEmailReview({
-    channelId: 'qualified-no-email-thread',
+  await postQualifiedCallLeads({
+    channelId: 'qualified-call-leads-thread',
     outcomes,
     runDate: new Date(2026, 6, 30),
     postMessage: async (payload) => {
@@ -256,7 +256,7 @@ test('qualified no-email review paginates and replies to its first thread messag
   for (const payload of payloads.slice(1)) {
     assert.deepEqual(payload.message_reference, {
       message_id: 'no-email-first',
-      channel_id: 'qualified-no-email-thread',
+      channel_id: 'qualified-call-leads-thread',
       fail_if_not_exists: false,
     });
     assert.match(payload.embeds[0].title, /Continued/u);
