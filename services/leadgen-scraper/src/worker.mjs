@@ -266,9 +266,8 @@ export async function runLeadgenSearch(query, max, config, options = {}) {
     skippedCount: (Array.isArray(records) ? records.length : 0) - usableLeads.length,
     alreadyKnownCount,
     insertedCount,
-    // full list, not truncated — the leadCount/insertedCount in Discord
-    // messages must match how many names are actually shown, or it reads
-    // as a discrepancy. Callers truncate for display if they want to.
+    // Full list, not truncated — Discord reports paginate this array so the
+    // leadCount/insertedCount still matches every clickable business shown.
     leadsPreview: usableLeads.map((record) => ({
       name: record.business_name,
       url: record.source_url,

@@ -24,11 +24,11 @@ import { measurePageSpeed, qualifyLead } from '../services/leadgen-qualifier/src
 import { executeTask } from '../services/task-router/src/executor.mjs';
 import { upsertPersistedPendingTask } from '../services/discord-bot/src/pending-task-store.mjs';
 import {
-  buildNoticeDiscordPayload,
   buildOutboundEventDiscordPayload,
   upgradeLegacyDiscordPayload,
 } from '../services/discord-bot/src/message-formatting.mjs';
 import { buildApprovalButtons } from '../services/discord-bot/src/approval-buttons.mjs';
+import { postLeadQualificationReport } from './lib/lead-qualification-report.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 
@@ -342,69 +342,9 @@ async function main() {
     || config.channelIds.leadGeneration
     || config.channelIds.agentResults;
   if (!dryRun && channelId && config.env.DISCORD_BOT_TOKEN) {
-    // A per-lead list alone forces the operator to read every line to find
-    // out why "10 qualified" produced only 3 drafts — a rollup up front
-    // answers that at a glance (operator feedback, 2026-07-21).
-    const draftCount = outcomes.filter((o) => o.approvalTaskId).length;
-    const noEmailCount = outcomes.filter((o) => o.status === 'qualified_no_email').length;
-    const draftFailedCount = outcomes.filter((o) => o.status === 'qualified_draft_failed').length;
-    const rejectedCount = outcomes.filter((o) => o.status === 'rejected_fit').length;
-    const unreachableCount = outcomes.filter((o) => o.status === 'site_unreachable').length;
-    const extractionErrorCount = outcomes.filter((o) => o.status === 'extraction_error').length;
-    const failedCount = outcomes.filter((o) => o.error).length;
     const outreachChannel = config.channelIds.outreachAgent
       ? `<#${config.channelIds.outreachAgent}>`
       : '#outreach-agent';
-
-    const rollupParts = [
-      draftCount > 0 ? `**${draftCount}** draft(s) awaiting approval in ${outreachChannel}` : '',
-      noEmailCount > 0 ? `**${noEmailCount}** qualified but no email found (no draft possible)` : '',
-      draftFailedCount > 0 ? `**${draftFailedCount}** qualified but draft creation failed` : '',
-      rejectedCount > 0 ? `**${rejectedCount}** rejected — weak fit` : '',
-      unreachableCount > 0 ? `**${unreachableCount}** site unreachable (parked for retry)` : '',
-      extractionErrorCount > 0 ? `**${extractionErrorCount}** extraction error` : '',
-      failedCount > 0 ? `**${failedCount}** qualification call failed (timeout/error — stays \`new\`, retried in a future run)` : '',
-    ].filter(Boolean);
-
-    // Each lead gets a "full" line (with reasoning) and a "short" fallback
-    // (without it). When the qualification limit is bumped above 10, the full
-    // detail can approach Discord's 4096-char embed cap — so the rollup header
-    // is always kept, then lines are added within a budget: full detail while
-    // it fits, dropping the reasoning suffix when it doesn't, and finally a
-    // "…and N more" note rather than a hard mid-word truncation (operator
-    // flagged this as a thing to watch when raising the limit, 2026-07-22).
-    const DESCRIPTION_BUDGET = 3900; // headroom under the 4096 hard cap
-    const header = `Processed ${outcomes.length} lead(s) — ${rollupParts.join(', ')}.`;
-
-    const rendered = outcomes.map((o) => {
-      const name = o.sourceUrl ? `[${o.lead}](${o.sourceUrl})` : o.lead;
-      if (o.error) return { full: `- ${name}: qualification failed (${o.error.slice(0, 80)})`, short: `- ${name}: qualification failed` };
-      if (o.draftError) return { full: `- ${name}: qualified but draft failed (${o.draftError.slice(0, 80)})`, short: `- ${name}: qualified but draft failed` };
-      const angle = o.offer_angle ? ` — ${o.offer_angle}` : '';
-      const lcp = Number.isFinite(o.lcp_seconds) ? `, LCP ${o.lcp_seconds}s` : '';
-      const age = Number.isFinite(o.leadAgeDays) ? ` (found ${o.leadAgeDays}d ago${lcp})` : '';
-      const approval = o.approvalTaskId ? ` (draft awaiting approval: ${o.approvalTaskId})` : '';
-      const why = (o.status === 'rejected_fit' || o.status === 'extraction_error') && o.reasoning
-        ? ` — ${o.reasoning.slice(0, 200)}`
-        : '';
-      const short = `- ${name}: **${o.status}**${angle}${age}${approval}`;
-      return { full: `${short}${why}`, short };
-    });
-
-    const bodyLines = [];
-    let used = header.length + 2; // + the "\n\n" separator
-    for (let i = 0; i < rendered.length; i += 1) {
-      const { full, short } = rendered[i];
-      const pick = used + full.length + 1 <= DESCRIPTION_BUDGET
-        ? full
-        : (used + short.length + 1 <= DESCRIPTION_BUDGET ? short : null);
-      if (pick === null) {
-        bodyLines.push(`…and ${rendered.length - i} more (see the full log / leads table)`);
-        break;
-      }
-      bodyLines.push(pick);
-      used += pick.length + 1;
-    }
 
     // Title reflects WHICH mode ran — a redraft/recovery run posting as plain
     // "Lead Qualification" was misleading (operator flagged this, 2026-07-27).
@@ -412,12 +352,13 @@ async function main() {
       : recoverEmails ? 'Lead Qualification — Email recovery'
       : retryUnreachable ? 'Lead Qualification — Retry (unreachable sites)'
       : 'Lead Qualification';
-    await postToChannel(config, channelId, buildNoticeDiscordPayload({
-      title: runTitle,
-      description: `${header}\n\n${bodyLines.join('\n')}`,
-      color: 0x5865F2,
-      footerText: 'ORION lead qualification',
-    }));
+    await postLeadQualificationReport({
+      channelId,
+      outcomes,
+      outreachChannel,
+      runTitle,
+      postMessage: (payload) => postToChannel(config, channelId, payload),
+    });
   }
 
   process.stdout.write(`${JSON.stringify(outcomes, null, 2)}\n`);

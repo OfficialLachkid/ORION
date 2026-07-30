@@ -1,11 +1,12 @@
 import process from 'node:process';
 import { buildNoticeDiscordPayload } from '../../discord-bot/src/message-formatting.mjs';
+import {
+  formatLocalDate,
+  paginateDiscordLines,
+} from '../../discord-bot/src/embed-pagination.mjs';
 import { withRetry } from '../../lib/retry.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
-// Discord embed descriptions cap at 4096 chars — cut the lead list there,
-// not at an arbitrary row count, so short batches always show everything.
-const DESCRIPTION_BUDGET = 3900;
 
 // Set by any withRetry(...) call in this module that had to retry — the
 // next successful Discord post appends a note about it, so an outage that
@@ -228,9 +229,21 @@ export async function updateSweepOverview(config, message, { statuses, totalLead
   }
 }
 
-function buildResultDescription({ title, niche, query, result, runError, durationMinutes }) {
+export function buildResultDescriptions({
+  title,
+  niche,
+  query,
+  result,
+  runError,
+  durationMinutes,
+  recoveryNote = '',
+  runDate = new Date(),
+}) {
   if (runError) {
-    return `${title} failed for **${niche}** (query: "${query}"): ${runError.message}`;
+    return paginateDiscordLines({
+      firstHeader: `${recoveryNote}${title} failed for **${niche}** (query: "${query}"): ${runError.message}`,
+      continuationHeader: `**Follow-up:** This belongs to **${title}** from **${formatLocalDate(runDate)}**.`,
+    });
   }
 
   const alreadyKnownNote = result?.alreadyKnownCount > 0
@@ -245,44 +258,62 @@ function buildResultDescription({ title, niche, query, result, runError, duratio
 
   const header = `${title} for **${niche}** (query: "${query}") found ${result.leadCount} new lead(s), saved ${result.insertedCount} to the leads table.${searchedNote}${alreadyKnownNote}${durationNote}`;
 
-  const leads = result?.leadsPreview || [];
-  const lines = [];
-  let used = header.length;
-  for (let i = 0; i < leads.length; i += 1) {
-    const lead = leads[i];
-    const line = lead?.url ? `- [${lead.name}](${lead.url})` : `- ${lead?.name || lead}`;
-    if (used + line.length + 1 > DESCRIPTION_BUDGET) {
-      lines.push(`...and ${leads.length - i} more (see the leads table)`);
-      break;
-    }
-    lines.push(line);
-    used += line.length + 1;
-  }
+  const lines = (result?.leadsPreview || []).map((lead) => (
+    lead?.url ? `- [${lead.name}](${lead.url})` : `- ${lead?.name || lead}`
+  ));
 
-  return lines.length > 0 ? `${header}\n${lines.join('\n')}` : header;
+  return paginateDiscordLines({
+    firstHeader: `${recoveryNote}${header}`,
+    continuationHeader: `**Follow-up:** This belongs to **${title}** from **${formatLocalDate(runDate)}**.`,
+    lines,
+  });
 }
 
 // Edits the started-message in place with the final results; posts a fresh
-// message when there's no started-message to edit.
-export async function reportLeadgenRunToDiscord(config, { title, niche, query, result, runError, startedMessage, durationMinutes }) {
+// message when there's no started-message to edit. Any overflow pages reply
+// to that first result so every clickable lead remains visible.
+export async function reportLeadgenRunToDiscord(config, {
+  title,
+  niche,
+  query,
+  result,
+  runError,
+  startedMessage,
+  durationMinutes,
+  runDate = new Date(),
+}) {
   const channelId = startedMessage?.channelId || resolveChannelId(config);
   if (!channelId || !config.env.DISCORD_BOT_TOKEN) {
     return null;
   }
 
-  const payload = buildNoticeDiscordPayload({
-    title: runError ? `${title} — Failed` : title,
-    description: consumeRecoveryNote() + buildResultDescription({ title, niche, query, result, runError, durationMinutes }),
+  const baseTitle = runError ? `${title} — Failed` : title;
+  const descriptions = buildResultDescriptions({
+    title,
+    niche,
+    query,
+    result,
+    runError,
+    durationMinutes,
+    recoveryNote: consumeRecoveryNote(),
+    runDate,
+  });
+  const buildPayload = (description, pageIndex) => buildNoticeDiscordPayload({
+    title: pageIndex === 0
+      ? baseTitle
+      : `${baseTitle} — Continued (${pageIndex + 1}/${descriptions.length})`,
+    description,
     color: runError ? 0xED4245 : 0x57F287,
     footerText: 'ORION leadgen',
   });
 
+  let firstMessage = null;
   if (startedMessage?.messageId) {
     try {
-      return await discordRequest(
+      firstMessage = await discordRequest(
         config.env.DISCORD_BOT_TOKEN,
         `/channels/${channelId}/messages/${startedMessage.messageId}`,
-        { method: 'PATCH', body: payload },
+        { method: 'PATCH', body: buildPayload(descriptions[0], 0) },
       );
     } catch {
       // fall through to posting a fresh message
@@ -294,10 +325,43 @@ export async function reportLeadgenRunToDiscord(config, { title, niche, query, r
   // losing the notification is a cosmetic miss, not a reason to abandon the
   // remaining niches. (Root cause of the 2026-07-20 sweep dying after one
   // Discord blip: this call used to be unguarded.)
-  try {
-    return await discordRequest(config.env.DISCORD_BOT_TOKEN, `/channels/${channelId}/messages`, { body: payload });
-  } catch (error) {
-    process.stderr.write(`Discord report post failed (non-fatal): ${error.message}\n`);
-    return null;
+  if (!firstMessage) {
+    try {
+      firstMessage = await discordRequest(
+        config.env.DISCORD_BOT_TOKEN,
+        `/channels/${channelId}/messages`,
+        { body: buildPayload(descriptions[0], 0) },
+      );
+    } catch (error) {
+      process.stderr.write(`Discord report post failed (non-fatal): ${error.message}\n`);
+      return null;
+    }
   }
+
+  const firstMessageId = firstMessage?.id || startedMessage?.messageId;
+  for (let pageIndex = 1; pageIndex < descriptions.length; pageIndex += 1) {
+    const payload = {
+      ...buildPayload(descriptions[pageIndex], pageIndex),
+      ...(firstMessageId ? {
+        message_reference: {
+          message_id: firstMessageId,
+          channel_id: channelId,
+          fail_if_not_exists: false,
+        },
+      } : {}),
+    };
+
+    try {
+      await discordRequest(
+        config.env.DISCORD_BOT_TOKEN,
+        `/channels/${channelId}/messages`,
+        { body: payload },
+      );
+    } catch (error) {
+      process.stderr.write(`Discord continuation post failed (non-fatal): ${error.message}\n`);
+      break;
+    }
+  }
+
+  return firstMessage;
 }
