@@ -9,6 +9,9 @@ import {
 const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
   water: ['beach-backgrounds'],
 });
+const PATTERN_BACKGROUND_KEYWORDS = Object.freeze([
+  'pokeball',
+]);
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -123,6 +126,14 @@ function selectSeededFileAvoidingPrevious(files, random, previousPath) {
   return selectSeededFile(eligibleFiles.length > 0 ? eligibleFiles : files, random);
 }
 
+function preferScenicBackgrounds(backgrounds) {
+  const candidates = Array.isArray(backgrounds) ? backgrounds : [];
+  const scenic = candidates.filter((backgroundPath) => (
+    !PATTERN_BACKGROUND_KEYWORDS.some((keyword) => backgroundPath.toLowerCase().includes(keyword))
+  ));
+  return scenic.length > 0 ? scenic : candidates;
+}
+
 function selectBackgroundCandidatesForTypePair(backgrounds, typePair = []) {
   const allBackgrounds = Array.isArray(backgrounds) ? backgrounds : [];
   if (allBackgrounds.length === 0) {
@@ -137,9 +148,11 @@ function selectBackgroundCandidatesForTypePair(backgrounds, typePair = []) {
     ));
   });
 
-  return themedCandidates.length > 0
-    ? [...new Set(themedCandidates)]
-    : allBackgrounds;
+  return preferScenicBackgrounds(
+    themedCandidates.length > 0
+      ? [...new Set(themedCandidates)]
+      : allBackgrounds,
+  );
 }
 
 function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {

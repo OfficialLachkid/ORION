@@ -23,7 +23,7 @@
         "delete_preview_on_reject": true
       },
       "youtube": {
-        "channel_id": "",
+        "channel_id": "UCvMqBsEPDvjgNRMymQyefFg",
         "default_category_id": "24",
         "oauth_client_secret_path": "config/youtube/client-secret.json",
         "oauth_refresh_token_env": "YOUTUBE_POKE_QUIZZ_REFRESH_TOKEN"

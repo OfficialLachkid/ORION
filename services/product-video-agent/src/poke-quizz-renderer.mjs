@@ -31,6 +31,7 @@ const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
 const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.68;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
+const DEFAULT_TYPE_ICON_BADGE_RING_SCALE_MULTIPLIER = 1.08;
 const DEFAULT_POKEBALL_INTRO_SECONDS = 0.28;
 const DEFAULT_TIMER_ALARM_EXTRA_HOLD_SECONDS = 1;
 const DEFAULT_TIMER_ALARM_EXIT_SECONDS = 0.42;
@@ -79,6 +80,13 @@ function slugify(value) {
 
 function safeFilterLabel(prefix, index) {
   return `${prefix}${index}`;
+}
+
+function typeIconUsesOpaqueBadgeArt(typeIconAsset) {
+  const styleVariant = String(typeIconAsset?.style_variant || typeIconAsset?.style || '')
+    .trim()
+    .toLowerCase();
+  return styleVariant === 'badge-style';
 }
 
 export function estimateWrapCharacterLimit(template, fontSize) {
@@ -427,24 +435,63 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
 }
 
 export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDurations = {}) {
+  const promptPhase = renderPlan?.phases?.type_prompt;
+  const countdownPhase = renderPlan?.phases?.countdown;
+  const revealPhase = renderPlan?.phases?.reveal;
   const promptDurationSeconds = ensureNumber(narrationDurations.prompt_seconds, 0);
-  if (promptDurationSeconds <= 0) {
+  if (promptDurationSeconds <= 0 || !promptPhase || !countdownPhase || !revealPhase) {
     return renderPlan;
   }
 
+  const promptDuration = roundTime(Math.max(promptPhase.duration_seconds, promptDurationSeconds));
+  const promptEnd = roundTime(promptPhase.start_seconds + promptDuration);
+  const countdownStart = promptEnd;
+  const countdownEnd = roundTime(countdownStart + countdownPhase.duration_seconds);
+  const revealStart = countdownEnd;
+  const revealEnd = roundTime(revealStart + revealPhase.duration_seconds);
+  const revealVisualDelay = roundTime(Math.max(
+    0,
+    ensureNumber(renderPlan.audio_cues?.reveal_visual_start_seconds, revealPhase.start_seconds) - revealPhase.start_seconds,
+  ));
+  const updatedPhases = {
+    ...renderPlan.phases,
+    type_prompt: {
+      ...promptPhase,
+      duration_seconds: promptDuration,
+      end_seconds: promptEnd,
+    },
+    countdown: {
+      ...countdownPhase,
+      start_seconds: countdownStart,
+      end_seconds: countdownEnd,
+    },
+    reveal: {
+      ...revealPhase,
+      start_seconds: revealStart,
+      end_seconds: revealEnd,
+    },
+  };
+  const countdownFrom = Number.parseInt(renderPlan.countdown_numbers?.[0]?.value ?? '5', 10);
+  const countdownTo = Number.parseInt(renderPlan.countdown_numbers?.at(-1)?.value ?? '0', 10);
   return {
     ...renderPlan,
+    phases: updatedPhases,
+    total_duration_seconds: revealEnd,
+    countdown_numbers: buildCountdownMoments(
+      {
+        phases: updatedPhases,
+        total_duration_seconds: revealEnd,
+      },
+      Number.isFinite(countdownFrom) ? countdownFrom : 5,
+      Number.isFinite(countdownTo) ? countdownTo : 0,
+    ),
     audio_cues: {
       ...renderPlan.audio_cues,
-      prompt_end_seconds: roundTime(
-        Math.min(
-          renderPlan.audio_cues.timer_end_seconds,
-          Math.max(
-            ensureNumber(renderPlan.audio_cues.prompt_end_seconds, renderPlan.audio_cues.countdown_start_seconds),
-            renderPlan.audio_cues.prompt_start_seconds + promptDurationSeconds,
-          ),
-        ),
-      ),
+      prompt_end_seconds: promptEnd,
+      countdown_start_seconds: countdownStart,
+      timer_end_seconds: revealStart,
+      reveal_start_seconds: revealStart,
+      reveal_visual_start_seconds: roundTime(Math.min(revealEnd, revealStart + revealVisualDelay)),
     },
   };
 }
@@ -528,9 +575,12 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const iconOutlineLabel = safeFilterLabel('typeoutline', index);
     const iconBackdropBaseLabel = safeFilterLabel('typebgbase', index);
     const iconBackdropLabel = safeFilterLabel('typebg', index);
+    const iconBadgeRingBaseLabel = safeFilterLabel('typebgringbase', index);
+    const iconBadgeRingLabel = safeFilterLabel('typebgring', index);
     const iconBackdropVideoLabel = safeFilterLabel('vtbg', index);
     const position = renderPlan.type_icon_layout[index];
     const introPosition = renderPlan.type_icon_intro_layout[index] || position;
+    const usesOpaqueBadgeArt = typeIconUsesOpaqueBadgeArt(plan.assets.type_icons[index]);
     const settleDuration = ensureNumber(
       renderPlan.transitions?.type_icon_settle_seconds,
       DEFAULT_TYPE_ICON_SETTLE_SECONDS,
@@ -563,54 +613,71 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
     const iconScaleExpression = `(${baseSizeExpression})*(${introPopMultiplierExpression})`;
     const iconBackdropScaleExpression = `(${iconScaleExpression})*${DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER}`;
+    const iconBadgeRingScaleExpression = `(${iconScaleExpression})*${DEFAULT_TYPE_ICON_BADGE_RING_SCALE_MULTIPLIER}`;
     const iconOutlineScaleExpression = iconScaleExpression;
     const iconOutlineOffsetExpression = `max(5,(${iconScaleExpression})*0.03)`;
     filters.push(
-      `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${DEFAULT_TYPE_ICON_BACKDROP_ALPHA},0)'[${iconBackdropBaseLabel}]`,
-    );
-    filters.push(
-      `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
-    );
-    filters.push(
-      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconOutlineScaleExpression}':h='${iconOutlineScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,lutrgb=r='0':g='0':b='0',setsar=1[${iconOutlineLabel}]`,
-    );
-    filters.push(
       `[${inputRefs.typeIcons[index]}:v]scale=w='${iconScaleExpression}':h='${iconScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
     );
-    filters.push(
-      `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
-    );
-    const outlineDirections = [
-      [-1, 0],
-      [1, 0],
-      [0, -1],
-      [0, 1],
-      [-1, -1],
-      [-1, 1],
-      [1, -1],
-      [1, 1],
-    ];
-    let outlineVideoLabel = iconBackdropVideoLabel;
-    for (let directionIndex = 0; directionIndex < outlineDirections.length; directionIndex += 1) {
-      const [deltaX, deltaY] = outlineDirections[directionIndex];
-      const nextOutlineVideoLabel = safeFilterLabel(`vtol${index}`, directionIndex);
-      const offsetX = deltaX === 0
-        ? ''
-        : deltaX < 0
-          ? `-${iconOutlineOffsetExpression}`
-          : `+${iconOutlineOffsetExpression}`;
-      const offsetY = deltaY === 0
-        ? ''
-        : deltaY < 0
-          ? `-${iconOutlineOffsetExpression}`
-          : `+${iconOutlineOffsetExpression}`;
+
+    let baseVideoLabel = `v${index}`;
+    if (usesOpaqueBadgeArt) {
       filters.push(
-        `[${outlineVideoLabel}][${iconOutlineLabel}]overlay=x='${iconCenterXExpression}-w/2${offsetX}':y='${iconCenterYExpression}-h/2-${introLiftExpression}${offsetY}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${nextOutlineVideoLabel}]`,
+        `color=c=black:s=640x640,format=rgba,geq=r='0':g='0':b='0':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),255,0)'[${iconBadgeRingBaseLabel}]`,
       );
-      outlineVideoLabel = nextOutlineVideoLabel;
+      filters.push(
+        `[${iconBadgeRingBaseLabel}]scale=w='${iconBadgeRingScaleExpression}':h='${iconBadgeRingScaleExpression}':eval=frame,setsar=1[${iconBadgeRingLabel}]`,
+      );
+      filters.push(
+        `[v${index}][${iconBadgeRingLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
+      );
+      baseVideoLabel = iconBackdropVideoLabel;
+    } else {
+      filters.push(
+        `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${DEFAULT_TYPE_ICON_BACKDROP_ALPHA},0)'[${iconBackdropBaseLabel}]`,
+      );
+      filters.push(
+        `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
+      );
+      filters.push(
+        `[${inputRefs.typeIcons[index]}:v]scale=w='${iconOutlineScaleExpression}':h='${iconOutlineScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,lutrgb=r='0':g='0':b='0',setsar=1[${iconOutlineLabel}]`,
+      );
+      filters.push(
+        `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
+      );
+      const outlineDirections = [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+        [-1, -1],
+        [-1, 1],
+        [1, -1],
+        [1, 1],
+      ];
+      let outlineVideoLabel = iconBackdropVideoLabel;
+      for (let directionIndex = 0; directionIndex < outlineDirections.length; directionIndex += 1) {
+        const [deltaX, deltaY] = outlineDirections[directionIndex];
+        const nextOutlineVideoLabel = safeFilterLabel(`vtol${index}`, directionIndex);
+        const offsetX = deltaX === 0
+          ? ''
+          : deltaX < 0
+            ? `-${iconOutlineOffsetExpression}`
+            : `+${iconOutlineOffsetExpression}`;
+        const offsetY = deltaY === 0
+          ? ''
+          : deltaY < 0
+            ? `-${iconOutlineOffsetExpression}`
+            : `+${iconOutlineOffsetExpression}`;
+        filters.push(
+          `[${outlineVideoLabel}][${iconOutlineLabel}]overlay=x='${iconCenterXExpression}-w/2${offsetX}':y='${iconCenterYExpression}-h/2-${introLiftExpression}${offsetY}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${nextOutlineVideoLabel}]`,
+        );
+        outlineVideoLabel = nextOutlineVideoLabel;
+      }
+      baseVideoLabel = outlineVideoLabel;
     }
     filters.push(
-      `[${outlineVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      `[${baseVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
     );
   }
 
@@ -645,7 +712,7 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     ? `(PTS-STARTPTS)*${roundTime(countdownDuration / timerSourceDuration)}+${countdownStart}/TB`
     : `PTS-STARTPTS+${countdownStart}/TB`;
   if (pokeballStaticLabels.length > 0) {
-    filters.push(`[${inputRefs.timerCountdown}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timercountdown]`);
+    filters.push(`[${inputRefs.timerCountdown}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},crop=iw*0.72:ih*0.72:(iw-ow)/2:(ih-oh)/2-20,scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timercountdown]`);
     filters.push(`[${inputRefs.pokeball}:v]fps=${fps},trim=duration=${countdownDuration},setpts=PTS-STARTPTS+${countdownStart}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[pokeballbase]`);
     const pokeballSplitLabels = [...pokeballStaticLabels, ...pokeballTransitionLabels];
     filters.push(`[pokeballbase]split=${pokeballSplitLabels.length}${pokeballSplitLabels.map((label) => `[${label}]`).join('')}`);
@@ -697,7 +764,7 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       timerAlarmVisibleEnd - timerAlarmExitStart,
     ));
     filters.push(
-      `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},tpad=stop_mode=clone:stop_duration=${timerAlarmHoldSeconds},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,scale=w='${renderPlan.timer_layout.width}*(${timerAlarmScaleExpression})':h='${renderPlan.timer_layout.height}*(${timerAlarmScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,fade=t=out:st=${timerAlarmExitStart}:d=${timerAlarmFadeDuration}:alpha=1,setsar=1[${timerAlarmLabel}]`,
+      `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},tpad=stop_mode=clone:stop_duration=${timerAlarmHoldSeconds},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,crop=iw*0.72:ih*0.72:(iw-ow)/2:(ih-oh)/2-20,scale=w='${renderPlan.timer_layout.width}*(${timerAlarmScaleExpression})':h='${renderPlan.timer_layout.height}*(${timerAlarmScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,fade=t=out:st=${timerAlarmExitStart}:d=${timerAlarmFadeDuration}:alpha=1,setsar=1[${timerAlarmLabel}]`,
     );
     const timerAlarmVideoLabel = `${currentVideoLabel}a`;
     filters.push(

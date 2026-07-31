@@ -171,6 +171,10 @@ test('prompt cue window can extend to the measured narration duration', () => {
     prompt_seconds: 2.6,
   });
   assert.equal(adjusted.audio_cues.prompt_end_seconds, 3.8);
+  assert.equal(adjusted.audio_cues.countdown_start_seconds, 3.8);
+  assert.equal(adjusted.audio_cues.reveal_start_seconds, 8.8);
+  assert.equal(adjusted.total_duration_seconds, 11.2);
+  assert.deepEqual(adjusted.countdown_numbers[0], { value: '5', start_seconds: 3.8, end_seconds: 4.8 });
 });
 
 test('audio filter script repeats short tick assets when no long countdown bed exists', () => {
