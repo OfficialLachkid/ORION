@@ -180,20 +180,20 @@ test('timer layout sits above the pokeball grid with centered number anchors', (
       height: 1040,
     },
   });
-  assert.equal(layout.x, 430);
-  assert.equal(layout.y, 150);
-  assert.equal(layout.width, 220);
-  assert.equal(layout.height, 220);
+  assert.equal(layout.x, 450);
+  assert.equal(layout.y, 596);
+  assert.equal(layout.width, 180);
+  assert.equal(layout.height, 180);
   assert.equal(layout.number_center_x, 540);
-  assert.equal(layout.number_center_y, 260);
+  assert.equal(layout.number_center_y, 686);
 });
 
-test('countdown moments include the 0 card at reveal time', () => {
+test('countdown moments stop at 1 instead of showing a 0 card', () => {
   const schedule = buildPhaseSchedule(plan.timeline);
   const countdown = buildCountdownMoments(schedule, 5, 0);
-  assert.equal(countdown.length, 6);
+  assert.equal(countdown.length, 5);
   assert.deepEqual(countdown[0], { value: '5', start_seconds: 2.8, end_seconds: 3.8 });
-  assert.deepEqual(countdown.at(-1), { value: '0', start_seconds: 7.8, end_seconds: 8.15 });
+  assert.deepEqual(countdown.at(-1), { value: '1', start_seconds: 6.8, end_seconds: 8.15 });
 });
 
 test('render plan derives battle-music lead-in and preserves grid geometry', () => {
@@ -208,7 +208,8 @@ test('render plan derives battle-music lead-in and preserves grid geometry', () 
   assert.equal(renderPlan.grid.cells.length, 6);
   assert.equal(renderPlan.type_icon_intro_layout[0].width > renderPlan.type_icon_layout[0].width, true);
   assert.equal(renderPlan.transitions.type_icon_settle_seconds, 0.256);
-  assert.equal(renderPlan.timer_layout.y < renderPlan.grid.cells[0].y, true);
+  assert.equal(renderPlan.timer_layout.y > renderPlan.type_icon_layout[0].y, true);
+  assert.equal(renderPlan.timer_layout.y < template.layout.pokeball_grid.stage_bounds_px.top, true);
   assert.equal(renderPlan.output_path.endsWith('grass-poison-preview.mp4'), true);
 });
 
@@ -275,7 +276,7 @@ test('escaped enable windows are safe for ffmpeg filter parsing', () => {
   });
   assert.match(
     JSON.stringify(renderPlan.countdown_numbers),
-    /7\.8/u,
+    /6\.8/u,
   );
   assert.equal(
     formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, renderPlan.phases.reveal.start_seconds),

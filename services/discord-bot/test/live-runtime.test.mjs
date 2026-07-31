@@ -54,6 +54,16 @@ test('buildApprovalButtons uses email-specific labels without changing custom_id
   assert.equal(components[0].components[1].custom_id, 'reject:TASK-202606291339-2AA8A8F209');
 });
 
+test('buildApprovalButtons accepts explicit label overrides for custom approval flows', () => {
+  const components = buildApprovalButtons('TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456', {
+    approveLabel: 'Publish',
+    rejectLabel: 'Give Feedback',
+  });
+
+  assert.equal(components[0].components[0].label, 'Publish');
+  assert.equal(components[0].components[1].label, 'Give Feedback');
+});
+
 test('buildApprovalRejectModal creates a required feedback form', () => {
   const modal = buildApprovalRejectModal('TASK-202606291339-2AA8A8F209');
 
@@ -67,6 +77,13 @@ test('buildApprovalRejectModal uses PR-specific copy for merge approvals', () =>
 
   assert.equal(modal.title, 'Reject PR Merge');
   assert.match(modal.components[0].components[0].label, /PR remain open/u);
+});
+
+test('buildApprovalRejectModal uses preview-feedback copy for Poke Quizz review tasks', () => {
+  const modal = buildApprovalRejectModal('TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+
+  assert.equal(modal.title, 'Give Preview Feedback');
+  assert.match(modal.components[0].components[0].label, /next preview/u);
 });
 
 test('buildResolvedApprovalButtons removes the approval buttons after resolution', () => {

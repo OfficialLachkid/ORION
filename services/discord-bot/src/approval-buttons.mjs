@@ -36,6 +36,8 @@ export function buildApprovalButtons(taskId, options = {}) {
   }
 
   const isEmailAction = options.isEmailAction === true;
+  const approveLabel = String(options.approveLabel || '').trim() || (isEmailAction ? 'Send Email' : 'Approve');
+  const rejectLabel = String(options.rejectLabel || '').trim() || (isEmailAction ? 'Give Feedback' : 'Reject');
 
   return [
     {
@@ -44,14 +46,14 @@ export function buildApprovalButtons(taskId, options = {}) {
         {
           type: DISCORD_COMPONENT_TYPE_BUTTON,
           style: DISCORD_BUTTON_STYLE_SUCCESS,
-          label: isEmailAction ? 'Send Email' : 'Approve',
+          label: approveLabel,
           custom_id: `approve:${taskId}`,
           disabled: options.approveDisabled === true,
         },
         {
           type: DISCORD_COMPONENT_TYPE_BUTTON,
           style: DISCORD_BUTTON_STYLE_DANGER,
-          label: isEmailAction ? 'Give Feedback' : 'Reject',
+          label: rejectLabel,
           custom_id: `reject:${taskId}`,
           disabled: options.rejectDisabled === true,
         },
@@ -72,10 +74,13 @@ export function buildApprovalRejectModal(taskId) {
 
   const isPullRequestMerge = taskId.startsWith('TASK-PR-MERGE-');
   const isProductVideo = taskId.startsWith('TASK-ORION-');
+  const isPokeQuizzPublicationReview = taskId.startsWith('TASK-ORION-PQ-PUBLISH-');
 
   return {
     custom_id: `${APPROVAL_REJECT_MODAL_PREFIX}${taskId}`,
-    title: isPullRequestMerge
+    title: isPokeQuizzPublicationReview
+      ? 'Give Preview Feedback'
+      : isPullRequestMerge
       ? 'Reject PR Merge'
       : isProductVideo
         ? 'Reject Approval Request'
@@ -88,12 +93,16 @@ export function buildApprovalRejectModal(taskId) {
             type: DISCORD_COMPONENT_TYPE_TEXT_INPUT,
             custom_id: 'rejection_reason',
             style: DISCORD_TEXT_INPUT_STYLE_PARAGRAPH,
-            label: isPullRequestMerge
+            label: isPokeQuizzPublicationReview
+              ? 'What should change in the next preview?'
+              : isPullRequestMerge
               ? 'Why should this PR remain open?'
               : isProductVideo
                 ? 'Why is this approval being rejected?'
                 : 'What should be improved before this is sent?',
-            placeholder: isPullRequestMerge
+            placeholder: isPokeQuizzPublicationReview
+              ? 'Describe the revision to render next.'
+              : isPullRequestMerge
               ? 'State what must change before merging.'
               : 'State the required revision feedback.',
             min_length: 5,

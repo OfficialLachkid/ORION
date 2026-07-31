@@ -44,6 +44,7 @@ import {
   removePersistedPendingTask,
   upsertPersistedPendingTask,
 } from './pending-task-store.mjs';
+import { buildPokeQuizzFeedbackRegenerationTask } from '../../product-video-agent/src/poke-quizz-publication-review.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -535,6 +536,8 @@ async function fanOutOutboundEvents(token, config, outboundEvents = [], trackedM
           || outboundEvent.metadata.approvalResolved === true,
         rejectDisabled: outboundEvent.metadata.approvalResolved === true,
         isEmailAction: Boolean(outboundEvent.metadata?.emailTo),
+        approveLabel: outboundEvent.metadata?.approveLabel || '',
+        rejectLabel: outboundEvent.metadata?.rejectLabel || '',
       });
     }
 
@@ -892,7 +895,8 @@ export async function runLiveDiscordBot(config) {
               decision: result.decision.decision,
               actor: actorName,
             });
-            pendingApprovalTask = pendingTasks.get(result.decision.taskId);
+            pendingApprovalTask = pendingTasks.get(result.decision.taskId)
+              || findPersistedPendingTask(config, result.decision.taskId);
             const approvalWaitMs = computeElapsedMs(pendingApprovalTask?.submitted_at);
             safeRecordMetric('approval_button_resolution', {
               taskId: result.decision.taskId,
@@ -1109,7 +1113,8 @@ export async function runLiveDiscordBot(config) {
               decision: result.decision.decision,
               actor: actorName,
             });
-            pendingApprovalTask = pendingTasks.get(result.decision.taskId);
+            pendingApprovalTask = pendingTasks.get(result.decision.taskId)
+              || findPersistedPendingTask(config, result.decision.taskId);
             const approvalWaitMs = computeElapsedMs(pendingApprovalTask?.submitted_at);
             safeRecordMetric('approval_text_resolution', {
               taskId: result.decision.taskId,
@@ -1658,6 +1663,75 @@ export async function runLiveDiscordBot(config) {
 
       const approvalCandidates = buildApprovalOutcomeWriteBackCandidates(pendingTask, decision, config.memoryPromotionRules);
       const approvalWriteBackEvent = buildMemoryWriteBackCandidateEvent(pendingTask, approvalCandidates);
+
+      if (pendingTask.automation_type === 'poke_quizz_publication_review' && decision.reason) {
+        const regenerationTask = buildPokeQuizzFeedbackRegenerationTask({
+          reviewTask: pendingTask,
+          feedback: decision.reason,
+          actor: decision.actor || '',
+          actorId: decision.actorId || '',
+        });
+        const executionState = queueExecutableTask(regenerationTask);
+        const outboundEvents = [
+          {
+            channelKey: 'taskQueue',
+            type: 'task_queue_update',
+            body: `${decision.taskId} was rejected; generating a revised Poke Quizz preview from operator feedback.`,
+            metadata: {
+              taskId: decision.taskId,
+              status: 'rejected',
+              summary: pendingTask.summary,
+              targetAgent: pendingTask.target_agent,
+              domain: pendingTask.domain,
+              reason: decision.reason || '',
+              decision: decision.decision,
+            },
+          },
+        ];
+        if (approvalWriteBackEvent) {
+          outboundEvents.push(approvalWriteBackEvent);
+        }
+
+        if (executionState.state === 'no_executor') {
+          recordTaskStateChange(regenerationTask, 'blocked', {
+            reason: 'No executor is mapped for this request yet.',
+          });
+          await fanOutOutboundEvents(
+            token,
+            config,
+            [...outboundEvents, ...buildTaskDispatchBlockedEvents(regenerationTask)],
+            trackedTaskMessages
+          );
+          return;
+        }
+
+        if (executionState.state !== 'duplicate_ignored') {
+          recordTaskStateChange(
+            regenerationTask,
+            executionState.state === 'starting' ? 'queued' : executionState.state,
+            { action: regenerationTask.runtime_action }
+          );
+          outboundEvents.push({
+            channelKey: 'taskQueue',
+            type: 'task_queue_update',
+            body: `${regenerationTask.task_id} is ${executionState.state} ${regenerationTask.runtime_action}.`,
+            metadata: {
+              taskId: regenerationTask.task_id,
+              status: executionState.state,
+              summary: regenerationTask.summary,
+              targetAgent: regenerationTask.target_agent,
+              domain: regenerationTask.domain,
+              action: regenerationTask.runtime_action,
+              reason: decision.reason || '',
+            },
+          });
+          ensureExecutionDrain();
+        }
+
+        await fanOutOutboundEvents(token, config, outboundEvents, trackedTaskMessages);
+        return;
+      }
+
       const outboundEvents = [
         {
           channelKey: 'taskQueue',

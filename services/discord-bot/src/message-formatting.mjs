@@ -413,8 +413,11 @@ function formatApprovalRequest(outboundEvent) {
 function buildApprovalRequestPayload(outboundEvent) {
   const metadata = outboundEvent.metadata || {};
   const isProductVideoApproval = Boolean(metadata.productVideoStage);
+  const isPublicationReview = metadata.publicationReview === true;
   const actionText = metadata.emailTo
     ? 'Approve sends the current Gmail draft. Reject opens a feedback form for revisions.'
+    : isPublicationReview
+      ? 'Publish adds this preview to the publish queue. Give Feedback opens a revision form and generates a new preview in the same review thread.'
     : isProductVideoApproval && metadata.approvalBlocked
       ? 'Approval is disabled until every listed blocker is resolved. Reject remains available.'
       : isProductVideoApproval && metadata.approvalResolved
@@ -431,6 +434,12 @@ function buildApprovalRequestPayload(outboundEvent) {
     createField('Draft', metadata.gmailDraftId ? `\`${metadata.gmailDraftId}\`` : '', true),
     createField('Body', formatEmailBody(metadata.emailBody || ''), false),
     createField('Stage', metadata.productVideoStage ? `\`${metadata.productVideoStage}\`` : '', true),
+    createField('Publication', metadata.publicationId ? `\`${metadata.publicationId}\`` : '', true),
+    createField('Preview', metadata.previewUrl ? `[Open unlisted preview](${metadata.previewUrl})` : '', true),
+    createField('Type Pair', metadata.typePairLabel || '', true),
+    createField('Seed', metadata.seed ? `\`${metadata.seed}\`` : '', true),
+    createField('Render', metadata.renderPath ? `\`${compactPath(metadata.renderPath)}\`` : '', false),
+    createField('Plan', metadata.planPath ? `\`${compactPath(metadata.planPath)}\`` : '', false),
     createField('Product', metadata.productName || '', true),
     createField('State', metadata.approvalState ? `\`${metadata.approvalState}\`` : '', true),
     createField('Subject', metadata.subjectId ? `\`${metadata.subjectId}\`` : '', false),

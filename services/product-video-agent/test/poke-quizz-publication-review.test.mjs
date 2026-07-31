@@ -1,0 +1,122 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  buildPokeQuizzFeedbackRegenerationTask,
+  buildPokeQuizzPublicationReviewEvent,
+  buildPokeQuizzPublicationReviewPayload,
+  buildPokeQuizzPublicationReviewTask,
+  deriveFeedbackRevisionSeed,
+} from '../src/poke-quizz-publication-review.mjs';
+
+const publication = {
+  id: 'publication-123',
+  video_id: 'video-123',
+  preview_url: 'https://youtube.com/shorts/preview-123',
+  metadata: {
+    type_pair: ['water', 'flying'],
+    seed: 'water-flying-random-20260731t220000z',
+    render_path: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/water-flying.mp4',
+  },
+};
+
+const video = {
+  id: 'video-123',
+  render: {
+    output_path: publication.metadata.render_path,
+  },
+};
+
+test('buildPokeQuizzPublicationReviewTask creates an approval-gated publish task', () => {
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+
+  assert.match(task.task_id, /^TASK-ORION-PQ-PUBLISH-20260731204500-[A-F0-9]{12}$/u);
+  assert.equal(task.runtime_action, 'poke_quizz_publish_preview');
+  assert.equal(task.automation_type, 'poke_quizz_publication_review');
+  assert.equal(task.poke_quizz_publication_review.previewUrl, publication.preview_url);
+  assert.equal(task.poke_quizz_publication_review.reviewThreadId, '1532709429902839810');
+});
+
+test('buildPokeQuizzPublicationReviewEvent adds preview-review metadata and labels', () => {
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+
+  const event = buildPokeQuizzPublicationReviewEvent(task);
+  assert.equal(event.metadata.publicationReview, true);
+  assert.equal(event.metadata.approveLabel, 'Publish');
+  assert.equal(event.metadata.rejectLabel, 'Give Feedback');
+  assert.equal(event.metadata.previewUrl, publication.preview_url);
+});
+
+test('buildPokeQuizzPublicationReviewPayload renders Publish and Give Feedback buttons', () => {
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+
+  const { payload } = buildPokeQuizzPublicationReviewPayload(task);
+  assert.equal(payload.components[0].components[0].label, 'Publish');
+  assert.equal(payload.components[0].components[1].label, 'Give Feedback');
+});
+
+test('feedback regeneration task carries the operator notes forward', () => {
+  const reviewTask = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+  const regenTask = buildPokeQuizzFeedbackRegenerationTask({
+    reviewTask,
+    feedback: 'Use a cleaner opener and keep the same type pair.',
+    actor: 'Valen',
+    actorId: 'user-1',
+    submittedAt: '2026-07-31T20:46:00.000Z',
+  });
+
+  assert.match(regenTask.task_id, /^TASK-ORION-PQ-REGENERATE-20260731204600-[A-F0-9]{12}$/u);
+  assert.equal(regenTask.runtime_action, 'poke_quizz_feedback_regenerate');
+  assert.equal(regenTask.poke_quizz_feedback.feedback, 'Use a cleaner opener and keep the same type pair.');
+  assert.equal(regenTask.poke_quizz_feedback.reviewThreadId, '1532709429902839810');
+});
+
+test('deriveFeedbackRevisionSeed produces a distinct auditable revision seed', () => {
+  const reviewTask = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+  const seed = deriveFeedbackRevisionSeed(
+    reviewTask,
+    'Keep the same pair but vary the preview composition.',
+    '2026-07-31T20:46:00.000Z',
+  );
+
+  assert.match(seed, /^water-flying-random-20260731t220000z-feedback-20260731204600-[a-f0-9]{8}$/u);
+});

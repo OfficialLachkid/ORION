@@ -15,6 +15,10 @@ import {
   describeExplicitPullRequestMergeAction,
   executePullRequestMergeAction,
 } from './pr-merge-executor.mjs';
+import {
+  describeExplicitProductVideoAction,
+  executeProductVideoAction,
+} from './product-video-executor.mjs';
 
 function event(channelKey, type, body, metadata = {}) {
   return {
@@ -336,6 +340,11 @@ function isMacRuntimeSafeSync(task) {
 }
 
 export function buildExecutionPlan(task) {
+  const explicitProductVideoAction = describeExplicitProductVideoAction(task);
+  if (explicitProductVideoAction) {
+    return explicitProductVideoAction;
+  }
+
   const explicitPullRequestMergeAction = describeExplicitPullRequestMergeAction(task);
   if (explicitPullRequestMergeAction) {
     return explicitPullRequestMergeAction;
@@ -1818,6 +1827,27 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
     );
   }
 
+  if (executionPlan.action === 'poke_quizz_publish_preview' || executionPlan.action === 'poke_quizz_feedback_regenerate') {
+    return buildCompletedResultEvents(
+      'agentResults',
+      `Execution result for ${task.task_id}: ${report.summary || 'Poke Quizz publication workflow completed.'}`,
+      {
+        taskId: task.task_id,
+        action: executionPlan.action,
+        state: report.state || 'unknown',
+        severity: report.severity || '',
+        publicationId: report.publicationId || '',
+        previewUrl: report.previewUrl || '',
+        reviewTaskId: report.reviewTaskId || '',
+        reviewMessageId: report.reviewMessageId || '',
+        renderPath: report.renderPath || '',
+        approvedAt: report.approvedAt || '',
+        workflowState: report.workflowState || '',
+        feedback: report.feedback || '',
+      }
+    );
+  }
+
   if (executionPlan.action === 'mac_runtime_safe_sync') {
     return buildCompletedResultEvents(
       report.didPull === true ? 'deployments' : 'agentResults',
@@ -1999,6 +2029,11 @@ export async function executeTask(task, config, options = {}) {
           workflowRunner: options.pullRequestMergeWorkflow,
           commandRunner: options.pullRequestMergeCommandRunner,
         }),
+      };
+    } else if (executionPlan.action === 'poke_quizz_publish_preview' || executionPlan.action === 'poke_quizz_feedback_regenerate') {
+      executionState = {
+        outcome: 'completed',
+        executionResult: await executeProductVideoAction(executionPlan.action, task, config),
       };
     } else {
       const commandRunner = options.commandRunner

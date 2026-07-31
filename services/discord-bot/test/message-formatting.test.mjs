@@ -315,6 +315,33 @@ test('buildOutboundEventDiscordPayload renders Gmail approval requests with draf
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Preview'), false);
 });
 
+test('buildOutboundEventDiscordPayload renders Poke Quizz publication review cards with preview actions', () => {
+  const payload = buildOutboundEventDiscordPayload({
+    type: 'approval_request',
+    body: 'Approval needed for TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456: Publish Poke Quizz preview for Water / Flying.',
+    metadata: {
+      taskId: 'TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456',
+      summary: 'Publish Poke Quizz preview for Water / Flying.',
+      targetAgent: 'product-video-agent',
+      domain: 'content',
+      priority: 'normal',
+      approvalReason: 'poke_quizz_publish_preview: preview uploaded and awaiting explicit publish approval',
+      publicationReview: true,
+      publicationId: 'publication-123',
+      previewUrl: 'https://youtube.com/shorts/preview-123',
+      typePairLabel: 'Water / Flying',
+      seed: 'water-flying-random-20260731t220000z',
+      renderPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/water-flying.mp4',
+      planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    },
+  });
+
+  assert.equal(payload.embeds.length, 1);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Publication' && /publication-123/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Preview' && /Open unlisted preview/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Action' && /Publish adds this preview to the publish queue/u.test(field.value)), true);
+});
+
 test('buildHealthNotificationDiscordPayload renders alert cards with recovery guidance', () => {
   const payload = buildHealthNotificationDiscordPayload({
     kind: 'alert',
