@@ -35,6 +35,13 @@ function sampleArray(values, count, random) {
   return items.slice(0, count);
 }
 
+function normalizeSelectionState(selectionState) {
+  return {
+    last_type_pair_key: String(selectionState?.last_type_pair_key || '').trim().toLowerCase() || null,
+    last_background_path: String(selectionState?.last_background_path || '').trim() || null,
+  };
+}
+
 function getTemplateSelectionConfig(template) {
   const typePairPolicy = template.selection_rules?.type_pair_policy || {};
   const configuredGenerationScope = Array.isArray(template.selection_rules?.generation_scope)
@@ -78,7 +85,7 @@ function buildPairCatalog(rows, config) {
     .sort((left, right) => left.pair.join('|').localeCompare(right.pair.join('|')));
 }
 
-function pickPair(pairCatalog, forcedTypePair, random) {
+function pickPair(pairCatalog, forcedTypePair, random, selectionState) {
   if (forcedTypePair) {
     const pairKey = createTypePairKey(forcedTypePair);
     const forced = pairCatalog.find((entry) => createTypePairKey(entry.pair) === pairKey);
@@ -92,7 +99,24 @@ function pickPair(pairCatalog, forcedTypePair, random) {
     throw new Error('No eligible Pokemon type pairs were found in the grounded Pokedex catalog.');
   }
 
-  return pairCatalog[Math.floor(random() * pairCatalog.length)];
+  const lastTypePairKey = normalizeSelectionState(selectionState).last_type_pair_key;
+  const eligibleCatalog = lastTypePairKey && pairCatalog.length > 1
+    ? pairCatalog.filter((entry) => createTypePairKey(entry.pair) !== lastTypePairKey)
+    : pairCatalog;
+
+  return eligibleCatalog[Math.floor(random() * eligibleCatalog.length)];
+}
+
+function selectSeededFileAvoidingPrevious(files, random, previousPath) {
+  if (!Array.isArray(files) || files.length === 0) {
+    return null;
+  }
+  if (!previousPath || files.length <= 1) {
+    return selectSeededFile(files, random);
+  }
+
+  const eligibleFiles = files.filter((filePath) => filePath !== previousPath);
+  return selectSeededFile(eligibleFiles.length > 0 ? eligibleFiles : files, random);
 }
 
 function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
@@ -199,11 +223,13 @@ export async function planPokemonTypeChallenge({
   seed = 'poke-quizz',
   forcedTypePair = null,
   assetInventory = null,
+  selectionState = null,
 }) {
   const config = getTemplateSelectionConfig(template);
   const random = createPrng(seed);
   const pairCatalog = buildPairCatalog(pokedexRows, config);
-  const selectedPair = pickPair(pairCatalog, forcedTypePair, random);
+  const normalizedSelectionState = normalizeSelectionState(selectionState);
+  const selectedPair = pickPair(pairCatalog, forcedTypePair, random, normalizedSelectionState);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
   const selectedSubjectCount = Math.max(
     config.selectedSubjectsMin,
@@ -246,6 +272,12 @@ export async function planPokemonTypeChallenge({
   if (!inventory.sound_effects.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
   if (!inventory.sound_effects.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
   if (!inventory.sound_effects.reveal) requiredAssetGaps.push('reveal_sfx_missing');
+
+  const selectedBackgroundPath = selectSeededFileAvoidingPrevious(
+    inventory.backgrounds,
+    random,
+    normalizedSelectionState.last_background_path,
+  );
 
   return {
     schema_version: 'poke-quizz-plan-v1',
@@ -311,7 +343,7 @@ export async function planPokemonTypeChallenge({
     assets: {
       background: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
-        selected_path: selectSeededFile(inventory.backgrounds, random),
+        selected_path: selectedBackgroundPath,
       },
       type_icons: typeIcons,
       pokemon: selectedSubjects.map((subject) => buildSubjectAssetRecord(subject)),
@@ -343,7 +375,12 @@ export async function planPokemonTypeChallenge({
         masters_directory: POKE_QUIZZ_ASSET_LAYOUT.masters,
       },
     },
+    selection_state: {
+      last_type_pair_key: createTypePairKey(selectedPair.pair),
+      last_background_path: selectedBackgroundPath,
+    },
     asset_inventory_snapshot: inventory,
     required_asset_gaps: [...new Set(requiredAssetGaps)],
   };
 }
+

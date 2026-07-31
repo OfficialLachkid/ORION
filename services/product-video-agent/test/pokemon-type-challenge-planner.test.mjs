@@ -476,3 +476,95 @@ test('planner caps large compatible groups to a centered 3x3 grid', async () => 
   assert.equal(plan.assets.overlays.pokeball_grid.columns, 3);
   assert.equal(plan.assets.overlays.pokeball_grid.rows, 3);
 });
+
+test('planner avoids the immediately previous type pair and background when alternatives exist', async () => {
+  const inventory = {
+    scanned_at: '2026-07-31T00:00:00.000Z',
+    directories: {},
+    backgrounds: ['/tmp/background-1.png', '/tmp/background-2.png'],
+    music: ['/tmp/battle-intro-1.mp3'],
+    sound_effects: {
+      all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+      countdown_tick: '/tmp/countdown-tick.wav',
+      timer_end: '/tmp/reveal.wav',
+      reveal: '/tmp/reveal.wav',
+    },
+    type_icons: {
+      pixel: [
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+      ],
+      three_d: [],
+    },
+    overlay_presets: {
+      timer: '/tmp/Timer.gif',
+      timer_countdown: '/tmp/Timer Countdown.gif',
+      timer_alarm: '/tmp/Timer Alarm.gif',
+      pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+    },
+    overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+    transitions: [],
+  };
+
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'repeat-avoidance',
+    assetInventory: inventory,
+    selectionState: {
+      last_type_pair_key: 'grass|poison',
+      last_background_path: '/tmp/background-1.png',
+    },
+  });
+
+  assert.notDeepEqual(plan.selection.type_pair, ['grass', 'poison']);
+  assert.equal(plan.assets.background.selected_path, '/tmp/background-2.png');
+  assert.notEqual(plan.selection_state.last_type_pair_key, 'grass|poison');
+  assert.equal(plan.selection_state.last_background_path, '/tmp/background-2.png');
+});
+
+test('planner allows reuse when only one type pair or background exists', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows: pokedexRows.filter((row) => row.types.includes('grass')),
+    seed: 'repeat-fallback',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-07-31T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+    selectionState: {
+      last_type_pair_key: 'grass|poison',
+      last_background_path: '/tmp/background-1.png',
+    },
+  });
+
+  assert.deepEqual(plan.selection.type_pair, ['grass', 'poison']);
+  assert.equal(plan.assets.background.selected_path, '/tmp/background-1.png');
+});
+
