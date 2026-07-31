@@ -127,8 +127,11 @@ function runQualificationScript(args) {
   const ran = outcomes.length > 0;
   const allErrored = ran && outcomes.every((o) => o.error);
   const systemicFailure = (!ran && result.status !== 0) || allErrored;
+  const childStderr = String(result.stderr || '').trim();
+  const outcomeErrors = [...new Set(outcomes.map((outcome) => outcome.error).filter(Boolean))];
+  const diagnostic = childStderr || outcomeErrors.slice(0, 3).join(' | ');
 
-  return { outcomes, systemicFailure, exitCode: result.status ?? -1, stderr: String(result.stderr || '') };
+  return { outcomes, systemicFailure, exitCode: result.status ?? -1, stderr: diagnostic };
 }
 
 function buildDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
