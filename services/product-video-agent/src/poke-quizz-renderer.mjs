@@ -340,7 +340,10 @@ export function buildCountdownMoments(schedule, countdownFrom, countdownTo = 0) 
   if (!countdownPhase) return [];
   const values = [];
   let current = ensureNumber(countdownFrom, 5);
-  const target = ensureNumber(countdownTo, 0);
+  const configuredTarget = ensureNumber(countdownTo, 0);
+  const target = current > configuredTarget && configuredTarget <= 0
+    ? 1
+    : configuredTarget;
   const direction = current >= target ? -1 : 1;
   let offset = 0;
   while ((direction === -1 && current >= target) || (direction === 1 && current <= target)) {

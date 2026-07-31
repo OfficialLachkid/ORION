@@ -10,6 +10,10 @@ const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
   water: ['beach-backgrounds'],
 });
 
+function isBeachBackgroundPath(backgroundPath) {
+  return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
+}
+
 function hashSeed(input) {
   let hash = 2166136261;
   for (const character of String(input || 'poke-quizz-default-seed')) {
@@ -139,7 +143,7 @@ function selectBackgroundCandidatesForTypePair(backgrounds, typePair = []) {
 
   return themedCandidates.length > 0
     ? [...new Set(themedCandidates)]
-    : allBackgrounds;
+    : allBackgrounds.filter((backgroundPath) => !isBeachBackgroundPath(backgroundPath));
 }
 
 function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
