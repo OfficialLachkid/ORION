@@ -567,4 +567,3 @@ test('planner allows reuse when only one type pair or background exists', async 
   assert.deepEqual(plan.selection.type_pair, ['grass', 'poison']);
   assert.equal(plan.assets.background.selected_path, '/tmp/background-1.png');
 });
-

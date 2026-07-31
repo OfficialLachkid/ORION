@@ -383,4 +383,3 @@ export async function planPokemonTypeChallenge({
     required_asset_gaps: [...new Set(requiredAssetGaps)],
   };
 }
-

@@ -95,4 +95,3 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   printInfo(`Wrote Pokemon type challenge plan to ${absoluteOutputPath}`);
   printInfo(`Updated selection state at ${absoluteStatePath}`);
 }
-
