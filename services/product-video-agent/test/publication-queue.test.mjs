@@ -141,7 +141,8 @@ test('channel profiles upsert into the generic video_channels row shape', () => 
   const row = toVideoChannelRow(channelProfile);
   assert.equal(row.id, 'video-channel-poke-quizz-youtube');
   assert.equal(row.platform, 'youtube_shorts');
-  assert.equal(row.timezone, 'Europe/Amsterdam');
+  assert.equal(row.language, 'en-US');
+  assert.equal(row.settings.timezone, 'Europe/Amsterdam');
   assert.equal(row.settings.workflow.preview_visibility, 'unlisted');
   assert.equal(row.settings.schedule_slots.length, 3);
 });
