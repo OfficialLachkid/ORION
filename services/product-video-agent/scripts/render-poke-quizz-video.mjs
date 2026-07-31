@@ -10,6 +10,7 @@ import {
   printUsage,
   projectRoot,
 } from '../../../scripts/lib/ruflo-wrapper-utils.mjs';
+import { moveOlderPreviewFiles } from './organize-poke-quizz-previews.mjs';
 import { buildPokeQuizzRenderPlan, loadJson, renderPokeQuizzVideo } from '../src/poke-quizz-renderer.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../src/poke-quizz-asset-layout.mjs';
 import { resolveFfmpegExecutable } from '../src/runtime-executables.mjs';
@@ -122,4 +123,14 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   printInfo(`Rendered Poke Quizz preview to ${result.output_path}`);
   printInfo(`Mixed audio track: ${result.audio_mix_path}`);
   printInfo(`Video filter script: ${result.video_filter_script_path}`);
+
+  const previewRoot = resolve(projectRoot, POKE_QUIZZ_ASSET_LAYOUT.previews);
+  if (resolve(result.output_path).startsWith(previewRoot)) {
+    const organized = await moveOlderPreviewFiles({
+      previewsDirectory: previewRoot,
+      archiveDirectory: resolve(previewRoot, 'Older Generated Videos'),
+      keepCount: 2,
+    });
+    printInfo(`Preview organizer kept ${organized.kept.length} preview(s) in root and archived ${organized.archived.length}.`);
+  }
 }

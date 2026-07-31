@@ -23,6 +23,7 @@ async function listPreviewMp4FilesSortedByModifiedTime(directoryPath) {
     const files = await Promise.all(
       entries
         .filter((entry) => entry.isFile())
+        .filter((entry) => !entry.name.startsWith('.'))
         .filter((entry) => entry.name.toLowerCase().endsWith('.mp4'))
         .map(async (entry) => {
           const filePath = resolve(directoryPath, entry.name);
@@ -41,7 +42,7 @@ async function listPreviewMp4FilesSortedByModifiedTime(directoryPath) {
   }
 }
 
-async function moveOlderPreviewFiles({ previewsDirectory, archiveDirectory, keepCount }) {
+export async function moveOlderPreviewFiles({ previewsDirectory, archiveDirectory, keepCount }) {
   await mkdir(archiveDirectory, { recursive: true });
   const previewFiles = await listPreviewMp4FilesSortedByModifiedTime(previewsDirectory);
   const kept = previewFiles.slice(0, keepCount);

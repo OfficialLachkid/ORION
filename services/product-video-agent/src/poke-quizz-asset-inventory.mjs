@@ -148,7 +148,7 @@ export async function scanPokeQuizzAssetInventory() {
     overlays,
     transitions,
   ] = await Promise.all([
-    listFiles(POKE_QUIZZ_ASSET_LAYOUT.backgrounds, BACKGROUND_EXTENSIONS),
+    listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.backgrounds, BACKGROUND_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.soundEffects, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.pixelTypes, IMAGE_EXTENSIONS),
@@ -161,6 +161,7 @@ export async function scanPokeQuizzAssetInventory() {
   const countdownTick = matchSoundEffect(soundEffects, ['countdown', 'tick', 'beep']);
   const timerEnd = matchSoundEffect(soundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'ding', 'reveal-hit']);
   const reveal = matchSoundEffect(soundEffects, ['reveal', 'sparkle', 'who', 'answer']) || timerEnd;
+  const pokeballWiggle = matchSoundEffect(soundEffects, ['pokeball', 'wiggle', 'wobble', 'shake']);
 
   return {
     scanned_at: new Date().toISOString(),
@@ -172,6 +173,7 @@ export async function scanPokeQuizzAssetInventory() {
       countdown_tick: countdownTick,
       timer_end: timerEnd,
       reveal,
+      pokeball_wiggle: pokeballWiggle,
     },
     type_icons: {
       pixel: pixelTypes,

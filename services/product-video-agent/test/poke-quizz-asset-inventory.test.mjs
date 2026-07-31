@@ -91,12 +91,15 @@ test('timer_finished sound effect naming is recognized by the current inventory 
   const soundEffects = [
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/countdown.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/timer_finished.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/pokeball_wiggle.mp3',
   ];
   const countdownTick = soundEffects.find((filePath) => ['countdown', 'tick', 'beep'].some((keyword) => filePath.toLowerCase().includes(keyword)));
   const timerEnd = soundEffects.find((filePath) => ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'ding', 'reveal-hit'].some((keyword) => filePath.toLowerCase().includes(keyword)));
   const reveal = soundEffects.find((filePath) => ['reveal', 'sparkle', 'who', 'answer'].some((keyword) => filePath.toLowerCase().includes(keyword))) || timerEnd;
+  const pokeballWiggle = soundEffects.find((filePath) => ['pokeball', 'wiggle', 'wobble', 'shake'].some((keyword) => filePath.toLowerCase().includes(keyword)));
 
   assert.match(countdownTick || '', /countdown\.mp3$/u);
   assert.match(timerEnd || '', /timer_finished\.mp3$/u);
   assert.match(reveal || '', /timer_finished\.mp3$/u);
+  assert.match(pokeballWiggle || '', /pokeball_wiggle\.mp3$/u);
 });

@@ -567,3 +567,71 @@ test('planner allows reuse when only one type pair or background exists', async 
   assert.deepEqual(plan.selection.type_pair, ['grass', 'poison']);
   assert.equal(plan.assets.background.selected_path, '/tmp/background-1.png');
 });
+
+test('planner prefers beach backgrounds when a water type is in the selected pair', async () => {
+  const waterRows = [
+    {
+      id: 'pokedex-0130',
+      national_dex_number: 130,
+      name: 'Gyarados',
+      generation: 1,
+      region: 'kanto',
+      types: ['water', 'flying'],
+      sprite_path: '/tmp/0130.png',
+      silhouette_path: '/tmp/0130-silhouette.png',
+      shiny_sprite_path: '/tmp/0130-shiny.png',
+      cry_path: '/tmp/0130.wav',
+      sprite_source_url: 'https://example.test/0130.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/water.gif',
+          'https://www.serebii.net/pokedex-bw/type/flying.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows: waterRows,
+    seed: 'water-beach-background',
+    forcedTypePair: ['water', 'flying'],
+    assetInventory: {
+      scanned_at: '2026-07-31T00:00:00.000Z',
+      directories: {},
+      backgrounds: [
+        '/tmp/background-plain.png',
+        '/tmp/beach-backgrounds/beach-1.png',
+        '/tmp/beach-backgrounds/beach-2.png',
+      ],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav', '/tmp/pokeball_wiggle.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+        pokeball_wiggle: '/tmp/pokeball_wiggle.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/water.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.match(plan.assets.background.selected_path || '', /\/beach-backgrounds\//u);
+});

@@ -6,6 +6,10 @@ import {
   selectTypeIconSet,
 } from './poke-quizz-asset-inventory.mjs';
 
+const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
+  water: ['beach-backgrounds'],
+});
+
 function hashSeed(input) {
   let hash = 2166136261;
   for (const character of String(input || 'poke-quizz-default-seed')) {
@@ -117,6 +121,25 @@ function selectSeededFileAvoidingPrevious(files, random, previousPath) {
 
   const eligibleFiles = files.filter((filePath) => filePath !== previousPath);
   return selectSeededFile(eligibleFiles.length > 0 ? eligibleFiles : files, random);
+}
+
+function selectBackgroundCandidatesForTypePair(backgrounds, typePair = []) {
+  const allBackgrounds = Array.isArray(backgrounds) ? backgrounds : [];
+  if (allBackgrounds.length === 0) {
+    return [];
+  }
+
+  const normalizedTypes = typePair.map((typeName) => String(typeName || '').trim().toLowerCase());
+  const themedCandidates = normalizedTypes.flatMap((typeName) => {
+    const folderHints = TYPE_THEMED_BACKGROUND_FOLDER_HINTS[typeName] || [];
+    return allBackgrounds.filter((backgroundPath) => (
+      folderHints.some((folderHint) => backgroundPath.toLowerCase().includes(`/${folderHint.toLowerCase()}/`))
+    ));
+  });
+
+  return themedCandidates.length > 0
+    ? [...new Set(themedCandidates)]
+    : allBackgrounds;
 }
 
 function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
@@ -274,7 +297,7 @@ export async function planPokemonTypeChallenge({
   if (!inventory.sound_effects.reveal) requiredAssetGaps.push('reveal_sfx_missing');
 
   const selectedBackgroundPath = selectSeededFileAvoidingPrevious(
-    inventory.backgrounds,
+    selectBackgroundCandidatesForTypePair(inventory.backgrounds, selectedPair.pair),
     random,
     normalizedSelectionState.last_background_path,
   );

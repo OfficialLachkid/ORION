@@ -130,11 +130,11 @@ test('timer layout sits above the pokeball grid with centered number anchors', (
     },
   });
   assert.equal(layout.x, 315);
-  assert.equal(layout.y, 441);
+  assert.equal(layout.y, 371);
   assert.equal(layout.width, 450);
   assert.equal(layout.height, 450);
   assert.equal(layout.number_center_x, 540);
-  assert.equal(layout.number_center_y, 666);
+  assert.equal(layout.number_center_y, 596);
 });
 
 test('countdown moments include the 0 card at reveal time', () => {

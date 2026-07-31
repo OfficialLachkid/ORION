@@ -8,6 +8,7 @@ const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
 const DEFAULT_TIMER_SIZE = 300;
 const DEFAULT_TIMER_SCALE_MULTIPLIER = 1.5;
+const DEFAULT_TIMER_Y_OFFSET = 70;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
 const DEFAULT_HOOK_FONT_SIZE = 138;
 const DEFAULT_PROMPT_FONT_SIZE = 81;
@@ -18,6 +19,7 @@ const DEFAULT_MUSIC_LEAD_SECONDS = 0.6;
 const DEFAULT_MUSIC_VOLUME = 0.18;
 const DEFAULT_VOICE_VOLUME = 1;
 const DEFAULT_COUNTDOWN_VOLUME = 0.72;
+const DEFAULT_POKEBALL_WIGGLE_VOLUME = 0.38;
 const DEFAULT_TIMER_END_VOLUME = 0.9;
 const DEFAULT_REVEAL_TRANSITION_SECONDS = 0.42;
 const DEFAULT_REVEAL_VISUAL_DELAY_SECONDS = 0.5;
@@ -27,9 +29,12 @@ const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.55;
 const DEFAULT_TYPE_ICON_HOOK_Y = 620;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
 const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
-const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.82;
+const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.72;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
-const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.035;
+const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
+const DEFAULT_POKEBALL_INTRO_SECONDS = 0.28;
+const DEFAULT_TIMER_ALARM_EXTRA_HOLD_SECONDS = 1;
+const DEFAULT_TIMER_ALARM_EXIT_SECONDS = 0.42;
 const DEFAULT_FONT_CANDIDATES = [
   '/System/Library/Fonts/Supplemental/Avenir Next.ttc',
   '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
@@ -171,6 +176,29 @@ function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYP
   return `if(lt(t,${start}),${distancePx},if(lt(t,${end}),${distancePx}*(1-((t-${start})/${duration})),0))`;
 }
 
+function buildAnimatedPopSettleExpression(startSeconds, durationSeconds = DEFAULT_POKEBALL_INTRO_SECONDS, initialScale = 0.28, peakScale = 1.14, settleScale = 1) {
+  const start = roundTime(startSeconds);
+  const duration = roundTime(Math.max(0.18, durationSeconds));
+  const peak = roundTime(start + (duration * 0.58));
+  const end = roundTime(start + duration);
+  return `if(lt(t,${start}),${initialScale},if(lt(t,${peak}),${initialScale}+((t-${start})/${roundTime(peak - start)})*${roundTime(peakScale - initialScale)},if(lt(t,${end}),${peakScale}-((t-${peak})/${roundTime(end - peak)})*${roundTime(peakScale - settleScale)},${settleScale})))`;
+}
+
+function buildTimerAlarmExitScaleExpression(exitStartSeconds, exitEndSeconds) {
+  const start = roundTime(exitStartSeconds);
+  const end = roundTime(exitEndSeconds);
+  const duration = roundTime(Math.max(0.18, end - start));
+  const peak = roundTime(start + (duration * 0.38));
+  return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.18,if(lt(t,${end}),1.18-((t-${peak})/${roundTime(end - peak)})*0.54,0.64)))`;
+}
+
+function buildTimerAlarmExitAlphaExpression(exitStartSeconds, exitEndSeconds) {
+  const start = roundTime(exitStartSeconds);
+  const end = roundTime(exitEndSeconds);
+  const duration = roundTime(Math.max(0.18, end - start));
+  return `if(lt(t,${start}),1,if(lt(t,${end}),1-((t-${start})/${duration}),0))`;
+}
+
 function resolveRevealSpriteHoldSize({ gridItemSize, itemCount, configuredMultiplier }) {
   const desiredSize = gridItemSize * Math.max(1, configuredMultiplier);
   if (itemCount <= 2) return roundTime(desiredSize);
@@ -267,7 +295,7 @@ export function buildTimerLayout(template, gridLayout = null) {
   const size = Math.round(Math.max(DEFAULT_TIMER_SIZE, gridItemSize * 1.22) * DEFAULT_TIMER_SCALE_MULTIPLIER);
   const gapCenterY = Math.floor((typeIconBottom + gridVisualTop) / 2);
   const left = Math.max(24, Math.floor((canvasWidth - size) / 2));
-  const top = Math.max(safeTop + 110, gapCenterY - Math.floor(size / 2));
+  const top = Math.max(safeTop + 70, gapCenterY - Math.floor(size / 2) - DEFAULT_TIMER_Y_OFFSET);
   return {
     x: left,
     y: top,
@@ -590,6 +618,7 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     ),
   });
   const pokeballStaticLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbs', index));
+  const pokeballIntroLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbi', index));
   const pokeballTransitionLabels = renderPlan.grid.cells.map((_, index) => safeFilterLabel('pbt', index));
   const timerSourceDuration = Math.max(
     0.12,
@@ -608,9 +637,13 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     filters.push(`[pokeballbase]split=${pokeballSplitLabels.length}${pokeballSplitLabels.map((label) => `[${label}]`).join('')}`);
     for (let index = 0; index < renderPlan.grid.cells.length; index += 1) {
       const cell = renderPlan.grid.cells[index];
+      const introScaleExpression = buildAnimatedPopSettleExpression(countdownStart);
+      filters.push(
+        `[${pokeballStaticLabels[index]}]scale=w='${pokeballSize}*(${introScaleExpression})':h='${pokeballSize}*(${introScaleExpression})':eval=frame,setsar=1[${pokeballIntroLabels[index]}]`,
+      );
       const nextVideoLabel = safeFilterLabel('vg', index);
       filters.push(
-        `[${currentVideoLabel}][${pokeballStaticLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, revealVisualStart)}'[${nextVideoLabel}]`,
+        `[${currentVideoLabel}][${pokeballIntroLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, revealVisualStart)}'[${nextVideoLabel}]`,
       );
       currentVideoLabel = nextVideoLabel;
     }
@@ -625,12 +658,36 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
   if (inputRefs.timerAlarm != null && timerAlarmDuration > 0) {
     const timerAlarmLabel = 'timeralarm';
     const timerAlarmStart = renderPlan.phases.reveal.start_seconds;
+    const timerAlarmVisibleEnd = roundTime(
+      Math.min(
+        renderPlan.total_duration_seconds,
+        timerAlarmStart + timerAlarmDuration + DEFAULT_TIMER_ALARM_EXTRA_HOLD_SECONDS,
+      ),
+    );
+    const timerAlarmExitStart = roundTime(
+      Math.max(
+        timerAlarmStart + Math.min(timerAlarmDuration, DEFAULT_TIMER_ALARM_EXTRA_HOLD_SECONDS * 0.35),
+        timerAlarmVisibleEnd - DEFAULT_TIMER_ALARM_EXIT_SECONDS,
+      ),
+    );
+    const timerAlarmScaleExpression = buildTimerAlarmExitScaleExpression(
+      timerAlarmExitStart,
+      timerAlarmVisibleEnd,
+    );
+    const timerAlarmAlphaExpression = buildTimerAlarmExitAlphaExpression(
+      timerAlarmExitStart,
+      timerAlarmVisibleEnd,
+    );
+    const timerAlarmHoldSeconds = roundTime(Math.max(
+      0,
+      timerAlarmVisibleEnd - (timerAlarmStart + timerAlarmDuration),
+    ));
     filters.push(
-      `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[${timerAlarmLabel}]`,
+      `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},tpad=stop_mode=clone:stop_duration=${timerAlarmHoldSeconds},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,scale=w='${renderPlan.timer_layout.width}*(${timerAlarmScaleExpression})':h='${renderPlan.timer_layout.height}*(${timerAlarmScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,colorchannelmixer=aa='${timerAlarmAlphaExpression}',setsar=1[${timerAlarmLabel}]`,
     );
     const timerAlarmVideoLabel = `${currentVideoLabel}a`;
     filters.push(
-      `[${currentVideoLabel}][${timerAlarmLabel}]overlay=${renderPlan.timer_layout.x}:${renderPlan.timer_layout.y}:enable='${formatEnableBetween(timerAlarmStart, renderPlan.total_duration_seconds)}'[${timerAlarmVideoLabel}]`,
+      `[${currentVideoLabel}][${timerAlarmLabel}]overlay=x='${renderPlan.timer_layout.number_center_x}-w/2':y='${renderPlan.timer_layout.number_center_y}-h/2':enable='${formatEnableBetween(timerAlarmStart, timerAlarmVisibleEnd)}'[${timerAlarmVideoLabel}]`,
     );
     currentVideoLabel = timerAlarmVideoLabel;
   }
@@ -788,6 +845,7 @@ export function buildAudioFilterScript({
   musicPath,
   countdownPath,
   timerEndPath,
+  pokeballWigglePath,
   renderPlan,
   mediaDurations = {},
 }) {
@@ -844,6 +902,22 @@ export function buildAudioFilterScript({
     const delayMs = Math.max(0, Math.round(renderPlan.audio_cues.timer_end_seconds * 1000));
     filters.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=${DEFAULT_TIMER_END_VOLUME}[timerend]`);
     mixLabels.push('timerend');
+    inputIndex += 1;
+  }
+
+  if (pokeballWigglePath) {
+    const wiggleCount = Math.max(
+      1,
+      Math.round(Math.max(0, renderPlan.audio_cues.timer_end_seconds - renderPlan.audio_cues.countdown_start_seconds)),
+    );
+    const wiggleSplitLabels = Array.from({ length: wiggleCount }, (_, index) => `w${index}`);
+    filters.push(`[${inputIndex}:a]asplit=${wiggleCount}${wiggleSplitLabels.map((label) => `[${label}]`).join('')}`);
+    for (let wiggleIndex = 0; wiggleIndex < wiggleCount; wiggleIndex += 1) {
+      const delayMs = Math.max(0, Math.round((renderPlan.audio_cues.countdown_start_seconds + wiggleIndex + 0.12) * 1000));
+      const label = `wig${wiggleIndex}`;
+      filters.push(`[w${wiggleIndex}]atrim=0:0.34,adelay=${delayMs}|${delayMs},volume=${DEFAULT_POKEBALL_WIGGLE_VOLUME}[${label}]`);
+      mixLabels.push(label);
+    }
   }
 
   filters.push(`${mixLabels.map((label) => `[${label}]`).join('')}amix=inputs=${mixLabels.length}:normalize=0,alimiter=limit=0.95[aout]`);
@@ -956,11 +1030,13 @@ export async function renderPokeQuizzVideo({
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
   const countdownPath = plan.assets.audio.selected_sound_effects?.countdown_tick || null;
   const timerEndPath = plan.assets.audio.selected_sound_effects?.timer_end || null;
+  const pokeballWigglePath = plan.assets.audio.selected_sound_effects?.pokeball_wiggle || null;
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
     ...(countdownPath ? [countdownPath] : []),
     ...(timerEndPath ? [timerEndPath] : []),
+    ...(pokeballWigglePath ? [pokeballWigglePath] : []),
   ]);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
@@ -1007,6 +1083,7 @@ export async function renderPokeQuizzVideo({
     musicPath,
     countdownPath,
     timerEndPath,
+    pokeballWigglePath,
     renderPlan,
     mediaDurations: {
       countdown_audio_duration_seconds: countdownDurationSeconds,
@@ -1022,6 +1099,7 @@ export async function renderPokeQuizzVideo({
         ...(musicPath ? [musicPath] : []),
         ...(countdownPath ? [countdownPath] : []),
         ...(timerEndPath ? [timerEndPath] : []),
+        ...(pokeballWigglePath ? [pokeballWigglePath] : []),
       ]),
       '-/filter_complex',
       audioFilterScriptPath,
