@@ -81,6 +81,13 @@ function safeFilterLabel(prefix, index) {
   return `${prefix}${index}`;
 }
 
+function typeIconUsesOpaqueBadgeArt(typeIconAsset) {
+  const styleVariant = String(typeIconAsset?.style_variant || typeIconAsset?.style || '')
+    .trim()
+    .toLowerCase();
+  return styleVariant === 'badge-style';
+}
+
 export function estimateWrapCharacterLimit(template, fontSize) {
   const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
   const safeZone = template?.canvas?.safe_zone || {};
@@ -544,7 +551,7 @@ function buildVisualInputs(plan, renderPlan) {
   return inputs;
 }
 
-function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts) {
+export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts) {
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
   const countdownDuration = Math.max(0.5, ensureNumber(renderPlan.phases.countdown?.duration_seconds, 0));
@@ -570,6 +577,7 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const iconBackdropVideoLabel = safeFilterLabel('vtbg', index);
     const position = renderPlan.type_icon_layout[index];
     const introPosition = renderPlan.type_icon_intro_layout[index] || position;
+    const usesOpaqueBadgeArt = typeIconUsesOpaqueBadgeArt(plan.assets.type_icons[index]);
     const settleDuration = ensureNumber(
       renderPlan.transitions?.type_icon_settle_seconds,
       DEFAULT_TYPE_ICON_SETTLE_SECONDS,
@@ -605,20 +613,24 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const iconOutlineScaleExpression = iconScaleExpression;
     const iconOutlineOffsetExpression = `max(5,(${iconScaleExpression})*0.03)`;
     filters.push(
-      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconOutlineScaleExpression}':h='${iconOutlineScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,colorchannelmixer=rr=0:rg=0:rb=0:gr=0:gg=0:gb=0:br=0:bg=0:bb=0,setsar=1[${iconOutlineLabel}]`,
+      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconOutlineScaleExpression}':h='${iconOutlineScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,lutrgb=r='0':g='0':b='0',setsar=1[${iconOutlineLabel}]`,
     );
     filters.push(
       `[${inputRefs.typeIcons[index]}:v]scale=w='${iconScaleExpression}':h='${iconScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
     );
-    filters.push(
-      `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${DEFAULT_TYPE_ICON_BACKDROP_ALPHA},0)'[${iconBackdropBaseLabel}]`,
-    );
-    filters.push(
-      `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
-    );
-    filters.push(
-      `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
-    );
+    let baseVideoLabel = `v${index}`;
+    if (!usesOpaqueBadgeArt) {
+      filters.push(
+        `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${DEFAULT_TYPE_ICON_BACKDROP_ALPHA},0)'[${iconBackdropBaseLabel}]`,
+      );
+      filters.push(
+        `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
+      );
+      filters.push(
+        `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
+      );
+      baseVideoLabel = iconBackdropVideoLabel;
+    }
     const outlineDirections = [
       [-1, 0],
       [1, 0],
@@ -629,7 +641,7 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       [1, -1],
       [1, 1],
     ];
-    let outlineVideoLabel = iconBackdropVideoLabel;
+    let outlineVideoLabel = baseVideoLabel;
     for (let directionIndex = 0; directionIndex < outlineDirections.length; directionIndex += 1) {
       const [deltaX, deltaY] = outlineDirections[directionIndex];
       const nextOutlineVideoLabel = safeFilterLabel(`vtol${index}`, directionIndex);

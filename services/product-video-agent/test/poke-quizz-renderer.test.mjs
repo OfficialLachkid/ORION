@@ -5,6 +5,7 @@ import {
   buildCountdownMoments,
   buildAudioFilterScript,
   buildHookTypeIconLayout,
+  buildVisualFilterScript,
   escapeDrawtextText,
   formatEnableBetween,
   buildPhaseSchedule,
@@ -117,6 +118,56 @@ test('hook type icon layout starts larger and centered before settling', () => {
   const layout = buildHookTypeIconLayout(template, 2);
   assert.deepEqual(layout[0], { x: 119, y: 620, width: 391, height: 391 });
   assert.deepEqual(layout[1], { x: 570, y: 620, width: 391, height: 391 });
+});
+
+test('badge-style hook icons skip the synthetic white backdrop path', () => {
+  const badgePlan = {
+    ...plan,
+    assets: {
+      ...plan.assets,
+      type_icons: [
+        { type: 'grass', local_path: '/tmp/grass.png', style_variant: 'badge-style' },
+        { type: 'poison', local_path: '/tmp/poison.png', style_variant: 'badge-style' },
+      ],
+      pokemon: [],
+      overlays: {
+        ...plan.assets.overlays,
+        pokeball_grid: {
+          cells: [],
+          item_count: 0,
+          columns: 0,
+          rows: 0,
+          item_size_px: 180,
+        },
+      },
+    },
+  };
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan: badgePlan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const visualFilter = buildVisualFilterScript(
+    badgePlan,
+    template,
+    renderPlan,
+    {
+      background: 0,
+      typeIcons: [1, 2],
+      timerCountdown: 3,
+      timerAlarm: null,
+      pokeball: 4,
+      pokemon: [],
+    },
+    null,
+    {
+      hook: { lines: [] },
+      prompt: { lines: [] },
+      reveal: { lines: [] },
+    },
+  );
+  assert.doesNotMatch(visualFilter.script, /color=c=white:s=640x640/u);
+  assert.match(visualFilter.script, /lutrgb=r='0':g='0':b='0'/u);
 });
 
 test('timer layout sits above the pokeball grid with centered number anchors', () => {
