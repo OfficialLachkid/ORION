@@ -105,7 +105,6 @@ export function toVideoChannelRow(profileInput) {
     platform: profile.platform,
     account_key: profile.account_key,
     language: profile.language,
-    timezone: profile.timezone,
     status: profile.status,
     settings: {
       schedule_slots: profile.schedule_slots,
