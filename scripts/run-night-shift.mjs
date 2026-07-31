@@ -26,6 +26,7 @@ import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
 import { fetchLeads } from './lib/leadgen-supabase.mjs';
 import { reconcileDrafts } from './lib/draft-reconciler.mjs';
 import { detectReplies } from './lib/reply-detector.mjs';
+import { getQualificationBatchTimeoutMs } from './lib/night-shift-runtime.mjs';
 import { buildNoticeDiscordPayload } from '../services/discord-bot/src/message-formatting.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
@@ -75,7 +76,10 @@ async function postDiscord(config, channelId, payload) {
 // NOT to write the success marker — that's what lets the 07:00 fallback
 // recover it.
 function runQualification(limit) {
-  return runQualificationScript([resolve(projectRoot, 'scripts', 'run-lead-qualification.mjs'), '--limit', String(limit)]);
+  return runQualificationScript(
+    [resolve(projectRoot, 'scripts', 'run-lead-qualification.mjs'), '--limit', String(limit)],
+    getQualificationBatchTimeoutMs(limit),
+  );
 }
 
 // Re-drafts leads the operator rejected with feedback (status=draft_rejected):
@@ -83,7 +87,10 @@ function runQualification(limit) {
 // saved rejection_feedback back into the qualifier so the new draft addresses
 // it. Returns the parsed outcomes (empty if there were none to redraft).
 function runRedraftRejected(limit) {
-  return runQualificationScript([resolve(projectRoot, 'scripts', 'run-lead-qualification.mjs'), '--redraft-rejected', '--limit', String(limit)]);
+  return runQualificationScript(
+    [resolve(projectRoot, 'scripts', 'run-lead-qualification.mjs'), '--redraft-rejected', '--limit', String(limit)],
+    getQualificationBatchTimeoutMs(limit),
+  );
 }
 
 // Drafts follow-ups for sent leads that passed the wait window without a reply
@@ -105,11 +112,11 @@ function runFollowUps(limit) {
   return 0;
 }
 
-function runQualificationScript(args) {
+function runQualificationScript(args, timeoutMs) {
   const result = spawnSync(process.execPath, args, {
     cwd: projectRoot,
     encoding: 'utf8',
-    timeout: 60 * 60 * 1000, // 1h hard ceiling for the whole batch
+    timeout: timeoutMs,
   });
 
   const stdout = String(result.stdout || '');
@@ -129,7 +136,9 @@ function runQualificationScript(args) {
   const systemicFailure = (!ran && result.status !== 0) || allErrored;
   const childStderr = String(result.stderr || '').trim();
   const outcomeErrors = [...new Set(outcomes.map((outcome) => outcome.error).filter(Boolean))];
-  const diagnostic = childStderr || outcomeErrors.slice(0, 3).join(' | ');
+  const processError = result.error?.message
+    || (result.signal ? `Qualification process ended with signal ${result.signal}.` : '');
+  const diagnostic = childStderr || outcomeErrors.slice(0, 3).join(' | ') || processError;
 
   return { outcomes, systemicFailure, exitCode: result.status ?? -1, stderr: diagnostic };
 }

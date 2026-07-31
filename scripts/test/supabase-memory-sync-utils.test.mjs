@@ -13,6 +13,7 @@ import {
   isTransientSupabaseError,
   retryTransientSupabaseOperation,
 } from '../lib/supabase-bridge-api.mjs';
+import { getQualificationBatchTimeoutMs } from '../lib/night-shift-runtime.mjs';
 
 test('extractMarkdownTitle prefers the first markdown heading', () => {
   assert.equal(extractMarkdownTitle('# Bridge Hub\n\nSummary'), 'Bridge Hub');
@@ -215,4 +216,11 @@ test('retryTransientSupabaseOperation does not retry permanent Supabase errors',
   );
 
   assert.equal(calls, 1);
+});
+
+test('getQualificationBatchTimeoutMs scales safely for scheduled batch size', () => {
+  assert.equal(getQualificationBatchTimeoutMs(3), 60 * 60 * 1000);
+  assert.equal(getQualificationBatchTimeoutMs(10), 70 * 60 * 1000);
+  assert.equal(getQualificationBatchTimeoutMs(20), 140 * 60 * 1000);
+  assert.equal(getQualificationBatchTimeoutMs(100), 3 * 60 * 60 * 1000);
 });
