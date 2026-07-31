@@ -129,10 +129,10 @@ test('timer layout sits above the pokeball grid with centered number anchors', (
       height: 1040,
     },
   });
-  assert.equal(layout.x, 390);
-  assert.equal(layout.y, 516);
-  assert.equal(layout.width, 300);
-  assert.equal(layout.height, 300);
+  assert.equal(layout.x, 315);
+  assert.equal(layout.y, 441);
+  assert.equal(layout.width, 450);
+  assert.equal(layout.height, 450);
   assert.equal(layout.number_center_x, 540);
   assert.equal(layout.number_center_y, 666);
 });

@@ -7,6 +7,7 @@ import {
   parseSerebiiGen4Pokedex,
   parseSerebiiGen5Pokedex,
   parseSerebiiGen6Pokedex,
+  parseSerebiiGen7Pokedex,
 } from '../src/pokedex-source.mjs';
 
 const SAMPLE_GEN1_HTML = `
@@ -156,6 +157,24 @@ const SAMPLE_GEN6_HTML = `
 </table>
 `;
 
+const SAMPLE_GEN7_HTML = `
+<table class="dextable" align="center">
+  <tr>
+    <td align="center" class="fooinfo">#0724</td>
+    <td align="center" class="fooinfo"><table class="pkmn"><tr><td><a href="/pokemon/decidueye"><img src="/scarletviolet/pokemon/new/small/724.png" loading="lazy" style="height:120px" /></a></td></tr></table></td>
+    <td align="center" class="fooinfo"><a href="/pokemon/decidueye">Decidueye</a></td>
+    <td align="center" class="fooinfo"><a href="/pokemon/type/grass"><img src="/pokedex-bw/type/grass.gif" /></a> <a href="/pokemon/type/ghost"><img src="/pokedex-bw/type/ghost.gif" /></a></td>
+    <td align="center" class="fooinfo"><a href="/abilitydex/overgrow.shtml">Overgrow</a> <br /><a href="/abilitydex/longreach.shtml">Long Reach</a></td>
+    <td align="center" class="fooinfo">78</td>
+    <td align="center" class="fooinfo">107</td>
+    <td align="center" class="fooinfo">75</td>
+    <td align="center" class="fooinfo">100</td>
+    <td align="center" class="fooinfo">100</td>
+    <td align="center" class="fooinfo">70</td>
+  </tr>
+</table>
+`;
+
 test('Serebii Gen 1 parser emits truth-only pokedex rows', () => {
   const rows = parseSerebiiGen1Pokedex(SAMPLE_GEN1_HTML);
 
@@ -232,4 +251,16 @@ test('Serebii Gen 6 parser emits Kalos rows with grounded type icons', () => {
   assert.equal(rows[0].sprite_source_url, 'https://www.serebii.net/scarletviolet/pokemon/new/small/700.png');
   assert.deepEqual(rows[0].types, ['fairy']);
   assert.deepEqual(rows[0].metadata.abilities, ['Cute Charm', 'Pixilate']);
+});
+
+test('Serebii Gen 7 parser emits Alola rows with grounded dual types', () => {
+  const rows = parseSerebiiGen7Pokedex(SAMPLE_GEN7_HTML);
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].generation, 7);
+  assert.equal(rows[0].region, 'alola');
+  assert.equal(rows[0].metadata.typing_basis, 'current_canonical_types_from_serebii_gen7_page');
+  assert.equal(rows[0].sprite_source_url, 'https://www.serebii.net/scarletviolet/pokemon/new/small/724.png');
+  assert.deepEqual(rows[0].types, ['grass', 'ghost']);
+  assert.deepEqual(rows[0].metadata.abilities, ['Overgrow', 'Long Reach']);
 });

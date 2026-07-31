@@ -7,6 +7,7 @@ const DEFAULT_PROMPT_TEXT_Y = 170;
 const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
 const DEFAULT_TIMER_SIZE = 300;
+const DEFAULT_TIMER_SCALE_MULTIPLIER = 1.5;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
 const DEFAULT_HOOK_FONT_SIZE = 138;
 const DEFAULT_PROMPT_FONT_SIZE = 81;
@@ -26,8 +27,9 @@ const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.55;
 const DEFAULT_TYPE_ICON_HOOK_Y = 620;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
 const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
-const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.88;
-const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 214;
+const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.82;
+const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
+const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.035;
 const DEFAULT_FONT_CANDIDATES = [
   '/System/Library/Fonts/Supplemental/Avenir Next.ttc',
   '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
@@ -262,7 +264,7 @@ export function buildTimerLayout(template, gridLayout = null) {
     gridLayout?.item_size_px,
     ensureNumber(template?.layout?.pokeball_grid?.item_size_px, 240),
   );
-  const size = Math.round(Math.max(DEFAULT_TIMER_SIZE, gridItemSize * 1.22));
+  const size = Math.round(Math.max(DEFAULT_TIMER_SIZE, gridItemSize * 1.22) * DEFAULT_TIMER_SCALE_MULTIPLIER);
   const gapCenterY = Math.floor((typeIconBottom + gridVisualTop) / 2);
   const left = Math.max(24, Math.floor((canvasWidth - size) / 2));
   const top = Math.max(safeTop + 110, gapCenterY - Math.floor(size / 2));
@@ -507,9 +509,11 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
 
   for (let index = 0; index < plan.assets.type_icons.length; index += 1) {
     const iconLabel = safeFilterLabel('type', index);
+    const iconOutlineLabel = safeFilterLabel('typeoutline', index);
     const iconBackdropBaseLabel = safeFilterLabel('typebgbase', index);
     const iconBackdropLabel = safeFilterLabel('typebg', index);
     const iconBackdropVideoLabel = safeFilterLabel('vtbg', index);
+    const iconOutlineVideoLabel = safeFilterLabel('vtol', index);
     const position = renderPlan.type_icon_layout[index];
     const introPosition = renderPlan.type_icon_intro_layout[index] || position;
     const settleDuration = ensureNumber(
@@ -542,7 +546,9 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       transitionDurationSeconds: settleDuration,
     });
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
-    const iconBackdropScaleExpression = `((${baseSizeExpression})*(${introPopMultiplierExpression}))*${DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER}`;
+    const iconScaleExpression = `(${baseSizeExpression})*(${introPopMultiplierExpression})`;
+    const iconBackdropScaleExpression = `(${iconScaleExpression})*${DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER}`;
+    const iconOutlineScaleExpression = `(${iconScaleExpression})*${DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER}`;
     filters.push(
       `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${DEFAULT_TYPE_ICON_BACKDROP_ALPHA},0)'[${iconBackdropBaseLabel}]`,
     );
@@ -550,13 +556,19 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
     );
     filters.push(
-      `[${inputRefs.typeIcons[index]}:v]scale=w='(${baseSizeExpression})*(${introPopMultiplierExpression})':h='(${baseSizeExpression})*(${introPopMultiplierExpression})':eval=frame:force_original_aspect_ratio=decrease,setsar=1[${iconLabel}]`,
+      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconOutlineScaleExpression}':h='${iconOutlineScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,lutrgb=r='0':g='0':b='0',setsar=1[${iconOutlineLabel}]`,
+    );
+    filters.push(
+      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconScaleExpression}':h='${iconScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
     );
     filters.push(
       `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
     );
     filters.push(
-      `[${iconBackdropVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      `[${iconBackdropVideoLabel}][${iconOutlineLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconOutlineVideoLabel}]`,
+    );
+    filters.push(
+      `[${iconOutlineVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
     );
   }
 
@@ -613,15 +625,12 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
   if (inputRefs.timerAlarm != null && timerAlarmDuration > 0) {
     const timerAlarmLabel = 'timeralarm';
     const timerAlarmStart = renderPlan.phases.reveal.start_seconds;
-    const timerAlarmEnd = roundTime(
-      Math.min(renderPlan.total_duration_seconds, timerAlarmStart + timerAlarmDuration, revealVisualStart),
-    );
     filters.push(
       `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[${timerAlarmLabel}]`,
     );
     const timerAlarmVideoLabel = `${currentVideoLabel}a`;
     filters.push(
-      `[${currentVideoLabel}][${timerAlarmLabel}]overlay=${renderPlan.timer_layout.x}:${renderPlan.timer_layout.y}:enable='${formatEnableBetween(timerAlarmStart, timerAlarmEnd)}'[${timerAlarmVideoLabel}]`,
+      `[${currentVideoLabel}][${timerAlarmLabel}]overlay=${renderPlan.timer_layout.x}:${renderPlan.timer_layout.y}:enable='${formatEnableBetween(timerAlarmStart, renderPlan.total_duration_seconds)}'[${timerAlarmVideoLabel}]`,
     );
     currentVideoLabel = timerAlarmVideoLabel;
   }

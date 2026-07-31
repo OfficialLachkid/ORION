@@ -111,6 +111,7 @@
     "product-video:sync-pokedex-gen4": "node services/product-video-agent/scripts/sync-pokedex-gen4.mjs",
     "product-video:sync-pokedex-gen5": "node services/product-video-agent/scripts/sync-pokedex-gen5.mjs",
     "product-video:sync-pokedex-gen6": "node services/product-video-agent/scripts/sync-pokedex-gen6.mjs",
+    "product-video:sync-pokedex-gen7": "node services/product-video-agent/scripts/sync-pokedex-gen7.mjs",
     "product-video:sync-publication-channels": "node services/product-video-agent/scripts/sync-video-publication-channels.mjs",
     "product-video:publication-queue": "node services/product-video-agent/scripts/run-video-publication-scheduler.mjs",
     "product-video:plan-poke-quizz": "node services/product-video-agent/scripts/plan-pokemon-type-challenge.mjs",
