@@ -167,7 +167,7 @@ test('badge-style hook icons skip the synthetic white backdrop path', () => {
     },
   );
   assert.doesNotMatch(visualFilter.script, /color=c=white:s=640x640/u);
-  assert.match(visualFilter.script, /lutrgb=r='0':g='0':b='0'/u);
+  assert.doesNotMatch(visualFilter.script, /typeoutline/u);
 });
 
 test('timer layout sits above the pokeball grid with centered number anchors', () => {

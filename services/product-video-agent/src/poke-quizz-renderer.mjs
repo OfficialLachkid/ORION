@@ -571,7 +571,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
   for (let index = 0; index < plan.assets.type_icons.length; index += 1) {
     const iconLabel = safeFilterLabel('type', index);
-    const iconOutlineLabel = safeFilterLabel('typeoutline', index);
     const iconBackdropBaseLabel = safeFilterLabel('typebgbase', index);
     const iconBackdropLabel = safeFilterLabel('typebg', index);
     const iconBackdropVideoLabel = safeFilterLabel('vtbg', index);
@@ -610,11 +609,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
     const iconScaleExpression = `(${baseSizeExpression})*(${introPopMultiplierExpression})`;
     const iconBackdropScaleExpression = `(${iconScaleExpression})*${DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER}`;
-    const iconOutlineScaleExpression = iconScaleExpression;
-    const iconOutlineOffsetExpression = `max(5,(${iconScaleExpression})*0.03)`;
-    filters.push(
-      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconOutlineScaleExpression}':h='${iconOutlineScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,lutrgb=r='0':g='0':b='0',setsar=1[${iconOutlineLabel}]`,
-    );
     filters.push(
       `[${inputRefs.typeIcons[index]}:v]scale=w='${iconScaleExpression}':h='${iconScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
     );
@@ -631,37 +625,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       baseVideoLabel = iconBackdropVideoLabel;
     }
-    const outlineDirections = [
-      [-1, 0],
-      [1, 0],
-      [0, -1],
-      [0, 1],
-      [-1, -1],
-      [-1, 1],
-      [1, -1],
-      [1, 1],
-    ];
-    let outlineVideoLabel = baseVideoLabel;
-    for (let directionIndex = 0; directionIndex < outlineDirections.length; directionIndex += 1) {
-      const [deltaX, deltaY] = outlineDirections[directionIndex];
-      const nextOutlineVideoLabel = safeFilterLabel(`vtol${index}`, directionIndex);
-      const offsetX = deltaX === 0
-        ? ''
-        : deltaX < 0
-          ? `-${iconOutlineOffsetExpression}`
-          : `+${iconOutlineOffsetExpression}`;
-      const offsetY = deltaY === 0
-        ? ''
-        : deltaY < 0
-          ? `-${iconOutlineOffsetExpression}`
-          : `+${iconOutlineOffsetExpression}`;
-      filters.push(
-        `[${outlineVideoLabel}][${iconOutlineLabel}]overlay=x='${iconCenterXExpression}-w/2${offsetX}':y='${iconCenterYExpression}-h/2-${introLiftExpression}${offsetY}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${nextOutlineVideoLabel}]`,
-      );
-      outlineVideoLabel = nextOutlineVideoLabel;
-    }
     filters.push(
-      `[${outlineVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      `[${baseVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
     );
   }
 
