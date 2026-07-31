@@ -116,6 +116,8 @@
     "product-video:publication-queue": "node services/product-video-agent/scripts/run-video-publication-scheduler.mjs",
     "product-video:plan-poke-quizz": "node services/product-video-agent/scripts/plan-pokemon-type-challenge.mjs",
     "product-video:render-poke-quizz": "node services/product-video-agent/scripts/render-poke-quizz-video.mjs",
+    "product-video:register-poke-quizz-publication": "node services/product-video-agent/scripts/register-poke-quizz-publication.mjs",
+    "product-video:execute-youtube-publication": "node services/product-video-agent/scripts/execute-youtube-publication.mjs",
     "product-video:localize-poke-quizz-assets": "node services/product-video-agent/scripts/localize-poke-quizz-assets.mjs",
     "product-video:scan-poke-quizz-assets": "node services/product-video-agent/scripts/scan-poke-quizz-assets.mjs",
     "product-video:set-source-retention": "node services/product-video-agent/index.mjs --set-source-retention",

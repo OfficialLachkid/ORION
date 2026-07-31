@@ -79,6 +79,22 @@ export function normalizePublicationChannelProfile(profile) {
   };
 }
 
+export function findPublicationChannelProfile(profiles, selector) {
+  const normalizedSelector = String(selector || '').trim();
+  const matches = profiles.filter((profile) => (
+    profile.id === normalizedSelector || profile.account_key === normalizedSelector
+  ));
+
+  if (matches.length === 0) {
+    throw new Error(`No publication channel matched "${normalizedSelector}". Use the row id or account_key from publication-channels.`);
+  }
+  if (matches.length > 1) {
+    throw new Error(`Multiple publication channels matched "${normalizedSelector}". Use the exact row id.`);
+  }
+
+  return matches[0];
+}
+
 export function toVideoChannelRow(profileInput) {
   const profile = normalizePublicationChannelProfile(profileInput);
   return {
