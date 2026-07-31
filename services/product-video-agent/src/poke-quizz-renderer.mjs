@@ -192,13 +192,6 @@ function buildTimerAlarmExitScaleExpression(exitStartSeconds, exitEndSeconds) {
   return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.18,if(lt(t,${end}),1.18-((t-${peak})/${roundTime(end - peak)})*0.54,0.64)))`;
 }
 
-function buildTimerAlarmExitAlphaExpression(exitStartSeconds, exitEndSeconds) {
-  const start = roundTime(exitStartSeconds);
-  const end = roundTime(exitEndSeconds);
-  const duration = roundTime(Math.max(0.18, end - start));
-  return `if(lt(t,${start}),1,if(lt(t,${end}),1-((t-${start})/${duration}),0))`;
-}
-
 function resolveRevealSpriteHoldSize({ gridItemSize, itemCount, configuredMultiplier }) {
   const desiredSize = gridItemSize * Math.max(1, configuredMultiplier);
   if (itemCount <= 2) return roundTime(desiredSize);
@@ -674,16 +667,16 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
       timerAlarmExitStart,
       timerAlarmVisibleEnd,
     );
-    const timerAlarmAlphaExpression = buildTimerAlarmExitAlphaExpression(
-      timerAlarmExitStart,
-      timerAlarmVisibleEnd,
-    );
     const timerAlarmHoldSeconds = roundTime(Math.max(
       0,
       timerAlarmVisibleEnd - (timerAlarmStart + timerAlarmDuration),
     ));
+    const timerAlarmFadeDuration = roundTime(Math.max(
+      0.18,
+      timerAlarmVisibleEnd - timerAlarmExitStart,
+    ));
     filters.push(
-      `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},tpad=stop_mode=clone:stop_duration=${timerAlarmHoldSeconds},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,scale=w='${renderPlan.timer_layout.width}*(${timerAlarmScaleExpression})':h='${renderPlan.timer_layout.height}*(${timerAlarmScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,colorchannelmixer=aa='${timerAlarmAlphaExpression}',setsar=1[${timerAlarmLabel}]`,
+      `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},tpad=stop_mode=clone:stop_duration=${timerAlarmHoldSeconds},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,scale=w='${renderPlan.timer_layout.width}*(${timerAlarmScaleExpression})':h='${renderPlan.timer_layout.height}*(${timerAlarmScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,fade=t=out:st=${timerAlarmExitStart}:d=${timerAlarmFadeDuration}:alpha=1,setsar=1[${timerAlarmLabel}]`,
     );
     const timerAlarmVideoLabel = `${currentVideoLabel}a`;
     filters.push(
