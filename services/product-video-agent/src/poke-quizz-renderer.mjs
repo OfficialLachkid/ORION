@@ -8,7 +8,6 @@ const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
 const DEFAULT_TIMER_SIZE = 300;
 const DEFAULT_TIMER_SCALE_MULTIPLIER = 1.5;
-const DEFAULT_TIMER_Y_OFFSET = 70;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
 const DEFAULT_HOOK_FONT_SIZE = 138;
 const DEFAULT_PROMPT_FONT_SIZE = 81;
@@ -29,7 +28,7 @@ const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.55;
 const DEFAULT_TYPE_ICON_HOOK_Y = 620;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
 const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
-const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.72;
+const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.68;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
 const DEFAULT_POKEBALL_INTRO_SECONDS = 0.28;
@@ -189,7 +188,7 @@ function buildTimerAlarmExitScaleExpression(exitStartSeconds, exitEndSeconds) {
   const end = roundTime(exitEndSeconds);
   const duration = roundTime(Math.max(0.18, end - start));
   const peak = roundTime(start + (duration * 0.38));
-  return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.18,if(lt(t,${end}),1.18-((t-${peak})/${roundTime(end - peak)})*0.54,0.64)))`;
+  return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.18,if(lt(t,${end}),max(0.01,1.18-((t-${peak})/${roundTime(end - peak)})*1.18),0.01)))`;
 }
 
 function resolveRevealSpriteHoldSize({ gridItemSize, itemCount, configuredMultiplier }) {
@@ -274,21 +273,17 @@ export function buildTimerLayout(template, gridLayout = null) {
   const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
   const safeZone = template?.canvas?.safe_zone || {};
   const safeTop = ensureNumber(safeZone.top, 160);
-  const gridStage = gridLayout?.stage_bounds_px || template?.layout?.pokeball_grid?.stage_bounds_px || {};
-  const gridTop = ensureNumber(gridStage.top, safeTop + 560);
-  const typeIconBottom = DEFAULT_TYPE_ICON_Y + ensureNumber(template?.layout?.type_icons?.icon_size_px, 168);
-  const gridCellTop = Array.isArray(gridLayout?.cells) && gridLayout.cells.length > 0
-    ? Math.min(...gridLayout.cells.map((cell) => ensureNumber(cell?.y, gridTop)))
-    : gridTop;
-  const gridVisualTop = gridCellTop > (typeIconBottom + 40) ? gridCellTop : gridTop;
   const gridItemSize = ensureNumber(
     gridLayout?.item_size_px,
     ensureNumber(template?.layout?.pokeball_grid?.item_size_px, 240),
   );
-  const size = Math.round(Math.max(DEFAULT_TIMER_SIZE, gridItemSize * 1.22) * DEFAULT_TIMER_SCALE_MULTIPLIER);
-  const gapCenterY = Math.floor((typeIconBottom + gridVisualTop) / 2);
+  const promptZoneTop = Math.max(48, safeTop - 10);
+  const promptZoneBottom = DEFAULT_TYPE_ICON_Y - 60;
+  const promptZoneHeight = Math.max(220, promptZoneBottom - promptZoneTop);
+  const preferredSize = Math.round(Math.max(DEFAULT_TIMER_SIZE, gridItemSize) * DEFAULT_TIMER_SCALE_MULTIPLIER);
+  const size = Math.min(preferredSize, promptZoneHeight);
   const left = Math.max(24, Math.floor((canvasWidth - size) / 2));
-  const top = Math.max(safeTop + 70, gapCenterY - Math.floor(size / 2) - DEFAULT_TIMER_Y_OFFSET);
+  const top = promptZoneTop + Math.max(0, Math.floor((promptZoneHeight - size) / 2));
   return {
     x: left,
     y: top,
@@ -534,7 +529,6 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const iconBackdropBaseLabel = safeFilterLabel('typebgbase', index);
     const iconBackdropLabel = safeFilterLabel('typebg', index);
     const iconBackdropVideoLabel = safeFilterLabel('vtbg', index);
-    const iconOutlineVideoLabel = safeFilterLabel('vtol', index);
     const position = renderPlan.type_icon_layout[index];
     const introPosition = renderPlan.type_icon_intro_layout[index] || position;
     const settleDuration = ensureNumber(
@@ -569,7 +563,8 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
     const iconScaleExpression = `(${baseSizeExpression})*(${introPopMultiplierExpression})`;
     const iconBackdropScaleExpression = `(${iconScaleExpression})*${DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER}`;
-    const iconOutlineScaleExpression = `(${iconScaleExpression})*${DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER}`;
+    const iconOutlineScaleExpression = iconScaleExpression;
+    const iconOutlineOffsetExpression = `max(5,(${iconScaleExpression})*0.03)`;
     filters.push(
       `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${DEFAULT_TYPE_ICON_BACKDROP_ALPHA},0)'[${iconBackdropBaseLabel}]`,
     );
@@ -585,11 +580,37 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     filters.push(
       `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
     );
+    const outlineDirections = [
+      [-1, 0],
+      [1, 0],
+      [0, -1],
+      [0, 1],
+      [-1, -1],
+      [-1, 1],
+      [1, -1],
+      [1, 1],
+    ];
+    let outlineVideoLabel = iconBackdropVideoLabel;
+    for (let directionIndex = 0; directionIndex < outlineDirections.length; directionIndex += 1) {
+      const [deltaX, deltaY] = outlineDirections[directionIndex];
+      const nextOutlineVideoLabel = safeFilterLabel(`vtol${index}`, directionIndex);
+      const offsetX = deltaX === 0
+        ? ''
+        : deltaX < 0
+          ? `-${iconOutlineOffsetExpression}`
+          : `+${iconOutlineOffsetExpression}`;
+      const offsetY = deltaY === 0
+        ? ''
+        : deltaY < 0
+          ? `-${iconOutlineOffsetExpression}`
+          : `+${iconOutlineOffsetExpression}`;
+      filters.push(
+        `[${outlineVideoLabel}][${iconOutlineLabel}]overlay=x='${iconCenterXExpression}-w/2${offsetX}':y='${iconCenterYExpression}-h/2-${introLiftExpression}${offsetY}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${nextOutlineVideoLabel}]`,
+      );
+      outlineVideoLabel = nextOutlineVideoLabel;
+    }
     filters.push(
-      `[${iconBackdropVideoLabel}][${iconOutlineLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconOutlineVideoLabel}]`,
-    );
-    filters.push(
-      `[${iconOutlineVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      `[${outlineVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
     );
   }
 
@@ -769,7 +790,7 @@ function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath
     );
   }
 
-  filters.push(`[${currentVideoLabel}]${drawtextParts.join(',')}[vout]`);
+  filters.push(`[${currentVideoLabel}]${drawtextParts.join(',')},trim=duration=${renderPlan.total_duration_seconds}[vout]`);
 
   return {
     script: `${filters.join(';\n')}\n`,
@@ -1158,6 +1179,8 @@ export async function renderPokeQuizzVideo({
       'aac',
       '-b:a',
       '192k',
+      '-t',
+      String(renderPlan.total_duration_seconds),
       '-shortest',
       '-movflags',
       '+faststart',
