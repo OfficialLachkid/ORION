@@ -351,7 +351,8 @@ test('buildOutboundEventDiscordPayload renders Poke Quizz publication review car
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Title' && /Water \/ Flying/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Description' && /Beat the timer/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Preview' && /Open unlisted preview/u.test(field.value)), true);
-  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Action' && /Publish adds this preview to the publish queue/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Action'), false);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Reason'), false);
 });
 
 test('buildHealthNotificationDiscordPayload renders alert cards with recovery guidance', () => {

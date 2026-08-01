@@ -426,6 +426,8 @@ function buildApprovalRequestPayload(outboundEvent) {
   const metadata = outboundEvent.metadata || {};
   const isProductVideoApproval = Boolean(metadata.productVideoStage);
   const isPublicationReview = metadata.publicationReview === true;
+  const showReasonField = !metadata.emailTo && !isPublicationReview;
+  const showActionField = !isPublicationReview;
   const actionText = metadata.emailTo
     ? 'Approve sends the current Gmail draft. Reject opens a feedback form for revisions.'
     : isPublicationReview
@@ -496,9 +498,9 @@ function buildApprovalRequestPayload(outboundEvent) {
     // request (2026-07-20) — Preview always duplicated Body regardless of
     // approval type, but Reason still carries real signal for non-email
     // approvals (PR merges, infra sync), so it only drops for emailTo.
-    createField('Reason', metadata.emailTo ? '' : (metadata.approvalReason || ''), false),
+    createField('Reason', showReasonField ? (metadata.approvalReason || '') : '', false),
     createField('Image Files', Array.isArray(metadata.imageAttachmentFilenames) ? metadata.imageAttachmentFilenames.join('\n') : '', false),
-    createField('Action', actionText, false),
+    createField('Action', showActionField ? actionText : '', false),
   ].filter(Boolean);
 
   return buildEmbedPayload({

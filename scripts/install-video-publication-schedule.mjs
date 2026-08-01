@@ -117,7 +117,7 @@ function main() {
       'Usage: node scripts/install-video-publication-schedule.mjs [--hours 8,12,16 --minute 0] [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.video-publication-scheduler.plist and loads it by default.',
-      'The scheduled worker inspects ORION publication queues and plans YouTube preview/schedule work.',
+      'The scheduled worker executes ORION YouTube preview uploads and approved schedule updates.',
     ].join('\n'));
     return;
   }
