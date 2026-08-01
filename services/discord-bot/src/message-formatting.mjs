@@ -457,7 +457,7 @@ function buildApprovalRequestPayload(outboundEvent) {
         : '',
       true
     ),
-    createField('Preview', metadata.previewUrl ? `[Open unlisted preview](${metadata.previewUrl})` : '', true),
+    createField('Preview', metadata.previewUrl ? `[Open Preview](${metadata.previewUrl})` : '', true),
     createField('Type Pair', metadata.typePairLabel || '', true),
     createField('Seed', metadata.seed ? `\`${metadata.seed}\`` : '', true),
     createField('Busy Time', metadata.generationDurationLabel || '', true),

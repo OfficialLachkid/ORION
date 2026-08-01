@@ -1,6 +1,10 @@
 import { createTypePairKey, DISALLOWED_TYPE_PAIR_KEYS, normalizeTypePair } from './pokemon-type-pairs.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from './poke-quizz-asset-layout.mjs';
 import {
+  createPokeQuizzVideoSignatureKey,
+  normalizePokeQuizzSelectionState,
+} from './poke-quizz-selection-state.mjs';
+import {
   scanPokeQuizzAssetInventory,
   selectSeededFile,
   selectTypeIconSet,
@@ -12,6 +16,10 @@ const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
 
 function isBeachBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
+}
+
+function normalizeAssetPath(assetPath) {
+  return String(assetPath || '').trim().replaceAll('\\', '/').toLowerCase();
 }
 
 function hashSeed(input) {
@@ -41,13 +49,6 @@ function sampleArray(values, count, random) {
     [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
   return items.slice(0, count);
-}
-
-function normalizeSelectionState(selectionState) {
-  return {
-    last_type_pair_key: String(selectionState?.last_type_pair_key || '').trim().toLowerCase() || null,
-    last_background_path: String(selectionState?.last_background_path || '').trim() || null,
-  };
 }
 
 function getTemplateSelectionConfig(template) {
@@ -107,7 +108,7 @@ function pickPair(pairCatalog, forcedTypePair, random, selectionState) {
     throw new Error('No eligible Pokemon type pairs were found in the grounded Pokedex catalog.');
   }
 
-  const lastTypePairKey = normalizeSelectionState(selectionState).last_type_pair_key;
+  const lastTypePairKey = normalizePokeQuizzSelectionState(selectionState).last_type_pair_key;
   const eligibleCatalog = lastTypePairKey && pairCatalog.length > 1
     ? pairCatalog.filter((entry) => createTypePairKey(entry.pair) !== lastTypePairKey)
     : pairCatalog;
@@ -123,7 +124,8 @@ function selectSeededFileAvoidingPrevious(files, random, previousPath) {
     return selectSeededFile(files, random);
   }
 
-  const eligibleFiles = files.filter((filePath) => filePath !== previousPath);
+  const normalizedPreviousPath = normalizeAssetPath(previousPath);
+  const eligibleFiles = files.filter((filePath) => normalizeAssetPath(filePath) !== normalizedPreviousPath);
   return selectSeededFile(eligibleFiles.length > 0 ? eligibleFiles : files, random);
 }
 
@@ -144,6 +146,28 @@ function selectBackgroundCandidatesForTypePair(backgrounds, typePair = []) {
   return themedCandidates.length > 0
     ? [...new Set(themedCandidates)]
     : allBackgrounds.filter((backgroundPath) => !isBeachBackgroundPath(backgroundPath));
+}
+
+function selectBackgroundForTypePair(backgrounds, typePair, random, selectionState) {
+  const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
+  const backgroundCandidates = selectBackgroundCandidatesForTypePair(backgrounds, typePair);
+  if (backgroundCandidates.length === 0) {
+    return null;
+  }
+
+  const usedVideoSignatures = new Set(normalizedSelectionState.used_video_signatures || []);
+  const unseenSignatureCandidates = backgroundCandidates.filter((backgroundPath) => (
+    !usedVideoSignatures.has(createPokeQuizzVideoSignatureKey(typePair, backgroundPath))
+  ));
+  const preferredCandidates = unseenSignatureCandidates.length > 0
+    ? unseenSignatureCandidates
+    : backgroundCandidates;
+
+  return selectSeededFileAvoidingPrevious(
+    preferredCandidates,
+    random,
+    normalizedSelectionState.last_background_path,
+  );
 }
 
 function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
@@ -255,7 +279,7 @@ export async function planPokemonTypeChallenge({
   const config = getTemplateSelectionConfig(template);
   const random = createPrng(seed);
   const pairCatalog = buildPairCatalog(pokedexRows, config);
-  const normalizedSelectionState = normalizeSelectionState(selectionState);
+  const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
   const selectedPair = pickPair(pairCatalog, forcedTypePair, random, normalizedSelectionState);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
   const selectedSubjectCount = Math.max(
@@ -300,11 +324,20 @@ export async function planPokemonTypeChallenge({
   if (!inventory.sound_effects.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
   if (!inventory.sound_effects.reveal) requiredAssetGaps.push('reveal_sfx_missing');
 
-  const selectedBackgroundPath = selectSeededFileAvoidingPrevious(
-    selectBackgroundCandidatesForTypePair(inventory.backgrounds, selectedPair.pair),
+  const selectedBackgroundPath = selectBackgroundForTypePair(
+    inventory.backgrounds,
+    selectedPair.pair,
     random,
-    normalizedSelectionState.last_background_path,
+    normalizedSelectionState,
   );
+  const selectedVideoSignature = createPokeQuizzVideoSignatureKey(
+    selectedPair.pair,
+    selectedBackgroundPath,
+  );
+  const usedVideoSignatures = [
+    selectedVideoSignature,
+    ...normalizedSelectionState.used_video_signatures.filter((signature) => signature !== selectedVideoSignature),
+  ].filter(Boolean);
 
   return {
     schema_version: 'poke-quizz-plan-v1',
@@ -405,6 +438,7 @@ export async function planPokemonTypeChallenge({
     selection_state: {
       last_type_pair_key: createTypePairKey(selectedPair.pair),
       last_background_path: selectedBackgroundPath,
+      used_video_signatures: usedVideoSignatures,
     },
     asset_inventory_snapshot: inventory,
     required_asset_gaps: [...new Set(requiredAssetGaps)],

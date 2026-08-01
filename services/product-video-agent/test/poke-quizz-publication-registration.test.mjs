@@ -83,6 +83,7 @@ test('Poke Quizz publication registration creates pending preview-upload rows', 
   assert.equal(registration.publicationRow.visibility, 'unlisted');
   assert.equal(registration.publicationRow.metadata.workflow_state, 'preview_upload_pending');
   assert.deepEqual(registration.publicationRow.metadata.type_pair, ['psychic', 'water']);
+  assert.match(registration.publicationRow.metadata.background_path || '', /beach-backgrounds/u);
 });
 
 test('mergeRegisteredPublicationRow preserves upload state on re-registration', () => {

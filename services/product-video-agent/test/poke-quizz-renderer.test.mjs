@@ -249,7 +249,9 @@ test('visual filter script starts pokeballs earlier and enlarges the timer visua
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+2\.3\/TB,scale=216:216/u);
   assert.match(visualFilter.script, /scale=234:234:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /overlay=x='540-w\/2':y='686-h\/2'/u);
-  assert.match(visualFilter.script, /if\(lt\(t,0\),1,if\(lt\(t,0\.12\),1\+\(\(t-0\)\/0\.12\)\*0\.08/u);
+  assert.match(visualFilter.script, /if\(lt\(t,0\),0\.56,if\(lt\(t,0\.12\),0\.56\+\(\(t-0\)\/0\.12\)\*0\.60/u);
+  assert.match(visualFilter.script, /\(t-1\.2\)\/0\.192/u);
+  assert.match(visualFilter.script, /\(t-1\.2\)\/0\.256/u);
 });
 
 test('prompt cue window can extend to the measured narration duration', () => {

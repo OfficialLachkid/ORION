@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planPokemonTypeChallenge } from '../src/pokemon-type-challenge-planner.mjs';
+import { createPokeQuizzVideoSignatureKey } from '../src/poke-quizz-selection-state.mjs';
 
 const template = {
   template_id: 'pokemon-type-challenge-v1',
@@ -523,6 +524,12 @@ test('planner avoids the immediately previous type pair and background when alte
   assert.equal(plan.assets.background.selected_path, '/tmp/background-2.png');
   assert.notEqual(plan.selection_state.last_type_pair_key, 'grass|poison');
   assert.equal(plan.selection_state.last_background_path, '/tmp/background-2.png');
+  assert.equal(
+    plan.selection_state.used_video_signatures.includes(
+      createPokeQuizzVideoSignatureKey(plan.selection.type_pair, '/tmp/background-2.png'),
+    ),
+    true,
+  );
 });
 
 test('planner allows reuse when only one type pair or background exists', async () => {
@@ -566,6 +573,50 @@ test('planner allows reuse when only one type pair or background exists', async 
 
   assert.deepEqual(plan.selection.type_pair, ['grass', 'poison']);
   assert.equal(plan.assets.background.selected_path, '/tmp/background-1.png');
+});
+
+test('planner avoids a previously used exact video signature when another background exists', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'signature-avoidance',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-07-31T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png', '/tmp/background-2.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+    selectionState: {
+      used_video_signatures: [
+        createPokeQuizzVideoSignatureKey(['grass', 'poison'], '/tmp/background-1.png'),
+      ],
+    },
+  });
+
+  assert.deepEqual(plan.selection.type_pair, ['grass', 'poison']);
+  assert.equal(plan.assets.background.selected_path, '/tmp/background-2.png');
 });
 
 test('planner prefers beach backgrounds when a water type is in the selected pair', async () => {
@@ -634,4 +685,45 @@ test('planner prefers beach backgrounds when a water type is in the selected pai
   });
 
   assert.match(plan.assets.background.selected_path || '', /\/beach-backgrounds\//u);
+});
+
+test('planner excludes beach backgrounds for non-water type pairs', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'non-water-background-guard',
+    forcedTypePair: ['poison', 'flying'],
+    assetInventory: {
+      scanned_at: '2026-08-01T00:00:00.000Z',
+      directories: {},
+      backgrounds: [
+        '/tmp/background-plain.png',
+        '/tmp/beach-backgrounds/beach-1.png',
+      ],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.equal(plan.assets.background.selected_path, '/tmp/background-plain.png');
 });

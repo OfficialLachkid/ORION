@@ -350,7 +350,7 @@ test('buildOutboundEventDiscordPayload renders Poke Quizz publication review car
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Busy Time' && /3 min/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Title' && /Water \/ Flying/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Description' && /Beat the timer/u.test(field.value)), true);
-  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Preview' && /Open unlisted preview/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Preview' && /Open Preview/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Action'), false);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Reason'), false);
 });

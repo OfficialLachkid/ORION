@@ -95,13 +95,19 @@ export class SupabasePublicationStore {
     return rows?.[0] || null;
   }
 
-  async fetchPublicationsByChannel({ platform, accountKey }) {
+  async fetchPublicationsByChannel({
+    platform,
+    accountKey,
+    order = 'created_at.asc',
+    limit = null,
+  }) {
     return this.request('video_publications', {
       params: {
         select: '*',
         platform: `eq.${platform}`,
         account_key: `eq.${accountKey}`,
-        order: 'created_at.asc',
+        order,
+        limit,
       },
     });
   }

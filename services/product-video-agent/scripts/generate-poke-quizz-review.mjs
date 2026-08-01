@@ -8,7 +8,12 @@ import { planPokemonTypeChallenge } from '../src/pokemon-type-challenge-planner.
 import { normalizeTypePair } from '../src/pokemon-type-pairs.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../src/poke-quizz-asset-layout.mjs';
 import { renderPokeQuizzVideo } from '../src/poke-quizz-renderer.mjs';
+import {
+  loadPokeQuizzSelectionStateFromStore,
+  mergePokeQuizzSelectionStates,
+} from '../src/poke-quizz-selection-state.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../src/publication-channels.mjs';
+import { SupabasePublicationStore } from '../src/publication-store.mjs';
 import {
   beginPokeQuizzGenerationProgress,
   markPokeQuizzGenerationFailed,
@@ -92,7 +97,7 @@ function resolveTypePairSlug(plan) {
     .join('-');
 }
 
-async function resolvePlan(options) {
+async function resolvePlan(options, selectionState = null) {
   const planPath = getStringOption(options, 'plan', '');
   if (planPath) {
     return {
@@ -122,18 +127,19 @@ async function resolvePlan(options) {
     ? normalizeTypePair(forcedTypePairInput.split(','))
     : null;
 
-  const [template, pokedexRows, selectionState] = await Promise.all([
+  const [template, pokedexRows, localSelectionState] = await Promise.all([
     loadJson(templatePath),
     loadJson(catalogJsonPath),
     loadOptionalJson(statePath),
   ]);
+  const effectiveSelectionState = mergePokeQuizzSelectionStates(selectionState, localSelectionState);
 
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
     seed: getStringOption(options, 'seed', 'poke-quizz-default'),
     forcedTypePair,
-    selectionState,
+    selectionState: effectiveSelectionState,
   });
   await writeJson(outputPlanPath, plan);
   await writeJson(statePath, plan.selection_state || {});
@@ -141,6 +147,30 @@ async function resolvePlan(options) {
     plan,
     planPath: outputPlanPath,
   };
+}
+
+async function resolveLiveSelectionState(runtimeConfig, channelProfile) {
+  const supabaseUrl = runtimeConfig.env.SUPABASE_URL || '';
+  const apiKey = runtimeConfig.env.SUPABASE_SECRET_KEY || runtimeConfig.env.SUPABASE_PUBLISHABLE_KEY || '';
+  if (!supabaseUrl || !apiKey) {
+    return null;
+  }
+
+  const store = new SupabasePublicationStore({
+    supabaseUrl,
+    apiKey,
+  });
+
+  try {
+    return await loadPokeQuizzSelectionStateFromStore({
+      store,
+      channelProfile,
+      limit: 32,
+    });
+  } catch (error) {
+    printWarn(`Could not load recent Poke Quizz selection history from Supabase: ${error.message}`);
+    return null;
+  }
 }
 
 async function generateAndReviewPokeQuizz(options) {
@@ -159,13 +189,14 @@ async function generateAndReviewPokeQuizz(options) {
   const channelSelector = getStringOption(options, 'channel', DEFAULT_CHANNEL_SELECTOR);
   const submittedAt = getStringOption(options, 'as-of', new Date().toISOString());
   const runtimeConfig = loadRuntimeConfig();
-  const [profiles, template, config, { plan, planPath }] = await Promise.all([
+  const [profiles, template, config] = await Promise.all([
     loadPublicationChannelProfiles(channelsPath, { projectRoot }),
     loadJson(templatePath),
     loadRuntimeConfigJson(configPath),
-    resolvePlan(options),
   ]);
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
+  const liveSelectionState = await resolveLiveSelectionState(runtimeConfig, channelProfile);
+  const { plan, planPath } = await resolvePlan(options, liveSelectionState);
   const typePairSlug = resolveTypePairSlug(plan) || 'pokemon-type-challenge';
   const seedSlug = slugify(plan.seed || 'preview');
   const outputPath = getStringOption(

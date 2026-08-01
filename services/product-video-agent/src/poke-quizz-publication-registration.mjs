@@ -182,6 +182,7 @@ export async function createPokeQuizzPublicationRegistration({
     metadata: {
       workflow_state: 'preview_upload_pending',
       type_pair: typePair,
+      background_path: plan?.assets?.background?.selected_path || null,
       seed: plan?.seed || '',
       render_path: resolvedRenderPath,
       template_id: plan?.template_id || '',
