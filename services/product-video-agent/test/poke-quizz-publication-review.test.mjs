@@ -26,14 +26,23 @@ const video = {
   },
 };
 
+const channelProfile = {
+  name: 'Poke Quizz',
+  youtube: {
+    channel_id: 'UCvMqBsEPDvjgNRMymQyefFg',
+  },
+};
+
 test('buildPokeQuizzPublicationReviewTask creates an approval-gated publish task', () => {
   const task = buildPokeQuizzPublicationReviewTask({
     publication,
     video,
+    channelProfile,
     reviewThreadId: '1532709429902839810',
     planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
     renderPath: publication.metadata.render_path,
     catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    generationDurationMinutes: 3,
     submittedAt: '2026-07-31T20:45:00.000Z',
   });
 
@@ -42,30 +51,40 @@ test('buildPokeQuizzPublicationReviewTask creates an approval-gated publish task
   assert.equal(task.automation_type, 'poke_quizz_publication_review');
   assert.equal(task.poke_quizz_publication_review.previewUrl, publication.preview_url);
   assert.equal(task.poke_quizz_publication_review.reviewThreadId, '1532709429902839810');
+  assert.equal(task.poke_quizz_publication_review.channelName, 'Poke Quizz');
+  assert.equal(task.poke_quizz_publication_review.channelUrl, 'https://www.youtube.com/channel/UCvMqBsEPDvjgNRMymQyefFg');
+  assert.equal(task.poke_quizz_publication_review.generationDurationLabel, '3 min');
 });
 
 test('buildPokeQuizzPublicationReviewEvent adds preview-review metadata and labels', () => {
   const task = buildPokeQuizzPublicationReviewTask({
     publication,
     video,
+    channelProfile,
     reviewThreadId: '1532709429902839810',
     planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
     renderPath: publication.metadata.render_path,
     catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    generationDurationMinutes: 2,
     submittedAt: '2026-07-31T20:45:00.000Z',
   });
 
   const event = buildPokeQuizzPublicationReviewEvent(task);
+  assert.equal(event.channelKey, 'pokeQuizzReview');
   assert.equal(event.metadata.publicationReview, true);
   assert.equal(event.metadata.approveLabel, 'Publish');
   assert.equal(event.metadata.rejectLabel, 'Give Feedback');
   assert.equal(event.metadata.previewUrl, publication.preview_url);
+  assert.equal(event.metadata.genreLabel, 'Type Combination');
+  assert.equal(event.metadata.channelName, 'Poke Quizz');
+  assert.equal(event.metadata.generationDurationLabel, '2 min');
 });
 
 test('buildPokeQuizzPublicationReviewPayload renders Publish and Give Feedback buttons', () => {
   const task = buildPokeQuizzPublicationReviewTask({
     publication,
     video,
+    channelProfile,
     reviewThreadId: '1532709429902839810',
     planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
     renderPath: publication.metadata.render_path,
@@ -82,6 +101,7 @@ test('feedback regeneration task carries the operator notes forward', () => {
   const reviewTask = buildPokeQuizzPublicationReviewTask({
     publication,
     video,
+    channelProfile,
     reviewThreadId: '1532709429902839810',
     planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
     renderPath: publication.metadata.render_path,
@@ -106,6 +126,7 @@ test('deriveFeedbackRevisionSeed produces a distinct auditable revision seed', (
   const reviewTask = buildPokeQuizzPublicationReviewTask({
     publication,
     video,
+    channelProfile,
     reviewThreadId: '1532709429902839810',
     planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
     renderPath: publication.metadata.render_path,

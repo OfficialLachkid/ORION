@@ -73,7 +73,7 @@ test('processDiscordEvent routes invalid approval replies into security logs', (
   assert.equal(result.outboundEvents[0].type, 'invalid_approval_message');
 });
 
-for (const channelKey of ['outreachAgent', 'pullRequests', 'outreachFollowups']) {
+for (const channelKey of ['outreachAgent', 'pullRequests', 'outreachFollowups', 'orionReview', 'pokeQuizzReview']) {
   test(`processDiscordEvent routes approval replies from ${channelKey}`, () => {
     const baseConfig = loadRuntimeConfig();
     const channelId = `channel-${channelKey}`;

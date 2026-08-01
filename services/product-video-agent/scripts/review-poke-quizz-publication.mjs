@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+import process from 'node:process';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../lib/runtime-config.mjs';
 import { loadPipelineConfig } from '../src/config.mjs';
 import { generatePokeQuizzPublicationMetadata } from '../src/local-publication-metadata.mjs';
@@ -26,7 +28,10 @@ import {
   loadPersistedPendingTasks,
   savePersistedPendingTasks,
 } from '../../discord-bot/src/pending-task-store.mjs';
-import { sendDiscordChannelMessage } from '../../../scripts/lib/discord-post.mjs';
+import {
+  editDiscordChannelMessage,
+  sendDiscordChannelMessage,
+} from '../../../scripts/lib/discord-post.mjs';
 import {
   getBooleanOption,
   getStringOption,
@@ -161,33 +166,35 @@ function replaceExistingReviewTasks(runtimeConfig, nextTask) {
   savePersistedPendingTasks(runtimeConfig, filtered);
 }
 
-async function main() {
-  const options = parseArgs();
-  if (options.help) {
-    printUsage([
-      'Usage: node services/product-video-agent/scripts/review-poke-quizz-publication.mjs [options]',
-      '',
-      'Options:',
-      '  --plan <path>              Required Poke Quizz plan JSON path.',
-      '  --thread-id <id>           Required Discord thread id for the review post.',
-      '  --render <path>            Optional rendered MP4 path. Default: derived from the plan output convention.',
-      '  --publication-id <id>      Reuse an existing publication row instead of registering a new one.',
-      '  --catalog-json <path>      Catalog JSON used for feedback-driven revisions.',
-      '  --channel <id>             Channel id or account_key. Default: poke-quizz-youtube',
-      '  --channels <path>          Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
-      '  --config <path>            Product-video config JSON. Default: services/product-video-agent/config.example.json',
-      '  --template <path>          Template JSON. Default: services/product-video-agent/pokemon-type-challenge-v1.template.json',
-      '  --title <text>             Override generated title.',
-      '  --description <text>       Override generated description.',
-      '  --hashtags <a,b,c>         Override generated hashtags.',
-      '  --no-local-model           Skip local Ollama metadata generation and use the deterministic fallback.',
-      '  --as-of <ISO>              Registration timestamp. Default: now.',
-    ]);
-    return;
+async function postReviewPayload(runtimeConfig, reviewThreadId, reviewMessageId, payload) {
+  if (reviewMessageId) {
+    const updated = await editDiscordChannelMessage(runtimeConfig, reviewThreadId, reviewMessageId, payload);
+    if (updated.posted) {
+      return updated;
+    }
   }
 
-  const planPath = getStringOption(options, 'plan', '');
-  const reviewThreadId = getStringOption(options, 'thread-id', '');
+  return sendDiscordChannelMessage(runtimeConfig, reviewThreadId, payload);
+}
+
+export async function reviewPokeQuizzPublication({
+  planPath,
+  reviewThreadId,
+  renderPath = '',
+  reviewMessageId = '',
+  publicationId = '',
+  catalogJsonPath = '',
+  channelsPath = 'services/product-video-agent/publication-channels.example.json',
+  configPath = DEFAULT_CONFIG_PATH,
+  templatePath = DEFAULT_TEMPLATE_PATH,
+  channelSelector = DEFAULT_CHANNEL_SELECTOR,
+  submittedAt = new Date().toISOString(),
+  title = '',
+  description = '',
+  hashtags = [],
+  localModel = true,
+  generationDurationMinutes = null,
+} = {}) {
   if (!planPath) {
     throw new Error('The --plan option is required.');
   }
@@ -195,17 +202,6 @@ async function main() {
     throw new Error('The --thread-id option is required.');
   }
 
-  const channelsPath = getStringOption(
-    options,
-    'channels',
-    'services/product-video-agent/publication-channels.example.json',
-  );
-  const configPath = getStringOption(options, 'config', DEFAULT_CONFIG_PATH);
-  const templatePath = getStringOption(options, 'template', DEFAULT_TEMPLATE_PATH);
-  const channelSelector = getStringOption(options, 'channel', DEFAULT_CHANNEL_SELECTOR);
-  const publicationId = getStringOption(options, 'publication-id', '');
-  const catalogJsonPath = getStringOption(options, 'catalog-json', '');
-  const submittedAt = getStringOption(options, 'as-of', new Date().toISOString());
   const [plan, profiles, config] = await Promise.all([
     loadJson(planPath),
     loadPublicationChannelProfiles(channelsPath, { projectRoot }),
@@ -232,7 +228,7 @@ async function main() {
       throw new Error(`Video row ${publication.video_id} was not found for publication ${publicationId}.`);
     }
   } else {
-    let metadata = getBooleanOption(options, 'local-model', true)
+    let metadata = localModel
       ? await generatePokeQuizzPublicationMetadata({
         plan,
         config,
@@ -240,22 +236,22 @@ async function main() {
       })
       : null;
 
-    if (getStringOption(options, 'title', '')) {
+    if (title) {
       metadata = {
         ...(metadata || {}),
-        title: getStringOption(options, 'title', ''),
+        title,
       };
     }
-    if (getStringOption(options, 'description', '')) {
+    if (description) {
       metadata = {
         ...(metadata || {}),
-        description: getStringOption(options, 'description', ''),
+        description,
       };
     }
-    if (getStringOption(options, 'hashtags', '')) {
+    if (Array.isArray(hashtags) && hashtags.length > 0) {
       metadata = {
         ...(metadata || {}),
-        hashtags: parseHashtags(getStringOption(options, 'hashtags', '')),
+        hashtags,
       };
     }
 
@@ -270,7 +266,7 @@ async function main() {
     const registered = await registerPublication({
       plan,
       channelProfile,
-      renderPath: getStringOption(options, 'render', ''),
+      renderPath,
       metadata,
       registeredAt: submittedAt,
       store,
@@ -291,19 +287,21 @@ async function main() {
   const reviewTask = buildPokeQuizzPublicationReviewTask({
     publication,
     video,
+    channelProfile,
     reviewThreadId,
     planPath,
-    renderPath: getStringOption(options, 'render', '') || publication.metadata?.render_path || video.render?.output_path || '',
+    renderPath: renderPath || publication.metadata?.render_path || video.render?.output_path || '',
     catalogJsonPath,
     templatePath,
     configPath,
     channelSelector,
+    generationDurationMinutes,
     submittedAt,
   });
   replaceExistingReviewTasks(runtimeConfig, reviewTask);
 
   const { payload } = buildPokeQuizzPublicationReviewPayload(reviewTask);
-  const posted = await sendDiscordChannelMessage(runtimeConfig, reviewThreadId, payload);
+  const posted = await postReviewPayload(runtimeConfig, reviewThreadId, reviewMessageId, payload);
   if (!posted.posted) {
     throw new Error(`Could not post the Poke Quizz review card: ${posted.reason}${posted.error ? ` (${posted.error})` : ''}`);
   }
@@ -317,8 +315,7 @@ async function main() {
     }),
   });
 
-  printInfo(`Posted Poke Quizz review ${reviewTask.task_id} to Discord thread ${reviewThreadId}.`);
-  process.stdout.write(`${JSON.stringify({
+  return {
     publication_id: updatedPublication?.id || publication.id,
     video_id: updatedPublication?.video_id || publication.video_id,
     task_id: reviewTask.task_id,
@@ -326,10 +323,71 @@ async function main() {
     thread_id: reviewThreadId,
     preview_url: publication.preview_url || ensuredPreview.previewUrl,
     render_path: publication.metadata?.render_path || video.render?.output_path || '',
-  }, null, 2)}\n`);
+  };
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error.stack || error.message}\n`);
-  process.exitCode = 1;
-});
+async function main() {
+  const options = parseArgs();
+  if (options.help) {
+    printUsage([
+      'Usage: node services/product-video-agent/scripts/review-poke-quizz-publication.mjs [options]',
+      '',
+      'Options:',
+      '  --plan <path>              Required Poke Quizz plan JSON path.',
+      '  --thread-id <id>           Required Discord thread id for the review post.',
+      '  --render <path>            Optional rendered MP4 path. Default: derived from the plan output convention.',
+      '  --message-id <id>          Optional existing Discord message id to patch in place.',
+      '  --publication-id <id>      Reuse an existing publication row instead of registering a new one.',
+      '  --catalog-json <path>      Catalog JSON used for feedback-driven revisions.',
+      '  --channel <id>             Channel id or account_key. Default: poke-quizz-youtube',
+      '  --channels <path>          Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
+      '  --config <path>            Product-video config JSON. Default: services/product-video-agent/config.example.json',
+      '  --template <path>          Template JSON. Default: services/product-video-agent/pokemon-type-challenge-v1.template.json',
+      '  --title <text>             Override generated title.',
+      '  --description <text>       Override generated description.',
+      '  --hashtags <a,b,c>         Override generated hashtags.',
+      '  --generation-minutes <n>   Optional render duration shown on the final review card.',
+      '  --no-local-model           Skip local Ollama metadata generation and use the deterministic fallback.',
+      '  --as-of <ISO>              Registration timestamp. Default: now.',
+    ]);
+    return;
+  }
+
+  const generationDurationMinutes = Number(getStringOption(options, 'generation-minutes', ''));
+  const result = await reviewPokeQuizzPublication({
+    planPath: getStringOption(options, 'plan', ''),
+    reviewThreadId: getStringOption(options, 'thread-id', ''),
+    renderPath: getStringOption(options, 'render', ''),
+    reviewMessageId: getStringOption(options, 'message-id', ''),
+    publicationId: getStringOption(options, 'publication-id', ''),
+    catalogJsonPath: getStringOption(options, 'catalog-json', ''),
+    channelsPath: getStringOption(
+      options,
+      'channels',
+      'services/product-video-agent/publication-channels.example.json',
+    ),
+    configPath: getStringOption(options, 'config', DEFAULT_CONFIG_PATH),
+    templatePath: getStringOption(options, 'template', DEFAULT_TEMPLATE_PATH),
+    channelSelector: getStringOption(options, 'channel', DEFAULT_CHANNEL_SELECTOR),
+    submittedAt: getStringOption(options, 'as-of', new Date().toISOString()),
+    title: getStringOption(options, 'title', ''),
+    description: getStringOption(options, 'description', ''),
+    hashtags: getStringOption(options, 'hashtags', '')
+      ? parseHashtags(getStringOption(options, 'hashtags', ''))
+      : [],
+    localModel: getBooleanOption(options, 'local-model', true),
+    generationDurationMinutes: Number.isFinite(generationDurationMinutes)
+      ? generationDurationMinutes
+      : null,
+  });
+
+  printInfo(`Posted Poke Quizz review ${result.task_id} to Discord thread ${result.thread_id}.`);
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  main().catch((error) => {
+    process.stderr.write(`${error.stack || error.message}\n`);
+    process.exitCode = 1;
+  });
+}

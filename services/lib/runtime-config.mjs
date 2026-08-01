@@ -142,6 +142,9 @@ export function loadRuntimeConfig(options = {}) {
   if (!Object.prototype.hasOwnProperty.call(channelIds, 'qualifiedCallLeads')) {
     channelIds.qualifiedCallLeads = env.DISCORD_QUALIFIED_CALL_LEADS_THREAD_ID || '';
   }
+  if (!Object.prototype.hasOwnProperty.call(channelIds, 'pokeQuizzReview')) {
+    channelIds.pokeQuizzReview = env.DISCORD_POKE_QUIZZ_REVIEW_THREAD_ID || '';
+  }
 
   const resolvedTmpDir = env.RUNTIME_TMP_DIR || resolve(projectRoot, 'data', 'runtime', 'tmp');
   const resolvedLogDir = env.RUNTIME_LOG_DIR || resolve(projectRoot, 'data', 'runtime', 'logs');

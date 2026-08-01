@@ -5,6 +5,7 @@ import { buildOutboundEventDiscordPayload } from '../../discord-bot/src/message-
 const DEFAULT_CHANNEL_SELECTOR = 'poke-quizz-youtube';
 const DEFAULT_TEMPLATE_PATH = 'services/product-video-agent/pokemon-type-challenge-v1.template.json';
 const DEFAULT_CONFIG_PATH = 'services/product-video-agent/config.example.json';
+const DEFAULT_GENRE_LABEL = 'Type Combination';
 
 function normalizeTypePair(typePair = []) {
   return typePair
@@ -47,6 +48,22 @@ function buildReviewSummary(publication = {}) {
   return `Publish Poke Quizz preview ${publication.id || ''}.`.trim();
 }
 
+function buildYoutubeChannelUrl(channelProfile = {}) {
+  const channelId = String(channelProfile?.youtube?.channel_id || '').trim();
+  return channelId ? `https://www.youtube.com/channel/${channelId}` : '';
+}
+
+function formatGenerationDurationLabel(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric < 0) {
+    return '';
+  }
+  if (numeric < 1) {
+    return '<1 min';
+  }
+  return `${Math.round(numeric)} min`;
+}
+
 function normalizeReviewPaths(review = {}) {
   return {
     planPath: String(review.planPath || '').trim(),
@@ -60,6 +77,7 @@ function normalizeReviewPaths(review = {}) {
 export function buildPokeQuizzPublicationReviewTask({
   publication,
   video,
+  channelProfile = null,
   reviewThreadId,
   planPath,
   renderPath,
@@ -67,6 +85,8 @@ export function buildPokeQuizzPublicationReviewTask({
   templatePath = DEFAULT_TEMPLATE_PATH,
   configPath = DEFAULT_CONFIG_PATH,
   channelSelector = DEFAULT_CHANNEL_SELECTOR,
+  genreLabel = DEFAULT_GENRE_LABEL,
+  generationDurationMinutes = null,
   submittedBy = 'O.R.I.O.N.',
   submittedAt = new Date().toISOString(),
 }) {
@@ -83,6 +103,12 @@ export function buildPokeQuizzPublicationReviewTask({
     catalogJsonPath: String(catalogJsonPath || '').trim(),
     templatePath: String(templatePath || DEFAULT_TEMPLATE_PATH).trim(),
     configPath: String(configPath || DEFAULT_CONFIG_PATH).trim(),
+    genreLabel: String(genreLabel || DEFAULT_GENRE_LABEL).trim(),
+    channelName: String(channelProfile?.name || '').trim(),
+    channelUrl: buildYoutubeChannelUrl(channelProfile),
+    publicationTitle: String(publication?.title || '').trim(),
+    publicationDescription: String(publication?.description || '').trim(),
+    generationDurationLabel: formatGenerationDurationLabel(generationDurationMinutes),
   };
 
   return {
@@ -147,7 +173,7 @@ export function buildPokeQuizzPublicationReviewEvent(task) {
   const typePairLabel = formatTypePairLabel(review.typePair || []);
 
   return {
-    channelKey: 'approvals',
+    channelKey: 'pokeQuizzReview',
     type: 'approval_request',
     body: `Approval needed for ${task.task_id}: ${task.summary || 'Publish this Poke Quizz preview.'}`,
     metadata: {
@@ -167,6 +193,12 @@ export function buildPokeQuizzPublicationReviewEvent(task) {
       planPath: review.planPath || '',
       typePairLabel,
       seed: review.seed || '',
+      genreLabel: review.genreLabel || DEFAULT_GENRE_LABEL,
+      channelName: review.channelName || '',
+      channelUrl: review.channelUrl || '',
+      publicationTitle: review.publicationTitle || '',
+      publicationDescription: review.publicationDescription || '',
+      generationDurationLabel: review.generationDurationLabel || '',
       approveLabel: 'Publish',
       rejectLabel: 'Give Feedback',
       responsePattern: [
@@ -205,5 +237,6 @@ export {
   DEFAULT_CHANNEL_SELECTOR,
   DEFAULT_CONFIG_PATH,
   DEFAULT_TEMPLATE_PATH,
+  DEFAULT_GENRE_LABEL,
   formatTypePairLabel,
 };

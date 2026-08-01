@@ -127,6 +127,18 @@ function compactPath(value) {
   return parts.length <= 2 ? normalized : parts.slice(-2).join('/');
 }
 
+function formatMarkdownLink(label, url) {
+  const text = String(label || '').trim();
+  const href = String(url || '').trim();
+  if (!text) {
+    return href;
+  }
+  if (!href) {
+    return text;
+  }
+  return `[${text}](${href})`;
+}
+
 function createField(name, value, inline = true) {
   const text = String(value || '').trim();
   if (!text) {
@@ -435,9 +447,20 @@ function buildApprovalRequestPayload(outboundEvent) {
     createField('Body', formatEmailBody(metadata.emailBody || ''), false),
     createField('Stage', metadata.productVideoStage ? `\`${metadata.productVideoStage}\`` : '', true),
     createField('Publication', metadata.publicationId ? `\`${metadata.publicationId}\`` : '', true),
+    createField('Genre', metadata.genreLabel || '', true),
+    createField(
+      'Channel',
+      metadata.channelName || metadata.channelUrl
+        ? formatMarkdownLink(metadata.channelName || metadata.channelUrl, metadata.channelUrl || '')
+        : '',
+      true
+    ),
     createField('Preview', metadata.previewUrl ? `[Open unlisted preview](${metadata.previewUrl})` : '', true),
     createField('Type Pair', metadata.typePairLabel || '', true),
     createField('Seed', metadata.seed ? `\`${metadata.seed}\`` : '', true),
+    createField('Busy Time', metadata.generationDurationLabel || '', true),
+    createField('Title', metadata.publicationTitle || '', false),
+    createField('Description', metadata.publicationDescription || '', false),
     createField('Render', metadata.renderPath ? `\`${compactPath(metadata.renderPath)}\`` : '', false),
     createField('Plan', metadata.planPath ? `\`${compactPath(metadata.planPath)}\`` : '', false),
     createField('Product', metadata.productName || '', true),
@@ -479,7 +502,7 @@ function buildApprovalRequestPayload(outboundEvent) {
   ].filter(Boolean);
 
   return buildEmbedPayload({
-    color: EMBED_COLORS.approval,
+    color: isPublicationReview ? EMBED_COLORS.awaitingReview : EMBED_COLORS.approval,
     title: approvalStateTitle(metadata),
     description: metadata.summary || outboundEvent.body || 'Approval requested.',
     fields: embedFields,

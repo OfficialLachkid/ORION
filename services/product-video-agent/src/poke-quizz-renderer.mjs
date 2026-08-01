@@ -8,6 +8,7 @@ const DEFAULT_REVEAL_TEXT_Y = 170;
 const DEFAULT_TYPE_ICON_Y = 320;
 const DEFAULT_TIMER_SIZE = 300;
 const DEFAULT_TIMER_SCALE_MULTIPLIER = 1.5;
+const DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER = 1.3;
 const DEFAULT_TIMER_NUMBER_SIZE = 112;
 const DEFAULT_HOOK_FONT_SIZE = 138;
 const DEFAULT_PROMPT_FONT_SIZE = 81;
@@ -32,6 +33,7 @@ const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.68;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
 const DEFAULT_POKEBALL_INTRO_SECONDS = 0.28;
+const DEFAULT_POKEBALL_INTRO_LEAD_SECONDS = 0.5;
 const DEFAULT_TIMER_ALARM_EXTRA_HOLD_SECONDS = 1;
 const DEFAULT_TIMER_ALARM_EXIT_SECONDS = 0.42;
 const DEFAULT_FONT_CANDIDATES = [
@@ -172,7 +174,7 @@ function buildAnimatedPopMultiplierExpression(startSeconds, durationSeconds = DE
   const duration = roundTime(Math.max(0.16, durationSeconds));
   const peak = roundTime(start + (duration * 0.6));
   const end = roundTime(start + duration);
-  return `if(lt(t,${start}),0.56,if(lt(t,${peak}),0.56+((t-${start})/${roundTime(peak - start)})*0.60,if(lt(t,${end}),1.16-((t-${peak})/${roundTime(end - peak)})*0.16,1)))`;
+  return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.08,if(lt(t,${end}),1.08-((t-${peak})/${roundTime(end - peak)})*0.08,1)))`;
 }
 
 function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS, distancePx = 30) {
@@ -651,6 +653,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       ensureNumber(template?.layout?.pokeball_grid?.overlay_scale_multiplier, DEFAULT_POKEBALL_SCALE_MULTIPLIER),
     ),
   );
+  const timerVisualWidth = roundTime(renderPlan.timer_layout.width * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
+  const timerVisualHeight = roundTime(renderPlan.timer_layout.height * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
+  const pokeballIntroStart = roundTime(Math.max(
+    ensureNumber(renderPlan.phases.type_prompt?.start_seconds, 0),
+    countdownStart - DEFAULT_POKEBALL_INTRO_LEAD_SECONDS,
+  ));
+  const pokeballIntroDuration = roundTime(
+    DEFAULT_POKEBALL_INTRO_SECONDS + Math.max(0, countdownStart - pokeballIntroStart),
+  );
+  const pokeballVisibleDuration = roundTime(Math.max(0.5, revealVisualStart - pokeballIntroStart));
   const spriteHoldSize = resolveRevealSpriteHoldSize({
     gridItemSize,
     itemCount: renderPlan.grid.item_count || renderPlan.grid.cells.length,
@@ -673,25 +685,28 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     ? `(PTS-STARTPTS)*${roundTime(countdownDuration / timerSourceDuration)}+${countdownStart}/TB`
     : `PTS-STARTPTS+${countdownStart}/TB`;
   if (pokeballStaticLabels.length > 0) {
-    filters.push(`[${inputRefs.timerCountdown}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},crop=iw*0.72:ih*0.72:(iw-ow)/2:(ih-oh)/2-20,scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timercountdown]`);
-    filters.push(`[${inputRefs.pokeball}:v]fps=${fps},trim=duration=${countdownDuration},setpts=PTS-STARTPTS+${countdownStart}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[pokeballbase]`);
+    filters.push(`[${inputRefs.timerCountdown}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},crop=iw*0.72:ih*0.72:(iw-ow)/2:(ih-oh)/2-20,scale=${timerVisualWidth}:${timerVisualHeight}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[timercountdown]`);
+    filters.push(`[${inputRefs.pokeball}:v]fps=${fps},trim=duration=${pokeballVisibleDuration},setpts=PTS-STARTPTS+${pokeballIntroStart}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[pokeballbase]`);
     const pokeballSplitLabels = [...pokeballStaticLabels, ...pokeballTransitionLabels];
     filters.push(`[pokeballbase]split=${pokeballSplitLabels.length}${pokeballSplitLabels.map((label) => `[${label}]`).join('')}`);
     for (let index = 0; index < renderPlan.grid.cells.length; index += 1) {
       const cell = renderPlan.grid.cells[index];
-      const introScaleExpression = buildAnimatedPopSettleExpression(countdownStart);
+      const introScaleExpression = buildAnimatedPopSettleExpression(
+        pokeballIntroStart,
+        pokeballIntroDuration,
+      );
       filters.push(
         `[${pokeballStaticLabels[index]}]scale=w='${pokeballSize}*(${introScaleExpression})':h='${pokeballSize}*(${introScaleExpression})':eval=frame,setsar=1[${pokeballIntroLabels[index]}]`,
       );
       const nextVideoLabel = safeFilterLabel('vg', index);
       filters.push(
-        `[${currentVideoLabel}][${pokeballIntroLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, revealVisualStart)}'[${nextVideoLabel}]`,
+        `[${currentVideoLabel}][${pokeballIntroLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(pokeballIntroStart, revealVisualStart)}'[${nextVideoLabel}]`,
       );
       currentVideoLabel = nextVideoLabel;
     }
     const timerVideoLabel = `${currentVideoLabel}t`;
     filters.push(
-      `[${currentVideoLabel}][timercountdown]overlay=${renderPlan.timer_layout.x}:${renderPlan.timer_layout.y}:enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${timerVideoLabel}]`,
+      `[${currentVideoLabel}][timercountdown]overlay=x='${renderPlan.timer_layout.number_center_x}-w/2':y='${renderPlan.timer_layout.number_center_y}-h/2':enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${timerVideoLabel}]`,
     );
     currentVideoLabel = timerVideoLabel;
   }
@@ -725,7 +740,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       timerAlarmVisibleEnd - timerAlarmExitStart,
     ));
     filters.push(
-      `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},tpad=stop_mode=clone:stop_duration=${timerAlarmHoldSeconds},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,crop=iw*0.72:ih*0.72:(iw-ow)/2:(ih-oh)/2-20,scale=w='${renderPlan.timer_layout.width}*(${timerAlarmScaleExpression})':h='${renderPlan.timer_layout.height}*(${timerAlarmScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,fade=t=out:st=${timerAlarmExitStart}:d=${timerAlarmFadeDuration}:alpha=1,setsar=1[${timerAlarmLabel}]`,
+      `[${inputRefs.timerAlarm}:v]fps=${fps},trim=duration=${timerAlarmDuration},tpad=stop_mode=clone:stop_duration=${timerAlarmHoldSeconds},setpts=PTS-STARTPTS+${timerAlarmStart}/TB,crop=iw*0.72:ih*0.72:(iw-ow)/2:(ih-oh)/2-20,scale=w='${timerVisualWidth}*(${timerAlarmScaleExpression})':h='${timerVisualHeight}*(${timerAlarmScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,fade=t=out:st=${timerAlarmExitStart}:d=${timerAlarmFadeDuration}:alpha=1,setsar=1[${timerAlarmLabel}]`,
     );
     const timerAlarmVideoLabel = `${currentVideoLabel}a`;
     filters.push(

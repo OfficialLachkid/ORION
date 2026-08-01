@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildToolReportEmbed,
+  editDiscordChannelMessage,
   postToolReport,
   sendDiscordChannelMessage,
   shouldPostToDiscord,
@@ -68,6 +69,34 @@ test('sendDiscordChannelMessage returns messageId on success and error on failur
   const failure = await sendDiscordChannelMessage(buildConfig(), '123', { content: 'x' }, { fetch: stubFailure });
   assert.equal(failure.posted, false);
   assert.equal(failure.reason, 'discord_api_500');
+});
+
+test('editDiscordChannelMessage PATCHes an existing Discord message', async () => {
+  let capturedUrl = '';
+  let capturedMethod = '';
+  const stubFetch = async (url, options) => {
+    capturedUrl = url;
+    capturedMethod = options.method;
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'msg-2' }),
+      text: async () => '',
+    };
+  };
+
+  const result = await editDiscordChannelMessage(
+    buildConfig(),
+    '123',
+    'msg-1',
+    { content: 'updated' },
+    { fetch: stubFetch },
+  );
+
+  assert.equal(result.posted, true);
+  assert.equal(result.messageId, 'msg-2');
+  assert.equal(capturedMethod, 'PATCH');
+  assert.ok(capturedUrl.endsWith('/channels/123/messages/msg-1'));
 });
 
 test('postToolReport skips when opt-in flag is not set', async () => {

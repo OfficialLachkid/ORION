@@ -185,35 +185,16 @@ async function executeFeedbackRegenerationTask(task, config) {
 
   await updatePriorPublicationForRevision(feedback, config);
 
-  await runLocalProcess({
-    executable: process.execPath,
-    args: [
-      resolve(projectRoot, 'services/product-video-agent/scripts/render-poke-quizz-video.mjs'),
-      '--plan',
-      planPath,
-      '--template',
-      resolve(projectRoot, feedback.templatePath || DEFAULT_TEMPLATE_PATH),
-      '--config',
-      resolve(projectRoot, feedback.configPath || DEFAULT_CONFIG_PATH),
-      '--output',
-      outputPath,
-    ],
-    cwd: projectRoot,
-    timeoutMs: 900_000,
-  });
-
   const reviewResult = await runLocalProcess({
     executable: process.execPath,
     args: [
-      resolve(projectRoot, 'services/product-video-agent/scripts/review-poke-quizz-publication.mjs'),
+      resolve(projectRoot, 'services/product-video-agent/scripts/generate-poke-quizz-review.mjs'),
       '--plan',
       planPath,
-      '--render',
-      outputPath,
       '--thread-id',
       feedback.reviewThreadId,
-      '--catalog-json',
-      feedback.catalogJsonPath ? resolve(projectRoot, feedback.catalogJsonPath) : '',
+      '--output',
+      outputPath,
       '--channel',
       feedback.channelSelector || DEFAULT_CHANNEL_SELECTOR,
       '--template',
@@ -227,7 +208,7 @@ async function executeFeedbackRegenerationTask(task, config) {
         : []),
     ],
     cwd: projectRoot,
-    timeoutMs: 300_000,
+    timeoutMs: 1_200_000,
   });
 
   const reviewPayload = parseLastJsonObject(reviewResult.stdout) || {};

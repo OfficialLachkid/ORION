@@ -329,15 +329,27 @@ test('buildOutboundEventDiscordPayload renders Poke Quizz publication review car
       publicationReview: true,
       publicationId: 'publication-123',
       previewUrl: 'https://youtube.com/shorts/preview-123',
+      genreLabel: 'Type Combination',
+      channelName: 'Poke Quizz',
+      channelUrl: 'https://www.youtube.com/channel/UCvMqBsEPDvjgNRMymQyefFg',
       typePairLabel: 'Water / Flying',
       seed: 'water-flying-random-20260731t220000z',
+      generationDurationLabel: '3 min',
+      publicationTitle: 'Can You Guess These Water / Flying Pokemon?',
+      publicationDescription: 'Beat the timer and wait for the reveal.',
       renderPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/water-flying.mp4',
       planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
     },
   });
 
   assert.equal(payload.embeds.length, 1);
+  assert.equal(payload.embeds[0].color, 0x9B59B6);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Publication' && /publication-123/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Genre' && /Type Combination/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Channel' && /Poke Quizz/u.test(field.value) && /youtube\.com\/channel/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Busy Time' && /3 min/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Title' && /Water \/ Flying/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Description' && /Beat the timer/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Preview' && /Open unlisted preview/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Action' && /Publish adds this preview to the publish queue/u.test(field.value)), true);
 });
