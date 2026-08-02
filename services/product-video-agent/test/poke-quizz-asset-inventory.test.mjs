@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  BACKGROUND_EXTENSIONS,
   buildThreeDTypeStyleCatalog,
   isAssetCandidateFileName,
   selectOverlayPresets,
@@ -12,6 +13,11 @@ test('asset inventory ignores hidden and AppleDouble metadata files', () => {
   assert.equal(isAssetCandidateFileName('.DS_Store'), false);
   assert.equal(isAssetCandidateFileName('._grass.gif'), false);
   assert.equal(isAssetCandidateFileName(''), false);
+});
+
+test('background inventory accepts avif assets alongside legacy image formats', () => {
+  assert.equal(BACKGROUND_EXTENSIONS.has('.avif'), true);
+  assert.equal(BACKGROUND_EXTENSIONS.has('.jpg'), true);
 });
 
 test('type icon selection prefers 3D assets only when every requested type exists', () => {

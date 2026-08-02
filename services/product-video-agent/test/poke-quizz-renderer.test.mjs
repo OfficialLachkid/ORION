@@ -116,8 +116,8 @@ test('type icon layout stays centered in the upper middle', () => {
 
 test('hook type icon layout starts larger and centered before settling', () => {
   const layout = buildHookTypeIconLayout(template, 2);
-  assert.deepEqual(layout[0], { x: 132, y: 684, width: 378, height: 378 });
-  assert.deepEqual(layout[1], { x: 570, y: 684, width: 378, height: 378 });
+  assert.deepEqual(layout[0], { x: 182, y: 684, width: 328, height: 328 });
+  assert.deepEqual(layout[1], { x: 570, y: 684, width: 328, height: 328 });
 });
 
 test('badge-style hook icons render directly without a synthetic white backdrop layer', () => {

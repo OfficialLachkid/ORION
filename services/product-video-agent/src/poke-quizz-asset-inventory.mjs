@@ -6,7 +6,7 @@ import {
   POKE_QUIZZ_ASSET_LAYOUT,
 } from './poke-quizz-asset-layout.mjs';
 
-const BACKGROUND_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.mov', '.webm']);
+export const BACKGROUND_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.mp4', '.mov', '.webm']);
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg']);
 const IMAGE_EXTENSIONS = new Set(['.png', '.gif', '.webp']);
 

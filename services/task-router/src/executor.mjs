@@ -38,6 +38,14 @@ function resolvePokeQuizzPublicationId(task) {
   ).trim();
 }
 
+function isPokeQuizzPublicationWorkflowAction(action) {
+  return (
+    action === 'poke_quizz_publish_preview'
+    || action === 'poke_quizz_feedback_regenerate'
+    || action === 'poke_quizz_delete_preview'
+  );
+}
+
 function isPausedExecutionReport(report = {}) {
   return report?.paused === true || String(report?.state || '').trim().toLowerCase() === 'paused';
 }
@@ -1844,30 +1852,11 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
     );
   }
 
-  if (
-    executionPlan.action === 'poke_quizz_publish_preview'
-    || executionPlan.action === 'poke_quizz_feedback_regenerate'
-    || executionPlan.action === 'poke_quizz_delete_preview'
-  ) {
-    return buildCompletedResultEvents(
-      'agentResults',
-      `Execution result for ${task.task_id}: ${report.summary || 'Poke Quizz publication workflow completed.'}`,
-      {
-        taskId: task.task_id,
-        action: executionPlan.action,
-        state: report.state || 'unknown',
-        severity: report.severity || '',
-        publicationId: report.publicationId || '',
-        previewUrl: report.previewUrl || '',
-        reviewTaskId: report.reviewTaskId || '',
-        reviewMessageId: report.reviewMessageId || '',
-        renderPath: report.renderPath || '',
-        approvedAt: report.approvedAt || '',
-        workflowState: report.workflowState || '',
-        feedback: report.feedback || '',
-        deletedAt: report.deletedAt || '',
-      }
-    );
+  if (isPokeQuizzPublicationWorkflowAction(executionPlan.action)) {
+    return withTerminalAlert([
+      commonQueueEvent,
+      commonSystemEvent,
+    ]);
   }
 
   if (executionPlan.action === 'mac_runtime_safe_sync') {
@@ -2054,14 +2043,11 @@ export async function executeTask(task, config, options = {}) {
           commandRunner: options.pullRequestMergeCommandRunner,
         }),
       };
-    } else if (
-      executionPlan.action === 'poke_quizz_publish_preview'
-      || executionPlan.action === 'poke_quizz_feedback_regenerate'
-      || executionPlan.action === 'poke_quizz_delete_preview'
-    ) {
+    } else if (isPokeQuizzPublicationWorkflowAction(executionPlan.action)) {
+      const productVideoActionRunner = options.productVideoActionRunner || executeProductVideoAction;
       executionState = {
         outcome: 'completed',
-        executionResult: await executeProductVideoAction(executionPlan.action, task, config),
+        executionResult: await productVideoActionRunner(executionPlan.action, task, config),
       };
     } else {
       const commandRunner = options.commandRunner
