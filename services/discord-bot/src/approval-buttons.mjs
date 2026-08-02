@@ -3,6 +3,7 @@ import { approvalStateTitle, EMBED_COLORS } from './message-formatting.mjs';
 const DISCORD_COMPONENT_TYPE_ACTION_ROW = 1;
 const DISCORD_COMPONENT_TYPE_BUTTON = 2;
 const DISCORD_COMPONENT_TYPE_TEXT_INPUT = 4;
+const DISCORD_BUTTON_STYLE_SECONDARY = 2;
 const DISCORD_BUTTON_STYLE_SUCCESS = 3;
 const DISCORD_BUTTON_STYLE_DANGER = 4;
 const DISCORD_TEXT_INPUT_STYLE_PARAGRAPH = 2;
@@ -12,7 +13,7 @@ const APPROVAL_REJECT_MODAL_PREFIX = 'reject-modal:';
 const POKE_QUIZZ_PUBLISH_TASK_PREFIX = 'TASK-ORION-PQ-PUBLISH-';
 
 export function parseApprovalButtonCustomId(customId) {
-  const match = /^(approve|reject):(TASK-[A-Z0-9-]+)$/u.exec(String(customId || ''));
+  const match = /^(approve|reject|delete):(TASK-[A-Z0-9-]+)$/u.exec(String(customId || ''));
   if (!match) {
     return null;
   }
@@ -39,26 +40,37 @@ export function buildApprovalButtons(taskId, options = {}) {
   const isEmailAction = options.isEmailAction === true;
   const approveLabel = String(options.approveLabel || '').trim() || (isEmailAction ? 'Send Email' : 'Approve');
   const rejectLabel = String(options.rejectLabel || '').trim() || (isEmailAction ? 'Give Feedback' : 'Reject');
+  const deleteLabel = String(options.deleteLabel || '').trim();
+  const components = [
+    {
+      type: DISCORD_COMPONENT_TYPE_BUTTON,
+      style: DISCORD_BUTTON_STYLE_SUCCESS,
+      label: approveLabel,
+      custom_id: `approve:${taskId}`,
+      disabled: options.approveDisabled === true,
+    },
+    {
+      type: DISCORD_COMPONENT_TYPE_BUTTON,
+      style: deleteLabel ? DISCORD_BUTTON_STYLE_SECONDARY : DISCORD_BUTTON_STYLE_DANGER,
+      label: rejectLabel,
+      custom_id: `reject:${taskId}`,
+      disabled: options.rejectDisabled === true,
+    },
+  ];
+  if (deleteLabel) {
+    components.push({
+      type: DISCORD_COMPONENT_TYPE_BUTTON,
+      style: DISCORD_BUTTON_STYLE_DANGER,
+      label: deleteLabel,
+      custom_id: `delete:${taskId}`,
+      disabled: options.deleteDisabled === true,
+    });
+  }
 
   return [
     {
       type: DISCORD_COMPONENT_TYPE_ACTION_ROW,
-      components: [
-        {
-          type: DISCORD_COMPONENT_TYPE_BUTTON,
-          style: DISCORD_BUTTON_STYLE_SUCCESS,
-          label: approveLabel,
-          custom_id: `approve:${taskId}`,
-          disabled: options.approveDisabled === true,
-        },
-        {
-          type: DISCORD_COMPONENT_TYPE_BUTTON,
-          style: DISCORD_BUTTON_STYLE_DANGER,
-          label: rejectLabel,
-          custom_id: `reject:${taskId}`,
-          disabled: options.rejectDisabled === true,
-        },
-      ],
+      components,
     },
   ];
 }
@@ -139,13 +151,18 @@ export function buildResolvedApprovalEmbeds(originalEmbeds, decision, taskId) {
   }
 
   const isPokeQuizzPublishApproval = decision === 'approve' && String(taskId || '').startsWith(POKE_QUIZZ_PUBLISH_TASK_PREFIX);
+  const isPokeQuizzDeleteApproval = decision === 'delete' && String(taskId || '').startsWith(POKE_QUIZZ_PUBLISH_TASK_PREFIX);
   const color = isPokeQuizzPublishApproval
     ? EMBED_COLORS.queue
+    : isPokeQuizzDeleteApproval
+      ? EMBED_COLORS.blocked
     : decision === 'approve'
       ? EMBED_COLORS.success
       : EMBED_COLORS.blocked;
   const resolvedTitle = isPokeQuizzPublishApproval
     ? `Publish Queued · ${taskId}`
+    : isPokeQuizzDeleteApproval
+      ? `Delete Queued · ${taskId}`
     : approvalStateTitle({ decision, taskId });
   return embeds.map((embed, index) => ({
     ...embed,
@@ -155,6 +172,8 @@ export function buildResolvedApprovalEmbeds(originalEmbeds, decision, taskId) {
         fields: embed.fields.map((field) => (
           field?.name === 'State' && isPokeQuizzPublishApproval
             ? { ...field, value: '`queued_for_publish`' }
+            : field?.name === 'State' && isPokeQuizzDeleteApproval
+              ? { ...field, value: '`delete_requested`' }
             : field
         )),
       }
@@ -194,6 +213,8 @@ export function normalizeInteractionAsApprovalMessage(interaction) {
 
   const content = action.decision === 'approve'
     ? `approve ${action.taskId}`
+    : action.decision === 'delete'
+      ? `delete ${action.taskId}`
     : `reject ${action.taskId} because ${action.reason || 'rejected via approval button'}`;
 
   return {

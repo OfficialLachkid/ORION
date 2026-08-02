@@ -10,6 +10,9 @@ import {
   DEFAULT_CHANNEL_SELECTOR,
   DEFAULT_CONFIG_PATH,
   DEFAULT_TEMPLATE_PATH,
+  buildPokeQuizzDeleteTask,
+  buildPokeQuizzPublicationReviewPayload,
+  buildPokeQuizzPublicationReviewTask,
   deriveFeedbackRevisionSeed,
   formatTypePairLabel,
 } from '../../product-video-agent/src/poke-quizz-publication-review.mjs';
@@ -17,6 +20,7 @@ import {
   deleteYoutubeVideo,
   loadYoutubeClientCredentials,
 } from '../../product-video-agent/src/youtube-publication-executor.mjs';
+import { editDiscordChannelMessage } from '../../../scripts/lib/discord-post.mjs';
 
 function slugify(value) {
   return String(value || '')
@@ -89,6 +93,54 @@ function assertFeedbackTask(task) {
     throw new Error('Poke Quizz feedback task is missing the original plan path.');
   }
   return feedback;
+}
+
+function assertDeleteTask(task) {
+  const deletion = task?.poke_quizz_delete;
+  if (!deletion?.publicationId) {
+    throw new Error('Poke Quizz delete task is missing a publication payload.');
+  }
+  return deletion;
+}
+
+function isActionableReviewWorkflowState(workflowState) {
+  const normalizedState = String(workflowState || '').trim().toLowerCase();
+  return normalizedState === 'preview_uploaded' || normalizedState === 'delete_failed';
+}
+
+async function refreshPublicationReviewMessage({
+  config,
+  publication,
+  videoRow,
+  channelSelector = DEFAULT_CHANNEL_SELECTOR,
+}) {
+  const reviewThreadId = String(publication?.metadata?.review_thread_id || '').trim();
+  const reviewMessageId = String(publication?.metadata?.review_message_id || '').trim();
+  if (!reviewThreadId || !reviewMessageId || !videoRow) {
+    return null;
+  }
+
+  const profiles = await loadPublicationChannelProfiles(
+    'services/product-video-agent/publication-channels.example.json',
+    { projectRoot },
+  );
+  const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
+  const reviewTask = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video: videoRow,
+    channelProfile,
+    reviewThreadId,
+    planPath: '',
+    renderPath: publication?.metadata?.render_path || videoRow?.render?.output_path || '',
+    catalogJsonPath: '',
+    channelSelector,
+    submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
+  });
+  const { payload } = buildPokeQuizzPublicationReviewPayload(reviewTask);
+  if (!isActionableReviewWorkflowState(publication?.metadata?.workflow_state)) {
+    payload.components = [];
+  }
+  return editDiscordChannelMessage(config, reviewThreadId, reviewMessageId, payload);
 }
 
 async function executePublishPreviewTask(task, config, dependencies = {}) {
@@ -244,6 +296,7 @@ async function updatePriorPublicationForRevision(feedback, config) {
   if (!publication) {
     return;
   }
+  const videoRow = publication.video_id ? await store.fetchVideoById(publication.video_id) : null;
 
   let deleteReport = {
     deleted: false,
@@ -286,11 +339,12 @@ async function updatePriorPublicationForRevision(feedback, config) {
     };
   }
 
-  await store.updatePublication(publication.id, {
-    preview_url: deleteReport.deleted ? null : publication.preview_url,
+  const updatedPublication = await store.updatePublication(publication.id, {
+    status: deleteReport.deleted ? 'deleted' : publication.status,
+    preview_url: publication.preview_url,
     public_url: deleteReport.deleted ? null : publication.public_url,
     external_id: deleteReport.deleted ? null : publication.external_id,
-    uploaded_at: deleteReport.deleted ? null : publication.uploaded_at,
+    uploaded_at: publication.uploaded_at,
     metadata: {
       ...(publication.metadata || {}),
       workflow_state: 'revision_requested',
@@ -303,6 +357,12 @@ async function updatePriorPublicationForRevision(feedback, config) {
       rejected_preview_deleted_at: deleteReport.deleted ? deleteReport.deletedAt : '',
       rejected_preview_delete_error: deleteReport.error || '',
     },
+  });
+  await refreshPublicationReviewMessage({
+    config,
+    publication: updatedPublication || publication,
+    videoRow,
+    channelSelector: feedback.channelSelector || DEFAULT_CHANNEL_SELECTOR,
   });
 }
 
@@ -368,6 +428,98 @@ async function executeFeedbackRegenerationTask(task, config) {
   };
 }
 
+async function executeDeletePreviewTask(task, config) {
+  const deletion = assertDeleteTask(task);
+  const store = createPublicationStore(config);
+  const publication = await store.fetchPublicationById(deletion.publicationId);
+  if (!publication) {
+    throw new Error(`Publication ${deletion.publicationId} was not found.`);
+  }
+  const videoRow = publication.video_id ? await store.fetchVideoById(publication.video_id) : null;
+
+  let deleteReport = {
+    deleted: false,
+    error: '',
+  };
+
+  try {
+    const profiles = await loadPublicationChannelProfiles(
+      'services/product-video-agent/publication-channels.example.json',
+      { projectRoot },
+    );
+    const channelProfile = findPublicationChannelProfile(
+      profiles,
+      deletion.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+    );
+    const refreshToken = config?.env?.[channelProfile.youtube.oauth_refresh_token_env] || '';
+    if (!publication.external_id) {
+      throw new Error('Preview has no YouTube video id to delete.');
+    }
+    if (!refreshToken) {
+      throw new Error('YouTube refresh token is unavailable for this channel.');
+    }
+    const clientConfig = await loadYoutubeClientCredentials(
+      channelProfile.youtube.oauth_client_secret_path,
+      projectRoot,
+    );
+    const deleted = await deleteYoutubeVideo({
+      externalId: publication.external_id,
+      clientConfig,
+      refreshToken,
+    });
+    deleteReport = {
+      deleted: true,
+      deletedAt: deleted.deletedAt,
+    };
+  } catch (error) {
+    deleteReport = {
+      deleted: false,
+      error: error.message || 'unknown delete error',
+    };
+  }
+
+  const updatedPublication = await store.updatePublication(publication.id, {
+    status: deleteReport.deleted ? 'deleted' : publication.status,
+    preview_url: publication.preview_url,
+    public_url: deleteReport.deleted ? null : publication.public_url,
+    external_id: deleteReport.deleted ? null : publication.external_id,
+    uploaded_at: publication.uploaded_at,
+    metadata: {
+      ...(publication.metadata || {}),
+      workflow_state: deleteReport.deleted ? 'deleted' : 'delete_failed',
+      deleted_by: deletion.actor || '',
+      deleted_by_id: deletion.actorId || '',
+      deleted_at: deleteReport.deleted ? new Date().toISOString() : '',
+      delete_attempted_at: new Date().toISOString(),
+      deleted_preview_url: publication.preview_url || '',
+      deleted_preview_external_id: publication.external_id || '',
+      deleted_preview_deleted_at: deleteReport.deleted ? deleteReport.deletedAt : '',
+      deleted_preview_delete_error: deleteReport.error || '',
+    },
+  });
+  await refreshPublicationReviewMessage({
+    config,
+    publication: updatedPublication || publication,
+    videoRow,
+    channelSelector: deletion.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+  });
+
+  return {
+    rawStdout: '',
+    report: {
+      state: deleteReport.deleted ? 'deleted' : 'delete_failed',
+      severity: deleteReport.deleted ? 'success' : 'warning',
+      summary: deleteReport.deleted
+        ? `Deleted preview ${publication.id} from YouTube and marked it as removed.`
+        : `Could not delete preview ${publication.id} from YouTube: ${deleteReport.error || 'unknown error'}`,
+      publicationId: publication.id,
+      previewUrl: publication.preview_url || '',
+      workflowState: deleteReport.deleted ? 'deleted' : 'delete_failed',
+      deletedAt: deleteReport.deleted ? deleteReport.deletedAt : '',
+    },
+  };
+}
+
 export function describeExplicitProductVideoAction(task) {
   const action = String(task?.runtime_action || '').trim();
   if (action === 'poke_quizz_publish_preview') {
@@ -384,6 +536,13 @@ export function describeExplicitProductVideoAction(task) {
     };
   }
 
+  if (action === 'poke_quizz_delete_preview') {
+    return {
+      action,
+      description: 'Delete a reviewed Poke Quizz preview without generating a replacement.',
+    };
+  }
+
   return null;
 }
 
@@ -394,6 +553,10 @@ export async function executeProductVideoAction(action, task, config, dependenci
 
   if (action === 'poke_quizz_feedback_regenerate') {
     return executeFeedbackRegenerationTask(task, config);
+  }
+
+  if (action === 'poke_quizz_delete_preview') {
+    return executeDeletePreviewTask(task, config);
   }
 
   throw new Error(`Unsupported product-video action '${action}'.`);

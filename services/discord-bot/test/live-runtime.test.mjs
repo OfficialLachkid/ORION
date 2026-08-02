@@ -17,7 +17,7 @@ import {
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
 
-test('parseApprovalButtonCustomId understands approve and reject actions', () => {
+test('parseApprovalButtonCustomId understands approve, reject, and delete actions', () => {
   assert.deepEqual(
     parseApprovalButtonCustomId('approve:TASK-202606291339-2AA8A8F209'),
     {
@@ -30,6 +30,14 @@ test('parseApprovalButtonCustomId understands approve and reject actions', () =>
     parseApprovalButtonCustomId('reject:TASK-202606291339-2AA8A8F209'),
     {
       decision: 'reject',
+      taskId: 'TASK-202606291339-2AA8A8F209',
+    }
+  );
+
+  assert.deepEqual(
+    parseApprovalButtonCustomId('delete:TASK-202606291339-2AA8A8F209'),
+    {
+      decision: 'delete',
       taskId: 'TASK-202606291339-2AA8A8F209',
     }
   );
@@ -58,10 +66,15 @@ test('buildApprovalButtons accepts explicit label overrides for custom approval 
   const components = buildApprovalButtons('TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456', {
     approveLabel: 'Publish',
     rejectLabel: 'Give Feedback',
+    deleteLabel: 'Delete',
   });
 
   assert.equal(components[0].components[0].label, 'Publish');
+  assert.equal(components[0].components[0].style, 3);
   assert.equal(components[0].components[1].label, 'Give Feedback');
+  assert.equal(components[0].components[1].style, 2);
+  assert.equal(components[0].components[2].label, 'Delete');
+  assert.equal(components[0].components[2].style, 4);
 });
 
 test('buildApprovalRejectModal creates a required feedback form', () => {
@@ -140,6 +153,28 @@ test('buildResolvedApprovalEmbeds marks Poke Quizz approvals as queued for publi
   assert.equal(approved[0].fields[0].value, '`queued_for_publish`');
 });
 
+test('buildResolvedApprovalEmbeds marks Poke Quizz deletes as queued removal', () => {
+  const originalEmbeds = [
+    {
+      title: 'Approval Needed',
+      color: 0x9B59B6,
+      fields: [
+        { name: 'State', value: '`preview_uploaded`', inline: true },
+      ],
+    },
+  ];
+
+  const deleted = buildResolvedApprovalEmbeds(
+    originalEmbeds,
+    'delete',
+    'TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456',
+  );
+
+  assert.equal(deleted[0].title, 'Delete Queued · TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+  assert.equal(deleted[0].color, 0xED4245);
+  assert.equal(deleted[0].fields[0].value, '`delete_requested`');
+});
+
 test('shouldScheduleDeferredDiscordBotRestart only triggers for deferred Mac sync completions', () => {
   assert.equal(shouldScheduleDeferredDiscordBotRestart({
     outcome: 'completed',
@@ -202,6 +237,31 @@ test('normalizeInteractionAsApprovalMessage converts an approve button click int
       isOperator: false,
     },
   });
+});
+
+test('normalizeInteractionAsApprovalMessage converts a delete button click into delete text', () => {
+  const message = normalizeInteractionAsApprovalMessage({
+    type: 3,
+    guild_id: 'guild-1',
+    channel_id: 'channel-1',
+    data: {
+      custom_id: 'delete:TASK-202606291339-2AA8A8F209',
+    },
+    message: {
+      id: 'message-1',
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'delete TASK-202606291339-2AA8A8F209');
 });
 
 test('shouldOpenRejectApprovalModal flags reject button interactions', () => {

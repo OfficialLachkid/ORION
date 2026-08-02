@@ -1827,7 +1827,11 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
     );
   }
 
-  if (executionPlan.action === 'poke_quizz_publish_preview' || executionPlan.action === 'poke_quizz_feedback_regenerate') {
+  if (
+    executionPlan.action === 'poke_quizz_publish_preview'
+    || executionPlan.action === 'poke_quizz_feedback_regenerate'
+    || executionPlan.action === 'poke_quizz_delete_preview'
+  ) {
     return buildCompletedResultEvents(
       'agentResults',
       `Execution result for ${task.task_id}: ${report.summary || 'Poke Quizz publication workflow completed.'}`,
@@ -1844,6 +1848,7 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
         approvedAt: report.approvedAt || '',
         workflowState: report.workflowState || '',
         feedback: report.feedback || '',
+        deletedAt: report.deletedAt || '',
       }
     );
   }
@@ -2030,7 +2035,11 @@ export async function executeTask(task, config, options = {}) {
           commandRunner: options.pullRequestMergeCommandRunner,
         }),
       };
-    } else if (executionPlan.action === 'poke_quizz_publish_preview' || executionPlan.action === 'poke_quizz_feedback_regenerate') {
+    } else if (
+      executionPlan.action === 'poke_quizz_publish_preview'
+      || executionPlan.action === 'poke_quizz_feedback_regenerate'
+      || executionPlan.action === 'poke_quizz_delete_preview'
+    ) {
       executionState = {
         outcome: 'completed',
         executionResult: await executeProductVideoAction(executionPlan.action, task, config),

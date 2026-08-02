@@ -86,6 +86,26 @@ function formatScheduledForLabel(value, timeZone = 'UTC') {
   }).format(date)} ${timeZone}`;
 }
 
+function formatPreviewDeletionLabel(metadata = {}, timeZone = 'UTC') {
+  const deletedAt = String(
+    metadata?.deleted_preview_deleted_at
+    || metadata?.rejected_preview_deleted_at
+    || '',
+  ).trim();
+  const deleteError = String(
+    metadata?.deleted_preview_delete_error
+    || metadata?.rejected_preview_delete_error
+    || '',
+  ).trim();
+  if (deletedAt) {
+    return `Deleted from YouTube on ${formatScheduledForLabel(deletedAt, timeZone)}`;
+  }
+  if (deleteError) {
+    return `Delete failed: ${deleteError}`;
+  }
+  return '';
+}
+
 function normalizeReviewPaths(review = {}) {
   return {
     planPath: String(review.planPath || '').trim(),
@@ -116,8 +136,12 @@ export function buildPokeQuizzPublicationReviewTask({
     publicationId: publication?.id || '',
     videoId: publication?.video_id || video?.id || '',
     channelSelector,
-    previewUrl: publication?.preview_url || '',
+    previewUrl: publication?.preview_url
+      || publication?.metadata?.rejected_preview_url
+      || publication?.metadata?.deleted_preview_url
+      || '',
     reviewThreadId: String(reviewThreadId || '').trim(),
+    reviewMessageId: String(publication?.metadata?.review_message_id || '').trim(),
     typePair: normalizeTypePair(publication?.metadata?.type_pair || video?.render?.type_pair || []),
     seed: String(publication?.metadata?.seed || video?.render?.seed || '').trim(),
     planPath: String(planPath || '').trim(),
@@ -133,6 +157,7 @@ export function buildPokeQuizzPublicationReviewTask({
     generationDurationLabel: formatGenerationDurationLabel(generationDurationMinutes),
     approvalState: String(publication?.metadata?.workflow_state || '').trim(),
     scheduledForLabel: formatScheduledForLabel(publication?.scheduled_for, channelProfile?.timezone || 'UTC'),
+    previewDeletionLabel: formatPreviewDeletionLabel(publication?.metadata || {}, channelProfile?.timezone || 'UTC'),
   };
 
   return {
@@ -192,6 +217,44 @@ export function buildPokeQuizzFeedbackRegenerationTask({
   };
 }
 
+export function buildPokeQuizzDeleteTask({
+  reviewTask,
+  actor,
+  actorId = '',
+  submittedAt = new Date().toISOString(),
+}) {
+  const review = reviewTask?.poke_quizz_publication_review || {};
+  const payload = {
+    publicationId: review.publicationId || '',
+    videoId: review.videoId || '',
+    channelSelector: review.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+    reviewThreadId: String(review.reviewThreadId || '').trim(),
+    reviewMessageId: String(review.reviewMessageId || '').trim(),
+    actor: String(actor || '').trim(),
+    actorId: String(actorId || '').trim(),
+    typePair: normalizeTypePair(review.typePair || []),
+    seed: String(review.seed || '').trim(),
+    ...normalizeReviewPaths(review),
+    priorReviewTaskId: reviewTask?.task_id || '',
+  };
+
+  return {
+    task_id: createTaskId('DELETE', payload, submittedAt),
+    status: 'queued',
+    approval_required: false,
+    runtime_action: 'poke_quizz_delete_preview',
+    automation_type: 'poke_quizz_publication_delete',
+    source_type: 'automation',
+    target_agent: 'product-video-agent',
+    domain: 'content',
+    priority: 'normal',
+    submitted_by: String(actor || reviewTask?.submitted_by || 'operator').trim(),
+    submitted_at: submittedAt,
+    summary: `Delete the current Poke Quizz preview for ${formatTypePairLabel(payload.typePair) || 'the current type pair'} without regenerating it.`,
+    poke_quizz_delete: payload,
+  };
+}
+
 export function buildPokeQuizzPublicationReviewEvent(task) {
   const review = task?.poke_quizz_publication_review || {};
   const typePairLabel = formatTypePairLabel(review.typePair || []);
@@ -225,11 +288,14 @@ export function buildPokeQuizzPublicationReviewEvent(task) {
       generationDurationLabel: review.generationDurationLabel || '',
       approvalState: review.approvalState || '',
       scheduledForLabel: review.scheduledForLabel || '',
+      previewDeletionLabel: review.previewDeletionLabel || '',
       approveLabel: 'Publish',
       rejectLabel: 'Give Feedback',
+      deleteLabel: 'Delete',
       responsePattern: [
         'approve TASK-123',
         'reject TASK-123 because <feedback to use in the next preview>',
+        'delete TASK-123',
       ],
     },
   };
@@ -241,6 +307,7 @@ export function buildPokeQuizzPublicationReviewPayload(task) {
   payload.components = buildApprovalButtons(task.task_id, {
     approveLabel: 'Publish',
     rejectLabel: 'Give Feedback',
+    deleteLabel: 'Delete',
   });
   return {
     event,
@@ -265,4 +332,5 @@ export {
   DEFAULT_TEMPLATE_PATH,
   DEFAULT_GENRE_LABEL,
   formatTypePairLabel,
+  formatPreviewDeletionLabel,
 };

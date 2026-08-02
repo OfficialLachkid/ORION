@@ -17,6 +17,7 @@ function workflowState(publication = {}) {
     return String(publication.metadata.workflow_state).trim();
   }
   if (publication.status === 'published') return 'published';
+  if (publication.status === 'deleted') return 'deleted';
   if (publication.status === 'failed') return 'failed';
   if (publication.status === 'blocked') return 'blocked';
   if (publication.preview_url) return 'preview_uploaded';
@@ -29,7 +30,8 @@ function matchesChannel(publication, channelProfile) {
 }
 
 function isActivePublication(publication) {
-  return publication.status !== 'blocked'
+  return publication.status !== 'deleted'
+    && publication.status !== 'blocked'
     && publication.status !== 'failed'
     && publication.status !== 'published';
 }

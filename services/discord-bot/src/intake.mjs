@@ -274,10 +274,16 @@ export function processDiscordEvent(message, config) {
 
   if (APPROVAL_CHANNEL_KEYS.has(channelKey)) {
     const decision = parseApprovalResponse(message);
-    const resolvedStatus = decision.decision === 'approve' ? 'approved' : 'rejected';
+    const resolvedStatus = decision.decision === 'approve'
+      ? 'approved'
+      : decision.decision === 'delete'
+        ? 'deleted'
+        : 'rejected';
     const resolvedBody = decision.decision === 'approve'
       ? `Approved ${decision.taskId}.`
-      : `Rejected ${decision.taskId}.`;
+      : decision.decision === 'delete'
+        ? `Delete requested for ${decision.taskId}.`
+        : `Rejected ${decision.taskId}.`;
     const outboundEvents = decision.valid
       ? [
           event('taskQueue', 'approval_outcome', resolvedBody, {

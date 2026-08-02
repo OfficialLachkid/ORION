@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildPokeQuizzDeleteTask,
   buildPokeQuizzFeedbackRegenerationTask,
   buildPokeQuizzPublicationReviewEvent,
   buildPokeQuizzPublicationReviewPayload,
@@ -74,13 +75,14 @@ test('buildPokeQuizzPublicationReviewEvent adds preview-review metadata and labe
   assert.equal(event.metadata.publicationReview, true);
   assert.equal(event.metadata.approveLabel, 'Publish');
   assert.equal(event.metadata.rejectLabel, 'Give Feedback');
+  assert.equal(event.metadata.deleteLabel, 'Delete');
   assert.equal(event.metadata.previewUrl, publication.preview_url);
   assert.equal(event.metadata.genreLabel, 'Type Combination');
   assert.equal(event.metadata.channelName, 'Poke Quizz');
   assert.equal(event.metadata.generationDurationLabel, '2 min');
 });
 
-test('buildPokeQuizzPublicationReviewPayload renders Publish and Give Feedback buttons', () => {
+test('buildPokeQuizzPublicationReviewPayload renders Publish, Give Feedback, and Delete buttons', () => {
   const task = buildPokeQuizzPublicationReviewTask({
     publication,
     video,
@@ -95,6 +97,7 @@ test('buildPokeQuizzPublicationReviewPayload renders Publish and Give Feedback b
   const { payload } = buildPokeQuizzPublicationReviewPayload(task);
   assert.equal(payload.components[0].components[0].label, 'Publish');
   assert.equal(payload.components[0].components[1].label, 'Give Feedback');
+  assert.equal(payload.components[0].components[2].label, 'Delete');
 });
 
 test('feedback regeneration task carries the operator notes forward', () => {
@@ -120,6 +123,30 @@ test('feedback regeneration task carries the operator notes forward', () => {
   assert.equal(regenTask.runtime_action, 'poke_quizz_feedback_regenerate');
   assert.equal(regenTask.poke_quizz_feedback.feedback, 'Use a cleaner opener and keep the same type pair.');
   assert.equal(regenTask.poke_quizz_feedback.reviewThreadId, '1532709429902839810');
+});
+
+test('delete task carries the current review target without feedback regeneration', () => {
+  const reviewTask = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    channelProfile,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+  const deleteTask = buildPokeQuizzDeleteTask({
+    reviewTask,
+    actor: 'Valen',
+    actorId: 'user-1',
+    submittedAt: '2026-07-31T20:46:00.000Z',
+  });
+
+  assert.match(deleteTask.task_id, /^TASK-ORION-PQ-DELETE-20260731204600-[A-F0-9]{12}$/u);
+  assert.equal(deleteTask.runtime_action, 'poke_quizz_delete_preview');
+  assert.equal(deleteTask.poke_quizz_delete.reviewThreadId, '1532709429902839810');
+  assert.equal(deleteTask.poke_quizz_delete.videoId, 'video-123');
 });
 
 test('deriveFeedbackRevisionSeed produces a distinct auditable revision seed', () => {

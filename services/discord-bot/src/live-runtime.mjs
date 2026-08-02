@@ -44,7 +44,13 @@ import {
   removePersistedPendingTask,
   upsertPersistedPendingTask,
 } from './pending-task-store.mjs';
-import { buildPokeQuizzFeedbackRegenerationTask } from '../../product-video-agent/src/poke-quizz-publication-review.mjs';
+import {
+  buildPokeQuizzDeleteTask,
+  buildPokeQuizzFeedbackRegenerationTask,
+  buildPokeQuizzPublicationReviewTask,
+} from '../../product-video-agent/src/poke-quizz-publication-review.mjs';
+import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
+import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../product-video-agent/src/publication-channels.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -60,6 +66,7 @@ const DISCORD_INTERACTION_CALLBACK_MODAL = 9;
 const DISCORD_MESSAGE_FLAG_EPHEMERAL = 1 << 6;
 const IMAGE_CONTEXT_WINDOW_MS = 10 * 60 * 1000;
 const DISCORD_BOT_LAUNCH_AGENT = 'io.vbj.orion.discord-bot';
+const POKE_QUIZZ_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 
 function assertLiveRuntimeConfig(config) {
   const missing = [];
@@ -97,6 +104,59 @@ function buildAuthHeaders(token) {
     Authorization: `Bot ${token}`,
     'Content-Type': 'application/json',
   };
+}
+
+async function rehydratePokeQuizzReviewTask(decision, config) {
+  if (!String(decision?.taskId || '').startsWith('TASK-ORION-PQ-PUBLISH-')) {
+    return null;
+  }
+  if (!config?.env?.SUPABASE_URL) {
+    return null;
+  }
+
+  try {
+    const profiles = await loadPublicationChannelProfiles(POKE_QUIZZ_CHANNELS_PATH, { projectRoot });
+    const channelProfile = findPublicationChannelProfile(profiles, 'poke-quizz-youtube');
+    const store = new SupabasePublicationStore({
+      supabaseUrl: config.env.SUPABASE_URL,
+      apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY || '',
+    });
+    const publications = await store.fetchPublicationsByChannel({
+      platform: channelProfile.platform,
+      accountKey: channelProfile.account_key,
+    });
+    const publication = publications.find((item) => (
+      String(item?.metadata?.review_task_id || '').trim() === String(decision.taskId || '').trim()
+      || (
+        decision.messageId
+        && String(item?.metadata?.review_message_id || '').trim() === String(decision.messageId || '').trim()
+      )
+    ));
+    if (!publication?.video_id) {
+      return null;
+    }
+
+    const video = await store.fetchVideoById(publication.video_id);
+    const reviewThreadId = String(publication?.metadata?.review_thread_id || '').trim();
+    if (!video || !reviewThreadId) {
+      return null;
+    }
+
+    return buildPokeQuizzPublicationReviewTask({
+      publication,
+      video,
+      channelProfile,
+      reviewThreadId,
+      planPath: '',
+      renderPath: publication?.metadata?.render_path || video?.render?.output_path || '',
+      catalogJsonPath: '',
+      channelSelector: channelProfile.account_key,
+      submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
+    });
+  } catch (error) {
+    process.stderr.write(`Could not rehydrate Poke Quizz review task ${decision?.taskId || ''}: ${error.message}\n`);
+    return null;
+  }
 }
 
 async function sendDiscordApiRequest(token, path, body, method = 'POST') {
@@ -867,6 +927,9 @@ export async function runLiveDiscordBot(config) {
           }
 
           const result = processDiscordEvent(approvalMessage, config);
+          if (result.route === 'approval' && result.decision?.taskId) {
+            result.decision.messageId = approvalMessage.messageId || payload.d.message?.id || '';
+          }
           const actorName = approvalMessage.author.displayName || approvalMessage.author.username || approvalMessage.author.id || 'operator';
           let pendingApprovalTask = null;
 
@@ -1095,6 +1158,7 @@ export async function runLiveDiscordBot(config) {
 
         let pendingApprovalTask = null;
         if (result.route === 'approval' && result.decision?.taskId) {
+          result.decision.messageId = message.messageId || '';
           const existingResolution = resolvedApprovals.get(result.decision.taskId);
           if (existingResolution) {
             await postChannelMessage(
@@ -1623,7 +1687,13 @@ export async function runLiveDiscordBot(config) {
       return;
     }
 
-    const pendingTask = pendingTasks.get(decision.taskId) || findPersistedPendingTask(config, decision.taskId);
+    let pendingTask = pendingTasks.get(decision.taskId) || findPersistedPendingTask(config, decision.taskId);
+    if (!pendingTask) {
+      pendingTask = await rehydratePokeQuizzReviewTask(decision, config);
+      if (pendingTask?.task_id) {
+        upsertPersistedPendingTask(config, pendingTask);
+      }
+    }
     if (!pendingTask) {
       return;
     }
@@ -1753,6 +1823,79 @@ export async function runLiveDiscordBot(config) {
       }
       await fanOutOutboundEvents(token, config, outboundEvents, trackedTaskMessages);
       return;
+    }
+
+    if (decision.decision === 'delete') {
+      recordTaskStateChange(pendingTask, 'rejected', {
+        approvalWaitMs,
+      });
+      const approvalCandidates = buildApprovalOutcomeWriteBackCandidates(pendingTask, decision, config.memoryPromotionRules);
+      const approvalWriteBackEvent = buildMemoryWriteBackCandidateEvent(pendingTask, approvalCandidates);
+
+      if (pendingTask.automation_type === 'poke_quizz_publication_review') {
+        const deleteTask = buildPokeQuizzDeleteTask({
+          reviewTask: pendingTask,
+          actor: decision.actor || '',
+          actorId: decision.actorId || '',
+        });
+        const executionState = queueExecutableTask(deleteTask);
+        const outboundEvents = [
+          {
+            channelKey: 'taskQueue',
+            type: 'task_queue_update',
+            body: `${decision.taskId} was deleted; removing the current Poke Quizz preview without generating a replacement.`,
+            metadata: {
+              taskId: decision.taskId,
+              status: 'rejected',
+              summary: pendingTask.summary,
+              targetAgent: pendingTask.target_agent,
+              domain: pendingTask.domain,
+              decision: decision.decision,
+            },
+          },
+        ];
+        if (approvalWriteBackEvent) {
+          outboundEvents.push(approvalWriteBackEvent);
+        }
+
+        if (executionState.state === 'no_executor') {
+          recordTaskStateChange(deleteTask, 'blocked', {
+            reason: 'No executor is mapped for this request yet.',
+          });
+          await fanOutOutboundEvents(
+            token,
+            config,
+            [...outboundEvents, ...buildTaskDispatchBlockedEvents(deleteTask)],
+            trackedTaskMessages
+          );
+          return;
+        }
+
+        if (executionState.state !== 'duplicate_ignored') {
+          recordTaskStateChange(
+            deleteTask,
+            executionState.state === 'starting' ? 'queued' : executionState.state,
+            { action: deleteTask.runtime_action }
+          );
+          outboundEvents.push({
+            channelKey: 'taskQueue',
+            type: 'task_queue_update',
+            body: `${deleteTask.task_id} is ${executionState.state} ${deleteTask.runtime_action}.`,
+            metadata: {
+              taskId: deleteTask.task_id,
+              status: executionState.state,
+              summary: deleteTask.summary,
+              targetAgent: deleteTask.target_agent,
+              domain: deleteTask.domain,
+              action: deleteTask.runtime_action,
+            },
+          });
+          ensureExecutionDrain();
+        }
+
+        await fanOutOutboundEvents(token, config, outboundEvents, trackedTaskMessages);
+        return;
+      }
     }
 
     recordTaskStateChange(pendingTask, 'approved', {

@@ -19,12 +19,22 @@ test('normalizeTaskMessage marks production and merge requests as approval-gated
   assert.equal(result.writeBackCandidates.some((candidate) => candidate.namespace === 'approvals'), true);
 });
 
-test('parseApprovalResponse accepts approve and reject patterns', () => {
+test('parseApprovalResponse accepts approve, delete, and reject patterns', () => {
   assert.deepEqual(
     parseApprovalResponse({ content: 'approve TASK-202606251000-ABC123' }),
     {
       valid: true,
       decision: 'approve',
+      taskId: 'TASK-202606251000-ABC123',
+      reason: '',
+    }
+  );
+
+  assert.deepEqual(
+    parseApprovalResponse({ content: 'delete TASK-202606251000-ABC123' }),
+    {
+      valid: true,
+      decision: 'delete',
       taskId: 'TASK-202606251000-ABC123',
       reason: '',
     }

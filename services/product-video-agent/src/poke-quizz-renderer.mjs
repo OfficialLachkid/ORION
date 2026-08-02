@@ -33,9 +33,6 @@ const DEFAULT_TYPE_ICON_SCALE_SETTLE_RATIO = 1;
 const DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER = 1.08;
 const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.78;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
-const DEFAULT_TYPE_ICON_BADGE_ART_INTRO_SCALE_MULTIPLIER = 0.96;
-const DEFAULT_TYPE_ICON_BADGE_ART_FINAL_SCALE_MULTIPLIER = 0.82;
-const DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE = 640;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
 const DEFAULT_POKEBALL_INTRO_SECONDS = 0.16;
 const DEFAULT_POKEBALL_INTRO_LEAD_SECONDS = 0.5;
@@ -629,9 +626,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const iconInnerLabel = safeFilterLabel('typeinner', index);
     const iconBackdropBaseLabel = safeFilterLabel('typebgbase', index);
     const iconBackdropLabel = safeFilterLabel('typebg', index);
-    const iconCompositeBaseLabel = safeFilterLabel('typeunitbase', index);
-    const iconCompositeBackdropLabel = safeFilterLabel('typeunitbg', index);
-    const iconCompositeLabel = safeFilterLabel('typeunit', index);
     const position = renderPlan.type_icon_layout[index];
     const introPosition = renderPlan.type_icon_intro_layout[index] || position;
     const usesOpaqueBadgeArt = typeIconUsesOpaqueBadgeArt(plan.assets.type_icons[index]);
@@ -676,47 +670,15 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
     const iconScaleExpression =
       `(${baseSizeExpression})*(${introPopMultiplierExpression})*(${settleScaleMultiplierExpression})`;
-    const badgeArtScaleMultiplierExpression = usesOpaqueBadgeArt
-      ? buildAnimatedLerpExpression({
-        fromValue: DEFAULT_TYPE_ICON_BADGE_ART_INTRO_SCALE_MULTIPLIER,
-        toValue: DEFAULT_TYPE_ICON_BADGE_ART_FINAL_SCALE_MULTIPLIER,
-        holdUntilSeconds: iconSettleStart,
-        transitionDurationSeconds: sizeSettleDuration,
-      })
-      : '1';
-    const iconForegroundScaleExpression = usesOpaqueBadgeArt
-      ? `(${iconScaleExpression})*(${badgeArtScaleMultiplierExpression})`
-      : iconScaleExpression;
-    const iconBackdropScaleMultiplier = usesOpaqueBadgeArt
-      ? 1
-      : DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER;
+    const iconBackdropScaleMultiplier = DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER;
     const iconBackdropAlpha = usesOpaqueBadgeArt
       ? Math.max(180, DEFAULT_TYPE_ICON_BACKDROP_ALPHA - 40)
       : DEFAULT_TYPE_ICON_BACKDROP_ALPHA;
     const iconBackdropScaleExpression = `(${iconScaleExpression})*${iconBackdropScaleMultiplier}`;
     filters.push(
-      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconForegroundScaleExpression}':h='${iconForegroundScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
+      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconScaleExpression}':h='${iconScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
     );
-    if (usesOpaqueBadgeArt) {
-      filters.push(
-        `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${iconBackdropAlpha},0)'[${iconBackdropBaseLabel}]`,
-      );
-      filters.push(
-        `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
-      );
-      filters.push(
-        `color=c=black@0:s=${DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE}x${DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE},format=rgba[${iconCompositeBaseLabel}]`,
-      );
-      filters.push(
-        `[${iconCompositeBaseLabel}][${iconBackdropLabel}]overlay=x='(W-w)/2':y='(H-h)/2'[${iconCompositeBackdropLabel}]`,
-      );
-      filters.push(
-        `[${iconCompositeBackdropLabel}][${iconLabel}]overlay=x='(W-w)/2':y='(H-h)/2'[${iconCompositeLabel}]`,
-      );
-      filters.push(
-        `[v${index}][${iconCompositeLabel}]overlay=x='${iconCenterXExpression}-${Math.floor(DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE / 2)}':y='${iconCenterYExpression}-${Math.floor(DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE / 2)}-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
-      );
-    } else {
+    if (!usesOpaqueBadgeArt) {
       filters.push(
         `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${iconBackdropAlpha},0)'[${iconBackdropBaseLabel}]`,
       );
@@ -728,6 +690,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       filters.push(
         `[${iconInnerLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      );
+    } else {
+      filters.push(
+        `[v${index}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
       );
     }
   }
@@ -750,7 +716,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const pokeballIntroDuration = roundTime(
     DEFAULT_POKEBALL_INTRO_SECONDS,
   );
-  const pokeballVisibleDuration = roundTime(Math.max(0.5, revealVisualStart - pokeballIntroStart));
+  const pokeballVisibleDuration = roundTime(Math.max(0.5, revealTransitionEnd - pokeballIntroStart));
   const spriteHoldSize = resolveRevealSpriteHoldSize({
     gridItemSize,
     itemCount: renderPlan.grid.item_count || renderPlan.grid.cells.length,

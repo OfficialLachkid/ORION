@@ -372,6 +372,8 @@ function publicationReviewColor(approvalState) {
       return EMBED_COLORS.queue;
     case 'published':
       return EMBED_COLORS.success;
+    case 'delete_failed':
+    case 'deleted':
     case 'revision_requested':
     case 'rejected':
       return EMBED_COLORS.blocked;
@@ -391,6 +393,10 @@ function publicationReviewTitle(metadata = {}) {
       return taskTitle('Scheduled For Publish', taskId);
     case 'published':
       return taskTitle('Published', taskId);
+    case 'delete_failed':
+      return taskTitle('Delete Failed', taskId);
+    case 'deleted':
+      return taskTitle('Deleted', taskId);
     case 'revision_requested':
       return taskTitle('Feedback Received', taskId);
     default:
@@ -498,6 +504,7 @@ function buildApprovalRequestPayload(outboundEvent) {
     createField('Seed', metadata.seed ? `\`${metadata.seed}\`` : '', true),
     createField('Busy Time', metadata.generationDurationLabel || '', true),
     createField('Scheduled For', metadata.scheduledForLabel || '', true),
+    createField('Preview Deletion', metadata.previewDeletionLabel || '', false),
     createField('Title', metadata.publicationTitle || '', false),
     createField('Description', metadata.publicationDescription || '', false),
     createField('Render', metadata.renderPath ? `\`${compactPath(metadata.renderPath)}\`` : '', false),

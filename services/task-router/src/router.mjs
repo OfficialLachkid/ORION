@@ -279,6 +279,16 @@ export function parseApprovalResponse(message) {
     };
   }
 
+  const deleteMatch = /^delete\s+(TASK-[A-Z0-9-]+)$/iu.exec(content);
+  if (deleteMatch) {
+    return {
+      valid: true,
+      decision: 'delete',
+      taskId: deleteMatch[1].toUpperCase(),
+      reason: '',
+    };
+  }
+
   const rejectMatch = /^reject\s+(TASK-[A-Z0-9-]+)(?:\s+because\s+(.+))?$/iu.exec(content);
   if (rejectMatch) {
     const reason = normalizeWhitespace(rejectMatch[2] || '');
@@ -303,6 +313,6 @@ export function parseApprovalResponse(message) {
     valid: false,
     decision: 'invalid',
     taskId: '',
-    reason: 'Approval message must match `approve TASK-123` or `reject TASK-123 because <reason>`.',
+    reason: 'Approval message must match `approve TASK-123`, `delete TASK-123`, or `reject TASK-123 because <reason>`.',
   };
 }
