@@ -29,11 +29,11 @@ const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.5;
 const DEFAULT_TYPE_ICON_HOOK_Y = 684;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
 const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
-const DEFAULT_TYPE_ICON_POP_IN_INITIAL_SCALE = 0.42;
-const DEFAULT_TYPE_ICON_POP_IN_PEAK_SCALE = 1.08;
+const DEFAULT_TYPE_ICON_POP_IN_INITIAL_SCALE = 0.9;
+const DEFAULT_TYPE_ICON_POP_IN_PEAK_SCALE = 1.12;
 const DEFAULT_TYPE_ICON_POP_IN_SETTLE_SCALE = 1;
 const DEFAULT_TYPE_ICON_SCALE_SETTLE_RATIO = 1;
-const DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER = 1.08;
+const DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER = 1;
 const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.78;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
@@ -894,7 +894,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     spriteHoldLabels.push(spriteHoldLabel);
     spriteTransitionLabels.push(spriteTransitionLabel);
     filters.push(
-      `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.18:saturation=1.14,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
+      `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.08:saturation=1.05,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
     );
     filters.push(
       `[${spriteHoldSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteHoldLabel}]`,

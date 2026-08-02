@@ -143,7 +143,13 @@ export function loadRuntimeConfig(options = {}) {
     channelIds.qualifiedCallLeads = env.DISCORD_QUALIFIED_CALL_LEADS_THREAD_ID || '';
   }
   if (!Object.prototype.hasOwnProperty.call(channelIds, 'pokeQuizzReview')) {
-    channelIds.pokeQuizzReview = env.DISCORD_POKE_QUIZZ_REVIEW_THREAD_ID || '';
+    channelIds.pokeQuizzReview =
+      env.DISCORD_REVIEW_VIDEOS_POKE_QUIZZ_THREAD_ID
+      || env.DISCORD_POKE_QUIZZ_REVIEW_THREAD_ID
+      || '';
+  }
+  if (!Object.prototype.hasOwnProperty.call(channelIds, 'pokemon')) {
+    channelIds.pokemon = env.DISCORD_POKEMON_CHANNEL_ID || '';
   }
 
   const resolvedTmpDir = env.RUNTIME_TMP_DIR || resolve(projectRoot, 'data', 'runtime', 'tmp');

@@ -44,10 +44,6 @@ function resolveChannelKey(message, config) {
 }
 
 function isAuthorizedOperator(message, config) {
-  if (message.author?.isOperator === true) {
-    return true;
-  }
-
   if (message.author?.id && config.operatorUserIds.includes(message.author.id)) {
     return true;
   }
@@ -56,7 +52,12 @@ function isAuthorizedOperator(message, config) {
     return message.author.roleIds.includes(config.operatorRoleId);
   }
 
-  return false;
+  const hasConfiguredOperatorGate = Boolean(config.operatorRoleId)
+    || (Array.isArray(config.operatorUserIds) && config.operatorUserIds.length > 0);
+
+  return hasConfiguredOperatorGate
+    ? false
+    : message.author?.isOperator === true;
 }
 
 function event(channelKey, type, body, metadata = {}) {

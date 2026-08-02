@@ -13,6 +13,7 @@ import {
 import { moveOlderPreviewFiles } from './organize-poke-quizz-previews.mjs';
 import { buildPokeQuizzRenderPlan, loadJson, renderPokeQuizzVideo } from '../src/poke-quizz-renderer.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../src/poke-quizz-asset-layout.mjs';
+import { resolveManagedPokeQuizzPreviewOutputPath } from '../src/poke-quizz-preview-storage.mjs';
 import { resolveFfmpegExecutable } from '../src/runtime-executables.mjs';
 
 function resolveTypePairSlug(plan) {
@@ -102,18 +103,19 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     'output',
     `${POKE_QUIZZ_ASSET_LAYOUT.previews}/${typePairSlug}-${seedSlug}.mp4`,
   );
+  const resolvedOutput = await resolveManagedPokeQuizzPreviewOutputPath(outputPath);
   const ffmpegExecutable = resolveFfmpegExecutable(config.render || config);
   const kokoro = resolveVoiceRuntime(config, options);
   const runtimeRoot = resolve(projectRoot, 'data/runtime/product-video-agent/poke-quizz-render');
 
-  const previewPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath });
+  const previewPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath: resolvedOutput.outputPath });
   printInfo(`Rendering ${typePairSlug} Poke Quizz preview (${previewPlan.total_duration_seconds}s).`);
-  printInfo(`Output: ${outputPath}`);
+  printInfo(`Output: ${resolvedOutput.outputPath}`);
 
   const result = await renderPokeQuizzVideo({
     plan,
     template,
-    outputPath,
+    outputPath: resolvedOutput.outputPath,
     projectRoot,
     ffmpegExecutable,
     kokoro,

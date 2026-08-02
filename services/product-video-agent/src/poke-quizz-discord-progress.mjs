@@ -11,6 +11,7 @@ import {
 const STATUS_COLORS = Object.freeze({
   started: 0x99AAB5,
   running: 0xFEE75C,
+  retrying: 0xE67E22,
   failed: 0xED4245,
 });
 
@@ -55,16 +56,21 @@ function buildProgressPayload({
   title = '',
   description = '',
   errorMessage = '',
+  attemptLabel = '',
 }) {
   const channelName = String(channelProfile?.name || '').trim();
   const channelUrl = buildYoutubeChannelUrl(channelProfile);
   const statusTitle = status === 'failed'
     ? 'Poke Quizz Video Gen - Failed'
+    : status === 'retrying'
+      ? 'Poke Quizz Video Gen - Retrying'
     : status === 'running'
       ? 'Poke Quizz Video Gen - Running'
       : 'Poke Quizz Video Gen - Started';
   const statusDescription = status === 'failed'
     ? `Video generation stopped: ${errorMessage || 'unknown error'}.`
+    : status === 'retrying'
+      ? `Render attempt failed, retrying automatically. ${errorMessage || 'Transient render issue detected.'}`
     : status === 'running'
       ? 'Rendering is in progress. This message updates while the preview is being assembled.'
       : 'Video generation has started. This message will update until the review card is ready.';
@@ -85,6 +91,7 @@ function buildProgressPayload({
       ),
       createField('Type Pair', formatTypePairLabel(typePair || []), true),
       createField('Busy Time', formatElapsedMinutes(elapsedMs), true),
+      createField('Attempt', attemptLabel, true),
       createField('Title', title, false),
       createField('Description', description, false),
     ].filter(Boolean),
@@ -175,5 +182,23 @@ export async function markPokeQuizzGenerationFailed(runtimeConfig, message, cont
     title: context.title,
     description: context.description,
     errorMessage: error?.message || '',
+    attemptLabel: context.attemptLabel || '',
+  }));
+}
+
+export async function markPokeQuizzGenerationRetry(runtimeConfig, message, context = {}, error) {
+  if (!message?.messageId) {
+    return null;
+  }
+
+  return patchProgressMessage(runtimeConfig, message, buildProgressPayload({
+    status: 'retrying',
+    channelProfile: context.channelProfile,
+    typePair: context.typePair,
+    elapsedMs: Number(context.elapsedMs) || 0,
+    title: context.title,
+    description: context.description,
+    errorMessage: error?.message || '',
+    attemptLabel: context.attemptLabel || '',
   }));
 }

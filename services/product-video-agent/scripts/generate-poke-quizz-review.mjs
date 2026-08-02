@@ -16,9 +16,11 @@ import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '.
 import { SupabasePublicationStore } from '../src/publication-store.mjs';
 import {
   beginPokeQuizzGenerationProgress,
+  markPokeQuizzGenerationRetry,
   markPokeQuizzGenerationFailed,
   postPokeQuizzGenerationStarted,
 } from '../src/poke-quizz-discord-progress.mjs';
+import { resolveManagedPokeQuizzPreviewOutputPath } from '../src/poke-quizz-preview-storage.mjs';
 import { reviewPokeQuizzPublication } from './review-poke-quizz-publication.mjs';
 import { resolveFfmpegExecutable } from '../src/runtime-executables.mjs';
 import { moveOlderPreviewFiles } from './organize-poke-quizz-previews.mjs';
@@ -32,6 +34,7 @@ import {
   getStringOption,
   parseArgs,
   printInfo,
+  printWarn,
   printUsage,
   projectRoot,
 } from '../../../scripts/lib/ruflo-wrapper-utils.mjs';
@@ -204,6 +207,7 @@ async function generateAndReviewPokeQuizz(options) {
     'output',
     `${POKE_QUIZZ_ASSET_LAYOUT.previews}/${typePairSlug}-${seedSlug}.mp4`,
   );
+  const resolvedOutput = await resolveManagedPokeQuizzPreviewOutputPath(outputPath);
   const ffmpegExecutable = resolveFfmpegExecutable(config.render || config);
   const kokoro = resolveVoiceRuntime(config, options);
   const runtimeRoot = resolve(projectRoot, 'data/runtime/product-video-agent/poke-quizz-render');
@@ -225,17 +229,36 @@ async function generateAndReviewPokeQuizz(options) {
 
   try {
     printInfo(`Rendering ${typePairSlug} Poke Quizz preview.`);
-    printInfo(`Output: ${outputPath}`);
+    printInfo(`Output: ${resolvedOutput.outputPath}`);
 
-    const renderResult = await renderPokeQuizzVideo({
-      plan,
-      template,
-      outputPath,
-      projectRoot,
-      ffmpegExecutable,
-      kokoro,
-      runtimeRoot,
-    });
+    let renderResult = null;
+    const maxRenderAttempts = 2;
+    for (let attempt = 1; attempt <= maxRenderAttempts; attempt += 1) {
+      try {
+        renderResult = await renderPokeQuizzVideo({
+          plan,
+          template,
+          outputPath: resolvedOutput.outputPath,
+          projectRoot,
+          ffmpegExecutable,
+          kokoro,
+          runtimeRoot,
+        });
+        break;
+      } catch (error) {
+        if (attempt >= maxRenderAttempts) {
+          throw error;
+        }
+        await markPokeQuizzGenerationRetry(runtimeConfig, startedMessage, {
+          channelProfile,
+          typePair: plan.selection?.type_pair || [],
+          title: overrideTitle,
+          description: overrideDescription,
+          elapsedMs: progress.getElapsedMs(),
+          attemptLabel: `${attempt + 1}/${maxRenderAttempts}`,
+        }, error);
+      }
+    }
 
     progress.stop();
     printInfo(`Rendered Poke Quizz preview to ${renderResult.output_path}`);
@@ -243,7 +266,7 @@ async function generateAndReviewPokeQuizz(options) {
     const reviewResult = await reviewPokeQuizzPublication({
       planPath,
       reviewThreadId,
-      renderPath: outputPath,
+      renderPath: renderResult.output_path,
       reviewMessageId: startedMessage?.messageId || '',
       publicationId: getStringOption(options, 'publication-id', ''),
       catalogJsonPath: getStringOption(options, 'catalog-json', ''),
@@ -262,7 +285,7 @@ async function generateAndReviewPokeQuizz(options) {
     });
 
     const previewRoot = resolve(projectRoot, POKE_QUIZZ_ASSET_LAYOUT.previews);
-    if (await fileExists(resolve(projectRoot, outputPath)) && resolve(projectRoot, outputPath).startsWith(previewRoot)) {
+    if (await fileExists(resolve(renderResult.output_path)) && resolve(renderResult.output_path).startsWith(previewRoot)) {
       const organized = await moveOlderPreviewFiles({
         previewsDirectory: previewRoot,
         archiveDirectory: resolve(previewRoot, 'Older Generated Videos'),
@@ -274,7 +297,7 @@ async function generateAndReviewPokeQuizz(options) {
     return {
       ...reviewResult,
       plan_path: planPath,
-      output_path: outputPath,
+      output_path: renderResult.output_path,
     };
   } catch (error) {
     progress.stop();
@@ -284,6 +307,7 @@ async function generateAndReviewPokeQuizz(options) {
       title: overrideTitle,
       description: overrideDescription,
       elapsedMs: progress.getElapsedMs(),
+      attemptLabel: '2/2',
     }, error);
     throw error;
   }

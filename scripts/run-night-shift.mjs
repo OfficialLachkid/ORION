@@ -1,21 +1,20 @@
 #!/usr/bin/env node
-// Night shift — durable overnight maintenance. Runs the day's lead
+// Night shift: durable overnight maintenance. Runs the day's lead
 // qualification in the operator's preferred pre-token-reset window (01:30),
 // then posts a digest so they wake to reviewed results. Designed to survive
 // what session-scoped CronCreate could not: it's a real launchd job.
 //
-// Rate-limit safety: the SAME script runs at 01:30 (primary) and 07:00
+// Rate-limit safety: the same script runs at 01:30 (primary) and 07:00
 // (fallback, with --fallback). On a successful run it writes a per-day
 // marker; the --fallback invocation exits immediately if today's marker
 // already exists (so 07:00 is a no-op when the night shift succeeded), and
 // runs the qualification itself when the marker is missing (so a rate-limited
 // or failed 01:30 run is recovered at 07:00, never lost).
 //
-// v1 scope: qualification + digest + marker + fallback. Future layers
-// (autonomous junk-lead cleanup, vault freshness, test health) are tracked
-// in the vault's Night_Shift_Autonomous_Maintenance note and deliberately
-// left out of v1 — those either need the operator's sign-off (autonomous
-// deletes) or aren't schedulable headless (mining the interactive chat).
+// v1 scope started as qualification + digest + marker + fallback. It now also
+// performs low-risk Poke Quizz queue maintenance:
+//   - re-run schedule reconciliation for active video lanes
+//   - move fallback preview MP4s from Desktop back to the SSD when it returns
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -23,21 +22,21 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
+import { buildNoticeDiscordPayload } from '../services/discord-bot/src/message-formatting.mjs';
+import { loadPublicationChannelProfiles } from '../services/product-video-agent/src/publication-channels.mjs';
+import { reconcilePokeQuizzPreviewFallbackStorage } from '../services/product-video-agent/src/poke-quizz-preview-storage.mjs';
 import { fetchLeads } from './lib/leadgen-supabase.mjs';
 import { reconcileDrafts } from './lib/draft-reconciler.mjs';
 import { detectReplies } from './lib/reply-detector.mjs';
 import { getQualificationBatchTimeoutMs } from './lib/night-shift-runtime.mjs';
-import { buildNoticeDiscordPayload } from '../services/discord-bot/src/message-formatting.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
+const DEFAULT_PUBLICATION_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 
 function todayStamp() {
-  // LOCAL date, NOT UTC. The primary run (01:30) and the fallback (07:00) are
-  // on the same LOCAL day but can straddle a UTC day boundary (01:30 CEST =
-  // 23:30 UTC the previous day). Using UTC here meant the 01:30 run wrote
-  // yesterday's UTC-dated marker and the 07:00 fallback looked for today's,
-  // never matched, and re-ran qualification every day. Local date keeps both
-  // on the same stamp.
+  // LOCAL date, not UTC. The primary run (01:30) and the fallback (07:00) are
+  // on the same local day but can straddle a UTC day boundary. Using UTC here
+  // caused the primary and fallback to write/check different markers.
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -70,11 +69,27 @@ async function postDiscord(config, channelId, payload) {
   }
 }
 
-// Runs the existing qualification script and returns its parsed outcomes.
-// Systemic failure (every lead errored with the same startup-shaped error,
-// e.g. a rate limit or ENOENT) is reported distinctly so the caller knows
-// NOT to write the success marker — that's what lets the 07:00 fallback
-// recover it.
+function parseTrailingJsonArray(stdout) {
+  const text = String(stdout || '').trim();
+  if (!text) {
+    return [];
+  }
+
+  for (let index = text.lastIndexOf('['); index >= 0; index = text.lastIndexOf('[', index - 1)) {
+    const candidate = text.slice(index);
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // Keep scanning backward until the trailing JSON array is found.
+    }
+  }
+
+  return [];
+}
+
 function runQualification(limit) {
   return runQualificationScript(
     [resolve(projectRoot, 'scripts', 'run-lead-qualification.mjs'), '--limit', String(limit)],
@@ -82,10 +97,6 @@ function runQualification(limit) {
   );
 }
 
-// Re-drafts leads the operator rejected with feedback (status=draft_rejected):
-// same qualification script, --redraft-rejected mode, which feeds each lead's
-// saved rejection_feedback back into the qualifier so the new draft addresses
-// it. Returns the parsed outcomes (empty if there were none to redraft).
 function runRedraftRejected(limit) {
   return runQualificationScript(
     [resolve(projectRoot, 'scripts', 'run-lead-qualification.mjs'), '--redraft-rejected', '--limit', String(limit)],
@@ -93,13 +104,11 @@ function runRedraftRejected(limit) {
   );
 }
 
-// Drafts follow-ups for sent leads that passed the wait window without a reply
-// (default 4 days; run-follow-ups reads FOLLOW_UP_WAIT_MINUTES if set). Itself
-// gated on the Gmail read scope, so it no-ops until reply detection is live.
-// Returns the count drafted (each approval-gated in #outreach-followups).
 function runFollowUps(limit) {
   const result = spawnSync(process.execPath, [resolve(projectRoot, 'scripts', 'run-follow-ups.mjs'), '--limit', String(limit)], {
-    cwd: projectRoot, encoding: 'utf8', timeout: 30 * 60 * 1000,
+    cwd: projectRoot,
+    encoding: 'utf8',
+    timeout: 30 * 60 * 1000,
   });
   const stdout = String(result.stdout || '');
   try {
@@ -108,7 +117,9 @@ function runFollowUps(limit) {
     if (start !== -1 && end > start) {
       return Number(JSON.parse(stdout.slice(start, end + 1)).drafted || 0);
     }
-  } catch { /* fall through */ }
+  } catch {
+    // Fall through to zero.
+  }
   return 0;
 }
 
@@ -132,7 +143,7 @@ function runQualificationScript(args, timeoutMs) {
   }
 
   const ran = outcomes.length > 0;
-  const allErrored = ran && outcomes.every((o) => o.error);
+  const allErrored = ran && outcomes.every((outcome) => outcome.error);
   const systemicFailure = (!ran && result.status !== 0) || allErrored;
   const childStderr = String(result.stderr || '').trim();
   const outcomeErrors = [...new Set(outcomes.map((outcome) => outcome.error).filter(Boolean))];
@@ -143,14 +154,104 @@ function runQualificationScript(args, timeoutMs) {
   return { outcomes, systemicFailure, exitCode: result.status ?? -1, stderr: diagnostic };
 }
 
+async function runVideoQueueMaintenance(asOf = new Date().toISOString()) {
+  const profiles = await loadPublicationChannelProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
+  const activeProfiles = profiles.filter((profile) => profile.status === 'active');
+  const scriptPath = resolve(projectRoot, 'services/product-video-agent/scripts/execute-youtube-publication.mjs');
+  const results = [];
+
+  for (const profile of activeProfiles) {
+    const child = spawnSync(process.execPath, [
+      scriptPath,
+      '--channel',
+      profile.account_key,
+      '--channels',
+      DEFAULT_PUBLICATION_CHANNELS_PATH,
+      '--schedule-approved',
+      '--as-of',
+      asOf,
+    ], {
+      cwd: projectRoot,
+      encoding: 'utf8',
+      timeout: 20 * 60 * 1000,
+    });
+
+    const parsedResults = parseTrailingJsonArray(child.stdout);
+    const error = child.error?.message
+      || (child.status === 0 ? '' : String(child.stderr || '').trim());
+    results.push({
+      channelId: profile.id,
+      accountKey: profile.account_key,
+      channelName: profile.name,
+      status: error ? 'failed' : 'completed',
+      exitCode: child.status ?? 0,
+      error,
+      results: parsedResults,
+    });
+  }
+
+  return summarizeVideoQueueMaintenance(activeProfiles, results);
+}
+
+function summarizeVideoQueueMaintenance(profiles, runs) {
+  const summary = {
+    attemptedChannels: profiles.length,
+    processedChannels: 0,
+    failedChannels: 0,
+    scheduled: 0,
+    published: 0,
+    returnedToApproval: 0,
+    deleted: 0,
+    changedSchedule: 0,
+    statusLookupFailures: 0,
+    errors: [],
+    channels: runs,
+  };
+
+  for (const run of runs) {
+    if (run.status === 'failed') {
+      summary.failedChannels += 1;
+      summary.errors.push(`${run.accountKey}: ${run.error || 'unknown queue maintenance error'}`);
+      continue;
+    }
+
+    summary.processedChannels += 1;
+    for (const result of run.results) {
+      const action = String(result?.action || '');
+      const workflowState = String(result?.workflow_state || '');
+      const reason = String(result?.reason || '');
+      if (action === 'schedule_update' || workflowState === 'scheduled') {
+        summary.scheduled += 1;
+      }
+      if (workflowState === 'published') {
+        summary.published += 1;
+      }
+      if (workflowState === 'deleted') {
+        summary.deleted += 1;
+      }
+      if (workflowState === 'preview_approved') {
+        summary.returnedToApproval += 1;
+      }
+      if (reason === 'youtube_publish_time_changed') {
+        summary.changedSchedule += 1;
+      }
+      if (reason === 'status_lookup_failed') {
+        summary.statusLookupFailures += 1;
+      }
+    }
+  }
+
+  return summary;
+}
+
 function buildDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
-  const n = outcomes.length;
-  const drafted = outcomes.filter((o) => o.approvalTaskId).length;
-  const noEmail = outcomes.filter((o) => o.status === 'qualified_no_email').length;
-  const rejected = outcomes.filter((o) => o.status === 'rejected_fit').length;
-  const unreachable = outcomes.filter((o) => o.status === 'site_unreachable').length;
-  const extractionError = outcomes.filter((o) => o.status === 'extraction_error').length;
-  const failed = outcomes.filter((o) => o.error).length;
+  const processedCount = outcomes.length;
+  const drafted = outcomes.filter((outcome) => outcome.approvalTaskId).length;
+  const noEmail = outcomes.filter((outcome) => outcome.status === 'qualified_no_email').length;
+  const rejected = outcomes.filter((outcome) => outcome.status === 'rejected_fit').length;
+  const unreachable = outcomes.filter((outcome) => outcome.status === 'site_unreachable').length;
+  const extractionError = outcomes.filter((outcome) => outcome.status === 'extraction_error').length;
+  const failed = outcomes.filter((outcome) => outcome.error).length;
   const {
     redrafted = 0,
     reconciled = 0,
@@ -176,7 +277,7 @@ function buildDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
   ].filter(Boolean);
 
   const replyLine = replyResult && replyResult.available === false
-    ? `Reply detection is **paused** — Gmail needs re-authorizing with the read scope (follow-ups stay off until then).`
+    ? 'Reply detection is **paused** - Gmail needs re-authorizing with the read scope (follow-ups stay off until then).'
     : (replyResult && (replyResult.replies || replyResult.bounces || replyResult.autoReplies)
       ? `Replies checked: **${replyResult.replies}** reply, **${replyResult.bounces}** undeliverable, **${replyResult.autoReplies}** auto-reply (of ${replyResult.checked} sent thread(s)).`
       : '');
@@ -187,15 +288,103 @@ function buildDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
     redrafted > 0 ? `Re-drafted **${redrafted}** previously-rejected lead(s) using your feedback.` : '',
     reconciled > 0 ? `Reconciled **${reconciled}** draft(s) you sent manually in Gmail (marked sent, closed the approval).` : '',
     editedInGmail > 0 ? `Mirrored **${editedInGmail}** draft edit(s) you made in Gmail back into the Discord approval card.` : '',
-    repointedInGmail > 0 ? `Repointed **${repointedInGmail}** draft(s) after mobile Gmail created a new draft on edit — the approval card now reflects your latest version.` : '',
+    repointedInGmail > 0 ? `Repointed **${repointedInGmail}** draft(s) after mobile Gmail created a new draft on edit - the approval card now reflects your latest version.` : '',
   ].filter(Boolean);
 
   return [
-    `Night shift processed **${n}** lead(s)${parts.length ? ' — ' + parts.join(', ') : ''}.`,
+    `Night shift processed **${processedCount}** lead(s)${parts.length ? ' - ' + parts.join(', ') : ''}.`,
     ...(maintenance.length ? ['', ...maintenance] : []),
-    ``,
+    '',
     `Backlog: **${backlogCount}** leads still \`new\`. Open drafts awaiting your approval: **${openDraftCount}**.`,
   ].join('\n');
+}
+
+function buildVideoQueueMaintenanceLine(summary) {
+  if (!summary) {
+    return '';
+  }
+  const parts = [];
+  if (summary.scheduled > 0) parts.push(`**${summary.scheduled}** scheduled`);
+  if (summary.published > 0) parts.push(`**${summary.published}** marked live`);
+  if (summary.returnedToApproval > 0) parts.push(`**${summary.returnedToApproval}** returned to approval`);
+  if (summary.deleted > 0) parts.push(`**${summary.deleted}** marked deleted`);
+  if (summary.changedSchedule > 0) parts.push(`**${summary.changedSchedule}** schedule(s) corrected`);
+  if (summary.statusLookupFailures > 0) parts.push(`**${summary.statusLookupFailures}** lookup failure(s)`);
+  if (summary.failedChannels > 0) parts.push(`**${summary.failedChannels}** channel run(s) failed`);
+  if (parts.length === 0) {
+    return summary.processedChannels > 0
+      ? 'Video queue maintenance found no schedule corrections to apply.'
+      : '';
+  }
+  return `Video queue maintenance: ${parts.join(', ')}.`;
+}
+
+function buildPreviewFallbackLine(report) {
+  if (!report) {
+    return '';
+  }
+  if (report.preferredAvailable === false) {
+    return report.strandedCount > 0
+      ? `Preview fallback storage: SSD still unavailable, **${report.strandedCount}** preview(s) remain on Desktop fallback.`
+      : 'Preview fallback storage: SSD still unavailable, but no stranded previews were found on Desktop fallback.';
+  }
+  if (report.moved.length > 0 || report.deduped.length > 0) {
+    const parts = [];
+    if (report.moved.length > 0) parts.push(`moved **${report.moved.length}** back to SSD`);
+    if (report.deduped.length > 0) parts.push(`removed **${report.deduped.length}** duplicate fallback copy/copies`);
+    if (report.skipped.length > 0) parts.push(`skipped **${report.skipped.length}** conflicted preview(s)`);
+    return `Preview fallback storage: ${parts.join(', ')}.`;
+  }
+  return report.strandedCount > 0
+    ? `Preview fallback storage: SSD reachable, but **${report.skipped.length}** preview(s) still need manual review.`
+    : '';
+}
+
+function buildPokemonNightShiftDigest({
+  videoQueueMaintenance = null,
+  previewFallback = null,
+  videoQueueMaintenanceError = '',
+  previewFallbackError = '',
+} = {}) {
+  const lines = [];
+  if (videoQueueMaintenanceError) {
+    lines.push(`Video queue maintenance failed: ${videoQueueMaintenanceError}`);
+  } else {
+    const queueLine = buildVideoQueueMaintenanceLine(videoQueueMaintenance);
+    if (queueLine) {
+      lines.push(queueLine);
+    }
+  }
+
+  if (previewFallbackError) {
+    lines.push(`Preview fallback reconcile failed: ${previewFallbackError}`);
+  } else {
+    const fallbackLine = buildPreviewFallbackLine(previewFallback);
+    if (fallbackLine) {
+      lines.push(fallbackLine);
+    }
+  }
+
+  if (lines.length === 0) {
+    return 'Poke Quizz night shift found no queue or SSD preview corrections to apply.';
+  }
+
+  return lines.join('\n');
+}
+
+async function postPokemonNightShiftDigest(config, title, options = {}) {
+  const channelId = config.channelIds.pokemon || '';
+  if (!channelId) {
+    return;
+  }
+
+  const hasError = Boolean(options.videoQueueMaintenanceError || options.previewFallbackError);
+  await postDiscord(config, channelId, buildNoticeDiscordPayload({
+    title,
+    description: buildPokemonNightShiftDigest(options),
+    color: hasError ? 0xED4245 : 0x57F287,
+    footerText: 'ORION video gen night shift',
+  }));
 }
 
 async function countOpenDrafts(config) {
@@ -208,7 +397,7 @@ async function countOpenDrafts(config) {
       headers: { Authorization: `Bot ${config.env.DISCORD_BOT_TOKEN}` },
     });
     const msgs = await res.json();
-    return Array.isArray(msgs) ? msgs.filter((m) => m.embeds?.[0]?.title?.includes('Approval Needed')).length : 0;
+    return Array.isArray(msgs) ? msgs.filter((message) => message.embeds?.[0]?.title?.includes('Approval Needed')).length : 0;
   } catch {
     return 0;
   }
@@ -220,7 +409,6 @@ async function main() {
   const config = loadRuntimeConfig();
   const marker = markerPath();
 
-  // Fallback (07:00): if the night shift already succeeded today, do nothing.
   if (isFallback && existsSync(marker)) {
     process.stdout.write(`Night shift already completed today (${marker}); fallback is a no-op.\n`);
     return;
@@ -232,18 +420,16 @@ async function main() {
   recordOpsMetric(config, 'night_shift_run', {
     fallback: isFallback,
     processed: outcomes.length,
-    drafted: outcomes.filter((o) => o.approvalTaskId).length,
+    drafted: outcomes.filter((outcome) => outcome.approvalTaskId).length,
     systemicFailure,
     exitCode,
   });
 
   if (systemicFailure) {
-    // Do NOT write the marker — let the next scheduled slot (07:00 fallback,
-    // or tomorrow's 01:30) recover. Surface it so it isn't silently lost.
-    process.stderr.write(`Night shift qualification failed systemically (exit ${exitCode}). No marker written — will retry at the next slot.\nstderr: ${stderr.slice(0, 500)}\n`);
+    process.stderr.write(`Night shift qualification failed systemically (exit ${exitCode}). No marker written; will retry at the next slot.\nstderr: ${stderr.slice(0, 500)}\n`);
     await postDiscord(config, config.channelIds.leadQualificationAgent || config.channelIds.leadGeneration, buildNoticeDiscordPayload({
-      title: `${label} — Failed`,
-      description: `Qualification failed systemically (likely a usage/rate limit or startup error). No leads were processed. This will retry automatically at the next scheduled slot${isFallback ? ' (tomorrow 01:30)' : ' (07:00 today)'} — nothing is lost.`,
+      title: `${label} - Failed`,
+      description: `Qualification failed systemically (likely a usage/rate limit or startup error). No leads were processed. This will retry automatically at the next scheduled slot${isFallback ? ' (tomorrow 01:30)' : ' (07:00 today)'} - nothing is lost.`,
       color: 0xED4245,
       footerText: 'ORION night shift',
     }));
@@ -251,10 +437,6 @@ async function main() {
     return;
   }
 
-  // Reply detection — the prerequisite for follow-ups. Read-only; a no-op
-  // until Gmail is re-authorized with the read scope (reports available:false
-  // in that case so follow-ups stay off). Runs BEFORE any follow-up logic so
-  // responded_at/bounced are fresh.
   let replyResult = { available: false, replies: 0, bounces: 0, autoReplies: 0, checked: 0 };
   try {
     replyResult = await detectReplies(config);
@@ -262,19 +444,14 @@ async function main() {
     process.stderr.write(`Reply-detection step failed (non-fatal): ${error.message}\n`);
   }
 
-  // Re-draft any leads the operator rejected with feedback — each one's saved
-  // rejection_feedback is fed back into the qualifier so the new draft
-  // addresses it. Best-effort; a failure here never blocks the digest/marker.
   let redrafted = 0;
   try {
     const redraft = runRedraftRejected(limit);
-    redrafted = redraft.outcomes.filter((o) => o.approvalTaskId).length;
+    redrafted = redraft.outcomes.filter((outcome) => outcome.approvalTaskId).length;
   } catch (error) {
     process.stderr.write(`Redraft-rejected step failed (non-fatal): ${error.message}\n`);
   }
 
-  // Draft follow-ups for sent leads that went unanswered past the wait window
-  // (gated on the Gmail read scope, so a no-op until reply detection is live).
   let followedUp = 0;
   try {
     followedUp = runFollowUps(limit);
@@ -282,12 +459,6 @@ async function main() {
     process.stderr.write(`Follow-up step failed (non-fatal): ${error.message}\n`);
   }
 
-  // Reconcile drafts the operator touched in Gmail:
-  //   - Drafts sent/deleted by hand → flip Discord approval to "sent", mark
-  //     the lead sent, drop the pending task.
-  //   - Drafts still pending but with edited subject/body → mirror the current
-  //     Gmail content back into the pending-task store and rewrite the
-  //     approval card's Subject/Body fields so the preview matches reality.
   let reconciled = 0;
   let editedInGmail = 0;
   let repointedInGmail = 0;
@@ -300,12 +471,28 @@ async function main() {
     process.stderr.write(`Draft reconcile step failed (non-fatal): ${error.message}\n`);
   }
 
-  // Success (even a partial batch with a couple of timeouts counts) — mark
-  // the day done and post the digest.
+  let previewFallback = null;
+  let previewFallbackError = '';
+  try {
+    previewFallback = await reconcilePokeQuizzPreviewFallbackStorage();
+  } catch (error) {
+    previewFallbackError = error.message;
+    process.stderr.write(`Preview fallback reconcile failed (non-fatal): ${error.message}\n`);
+  }
+
+  let videoQueueMaintenance = null;
+  let videoQueueMaintenanceError = '';
+  try {
+    videoQueueMaintenance = await runVideoQueueMaintenance(new Date().toISOString());
+  } catch (error) {
+    videoQueueMaintenanceError = error.message;
+    process.stderr.write(`Video queue maintenance failed (non-fatal): ${error.message}\n`);
+  }
+
   mkdirSync(dirname(marker), { recursive: true });
   writeFileSync(marker, new Date().toISOString());
 
-  const backlog = await fetchLeads({ status: 'new', limit: 2000 }).then((l) => l.length).catch(() => 0);
+  const backlog = await fetchLeads({ status: 'new', limit: 2000 }).then((leads) => leads.length).catch(() => 0);
   const openDrafts = await countOpenDrafts(config);
 
   await postDiscord(config, config.channelIds.leadQualificationAgent || config.channelIds.leadGeneration, buildNoticeDiscordPayload({
@@ -328,7 +515,31 @@ async function main() {
     footerText: 'ORION night shift',
   }));
 
-  process.stdout.write(`${JSON.stringify({ processed: outcomes.length, redrafted, reconciled, editedInGmail, repointedInGmail, followedUp, backlog, openDrafts }, null, 2)}\n`);
+  await postPokemonNightShiftDigest(
+    config,
+    isFallback ? 'Pokemon Night Shift (07:00 fallback)' : 'Pokemon Night Shift',
+    {
+      videoQueueMaintenance,
+      previewFallback,
+      videoQueueMaintenanceError,
+      previewFallbackError,
+    },
+  );
+
+  process.stdout.write(`${JSON.stringify({
+    processed: outcomes.length,
+    redrafted,
+    reconciled,
+    editedInGmail,
+    repointedInGmail,
+    followedUp,
+    backlog,
+    openDrafts,
+    videoQueueMaintenance,
+    previewFallback,
+    videoQueueMaintenanceError,
+    previewFallbackError,
+  }, null, 2)}\n`);
 }
 
 main().catch((error) => {

@@ -5,6 +5,7 @@ import { projectRoot } from '../../lib/runtime-config.mjs';
 import { runLocalProcess } from '../../product-video-agent/src/process-runner.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../../product-video-agent/src/poke-quizz-asset-layout.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../product-video-agent/src/publication-channels.mjs';
+import { isManagedPokeQuizzPreviewPath as isManagedPokeQuizzPreviewStoragePath } from '../../product-video-agent/src/poke-quizz-preview-storage.mjs';
 import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
@@ -37,13 +38,6 @@ function createPublicationStore(config) {
   });
 }
 
-function normalizePortablePath(value) {
-  return String(value || '')
-    .trim()
-    .replaceAll('\\', '/')
-    .replace(/\/+$/u, '');
-}
-
 function resolvePublicationRenderPath(publication, videoRow, explicitRenderPath = '') {
   return String(
     explicitRenderPath
@@ -54,11 +48,7 @@ function resolvePublicationRenderPath(publication, videoRow, explicitRenderPath 
 }
 
 function isManagedPokeQuizzPreviewPath(filePath) {
-  const normalizedPath = normalizePortablePath(filePath);
-  const previewRoot = normalizePortablePath(POKE_QUIZZ_ASSET_LAYOUT.previews);
-  return Boolean(normalizedPath)
-    && normalizedPath.toLowerCase().endsWith('.mp4')
-    && (normalizedPath === previewRoot || normalizedPath.startsWith(`${previewRoot}/`));
+  return isManagedPokeQuizzPreviewStoragePath(filePath);
 }
 
 async function deleteManagedPokeQuizzPreviewFile(filePath) {
