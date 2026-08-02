@@ -9,6 +9,7 @@ const DISCORD_TEXT_INPUT_STYLE_PARAGRAPH = 2;
 const DISCORD_INTERACTION_TYPE_MESSAGE_COMPONENT = 3;
 const DISCORD_INTERACTION_TYPE_MODAL_SUBMIT = 5;
 const APPROVAL_REJECT_MODAL_PREFIX = 'reject-modal:';
+const POKE_QUIZZ_PUBLISH_TASK_PREFIX = 'TASK-ORION-PQ-PUBLISH-';
 
 export function parseApprovalButtonCustomId(customId) {
   const match = /^(approve|reject):(TASK-[A-Z0-9-]+)$/u.exec(String(customId || ''));
@@ -137,11 +138,27 @@ export function buildResolvedApprovalEmbeds(originalEmbeds, decision, taskId) {
     return undefined;
   }
 
-  const color = decision === 'approve' ? EMBED_COLORS.success : EMBED_COLORS.blocked;
-  const resolvedTitle = approvalStateTitle({ decision, taskId });
+  const isPokeQuizzPublishApproval = decision === 'approve' && String(taskId || '').startsWith(POKE_QUIZZ_PUBLISH_TASK_PREFIX);
+  const color = isPokeQuizzPublishApproval
+    ? EMBED_COLORS.queue
+    : decision === 'approve'
+      ? EMBED_COLORS.success
+      : EMBED_COLORS.blocked;
+  const resolvedTitle = isPokeQuizzPublishApproval
+    ? `Publish Queued · ${taskId}`
+    : approvalStateTitle({ decision, taskId });
   return embeds.map((embed, index) => ({
     ...embed,
     color,
+    ...(Array.isArray(embed?.fields) && embed.fields.length > 0
+      ? {
+        fields: embed.fields.map((field) => (
+          field?.name === 'State' && isPokeQuizzPublishApproval
+            ? { ...field, value: '`queued_for_publish`' }
+            : field
+        )),
+      }
+      : {}),
     ...(index === 0 ? { title: resolvedTitle } : {}),
   }));
 }

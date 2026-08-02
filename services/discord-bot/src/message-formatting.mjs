@@ -24,6 +24,8 @@ export const EMBED_COLORS = {
   blocked: 0xED4245,
 };
 
+const POKE_QUIZZ_PUBLISH_TASK_PREFIX = 'TASK-ORION-PQ-PUBLISH-';
+
 function truncateText(value, maxLength) {
   const text = String(value || '').trim();
   if (text.length <= maxLength) {
@@ -362,6 +364,40 @@ function queueTitleText(metadata = {}, outboundEvent = {}) {
   return String(metadata.taskId || '').trim();
 }
 
+function publicationReviewColor(approvalState) {
+  switch (String(approvalState || '').trim().toLowerCase()) {
+    case 'preview_approved':
+    case 'queued_for_publish':
+    case 'scheduled':
+      return EMBED_COLORS.queue;
+    case 'published':
+      return EMBED_COLORS.success;
+    case 'revision_requested':
+    case 'rejected':
+      return EMBED_COLORS.blocked;
+    default:
+      return EMBED_COLORS.awaitingReview;
+  }
+}
+
+function publicationReviewTitle(metadata = {}) {
+  const taskId = String(metadata.taskId || '').trim();
+  const approvalState = String(metadata.approvalState || '').trim().toLowerCase();
+  switch (approvalState) {
+    case 'preview_approved':
+    case 'queued_for_publish':
+      return taskTitle('Publish Queued', taskId);
+    case 'scheduled':
+      return taskTitle('Scheduled For Publish', taskId);
+    case 'published':
+      return taskTitle('Published', taskId);
+    case 'revision_requested':
+      return taskTitle('Feedback Received', taskId);
+    default:
+      return approvalStateTitle(metadata);
+  }
+}
+
 function formatTaskMetadata(task = {}) {
   return lines(
     task.task_id ? `Task: \`${task.task_id}\`` : '',
@@ -461,6 +497,7 @@ function buildApprovalRequestPayload(outboundEvent) {
     createField('Type Pair', metadata.typePairLabel || '', true),
     createField('Seed', metadata.seed ? `\`${metadata.seed}\`` : '', true),
     createField('Busy Time', metadata.generationDurationLabel || '', true),
+    createField('Scheduled For', metadata.scheduledForLabel || '', true),
     createField('Title', metadata.publicationTitle || '', false),
     createField('Description', metadata.publicationDescription || '', false),
     createField('Render', metadata.renderPath ? `\`${compactPath(metadata.renderPath)}\`` : '', false),
@@ -504,8 +541,8 @@ function buildApprovalRequestPayload(outboundEvent) {
   ].filter(Boolean);
 
   return buildEmbedPayload({
-    color: isPublicationReview ? EMBED_COLORS.awaitingReview : EMBED_COLORS.approval,
-    title: approvalStateTitle(metadata),
+    color: isPublicationReview ? publicationReviewColor(metadata.approvalState) : EMBED_COLORS.approval,
+    title: isPublicationReview ? publicationReviewTitle(metadata) : approvalStateTitle(metadata),
     description: metadata.summary || outboundEvent.body || 'Approval requested.',
     fields: embedFields,
     footerText: metadata.submittedBy ? `Requested by ${metadata.submittedBy}` : 'Ruflo approval gate',

@@ -5,7 +5,7 @@ import { runLocalProcess } from './process-runner.mjs';
 const DEFAULT_HOOK_TEXT_Y = 150;
 const DEFAULT_PROMPT_TEXT_Y = 170;
 const DEFAULT_REVEAL_TEXT_Y = 170;
-const DEFAULT_TYPE_ICON_Y = 320;
+const DEFAULT_TYPE_ICON_Y = 344;
 const DEFAULT_TIMER_SIZE = 300;
 const DEFAULT_TIMER_SCALE_MULTIPLIER = 1.5;
 const DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER = 1.3;
@@ -22,18 +22,18 @@ const DEFAULT_COUNTDOWN_VOLUME = 0.72;
 const DEFAULT_POKEBALL_WIGGLE_VOLUME = 0.38;
 const DEFAULT_TIMER_END_VOLUME = 0.9;
 const DEFAULT_REVEAL_TRANSITION_SECONDS = 0.42;
-const DEFAULT_REVEAL_VISUAL_DELAY_SECONDS = 0.5;
+const DEFAULT_REVEAL_VISUAL_DELAY_SECONDS = 0.3;
 const DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER = 1.2;
 const DEFAULT_POKEBALL_SCALE_MULTIPLIER = 1.2;
-const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.55;
-const DEFAULT_TYPE_ICON_HOOK_Y = 620;
+const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.5;
+const DEFAULT_TYPE_ICON_HOOK_Y = 660;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
 const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
 const DEFAULT_TYPE_ICON_SCALE_SETTLE_RATIO = 0.75;
 const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.68;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
-const DEFAULT_POKEBALL_INTRO_SECONDS = 0.2;
+const DEFAULT_POKEBALL_INTRO_SECONDS = 0.16;
 const DEFAULT_POKEBALL_INTRO_LEAD_SECONDS = 0.5;
 const DEFAULT_TIMER_ALARM_EXTRA_HOLD_SECONDS = 1;
 const DEFAULT_TIMER_ALARM_EXIT_SECONDS = 0.42;
@@ -173,22 +173,22 @@ function buildAnimatedLerpExpression({ fromValue, toValue, holdUntilSeconds, tra
 function buildAnimatedPopMultiplierExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS) {
   const start = roundTime(startSeconds);
   const duration = roundTime(Math.max(0.16, durationSeconds));
-  const peak = roundTime(start + (duration * 0.6));
+  const peak = roundTime(start + (duration * 0.42));
   const end = roundTime(start + duration);
-  return `if(lt(t,${start}),0.56,if(lt(t,${peak}),0.56+((t-${start})/${roundTime(peak - start)})*0.60,if(lt(t,${end}),1.16-((t-${peak})/${roundTime(end - peak)})*0.16,1)))`;
+  return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.12,if(lt(t,${end}),1.12-((t-${peak})/${roundTime(end - peak)})*0.12,1)))`;
 }
 
-function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS, distancePx = 30) {
+function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS, distancePx = 42) {
   const start = roundTime(startSeconds);
   const duration = roundTime(Math.max(0.16, durationSeconds));
   const end = roundTime(start + duration);
   return `if(lt(t,${start}),${distancePx},if(lt(t,${end}),${distancePx}*(1-((t-${start})/${duration})),0))`;
 }
 
-function buildAnimatedPopSettleExpression(startSeconds, durationSeconds = DEFAULT_POKEBALL_INTRO_SECONDS, initialScale = 0.34, peakScale = 1.12, settleScale = 1) {
+function buildAnimatedPopSettleExpression(startSeconds, durationSeconds = DEFAULT_POKEBALL_INTRO_SECONDS, initialScale = 0.42, peakScale = 1.08, settleScale = 1) {
   const start = roundTime(startSeconds);
-  const duration = roundTime(Math.max(0.14, durationSeconds));
-  const peak = roundTime(start + (duration * 0.46));
+  const duration = roundTime(Math.max(0.12, durationSeconds));
+  const peak = roundTime(start + (duration * 0.36));
   const end = roundTime(start + duration);
   return `if(lt(t,${start}),${initialScale},if(lt(t,${peak}),${initialScale}+((t-${start})/${roundTime(peak - start)})*${roundTime(peakScale - initialScale)},if(lt(t,${end}),${peakScale}-((t-${peak})/${roundTime(end - peak)})*${roundTime(peakScale - settleScale)},${settleScale})))`;
 }

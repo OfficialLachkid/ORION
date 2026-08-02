@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { projectRoot } from '../../lib/runtime-config.mjs';
 import { runLocalProcess } from '../../product-video-agent/src/process-runner.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../../product-video-agent/src/poke-quizz-asset-layout.mjs';
+import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../product-video-agent/src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
@@ -12,6 +13,10 @@ import {
   deriveFeedbackRevisionSeed,
   formatTypePairLabel,
 } from '../../product-video-agent/src/poke-quizz-publication-review.mjs';
+import {
+  deleteYoutubeVideo,
+  loadYoutubeClientCredentials,
+} from '../../product-video-agent/src/youtube-publication-executor.mjs';
 
 function slugify(value) {
   return String(value || '')
@@ -154,7 +159,52 @@ async function updatePriorPublicationForRevision(feedback, config) {
     return;
   }
 
+  let deleteReport = {
+    deleted: false,
+    error: '',
+  };
+
+  try {
+    const profiles = await loadPublicationChannelProfiles(
+      'services/product-video-agent/publication-channels.example.json',
+      { projectRoot },
+    );
+    const channelProfile = findPublicationChannelProfile(
+      profiles,
+      feedback.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+    );
+    const refreshToken = config?.env?.[channelProfile.youtube.oauth_refresh_token_env] || '';
+    if (
+      channelProfile.workflow?.delete_preview_on_reject
+      && publication.external_id
+      && refreshToken
+    ) {
+      const clientConfig = await loadYoutubeClientCredentials(
+        channelProfile.youtube.oauth_client_secret_path,
+        projectRoot,
+      );
+      const deleted = await deleteYoutubeVideo({
+        externalId: publication.external_id,
+        clientConfig,
+        refreshToken,
+      });
+      deleteReport = {
+        deleted: true,
+        deletedAt: deleted.deletedAt,
+      };
+    }
+  } catch (error) {
+    deleteReport = {
+      deleted: false,
+      error: error.message || 'unknown delete error',
+    };
+  }
+
   await store.updatePublication(publication.id, {
+    preview_url: deleteReport.deleted ? null : publication.preview_url,
+    public_url: deleteReport.deleted ? null : publication.public_url,
+    external_id: deleteReport.deleted ? null : publication.external_id,
+    uploaded_at: deleteReport.deleted ? null : publication.uploaded_at,
     metadata: {
       ...(publication.metadata || {}),
       workflow_state: 'revision_requested',
@@ -162,6 +212,10 @@ async function updatePriorPublicationForRevision(feedback, config) {
       revision_requested_by: feedback.actor || '',
       revision_requested_by_id: feedback.actorId || '',
       revision_requested_at: new Date().toISOString(),
+      rejected_preview_url: publication.preview_url || '',
+      rejected_preview_external_id: publication.external_id || '',
+      rejected_preview_deleted_at: deleteReport.deleted ? deleteReport.deletedAt : '',
+      rejected_preview_delete_error: deleteReport.error || '',
     },
   });
 }

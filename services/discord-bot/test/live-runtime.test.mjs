@@ -118,6 +118,28 @@ test('buildResolvedApprovalEmbeds returns undefined when there are no embeds to 
   assert.equal(buildResolvedApprovalEmbeds(undefined, 'approve', 'TASK-1'), undefined);
 });
 
+test('buildResolvedApprovalEmbeds marks Poke Quizz approvals as queued for publish', () => {
+  const originalEmbeds = [
+    {
+      title: 'Approval Needed',
+      color: 0x9B59B6,
+      fields: [
+        { name: 'State', value: '`preview_uploaded`', inline: true },
+      ],
+    },
+  ];
+
+  const approved = buildResolvedApprovalEmbeds(
+    originalEmbeds,
+    'approve',
+    'TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456',
+  );
+
+  assert.equal(approved[0].title, 'Publish Queued · TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+  assert.equal(approved[0].color, 0x3498DB);
+  assert.equal(approved[0].fields[0].value, '`queued_for_publish`');
+});
+
 test('shouldScheduleDeferredDiscordBotRestart only triggers for deferred Mac sync completions', () => {
   assert.equal(shouldScheduleDeferredDiscordBotRestart({
     outcome: 'completed',

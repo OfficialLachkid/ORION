@@ -575,50 +575,6 @@ test('planner allows reuse when only one type pair or background exists', async 
   assert.equal(plan.assets.background.selected_path, '/tmp/background-1.png');
 });
 
-test('planner avoids a previously used exact video signature when another background exists', async () => {
-  const plan = await planPokemonTypeChallenge({
-    template,
-    pokedexRows,
-    seed: 'signature-avoidance',
-    forcedTypePair: ['grass', 'poison'],
-    assetInventory: {
-      scanned_at: '2026-07-31T00:00:00.000Z',
-      directories: {},
-      backgrounds: ['/tmp/background-1.png', '/tmp/background-2.png'],
-      music: ['/tmp/battle-intro-1.mp3'],
-      sound_effects: {
-        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
-        countdown_tick: '/tmp/countdown-tick.wav',
-        timer_end: '/tmp/reveal.wav',
-        reveal: '/tmp/reveal.wav',
-      },
-      type_icons: {
-        pixel: [
-          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
-          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
-        ],
-        three_d: [],
-      },
-      overlay_presets: {
-        timer: '/tmp/Timer.gif',
-        timer_countdown: '/tmp/Timer Countdown.gif',
-        timer_alarm: '/tmp/Timer Alarm.gif',
-        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
-      },
-      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
-      transitions: [],
-    },
-    selectionState: {
-      used_video_signatures: [
-        createPokeQuizzVideoSignatureKey(['grass', 'poison'], '/tmp/background-1.png'),
-      ],
-    },
-  });
-
-  assert.deepEqual(plan.selection.type_pair, ['grass', 'poison']);
-  assert.equal(plan.assets.background.selected_path, '/tmp/background-2.png');
-});
-
 test('planner prefers beach backgrounds when a water type is in the selected pair', async () => {
   const waterRows = [
     {

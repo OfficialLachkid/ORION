@@ -7,12 +7,17 @@ import {
   selectScheduleCandidates,
 } from '../src/publication-queue.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../src/publication-channels.mjs';
+import {
+  buildPokeQuizzPublicationReviewPayload,
+  buildPokeQuizzPublicationReviewTask,
+} from '../src/poke-quizz-publication-review.mjs';
 import { SupabasePublicationStore } from '../src/publication-store.mjs';
 import {
   loadYoutubeClientCredentials,
   scheduleYoutubePublication,
   uploadYoutubePreviewVideo,
 } from '../src/youtube-publication-executor.mjs';
+import { editDiscordChannelMessage } from '../../../scripts/lib/discord-post.mjs';
 import {
   getBooleanOption,
   getStringOption,
@@ -29,6 +34,36 @@ function withLimit(items, limit) {
     return items;
   }
   return items.slice(0, normalizedLimit);
+}
+
+async function updatePublicationReviewMessage({
+  runtimeConfig,
+  publication,
+  videoRow,
+  channelProfile,
+  channelSelector,
+}) {
+  const reviewThreadId = String(publication?.metadata?.review_thread_id || '').trim();
+  const reviewMessageId = String(publication?.metadata?.review_message_id || '').trim();
+  if (!reviewThreadId || !reviewMessageId || !videoRow) {
+    return null;
+  }
+
+  const reviewTask = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video: videoRow,
+    channelProfile,
+    reviewThreadId,
+    planPath: '',
+    renderPath: publication?.metadata?.render_path || videoRow?.render?.output_path || '',
+    catalogJsonPath: '',
+    channelSelector,
+    generationDurationMinutes: null,
+    submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
+  });
+  const { payload } = buildPokeQuizzPublicationReviewPayload(reviewTask);
+  payload.components = [];
+  return editDiscordChannelMessage(runtimeConfig, reviewThreadId, reviewMessageId, payload);
 }
 
 async function main() {
@@ -100,9 +135,11 @@ async function main() {
       ? item
       : scopedPublications.find((row) => row.id === item.id) || item;
     if (!publication) continue;
+    const videoRow = publication.video_id
+      ? await store.fetchVideoById(publication.video_id)
+      : null;
 
     if (previewUploadMode) {
-      const videoRow = await store.fetchVideoById(publication.video_id);
       if (!videoRow) {
         throw new Error(`Video row not found for publication ${publication.id}.`);
       }
@@ -175,6 +212,21 @@ async function main() {
         ...(publication.metadata || {}),
         workflow_state: 'scheduled',
       },
+    });
+    await updatePublicationReviewMessage({
+      runtimeConfig,
+      publication: updatedPublication || {
+        ...publication,
+        status: 'scheduled',
+        scheduled_for: scheduled.scheduledFor,
+        metadata: {
+          ...(publication.metadata || {}),
+          workflow_state: 'scheduled',
+        },
+      },
+      videoRow,
+      channelProfile,
+      channelSelector,
     });
     results.push({
       publication_id: publication.id,

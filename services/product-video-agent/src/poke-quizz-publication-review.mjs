@@ -64,6 +64,28 @@ function formatGenerationDurationLabel(value) {
   return `${Math.round(numeric)} min`;
 }
 
+function formatScheduledForLabel(value, timeZone = 'UTC') {
+  const iso = String(value || '').trim();
+  if (!iso) {
+    return '';
+  }
+
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+
+  return `${new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)} ${timeZone}`;
+}
+
 function normalizeReviewPaths(review = {}) {
   return {
     planPath: String(review.planPath || '').trim(),
@@ -109,6 +131,8 @@ export function buildPokeQuizzPublicationReviewTask({
     publicationTitle: String(publication?.title || '').trim(),
     publicationDescription: String(publication?.description || '').trim(),
     generationDurationLabel: formatGenerationDurationLabel(generationDurationMinutes),
+    approvalState: String(publication?.metadata?.workflow_state || '').trim(),
+    scheduledForLabel: formatScheduledForLabel(publication?.scheduled_for, channelProfile?.timezone || 'UTC'),
   };
 
   return {
@@ -199,6 +223,8 @@ export function buildPokeQuizzPublicationReviewEvent(task) {
       publicationTitle: review.publicationTitle || '',
       publicationDescription: review.publicationDescription || '',
       generationDurationLabel: review.generationDurationLabel || '',
+      approvalState: review.approvalState || '',
+      scheduledForLabel: review.scheduledForLabel || '',
       approveLabel: 'Publish',
       rejectLabel: 'Give Feedback',
       responsePattern: [

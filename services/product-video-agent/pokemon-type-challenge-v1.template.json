@@ -159,7 +159,7 @@
   },
   "reveal": {
     "trigger_seconds": 5,
-    "visual_delay_seconds": 0.5,
+    "visual_delay_seconds": 0.3,
     "default_mode": "silhouette_hold_then_answer",
     "supported_variants": [
       "silhouette_hold_then_answer",

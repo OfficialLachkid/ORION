@@ -155,16 +155,8 @@ function selectBackgroundForTypePair(backgrounds, typePair, random, selectionSta
     return null;
   }
 
-  const usedVideoSignatures = new Set(normalizedSelectionState.used_video_signatures || []);
-  const unseenSignatureCandidates = backgroundCandidates.filter((backgroundPath) => (
-    !usedVideoSignatures.has(createPokeQuizzVideoSignatureKey(typePair, backgroundPath))
-  ));
-  const preferredCandidates = unseenSignatureCandidates.length > 0
-    ? unseenSignatureCandidates
-    : backgroundCandidates;
-
   return selectSeededFileAvoidingPrevious(
-    preferredCandidates,
+    backgroundCandidates,
     random,
     normalizedSelectionState.last_background_path,
   );

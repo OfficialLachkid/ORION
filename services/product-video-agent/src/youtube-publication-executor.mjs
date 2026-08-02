@@ -136,3 +136,34 @@ export async function scheduleYoutubePublication({
     payload,
   };
 }
+
+export async function deleteYoutubeVideo({
+  externalId,
+  clientConfig,
+  refreshToken,
+  fetchImpl = globalThis.fetch,
+}) {
+  const videoId = String(externalId || '').trim();
+  if (!videoId) {
+    throw new Error('YouTube delete requires a video id.');
+  }
+
+  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, { fetch: fetchImpl });
+  const response = await fetchImpl(`${YOUTUBE_VIDEOS_ENDPOINT}?id=${encodeURIComponent(videoId)}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${accessToken.accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const { bodyText } = await readJsonResponse(response);
+    throw new Error(`YouTube delete failed (${response.status}): ${bodyText || 'no body'}`);
+  }
+
+  return {
+    externalId: videoId,
+    deletedAt: new Date().toISOString(),
+  };
+}

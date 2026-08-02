@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { scheduleYoutubePublication, uploadYoutubePreviewVideo } from '../src/youtube-publication-executor.mjs';
+import { deleteYoutubeVideo, scheduleYoutubePublication, uploadYoutubePreviewVideo } from '../src/youtube-publication-executor.mjs';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -104,4 +104,29 @@ test('scheduleYoutubePublication sends the scheduled publish update', async () =
   assert.equal(scheduled.externalId, 'yt-123');
   assert.equal(scheduled.scheduledFor, '2026-08-01T10:00:00.000Z');
   assert.ok(calls.some((call) => call.url.includes('/youtube/v3/videos?part=status')));
+});
+
+test('deleteYoutubeVideo sends the delete request for a rejected preview', async () => {
+  const calls = [];
+  const deleted = await deleteYoutubeVideo({
+    externalId: 'yt-123',
+    clientConfig: {
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    },
+    refreshToken: 'refresh-token',
+    fetchImpl: async (url, options) => {
+      calls.push({ url: String(url), options });
+      if (String(url).includes('oauth2.googleapis.com/token')) {
+        return Response.json({ access_token: 'access-token', expires_in: 3600, token_type: 'Bearer' });
+      }
+      if (String(url).includes('/youtube/v3/videos?id=yt-123')) {
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    },
+  });
+
+  assert.equal(deleted.externalId, 'yt-123');
+  assert.ok(calls.some((call) => call.url.includes('/youtube/v3/videos?id=yt-123')));
 });
