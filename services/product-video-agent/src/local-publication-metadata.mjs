@@ -138,6 +138,45 @@ export function buildPokeQuizzFallbackPublicationMetadata(plan) {
   };
 }
 
+export async function resolvePokeQuizzPublicationMetadata({
+  plan,
+  config,
+  channelProfile,
+  localModel = true,
+  title = '',
+  description = '',
+  hashtags = [],
+}) {
+  let metadata = localModel
+    ? await generatePokeQuizzPublicationMetadata({
+      plan,
+      config,
+      channelProfile,
+    })
+    : buildPokeQuizzFallbackPublicationMetadata(plan);
+
+  if (title) {
+    metadata = {
+      ...(metadata || {}),
+      title,
+    };
+  }
+  if (description) {
+    metadata = {
+      ...(metadata || {}),
+      description,
+    };
+  }
+  if (Array.isArray(hashtags) && hashtags.length > 0) {
+    metadata = {
+      ...(metadata || {}),
+      hashtags,
+    };
+  }
+
+  return metadata;
+}
+
 export async function generatePokeQuizzPublicationMetadata({
   plan,
   config,

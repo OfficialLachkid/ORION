@@ -126,8 +126,8 @@ test('badge-style hook icons render directly without a synthetic white backdrop 
     assets: {
       ...plan.assets,
       type_icons: [
-        { type: 'grass', local_path: '/tmp/grass.png', style_variant: 'badge-style' },
-        { type: 'poison', local_path: '/tmp/poison.png', style_variant: 'badge-style' },
+        { type: 'grass', local_path: '/tmp/badge-style/grass.png' },
+        { type: 'poison', local_path: '/tmp/badge-style/poison.png' },
       ],
       pokemon: [],
       overlays: {
@@ -256,12 +256,12 @@ test('visual filter script starts pokeballs earlier and enlarges the timer visua
   assert.match(visualFilter.script, /trim=duration=6\.232,setpts=PTS-STARTPTS\+2\.3\/TB,scale=216:216/u);
   assert.match(visualFilter.script, /scale=234:234:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /overlay=x='540-w\/2':y='726-h\/2'/u);
-  assert.match(visualFilter.script, /if\(lt\(t,0\),1,if\(lt\(t,0\.084\),1\+\(\(t-0\)\/0\.084\)\*0\.16/u);
+  assert.match(visualFilter.script, /if\(lt\(t,0\),0\.42,if\(lt\(t,0\.072\),0\.42\+\(\(t-0\)\/0\.072\)\*0\.66/u);
   assert.match(visualFilter.script, /1\.08\+\(\(1-1\.08\)\*min\(max\(\(t-1\.2\)\/0\.256,0\),1\)\)/u);
   assert.match(visualFilter.script, /\(t-1\.2\)\/0\.256/u);
-  assert.match(visualFilter.script, /eq=contrast=1\.08:saturation=1\.08/u);
-  assert.match(visualFilter.script, /max\(0\.02,1-\(/u);
-  assert.match(visualFilter.script, /\*1\.18\)\)/u);
+  assert.match(visualFilter.script, /eq=contrast=1\.18:saturation=1\.14/u);
+  assert.match(visualFilter.script, /max\(0\.02,pow\(max\(0\.02,1-/u);
+  assert.match(visualFilter.script, /,1\.85\)\)/u);
   assert.doesNotMatch(visualFilter.script, /undefined/u);
 });
 

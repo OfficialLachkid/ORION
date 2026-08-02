@@ -4,7 +4,7 @@ import process from 'node:process';
 import { loadRuntimeConfig } from '../../lib/runtime-config.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
-  buildPokeQuizzPublicationReviewPayload,
+  buildPokeQuizzPublicationMessagePayload,
   buildPokeQuizzPublicationReviewTask,
 } from '../src/poke-quizz-publication-review.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../src/publication-channels.mjs';
@@ -88,7 +88,7 @@ async function main() {
       channelSelector,
       submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
     });
-    const { payload } = buildPokeQuizzPublicationReviewPayload(reviewTask);
+    const payload = buildPokeQuizzPublicationMessagePayload(reviewTask);
     if (!isActionableReview(publication)) {
       payload.components = [];
     } else {

@@ -10,6 +10,7 @@ const DISCORD_TEXT_INPUT_STYLE_PARAGRAPH = 2;
 const DISCORD_INTERACTION_TYPE_MESSAGE_COMPONENT = 3;
 const DISCORD_INTERACTION_TYPE_MODAL_SUBMIT = 5;
 const APPROVAL_REJECT_MODAL_PREFIX = 'reject-modal:';
+const APPROVAL_DELETE_MODAL_PREFIX = 'delete-modal:';
 const POKE_QUIZZ_PUBLISH_TASK_PREFIX = 'TASK-ORION-PQ-PUBLISH-';
 
 export function parseApprovalButtonCustomId(customId) {
@@ -76,11 +77,25 @@ export function buildApprovalButtons(taskId, options = {}) {
 }
 
 export function shouldOpenRejectApprovalModal(interaction) {
+  const action = getApprovalModalRequest(interaction);
+  return action?.decision === 'reject';
+}
+
+export function getApprovalModalRequest(interaction) {
   const action = parseApprovalButtonCustomId(interaction?.data?.custom_id);
-  return interaction?.type === DISCORD_INTERACTION_TYPE_MESSAGE_COMPONENT && action?.decision === 'reject';
+  if (interaction?.type !== DISCORD_INTERACTION_TYPE_MESSAGE_COMPONENT) {
+    return null;
+  }
+  return action?.decision === 'reject' || action?.decision === 'delete'
+    ? action
+    : null;
 }
 
 export function buildApprovalRejectModal(taskId) {
+  return buildApprovalDecisionModal('reject', taskId);
+}
+
+export function buildApprovalDecisionModal(decision, taskId) {
   if (!taskId) {
     return null;
   }
@@ -88,6 +103,29 @@ export function buildApprovalRejectModal(taskId) {
   const isPullRequestMerge = taskId.startsWith('TASK-PR-MERGE-');
   const isProductVideo = taskId.startsWith('TASK-ORION-');
   const isPokeQuizzPublicationReview = taskId.startsWith('TASK-ORION-PQ-PUBLISH-');
+  if (decision === 'delete') {
+    return {
+      custom_id: `${APPROVAL_DELETE_MODAL_PREFIX}${taskId}`,
+      title: isPokeQuizzPublicationReview ? 'Delete Preview' : 'Confirm Delete',
+      components: [
+        {
+          type: DISCORD_COMPONENT_TYPE_ACTION_ROW,
+          components: [
+            {
+              type: DISCORD_COMPONENT_TYPE_TEXT_INPUT,
+              custom_id: 'delete_confirmation',
+              style: DISCORD_TEXT_INPUT_STYLE_PARAGRAPH,
+              label: 'Type DELETE to confirm',
+              placeholder: 'DELETE',
+              min_length: 6,
+              max_length: 32,
+              required: true,
+            },
+          ],
+        },
+      ],
+    };
+  }
 
   return {
     custom_id: `${APPROVAL_REJECT_MODAL_PREFIX}${taskId}`,
@@ -205,7 +243,7 @@ export function buildResolvedApprovalContent(originalContent, decision, actorDis
 
 export function normalizeInteractionAsApprovalMessage(interaction) {
   const action = interaction?.type === DISCORD_INTERACTION_TYPE_MODAL_SUBMIT
-    ? parseRejectApprovalModalInteraction(interaction)
+    ? parseApprovalModalInteraction(interaction)
     : parseApprovalButtonCustomId(interaction?.data?.custom_id);
   if (!action) {
     return null;
@@ -222,6 +260,7 @@ export function normalizeInteractionAsApprovalMessage(interaction) {
     channelId: interaction.channel_id || '',
     messageId: interaction.message?.id || '',
     content,
+    validationError: action.validationError || '',
     attachments: [],
     author: {
       id: interaction.member?.user?.id || interaction.user?.id || '',
@@ -231,6 +270,11 @@ export function normalizeInteractionAsApprovalMessage(interaction) {
       isOperator: false,
     },
   };
+}
+
+function parseApprovalModalInteraction(interaction) {
+  return parseRejectApprovalModalInteraction(interaction)
+    || parseDeleteApprovalModalInteraction(interaction);
 }
 
 function parseRejectApprovalModalInteraction(interaction) {
@@ -256,11 +300,45 @@ function parseRejectApprovalModalInteraction(interaction) {
   };
 }
 
+function parseDeleteApprovalModalInteraction(interaction) {
+  const customId = String(interaction?.data?.custom_id || '');
+  const match = new RegExp(`^${APPROVAL_DELETE_MODAL_PREFIX}(TASK-[A-Z0-9-]+)$`, 'u').exec(customId);
+  if (!match) {
+    return null;
+  }
+
+  const confirmation = extractDeleteApprovalConfirmation(interaction?.data?.components);
+  if (confirmation !== 'DELETE') {
+    return {
+      decision: 'delete',
+      taskId: match[1],
+      validationError: 'Type DELETE exactly to confirm preview deletion.',
+    };
+  }
+
+  return {
+    decision: 'delete',
+    taskId: match[1],
+  };
+}
+
 function extractRejectApprovalReason(components = []) {
   for (const row of Array.isArray(components) ? components : []) {
     for (const component of Array.isArray(row?.components) ? row.components : []) {
       if (component?.custom_id === 'rejection_reason') {
         return String(component.value || '').replace(/\s+/gu, ' ').trim();
+      }
+    }
+  }
+
+  return '';
+}
+
+function extractDeleteApprovalConfirmation(components = []) {
+  for (const row of Array.isArray(components) ? components : []) {
+    for (const component of Array.isArray(row?.components) ? row.components : []) {
+      if (component?.custom_id === 'delete_confirmation') {
+        return String(component.value || '').replace(/\s+/gu, ' ').trim().toUpperCase();
       }
     }
   }

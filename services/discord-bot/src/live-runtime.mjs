@@ -17,13 +17,13 @@ import {
   buildExecutionWriteBackCandidates,
 } from '../../lib/memory-writeback-candidates.mjs';
 import {
-  buildApprovalRejectModal,
+  buildApprovalDecisionModal,
   buildApprovalButtons,
   buildResolvedApprovalButtons,
   buildResolvedApprovalContent,
   buildResolvedApprovalEmbeds,
+  getApprovalModalRequest,
   normalizeInteractionAsApprovalMessage,
-  shouldOpenRejectApprovalModal,
 } from './approval-buttons.mjs';
 import { buildMemoryWriteBackCandidateEvent } from './memory-writeback-events.mjs';
 import { normalizeSupportedSlashCommandInteraction } from './slash-commands.mjs';
@@ -892,15 +892,19 @@ export async function runLiveDiscordBot(config) {
             return;
           }
 
-          if (shouldOpenRejectApprovalModal(payload.d)) {
-            const customId = String(payload.d?.data?.custom_id || '');
-            const taskId = customId.split(':').slice(1).join(':').trim();
-            const modal = buildApprovalRejectModal(taskId);
+          const approvalModalRequest = getApprovalModalRequest(payload.d);
+          if (approvalModalRequest) {
+            const modal = buildApprovalDecisionModal(
+              approvalModalRequest.decision,
+              approvalModalRequest.taskId,
+            );
             if (!modal) {
               await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
                 type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
                 data: {
-                  content: 'Could not open the reject feedback form for this approval.',
+                  content: approvalModalRequest.decision === 'delete'
+                    ? 'Could not open the delete confirmation form for this approval.'
+                    : 'Could not open the reject feedback form for this approval.',
                   flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
                 },
               });
@@ -920,6 +924,16 @@ export async function runLiveDiscordBot(config) {
               type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
               data: {
                 content: 'This button is not supported by the current bot runtime.',
+                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+              },
+            });
+            return;
+          }
+          if (approvalMessage.validationError) {
+            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                content: truncateMessage(approvalMessage.validationError),
                 flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
               },
             });

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import process from 'node:process';
 import { resolve } from 'node:path';
 import { projectRoot } from '../../lib/runtime-config.mjs';
@@ -11,7 +11,7 @@ import {
   DEFAULT_CONFIG_PATH,
   DEFAULT_TEMPLATE_PATH,
   buildPokeQuizzDeleteTask,
-  buildPokeQuizzPublicationReviewPayload,
+  buildPokeQuizzPublicationMessagePayload,
   buildPokeQuizzPublicationReviewTask,
   deriveFeedbackRevisionSeed,
   formatTypePairLabel,
@@ -35,6 +35,63 @@ function createPublicationStore(config) {
     supabaseUrl: config?.env?.SUPABASE_URL || '',
     apiKey: config?.env?.SUPABASE_SECRET_KEY || config?.env?.SUPABASE_PUBLISHABLE_KEY || '',
   });
+}
+
+function normalizePortablePath(value) {
+  return String(value || '')
+    .trim()
+    .replaceAll('\\', '/')
+    .replace(/\/+$/u, '');
+}
+
+function resolvePublicationRenderPath(publication, videoRow, explicitRenderPath = '') {
+  return String(
+    explicitRenderPath
+    || publication?.metadata?.render_path
+    || videoRow?.render?.output_path
+    || '',
+  ).trim();
+}
+
+function isManagedPokeQuizzPreviewPath(filePath) {
+  const normalizedPath = normalizePortablePath(filePath);
+  const previewRoot = normalizePortablePath(POKE_QUIZZ_ASSET_LAYOUT.previews);
+  return Boolean(normalizedPath)
+    && normalizedPath.toLowerCase().endsWith('.mp4')
+    && (normalizedPath === previewRoot || normalizedPath.startsWith(`${previewRoot}/`));
+}
+
+async function deleteManagedPokeQuizzPreviewFile(filePath) {
+  if (!isManagedPokeQuizzPreviewPath(filePath)) {
+    return {
+      deleted: false,
+      error: '',
+      skipped: true,
+    };
+  }
+
+  try {
+    await rm(filePath);
+    return {
+      deleted: true,
+      error: '',
+      skipped: false,
+      deletedAt: new Date().toISOString(),
+    };
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return {
+        deleted: false,
+        error: '',
+        skipped: true,
+      };
+    }
+    return {
+      deleted: false,
+      error: error.message || String(error),
+      skipped: false,
+    };
+  }
 }
 
 function parseLastJsonObject(stdout) {
@@ -136,7 +193,7 @@ async function refreshPublicationReviewMessage({
     channelSelector,
     submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
   });
-  const { payload } = buildPokeQuizzPublicationReviewPayload(reviewTask);
+  const payload = buildPokeQuizzPublicationMessagePayload(reviewTask);
   if (!isActionableReviewWorkflowState(publication?.metadata?.workflow_state)) {
     payload.components = [];
   }
@@ -297,6 +354,7 @@ async function updatePriorPublicationForRevision(feedback, config) {
     return;
   }
   const videoRow = publication.video_id ? await store.fetchVideoById(publication.video_id) : null;
+  const renderPath = resolvePublicationRenderPath(publication, videoRow, feedback.renderPath);
 
   let deleteReport = {
     deleted: false,
@@ -338,6 +396,7 @@ async function updatePriorPublicationForRevision(feedback, config) {
       error: error.message || 'unknown delete error',
     };
   }
+  const renderDeleteReport = await deleteManagedPokeQuizzPreviewFile(renderPath);
 
   const updatedPublication = await store.updatePublication(publication.id, {
     status: deleteReport.deleted ? 'deleted' : publication.status,
@@ -356,6 +415,9 @@ async function updatePriorPublicationForRevision(feedback, config) {
       rejected_preview_external_id: publication.external_id || '',
       rejected_preview_deleted_at: deleteReport.deleted ? deleteReport.deletedAt : '',
       rejected_preview_delete_error: deleteReport.error || '',
+      rejected_preview_render_path: renderPath,
+      rejected_preview_render_deleted_at: renderDeleteReport.deleted ? renderDeleteReport.deletedAt : '',
+      rejected_preview_render_delete_error: renderDeleteReport.error || '',
     },
   });
   await refreshPublicationReviewMessage({
@@ -436,6 +498,7 @@ async function executeDeletePreviewTask(task, config) {
     throw new Error(`Publication ${deletion.publicationId} was not found.`);
   }
   const videoRow = publication.video_id ? await store.fetchVideoById(publication.video_id) : null;
+  const renderPath = resolvePublicationRenderPath(publication, videoRow, deletion.renderPath);
 
   let deleteReport = {
     deleted: false,
@@ -477,6 +540,7 @@ async function executeDeletePreviewTask(task, config) {
       error: error.message || 'unknown delete error',
     };
   }
+  const renderDeleteReport = await deleteManagedPokeQuizzPreviewFile(renderPath);
 
   const updatedPublication = await store.updatePublication(publication.id, {
     status: deleteReport.deleted ? 'deleted' : publication.status,
@@ -495,6 +559,9 @@ async function executeDeletePreviewTask(task, config) {
       deleted_preview_external_id: publication.external_id || '',
       deleted_preview_deleted_at: deleteReport.deleted ? deleteReport.deletedAt : '',
       deleted_preview_delete_error: deleteReport.error || '',
+      deleted_preview_render_path: renderPath,
+      deleted_preview_render_deleted_at: renderDeleteReport.deleted ? renderDeleteReport.deletedAt : '',
+      deleted_preview_render_delete_error: renderDeleteReport.error || '',
     },
   });
   await refreshPublicationReviewMessage({

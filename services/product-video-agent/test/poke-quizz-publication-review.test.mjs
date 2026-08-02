@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildPokeQuizzCollapsedReviewPayload,
   buildPokeQuizzDeleteTask,
   buildPokeQuizzFeedbackRegenerationTask,
+  buildPokeQuizzPublicationMessagePayload,
   buildPokeQuizzPublicationReviewEvent,
   buildPokeQuizzPublicationReviewPayload,
   buildPokeQuizzPublicationReviewTask,
@@ -98,6 +100,38 @@ test('buildPokeQuizzPublicationReviewPayload renders Publish, Give Feedback, and
   assert.equal(payload.components[0].components[0].label, 'Publish');
   assert.equal(payload.components[0].components[1].label, 'Give Feedback');
   assert.equal(payload.components[0].components[2].label, 'Delete');
+});
+
+test('collapsed deleted review payload removes the embed and keeps the preview link', () => {
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication: {
+      ...publication,
+      metadata: {
+        ...publication.metadata,
+        workflow_state: 'deleted',
+        deleted_preview_deleted_at: '2026-08-02T11:45:00.000Z',
+        deleted_preview_url: publication.preview_url,
+      },
+      preview_url: '',
+    },
+    video,
+    channelProfile: {
+      ...channelProfile,
+      timezone: 'Europe/Amsterdam',
+    },
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-08-02T11:50:00.000Z',
+  });
+
+  const payload = buildPokeQuizzPublicationMessagePayload(task);
+  assert.deepEqual(payload.embeds, []);
+  assert.deepEqual(payload.components, []);
+  assert.match(payload.content, /Deleted preview for Water \/ Flying\./u);
+  assert.match(payload.content, /Previous preview: https:\/\/youtube\.com\/shorts\/preview-123/u);
+  assert.equal(buildPokeQuizzCollapsedReviewPayload(task).embeds.length, 0);
 });
 
 test('feedback regeneration task carries the operator notes forward', () => {

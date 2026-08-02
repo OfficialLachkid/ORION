@@ -29,6 +29,9 @@ const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.5;
 const DEFAULT_TYPE_ICON_HOOK_Y = 684;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
 const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
+const DEFAULT_TYPE_ICON_POP_IN_INITIAL_SCALE = 0.42;
+const DEFAULT_TYPE_ICON_POP_IN_PEAK_SCALE = 1.08;
+const DEFAULT_TYPE_ICON_POP_IN_SETTLE_SCALE = 1;
 const DEFAULT_TYPE_ICON_SCALE_SETTLE_RATIO = 1;
 const DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER = 1.08;
 const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.78;
@@ -89,7 +92,11 @@ function typeIconUsesOpaqueBadgeArt(typeIconAsset) {
   const styleVariant = String(typeIconAsset?.style_variant || typeIconAsset?.style || '')
     .trim()
     .toLowerCase();
-  return styleVariant === 'badge-style';
+  const localPath = String(typeIconAsset?.local_path || '')
+    .trim()
+    .replaceAll('\\', '/')
+    .toLowerCase();
+  return styleVariant === 'badge-style' || localPath.includes('/badge-style/');
 }
 
 export function estimateWrapCharacterLimit(template, fontSize) {
@@ -147,14 +154,12 @@ function computeTextBlockY(baseY, lineCount, fontSize, template) {
   return Math.max(safeTop - 10, Math.floor(baseY - (((lineCount - 1) * lineHeight) / 2)));
 }
 
-function buildAnimatedTextAlphaExpression(startSeconds, endSeconds) {
+function buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds) {
   const start = roundTime(startSeconds);
   const end = roundTime(endSeconds);
-  const fadeInDuration = roundTime(Math.min(0.24, Math.max(0.14, (end - start) * 0.16)));
-  const fadeOutDuration = roundTime(Math.min(0.18, Math.max(0.12, (end - start) * 0.12)));
+  const fadeInDuration = roundTime(Math.min(0.18, Math.max(0.08, (end - start) * 0.3)));
   const fadeInEnd = roundTime(start + fadeInDuration);
-  const fadeOutStart = roundTime(Math.max(start + fadeInDuration, end - fadeOutDuration));
-  return `if(lt(t,${start}),0,if(lt(t,${fadeInEnd}),(t-${start})/${fadeInDuration},if(lt(t,${fadeOutStart}),1,if(lt(t,${end}),(${end}-t)/${fadeOutDuration},0))))`;
+  return `if(lt(t,${start}),0,if(lt(t,${fadeInEnd}),(t-${start})/${fadeInDuration},1))`;
 }
 
 function buildAnimatedTextYExpression(baseY, startSeconds) {
@@ -223,6 +228,76 @@ function buildTextLineArtifacts(text, { template, fontSize, maxLines, baseY }) {
       text: lineText,
       y: blockY + (index * lineHeight),
     })),
+  };
+}
+
+function tokenizeTextWords(value) {
+  return String(value || '')
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean);
+}
+
+function buildProgressiveTextArtifacts(text, {
+  template,
+  fontSize,
+  maxLines,
+  baseY,
+  startSeconds,
+  endSeconds,
+}) {
+  const lineArtifacts = buildTextLineArtifacts(text, {
+    template,
+    fontSize,
+    maxLines,
+    baseY,
+  });
+  const allWords = lineArtifacts.lines.flatMap((line) => tokenizeTextWords(line.text));
+  if (allWords.length === 0) {
+    return {
+      ...lineArtifacts,
+      segments: [],
+    };
+  }
+
+  const start = roundTime(startSeconds);
+  const end = roundTime(endSeconds);
+  const finalSegmentStart = Math.max(start, roundTime(end - 0.12));
+  const wordStepSeconds = roundTime(Math.min(
+    0.28,
+    Math.max(0.1, ((end - start) * 0.58) / Math.max(1, allWords.length)),
+  ));
+  let globalWordIndex = 0;
+  const segments = [];
+
+  for (const line of lineArtifacts.lines) {
+    const words = tokenizeTextWords(line.text);
+    if (words.length === 0) {
+      continue;
+    }
+    const lineSegments = [];
+    for (let index = 0; index < words.length; index += 1) {
+      const segmentStart = roundTime(Math.min(
+        finalSegmentStart,
+        start + (globalWordIndex * wordStepSeconds),
+      ));
+      globalWordIndex += 1;
+      lineSegments.push({
+        text: words.slice(0, index + 1).join(' '),
+        y: line.y,
+        start_seconds: segmentStart,
+        end_seconds: end,
+      });
+    }
+    for (let index = 0; index < lineSegments.length - 1; index += 1) {
+      lineSegments[index].end_seconds = lineSegments[index + 1].start_seconds;
+    }
+    segments.push(...lineSegments);
+  }
+
+  return {
+    ...lineArtifacts,
+    segments,
   };
 }
 
@@ -644,7 +719,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       holdUntilSeconds: iconSettleStart,
       transitionDurationSeconds: sizeSettleDuration,
     });
-    const introPopMultiplierExpression = buildAnimatedPopMultiplierExpression(hookStart);
+    const introPopMultiplierExpression = buildAnimatedPopSettleExpression(
+      hookStart,
+      DEFAULT_TYPE_ICON_POP_IN_SECONDS,
+      DEFAULT_TYPE_ICON_POP_IN_INITIAL_SCALE,
+      DEFAULT_TYPE_ICON_POP_IN_PEAK_SCALE,
+      DEFAULT_TYPE_ICON_POP_IN_SETTLE_SCALE,
+    );
     const settleScaleMultiplierExpression = buildAnimatedLerpExpression({
       fromValue: DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER,
       toValue: 1,
@@ -813,13 +894,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     spriteHoldLabels.push(spriteHoldLabel);
     spriteTransitionLabels.push(spriteTransitionLabel);
     filters.push(
-      `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.08:saturation=1.08,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
+      `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.18:saturation=1.14,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
     );
     filters.push(
       `[${spriteHoldSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteHoldLabel}]`,
     );
     const progressExpression = `min(max((t-${revealVisualStart})/${revealTransitionDuration},0),1)`;
-    const pokeballScaleFactor = `max(0.02,1-(${progressExpression}*1.18))`;
+    const pokeballScaleFactor = `max(0.02,pow(max(0.02,1-${progressExpression}),1.85))`;
     const spriteScaleFactor = `max(0.03,if(lt(${progressExpression},0.22),0.06+(${progressExpression}/0.22)*0.34,0.40+(((${progressExpression}-0.22)/0.78)*0.80)))`;
     const pokeballScaleExpression = `max(6,${pokeballSize}*(${pokeballScaleFactor}))`;
     const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;
@@ -862,19 +943,28 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     renderPlan.audio_cues?.prompt_end_seconds,
     renderPlan.phases.countdown?.start_seconds ?? renderPlan.phases.reveal.start_seconds,
   );
-  for (const line of textArtifacts.hook.lines) {
+  const hookSegments = textArtifacts.hook?.segments || textArtifacts.hook?.lines || [];
+  const promptSegments = textArtifacts.prompt?.segments || textArtifacts.prompt?.lines || [];
+  const revealSegments = textArtifacts.reveal?.segments || textArtifacts.reveal?.lines || [];
+  for (const line of hookSegments) {
+    const startSeconds = ensureNumber(line.start_seconds, renderPlan.phases.hook.start_seconds);
+    const endSeconds = ensureNumber(line.end_seconds, renderPlan.phases.hook.end_seconds);
     drawtextParts.push(
-      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_HOOK_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.hook.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.phases.hook.end_seconds)}'`,
+      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_HOOK_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'`,
     );
   }
-  for (const line of textArtifacts.prompt.lines) {
+  for (const line of promptSegments) {
+    const startSeconds = ensureNumber(line.start_seconds, renderPlan.phases.type_prompt.start_seconds);
+    const endSeconds = ensureNumber(line.end_seconds, promptTextEndSeconds);
     drawtextParts.push(
-      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_PROMPT_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.type_prompt.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.type_prompt.start_seconds, promptTextEndSeconds)}':enable='${formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, promptTextEndSeconds)}'`,
+      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_PROMPT_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'`,
     );
   }
-  for (const line of textArtifacts.reveal.lines) {
+  for (const line of revealSegments) {
+    const startSeconds = ensureNumber(line.start_seconds, renderPlan.phases.reveal.start_seconds);
+    const endSeconds = ensureNumber(line.end_seconds, renderPlan.total_duration_seconds);
     drawtextParts.push(
-      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_REVEAL_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, renderPlan.phases.reveal.start_seconds)}':alpha='${buildAnimatedTextAlphaExpression(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}':enable='${formatEnableBetween(renderPlan.phases.reveal.start_seconds, renderPlan.total_duration_seconds)}'`,
+      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_REVEAL_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'`,
     );
   }
   for (const countdown of renderPlan.countdown_numbers) {
@@ -901,23 +991,32 @@ function buildAudioInputs(assets) {
 
 function buildTextArtifacts({ renderPlan, template }) {
   return {
-    hook: buildTextLineArtifacts(renderPlan.text.hook, {
+    hook: buildProgressiveTextArtifacts(renderPlan.text.hook, {
       template,
       fontSize: DEFAULT_HOOK_FONT_SIZE,
       maxLines: 2,
       baseY: DEFAULT_HOOK_TEXT_Y,
+      startSeconds: renderPlan.phases.hook.start_seconds,
+      endSeconds: renderPlan.phases.hook.end_seconds,
     }),
-    prompt: buildTextLineArtifacts(renderPlan.text.prompt, {
+    prompt: buildProgressiveTextArtifacts(renderPlan.text.prompt, {
       template,
       fontSize: DEFAULT_PROMPT_FONT_SIZE,
       maxLines: 3,
       baseY: DEFAULT_PROMPT_TEXT_Y,
+      startSeconds: renderPlan.phases.type_prompt.start_seconds,
+      endSeconds: ensureNumber(
+        renderPlan.audio_cues?.prompt_end_seconds,
+        renderPlan.phases.countdown?.start_seconds ?? renderPlan.phases.reveal.start_seconds,
+      ),
     }),
-    reveal: buildTextLineArtifacts(renderPlan.text.reveal, {
+    reveal: buildProgressiveTextArtifacts(renderPlan.text.reveal, {
       template,
       fontSize: DEFAULT_REVEAL_FONT_SIZE,
       maxLines: 2,
       baseY: DEFAULT_REVEAL_TEXT_Y,
+      startSeconds: renderPlan.phases.reveal.start_seconds,
+      endSeconds: renderPlan.total_duration_seconds,
     }),
   };
 }
@@ -938,15 +1037,24 @@ async function writeDrawtextArtifacts({ runtimeRoot, plan, textArtifacts }) {
   return {
     hook: {
       ...textArtifacts.hook,
-      lines: await writeRoleLines('hook', textArtifacts.hook.lines),
+      segments: await writeRoleLines(
+        'hook',
+        textArtifacts.hook.segments || textArtifacts.hook.lines || [],
+      ),
     },
     prompt: {
       ...textArtifacts.prompt,
-      lines: await writeRoleLines('prompt', textArtifacts.prompt.lines),
+      segments: await writeRoleLines(
+        'prompt',
+        textArtifacts.prompt.segments || textArtifacts.prompt.lines || [],
+      ),
     },
     reveal: {
       ...textArtifacts.reveal,
-      lines: await writeRoleLines('reveal', textArtifacts.reveal.lines),
+      segments: await writeRoleLines(
+        'reveal',
+        textArtifacts.reveal.segments || textArtifacts.reveal.lines || [],
+      ),
     },
   };
 }

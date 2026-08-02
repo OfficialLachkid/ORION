@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { loadRuntimeConfig } from '../../lib/runtime-config.mjs';
 import { loadPipelineConfig } from '../src/config.mjs';
-import { generatePokeQuizzPublicationMetadata } from '../src/local-publication-metadata.mjs';
+import { resolvePokeQuizzPublicationMetadata } from '../src/local-publication-metadata.mjs';
 import {
   createPokeQuizzPublicationRegistration,
   mergeRegisteredPublicationRow,
@@ -82,32 +82,17 @@ async function main() {
     apiKey: runtimeConfig.env.SUPABASE_SECRET_KEY || runtimeConfig.env.SUPABASE_PUBLISHABLE_KEY,
   });
 
-  let metadata = getBooleanOption(options, 'local-model', true)
-    ? await generatePokeQuizzPublicationMetadata({
-      plan,
-      config,
-      channelProfile,
-    })
-    : null;
-
-  if (getStringOption(options, 'title', '')) {
-    metadata = {
-      ...(metadata || {}),
-      title: getStringOption(options, 'title', ''),
-    };
-  }
-  if (getStringOption(options, 'description', '')) {
-    metadata = {
-      ...(metadata || {}),
-      description: getStringOption(options, 'description', ''),
-    };
-  }
-  if (getStringOption(options, 'hashtags', '')) {
-    metadata = {
-      ...(metadata || {}),
-      hashtags: parseHashtags(getStringOption(options, 'hashtags', '')),
-    };
-  }
+  const metadata = await resolvePokeQuizzPublicationMetadata({
+    plan,
+    config,
+    channelProfile,
+    localModel: getBooleanOption(options, 'local-model', true),
+    title: getStringOption(options, 'title', ''),
+    description: getStringOption(options, 'description', ''),
+    hashtags: getStringOption(options, 'hashtags', '')
+      ? parseHashtags(getStringOption(options, 'hashtags', ''))
+      : [],
+  });
 
   if (!metadata?.title || !metadata?.description || !Array.isArray(metadata?.hashtags) || metadata.hashtags.length === 0) {
     throw new Error('Publication metadata could not be resolved. Provide explicit title/description/hashtags or enable the local model fallback.');

@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildApprovalDecisionModal,
   buildApprovalRejectModal,
   buildApprovalButtons,
   buildResolvedApprovalButtons,
   buildResolvedApprovalContent,
   buildResolvedApprovalEmbeds,
+  getApprovalModalRequest,
   normalizeInteractionAsApprovalMessage,
   parseApprovalButtonCustomId,
   shouldOpenRejectApprovalModal,
@@ -97,6 +99,14 @@ test('buildApprovalRejectModal uses preview-feedback copy for Poke Quizz review 
 
   assert.equal(modal.title, 'Give Preview Feedback');
   assert.match(modal.components[0].components[0].label, /next preview/u);
+});
+
+test('buildApprovalDecisionModal creates a delete confirmation form for Poke Quizz review tasks', () => {
+  const modal = buildApprovalDecisionModal('delete', 'TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+
+  assert.equal(modal.title, 'Delete Preview');
+  assert.equal(modal.custom_id, 'delete-modal:TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+  assert.equal(modal.components[0].components[0].custom_id, 'delete_confirmation');
 });
 
 test('buildResolvedApprovalButtons removes the approval buttons after resolution', () => {
@@ -228,6 +238,7 @@ test('normalizeInteractionAsApprovalMessage converts an approve button click int
     channelId: 'channel-1',
     messageId: 'message-1',
     content: 'approve TASK-202606291339-2AA8A8F209',
+    validationError: '',
     attachments: [],
     author: {
       id: 'user-1',
@@ -273,6 +284,18 @@ test('shouldOpenRejectApprovalModal flags reject button interactions', () => {
   }), true);
 });
 
+test('getApprovalModalRequest flags delete button interactions for confirmation', () => {
+  assert.deepEqual(getApprovalModalRequest({
+    type: 3,
+    data: {
+      custom_id: 'delete:TASK-202606291339-2AA8A8F209',
+    },
+  }), {
+    decision: 'delete',
+    taskId: 'TASK-202606291339-2AA8A8F209',
+  });
+});
+
 test('normalizeInteractionAsApprovalMessage converts a reject modal submit into approval text with feedback', () => {
   const message = normalizeInteractionAsApprovalMessage({
     type: 5,
@@ -309,6 +332,71 @@ test('normalizeInteractionAsApprovalMessage converts a reject modal submit into 
     message?.content,
     'reject TASK-202606291339-2AA8A8F209 because Needs a clearer CTA and shorter opening sentence.'
   );
+});
+
+test('normalizeInteractionAsApprovalMessage requires DELETE confirmation for delete modals', () => {
+  const message = normalizeInteractionAsApprovalMessage({
+    type: 5,
+    guild_id: 'guild-1',
+    channel_id: 'channel-1',
+    data: {
+      custom_id: 'delete-modal:TASK-202606291339-2AA8A8F209',
+      components: [
+        {
+          components: [
+            {
+              custom_id: 'delete_confirmation',
+              value: 'yes',
+            },
+          ],
+        },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.validationError, 'Type DELETE exactly to confirm preview deletion.');
+});
+
+test('normalizeInteractionAsApprovalMessage converts a confirmed delete modal submit into delete text', () => {
+  const message = normalizeInteractionAsApprovalMessage({
+    type: 5,
+    guild_id: 'guild-1',
+    channel_id: 'channel-1',
+    data: {
+      custom_id: 'delete-modal:TASK-202606291339-2AA8A8F209',
+      components: [
+        {
+          components: [
+            {
+              custom_id: 'delete_confirmation',
+              value: 'DELETE',
+            },
+          ],
+        },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'delete TASK-202606291339-2AA8A8F209');
+  assert.equal(message?.validationError, '');
 });
 
 test('mergeImageAttachments de-duplicates image attachments by id', () => {

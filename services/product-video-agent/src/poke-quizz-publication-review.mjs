@@ -116,6 +116,31 @@ function normalizeReviewPaths(review = {}) {
   };
 }
 
+function buildCollapsedReviewContent(task) {
+  const review = task?.poke_quizz_publication_review || {};
+  const typePairLabel = formatTypePairLabel(review.typePair || []);
+  const workflowState = String(review.approvalState || '').trim().toLowerCase();
+  const subjectLabel = typePairLabel || 'the current type pair';
+  const previewLabel = review.previewUrl
+    ? `Previous preview: ${review.previewUrl}`
+    : '';
+  if (workflowState === 'deleted') {
+    return [
+      `Deleted preview for ${subjectLabel}.`,
+      review.previewDeletionLabel || 'Removed from YouTube.',
+      previewLabel,
+    ].filter(Boolean).join(' ');
+  }
+  if (workflowState === 'revision_requested') {
+    return [
+      `Feedback recorded for ${subjectLabel}.`,
+      review.previewDeletionLabel || 'The previous preview was removed before regeneration.',
+      previewLabel,
+    ].filter(Boolean).join(' ');
+  }
+  return '';
+}
+
 export function buildPokeQuizzPublicationReviewTask({
   publication,
   video,
@@ -313,6 +338,24 @@ export function buildPokeQuizzPublicationReviewPayload(task) {
     event,
     payload,
   };
+}
+
+export function buildPokeQuizzCollapsedReviewPayload(task) {
+  return {
+    content: buildCollapsedReviewContent(task),
+    embeds: [],
+    components: [],
+  };
+}
+
+export function buildPokeQuizzPublicationMessagePayload(task) {
+  const workflowState = String(task?.poke_quizz_publication_review?.approvalState || '')
+    .trim()
+    .toLowerCase();
+  if (workflowState === 'deleted' || workflowState === 'revision_requested') {
+    return buildPokeQuizzCollapsedReviewPayload(task);
+  }
+  return buildPokeQuizzPublicationReviewPayload(task).payload;
 }
 
 export function deriveFeedbackRevisionSeed(reviewTask, feedback, submittedAt = new Date().toISOString()) {

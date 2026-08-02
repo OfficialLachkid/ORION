@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPokeQuizzFallbackPublicationMetadata, generatePokeQuizzPublicationMetadata } from '../src/local-publication-metadata.mjs';
+import {
+  buildPokeQuizzFallbackPublicationMetadata,
+  generatePokeQuizzPublicationMetadata,
+  resolvePokeQuizzPublicationMetadata,
+} from '../src/local-publication-metadata.mjs';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -80,4 +84,23 @@ test('local publication metadata uses Ollama output when available', async () =>
   );
   assert.deepEqual(metadata.hashtags, ['#pokemon', '#shorts', '#watertype', '#psychictype']);
   assert.equal(metadata.generation_provider, 'ollama');
+});
+
+test('resolved publication metadata falls back deterministically when the local model is disabled', async () => {
+  const metadata = await resolvePokeQuizzPublicationMetadata({
+    plan,
+    config: {
+      script: {
+        provider: 'ollama',
+        endpoint: 'http://127.0.0.1:11434',
+        model: 'llama3.1:8b',
+      },
+    },
+    channelProfile,
+    localModel: false,
+  });
+
+  assert.equal(metadata.title, 'Psychic/Water Type Quiz - Can You Guess?');
+  assert.equal(metadata.generation_provider, 'template');
+  assert.equal(metadata.model, 'fallback');
 });

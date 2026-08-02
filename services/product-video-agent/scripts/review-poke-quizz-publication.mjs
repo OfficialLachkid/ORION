@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../lib/runtime-config.mjs';
 import { loadPipelineConfig } from '../src/config.mjs';
-import { generatePokeQuizzPublicationMetadata } from '../src/local-publication-metadata.mjs';
+import { resolvePokeQuizzPublicationMetadata } from '../src/local-publication-metadata.mjs';
 import {
   createPokeQuizzPublicationRegistration,
   mergeRegisteredPublicationRow,
@@ -228,32 +228,15 @@ export async function reviewPokeQuizzPublication({
       throw new Error(`Video row ${publication.video_id} was not found for publication ${publicationId}.`);
     }
   } else {
-    let metadata = localModel
-      ? await generatePokeQuizzPublicationMetadata({
-        plan,
-        config,
-        channelProfile,
-      })
-      : null;
-
-    if (title) {
-      metadata = {
-        ...(metadata || {}),
-        title,
-      };
-    }
-    if (description) {
-      metadata = {
-        ...(metadata || {}),
-        description,
-      };
-    }
-    if (Array.isArray(hashtags) && hashtags.length > 0) {
-      metadata = {
-        ...(metadata || {}),
-        hashtags,
-      };
-    }
+    const metadata = await resolvePokeQuizzPublicationMetadata({
+      plan,
+      config,
+      channelProfile,
+      localModel,
+      title,
+      description,
+      hashtags,
+    });
 
     if (!metadata?.title || !metadata?.description || !Array.isArray(metadata?.hashtags) || metadata.hashtags.length === 0) {
       throw new Error('Publication metadata could not be resolved. Provide explicit title/description/hashtags or enable the local model fallback.');
