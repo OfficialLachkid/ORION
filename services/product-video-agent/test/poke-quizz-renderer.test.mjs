@@ -167,7 +167,7 @@ test('badge-style hook icons still get a white backdrop underneath', () => {
     },
   );
   assert.match(visualFilter.script, /color=c=white:s=640x640/u);
-  assert.match(visualFilter.script, /0\.577/u);
+  assert.match(visualFilter.script, /scale=w='[^']*\*1':h='[^']*\*1':eval=frame,setsar=1\[typebg0\]/u);
 });
 
 test('timer layout sits above the pokeball grid with centered number anchors', () => {
@@ -257,10 +257,11 @@ test('visual filter script starts pokeballs earlier and enlarges the timer visua
   assert.match(visualFilter.script, /scale=234:234:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /overlay=x='540-w\/2':y='726-h\/2'/u);
   assert.match(visualFilter.script, /if\(lt\(t,0\),1,if\(lt\(t,0\.084\),1\+\(\(t-0\)\/0\.084\)\*0\.16/u);
-  assert.match(visualFilter.script, /\(t-1\.2\)\/0\.192/u);
+  assert.match(visualFilter.script, /1\.08\+\(\(1-1\.08\)\*min\(max\(\(t-1\.2\)\/0\.256,0\),1\)\)/u);
   assert.match(visualFilter.script, /\(t-1\.2\)\/0\.256/u);
   assert.match(visualFilter.script, /eq=contrast=1\.08:saturation=1\.08/u);
-  assert.match(visualFilter.script, /max\(0\.1,1-\(/u);
+  assert.match(visualFilter.script, /max\(0\.02,1-\(/u);
+  assert.match(visualFilter.script, /\*1\.18\)\)/u);
   assert.doesNotMatch(visualFilter.script, /undefined/u);
 });
 

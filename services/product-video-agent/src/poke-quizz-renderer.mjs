@@ -29,7 +29,8 @@ const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.5;
 const DEFAULT_TYPE_ICON_HOOK_Y = 684;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
 const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
-const DEFAULT_TYPE_ICON_SCALE_SETTLE_RATIO = 0.75;
+const DEFAULT_TYPE_ICON_SCALE_SETTLE_RATIO = 1;
+const DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER = 1.08;
 const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.78;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
@@ -644,6 +645,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       transitionDurationSeconds: sizeSettleDuration,
     });
     const introPopMultiplierExpression = buildAnimatedPopMultiplierExpression(hookStart);
+    const settleScaleMultiplierExpression = buildAnimatedLerpExpression({
+      fromValue: DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER,
+      toValue: 1,
+      holdUntilSeconds: iconSettleStart,
+      transitionDurationSeconds: sizeSettleDuration,
+    });
     const finalCenterX = position.x + Math.floor(position.width / 2);
     const finalCenterY = position.y + Math.floor(position.height / 2);
     const introCenterX = introPosition.x + Math.floor(introPosition.width / 2);
@@ -661,9 +668,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       transitionDurationSeconds: settleDuration,
     });
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
-    const iconScaleExpression = `(${baseSizeExpression})*(${introPopMultiplierExpression})`;
+    const iconScaleExpression =
+      `(${baseSizeExpression})*(${introPopMultiplierExpression})*(${settleScaleMultiplierExpression})`;
     const iconBackdropScaleMultiplier = usesOpaqueBadgeArt
-      ? roundTime(DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER * 0.74)
+      ? 1
       : DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER;
     const iconBackdropAlpha = usesOpaqueBadgeArt
       ? Math.max(180, DEFAULT_TYPE_ICON_BACKDROP_ALPHA - 40)
@@ -809,7 +817,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       `[${spriteHoldSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteHoldLabel}]`,
     );
     const progressExpression = `min(max((t-${revealVisualStart})/${revealTransitionDuration},0),1)`;
-    const pokeballScaleFactor = `max(0.1,1-(${progressExpression}*0.9))`;
+    const pokeballScaleFactor = `max(0.02,1-(${progressExpression}*1.18))`;
     const spriteScaleFactor = `max(0.03,if(lt(${progressExpression},0.22),0.06+(${progressExpression}/0.22)*0.34,0.40+(((${progressExpression}-0.22)/0.78)*0.80)))`;
     const pokeballScaleExpression = `max(6,${pokeballSize}*(${pokeballScaleFactor}))`;
     const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;
