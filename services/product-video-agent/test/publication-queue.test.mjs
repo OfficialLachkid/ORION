@@ -172,6 +172,24 @@ test('queue planning preserves future scheduled rows and assigns the next free s
   ]);
 });
 
+test('queue planning skips slots that are too close for a new YouTube schedule update', () => {
+  const queuePlan = buildPublicationQueuePlan({
+    publications: [previewApproved],
+    channelProfiles: [channelProfile],
+    asOf: '2026-07-30T09:50:00.000Z',
+  });
+
+  assert.deepEqual(queuePlan.channels[0].scheduled_publish_queue, [
+    {
+      publication_id: 'pub-schedule',
+      title: 'Guess the Pokemon: Dark / Dragon',
+      workflow_state: 'scheduled',
+      scheduled_for: '2026-07-30T14:00:00.000Z',
+      schedule_update_required: true,
+    },
+  ]);
+});
+
 test('related publication selection prefers the latest same-type published short', () => {
   const related = selectRelatedPublicationCandidate(
     [previewApproved, previewPending, publishedSameType],

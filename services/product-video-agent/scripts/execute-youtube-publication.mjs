@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../lib/runtime-config.mjs';
 import {

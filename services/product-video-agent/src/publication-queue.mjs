@@ -1,5 +1,7 @@
 import { normalizeScheduleSlots } from './publication-channels.mjs';
 
+const DEFAULT_MINIMUM_SCHEDULE_LEAD_MINUTES = 20;
+
 function asDate(value) {
   const parsed = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(parsed.getTime())) {
@@ -183,7 +185,21 @@ function sortScheduledByTime(items) {
   return [...items].sort((left, right) => asDate(left.scheduled_for).getTime() - asDate(right.scheduled_for).getTime());
 }
 
-export function assignScheduleSlots(publications, channelProfile, asOf = new Date(), occupiedPublications = []) {
+function applyMinimumScheduleLead(referenceDate, minimumLeadMinutes = DEFAULT_MINIMUM_SCHEDULE_LEAD_MINUTES) {
+  const leadMinutes = Number(minimumLeadMinutes);
+  const leadMs = Number.isFinite(leadMinutes) && leadMinutes > 0
+    ? leadMinutes * 60_000
+    : 0;
+  return new Date(asDate(referenceDate).getTime() + leadMs);
+}
+
+export function assignScheduleSlots(
+  publications,
+  channelProfile,
+  asOf = new Date(),
+  occupiedPublications = [],
+  options = {},
+) {
   const occupiedSlotKeys = new Set(
     occupiedPublications
       .map((publication) => String(publication?.scheduled_for || '').trim())
@@ -191,7 +207,10 @@ export function assignScheduleSlots(publications, channelProfile, asOf = new Dat
       .map((value) => toIsoString(value)),
   );
   const scheduled = [];
-  let cursor = asDate(asOf);
+  let cursor = applyMinimumScheduleLead(
+    asOf,
+    options.minimumLeadMinutes ?? DEFAULT_MINIMUM_SCHEDULE_LEAD_MINUTES,
+  );
   for (const publication of publications) {
     const scheduledFor = nextAvailableSlotAfter(
       cursor,
