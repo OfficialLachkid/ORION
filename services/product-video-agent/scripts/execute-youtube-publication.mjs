@@ -14,6 +14,7 @@ import {
   buildPokeQuizzPublicationMessagePayload,
   buildPokeQuizzPublicationReviewTask,
 } from '../src/poke-quizz-publication-review.mjs';
+import { syncPokeQuizzQueueStatusMessage } from '../src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../src/publication-store.mjs';
 import {
   fetchYoutubeVideoStatus,
@@ -548,6 +549,16 @@ async function main() {
       workflow_state: updatedPublication?.metadata?.workflow_state || 'scheduled',
     });
     printInfo(`Scheduled publication ${publication.id} for ${scheduled.scheduledFor}`);
+  }
+
+  if (!dryRun) {
+    await syncPokeQuizzQueueStatusMessage({
+      runtimeConfig,
+      store,
+      channelProfile,
+      channelSelector,
+      asOf,
+    });
   }
 
   process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);

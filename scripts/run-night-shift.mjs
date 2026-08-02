@@ -23,8 +23,18 @@ import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
 import { buildNoticeDiscordPayload } from '../services/discord-bot/src/message-formatting.mjs';
-import { loadPublicationChannelProfiles } from '../services/product-video-agent/src/publication-channels.mjs';
+import {
+  findPublicationChannelProfile,
+  loadPublicationChannelProfiles,
+} from '../services/product-video-agent/src/publication-channels.mjs';
 import { reconcilePokeQuizzPreviewFallbackStorage } from '../services/product-video-agent/src/poke-quizz-preview-storage.mjs';
+import {
+  computePokeQuizzQueueStatus,
+  POKE_QUIZZ_REVIEW_TARGET_COUNT,
+  resolvePreferredPokeQuizzCatalogJsonPath,
+  syncPokeQuizzQueueStatusMessage,
+} from '../services/product-video-agent/src/poke-quizz-queue-status.mjs';
+import { SupabasePublicationStore } from '../services/product-video-agent/src/publication-store.mjs';
 import { fetchLeads } from './lib/leadgen-supabase.mjs';
 import { reconcileDrafts } from './lib/draft-reconciler.mjs';
 import { detectReplies } from './lib/reply-detector.mjs';
@@ -88,6 +98,31 @@ function parseTrailingJsonArray(stdout) {
   }
 
   return [];
+}
+
+function parseLastJsonObject(stdout) {
+  const text = String(stdout || '').trim();
+  if (!text) {
+    return null;
+  }
+
+  for (let index = text.lastIndexOf('{'); index >= 0; index = text.lastIndexOf('{', index - 1)) {
+    const candidate = text.slice(index);
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Keep scanning backward until the trailing JSON object is found.
+    }
+  }
+
+  return null;
+}
+
+function createPublicationStore(config) {
+  return new SupabasePublicationStore({
+    supabaseUrl: config.env.SUPABASE_URL,
+    apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY,
+  });
 }
 
 function runQualification(limit) {
@@ -191,6 +226,111 @@ async function runVideoQueueMaintenance(asOf = new Date().toISOString()) {
   }
 
   return summarizeVideoQueueMaintenance(activeProfiles, results);
+}
+
+async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().toISOString()) {
+  const reviewThreadId = String(config.channelIds.pokeQuizzReview || '').trim();
+  if (!reviewThreadId) {
+    return {
+      status: 'skipped',
+      generated: 0,
+      initialReviewReadyCount: 0,
+      finalReviewReadyCount: 0,
+      targetReviewReadyCount: POKE_QUIZZ_REVIEW_TARGET_COUNT,
+      errors: ['Missing pokeQuizzReview channel/thread id.'],
+    };
+  }
+
+  const catalogJsonPath = resolvePreferredPokeQuizzCatalogJsonPath();
+  if (!catalogJsonPath) {
+    return {
+      status: 'failed',
+      generated: 0,
+      initialReviewReadyCount: 0,
+      finalReviewReadyCount: 0,
+      targetReviewReadyCount: POKE_QUIZZ_REVIEW_TARGET_COUNT,
+      errors: ['No localized Poke Quizz catalog JSON could be found.'],
+    };
+  }
+
+  const profiles = await loadPublicationChannelProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
+  const channelProfile = findPublicationChannelProfile(profiles, 'poke-quizz-youtube');
+  const store = createPublicationStore(config);
+  const generationScriptPath = resolve(
+    projectRoot,
+    'services/product-video-agent/scripts/generate-poke-quizz-review.mjs',
+  );
+
+  const fetchQueueStatus = async () => {
+    const publications = await store.fetchPublicationsByChannel({
+      platform: channelProfile.platform,
+      accountKey: channelProfile.account_key,
+    });
+    return computePokeQuizzQueueStatus(publications, channelProfile, asOf);
+  };
+
+  const initialQueueStatus = await fetchQueueStatus();
+  const generated = [];
+  const errors = [];
+  let reviewReadyCount = initialQueueStatus.reviewReadyCount;
+  let consecutiveFailures = 0;
+
+  while (reviewReadyCount < POKE_QUIZZ_REVIEW_TARGET_COUNT && consecutiveFailures < 3) {
+    const child = spawnSync(process.execPath, [
+      generationScriptPath,
+      '--thread-id',
+      reviewThreadId,
+      '--catalog-json',
+      catalogJsonPath,
+      '--channel',
+      'poke-quizz-youtube',
+      '--as-of',
+      new Date().toISOString(),
+    ], {
+      cwd: projectRoot,
+      encoding: 'utf8',
+      timeout: 40 * 60 * 1000,
+    });
+
+    const payload = parseLastJsonObject(child.stdout);
+    if (child.error || child.status !== 0 || !payload?.publication_id) {
+      consecutiveFailures += 1;
+      errors.push(
+        child.error?.message
+          || String(child.stderr || '').trim()
+          || 'Poke Quizz review replenishment generation failed.',
+      );
+      continue;
+    }
+
+    consecutiveFailures = 0;
+    generated.push({
+      publicationId: payload.publication_id,
+      previewUrl: payload.preview_url || '',
+      messageId: payload.message_id || '',
+    });
+
+    reviewReadyCount = (await fetchQueueStatus()).reviewReadyCount;
+  }
+
+  const finalQueueStatus = await fetchQueueStatus();
+  await syncPokeQuizzQueueStatusMessage({
+    runtimeConfig: config,
+    store,
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf,
+  });
+
+  return {
+    status: errors.length > 0 && generated.length === 0 ? 'failed' : generated.length > 0 ? 'completed' : 'skipped',
+    generated: generated.length,
+    generatedItems: generated,
+    initialReviewReadyCount: initialQueueStatus.reviewReadyCount,
+    finalReviewReadyCount: finalQueueStatus.reviewReadyCount,
+    targetReviewReadyCount: POKE_QUIZZ_REVIEW_TARGET_COUNT,
+    errors,
+  };
 }
 
 function summarizeVideoQueueMaintenance(profiles, runs) {
@@ -340,9 +480,25 @@ function buildPreviewFallbackLine(report) {
     : '';
 }
 
+function buildReviewBacklogReplenishmentLine(report) {
+  if (!report) {
+    return '';
+  }
+  if (report.errors?.length && report.generated === 0) {
+    return `Review backlog replenish failed: ${report.errors[0]}`;
+  }
+  if (report.generated > 0) {
+    return `Review backlog replenish: generated **${report.generated}** preview(s), review queue now holds **${report.finalReviewReadyCount}/${report.targetReviewReadyCount}** ready for approval.`;
+  }
+  return report.finalReviewReadyCount < report.targetReviewReadyCount
+    ? `Review backlog replenish is still below target at **${report.finalReviewReadyCount}/${report.targetReviewReadyCount}** ready preview(s).`
+    : `Review backlog replenish found **${report.finalReviewReadyCount}/${report.targetReviewReadyCount}** ready preview(s); no fill-up was needed.`;
+}
+
 function buildPokemonNightShiftDigest({
   videoQueueMaintenance = null,
   previewFallback = null,
+  reviewBacklogReplenishment = null,
   videoQueueMaintenanceError = '',
   previewFallbackError = '',
 } = {}) {
@@ -363,6 +519,11 @@ function buildPokemonNightShiftDigest({
     if (fallbackLine) {
       lines.push(fallbackLine);
     }
+  }
+
+  const reviewBacklogLine = buildReviewBacklogReplenishmentLine(reviewBacklogReplenishment);
+  if (reviewBacklogLine) {
+    lines.push(reviewBacklogLine);
   }
 
   if (lines.length === 0) {
@@ -489,6 +650,21 @@ async function main() {
     process.stderr.write(`Video queue maintenance failed (non-fatal): ${error.message}\n`);
   }
 
+  let reviewBacklogReplenishment = null;
+  try {
+    reviewBacklogReplenishment = await replenishPokeQuizzReviewBacklog(config, new Date().toISOString());
+  } catch (error) {
+    reviewBacklogReplenishment = {
+      status: 'failed',
+      generated: 0,
+      initialReviewReadyCount: 0,
+      finalReviewReadyCount: 0,
+      targetReviewReadyCount: POKE_QUIZZ_REVIEW_TARGET_COUNT,
+      errors: [error.message],
+    };
+    process.stderr.write(`Review backlog replenish failed (non-fatal): ${error.message}\n`);
+  }
+
   mkdirSync(dirname(marker), { recursive: true });
   writeFileSync(marker, new Date().toISOString());
 
@@ -521,6 +697,7 @@ async function main() {
     {
       videoQueueMaintenance,
       previewFallback,
+      reviewBacklogReplenishment,
       videoQueueMaintenanceError,
       previewFallbackError,
     },
@@ -536,6 +713,7 @@ async function main() {
     backlog,
     openDrafts,
     videoQueueMaintenance,
+    reviewBacklogReplenishment,
     previewFallback,
     videoQueueMaintenanceError,
     previewFallbackError,

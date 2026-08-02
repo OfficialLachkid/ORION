@@ -11,6 +11,7 @@ import {
   createPokeQuizzPublicationRegistration,
   mergeRegisteredPublicationRow,
 } from '../src/poke-quizz-publication-registration.mjs';
+import { syncPokeQuizzQueueStatusMessage } from '../src/poke-quizz-queue-status.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
   DEFAULT_CONFIG_PATH,
@@ -296,6 +297,13 @@ export async function reviewPokeQuizzPublication({
       review_message_id: posted.messageId || '',
       review_requested_at: submittedAt,
     }),
+  });
+  await syncPokeQuizzQueueStatusMessage({
+    runtimeConfig,
+    store,
+    channelProfile,
+    channelSelector,
+    asOf: submittedAt,
   });
 
   return {

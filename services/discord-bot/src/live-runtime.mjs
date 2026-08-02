@@ -321,6 +321,12 @@ function hydrateApprovalOutcomeEvents(outboundEvents = [], pendingTask) {
         targetAgent: metadata.targetAgent || pendingTask.target_agent || '',
         domain: metadata.domain || pendingTask.domain || '',
         priority: metadata.priority || pendingTask.priority || '',
+        publicationId: metadata.publicationId || String(
+          pendingTask?.poke_quizz_publication_review?.publicationId
+          || pendingTask?.poke_quizz_feedback?.publicationId
+          || pendingTask?.poke_quizz_delete?.publicationId
+          || ''
+        ).trim(),
         imageAttachmentCount: metadata.imageAttachmentCount || pendingTask.image_attachment_count || 0,
         imageAttachmentFilenames: metadata.imageAttachmentFilenames || pendingTask.image_attachment_filenames || [],
       },
@@ -356,7 +362,8 @@ function buildTrackedOutboundEventKey(channelId, outboundEvent) {
     channelId
     && publicationId
     && (
-      outboundEvent?.type === 'task_queue_update'
+      outboundEvent?.type === 'approval_outcome'
+      || outboundEvent?.type === 'task_queue_update'
       || outboundEvent?.type === 'task_execution_result'
     )
   ) {
@@ -377,6 +384,7 @@ function buildTrackedOutboundEventKey(channelId, outboundEvent) {
     case 'approval_request':
       stream = 'approval';
       break;
+    case 'approval_outcome':
     case 'task_queue_update':
       stream = 'queue';
       break;
