@@ -51,6 +51,27 @@ function parseLastJsonObject(stdout) {
   return null;
 }
 
+function parseTrailingJsonArray(stdout) {
+  const text = String(stdout || '').trim();
+  if (!text) {
+    return [];
+  }
+
+  for (let index = text.lastIndexOf('['); index >= 0; index = text.lastIndexOf('[', index - 1)) {
+    const candidate = text.slice(index);
+    try {
+      const parsed = JSON.parse(candidate);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // Keep scanning backwards until a valid trailing JSON array is found.
+    }
+  }
+
+  return [];
+}
+
 function assertPublicationReviewTask(task) {
   const review = task?.poke_quizz_publication_review;
   if (!review?.publicationId) {
@@ -70,9 +91,9 @@ function assertFeedbackTask(task) {
   return feedback;
 }
 
-async function executePublishPreviewTask(task, config) {
+async function executePublishPreviewTask(task, config, dependencies = {}) {
   const review = assertPublicationReviewTask(task);
-  const store = createPublicationStore(config);
+  const store = dependencies.publicationStore || createPublicationStore(config);
   const publication = await store.fetchPublicationById(review.publicationId);
   if (!publication) {
     throw new Error(`Publication ${review.publicationId} was not found.`);
@@ -91,16 +112,81 @@ async function executePublishPreviewTask(task, config) {
     },
   });
 
+  const channelSelector = review.channelSelector || DEFAULT_CHANNEL_SELECTOR;
+  const runProcess = dependencies.runProcess || runLocalProcess;
+  const executePublicationScriptPath = dependencies.executePublicationScriptPath
+    || resolve(projectRoot, 'services/product-video-agent/scripts/execute-youtube-publication.mjs');
+
+  let scheduleSyncError = '';
+  let refreshedPublication = updated || publication;
+  try {
+    const scheduleResult = await runProcess({
+      executable: process.execPath,
+      args: [
+        executePublicationScriptPath,
+        '--channel',
+        channelSelector,
+        '--schedule-approved',
+        '--as-of',
+        approvedAt,
+      ],
+      cwd: projectRoot,
+      timeoutMs: 1_200_000,
+    });
+    const scheduledResults = parseTrailingJsonArray(scheduleResult.stdout);
+    const scheduledCurrentPublication = scheduledResults.find((entry) => entry?.publication_id === publication.id);
+    if (scheduledCurrentPublication) {
+      const latestPublication = await store.fetchPublicationById(publication.id);
+      if (latestPublication) {
+        refreshedPublication = latestPublication;
+      }
+    } else {
+      const latestPublication = await store.fetchPublicationById(publication.id);
+      if (latestPublication) {
+        refreshedPublication = latestPublication;
+      }
+    }
+  } catch (error) {
+    scheduleSyncError = error.message || String(error);
+    refreshedPublication = await store.updatePublication(publication.id, {
+      metadata: {
+        ...((updated || publication).metadata || {}),
+        schedule_sync_error: scheduleSyncError,
+      },
+    }) || refreshedPublication;
+  }
+
+  const refreshedWorkflowState = refreshedPublication?.metadata?.workflow_state || 'preview_approved';
+  const scheduledFor = refreshedPublication?.scheduled_for || '';
+  if (refreshedWorkflowState === 'scheduled' && scheduledFor) {
+    return {
+      rawStdout: '',
+      report: {
+        state: 'scheduled',
+        severity: 'success',
+        summary: `Approved ${publication.id} and scheduled it for ${scheduledFor}.`,
+        publicationId: refreshedPublication?.id || publication.id,
+        previewUrl: refreshedPublication?.preview_url || publication.preview_url || '',
+        workflowState: refreshedWorkflowState,
+        approvedAt,
+        scheduledFor,
+      },
+    };
+  }
+
   return {
     rawStdout: '',
     report: {
       state: 'preview_approved',
-      severity: 'success',
-      summary: `Marked ${publication.id} as approved for the Poke Quizz publish queue.`,
-      publicationId: updated?.id || publication.id,
-      previewUrl: updated?.preview_url || publication.preview_url || '',
-      workflowState: updated?.metadata?.workflow_state || 'preview_approved',
+      severity: scheduleSyncError ? 'warning' : 'success',
+      summary: scheduleSyncError
+        ? `Marked ${publication.id} as approved, but immediate schedule sync failed: ${scheduleSyncError}`
+        : `Marked ${publication.id} as approved for the Poke Quizz publish queue.`,
+      publicationId: refreshedPublication?.id || publication.id,
+      previewUrl: refreshedPublication?.preview_url || publication.preview_url || '',
+      workflowState: refreshedWorkflowState,
       approvedAt,
+      scheduledFor,
     },
   };
 }
@@ -301,9 +387,9 @@ export function describeExplicitProductVideoAction(task) {
   return null;
 }
 
-export async function executeProductVideoAction(action, task, config) {
+export async function executeProductVideoAction(action, task, config, dependencies = {}) {
   if (action === 'poke_quizz_publish_preview') {
-    return executePublishPreviewTask(task, config);
+    return executePublishPreviewTask(task, config, dependencies);
   }
 
   if (action === 'poke_quizz_feedback_regenerate') {
