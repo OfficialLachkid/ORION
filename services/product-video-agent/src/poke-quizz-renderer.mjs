@@ -35,6 +35,7 @@ const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.78;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
 const DEFAULT_TYPE_ICON_BADGE_ART_INTRO_SCALE_MULTIPLIER = 0.96;
 const DEFAULT_TYPE_ICON_BADGE_ART_FINAL_SCALE_MULTIPLIER = 0.82;
+const DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE = 640;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
 const DEFAULT_POKEBALL_INTRO_SECONDS = 0.16;
 const DEFAULT_POKEBALL_INTRO_LEAD_SECONDS = 0.5;
@@ -628,6 +629,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const iconInnerLabel = safeFilterLabel('typeinner', index);
     const iconBackdropBaseLabel = safeFilterLabel('typebgbase', index);
     const iconBackdropLabel = safeFilterLabel('typebg', index);
+    const iconCompositeBaseLabel = safeFilterLabel('typeunitbase', index);
+    const iconCompositeBackdropLabel = safeFilterLabel('typeunitbg', index);
     const iconCompositeLabel = safeFilterLabel('typeunit', index);
     const position = renderPlan.type_icon_layout[index];
     const introPosition = renderPlan.type_icon_intro_layout[index] || position;
@@ -702,10 +705,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
       );
       filters.push(
-        `[${iconBackdropLabel}][${iconLabel}]overlay=x='(W-w)/2':y='(H-h)/2'[${iconCompositeLabel}]`,
+        `color=c=black@0:s=${DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE}x${DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE},format=rgba[${iconCompositeBaseLabel}]`,
       );
       filters.push(
-        `[v${index}][${iconCompositeLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+        `[${iconCompositeBaseLabel}][${iconBackdropLabel}]overlay=x='(W-w)/2':y='(H-h)/2'[${iconCompositeBackdropLabel}]`,
+      );
+      filters.push(
+        `[${iconCompositeBackdropLabel}][${iconLabel}]overlay=x='(W-w)/2':y='(H-h)/2'[${iconCompositeLabel}]`,
+      );
+      filters.push(
+        `[v${index}][${iconCompositeLabel}]overlay=x='${iconCenterXExpression}-${Math.floor(DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE / 2)}':y='${iconCenterYExpression}-${Math.floor(DEFAULT_TYPE_ICON_COMPOSITE_CANVAS_SIZE / 2)}-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
       );
     } else {
       filters.push(
