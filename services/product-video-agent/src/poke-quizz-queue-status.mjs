@@ -104,6 +104,69 @@ export function resolvePreferredPokeQuizzCatalogJsonPath() {
   return candidates.find((relativePath) => existsSync(resolve(projectRoot, relativePath))) || '';
 }
 
+async function mergeLocalizedCatalogs(sourcePaths = [], outputPath = '') {
+  const absoluteSourcePaths = sourcePaths.map((relativePath) => resolve(projectRoot, relativePath));
+  const payloads = await Promise.all(
+    absoluteSourcePaths.map((filePath) => readFile(filePath, 'utf8').then(JSON.parse)),
+  );
+  const byId = new Map();
+  for (const rows of payloads) {
+    for (const row of rows) {
+      byId.set(row.id, row);
+    }
+  }
+  const mergedRows = [...byId.values()].sort((left, right) => {
+    const dexDelta = Number(left.national_dex_number || 0) - Number(right.national_dex_number || 0);
+    if (dexDelta !== 0) {
+      return dexDelta;
+    }
+    return String(left.id || '').localeCompare(String(right.id || ''));
+  });
+
+  const absoluteOutputPath = resolve(projectRoot, outputPath);
+  await mkdir(dirname(absoluteOutputPath), { recursive: true });
+  await writeFile(absoluteOutputPath, `${JSON.stringify(mergedRows, null, 2)}\n`, 'utf8');
+  return outputPath;
+}
+
+export async function ensurePreferredPokeQuizzCatalogJsonPath() {
+  const existing = resolvePreferredPokeQuizzCatalogJsonPath();
+  if (existing === 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json') {
+    return existing;
+  }
+
+  const buildPlans = [
+    {
+      output: 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+      sources: [
+        'data/runtime/product-video-agent/pokedex/gen1-gen7-localized.json',
+        'data/runtime/product-video-agent/pokedex/gen8-localized.json',
+        'data/runtime/product-video-agent/pokedex/gen9-localized.json',
+      ],
+    },
+    {
+      output: 'data/runtime/product-video-agent/pokedex/gen1-gen8-localized.json',
+      sources: [
+        'data/runtime/product-video-agent/pokedex/gen1-gen7-localized.json',
+        'data/runtime/product-video-agent/pokedex/gen8-localized.json',
+      ],
+    },
+  ];
+
+  for (const plan of buildPlans) {
+    if (existsSync(resolve(projectRoot, plan.output))) {
+      return plan.output;
+    }
+    const canBuild = plan.sources.every((relativePath) => existsSync(resolve(projectRoot, relativePath)));
+    if (!canBuild) {
+      continue;
+    }
+    return mergeLocalizedCatalogs(plan.sources, plan.output);
+  }
+
+  return existing;
+}
+
 export function computePokeQuizzQueueStatus(publications, channelProfile, asOf = new Date().toISOString()) {
   const scheduledQueue = listCommittedScheduledPublications(publications, channelProfile, asOf);
   const reviewReadyCount = publications.filter((publication) => workflowState(publication) === 'preview_uploaded').length;

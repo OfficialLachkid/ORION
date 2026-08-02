@@ -30,8 +30,8 @@ import {
 import { reconcilePokeQuizzPreviewFallbackStorage } from '../services/product-video-agent/src/poke-quizz-preview-storage.mjs';
 import {
   computePokeQuizzQueueStatus,
+  ensurePreferredPokeQuizzCatalogJsonPath,
   POKE_QUIZZ_REVIEW_TARGET_COUNT,
-  resolvePreferredPokeQuizzCatalogJsonPath,
   syncPokeQuizzQueueStatusMessage,
 } from '../services/product-video-agent/src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../services/product-video-agent/src/publication-store.mjs';
@@ -241,7 +241,7 @@ async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().toISOSt
     };
   }
 
-  const catalogJsonPath = resolvePreferredPokeQuizzCatalogJsonPath();
+  const catalogJsonPath = await ensurePreferredPokeQuizzCatalogJsonPath();
   if (!catalogJsonPath) {
     return {
       status: 'failed',
