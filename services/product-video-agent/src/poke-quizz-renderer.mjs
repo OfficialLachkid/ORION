@@ -36,6 +36,8 @@ const DEFAULT_TYPE_ICON_SCALE_SETTLE_RATIO = 1;
 const DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER = 1;
 const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.78;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
+const DEFAULT_TYPE_ICON_BADGE_ART_INTRO_SCALE_MULTIPLIER = 0.96;
+const DEFAULT_TYPE_ICON_BADGE_ART_FINAL_SCALE_MULTIPLIER = 0.82;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
 const DEFAULT_POKEBALL_INTRO_SECONDS = 0.16;
 const DEFAULT_POKEBALL_INTRO_LEAD_SECONDS = 0.5;
@@ -751,13 +753,24 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
     const iconScaleExpression =
       `(${baseSizeExpression})*(${introPopMultiplierExpression})*(${settleScaleMultiplierExpression})`;
+    const badgeArtScaleMultiplierExpression = usesOpaqueBadgeArt
+      ? buildAnimatedLerpExpression({
+        fromValue: DEFAULT_TYPE_ICON_BADGE_ART_INTRO_SCALE_MULTIPLIER,
+        toValue: DEFAULT_TYPE_ICON_BADGE_ART_FINAL_SCALE_MULTIPLIER,
+        holdUntilSeconds: iconSettleStart,
+        transitionDurationSeconds: sizeSettleDuration,
+      })
+      : '1';
+    const iconForegroundScaleExpression = usesOpaqueBadgeArt
+      ? `(${iconScaleExpression})*(${badgeArtScaleMultiplierExpression})`
+      : iconScaleExpression;
     const iconBackdropScaleMultiplier = DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER;
     const iconBackdropAlpha = usesOpaqueBadgeArt
       ? Math.max(180, DEFAULT_TYPE_ICON_BACKDROP_ALPHA - 40)
       : DEFAULT_TYPE_ICON_BACKDROP_ALPHA;
     const iconBackdropScaleExpression = `(${iconScaleExpression})*${iconBackdropScaleMultiplier}`;
     filters.push(
-      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconScaleExpression}':h='${iconScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
+      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconForegroundScaleExpression}':h='${iconForegroundScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
     );
     if (!usesOpaqueBadgeArt) {
       filters.push(
