@@ -156,57 +156,82 @@ function computeTextBlockY(baseY, lineCount, fontSize, template) {
   return Math.max(safeTop - 10, Math.floor(baseY - (((lineCount - 1) * lineHeight) / 2)));
 }
 
-function buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds) {
+function normalizeAnimationTimeExpression(timeExpression = 't') {
+  return `(${String(timeExpression || 't').trim() || 't'})`;
+}
+
+function buildScaleFilterTimeExpression({ fps, streamStartSeconds = 0 }) {
+  const normalizedFps = Math.max(1, ensureNumber(fps, 30));
+  const start = roundTime(streamStartSeconds);
+  return start === 0
+    ? `(n/${normalizedFps})`
+    : `(${start}+(n/${normalizedFps}))`;
+}
+
+function buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds, timeExpression = 't') {
+  const time = normalizeAnimationTimeExpression(timeExpression);
   const start = roundTime(startSeconds);
   const end = roundTime(endSeconds);
   const fadeInDuration = roundTime(Math.min(0.18, Math.max(0.08, (end - start) * 0.3)));
   const fadeInEnd = roundTime(start + fadeInDuration);
-  return `if(lt(t,${start}),0,if(lt(t,${fadeInEnd}),(t-${start})/${fadeInDuration},1))`;
+  return `if(lt(${time},${start}),0,if(lt(${time},${fadeInEnd}),(${time}-${start})/${fadeInDuration},1))`;
 }
 
-function buildAnimatedTextYExpression(baseY, startSeconds) {
+function buildAnimatedTextYExpression(baseY, startSeconds, timeExpression = 't') {
+  const time = normalizeAnimationTimeExpression(timeExpression);
   const start = roundTime(startSeconds);
   const settleEnd = roundTime(start + 0.32);
-  return `${baseY}+if(lt(t,${settleEnd}),(1-((t-${start})/0.32))*18*sin((t-${start})*20),0)`;
+  return `${baseY}+if(lt(${time},${settleEnd}),(1-((${time}-${start})/0.32))*18*sin((${time}-${start})*20),0)`;
 }
 
-function buildAnimatedLerpExpression({ fromValue, toValue, holdUntilSeconds, transitionDurationSeconds }) {
+function buildAnimatedLerpExpression({
+  fromValue,
+  toValue,
+  holdUntilSeconds,
+  transitionDurationSeconds,
+  timeExpression = 't',
+}) {
+  const time = normalizeAnimationTimeExpression(timeExpression);
   const start = roundTime(holdUntilSeconds);
   const duration = roundTime(Math.max(0.12, transitionDurationSeconds));
   const end = roundTime(start + duration);
-  const progress = `min(max((t-${start})/${duration},0),1)`;
-  return `if(lt(t,${start}),${fromValue},if(lt(t,${end}),${fromValue}+((${toValue}-${fromValue})*${progress}),${toValue}))`;
+  const progress = `min(max((${time}-${start})/${duration},0),1)`;
+  return `if(lt(${time},${start}),${fromValue},if(lt(${time},${end}),${fromValue}+((${toValue}-${fromValue})*${progress}),${toValue}))`;
 }
 
-function buildAnimatedPopMultiplierExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS) {
+function buildAnimatedPopMultiplierExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS, timeExpression = 't') {
+  const time = normalizeAnimationTimeExpression(timeExpression);
   const start = roundTime(startSeconds);
   const duration = roundTime(Math.max(0.16, durationSeconds));
   const peak = roundTime(start + (duration * 0.42));
   const end = roundTime(start + duration);
-  return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.16,if(lt(t,${end}),1.16-((t-${peak})/${roundTime(end - peak)})*0.16,1)))`;
+  return `if(lt(${time},${start}),1,if(lt(${time},${peak}),1+((${time}-${start})/${roundTime(peak - start)})*0.16,if(lt(${time},${end}),1.16-((${time}-${peak})/${roundTime(end - peak)})*0.16,1)))`;
 }
 
-function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS, distancePx = 42) {
+function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS, distancePx = 42, timeExpression = 't') {
+  const time = normalizeAnimationTimeExpression(timeExpression);
   const start = roundTime(startSeconds);
   const duration = roundTime(Math.max(0.16, durationSeconds));
   const end = roundTime(start + duration);
-  return `if(lt(t,${start}),${distancePx},if(lt(t,${end}),${distancePx}*(1-((t-${start})/${duration})),0))`;
+  return `if(lt(${time},${start}),${distancePx},if(lt(${time},${end}),${distancePx}*(1-((${time}-${start})/${duration})),0))`;
 }
 
-function buildAnimatedPopSettleExpression(startSeconds, durationSeconds = DEFAULT_POKEBALL_INTRO_SECONDS, initialScale = 0.42, peakScale = 1.08, settleScale = 1) {
+function buildAnimatedPopSettleExpression(startSeconds, durationSeconds = DEFAULT_POKEBALL_INTRO_SECONDS, initialScale = 0.42, peakScale = 1.08, settleScale = 1, timeExpression = 't') {
+  const time = normalizeAnimationTimeExpression(timeExpression);
   const start = roundTime(startSeconds);
   const duration = roundTime(Math.max(0.12, durationSeconds));
   const peak = roundTime(start + (duration * 0.36));
   const end = roundTime(start + duration);
-  return `if(lt(t,${start}),${initialScale},if(lt(t,${peak}),${initialScale}+((t-${start})/${roundTime(peak - start)})*${roundTime(peakScale - initialScale)},if(lt(t,${end}),${peakScale}-((t-${peak})/${roundTime(end - peak)})*${roundTime(peakScale - settleScale)},${settleScale})))`;
+  return `if(lt(${time},${start}),${initialScale},if(lt(${time},${peak}),${initialScale}+((${time}-${start})/${roundTime(peak - start)})*${roundTime(peakScale - initialScale)},if(lt(${time},${end}),${peakScale}-((${time}-${peak})/${roundTime(end - peak)})*${roundTime(peakScale - settleScale)},${settleScale})))`;
 }
 
-function buildTimerAlarmExitScaleExpression(exitStartSeconds, exitEndSeconds) {
+function buildTimerAlarmExitScaleExpression(exitStartSeconds, exitEndSeconds, timeExpression = 't') {
+  const time = normalizeAnimationTimeExpression(timeExpression);
   const start = roundTime(exitStartSeconds);
   const end = roundTime(exitEndSeconds);
   const duration = roundTime(Math.max(0.18, end - start));
   const peak = roundTime(start + (duration * 0.38));
-  return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.18,if(lt(t,${end}),max(0.01,1.18-((t-${peak})/${roundTime(end - peak)})*1.18),0.01)))`;
+  return `if(lt(${time},${start}),1,if(lt(${time},${peak}),1+((${time}-${start})/${roundTime(peak - start)})*0.18,if(lt(${time},${end}),max(0.01,1.18-((${time}-${peak})/${roundTime(end - peak)})*1.18),0.01)))`;
 }
 
 function resolveRevealSpriteHoldSize({ gridItemSize, itemCount, configuredMultiplier }) {
@@ -715,11 +740,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
     const hookStart = ensureNumber(renderPlan.phases.hook?.start_seconds, 0);
     const iconSettleStart = ensureNumber(renderPlan.phases.type_prompt?.start_seconds, 0);
+    const scaleFilterTimeExpression = buildScaleFilterTimeExpression({ fps });
     const baseSizeExpression = buildAnimatedLerpExpression({
       fromValue: introPosition.width,
       toValue: position.width,
       holdUntilSeconds: iconSettleStart,
       transitionDurationSeconds: sizeSettleDuration,
+      timeExpression: scaleFilterTimeExpression,
     });
     const introPopMultiplierExpression = buildAnimatedPopSettleExpression(
       hookStart,
@@ -727,12 +754,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       DEFAULT_TYPE_ICON_POP_IN_INITIAL_SCALE,
       DEFAULT_TYPE_ICON_POP_IN_PEAK_SCALE,
       DEFAULT_TYPE_ICON_POP_IN_SETTLE_SCALE,
+      scaleFilterTimeExpression,
     );
     const settleScaleMultiplierExpression = buildAnimatedLerpExpression({
       fromValue: DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER,
       toValue: 1,
       holdUntilSeconds: iconSettleStart,
       transitionDurationSeconds: sizeSettleDuration,
+      timeExpression: scaleFilterTimeExpression,
     });
     const finalCenterX = position.x + Math.floor(position.width / 2);
     const finalCenterY = position.y + Math.floor(position.height / 2);
@@ -759,6 +788,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         toValue: DEFAULT_TYPE_ICON_BADGE_ART_FINAL_SCALE_MULTIPLIER,
         holdUntilSeconds: iconSettleStart,
         transitionDurationSeconds: sizeSettleDuration,
+        timeExpression: scaleFilterTimeExpression,
       })
       : '1';
     const iconForegroundScaleExpression = usesOpaqueBadgeArt
@@ -839,9 +869,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     filters.push(`[pokeballbase]split=${pokeballSplitLabels.length}${pokeballSplitLabels.map((label) => `[${label}]`).join('')}`);
     for (let index = 0; index < renderPlan.grid.cells.length; index += 1) {
       const cell = renderPlan.grid.cells[index];
+      const introScaleTimeExpression = buildScaleFilterTimeExpression({
+        fps,
+        streamStartSeconds: pokeballIntroStart,
+      });
       const introScaleExpression = buildAnimatedPopSettleExpression(
         pokeballIntroStart,
         pokeballIntroDuration,
+        0.42,
+        1.08,
+        1,
+        introScaleTimeExpression,
       );
       filters.push(
         `[${pokeballStaticLabels[index]}]scale=w='${pokeballSize}*(${introScaleExpression})':h='${pokeballSize}*(${introScaleExpression})':eval=frame,setsar=1[${pokeballIntroLabels[index]}]`,
@@ -878,6 +916,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const timerAlarmScaleExpression = buildTimerAlarmExitScaleExpression(
       timerAlarmExitStart,
       timerAlarmVisibleEnd,
+      buildScaleFilterTimeExpression({
+        fps,
+        streamStartSeconds: timerAlarmStart,
+      }),
     );
     const timerAlarmHoldSeconds = roundTime(Math.max(
       0,
@@ -912,7 +954,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     filters.push(
       `[${spriteHoldSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteHoldLabel}]`,
     );
-    const progressExpression = `min(max((t-${revealVisualStart})/${revealTransitionDuration},0),1)`;
+    const transitionScaleTimeExpression = buildScaleFilterTimeExpression({
+      fps,
+      streamStartSeconds: revealVisualStart,
+    });
+    const progressExpression = `min(max((${normalizeAnimationTimeExpression(transitionScaleTimeExpression)}-${revealVisualStart})/${revealTransitionDuration},0),1)`;
     const pokeballScaleFactor = `max(0.02,pow(max(0.02,1-${progressExpression}),1.85))`;
     const spriteScaleFactor = `max(0.03,if(lt(${progressExpression},0.22),0.06+(${progressExpression}/0.22)*0.34,0.40+(((${progressExpression}-0.22)/0.78)*0.80)))`;
     const pokeballScaleExpression = `max(6,${pokeballSize}*(${pokeballScaleFactor}))`;

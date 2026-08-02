@@ -18,6 +18,10 @@ function isBeachBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
 }
 
+function isArchivedBackgroundPath(backgroundPath) {
+  return String(backgroundPath || '').toLowerCase().includes('/archived-backgrounds/');
+}
+
 function normalizeAssetPath(assetPath) {
   return String(assetPath || '').trim().replaceAll('\\', '/').toLowerCase();
 }
@@ -108,10 +112,14 @@ function pickPair(pairCatalog, forcedTypePair, random, selectionState) {
     throw new Error('No eligible Pokemon type pairs were found in the grounded Pokedex catalog.');
   }
 
-  const lastTypePairKey = normalizePokeQuizzSelectionState(selectionState).last_type_pair_key;
-  const eligibleCatalog = lastTypePairKey && pairCatalog.length > 1
-    ? pairCatalog.filter((entry) => createTypePairKey(entry.pair) !== lastTypePairKey)
+  const localizedPairCatalog = pairCatalog.filter((entry) => entry.matches.some((subject) => subject.sprite_path));
+  const renderablePairCatalog = localizedPairCatalog.length > 0
+    ? localizedPairCatalog
     : pairCatalog;
+  const lastTypePairKey = normalizePokeQuizzSelectionState(selectionState).last_type_pair_key;
+  const eligibleCatalog = lastTypePairKey && renderablePairCatalog.length > 1
+    ? renderablePairCatalog.filter((entry) => createTypePairKey(entry.pair) !== lastTypePairKey)
+    : renderablePairCatalog;
 
   return eligibleCatalog[Math.floor(random() * eligibleCatalog.length)];
 }
@@ -130,7 +138,8 @@ function selectSeededFileAvoidingPrevious(files, random, previousPath) {
 }
 
 function selectBackgroundCandidatesForTypePair(backgrounds, typePair = []) {
-  const allBackgrounds = Array.isArray(backgrounds) ? backgrounds : [];
+  const allBackgrounds = (Array.isArray(backgrounds) ? backgrounds : [])
+    .filter((backgroundPath) => !isArchivedBackgroundPath(backgroundPath));
   if (allBackgrounds.length === 0) {
     return [];
   }
@@ -274,13 +283,17 @@ export async function planPokemonTypeChallenge({
   const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
   const selectedPair = pickPair(pairCatalog, forcedTypePair, random, normalizedSelectionState);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
+  const localizedMatches = selectedPair.matches.filter((subject) => subject.sprite_path);
+  const selectableSubjects = localizedMatches.length > 0
+    ? localizedMatches
+    : selectedPair.matches;
   const selectedSubjectCount = Math.max(
     config.selectedSubjectsMin,
-    Math.min(config.selectedSubjectsMax, selectedPair.matches.length),
+    Math.min(config.selectedSubjectsMax, selectableSubjects.length),
   );
-  const selectedSubjects = sampleArray(selectedPair.matches, selectedSubjectCount, random)
+  const selectedSubjects = sampleArray(selectableSubjects, selectedSubjectCount, random)
     .sort((left, right) => left.national_dex_number - right.national_dex_number);
-  const compatibleDisplayCount = Math.min(selectedPair.matches.length, config.selectedSubjectsMax);
+  const compatibleDisplayCount = Math.min(selectableSubjects.length, config.selectedSubjectsMax);
   const pokeballGridLayout = buildCenteredGridLayout(template, compatibleDisplayCount);
 
   const firstSubjectTypeIcons = selectedPair.matches[0]?.metadata?.type_icon_source_urls || [];

@@ -29,6 +29,15 @@ function event(channelKey, type, body, metadata = {}) {
   };
 }
 
+function resolvePokeQuizzPublicationId(task) {
+  return String(
+    task?.poke_quizz_publication_review?.publicationId
+    || task?.poke_quizz_feedback?.publicationId
+    || task?.poke_quizz_delete?.publicationId
+    || '',
+  ).trim();
+}
+
 function isPausedExecutionReport(report = {}) {
   return report?.paused === true || String(report?.state || '').trim().toLowerCase() === 'paused';
 }
@@ -482,6 +491,7 @@ export function buildExecutionPlan(task) {
 }
 
 export function buildExecutionStartedEvents(task, executionPlan) {
+  const publicationId = resolvePokeQuizzPublicationId(task);
   return [
     event(
       'taskQueue',
@@ -495,6 +505,7 @@ export function buildExecutionStartedEvents(task, executionPlan) {
         priority: task.priority,
         targetAgent: task.target_agent,
         domain: task.domain,
+        publicationId,
       }
     ),
     event(
@@ -1414,6 +1425,11 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
       : isBlocked
         ? 'blocked'
         : 'completed';
+  const publicationId = String(
+    report.publicationId
+    || resolvePokeQuizzPublicationId(followUpTask || task)
+    || '',
+  ).trim();
   const commonQueueEvent = event(
     'taskQueue',
     'task_queue_update',
@@ -1429,6 +1445,7 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
       state,
       severity: report.severity || '',
       reason: isPaused || isAwaitingApproval || isBlocked ? (report.summary || state) : '',
+      publicationId,
     }
   );
   const commonSystemEvent = event(
@@ -1919,6 +1936,7 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
 }
 
 function buildFailedEvents(task, executionPlan, error) {
+  const publicationId = resolvePokeQuizzPublicationId(task);
   return [
     event(
       'taskQueue',
@@ -1932,6 +1950,7 @@ function buildFailedEvents(task, executionPlan, error) {
         priority: task.priority,
         targetAgent: task.target_agent,
         domain: task.domain,
+        publicationId,
       }
     ),
     event(

@@ -54,6 +54,15 @@ async function listFilesRecursive(directoryPath, allowedExtensions) {
   return files.sort((left, right) => left.localeCompare(right));
 }
 
+async function listPokeQuizzBackgroundFiles() {
+  const rootFiles = await listFiles(POKE_QUIZZ_ASSET_LAYOUT.backgrounds, BACKGROUND_EXTENSIONS);
+  const beachFiles = await listFiles(
+    `${POKE_QUIZZ_ASSET_LAYOUT.backgrounds}/beach-backgrounds`,
+    BACKGROUND_EXTENSIONS,
+  );
+  return [...new Set([...rootFiles, ...beachFiles])].sort((left, right) => left.localeCompare(right));
+}
+
 function normalizeTypeName(typeName) {
   return String(typeName || '').trim().toLowerCase();
 }
@@ -148,7 +157,7 @@ export async function scanPokeQuizzAssetInventory() {
     overlays,
     transitions,
   ] = await Promise.all([
-    listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.backgrounds, BACKGROUND_EXTENSIONS),
+    listPokeQuizzBackgroundFiles(),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.soundEffects, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.pixelTypes, IMAGE_EXTENSIONS),

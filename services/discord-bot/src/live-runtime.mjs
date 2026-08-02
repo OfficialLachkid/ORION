@@ -346,7 +346,23 @@ function resolveTrackedTaskId(outboundEvent) {
   return outboundEvent?.metadata?.taskId || outboundEvent?.metadata?.task?.task_id || '';
 }
 
+function resolveTrackedPublicationId(outboundEvent) {
+  return String(outboundEvent?.metadata?.publicationId || '').trim();
+}
+
 function buildTrackedOutboundEventKey(channelId, outboundEvent) {
+  const publicationId = resolveTrackedPublicationId(outboundEvent);
+  if (
+    channelId
+    && publicationId
+    && (
+      outboundEvent?.type === 'task_queue_update'
+      || outboundEvent?.type === 'task_execution_result'
+    )
+  ) {
+    return `${channelId}:publication:${publicationId}`;
+  }
+
   const taskId = resolveTrackedTaskId(outboundEvent);
   if (!channelId || !taskId) {
     return '';
@@ -376,6 +392,12 @@ function buildTrackedOutboundEventKey(channelId, outboundEvent) {
 
 function buildTaskDispatchBlockedEvents(task) {
   const reason = 'No executor is mapped for this request yet.';
+  const publicationId = String(
+    task?.poke_quizz_publication_review?.publicationId
+    || task?.poke_quizz_feedback?.publicationId
+    || task?.poke_quizz_delete?.publicationId
+    || ''
+  ).trim();
 
   return [
     {
@@ -390,6 +412,7 @@ function buildTaskDispatchBlockedEvents(task) {
         targetAgent: task.target_agent,
         domain: task.domain,
         reason,
+        publicationId,
       },
     },
     {
@@ -1755,6 +1778,11 @@ export async function runLiveDiscordBot(config) {
           actor: decision.actor || '',
           actorId: decision.actorId || '',
         });
+        const publicationId = String(
+          pendingTask?.poke_quizz_publication_review?.publicationId
+          || regenerationTask?.poke_quizz_feedback?.publicationId
+          || '',
+        ).trim();
         const executionState = queueExecutableTask(regenerationTask);
         const outboundEvents = [
           {
@@ -1769,6 +1797,7 @@ export async function runLiveDiscordBot(config) {
               domain: pendingTask.domain,
               reason: decision.reason || '',
               decision: decision.decision,
+              publicationId,
             },
           },
         ];
@@ -1807,6 +1836,7 @@ export async function runLiveDiscordBot(config) {
               domain: regenerationTask.domain,
               action: regenerationTask.runtime_action,
               reason: decision.reason || '',
+              publicationId,
             },
           });
           ensureExecutionDrain();
@@ -1852,6 +1882,11 @@ export async function runLiveDiscordBot(config) {
           actor: decision.actor || '',
           actorId: decision.actorId || '',
         });
+        const publicationId = String(
+          pendingTask?.poke_quizz_publication_review?.publicationId
+          || deleteTask?.poke_quizz_delete?.publicationId
+          || '',
+        ).trim();
         const executionState = queueExecutableTask(deleteTask);
         const outboundEvents = [
           {
@@ -1865,6 +1900,7 @@ export async function runLiveDiscordBot(config) {
               targetAgent: pendingTask.target_agent,
               domain: pendingTask.domain,
               decision: decision.decision,
+              publicationId,
             },
           },
         ];
@@ -1902,6 +1938,7 @@ export async function runLiveDiscordBot(config) {
               targetAgent: deleteTask.target_agent,
               domain: deleteTask.domain,
               action: deleteTask.runtime_action,
+              publicationId,
             },
           });
           ensureExecutionDrain();

@@ -258,9 +258,9 @@ test('visual filter script starts pokeballs earlier and enlarges the timer visua
   assert.match(visualFilter.script, /trim=duration=6\.232,setpts=PTS-STARTPTS\+2\.3\/TB,scale=216:216/u);
   assert.match(visualFilter.script, /scale=234:234:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /overlay=x='540-w\/2':y='726-h\/2'/u);
-  assert.match(visualFilter.script, /if\(lt\(t,0\),0\.9,if\(lt\(t,0\.072\),0\.9\+\(\(t-0\)\/0\.072\)\*0\.22/u);
-  assert.match(visualFilter.script, /1\+\(\(1-1\)\*min\(max\(\(t-1\.2\)\/0\.256,0\),1\)\)/u);
-  assert.match(visualFilter.script, /\(t-1\.2\)\/0\.256/u);
+  assert.match(visualFilter.script, /if\(lt\(\(\(n\/30\)\),0\),0\.9,if\(lt\(\(\(n\/30\)\),0\.072\),0\.9\+\(\(\(\(n\/30\)\)-0\)\/0\.072\)\*0\.22/u);
+  assert.match(visualFilter.script, /min\(max\(\(\(\(n\/30\)\)-1\.2\)\/0\.256,0\),1\)/u);
+  assert.match(visualFilter.script, /2\.3\+\(n\/30\)/u);
   assert.match(visualFilter.script, /eq=contrast=1\.08:saturation=1\.05/u);
   assert.match(visualFilter.script, /max\(0\.02,pow\(max\(0\.02,1-/u);
   assert.match(visualFilter.script, /,1\.85\)\)/u);
