@@ -33,6 +33,8 @@ const DEFAULT_TYPE_ICON_SCALE_SETTLE_RATIO = 1;
 const DEFAULT_TYPE_ICON_SETTLE_SCALE_MULTIPLIER = 1.08;
 const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.78;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
+const DEFAULT_TYPE_ICON_BADGE_ART_INTRO_SCALE_MULTIPLIER = 0.96;
+const DEFAULT_TYPE_ICON_BADGE_ART_FINAL_SCALE_MULTIPLIER = 0.82;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
 const DEFAULT_POKEBALL_INTRO_SECONDS = 0.16;
 const DEFAULT_POKEBALL_INTRO_LEAD_SECONDS = 0.5;
@@ -623,9 +625,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
   for (let index = 0; index < plan.assets.type_icons.length; index += 1) {
     const iconLabel = safeFilterLabel('type', index);
+    const iconInnerLabel = safeFilterLabel('typeinner', index);
     const iconBackdropBaseLabel = safeFilterLabel('typebgbase', index);
     const iconBackdropLabel = safeFilterLabel('typebg', index);
-    const iconBackdropVideoLabel = safeFilterLabel('vtbg', index);
+    const iconCompositeLabel = safeFilterLabel('typeunit', index);
     const position = renderPlan.type_icon_layout[index];
     const introPosition = renderPlan.type_icon_intro_layout[index] || position;
     const usesOpaqueBadgeArt = typeIconUsesOpaqueBadgeArt(plan.assets.type_icons[index]);
@@ -670,6 +673,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
     const iconScaleExpression =
       `(${baseSizeExpression})*(${introPopMultiplierExpression})*(${settleScaleMultiplierExpression})`;
+    const badgeArtScaleMultiplierExpression = usesOpaqueBadgeArt
+      ? buildAnimatedLerpExpression({
+        fromValue: DEFAULT_TYPE_ICON_BADGE_ART_INTRO_SCALE_MULTIPLIER,
+        toValue: DEFAULT_TYPE_ICON_BADGE_ART_FINAL_SCALE_MULTIPLIER,
+        holdUntilSeconds: iconSettleStart,
+        transitionDurationSeconds: sizeSettleDuration,
+      })
+      : '1';
+    const iconForegroundScaleExpression = usesOpaqueBadgeArt
+      ? `(${iconScaleExpression})*(${badgeArtScaleMultiplierExpression})`
+      : iconScaleExpression;
     const iconBackdropScaleMultiplier = usesOpaqueBadgeArt
       ? 1
       : DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER;
@@ -678,22 +692,35 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       : DEFAULT_TYPE_ICON_BACKDROP_ALPHA;
     const iconBackdropScaleExpression = `(${iconScaleExpression})*${iconBackdropScaleMultiplier}`;
     filters.push(
-      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconScaleExpression}':h='${iconScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
+      `[${inputRefs.typeIcons[index]}:v]scale=w='${iconForegroundScaleExpression}':h='${iconForegroundScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
     );
-    let baseVideoLabel = `v${index}`;
-    filters.push(
-      `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${iconBackdropAlpha},0)'[${iconBackdropBaseLabel}]`,
-    );
-    filters.push(
-      `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
-    );
-    filters.push(
-      `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
-    );
-    baseVideoLabel = iconBackdropVideoLabel;
-    filters.push(
-      `[${baseVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
-    );
+    if (usesOpaqueBadgeArt) {
+      filters.push(
+        `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${iconBackdropAlpha},0)'[${iconBackdropBaseLabel}]`,
+      );
+      filters.push(
+        `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
+      );
+      filters.push(
+        `[${iconBackdropLabel}][${iconLabel}]overlay=x='(W-w)/2':y='(H-h)/2'[${iconCompositeLabel}]`,
+      );
+      filters.push(
+        `[v${index}][${iconCompositeLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      );
+    } else {
+      filters.push(
+        `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${iconBackdropAlpha},0)'[${iconBackdropBaseLabel}]`,
+      );
+      filters.push(
+        `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
+      );
+      filters.push(
+        `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconInnerLabel}]`,
+      );
+      filters.push(
+        `[${iconInnerLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
+      );
+    }
   }
 
   let currentVideoLabel = `v${plan.assets.type_icons.length}`;
