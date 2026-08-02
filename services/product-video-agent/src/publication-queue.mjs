@@ -114,7 +114,7 @@ export function selectPreviewUploadCandidates(publications, channelProfile) {
 }
 
 export function listCommittedScheduledPublications(publications, channelProfile, asOf = new Date()) {
-  return sortByOldestFirst(
+  return sortScheduledByTime(
     publications.filter((publication) => (
       matchesChannel(publication, channelProfile)
       && workflowState(publication) === 'scheduled'
