@@ -100,7 +100,7 @@ function resolveTypePairSlug(plan) {
     .join('-');
 }
 
-async function resolvePlan(options, selectionState = null) {
+async function resolvePlan(options, selectionState = null, defaultSeed = new Date().toISOString()) {
   const planPath = getStringOption(options, 'plan', '');
   if (planPath) {
     return {
@@ -140,7 +140,7 @@ async function resolvePlan(options, selectionState = null) {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: getStringOption(options, 'seed', 'poke-quizz-default'),
+    seed: getStringOption(options, 'seed', defaultSeed),
     forcedTypePair,
     selectionState: effectiveSelectionState,
   });
@@ -199,7 +199,7 @@ async function generateAndReviewPokeQuizz(options) {
   ]);
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
   const liveSelectionState = await resolveLiveSelectionState(runtimeConfig, channelProfile);
-  const { plan, planPath } = await resolvePlan(options, liveSelectionState);
+  const { plan, planPath } = await resolvePlan(options, liveSelectionState, submittedAt);
   const typePairSlug = resolveTypePairSlug(plan) || 'pokemon-type-challenge';
   const seedSlug = slugify(plan.seed || 'preview');
   const outputPath = getStringOption(

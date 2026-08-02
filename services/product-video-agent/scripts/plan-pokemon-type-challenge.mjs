@@ -46,7 +46,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --catalog-json <path>     Parsed Pokedex rows JSON. Required.',
       '  --template <path>         Template JSON path. Default: pokemon-type-challenge-v1.template.json',
       '  --output <path>           Output planning JSON path',
-      '  --seed <text>             Deterministic seed. Default: poke-quizz-default',
+      '  --seed <text>             Deterministic seed. Default: current timestamp',
       '  --type-pair <a,b>         Optional forced pair such as grass,poison',
       '  --state <path>            Selection state JSON path. Default: data/runtime/product-video-agent/poke-quizz/selection-state.json',
     ]);
@@ -86,7 +86,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: getStringOption(options, 'seed', 'poke-quizz-default'),
+    seed: getStringOption(options, 'seed', new Date().toISOString()),
     forcedTypePair,
     selectionState,
   });

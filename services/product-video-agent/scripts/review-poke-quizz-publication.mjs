@@ -61,6 +61,11 @@ function mergePublicationMetadata(publication, patch = {}) {
   };
 }
 
+function isReusablePreviewRegistration(publication) {
+  const workflowState = String(publication?.metadata?.workflow_state || '').trim().toLowerCase();
+  return !workflowState || workflowState === 'preview_upload_pending';
+}
+
 async function registerPublication({
   plan,
   channelProfile,
@@ -77,6 +82,11 @@ async function registerPublication({
     registeredAt,
   });
   const existingPublication = await store.fetchPublicationById(registration.publicationRow.id);
+  if (existingPublication && !isReusablePreviewRegistration(existingPublication)) {
+    throw new Error(
+      `Publication ${registration.publicationRow.id} already exists in workflow state ${existingPublication.metadata?.workflow_state || existingPublication.status || 'unknown'}. Provide a unique seed or output path instead of reusing the same stable publication id.`,
+    );
+  }
   const mergedPublication = mergeRegisteredPublicationRow(existingPublication, registration.publicationRow);
 
   await store.upsertChannelProfile(channelProfile);
