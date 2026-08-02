@@ -105,6 +105,7 @@ function buildYoutubeApiPlan(queuePlan, profiles, publications) {
       })
       .filter(Boolean);
     const scheduleRequests = channelQueue.scheduled_publish_queue
+      .filter((queueItem) => queueItem.schedule_update_required === true)
       .map((queueItem) => {
         const publication = publications.find((item) => item.id === queueItem.publication_id);
         if (!publication || !profile || !publication.external_id) return null;

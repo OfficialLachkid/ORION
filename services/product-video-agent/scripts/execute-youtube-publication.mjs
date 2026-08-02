@@ -3,6 +3,7 @@
 import { loadRuntimeConfig } from '../../lib/runtime-config.mjs';
 import {
   assignScheduleSlots,
+  listCommittedScheduledPublications,
   selectPreviewUploadCandidates,
   selectScheduleCandidates,
 } from '../src/publication-queue.mjs';
@@ -13,6 +14,7 @@ import {
 } from '../src/poke-quizz-publication-review.mjs';
 import { SupabasePublicationStore } from '../src/publication-store.mjs';
 import {
+  fetchYoutubeVideoStatus,
   loadYoutubeClientCredentials,
   scheduleYoutubePublication,
   uploadYoutubePreviewVideo,
@@ -120,7 +122,12 @@ async function main() {
     : publications;
   const candidates = previewUploadMode
     ? selectPreviewUploadCandidates(scopedPublications, channelProfile)
-    : assignScheduleSlots(selectScheduleCandidates(scopedPublications, channelProfile), channelProfile, asOf);
+    : assignScheduleSlots(
+      selectScheduleCandidates(scopedPublications, channelProfile, asOf),
+      channelProfile,
+      asOf,
+      listCommittedScheduledPublications(scopedPublications, channelProfile, asOf),
+    );
   const workItems = withLimit(candidates, getStringOption(options, 'limit', ''));
 
   if (workItems.length === 0) {
@@ -195,6 +202,55 @@ async function main() {
         scheduled_for: item.scheduled_for,
         external_id: publication.external_id,
       });
+      continue;
+    }
+
+    const liveStatus = publication.external_id
+      ? await fetchYoutubeVideoStatus({
+        externalId: publication.external_id,
+        clientConfig,
+        refreshToken,
+      })
+      : null;
+    if (liveStatus?.privacyStatus === 'public') {
+      const updatedPublication = await store.updatePublication(publication.id, {
+        status: 'published',
+        visibility: 'public',
+        public_url: publication.public_url || publication.preview_url || liveStatus.publicUrl || '',
+        published_at: publication.published_at || liveStatus.publishedAt || new Date().toISOString(),
+        metadata: {
+          ...(publication.metadata || {}),
+          workflow_state: 'published',
+          youtube_live_title: liveStatus.title || '',
+          youtube_live_published_at: liveStatus.publishedAt || '',
+        },
+      });
+      await updatePublicationReviewMessage({
+        runtimeConfig,
+        publication: updatedPublication || {
+          ...publication,
+          status: 'published',
+          visibility: 'public',
+          public_url: publication.public_url || publication.preview_url || liveStatus.publicUrl || '',
+          published_at: publication.published_at || liveStatus.publishedAt || new Date().toISOString(),
+          metadata: {
+            ...(publication.metadata || {}),
+            workflow_state: 'published',
+          },
+        },
+        videoRow,
+        channelProfile,
+        channelSelector,
+      });
+      results.push({
+        publication_id: publication.id,
+        action: 'reconcile_published',
+        external_id: publication.external_id,
+        public_url: updatedPublication?.public_url || publication.public_url || publication.preview_url || liveStatus.publicUrl || '',
+        published_at: updatedPublication?.published_at || publication.published_at || liveStatus.publishedAt || '',
+        workflow_state: updatedPublication?.metadata?.workflow_state || 'published',
+      });
+      printInfo(`Marked publication ${publication.id} as published from live YouTube status.`);
       continue;
     }
 

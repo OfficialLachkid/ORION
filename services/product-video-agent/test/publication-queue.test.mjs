@@ -72,6 +72,23 @@ const previewApproved = {
   created_at: '2026-07-30T05:10:00.000Z',
 };
 
+const alreadyScheduled = {
+  id: 'pub-already-scheduled',
+  platform: 'youtube_shorts',
+  account_key: 'poke-quizz-youtube',
+  status: 'scheduled',
+  title: 'Already Scheduled',
+  description: 'Already queued on YouTube.',
+  hashtags: ['#pokemon', '#shorts'],
+  external_id: 'yt-999',
+  scheduled_for: '2026-07-30T10:00:00.000Z',
+  metadata: {
+    workflow_state: 'scheduled',
+    type_pair: ['psychic', 'water'],
+  },
+  created_at: '2026-07-30T04:30:00.000Z',
+};
+
 const publishedSameType = {
   id: 'pub-old-dark-dragon',
   platform: 'youtube_shorts',
@@ -111,6 +128,7 @@ test('publication queue separates preview uploads from scheduled publish candida
       title: 'Guess the Pokemon: Dark / Dragon',
       workflow_state: 'scheduled',
       scheduled_for: '2026-07-30T10:00:00.000Z',
+      schedule_update_required: true,
     },
   ]);
 });
@@ -127,6 +145,31 @@ test('youtube schedule update uses private plus publishAt', () => {
   assert.equal(plan.action, 'videos.update');
   assert.equal(plan.body.status.privacyStatus, 'private');
   assert.equal(plan.body.status.publishAt, '2026-07-30T08:00:00.000Z');
+});
+
+test('queue planning preserves future scheduled rows and assigns the next free slot to new approvals', () => {
+  const queuePlan = buildPublicationQueuePlan({
+    publications: [alreadyScheduled, previewApproved],
+    channelProfiles: [channelProfile],
+    asOf: '2026-07-30T06:30:00.000Z',
+  });
+
+  assert.deepEqual(queuePlan.channels[0].scheduled_publish_queue, [
+    {
+      publication_id: 'pub-already-scheduled',
+      title: 'Already Scheduled',
+      workflow_state: 'scheduled',
+      scheduled_for: '2026-07-30T10:00:00.000Z',
+      schedule_update_required: false,
+    },
+    {
+      publication_id: 'pub-schedule',
+      title: 'Guess the Pokemon: Dark / Dragon',
+      workflow_state: 'scheduled',
+      scheduled_for: '2026-07-30T14:00:00.000Z',
+      schedule_update_required: true,
+    },
+  ]);
 });
 
 test('related publication selection prefers the latest same-type published short', () => {

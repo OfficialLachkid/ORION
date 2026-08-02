@@ -5,7 +5,7 @@ import { runLocalProcess } from './process-runner.mjs';
 const DEFAULT_HOOK_TEXT_Y = 150;
 const DEFAULT_PROMPT_TEXT_Y = 170;
 const DEFAULT_REVEAL_TEXT_Y = 170;
-const DEFAULT_TYPE_ICON_Y = 344;
+const DEFAULT_TYPE_ICON_Y = 360;
 const DEFAULT_TIMER_SIZE = 300;
 const DEFAULT_TIMER_SCALE_MULTIPLIER = 1.5;
 const DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER = 1.3;
@@ -26,11 +26,11 @@ const DEFAULT_REVEAL_VISUAL_DELAY_SECONDS = 0.3;
 const DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER = 1.2;
 const DEFAULT_POKEBALL_SCALE_MULTIPLIER = 1.2;
 const DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER = 1.5;
-const DEFAULT_TYPE_ICON_HOOK_Y = 660;
+const DEFAULT_TYPE_ICON_HOOK_Y = 684;
 const DEFAULT_TYPE_ICON_SETTLE_SECONDS = 0.18;
 const DEFAULT_TYPE_ICON_POP_IN_SECONDS = 0.2;
 const DEFAULT_TYPE_ICON_SCALE_SETTLE_RATIO = 0.75;
-const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.68;
+const DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER = 0.78;
 const DEFAULT_TYPE_ICON_BACKDROP_ALPHA = 255;
 const DEFAULT_TYPE_ICON_OUTLINE_SCALE_MULTIPLIER = 1.1;
 const DEFAULT_POKEBALL_INTRO_SECONDS = 0.16;
@@ -175,7 +175,7 @@ function buildAnimatedPopMultiplierExpression(startSeconds, durationSeconds = DE
   const duration = roundTime(Math.max(0.16, durationSeconds));
   const peak = roundTime(start + (duration * 0.42));
   const end = roundTime(start + duration);
-  return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.12,if(lt(t,${end}),1.12-((t-${peak})/${roundTime(end - peak)})*0.12,1)))`;
+  return `if(lt(t,${start}),1,if(lt(t,${peak}),1+((t-${start})/${roundTime(peak - start)})*0.16,if(lt(t,${end}),1.16-((t-${peak})/${roundTime(end - peak)})*0.16,1)))`;
 }
 
 function buildAnimatedLiftExpression(startSeconds, durationSeconds = DEFAULT_TYPE_ICON_POP_IN_SECONDS, distancePx = 42) {
@@ -313,6 +313,41 @@ export function buildTimerLayout(template, gridLayout = null) {
   };
 }
 
+function normalizeGridLayout(gridLayout, template) {
+  const source = gridLayout || {};
+  const itemSize = ensureNumber(
+    source.item_size_px,
+    ensureNumber(template?.layout?.pokeball_grid?.item_size_px, 180),
+  );
+  const cells = Array.isArray(source.cells)
+    ? source.cells.map((cell, index) => {
+      const x = ensureNumber(cell?.x, 0);
+      const y = ensureNumber(cell?.y, 0);
+      const width = ensureNumber(cell?.width, itemSize);
+      const height = ensureNumber(cell?.height, itemSize);
+      return {
+        ...cell,
+        index: Number.isFinite(Number(cell?.index)) ? Number(cell.index) : index,
+        x,
+        y,
+        width,
+        height,
+        center_x: ensureNumber(cell?.center_x, x + Math.floor(width / 2)),
+        center_y: ensureNumber(cell?.center_y, y + Math.floor(height / 2)),
+      };
+    })
+    : [];
+
+  return {
+    ...source,
+    item_size_px: itemSize,
+    item_count: Math.max(0, Math.floor(ensureNumber(source.item_count, cells.length))),
+    columns: Math.max(0, Math.floor(ensureNumber(source.columns, 0))),
+    rows: Math.max(0, Math.floor(ensureNumber(source.rows, 0))),
+    cells,
+  };
+}
+
 function buildCountdownNumberScaleMultiplierExpression(startSeconds, endSeconds) {
   const start = roundTime(startSeconds);
   const end = roundTime(endSeconds);
@@ -376,7 +411,8 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const schedule = buildPhaseSchedule(plan.timeline);
   const typeIconLayout = buildTypeIconLayout(template, plan.assets.type_icons.length);
   const typeIconIntroLayout = buildHookTypeIconLayout(template, plan.assets.type_icons.length);
-  const timerLayout = buildTimerLayout(template, plan.assets.overlays?.pokeball_grid || null);
+  const gridLayout = normalizeGridLayout(plan.assets.overlays?.pokeball_grid || null, template);
+  const timerLayout = buildTimerLayout(template, gridLayout);
   const countdownPhase = schedule.phases.countdown || { start_seconds: 0, end_seconds: 0 };
   const revealPhase = schedule.phases.reveal || { start_seconds: schedule.total_duration_seconds, end_seconds: schedule.total_duration_seconds };
   const configuredBattleMusicStartSeconds = roundTime(
@@ -426,7 +462,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       reveal_cross_scale_seconds: revealTransitionDuration || DEFAULT_REVEAL_TRANSITION_SECONDS,
       type_icon_settle_seconds: typeIconSettleDuration || DEFAULT_TYPE_ICON_SETTLE_SECONDS,
     },
-    grid: plan.assets.overlays?.pokeball_grid || { cells: [], item_count: 0, columns: 0, rows: 0 },
+    grid: gridLayout,
     audio_cues: {
       hook_start_seconds: schedule.phases.hook?.start_seconds ?? 0,
       prompt_start_seconds: schedule.phases.type_prompt?.start_seconds ?? 0,
@@ -626,23 +662,27 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     });
     const introLiftExpression = buildAnimatedLiftExpression(hookStart);
     const iconScaleExpression = `(${baseSizeExpression})*(${introPopMultiplierExpression})`;
-    const iconBackdropScaleExpression = `(${iconScaleExpression})*${DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER}`;
+    const iconBackdropScaleMultiplier = usesOpaqueBadgeArt
+      ? roundTime(DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER * 0.74)
+      : DEFAULT_TYPE_ICON_BACKDROP_SCALE_MULTIPLIER;
+    const iconBackdropAlpha = usesOpaqueBadgeArt
+      ? Math.max(180, DEFAULT_TYPE_ICON_BACKDROP_ALPHA - 40)
+      : DEFAULT_TYPE_ICON_BACKDROP_ALPHA;
+    const iconBackdropScaleExpression = `(${iconScaleExpression})*${iconBackdropScaleMultiplier}`;
     filters.push(
       `[${inputRefs.typeIcons[index]}:v]scale=w='${iconScaleExpression}':h='${iconScaleExpression}':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
     );
     let baseVideoLabel = `v${index}`;
-    if (!usesOpaqueBadgeArt) {
-      filters.push(
-        `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${DEFAULT_TYPE_ICON_BACKDROP_ALPHA},0)'[${iconBackdropBaseLabel}]`,
-      );
-      filters.push(
-        `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
-      );
-      filters.push(
-        `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
-      );
-      baseVideoLabel = iconBackdropVideoLabel;
-    }
+    filters.push(
+      `color=c=white:s=640x640,format=rgba,geq=r='255':g='255':b='255':a='if(lte(((X-W/2)*(X-W/2))+((Y-H/2)*(Y-H/2)),((W/2)-10)*((W/2)-10)),${iconBackdropAlpha},0)'[${iconBackdropBaseLabel}]`,
+    );
+    filters.push(
+      `[${iconBackdropBaseLabel}]scale=w='${iconBackdropScaleExpression}':h='${iconBackdropScaleExpression}':eval=frame,setsar=1[${iconBackdropLabel}]`,
+    );
+    filters.push(
+      `[v${index}][${iconBackdropLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[${iconBackdropVideoLabel}]`,
+    );
+    baseVideoLabel = iconBackdropVideoLabel;
     filters.push(
       `[${baseVideoLabel}][${iconLabel}]overlay=x='${iconCenterXExpression}-w/2':y='${iconCenterYExpression}-h/2-${introLiftExpression}':enable='${formatEnableBetween(renderPlan.phases.hook.start_seconds, renderPlan.total_duration_seconds)}'[v${index + 1}]`,
     );
@@ -763,13 +803,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     spriteHoldLabels.push(spriteHoldLabel);
     spriteTransitionLabels.push(spriteTransitionLabel);
     filters.push(
-      `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${revealVisualStart}/TB,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
+      `[${inputRefs.pokemon[index]}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.08:saturation=1.08,split=2[${spriteSourceLabel}][${spriteHoldSourceLabel}]`,
     );
     filters.push(
       `[${spriteHoldSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${spriteHoldLabel}]`,
     );
     const progressExpression = `min(max((t-${revealVisualStart})/${revealTransitionDuration},0),1)`;
-    const pokeballScaleFactor = `if(lt(${progressExpression},0.16),1+(${progressExpression}/0.16)*0.28,max(0.03,1.28-(((${progressExpression}-0.16)/0.84)*1.28)))`;
+    const pokeballScaleFactor = `max(0.1,1-(${progressExpression}*0.9))`;
     const spriteScaleFactor = `max(0.03,if(lt(${progressExpression},0.22),0.06+(${progressExpression}/0.22)*0.34,0.40+(((${progressExpression}-0.22)/0.78)*0.80)))`;
     const pokeballScaleExpression = `max(6,${pokeballSize}*(${pokeballScaleFactor}))`;
     const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;

@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { deleteYoutubeVideo, scheduleYoutubePublication, uploadYoutubePreviewVideo } from '../src/youtube-publication-executor.mjs';
+import {
+  deleteYoutubeVideo,
+  fetchYoutubeVideoStatus,
+  scheduleYoutubePublication,
+  uploadYoutubePreviewVideo,
+} from '../src/youtube-publication-executor.mjs';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -129,4 +134,45 @@ test('deleteYoutubeVideo sends the delete request for a rejected preview', async
 
   assert.equal(deleted.externalId, 'yt-123');
   assert.ok(calls.some((call) => call.url.includes('/youtube/v3/videos?id=yt-123')));
+});
+
+test('fetchYoutubeVideoStatus returns the live YouTube visibility state', async () => {
+  const calls = [];
+  const status = await fetchYoutubeVideoStatus({
+    externalId: 'yt-123',
+    clientConfig: {
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    },
+    refreshToken: 'refresh-token',
+    fetchImpl: async (url, options) => {
+      calls.push({ url: String(url), options });
+      if (String(url).includes('oauth2.googleapis.com/token')) {
+        return Response.json({ access_token: 'access-token', expires_in: 3600, token_type: 'Bearer' });
+      }
+      if (String(url).includes('/youtube/v3/videos?part=status%2Csnippet&id=yt-123')) {
+        return Response.json({
+          items: [
+            {
+              id: 'yt-123',
+              status: {
+                privacyStatus: 'public',
+              },
+              snippet: {
+                title: 'Type Combination! Psychic | Water',
+                publishedAt: '2026-08-01T22:23:40Z',
+              },
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    },
+  });
+
+  assert.equal(status.externalId, 'yt-123');
+  assert.equal(status.privacyStatus, 'public');
+  assert.equal(status.publishedAt, '2026-08-01T22:23:40Z');
+  assert.equal(status.title, 'Type Combination! Psychic | Water');
+  assert.ok(calls.some((call) => call.url.includes('/youtube/v3/videos?part=status%2Csnippet&id=yt-123')));
 });

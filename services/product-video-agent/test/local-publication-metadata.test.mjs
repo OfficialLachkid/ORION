@@ -42,7 +42,11 @@ const plan = {
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
   const metadata = buildPokeQuizzFallbackPublicationMetadata(plan);
-  assert.match(metadata.title, /Psychic \/ Water/u);
+  assert.equal(metadata.title, 'Psychic/Water Type Quiz - Can You Guess?');
+  assert.equal(
+    metadata.description,
+    "Think you're a Pokémon master? Take this timed quiz to see how well you know your Psychic/Water types! I've got 2 tricky ones for you to guess.",
+  );
   assert.ok(metadata.hashtags.includes('#pokemon'));
   assert.ok(metadata.hashtags.includes('#psychictype'));
   assert.ok(metadata.hashtags.includes('#watertype'));
@@ -69,7 +73,11 @@ test('local publication metadata uses Ollama output when available', async () =>
     }),
   });
 
-  assert.equal(metadata.title, 'Guess the Psychic / Water Pair');
+  assert.equal(metadata.title, 'Psychic/Water Type Quiz - Can You Guess?');
+  assert.equal(
+    metadata.description,
+    "Think you're a Pokémon master? Take this timed quiz to see how well you know your Psychic/Water types! I've got 2 tricky ones for you to guess.",
+  );
   assert.deepEqual(metadata.hashtags, ['#pokemon', '#shorts', '#watertype', '#psychictype']);
   assert.equal(metadata.generation_provider, 'ollama');
 });

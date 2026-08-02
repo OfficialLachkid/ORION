@@ -137,6 +137,59 @@ export async function scheduleYoutubePublication({
   };
 }
 
+export async function fetchYoutubeVideoStatus({
+  externalId,
+  clientConfig,
+  refreshToken,
+  fetchImpl = globalThis.fetch,
+}) {
+  const videoId = String(externalId || '').trim();
+  if (!videoId) {
+    throw new Error('YouTube status lookup requires a video id.');
+  }
+
+  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, { fetch: fetchImpl });
+  const url = new URL(YOUTUBE_VIDEOS_ENDPOINT);
+  url.searchParams.set('part', 'status,snippet');
+  url.searchParams.set('id', videoId);
+  const response = await fetchImpl(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${accessToken.accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+  const { bodyText, payload } = await readJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(`YouTube status lookup failed (${response.status}): ${bodyText || 'no body'}`);
+  }
+
+  const item = Array.isArray(payload?.items) ? payload.items[0] : null;
+  if (!item?.id) {
+    return {
+      externalId: videoId,
+      found: false,
+      privacyStatus: '',
+      publishAt: null,
+      publishedAt: null,
+      title: '',
+      publicUrl: buildShortsUrl(videoId),
+      payload,
+    };
+  }
+
+  return {
+    externalId: videoId,
+    found: true,
+    privacyStatus: String(item.status?.privacyStatus || '').trim().toLowerCase(),
+    publishAt: item.status?.publishAt || null,
+    publishedAt: item.snippet?.publishedAt || null,
+    title: String(item.snippet?.title || '').trim(),
+    publicUrl: buildShortsUrl(videoId),
+    payload,
+  };
+}
+
 export async function deleteYoutubeVideo({
   externalId,
   clientConfig,

@@ -48,7 +48,7 @@ function getLocalEndpoint(endpoint) {
 }
 
 function buildTypePairLabel(types = []) {
-  return types.map((type) => titleCaseWord(type)).join(' / ');
+  return types.map((type) => titleCaseWord(type)).join('/');
 }
 
 function buildTypeHashtags(types = []) {
@@ -56,6 +56,18 @@ function buildTypeHashtags(types = []) {
     .map((type) => normalizeTagToken(type))
     .filter(Boolean)
     .map((type) => `#${type}type`);
+}
+
+function buildDefaultTitle(plan) {
+  const typePairLabel = buildTypePairLabel(plan?.selection?.type_pair || []);
+  return `${typePairLabel} Type Quiz - Can You Guess?`;
+}
+
+function buildDefaultDescription(plan) {
+  const typePairLabel = buildTypePairLabel(plan?.selection?.type_pair || []);
+  const selectedSubjects = plan?.selection?.selected_subjects || [];
+  const subjectCount = selectedSubjects.length || Number(plan?.selection?.display_subject_count || 0) || 4;
+  return `Think you're a Pokémon master? Take this timed quiz to see how well you know your ${typePairLabel} types! I've got ${subjectCount} tricky ones for you to guess.`;
 }
 
 function buildMetadataPrompt(plan) {
@@ -110,13 +122,10 @@ function parseGeneratedMetadataPayload(responseText) {
 
 export function buildPokeQuizzFallbackPublicationMetadata(plan) {
   const typePair = plan?.selection?.type_pair || [];
-  const typePairLabel = buildTypePairLabel(typePair);
   const typeHashtags = buildTypeHashtags(typePair);
-  const selectedSubjects = plan?.selection?.selected_subjects || [];
-  const subjectCount = selectedSubjects.length || Number(plan?.selection?.display_subject_count || 0) || 4;
   return {
-    title: `Can You Guess These ${typePairLabel} Pokemon?`,
-    description: `${subjectCount} silhouettes share the ${typePairLabel} type combo in this timed Poke Quizz short. Beat the countdown, lock in your guess, and wait for the reveal.`,
+    title: buildDefaultTitle(plan),
+    description: buildDefaultDescription(plan),
     hashtags: normalizeHashtags([
       'pokemon',
       'pokequizz',
@@ -174,6 +183,8 @@ export async function generatePokeQuizzPublicationMetadata({
     const parsed = parseGeneratedMetadataPayload(payload.response);
     return {
       ...parsed,
+      title: buildDefaultTitle(plan),
+      description: buildDefaultDescription(plan),
       generation_provider: 'ollama',
       model: config.script.model,
     };

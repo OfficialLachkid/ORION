@@ -139,7 +139,7 @@ async function buildRevisionPlan({
       typePair.join(','),
     ],
     cwd: projectRoot,
-    timeoutMs: 300_000,
+    timeoutMs: 1_200_000,
   });
 
   return {

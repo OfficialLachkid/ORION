@@ -65,7 +65,7 @@ test('Poke Quizz publication registration creates pending preview-upload rows', 
     channelProfile,
     renderPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/psychic-water-random-20260731t190729z.mp4',
     metadata: {
-      title: 'Can You Guess These Psychic / Water Pokemon?',
+      title: 'Psychic/Water Type Quiz - Can You Guess?',
       description: 'Beat the timer.',
       hashtags: ['#pokemon', '#shorts'],
       generation_provider: 'template',

@@ -110,17 +110,17 @@ test('prompt wrapping keeps long quiz text inside a centered two-line block', ()
 
 test('type icon layout stays centered in the upper middle', () => {
   const layout = buildTypeIconLayout(template, 2);
-  assert.deepEqual(layout[0], { x: 267, y: 344, width: 252, height: 252 });
-  assert.deepEqual(layout[1], { x: 561, y: 344, width: 252, height: 252 });
+  assert.deepEqual(layout[0], { x: 267, y: 360, width: 252, height: 252 });
+  assert.deepEqual(layout[1], { x: 561, y: 360, width: 252, height: 252 });
 });
 
 test('hook type icon layout starts larger and centered before settling', () => {
   const layout = buildHookTypeIconLayout(template, 2);
-  assert.deepEqual(layout[0], { x: 132, y: 660, width: 378, height: 378 });
-  assert.deepEqual(layout[1], { x: 570, y: 660, width: 378, height: 378 });
+  assert.deepEqual(layout[0], { x: 132, y: 684, width: 378, height: 378 });
+  assert.deepEqual(layout[1], { x: 570, y: 684, width: 378, height: 378 });
 });
 
-test('badge-style hook icons skip the synthetic white backdrop path', () => {
+test('badge-style hook icons still get a white backdrop underneath', () => {
   const badgePlan = {
     ...plan,
     assets: {
@@ -166,8 +166,8 @@ test('badge-style hook icons skip the synthetic white backdrop path', () => {
       reveal: { lines: [] },
     },
   );
-  assert.doesNotMatch(visualFilter.script, /color=c=white:s=640x640/u);
-  assert.doesNotMatch(visualFilter.script, /typeoutline/u);
+  assert.match(visualFilter.script, /color=c=white:s=640x640/u);
+  assert.match(visualFilter.script, /0\.577/u);
 });
 
 test('timer layout sits above the pokeball grid with centered number anchors', () => {
@@ -181,11 +181,11 @@ test('timer layout sits above the pokeball grid with centered number anchors', (
     },
   });
   assert.equal(layout.x, 450);
-  assert.equal(layout.y, 620);
+  assert.equal(layout.y, 636);
   assert.equal(layout.width, 180);
   assert.equal(layout.height, 180);
   assert.equal(layout.number_center_x, 540);
-  assert.equal(layout.number_center_y, 710);
+  assert.equal(layout.number_center_y, 726);
 });
 
 test('countdown moments stop at 1 instead of showing a 0 card', () => {
@@ -206,6 +206,8 @@ test('render plan derives battle-music lead-in and preserves grid geometry', () 
   assert.equal(renderPlan.audio_cues.reveal_visual_start_seconds, 8.1);
   assert.equal(renderPlan.audio_cues.battle_music_start_seconds, 0);
   assert.equal(renderPlan.grid.cells.length, 6);
+  assert.equal(renderPlan.grid.cells[0].center_x, 228);
+  assert.equal(renderPlan.grid.cells[0].center_y, 652);
   assert.equal(renderPlan.type_icon_intro_layout[0].width > renderPlan.type_icon_layout[0].width, true);
   assert.equal(renderPlan.transitions.type_icon_settle_seconds, 0.256);
   assert.equal(renderPlan.timer_layout.y > renderPlan.type_icon_layout[0].y, true);
@@ -218,7 +220,12 @@ test('visual filter script starts pokeballs earlier and enlarges the timer visua
     ...plan,
     assets: {
       ...plan.assets,
-      pokemon: [],
+      pokemon: [
+        {
+          national_dex_number: 1,
+          sprite_path: '/tmp/bulbasaur.png',
+        },
+      ],
     },
   };
   const renderPlan = buildPokeQuizzRenderPlan({
@@ -236,7 +243,7 @@ test('visual filter script starts pokeballs earlier and enlarges the timer visua
       timerCountdown: 3,
       timerAlarm: 4,
       pokeball: 5,
-      pokemon: [],
+      pokemon: [6],
     },
     null,
     {
@@ -248,10 +255,13 @@ test('visual filter script starts pokeballs earlier and enlarges the timer visua
 
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+2\.3\/TB,scale=216:216/u);
   assert.match(visualFilter.script, /scale=234:234:force_original_aspect_ratio=decrease/u);
-  assert.match(visualFilter.script, /overlay=x='540-w\/2':y='710-h\/2'/u);
-  assert.match(visualFilter.script, /if\(lt\(t,0\),1,if\(lt\(t,0\.084\),1\+\(\(t-0\)\/0\.084\)\*0\.12/u);
+  assert.match(visualFilter.script, /overlay=x='540-w\/2':y='726-h\/2'/u);
+  assert.match(visualFilter.script, /if\(lt\(t,0\),1,if\(lt\(t,0\.084\),1\+\(\(t-0\)\/0\.084\)\*0\.16/u);
   assert.match(visualFilter.script, /\(t-1\.2\)\/0\.192/u);
   assert.match(visualFilter.script, /\(t-1\.2\)\/0\.256/u);
+  assert.match(visualFilter.script, /eq=contrast=1\.08:saturation=1\.08/u);
+  assert.match(visualFilter.script, /max\(0\.1,1-\(/u);
+  assert.doesNotMatch(visualFilter.script, /undefined/u);
 });
 
 test('prompt cue window can extend to the measured narration duration', () => {

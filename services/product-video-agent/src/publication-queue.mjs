@@ -23,6 +23,25 @@ function workflowState(publication = {}) {
   return 'preview_upload_pending';
 }
 
+function matchesChannel(publication, channelProfile) {
+  return publication.platform === channelProfile.platform
+    && publication.account_key === channelProfile.account_key;
+}
+
+function isActivePublication(publication) {
+  return publication.status !== 'blocked'
+    && publication.status !== 'failed'
+    && publication.status !== 'published';
+}
+
+function hasFutureScheduledSlot(publication, asOf = new Date()) {
+  const scheduledFor = String(publication?.scheduled_for || '').trim();
+  if (!scheduledFor) {
+    return false;
+  }
+  return asDate(scheduledFor).getTime() > asDate(asOf).getTime();
+}
+
 function getTimeZoneParts(date, timeZone) {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -83,25 +102,34 @@ function sortByOldestFirst(items) {
 export function selectPreviewUploadCandidates(publications, channelProfile) {
   return sortByOldestFirst(
     publications.filter((publication) => (
-      publication.platform === channelProfile.platform
-      && publication.account_key === channelProfile.account_key
+      matchesChannel(publication, channelProfile)
       && workflowState(publication) === 'preview_upload_pending'
-      && publication.status !== 'blocked'
-      && publication.status !== 'failed'
-      && publication.status !== 'published'
+      && isActivePublication(publication)
     )),
   );
 }
 
-export function selectScheduleCandidates(publications, channelProfile) {
+export function listCommittedScheduledPublications(publications, channelProfile, asOf = new Date()) {
   return sortByOldestFirst(
     publications.filter((publication) => (
-      publication.platform === channelProfile.platform
-      && publication.account_key === channelProfile.account_key
+      matchesChannel(publication, channelProfile)
+      && workflowState(publication) === 'scheduled'
+      && isActivePublication(publication)
+      && hasFutureScheduledSlot(publication, asOf)
+    )),
+  );
+}
+
+export function selectScheduleCandidates(publications, channelProfile, asOf = new Date()) {
+  return sortByOldestFirst(
+    publications.filter((publication) => (
+      matchesChannel(publication, channelProfile)
       && ['preview_approved', 'queued', 'scheduled'].includes(workflowState(publication))
-      && publication.status !== 'blocked'
-      && publication.status !== 'failed'
-      && publication.status !== 'published'
+      && isActivePublication(publication)
+      && (
+        workflowState(publication) !== 'scheduled'
+        || !hasFutureScheduledSlot(publication, asOf)
+      )
     )),
   );
 }
@@ -136,23 +164,50 @@ function nextSlotAfter(referenceDate, slots, timeZone = 'UTC') {
   throw new Error('Could not resolve a publication slot within 32 days.');
 }
 
-export function assignScheduleSlots(publications, channelProfile, asOf = new Date()) {
+function nextAvailableSlotAfter(referenceDate, slots, occupiedSlotKeys, timeZone = 'UTC') {
+  let cursor = asDate(referenceDate);
+  for (let attempt = 0; attempt < 128; attempt += 1) {
+    const candidate = nextSlotAfter(cursor, slots, timeZone);
+    const candidateKey = toIsoString(candidate);
+    if (!occupiedSlotKeys.has(candidateKey)) {
+      return candidate;
+    }
+    cursor = new Date(candidate.getTime() + 60_000);
+  }
+  throw new Error('Could not resolve an unoccupied publication slot within 128 attempts.');
+}
+
+function sortScheduledByTime(items) {
+  return [...items].sort((left, right) => asDate(left.scheduled_for).getTime() - asDate(right.scheduled_for).getTime());
+}
+
+export function assignScheduleSlots(publications, channelProfile, asOf = new Date(), occupiedPublications = []) {
+  const occupiedSlotKeys = new Set(
+    occupiedPublications
+      .map((publication) => String(publication?.scheduled_for || '').trim())
+      .filter(Boolean)
+      .map((value) => toIsoString(value)),
+  );
   const scheduled = [];
   let cursor = asDate(asOf);
   for (const publication of publications) {
-    const scheduledFor = nextSlotAfter(
+    const scheduledFor = nextAvailableSlotAfter(
       cursor,
       channelProfile.schedule_slots,
+      occupiedSlotKeys,
       channelProfile.timezone || 'UTC',
     );
+    const scheduledForIso = toIsoString(scheduledFor);
     scheduled.push({
       ...publication,
-      scheduled_for: toIsoString(scheduledFor),
+      scheduled_for: scheduledForIso,
       metadata: {
         ...(publication.metadata || {}),
         workflow_state: 'scheduled',
       },
+      schedule_update_required: true,
     });
+    occupiedSlotKeys.add(scheduledForIso);
     cursor = new Date(scheduledFor.getTime() + 60_000);
   }
   return scheduled;
@@ -187,8 +242,16 @@ export function selectRelatedPublicationCandidate(publications, targetPublicatio
 export function buildPublicationQueuePlan({ publications, channelProfiles, asOf = new Date() }) {
   const planChannels = channelProfiles.map((channelProfile) => {
     const previewUploads = selectPreviewUploadCandidates(publications, channelProfile);
-    const scheduleCandidates = selectScheduleCandidates(publications, channelProfile);
-    const scheduledQueue = assignScheduleSlots(scheduleCandidates, channelProfile, asOf);
+    const committedScheduled = listCommittedScheduledPublications(publications, channelProfile, asOf)
+      .map((publication) => ({
+        ...publication,
+        schedule_update_required: false,
+      }));
+    const scheduleCandidates = selectScheduleCandidates(publications, channelProfile, asOf);
+    const scheduledQueue = sortScheduledByTime([
+      ...committedScheduled,
+      ...assignScheduleSlots(scheduleCandidates, channelProfile, asOf, committedScheduled),
+    ]);
     return {
       channel: {
         id: channelProfile.id,
@@ -208,6 +271,7 @@ export function buildPublicationQueuePlan({ publications, channelProfiles, asOf 
         title: publication.title,
         workflow_state: workflowState(publication),
         scheduled_for: publication.scheduled_for,
+        schedule_update_required: publication.schedule_update_required === true,
       })),
     };
   });
