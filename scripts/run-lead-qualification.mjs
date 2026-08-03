@@ -28,7 +28,7 @@ import {
   upgradeLegacyDiscordPayload,
 } from '../services/discord-bot/src/message-formatting.mjs';
 import { buildApprovalButtons } from '../services/discord-bot/src/approval-buttons.mjs';
-import { postLeadQualificationReport } from './lib/lead-qualification-report.mjs';
+import { postLeadQualificationReport, renderLiveProgressBody } from './lib/lead-qualification-report.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 
@@ -77,6 +77,28 @@ async function postToChannel(config, channelId, body) {
   }
 
   return response.json();
+}
+
+// PATCH the given message — used to keep the live-progress card current as
+// each lead finishes. Best-effort: a Discord/network blip is written to stderr
+// and swallowed so the qualification loop never breaks over a UI update.
+async function patchChannelMessage(config, channelId, messageId, body) {
+  try {
+    const response = await fetch(`${DISCORD_API_BASE_URL}/channels/${channelId}/messages/${messageId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bot ${config.env.DISCORD_BOT_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      process.stderr.write(`Discord progress PATCH failed (${response.status}): ${errorText.slice(0, 200)}\n`);
+    }
+  } catch (error) {
+    process.stderr.write(`Discord progress PATCH failed: ${error.message}\n`);
+  }
 }
 
 // Mirrors the live bot's fanOutOutboundEvents closely enough for this
@@ -215,8 +237,53 @@ async function main() {
     return;
   }
 
+  // Resolve channel + run title up front so the live-progress message can post
+  // BEFORE the loop starts — otherwise the operator sees nothing until every
+  // lead is done (30 leads * ~60-90s = 45+ minutes of silence).
+  const channelId = config.channelIds.leadQualificationAgent
+    || config.channelIds.leadGeneration
+    || config.channelIds.agentResults;
+  const runTitle = redraftRejected ? 'Lead Qualification — Redraft (rejected drafts)'
+    : recoverEmails ? 'Lead Qualification — Email recovery'
+    : retryUnreachable ? 'Lead Qualification — Retry (unreachable sites)'
+    : 'Lead Qualification';
+  const canPostLive = Boolean(!dryRun && channelId && config.env.DISCORD_BOT_TOKEN);
   const outcomes = [];
+  let progressMessageId = null;
+
+  if (canPostLive) {
+    try {
+      const initialBody = renderLiveProgressBody({
+        outcomes,
+        total: batch.length,
+        runTitle,
+        state: 'in_progress',
+      });
+      const posted = await postToChannel(config, channelId, { content: initialBody });
+      progressMessageId = posted?.id || null;
+    } catch (error) {
+      // Non-fatal — silence during the run is a UX regression, not a data
+      // problem. The final summary post at the end still lands.
+      process.stderr.write(`Live-progress initial post failed (non-fatal): ${error.message}\n`);
+    }
+  }
+
+  const updateProgress = async ({ state = 'in_progress', currentLead = '' } = {}) => {
+    if (!canPostLive || !progressMessageId) {
+      return;
+    }
+    const body = renderLiveProgressBody({
+      outcomes,
+      total: batch.length,
+      runTitle,
+      state,
+      currentLead,
+    });
+    await patchChannelMessage(config, channelId, progressMessageId, { content: body });
+  };
+
   for (const lead of batch) {
+    await updateProgress({ currentLead: lead.business_name });
     // Slow site = concrete website-builder signal; measured before the
     // judgment call so the real number can land in the draft.
     const pageSpeed = await measurePageSpeed(
@@ -241,6 +308,7 @@ async function main() {
       // exactly what happened during the ENOENT-broken run: every one of the
       // 10 leads hit this path, so the whole summary showed plain text names).
       outcomes.push({ lead: lead.business_name, sourceUrl: lead.source_url, error: error.message });
+      await updateProgress();
       continue;
     }
     qualification.page_speed = pageSpeed;
@@ -281,8 +349,10 @@ async function main() {
       try {
         approvalTaskId = await createDraftWithApproval(config, lead, qualification);
       } catch (error) {
-        outcomes.push({ lead: lead.business_name, decision: qualification.decision, draftError: error.message });
+        outcomes.push({ lead: lead.business_name, sourceUrl: lead.source_url, decision: qualification.decision, draftError: error.message });
         status = 'qualified_draft_failed';
+        await updateProgress();
+        continue;
       }
     }
 
@@ -332,26 +402,21 @@ async function main() {
       reasoning: qualification.reasoning || '',
       approvalTaskId,
     });
+    await updateProgress();
   }
+
+  // Flip the live-progress card to a "completed" state so the operator can
+  // tell at a glance the run is done — the rich summary posts right below.
+  await updateProgress({ state: 'completed' });
 
   // Summary goes to #lead-qualification-agent (operator request — #lead-
   // generation is for discovery activity; qualification/outreach is the
   // sales side). Per-lead drafts + approvals go to #outreach-agent instead,
   // via dispatchLeadOutreachEvents above.
-  const channelId = config.channelIds.leadQualificationAgent
-    || config.channelIds.leadGeneration
-    || config.channelIds.agentResults;
-  if (!dryRun && channelId && config.env.DISCORD_BOT_TOKEN) {
+  if (canPostLive) {
     const outreachChannel = config.channelIds.outreachAgent
       ? `<#${config.channelIds.outreachAgent}>`
       : '#outreach-agent';
-
-    // Title reflects WHICH mode ran — a redraft/recovery run posting as plain
-    // "Lead Qualification" was misleading (operator flagged this, 2026-07-27).
-    const runTitle = redraftRejected ? 'Lead Qualification — Redraft (rejected drafts)'
-      : recoverEmails ? 'Lead Qualification — Email recovery'
-      : retryUnreachable ? 'Lead Qualification — Retry (unreachable sites)'
-      : 'Lead Qualification';
     await postLeadQualificationReport({
       channelId,
       outcomes,

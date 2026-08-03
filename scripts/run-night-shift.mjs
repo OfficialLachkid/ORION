@@ -199,7 +199,11 @@ async function countOpenDrafts(config) {
 
 async function main() {
   const isFallback = hasFlag('--fallback');
-  const limit = Number(getArgValue('--limit', '10'));
+  // Fallback default matches install-night-shift-schedule.mjs DEFAULT_LIMIT so
+  // an ad-hoc `node scripts/run-night-shift.mjs` (no --limit) does the same
+  // volume the scheduled job does — mismatched defaults silently underran the
+  // manual runs at 10 while the scheduled one was doing 20+.
+  const limit = Number(getArgValue('--limit', '30'));
   const config = loadRuntimeConfig();
   const marker = markerPath();
 
