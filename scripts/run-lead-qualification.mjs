@@ -101,6 +101,26 @@ async function patchChannelMessage(config, channelId, messageId, body) {
   }
 }
 
+// DELETE the given message — used to clean up the live-progress card once the
+// full summary has posted, so the channel is left with one authoritative
+// message per run instead of a "completed" progress card sitting redundantly
+// above the summary. Best-effort: 404 is treated as success (already gone);
+// any other failure writes to stderr and is swallowed.
+async function deleteChannelMessage(config, channelId, messageId) {
+  try {
+    const response = await fetch(`${DISCORD_API_BASE_URL}/channels/${channelId}/messages/${messageId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bot ${config.env.DISCORD_BOT_TOKEN}` },
+    });
+    if (!response.ok && response.status !== 404) {
+      const errorText = await response.text();
+      process.stderr.write(`Discord progress DELETE failed (${response.status}): ${errorText.slice(0, 200)}\n`);
+    }
+  } catch (error) {
+    process.stderr.write(`Discord progress DELETE failed: ${error.message}\n`);
+  }
+}
+
 // Mirrors the live bot's fanOutOutboundEvents closely enough for this
 // standalone script: resolve channel by key, format the event, attach
 // Approve/Reject buttons on approval requests.
@@ -405,8 +425,10 @@ async function main() {
     await updateProgress();
   }
 
-  // Flip the live-progress card to a "completed" state so the operator can
-  // tell at a glance the run is done — the rich summary posts right below.
+  // Flip the live-progress card to a "completed" state FIRST — this is the
+  // fallback if the summary post below fails, so the operator still sees a
+  // coherent "run finished" state instead of a card stuck on "in progress".
+  // On success, the card is deleted right after the summary lands (below).
   await updateProgress({ state: 'completed' });
 
   // Summary goes to #lead-qualification-agent (operator request — #lead-
@@ -417,13 +439,31 @@ async function main() {
     const outreachChannel = config.channelIds.outreachAgent
       ? `<#${config.channelIds.outreachAgent}>`
       : '#outreach-agent';
-    await postLeadQualificationReport({
-      channelId,
-      outcomes,
-      outreachChannel,
-      runTitle,
-      postMessage: (payload) => postToChannel(config, channelId, payload),
-    });
+    let summaryPosted = false;
+    try {
+      await postLeadQualificationReport({
+        channelId,
+        outcomes,
+        outreachChannel,
+        runTitle,
+        postMessage: (payload) => postToChannel(config, channelId, payload),
+      });
+      summaryPosted = true;
+    } catch (error) {
+      // Surface but do NOT rethrow — the qualification results are already
+      // persisted to Supabase, so failing the whole process over a summary
+      // post would just drop the JSON on stdout that the caller consumes.
+      // The "completed" progress card above is left in place as the visible
+      // record for the operator.
+      process.stderr.write(`Lead qualification summary post failed (non-fatal): ${error.message}\n`);
+    }
+
+    // Delete the live-progress card once the summary lands cleanly — keeping
+    // both would leave the channel with a redundant "completed" card sitting
+    // above every summary (operator flagged 2026-08-03).
+    if (summaryPosted && progressMessageId) {
+      await deleteChannelMessage(config, channelId, progressMessageId);
+    }
   }
 
   process.stdout.write(`${JSON.stringify(outcomes, null, 2)}\n`);
