@@ -157,3 +157,103 @@ test('scheduled queue reconciliation returns hidden previews to preview_approved
     },
   ]);
 });
+
+test('scheduled queue reconciliation keeps just-due private videos scheduled during publish grace', async () => {
+  const publication = {
+    id: 'pub-grace',
+    video_id: 'video-3',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'scheduled',
+    visibility: 'private',
+    external_id: 'yt-grace',
+    preview_url: 'https://youtube.com/shorts/yt-grace',
+    scheduled_for: '2026-08-03T06:00:00.000Z',
+    metadata: {
+      workflow_state: 'scheduled',
+      type_pair: ['bug', 'poison'],
+    },
+  };
+  const store = createStore(publication);
+
+  const reconciled = await reconcileScheduledPublications({
+    publications: [publication],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    clientConfig: {},
+    refreshToken: 'refresh-token',
+    asOf: '2026-08-03T06:10:00.000Z',
+    fetchYoutubeStatus: async () => ({
+      found: true,
+      privacyStatus: 'private',
+      publishAt: '',
+    }),
+  });
+
+  assert.equal(store.updateCalls.length, 0);
+  assert.equal(store.current().status, 'scheduled');
+  assert.equal(store.current().scheduled_for, '2026-08-03T06:00:00.000Z');
+  assert.equal(store.current().metadata.workflow_state, 'scheduled');
+  assert.deepEqual(reconciled.results, [
+    {
+      publication_id: 'pub-grace',
+      action: 'queue_reconcile',
+      workflow_state: 'scheduled',
+      scheduled_for: '2026-08-03T06:00:00.000Z',
+      reason: 'awaiting_youtube_publish_grace',
+    },
+  ]);
+});
+
+test('scheduled queue reconciliation marks overdue public videos as published', async () => {
+  const publication = {
+    id: 'pub-live',
+    video_id: 'video-4',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'scheduled',
+    visibility: 'private',
+    external_id: 'yt-live',
+    preview_url: 'https://youtube.com/shorts/yt-live',
+    scheduled_for: '2026-08-03T06:00:00.000Z',
+    metadata: {
+      workflow_state: 'scheduled',
+      type_pair: ['bug', 'poison'],
+    },
+  };
+  const store = createStore(publication);
+
+  const reconciled = await reconcileScheduledPublications({
+    publications: [publication],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    clientConfig: {},
+    refreshToken: 'refresh-token',
+    asOf: '2026-08-03T06:05:00.000Z',
+    fetchYoutubeStatus: async () => ({
+      found: true,
+      privacyStatus: 'public',
+      publicUrl: 'https://youtube.com/shorts/yt-live',
+      publishedAt: '2026-08-03T06:00:20.000Z',
+      title: 'Bug/Poison Type Quiz - Can You Guess?',
+    }),
+  });
+
+  assert.equal(store.updateCalls.length, 1);
+  assert.equal(store.current().status, 'published');
+  assert.equal(store.current().visibility, 'public');
+  assert.equal(store.current().metadata.workflow_state, 'published');
+  assert.equal(store.current().published_at, '2026-08-03T06:00:20.000Z');
+  assert.deepEqual(reconciled.results, [
+    {
+      publication_id: 'pub-live',
+      action: 'queue_reconcile',
+      workflow_state: 'published',
+      reason: 'already_public',
+    },
+  ]);
+});

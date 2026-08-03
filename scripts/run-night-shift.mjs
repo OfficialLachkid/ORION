@@ -333,6 +333,36 @@ async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().toISOSt
   };
 }
 
+async function refreshPokeQuizzReviewMessages() {
+  const scriptPath = resolve(
+    projectRoot,
+    'services/product-video-agent/scripts/refresh-poke-quizz-review-messages.mjs',
+  );
+  const child = spawnSync(process.execPath, [
+    scriptPath,
+    '--channel',
+    'poke-quizz-youtube',
+    '--delay-ms',
+    '1200',
+    '--max-retries',
+    '3',
+  ], {
+    cwd: projectRoot,
+    encoding: 'utf8',
+    timeout: 20 * 60 * 1000,
+  });
+
+  const summary = parseLastJsonObject(child.stdout) || {};
+  const error = child.error?.message
+    || (child.status === 0 ? '' : String(child.stderr || '').trim());
+  return {
+    status: error ? 'failed' : 'completed',
+    exitCode: child.status ?? 0,
+    error,
+    ...summary,
+  };
+}
+
 function summarizeVideoQueueMaintenance(profiles, runs) {
   const summary = {
     attemptedChannels: profiles.length,
@@ -495,10 +525,30 @@ function buildReviewBacklogReplenishmentLine(report) {
     : `Review backlog replenish found **${report.finalReviewReadyCount}/${report.targetReviewReadyCount}** ready preview(s); no fill-up was needed.`;
 }
 
+function buildReviewMessageRefreshLine(report) {
+  if (!report) {
+    return '';
+  }
+  if (report.error) {
+    return `Review card refresh failed: ${report.error}`;
+  }
+  if (report.failed > 0) {
+    return `Review card refresh updated **${report.refreshed || 0}** card(s), but **${report.failed}** still need another pass.`;
+  }
+  if (report.refreshed > 0) {
+    const retryNote = report.retried > 0
+      ? ` after **${report.retried}** rate-limit retry/retries`
+      : '';
+    return `Review card refresh updated **${report.refreshed}** card(s)${retryNote}.`;
+  }
+  return '';
+}
+
 function buildPokemonNightShiftDigest({
   videoQueueMaintenance = null,
   previewFallback = null,
   reviewBacklogReplenishment = null,
+  reviewMessageRefresh = null,
   videoQueueMaintenanceError = '',
   previewFallbackError = '',
 } = {}) {
@@ -524,6 +574,11 @@ function buildPokemonNightShiftDigest({
   const reviewBacklogLine = buildReviewBacklogReplenishmentLine(reviewBacklogReplenishment);
   if (reviewBacklogLine) {
     lines.push(reviewBacklogLine);
+  }
+
+  const reviewMessageRefreshLine = buildReviewMessageRefreshLine(reviewMessageRefresh);
+  if (reviewMessageRefreshLine) {
+    lines.push(reviewMessageRefreshLine);
   }
 
   if (lines.length === 0) {
@@ -665,6 +720,20 @@ async function main() {
     process.stderr.write(`Review backlog replenish failed (non-fatal): ${error.message}\n`);
   }
 
+  let reviewMessageRefresh = null;
+  try {
+    reviewMessageRefresh = await refreshPokeQuizzReviewMessages();
+  } catch (error) {
+    reviewMessageRefresh = {
+      status: 'failed',
+      error: error.message,
+      refreshed: 0,
+      failed: 0,
+      retried: 0,
+    };
+    process.stderr.write(`Review card refresh failed (non-fatal): ${error.message}\n`);
+  }
+
   mkdirSync(dirname(marker), { recursive: true });
   writeFileSync(marker, new Date().toISOString());
 
@@ -698,6 +767,7 @@ async function main() {
       videoQueueMaintenance,
       previewFallback,
       reviewBacklogReplenishment,
+      reviewMessageRefresh,
       videoQueueMaintenanceError,
       previewFallbackError,
     },
@@ -714,6 +784,7 @@ async function main() {
     openDrafts,
     videoQueueMaintenance,
     reviewBacklogReplenishment,
+    reviewMessageRefresh,
     previewFallback,
     videoQueueMaintenanceError,
     previewFallbackError,

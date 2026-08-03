@@ -19,6 +19,7 @@ import {
   getStringOption,
   parseArgs,
   printInfo,
+  printWarn,
   printUsage,
   projectRoot,
 } from '../../../scripts/lib/ruflo-wrapper-utils.mjs';
@@ -26,6 +27,65 @@ import {
 function isActionableReview(publication) {
   const workflowState = String(publication?.metadata?.workflow_state || '').trim().toLowerCase();
   return workflowState === 'preview_uploaded' || workflowState === 'delete_failed';
+}
+
+function sleep(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function parseIntegerOption(options, key, fallbackValue) {
+  const raw = getStringOption(options, key, String(fallbackValue));
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : fallbackValue;
+}
+
+function parseDiscordRetryAfterMs(result) {
+  if (result?.reason !== 'discord_api_429') {
+    return 0;
+  }
+  try {
+    const parsed = JSON.parse(String(result.error || '{}'));
+    const retryAfter = Number(parsed.retry_after);
+    if (!Number.isFinite(retryAfter) || retryAfter <= 0) {
+      return 0;
+    }
+    return Math.ceil(retryAfter * 1000);
+  } catch {
+    return 0;
+  }
+}
+
+async function editReviewMessageWithRetry({
+  runtimeConfig,
+  reviewThreadId,
+  reviewMessageId,
+  payload,
+  delayMs,
+  maxRetries,
+}) {
+  let retries = 0;
+  while (true) {
+    const result = await editDiscordChannelMessage(
+      runtimeConfig,
+      reviewThreadId,
+      reviewMessageId,
+      payload,
+    );
+    if (result.posted || result.reason !== 'discord_api_429' || retries >= maxRetries) {
+      return {
+        ...result,
+        retries,
+      };
+    }
+
+    retries += 1;
+    await sleep(Math.max(delayMs, parseDiscordRetryAfterMs(result)));
+  }
 }
 
 async function main() {
@@ -38,6 +98,8 @@ async function main() {
       '  --channel <id>       Channel id or account_key. Default: poke-quizz-youtube',
       '  --channels <path>    Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
       '  --pending-only       Refresh only preview_uploaded cards that still await approval.',
+      '  --delay-ms <n>       Wait this many milliseconds between Discord edits. Default: 1200.',
+      '  --max-retries <n>    Retry Discord 429 responses this many times. Default: 3.',
     ]);
     return;
   }
@@ -49,6 +111,8 @@ async function main() {
     'services/product-video-agent/publication-channels.example.json',
   );
   const pendingOnly = getBooleanOption(options, 'pending-only', false);
+  const delayMs = Math.max(0, parseIntegerOption(options, 'delay-ms', 1200));
+  const maxRetries = Math.max(0, parseIntegerOption(options, 'max-retries', 3));
   const runtimeConfig = loadRuntimeConfig();
   const profiles = await loadPublicationChannelProfiles(channelsPath, { projectRoot });
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
@@ -62,6 +126,10 @@ async function main() {
   });
 
   const refreshedTasks = [];
+  const failures = [];
+  let refreshedCount = 0;
+  let retriedEdits = 0;
+  let inspectedCount = 0;
   for (const publication of publications) {
     const reviewThreadId = String(publication?.metadata?.review_thread_id || '').trim();
     const reviewMessageId = String(publication?.metadata?.review_message_id || '').trim();
@@ -76,6 +144,8 @@ async function main() {
     if (!videoRow) {
       continue;
     }
+
+    inspectedCount += 1;
 
     const reviewTask = buildPokeQuizzPublicationReviewTask({
       publication,
@@ -95,8 +165,28 @@ async function main() {
       refreshedTasks.push(reviewTask);
     }
 
-    const result = await editDiscordChannelMessage(runtimeConfig, reviewThreadId, reviewMessageId, payload);
-    printInfo(`Refreshed ${publication.id} -> ${reviewMessageId} (${result.posted ? 'ok' : result.reason || 'skipped'}).`);
+    const result = await editReviewMessageWithRetry({
+      runtimeConfig,
+      reviewThreadId,
+      reviewMessageId,
+      payload,
+      delayMs,
+      maxRetries,
+    });
+    retriedEdits += result.retries || 0;
+    if (result.posted) {
+      refreshedCount += 1;
+      printInfo(`Refreshed ${publication.id} -> ${reviewMessageId} (ok${result.retries ? ` after ${result.retries} retry/retries` : ''}).`);
+    } else {
+      failures.push({
+        publicationId: publication.id,
+        messageId: reviewMessageId,
+        reason: result.reason || 'skipped',
+      });
+      printWarn(`Refresh failed for ${publication.id} -> ${reviewMessageId} (${result.reason || 'skipped'}).`);
+    }
+
+    await sleep(delayMs);
   }
 
   const existingTasks = loadPersistedPendingTasks(runtimeConfig)
@@ -106,6 +196,15 @@ async function main() {
     ...refreshedTasks,
   ]);
   printInfo(`Persisted ${refreshedTasks.length} pending Poke Quizz review task(s).`);
+  process.stdout.write(`${JSON.stringify({
+    channel: channelSelector,
+    inspected: inspectedCount,
+    refreshed: refreshedCount,
+    actionable: refreshedTasks.length,
+    retried: retriedEdits,
+    failed: failures.length,
+    failures,
+  }, null, 2)}\n`);
 }
 
 main().catch((error) => {

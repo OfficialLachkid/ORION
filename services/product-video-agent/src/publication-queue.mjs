@@ -1,6 +1,7 @@
 import { normalizeScheduleSlots } from './publication-channels.mjs';
 
-const DEFAULT_MINIMUM_SCHEDULE_LEAD_MINUTES = 20;
+export const DEFAULT_MINIMUM_SCHEDULE_LEAD_MINUTES = 20;
+export const DEFAULT_SCHEDULE_PUBLISH_GRACE_MINUTES = 30;
 
 function asDate(value) {
   const parsed = value instanceof Date ? value : new Date(value);
@@ -38,12 +39,31 @@ function isActivePublication(publication) {
     && publication.status !== 'published';
 }
 
-function hasFutureScheduledSlot(publication, asOf = new Date()) {
+function hasScheduledSlot(publication) {
+  const scheduledFor = String(publication?.scheduled_for || '').trim();
+  return Boolean(scheduledFor);
+}
+
+export function hasCommittedScheduledSlot(
+  publication,
+  asOf = new Date(),
+  graceMinutes = DEFAULT_SCHEDULE_PUBLISH_GRACE_MINUTES,
+) {
   const scheduledFor = String(publication?.scheduled_for || '').trim();
   if (!scheduledFor) {
     return false;
   }
-  return asDate(scheduledFor).getTime() > asDate(asOf).getTime();
+  const scheduledAtMs = asDate(scheduledFor).getTime();
+  const asOfMs = asDate(asOf).getTime();
+  if (scheduledAtMs >= asOfMs) {
+    return true;
+  }
+
+  const normalizedGraceMinutes = Number(graceMinutes);
+  const graceMs = Number.isFinite(normalizedGraceMinutes) && normalizedGraceMinutes > 0
+    ? normalizedGraceMinutes * 60_000
+    : 0;
+  return scheduledAtMs + graceMs > asOfMs;
 }
 
 function getTimeZoneParts(date, timeZone) {
@@ -119,7 +139,18 @@ export function listCommittedScheduledPublications(publications, channelProfile,
       matchesChannel(publication, channelProfile)
       && workflowState(publication) === 'scheduled'
       && isActivePublication(publication)
-      && hasFutureScheduledSlot(publication, asOf)
+      && hasCommittedScheduledSlot(publication, asOf)
+    )),
+  );
+}
+
+export function listTrackedScheduledPublications(publications, channelProfile) {
+  return sortScheduledByTime(
+    publications.filter((publication) => (
+      matchesChannel(publication, channelProfile)
+      && workflowState(publication) === 'scheduled'
+      && isActivePublication(publication)
+      && hasScheduledSlot(publication)
     )),
   );
 }
@@ -132,7 +163,7 @@ export function selectScheduleCandidates(publications, channelProfile, asOf = ne
       && isActivePublication(publication)
       && (
         workflowState(publication) !== 'scheduled'
-        || !hasFutureScheduledSlot(publication, asOf)
+        || !hasCommittedScheduledSlot(publication, asOf)
       )
     )),
   );

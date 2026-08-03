@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../lib/runtime-config.mjs';
 import {
   assignScheduleSlots,
+  DEFAULT_SCHEDULE_PUBLISH_GRACE_MINUTES,
+  hasCommittedScheduledSlot,
   listCommittedScheduledPublications,
+  listTrackedScheduledPublications,
   selectPreviewUploadCandidates,
   selectScheduleCandidates,
 } from '../src/publication-queue.mjs';
@@ -39,6 +42,21 @@ function withLimit(items, limit) {
     return items;
   }
   return items.slice(0, normalizedLimit);
+}
+
+function isWithinScheduledPublishGrace(
+  publication,
+  asOf = new Date().toISOString(),
+  graceMinutes = DEFAULT_SCHEDULE_PUBLISH_GRACE_MINUTES,
+) {
+  if (!hasCommittedScheduledSlot(publication, asOf, graceMinutes)) {
+    return false;
+  }
+  const scheduledFor = String(publication?.scheduled_for || '').trim();
+  if (!scheduledFor) {
+    return false;
+  }
+  return new Date(scheduledFor).getTime() <= new Date(asOf).getTime();
 }
 
 async function updatePublicationReviewMessage({
@@ -124,10 +142,9 @@ export async function reconcileScheduledPublications({
 }) {
   let refreshedPublications = [...publications];
   const results = [];
-  const scheduledPublications = listCommittedScheduledPublications(
+  const scheduledPublications = listTrackedScheduledPublications(
     refreshedPublications,
     channelProfile,
-    asOf,
   );
 
   for (const publication of scheduledPublications) {
@@ -237,6 +254,21 @@ export async function reconcileScheduledPublications({
         action: 'queue_reconcile',
         workflow_state: 'deleted',
         reason: 'youtube_video_missing',
+      });
+      continue;
+    }
+
+    if (
+      !liveStatus.publishAt
+      && String(liveStatus.privacyStatus || '').trim().toLowerCase() === 'private'
+      && isWithinScheduledPublishGrace(publication, asOf)
+    ) {
+      results.push({
+        publication_id: publication.id,
+        action: 'queue_reconcile',
+        workflow_state: publication.metadata?.workflow_state || 'scheduled',
+        scheduled_for: publication.scheduled_for || '',
+        reason: 'awaiting_youtube_publish_grace',
       });
       continue;
     }
