@@ -87,6 +87,14 @@ function formatScheduledForLabel(value, timeZone = 'UTC') {
 }
 
 function formatPreviewDeletionLabel(metadata = {}, timeZone = 'UTC') {
+  const withdrawnAt = String(
+    metadata?.withdrawn_preview_withdrawn_at
+    || '',
+  ).trim();
+  const withdrawnVisibility = String(
+    metadata?.withdrawn_preview_visibility
+    || '',
+  ).trim();
   const deletedAt = String(
     metadata?.deleted_preview_deleted_at
     || metadata?.rejected_preview_deleted_at
@@ -99,6 +107,12 @@ function formatPreviewDeletionLabel(metadata = {}, timeZone = 'UTC') {
   ).trim();
   if (deletedAt) {
     return `Deleted from YouTube on ${formatScheduledForLabel(deletedAt, timeZone)}`;
+  }
+  if (withdrawnAt) {
+    const visibilitySuffix = withdrawnVisibility
+      ? ` (${titleCase(withdrawnVisibility)})`
+      : '';
+    return `Withdrawn from public view on ${formatScheduledForLabel(withdrawnAt, timeZone)}${visibilitySuffix}`;
   }
   if (deleteError) {
     return `Delete failed: ${deleteError}`;
@@ -128,6 +142,13 @@ function buildCollapsedReviewContent(task) {
     return [
       `Deleted preview for ${subjectLabel}.`,
       review.previewDeletionLabel || 'Removed from YouTube.',
+      previewLabel,
+    ].filter(Boolean).join(' ');
+  }
+  if (workflowState === 'withdrawn') {
+    return [
+      `Withdrawn published video for ${subjectLabel}.`,
+      review.previewDeletionLabel || 'Hidden from public view on YouTube.',
       previewLabel,
     ].filter(Boolean).join(' ');
   }
@@ -163,6 +184,7 @@ export function buildPokeQuizzPublicationReviewTask({
     channelSelector,
     previewUrl: publication?.preview_url
       || publication?.metadata?.rejected_preview_url
+      || publication?.metadata?.withdrawn_preview_url
       || publication?.metadata?.deleted_preview_url
       || '',
     reviewThreadId: String(reviewThreadId || '').trim(),
@@ -352,7 +374,7 @@ export function buildPokeQuizzPublicationMessagePayload(task) {
   const workflowState = String(task?.poke_quizz_publication_review?.approvalState || '')
     .trim()
     .toLowerCase();
-  if (workflowState === 'deleted' || workflowState === 'revision_requested') {
+  if (workflowState === 'deleted' || workflowState === 'revision_requested' || workflowState === 'withdrawn') {
     return buildPokeQuizzCollapsedReviewPayload(task);
   }
   return buildPokeQuizzPublicationReviewPayload(task).payload;

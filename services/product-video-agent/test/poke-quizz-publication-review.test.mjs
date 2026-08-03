@@ -134,6 +134,39 @@ test('collapsed deleted review payload removes the embed and keeps the preview l
   assert.equal(buildPokeQuizzCollapsedReviewPayload(task).embeds.length, 0);
 });
 
+test('collapsed withdrawn review payload removes the embed and keeps the preview link', () => {
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication: {
+      ...publication,
+      metadata: {
+        ...publication.metadata,
+        workflow_state: 'withdrawn',
+        withdrawn_preview_withdrawn_at: '2026-08-02T11:45:00.000Z',
+        withdrawn_preview_visibility: 'private',
+        withdrawn_preview_url: publication.preview_url,
+      },
+      preview_url: '',
+    },
+    video,
+    channelProfile: {
+      ...channelProfile,
+      timezone: 'Europe/Amsterdam',
+    },
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-08-02T11:50:00.000Z',
+  });
+
+  const payload = buildPokeQuizzPublicationMessagePayload(task);
+  assert.deepEqual(payload.embeds, []);
+  assert.deepEqual(payload.components, []);
+  assert.match(payload.content, /Withdrawn published video for Water \/ Flying\./u);
+  assert.match(payload.content, /Withdrawn from public view on/u);
+  assert.match(payload.content, /Previous preview: https:\/\/youtube\.com\/shorts\/preview-123/u);
+});
+
 test('feedback regeneration task carries the operator notes forward', () => {
   const reviewTask = buildPokeQuizzPublicationReviewTask({
     publication,

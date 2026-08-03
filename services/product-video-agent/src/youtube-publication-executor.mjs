@@ -5,6 +5,7 @@ import { extractYoutubeOAuthClientCredentials, refreshYoutubeAccessToken } from 
 
 const YOUTUBE_UPLOAD_ENDPOINT = 'https://www.googleapis.com/upload/youtube/v3/videos';
 const YOUTUBE_VIDEOS_ENDPOINT = 'https://www.googleapis.com/youtube/v3/videos';
+const YOUTUBE_VIDEO_STATUS_BATCH_SIZE = 25;
 
 async function readJsonResponse(response) {
   const bodyText = await response.text();
@@ -21,6 +22,44 @@ async function readJsonResponse(response) {
 
 function buildShortsUrl(videoId) {
   return `https://youtube.com/shorts/${videoId}`;
+}
+
+function normalizeYoutubeVideoStatus(videoId, item = null, payload = {}) {
+  if (!item?.id) {
+    return {
+      externalId: videoId,
+      found: false,
+      privacyStatus: '',
+      publishAt: null,
+      publishedAt: null,
+      title: '',
+      publicUrl: buildShortsUrl(videoId),
+      payload,
+    };
+  }
+
+  return {
+    externalId: videoId,
+    found: true,
+    privacyStatus: String(item.status?.privacyStatus || '').trim().toLowerCase(),
+    publishAt: item.status?.publishAt || null,
+    publishedAt: item.snippet?.publishedAt || null,
+    title: String(item.snippet?.title || '').trim(),
+    publicUrl: buildShortsUrl(videoId),
+    payload,
+  };
+}
+
+function chunkValues(values = [], size = YOUTUBE_VIDEO_STATUS_BATCH_SIZE) {
+  const normalizedSize = Number(size);
+  const chunkSize = Number.isFinite(normalizedSize) && normalizedSize > 0
+    ? Math.floor(normalizedSize)
+    : YOUTUBE_VIDEO_STATUS_BATCH_SIZE;
+  const chunks = [];
+  for (let index = 0; index < values.length; index += chunkSize) {
+    chunks.push(values.slice(index, index + chunkSize));
+  }
+  return chunks;
 }
 
 function resolveVideoMimeType(filePath) {
@@ -165,29 +204,52 @@ export async function fetchYoutubeVideoStatus({
   }
 
   const item = Array.isArray(payload?.items) ? payload.items[0] : null;
-  if (!item?.id) {
-    return {
-      externalId: videoId,
-      found: false,
-      privacyStatus: '',
-      publishAt: null,
-      publishedAt: null,
-      title: '',
-      publicUrl: buildShortsUrl(videoId),
-      payload,
-    };
+  return normalizeYoutubeVideoStatus(videoId, item, payload);
+}
+
+export async function fetchYoutubeVideoStatuses({
+  externalIds,
+  clientConfig,
+  refreshToken,
+  fetchImpl = globalThis.fetch,
+  batchSize = YOUTUBE_VIDEO_STATUS_BATCH_SIZE,
+}) {
+  const ids = [...new Set(
+    (Array.isArray(externalIds) ? externalIds : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  )];
+  if (ids.length === 0) {
+    return [];
   }
 
-  return {
-    externalId: videoId,
-    found: true,
-    privacyStatus: String(item.status?.privacyStatus || '').trim().toLowerCase(),
-    publishAt: item.status?.publishAt || null,
-    publishedAt: item.snippet?.publishedAt || null,
-    title: String(item.snippet?.title || '').trim(),
-    publicUrl: buildShortsUrl(videoId),
-    payload,
-  };
+  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, { fetch: fetchImpl });
+  const results = [];
+
+  for (const batchIds of chunkValues(ids, batchSize)) {
+    const url = new URL(YOUTUBE_VIDEOS_ENDPOINT);
+    url.searchParams.set('part', 'status,snippet');
+    url.searchParams.set('id', batchIds.join(','));
+    const response = await fetchImpl(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken.accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+    const { bodyText, payload } = await readJsonResponse(response);
+    if (!response.ok) {
+      throw new Error(`YouTube status lookup failed (${response.status}): ${bodyText || 'no body'}`);
+    }
+
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    const itemsById = new Map(items.map((item) => [String(item?.id || '').trim(), item]));
+    for (const videoId of batchIds) {
+      results.push(normalizeYoutubeVideoStatus(videoId, itemsById.get(videoId) || null, payload));
+    }
+  }
+
+  return results;
 }
 
 export async function deleteYoutubeVideo({

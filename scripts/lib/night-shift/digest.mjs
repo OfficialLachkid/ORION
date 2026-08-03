@@ -87,6 +87,7 @@ function buildVideoQueueMaintenanceLine(summary) {
   const parts = [];
   if (summary.scheduled > 0) parts.push(`**${summary.scheduled}** scheduled`);
   if (summary.published > 0) parts.push(`**${summary.published}** marked live`);
+  if (summary.withdrawn > 0) parts.push(`**${summary.withdrawn}** withdrawn`);
   if (summary.returnedToApproval > 0) parts.push(`**${summary.returnedToApproval}** returned to approval`);
   if (summary.deleted > 0) parts.push(`**${summary.deleted}** marked deleted`);
   if (summary.changedSchedule > 0) parts.push(`**${summary.changedSchedule}** schedule(s) corrected`);

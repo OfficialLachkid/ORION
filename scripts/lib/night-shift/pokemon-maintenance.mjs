@@ -32,6 +32,7 @@ function summarizeVideoQueueMaintenance(profiles, runs) {
     failedChannels: 0,
     scheduled: 0,
     published: 0,
+    withdrawn: 0,
     returnedToApproval: 0,
     deleted: 0,
     changedSchedule: 0,
@@ -57,6 +58,9 @@ function summarizeVideoQueueMaintenance(profiles, runs) {
       }
       if (workflowState === 'published') {
         summary.published += 1;
+      }
+      if (workflowState === 'withdrawn') {
+        summary.withdrawn += 1;
       }
       if (workflowState === 'deleted') {
         summary.deleted += 1;

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import {
   deleteYoutubeVideo,
   fetchYoutubeVideoStatus,
+  fetchYoutubeVideoStatuses,
   scheduleYoutubePublication,
   uploadYoutubePreviewVideo,
 } from '../src/youtube-publication-executor.mjs';
@@ -175,4 +176,57 @@ test('fetchYoutubeVideoStatus returns the live YouTube visibility state', async 
   assert.equal(status.publishedAt, '2026-08-01T22:23:40Z');
   assert.equal(status.title, 'Type Combination! Psychic | Water');
   assert.ok(calls.some((call) => call.url.includes('/youtube/v3/videos?part=status%2Csnippet&id=yt-123')));
+});
+
+test('fetchYoutubeVideoStatuses resolves found and missing ids in one batch', async () => {
+  const calls = [];
+  const statuses = await fetchYoutubeVideoStatuses({
+    externalIds: ['yt-123', 'yt-missing'],
+    clientConfig: {
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    },
+    refreshToken: 'refresh-token',
+    fetchImpl: async (url, options) => {
+      calls.push({ url: String(url), options });
+      if (String(url).includes('oauth2.googleapis.com/token')) {
+        return Response.json({ access_token: 'access-token', expires_in: 3600, token_type: 'Bearer' });
+      }
+      if (String(url).includes('/youtube/v3/videos?part=status%2Csnippet&id=yt-123%2Cyt-missing')) {
+        return Response.json({
+          items: [
+            {
+              id: 'yt-123',
+              status: {
+                privacyStatus: 'unlisted',
+              },
+              snippet: {
+                title: 'Type Combination! Fire | Water',
+                publishedAt: '2026-08-01T22:23:40Z',
+              },
+            },
+          ],
+        });
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    },
+  });
+
+  assert.deepEqual(statuses.map((status) => ({
+    externalId: status.externalId,
+    found: status.found,
+    privacyStatus: status.privacyStatus,
+  })), [
+    {
+      externalId: 'yt-123',
+      found: true,
+      privacyStatus: 'unlisted',
+    },
+    {
+      externalId: 'yt-missing',
+      found: false,
+      privacyStatus: '',
+    },
+  ]);
+  assert.ok(calls.some((call) => call.url.includes('/youtube/v3/videos?part=status%2Csnippet&id=yt-123%2Cyt-missing')));
 });

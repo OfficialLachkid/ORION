@@ -26,6 +26,7 @@ function workflowState(publication = {}) {
     return String(publication.metadata.workflow_state).trim().toLowerCase();
   }
   if (publication.status === 'published') return 'published';
+  if (publication.status === 'withdrawn') return 'withdrawn';
   if (publication.status === 'deleted') return 'deleted';
   if (publication.status === 'failed') return 'failed';
   if (publication.status === 'blocked') return 'blocked';

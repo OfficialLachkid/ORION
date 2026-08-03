@@ -5,7 +5,10 @@ import { normalizePublicationChannelProfile } from '../src/publication-channels.
 
 const originalArgv1 = process.argv[1];
 process.argv[1] = '';
-const { reconcileScheduledPublications } = await import('../scripts/execute-youtube-publication.mjs');
+const {
+  reconcilePublishedPublications,
+  reconcileScheduledPublications,
+} = await import('../scripts/execute-youtube-publication.mjs');
 process.argv[1] = originalArgv1;
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -254,6 +257,120 @@ test('scheduled queue reconciliation marks overdue public videos as published', 
       action: 'queue_reconcile',
       workflow_state: 'published',
       reason: 'already_public',
+    },
+  ]);
+});
+
+test('published queue reconciliation marks manually hidden videos as withdrawn', async () => {
+  const publication = {
+    id: 'pub-withdrawn',
+    video_id: 'video-5',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    visibility: 'public',
+    external_id: 'yt-withdrawn',
+    preview_url: 'https://youtube.com/shorts/yt-withdrawn',
+    public_url: 'https://youtube.com/shorts/yt-withdrawn',
+    published_at: '2026-08-02T12:00:00.000Z',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['ground', 'bug'],
+    },
+  };
+  const store = createStore(publication);
+
+  const reconciled = await reconcilePublishedPublications({
+    publications: [publication],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    clientConfig: {},
+    refreshToken: 'refresh-token',
+    asOf: '2026-08-03T10:00:00.000Z',
+    fetchYoutubeStatuses: async () => ([
+      {
+        externalId: 'yt-withdrawn',
+        found: true,
+        privacyStatus: 'private',
+        publishAt: null,
+        publishedAt: '2026-08-02T12:00:00.000Z',
+        title: 'Ground/Bug Type Quiz - Can You Guess?',
+        publicUrl: 'https://youtube.com/shorts/yt-withdrawn',
+      },
+    ]),
+  });
+
+  assert.equal(store.updateCalls.length, 1);
+  assert.equal(store.current().status, 'withdrawn');
+  assert.equal(store.current().visibility, 'private');
+  assert.equal(store.current().metadata.workflow_state, 'withdrawn');
+  assert.equal(store.current().metadata.withdrawn_preview_visibility, 'private');
+  assert.equal(store.current().metadata.published_state_reconciled_reason, 'youtube_visibility_private');
+  assert.deepEqual(reconciled.results, [
+    {
+      publication_id: 'pub-withdrawn',
+      action: 'published_reconcile',
+      workflow_state: 'withdrawn',
+      reason: 'youtube_visibility_private',
+    },
+  ]);
+});
+
+test('published queue reconciliation marks manually deleted videos as deleted', async () => {
+  const publication = {
+    id: 'pub-deleted',
+    video_id: 'video-6',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    visibility: 'public',
+    external_id: 'yt-deleted',
+    preview_url: 'https://youtube.com/shorts/yt-deleted',
+    public_url: 'https://youtube.com/shorts/yt-deleted',
+    published_at: '2026-08-02T12:00:00.000Z',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['ground', 'bug'],
+    },
+  };
+  const store = createStore(publication);
+
+  const reconciled = await reconcilePublishedPublications({
+    publications: [publication],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    clientConfig: {},
+    refreshToken: 'refresh-token',
+    asOf: '2026-08-03T10:05:00.000Z',
+    fetchYoutubeStatuses: async () => ([
+      {
+        externalId: 'yt-deleted',
+        found: false,
+        privacyStatus: '',
+        publishAt: null,
+        publishedAt: null,
+        title: '',
+        publicUrl: 'https://youtube.com/shorts/yt-deleted',
+      },
+    ]),
+  });
+
+  assert.equal(store.updateCalls.length, 1);
+  assert.equal(store.current().status, 'deleted');
+  assert.equal(store.current().external_id, null);
+  assert.equal(store.current().metadata.workflow_state, 'deleted');
+  assert.equal(store.current().metadata.deleted_preview_url, 'https://youtube.com/shorts/yt-deleted');
+  assert.equal(store.current().metadata.published_state_reconciled_reason, 'youtube_video_missing');
+  assert.deepEqual(reconciled.results, [
+    {
+      publication_id: 'pub-deleted',
+      action: 'published_reconcile',
+      workflow_state: 'deleted',
+      reason: 'youtube_video_missing',
     },
   ]);
 });

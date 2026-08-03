@@ -39,6 +39,7 @@ test('pokemon night shift digest combines maintenance, fallback, replenish, and 
       processedChannels: 1,
       scheduled: 2,
       published: 1,
+      withdrawn: 1,
       returnedToApproval: 0,
       deleted: 0,
       changedSchedule: 1,
@@ -65,7 +66,7 @@ test('pokemon night shift digest combines maintenance, fallback, replenish, and 
     },
   });
 
-  assert.match(digest, /Video queue maintenance: \*\*2\*\* scheduled, \*\*1\*\* marked live, \*\*1\*\* schedule\(s\) corrected\./u);
+  assert.match(digest, /Video queue maintenance: \*\*2\*\* scheduled, \*\*1\*\* marked live, \*\*1\*\* withdrawn, \*\*1\*\* schedule\(s\) corrected\./u);
   assert.match(digest, /Preview fallback storage: moved \*\*1\*\* back to SSD\./u);
   assert.match(digest, /Review backlog replenish: generated \*\*3\*\* preview\(s\)/u);
   assert.match(digest, /Review card refresh updated \*\*7\*\* card\(s\) after \*\*2\*\* rate-limit retry\/retries\./u);

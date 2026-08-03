@@ -20,6 +20,7 @@ function workflowState(publication = {}) {
     return String(publication.metadata.workflow_state).trim();
   }
   if (publication.status === 'published') return 'published';
+  if (publication.status === 'withdrawn') return 'withdrawn';
   if (publication.status === 'deleted') return 'deleted';
   if (publication.status === 'failed') return 'failed';
   if (publication.status === 'blocked') return 'blocked';
@@ -36,6 +37,7 @@ function isActivePublication(publication) {
   return publication.status !== 'deleted'
     && publication.status !== 'blocked'
     && publication.status !== 'failed'
+    && publication.status !== 'withdrawn'
     && publication.status !== 'published';
 }
 
@@ -151,6 +153,16 @@ export function listTrackedScheduledPublications(publications, channelProfile) {
       && workflowState(publication) === 'scheduled'
       && isActivePublication(publication)
       && hasScheduledSlot(publication)
+    )),
+  );
+}
+
+export function listTrackedPublishedPublications(publications, channelProfile) {
+  return sortByOldestFirst(
+    publications.filter((publication) => (
+      matchesChannel(publication, channelProfile)
+      && ['published', 'withdrawn'].includes(workflowState(publication))
+      && Boolean(String(publication?.external_id || '').trim())
     )),
   );
 }

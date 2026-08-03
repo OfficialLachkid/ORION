@@ -372,6 +372,8 @@ function publicationReviewColor(approvalState) {
       return EMBED_COLORS.queue;
     case 'published':
       return EMBED_COLORS.success;
+    case 'withdrawn':
+      return EMBED_COLORS.warning;
     case 'delete_failed':
     case 'deleted':
     case 'revision_requested':
@@ -393,6 +395,8 @@ function publicationReviewTitle(metadata = {}) {
       return taskTitle('Scheduled For Publish', taskId);
     case 'published':
       return taskTitle('Published', taskId);
+    case 'withdrawn':
+      return taskTitle('Withdrawn', taskId);
     case 'delete_failed':
       return taskTitle('Delete Failed', taskId);
     case 'deleted':
