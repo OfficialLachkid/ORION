@@ -5,6 +5,7 @@ import { projectRoot } from '../../lib/runtime-config.mjs';
 import { runLocalProcess } from '../../product-video-agent/src/process-runner.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../../product-video-agent/src/poke-quizz-asset-layout.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../product-video-agent/src/publication-channels.mjs';
+import { syncPokeQuizzQueueStatusMessage } from '../../product-video-agent/src/poke-quizz-queue-status.mjs';
 import { isManagedPokeQuizzPreviewPath as isManagedPokeQuizzPreviewStoragePath } from '../../product-video-agent/src/poke-quizz-preview-storage.mjs';
 import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
 import {
@@ -190,6 +191,35 @@ async function refreshPublicationReviewMessage({
   return editDiscordChannelMessage(config, reviewThreadId, reviewMessageId, payload);
 }
 
+async function syncPokeQuizzQueueStatus({
+  config,
+  store,
+  channelSelector = DEFAULT_CHANNEL_SELECTOR,
+  asOf = new Date().toISOString(),
+  channelProfile = null,
+  dependencies = {},
+}) {
+  const syncQueueStatusMessage = dependencies.syncQueueStatusMessage || syncPokeQuizzQueueStatusMessage;
+  let effectiveChannelProfile = channelProfile || dependencies.queueStatusChannelProfile || null;
+  if (!effectiveChannelProfile) {
+    const profilesLoader = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
+    const channelFinder = dependencies.findPublicationChannelProfile || findPublicationChannelProfile;
+    const profiles = await profilesLoader(
+      'services/product-video-agent/publication-channels.example.json',
+      { projectRoot },
+    );
+    effectiveChannelProfile = channelFinder(profiles, channelSelector);
+  }
+
+  return syncQueueStatusMessage({
+    runtimeConfig: config,
+    store,
+    channelProfile: effectiveChannelProfile,
+    channelSelector,
+    asOf,
+  });
+}
+
 async function executePublishPreviewTask(task, config, dependencies = {}) {
   const review = assertPublicationReviewTask(task);
   const store = dependencies.publicationStore || createPublicationStore(config);
@@ -254,6 +284,13 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
       },
     }) || refreshedPublication;
   }
+  await syncPokeQuizzQueueStatus({
+    config,
+    store,
+    channelSelector,
+    asOf: approvedAt,
+    dependencies,
+  });
 
   const refreshedWorkflowState = refreshedPublication?.metadata?.workflow_state || 'preview_approved';
   const scheduledFor = refreshedPublication?.scheduled_for || '';
@@ -333,7 +370,7 @@ async function buildRevisionPlan({
   };
 }
 
-async function updatePriorPublicationForRevision(feedback, config) {
+async function updatePriorPublicationForRevision(feedback, config, dependencies = {}) {
   if (!feedback.publicationId) {
     return;
   }
@@ -366,11 +403,11 @@ async function updatePriorPublicationForRevision(feedback, config) {
       && publication.external_id
       && refreshToken
     ) {
-      const clientConfig = await loadYoutubeClientCredentials(
+      const clientConfig = await (dependencies.loadYoutubeClientCredentials || loadYoutubeClientCredentials)(
         channelProfile.youtube.oauth_client_secret_path,
         projectRoot,
       );
-      const deleted = await deleteYoutubeVideo({
+      const deleted = await (dependencies.deleteYoutubeVideo || deleteYoutubeVideo)({
         externalId: publication.external_id,
         clientConfig,
         refreshToken,
@@ -416,9 +453,16 @@ async function updatePriorPublicationForRevision(feedback, config) {
     videoRow,
     channelSelector: feedback.channelSelector || DEFAULT_CHANNEL_SELECTOR,
   });
+  await syncPokeQuizzQueueStatus({
+    config,
+    store,
+    channelSelector: feedback.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+    asOf: new Date().toISOString(),
+    dependencies,
+  });
 }
 
-async function executeFeedbackRegenerationTask(task, config) {
+async function executeFeedbackRegenerationTask(task, config, dependencies = {}) {
   const feedback = assertFeedbackTask(task);
   const submittedAt = task.submitted_at || new Date().toISOString();
   const revisionSeed = deriveFeedbackRevisionSeed(
@@ -435,9 +479,10 @@ async function executeFeedbackRegenerationTask(task, config) {
   const typePairSlug = slugify((feedback.typePair || []).join('-')) || 'pokemon-type-challenge';
   const outputPath = `${POKE_QUIZZ_ASSET_LAYOUT.previews}/${typePairSlug}-${slugify(revisionSeed)}.mp4`;
 
-  await updatePriorPublicationForRevision(feedback, config);
+  await updatePriorPublicationForRevision(feedback, config, dependencies);
 
-  const reviewResult = await runLocalProcess({
+  const processRunner = dependencies.runProcess || runLocalProcess;
+  const reviewResult = await processRunner({
     executable: process.execPath,
     args: [
       resolve(projectRoot, 'services/product-video-agent/scripts/generate-poke-quizz-review.mjs'),
@@ -480,9 +525,9 @@ async function executeFeedbackRegenerationTask(task, config) {
   };
 }
 
-async function executeDeletePreviewTask(task, config) {
+async function executeDeletePreviewTask(task, config, dependencies = {}) {
   const deletion = assertDeleteTask(task);
-  const store = createPublicationStore(config);
+  const store = dependencies.publicationStore || createPublicationStore(config);
   const publication = await store.fetchPublicationById(deletion.publicationId);
   if (!publication) {
     throw new Error(`Publication ${deletion.publicationId} was not found.`);
@@ -511,11 +556,11 @@ async function executeDeletePreviewTask(task, config) {
     if (!refreshToken) {
       throw new Error('YouTube refresh token is unavailable for this channel.');
     }
-    const clientConfig = await loadYoutubeClientCredentials(
+    const clientConfig = await (dependencies.loadYoutubeClientCredentials || loadYoutubeClientCredentials)(
       channelProfile.youtube.oauth_client_secret_path,
       projectRoot,
     );
-    const deleted = await deleteYoutubeVideo({
+    const deleted = await (dependencies.deleteYoutubeVideo || deleteYoutubeVideo)({
       externalId: publication.external_id,
       clientConfig,
       refreshToken,
@@ -559,6 +604,13 @@ async function executeDeletePreviewTask(task, config) {
     publication: updatedPublication || publication,
     videoRow,
     channelSelector: deletion.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+  });
+  await syncPokeQuizzQueueStatus({
+    config,
+    store,
+    channelSelector: deletion.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+    asOf: new Date().toISOString(),
+    dependencies,
   });
 
   return {
@@ -609,11 +661,11 @@ export async function executeProductVideoAction(action, task, config, dependenci
   }
 
   if (action === 'poke_quizz_feedback_regenerate') {
-    return executeFeedbackRegenerationTask(task, config);
+    return executeFeedbackRegenerationTask(task, config, dependencies);
   }
 
   if (action === 'poke_quizz_delete_preview') {
-    return executeDeletePreviewTask(task, config);
+    return executeDeletePreviewTask(task, config, dependencies);
   }
 
   throw new Error(`Unsupported product-video action '${action}'.`);
