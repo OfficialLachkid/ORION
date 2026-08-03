@@ -11,6 +11,7 @@ import {
 } from './poke-quizz-asset-inventory.mjs';
 
 const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
+  fire: ['fire-backgrounds'],
   water: ['beach-backgrounds'],
 });
 
@@ -18,8 +19,21 @@ function isBeachBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
 }
 
+function isFireBackgroundPath(backgroundPath) {
+  return String(backgroundPath || '').toLowerCase().includes('/fire-backgrounds/');
+}
+
 function isArchivedBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/archived-backgrounds/');
+}
+
+const TYPE_THEMED_BACKGROUND_PRIORITY = Object.freeze([
+  'fire',
+  'water',
+]);
+
+function isThemedBackgroundPath(backgroundPath) {
+  return isBeachBackgroundPath(backgroundPath) || isFireBackgroundPath(backgroundPath);
 }
 
 function normalizeAssetPath(assetPath) {
@@ -145,16 +159,20 @@ function selectBackgroundCandidatesForTypePair(backgrounds, typePair = []) {
   }
 
   const normalizedTypes = typePair.map((typeName) => String(typeName || '').trim().toLowerCase());
-  const themedCandidates = normalizedTypes.flatMap((typeName) => {
+  const prioritizedThemedTypes = TYPE_THEMED_BACKGROUND_PRIORITY
+    .filter((typeName) => normalizedTypes.includes(typeName));
+
+  for (const typeName of prioritizedThemedTypes) {
     const folderHints = TYPE_THEMED_BACKGROUND_FOLDER_HINTS[typeName] || [];
-    return allBackgrounds.filter((backgroundPath) => (
+    const themedCandidates = allBackgrounds.filter((backgroundPath) => (
       folderHints.some((folderHint) => backgroundPath.toLowerCase().includes(`/${folderHint.toLowerCase()}/`))
     ));
-  });
+    if (themedCandidates.length > 0) {
+      return [...new Set(themedCandidates)];
+    }
+  }
 
-  return themedCandidates.length > 0
-    ? [...new Set(themedCandidates)]
-    : allBackgrounds.filter((backgroundPath) => !isBeachBackgroundPath(backgroundPath));
+  return allBackgrounds.filter((backgroundPath) => !isThemedBackgroundPath(backgroundPath));
 }
 
 function selectBackgroundForTypePair(backgrounds, typePair, random, selectionState) {

@@ -7,6 +7,10 @@ import {
 } from './poke-quizz-asset-layout.mjs';
 
 export const BACKGROUND_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.mp4', '.mov', '.webm']);
+const BACKGROUND_THEME_DIRECTORIES = Object.freeze([
+  'beach-backgrounds',
+  'fire-backgrounds',
+]);
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg']);
 const IMAGE_EXTENSIONS = new Set(['.png', '.gif', '.webp']);
 
@@ -56,11 +60,13 @@ async function listFilesRecursive(directoryPath, allowedExtensions) {
 
 async function listPokeQuizzBackgroundFiles() {
   const rootFiles = await listFiles(POKE_QUIZZ_ASSET_LAYOUT.backgrounds, BACKGROUND_EXTENSIONS);
-  const beachFiles = await listFiles(
-    `${POKE_QUIZZ_ASSET_LAYOUT.backgrounds}/beach-backgrounds`,
-    BACKGROUND_EXTENSIONS,
-  );
-  return [...new Set([...rootFiles, ...beachFiles])].sort((left, right) => left.localeCompare(right));
+  const themedBackgroundFiles = (await Promise.all(
+    BACKGROUND_THEME_DIRECTORIES.map((directoryName) => (
+      listFiles(`${POKE_QUIZZ_ASSET_LAYOUT.backgrounds}/${directoryName}`, BACKGROUND_EXTENSIONS)
+    )),
+  )).flat();
+  return [...new Set([...rootFiles, ...themedBackgroundFiles])]
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function normalizeTypeName(typeName) {

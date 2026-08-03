@@ -657,6 +657,75 @@ test('planner prefers beach backgrounds when a water type is in the selected pai
   assert.match(plan.assets.background.selected_path || '', /\/beach-backgrounds\//u);
 });
 
+test('planner restricts fire pairs to fire backgrounds when a fire type is present', async () => {
+  const fireRows = [
+    {
+      id: 'pokedex-0006',
+      national_dex_number: 6,
+      name: 'Charizard',
+      generation: 1,
+      region: 'kanto',
+      types: ['fire', 'flying'],
+      sprite_path: '/tmp/0006.png',
+      silhouette_path: '/tmp/0006-silhouette.png',
+      shiny_sprite_path: '/tmp/0006-shiny.png',
+      cry_path: '/tmp/0006.wav',
+      sprite_source_url: 'https://example.test/0006.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/fire.gif',
+          'https://www.serebii.net/pokedex-bw/type/flying.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows: fireRows,
+    seed: 'fire-background-lock',
+    forcedTypePair: ['fire', 'flying'],
+    assetInventory: {
+      scanned_at: '2026-08-01T00:00:00.000Z',
+      directories: {},
+      backgrounds: [
+        '/tmp/background-plain.png',
+        '/tmp/beach-backgrounds/beach-1.png',
+        '/tmp/fire-backgrounds/fire-1.png',
+        '/tmp/fire-backgrounds/fire-2.png',
+      ],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav', '/tmp/pokeball_wiggle.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+        pokeball_wiggle: '/tmp/pokeball_wiggle.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/fire.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.match(plan.assets.background.selected_path || '', /\/fire-backgrounds\//u);
+});
+
 test('planner excludes beach backgrounds for non-water type pairs', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
@@ -669,6 +738,7 @@ test('planner excludes beach backgrounds for non-water type pairs', async () => 
       backgrounds: [
         '/tmp/background-plain.png',
         '/tmp/beach-backgrounds/beach-1.png',
+        '/tmp/fire-backgrounds/fire-1.png',
       ],
       music: ['/tmp/battle-intro-1.mp3'],
       sound_effects: {
