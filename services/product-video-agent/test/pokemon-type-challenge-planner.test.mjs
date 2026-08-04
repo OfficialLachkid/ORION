@@ -841,6 +841,152 @@ test('planner prefers cave backgrounds for ground type pairs', async () => {
   assert.match(plan.assets.background.selected_path || '', /\/cave-backgrounds\//u);
 });
 
+test('planner prefers fire backgrounds for fire and ground pairs', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template: {
+      ...template,
+      selection_rules: {
+        ...template.selection_rules,
+        generation_scope: [],
+      },
+    },
+    pokedexRows: [
+      ...pokedexRows,
+      {
+        id: 'pokedex-fire-ground-test',
+        national_dex_number: 322,
+        name: 'Numel',
+        generation: 3,
+        region: 'hoenn',
+        types: ['fire', 'ground'],
+        sprite_path: '/tmp/0322.png',
+        silhouette_path: '/tmp/0322-silhouette.png',
+        shiny_sprite_path: '/tmp/0322-shiny.png',
+        cry_path: '/tmp/0322.wav',
+        sprite_source_url: 'https://example.test/0322.png',
+        shiny_sprite_source_url: null,
+        silhouette_source_url: null,
+        cry_source_url: null,
+        metadata: {
+          type_icon_source_urls: [
+            'https://www.serebii.net/pokedex-bw/type/fire.gif',
+            'https://www.serebii.net/pokedex-bw/type/ground.gif',
+          ],
+        },
+      },
+    ],
+    seed: 'fire-ground-background-priority',
+    forcedTypePair: ['fire', 'ground'],
+    assetInventory: {
+      scanned_at: '2026-08-04T00:00:00.000Z',
+      directories: {},
+      backgrounds: [
+        '/tmp/background-plain.png',
+        '/tmp/beach-backgrounds/beach-1.png',
+        '/tmp/cave-backgrounds/cave-1.png',
+        '/tmp/fire-backgrounds/fire-1.png',
+      ],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/fire.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/ground.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.match(plan.assets.background.selected_path || '', /\/fire-backgrounds\//u);
+});
+
+test('planner prefers fire backgrounds for fire and rock pairs', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template: {
+      ...template,
+      selection_rules: {
+        ...template.selection_rules,
+        generation_scope: [],
+      },
+    },
+    pokedexRows: [
+      ...pokedexRows,
+      {
+        id: 'pokedex-fire-rock-test',
+        national_dex_number: 219,
+        name: 'Magcargo',
+        generation: 2,
+        region: 'johto',
+        types: ['fire', 'rock'],
+        sprite_path: '/tmp/0219.png',
+        silhouette_path: '/tmp/0219-silhouette.png',
+        shiny_sprite_path: '/tmp/0219-shiny.png',
+        cry_path: '/tmp/0219.wav',
+        sprite_source_url: 'https://example.test/0219.png',
+        shiny_sprite_source_url: null,
+        silhouette_source_url: null,
+        cry_source_url: null,
+        metadata: {
+          type_icon_source_urls: [
+            'https://www.serebii.net/pokedex-bw/type/fire.gif',
+            'https://www.serebii.net/pokedex-bw/type/rock.gif',
+          ],
+        },
+      },
+    ],
+    seed: 'fire-rock-background-priority',
+    forcedTypePair: ['fire', 'rock'],
+    assetInventory: {
+      scanned_at: '2026-08-04T00:00:00.000Z',
+      directories: {},
+      backgrounds: [
+        '/tmp/background-plain.png',
+        '/tmp/beach-backgrounds/beach-1.png',
+        '/tmp/cave-backgrounds/cave-1.png',
+        '/tmp/fire-backgrounds/fire-1.png',
+      ],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/fire.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/rock.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.match(plan.assets.background.selected_path || '', /\/fire-backgrounds\//u);
+});
+
 test('planner excludes cave backgrounds for non-ground non-rock type pairs', async () => {
   const plan = await planPokemonTypeChallenge({
     template,

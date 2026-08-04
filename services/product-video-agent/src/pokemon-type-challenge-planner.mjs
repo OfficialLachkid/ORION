@@ -46,6 +46,21 @@ function isThemedBackgroundPath(backgroundPath) {
     || isFireBackgroundPath(backgroundPath);
 }
 
+function resolveThemedBackgroundPriority(normalizedTypes = []) {
+  const selectedTypes = new Set(normalizedTypes);
+  const prioritizedTypes = TYPE_THEMED_BACKGROUND_PRIORITY
+    .filter((typeName) => selectedTypes.has(typeName));
+
+  if (selectedTypes.has('fire') && (selectedTypes.has('ground') || selectedTypes.has('rock'))) {
+    return [
+      'fire',
+      ...prioritizedTypes.filter((typeName) => typeName !== 'fire'),
+    ];
+  }
+
+  return prioritizedTypes;
+}
+
 function normalizeAssetPath(assetPath) {
   return String(assetPath || '').trim().replaceAll('\\', '/').toLowerCase();
 }
@@ -169,8 +184,7 @@ function selectBackgroundCandidatesForTypePair(backgrounds, typePair = []) {
   }
 
   const normalizedTypes = typePair.map((typeName) => String(typeName || '').trim().toLowerCase());
-  const prioritizedThemedTypes = TYPE_THEMED_BACKGROUND_PRIORITY
-    .filter((typeName) => normalizedTypes.includes(typeName));
+  const prioritizedThemedTypes = resolveThemedBackgroundPriority(normalizedTypes);
 
   for (const typeName of prioritizedThemedTypes) {
     const folderHints = TYPE_THEMED_BACKGROUND_FOLDER_HINTS[typeName] || [];
