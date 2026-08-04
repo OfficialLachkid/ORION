@@ -120,6 +120,34 @@ function formatPreviewDeletionLabel(metadata = {}, timeZone = 'UTC') {
   return '';
 }
 
+function formatStatusToken(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/_/gu, ' ');
+}
+
+function formatRelatedVideoStatusLabel(relatedVideo = {}) {
+  const applyStatus = formatStatusToken(relatedVideo.apply_status);
+  if (applyStatus && applyStatus !== 'pending') {
+    return applyStatus;
+  }
+  const capabilityStatus = formatStatusToken(relatedVideo.capability_status);
+  const selectionStatus = formatStatusToken(relatedVideo.selection_status);
+  if (selectionStatus && capabilityStatus && capabilityStatus !== 'pending') {
+    return `${selectionStatus} / ${capabilityStatus}`;
+  }
+  return selectionStatus || capabilityStatus || '';
+}
+
+function formatRelatedVideoLabel(relatedVideo = {}) {
+  const title = String(relatedVideo?.target_title || '').trim();
+  if (title) {
+    return title;
+  }
+  return String(relatedVideo?.target_url || '').trim();
+}
+
 function normalizeReviewPaths(review = {}) {
   return {
     planPath: String(review.planPath || '').trim(),
@@ -205,6 +233,10 @@ export function buildPokeQuizzPublicationReviewTask({
     approvalState: String(publication?.metadata?.workflow_state || '').trim(),
     scheduledForLabel: formatScheduledForLabel(publication?.scheduled_for, channelProfile?.timezone || 'UTC'),
     previewDeletionLabel: formatPreviewDeletionLabel(publication?.metadata || {}, channelProfile?.timezone || 'UTC'),
+    relatedVideoLabel: formatRelatedVideoLabel(publication?.metadata?.related_video || {}),
+    relatedVideoUrl: String(publication?.metadata?.related_video?.target_url || '').trim(),
+    relatedVideoStatusLabel: formatRelatedVideoStatusLabel(publication?.metadata?.related_video || {}),
+    relatedVideoReason: String(publication?.metadata?.related_video?.match_reason || '').trim(),
   };
 
   return {
@@ -336,6 +368,10 @@ export function buildPokeQuizzPublicationReviewEvent(task) {
       approvalState: review.approvalState || '',
       scheduledForLabel: review.scheduledForLabel || '',
       previewDeletionLabel: review.previewDeletionLabel || '',
+      relatedVideoLabel: review.relatedVideoLabel || '',
+      relatedVideoUrl: review.relatedVideoUrl || '',
+      relatedVideoStatusLabel: review.relatedVideoStatusLabel || '',
+      relatedVideoReason: review.relatedVideoReason || '',
       approveLabel: 'Publish',
       rejectLabel: 'Give Feedback',
       deleteLabel: 'Delete',

@@ -509,6 +509,15 @@ function buildApprovalRequestPayload(outboundEvent) {
     createField('Busy Time', metadata.generationDurationLabel || '', true),
     createField('Scheduled For', metadata.scheduledForLabel || '', true),
     createField('Preview Deletion', metadata.previewDeletionLabel || '', false),
+    createField(
+      'Related Video',
+      metadata.relatedVideoLabel
+        ? formatMarkdownLink(metadata.relatedVideoLabel, metadata.relatedVideoUrl || '')
+        : '',
+      false,
+    ),
+    createField('Related State', metadata.relatedVideoStatusLabel || '', true),
+    createField('Related Reason', metadata.relatedVideoReason || '', false),
     createField('Title', metadata.publicationTitle || '', false),
     createField('Description', metadata.publicationDescription || '', false),
     createField('Render', metadata.renderPath ? `\`${compactPath(metadata.renderPath)}\`` : '', false),

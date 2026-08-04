@@ -20,6 +20,8 @@ import {
 } from '../../src/poke-quizz-publication-review.mjs';
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
+import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs';
+import { applyYoutubeRelatedVideoSelection } from '../../src/related-video/youtube-studio-automation.mjs';
 import {
   fetchYoutubeVideoStatus,
   fetchYoutubeVideoStatuses,
@@ -148,6 +150,53 @@ async function persistPublicationState({
     channelSelector,
   });
   return updatedPublication;
+}
+
+async function refreshPlannedRelatedVideo({
+  store,
+  publication,
+  videoRow,
+  channelProfile,
+  asOf,
+}) {
+  const publications = await store.fetchPublicationsByChannel({
+    platform: channelProfile.platform,
+    accountKey: channelProfile.account_key,
+  });
+  const { relatedVideo } = planRelatedVideoSelection({
+    publications,
+    targetPublication: publication,
+    targetVideo: videoRow,
+    channelProfile,
+    asOf,
+  });
+  const updatedPublication = await store.updatePublication(publication.id, {
+    metadata: {
+      ...(publication.metadata || {}),
+      related_video: relatedVideo,
+    },
+  });
+  return updatedPublication || {
+    ...publication,
+    metadata: {
+      ...(publication.metadata || {}),
+      related_video: relatedVideo,
+    },
+  };
+}
+
+function buildRelatedVideoRuntimePatch(publication, applyResult, asOf) {
+  const existingRelatedVideo = publication?.metadata?.related_video || {};
+  return {
+    ...existingRelatedVideo,
+    capability_status: String(applyResult?.capability?.status || existingRelatedVideo.capability_status || 'pending').trim(),
+    capability_checked_at: String(applyResult?.lastAttemptedAt || asOf || '').trim(),
+    apply_status: String(applyResult?.applyStatus || existingRelatedVideo.apply_status || 'pending').trim(),
+    applied_at: String(applyResult?.appliedAt || '').trim(),
+    last_attempted_at: String(applyResult?.lastAttemptedAt || asOf || '').trim(),
+    last_error: String(applyResult?.lastError || '').trim(),
+    studio_edit_url: String(applyResult?.studioEditUrl || existingRelatedVideo.studio_edit_url || '').trim(),
+  };
 }
 
 export async function reconcilePublishedPublications({
@@ -777,7 +826,7 @@ async function main() {
       clientConfig,
       refreshToken,
     });
-    const updatedPublication = await store.updatePublication(publication.id, {
+    let updatedPublication = await store.updatePublication(publication.id, {
       status: 'scheduled',
       visibility: 'private',
       scheduled_for: scheduled.scheduledFor,
@@ -786,17 +835,46 @@ async function main() {
         workflow_state: 'scheduled',
       },
     });
+    updatedPublication = updatedPublication || {
+      ...publication,
+      status: 'scheduled',
+      visibility: 'private',
+      scheduled_for: scheduled.scheduledFor,
+      metadata: {
+        ...(publication.metadata || {}),
+        workflow_state: 'scheduled',
+      },
+    };
+    updatedPublication = await refreshPlannedRelatedVideo({
+      store,
+      publication: updatedPublication,
+      videoRow,
+      channelProfile,
+      asOf,
+    });
+    const relatedVideoResult = await applyYoutubeRelatedVideoSelection({
+      channelProfile,
+      publication: updatedPublication,
+      relatedVideo: updatedPublication?.metadata?.related_video || {},
+      cwd: projectRoot,
+      env: process.env,
+      asOf,
+    });
+    updatedPublication = await store.updatePublication(publication.id, {
+      metadata: {
+        ...(updatedPublication?.metadata || publication.metadata || {}),
+        related_video: buildRelatedVideoRuntimePatch(updatedPublication, relatedVideoResult, asOf),
+      },
+    }) || {
+      ...updatedPublication,
+      metadata: {
+        ...(updatedPublication?.metadata || publication.metadata || {}),
+        related_video: buildRelatedVideoRuntimePatch(updatedPublication, relatedVideoResult, asOf),
+      },
+    };
     await updatePublicationReviewMessage({
       runtimeConfig,
-      publication: updatedPublication || {
-        ...publication,
-        status: 'scheduled',
-        scheduled_for: scheduled.scheduledFor,
-        metadata: {
-          ...(publication.metadata || {}),
-          workflow_state: 'scheduled',
-        },
-      },
+      publication: updatedPublication,
       videoRow,
       channelProfile,
       channelSelector,
@@ -807,6 +885,10 @@ async function main() {
       external_id: publication.external_id,
       scheduled_for: scheduled.scheduledFor,
       workflow_state: updatedPublication?.metadata?.workflow_state || 'scheduled',
+      related_video_selection_status: updatedPublication?.metadata?.related_video?.selection_status || '',
+      related_video_target_publication_id: updatedPublication?.metadata?.related_video?.target_publication_id || '',
+      related_video_capability_status: updatedPublication?.metadata?.related_video?.capability_status || '',
+      related_video_apply_status: updatedPublication?.metadata?.related_video?.apply_status || '',
     });
     printInfo(`Scheduled publication ${publication.id} for ${scheduled.scheduledFor}`);
   }

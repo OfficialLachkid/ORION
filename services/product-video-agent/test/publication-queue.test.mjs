@@ -106,6 +106,23 @@ const publishedSameType = {
   created_at: '2026-07-29T12:00:00.000Z',
 };
 
+const publishedDifferentType = {
+  id: 'pub-old-bug-ground',
+  platform: 'youtube_shorts',
+  account_key: 'poke-quizz-youtube',
+  status: 'published',
+  title: 'Previous Bug / Ground',
+  description: 'Published already.',
+  hashtags: ['#pokemon', '#shorts'],
+  public_url: 'https://youtube.com/shorts/example-bug-ground',
+  metadata: {
+    workflow_state: 'published',
+    type_pair: ['bug', 'ground'],
+  },
+  published_at: '2026-07-29T18:00:00.000Z',
+  created_at: '2026-07-29T13:00:00.000Z',
+};
+
 test('publication queue separates preview uploads from scheduled publish candidates', () => {
   const queuePlan = buildPublicationQueuePlan({
     publications: [previewPending, previewApproved],
@@ -219,12 +236,12 @@ test('queue planning skips slots that are too close for a new YouTube schedule u
   ]);
 });
 
-test('related publication selection prefers the latest same-type published short', () => {
+test('related publication selection skips exact same type-pair published shorts for Poke Quizz', () => {
   const related = selectRelatedPublicationCandidate(
-    [previewApproved, previewPending, publishedSameType],
+    [previewApproved, previewPending, publishedSameType, publishedDifferentType],
     previewApproved,
   );
-  assert.equal(related?.id, 'pub-old-dark-dragon');
+  assert.equal(related?.id, 'pub-old-bug-ground');
 });
 
 test('channel profiles upsert into the generic video_channels row shape', () => {

@@ -32,7 +32,14 @@
         "title_generation_model": "local_ollama",
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
-        "render_channel": "orion-renders"
+        "render_channel": "orion-renders",
+        "related_video": {
+          "enabled": true,
+          "provider": "youtube_studio",
+          "browser": "chrome",
+          "profile_dir": "~/.orion/playwright-profile",
+          "session_name": "yt-related-poke-quizz"
+        }
       }
     },
     {
