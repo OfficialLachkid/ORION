@@ -58,9 +58,33 @@ function buildTypeHashtags(types = []) {
     .map((type) => `#${type}type`);
 }
 
+const DEFAULT_TITLE_BUILDERS = Object.freeze([
+  (typePairLabel) => `${typePairLabel} Type Quiz - Can You Guess?`,
+  (typePairLabel) => `Can You Guess This ${typePairLabel} Pokemon?`,
+  (typePairLabel) => `${typePairLabel} Pokemon Quiz - Beat the Timer`,
+  (typePairLabel) => `Which Pokemon Fits ${typePairLabel}?`,
+  (typePairLabel) => `${typePairLabel} Challenge - Name These Pokemon`,
+]);
+
+function hashSeed(input) {
+  let hash = 2166136261;
+  for (const character of String(input || 'poke-quizz-title')) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 function buildDefaultTitle(plan) {
   const typePairLabel = buildTypePairLabel(plan?.selection?.type_pair || []);
-  return `${typePairLabel} Type Quiz - Can You Guess?`;
+  if (!typePairLabel) {
+    return 'Pokemon Type Quiz - Can You Guess?';
+  }
+  const seed = String(plan?.seed || '').trim();
+  const templateIndex = seed
+    ? hashSeed(`${seed}|${typePairLabel}`) % DEFAULT_TITLE_BUILDERS.length
+    : 0;
+  return DEFAULT_TITLE_BUILDERS[templateIndex](typePairLabel);
 }
 
 function buildDefaultDescription(plan) {

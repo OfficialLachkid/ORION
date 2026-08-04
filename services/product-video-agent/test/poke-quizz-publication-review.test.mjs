@@ -59,6 +59,61 @@ test('buildPokeQuizzPublicationReviewTask creates an approval-gated publish task
   assert.equal(task.poke_quizz_publication_review.generationDurationLabel, '3 min');
 });
 
+test('buildPokeQuizzPublicationReviewTask keeps the same task id when mutable review fields change', () => {
+  const firstTask = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    channelProfile,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-08-03T00:13:43.258Z',
+  });
+
+  const refreshedTask = buildPokeQuizzPublicationReviewTask({
+    publication: {
+      ...publication,
+      preview_url: 'https://youtube.com/shorts/preview-456',
+      metadata: {
+        ...publication.metadata,
+        review_message_id: '1533628903703314663',
+        render_path: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/water-flying-v2.mp4',
+      },
+    },
+    video,
+    channelProfile,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan-rehydrated.json',
+    renderPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/water-flying-v2.mp4',
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen2-serebii.json',
+    submittedAt: '2026-08-03T00:13:43.258Z',
+  });
+
+  assert.equal(refreshedTask.task_id, firstTask.task_id);
+});
+
+test('buildPokeQuizzPublicationReviewTask preserves a persisted review task id', () => {
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication: {
+      ...publication,
+      metadata: {
+        ...publication.metadata,
+        review_task_id: 'TASK-ORION-PQ-PUBLISH-20260803001343-FD8D7FA51847',
+      },
+    },
+    video,
+    channelProfile,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-08-04T08:00:00.000Z',
+  });
+
+  assert.equal(task.task_id, 'TASK-ORION-PQ-PUBLISH-20260803001343-FD8D7FA51847');
+});
+
 test('buildPokeQuizzPublicationReviewEvent adds preview-review metadata and labels', () => {
   const task = buildPokeQuizzPublicationReviewTask({
     publication,

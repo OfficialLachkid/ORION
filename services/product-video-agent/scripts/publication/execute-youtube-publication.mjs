@@ -154,6 +154,186 @@ async function persistPublicationState({
   return updatedPublication;
 }
 
+export async function reconcilePreviewPublications({
+  publications,
+  store,
+  runtimeConfig,
+  channelProfile,
+  channelSelector,
+  clientConfig,
+  refreshToken,
+  fetchYoutubeStatuses = fetchYoutubeVideoStatuses,
+  asOf = new Date().toISOString(),
+}) {
+  let refreshedPublications = [...publications];
+  const results = [];
+  const trackedPreviewPublications = refreshedPublications.filter((publication) => (
+    ['preview_uploaded', 'preview_approved'].includes(normalizeWorkflowState(publication))
+    && Boolean(String(publication?.external_id || '').trim())
+  ));
+  if (trackedPreviewPublications.length === 0) {
+    return {
+      publications: refreshedPublications,
+      results,
+    };
+  }
+
+  for (const batch of chunkItems(trackedPreviewPublications, 25)) {
+    const externalIds = batch
+      .map((publication) => String(publication?.external_id || '').trim())
+      .filter(Boolean);
+    if (externalIds.length === 0) {
+      continue;
+    }
+
+    let liveStatuses = [];
+    try {
+      liveStatuses = await fetchYoutubeStatuses({
+        externalIds,
+        clientConfig,
+        refreshToken,
+      });
+    } catch (error) {
+      for (const publication of batch) {
+        results.push({
+          publication_id: publication.id,
+          action: 'preview_reconcile',
+          workflow_state: normalizeWorkflowState(publication) || 'preview_uploaded',
+          reason: 'status_lookup_failed',
+          error: error.message || String(error),
+        });
+      }
+      continue;
+    }
+
+    const liveStatusesById = new Map(
+      liveStatuses.map((status) => [String(status?.externalId || '').trim(), status]),
+    );
+
+    for (const publication of batch) {
+      const workflowState = normalizeWorkflowState(publication) || 'preview_uploaded';
+      const liveStatus = liveStatusesById.get(String(publication?.external_id || '').trim()) || {
+        externalId: publication.external_id,
+        found: false,
+        privacyStatus: '',
+        publishAt: null,
+        publishedAt: null,
+        title: '',
+        publicUrl: publication.public_url || publication.preview_url || '',
+      };
+      const liveUrl = publication.public_url || publication.preview_url || liveStatus.publicUrl || '';
+
+      if (!liveStatus?.found) {
+        const updatedPublication = await persistPublicationState({
+          store,
+          runtimeConfig,
+          publication,
+          patch: {
+            status: 'deleted',
+            visibility: 'private',
+            scheduled_for: null,
+            public_url: null,
+            external_id: null,
+            metadata: {
+              ...(publication.metadata || {}),
+              workflow_state: 'deleted',
+              deleted_preview_url: liveUrl,
+              deleted_preview_external_id: publication.external_id || '',
+              deleted_preview_deleted_at: asOf,
+              preview_state_reconciled_at: asOf,
+              preview_state_reconciled_reason: 'youtube_video_missing',
+            },
+          },
+          channelProfile,
+          channelSelector,
+        });
+        refreshedPublications = replacePublication(refreshedPublications, updatedPublication);
+        results.push({
+          publication_id: publication.id,
+          action: 'preview_reconcile',
+          workflow_state: 'deleted',
+          reason: 'youtube_video_missing',
+        });
+        continue;
+      }
+
+      if (liveStatus.privacyStatus === 'public') {
+        const updatedPublication = await persistPublicationState({
+          store,
+          runtimeConfig,
+          publication,
+          patch: {
+            status: 'published',
+            visibility: 'public',
+            scheduled_for: null,
+            public_url: liveUrl,
+            published_at: publication.published_at || liveStatus.publishedAt || asOf,
+            metadata: {
+              ...(publication.metadata || {}),
+              workflow_state: 'published',
+              youtube_live_title: liveStatus.title || '',
+              youtube_live_published_at: liveStatus.publishedAt || '',
+              preview_state_reconciled_at: asOf,
+              preview_state_reconciled_reason: workflowState === 'preview_approved'
+                ? 'approved_preview_made_public'
+                : 'preview_made_public',
+            },
+          },
+          channelProfile,
+          channelSelector,
+        });
+        refreshedPublications = replacePublication(refreshedPublications, updatedPublication);
+        results.push({
+          publication_id: publication.id,
+          action: 'preview_reconcile',
+          workflow_state: 'published',
+          reason: workflowState === 'preview_approved'
+            ? 'approved_preview_made_public'
+            : 'preview_made_public',
+        });
+        continue;
+      }
+
+      if (liveStatus.publishAt) {
+        const liveScheduledFor = new Date(liveStatus.publishAt).toISOString();
+        const updatedPublication = await persistPublicationState({
+          store,
+          runtimeConfig,
+          publication,
+          patch: {
+            status: 'scheduled',
+            visibility: String(liveStatus.privacyStatus || publication.visibility || 'private').trim().toLowerCase() || 'private',
+            scheduled_for: liveScheduledFor,
+            public_url: liveUrl,
+            metadata: {
+              ...(publication.metadata || {}),
+              workflow_state: 'scheduled',
+              preview_state_reconciled_at: asOf,
+              preview_state_reconciled_reason: 'preview_scheduled_on_youtube',
+              youtube_live_privacy_status: liveStatus.privacyStatus || '',
+            },
+          },
+          channelProfile,
+          channelSelector,
+        });
+        refreshedPublications = replacePublication(refreshedPublications, updatedPublication);
+        results.push({
+          publication_id: publication.id,
+          action: 'preview_reconcile',
+          workflow_state: 'scheduled',
+          scheduled_for: liveScheduledFor,
+          reason: 'preview_scheduled_on_youtube',
+        });
+      }
+    }
+  }
+
+  return {
+    publications: refreshedPublications,
+    results,
+  };
+}
+
 export async function reconcilePublishedPublications({
   publications,
   store,
@@ -618,8 +798,18 @@ async function main() {
   let effectivePublications = scopedPublications;
   let preflightResults = [];
   if (!previewUploadMode) {
-    const publishedReconciled = await reconcilePublishedPublications({
+    const previewReconciled = await reconcilePreviewPublications({
       publications: scopedPublications,
+      store,
+      runtimeConfig,
+      channelProfile,
+      channelSelector,
+      clientConfig,
+      refreshToken,
+      asOf,
+    });
+    const publishedReconciled = await reconcilePublishedPublications({
+      publications: previewReconciled.publications,
       store,
       runtimeConfig,
       channelProfile,
@@ -639,7 +829,11 @@ async function main() {
       asOf,
     });
     effectivePublications = scheduledReconciled.publications;
-    preflightResults = [...publishedReconciled.results, ...scheduledReconciled.results];
+    preflightResults = [
+      ...previewReconciled.results,
+      ...publishedReconciled.results,
+      ...scheduledReconciled.results,
+    ];
   }
   const candidates = previewUploadMode
     ? selectPreviewUploadCandidates(effectivePublications, channelProfile)

@@ -40,6 +40,47 @@ function createTaskId(kind, payload, submittedAt) {
   ].join('-');
 }
 
+function buildStablePublicationReviewIdentity({
+  publication,
+  video,
+  channelSelector,
+  reviewThreadId,
+  typePair,
+  seed,
+}) {
+  return {
+    publicationId: publication?.id || '',
+    videoId: publication?.video_id || video?.id || '',
+    channelSelector: String(channelSelector || DEFAULT_CHANNEL_SELECTOR).trim(),
+    reviewThreadId: String(reviewThreadId || '').trim(),
+    typePair: normalizeTypePair(typePair || []),
+    seed: String(seed || '').trim(),
+  };
+}
+
+function createPublicationReviewTaskId({
+  publication,
+  video,
+  channelSelector,
+  reviewThreadId,
+  typePair,
+  seed,
+  submittedAt,
+}) {
+  const persistedTaskId = String(publication?.metadata?.review_task_id || '').trim();
+  if (persistedTaskId) {
+    return persistedTaskId;
+  }
+  return createTaskId('PUBLISH', buildStablePublicationReviewIdentity({
+    publication,
+    video,
+    channelSelector,
+    reviewThreadId,
+    typePair,
+    seed,
+  }), submittedAt);
+}
+
 function buildReviewSummary(publication = {}) {
   const typePairLabel = formatTypePairLabel(publication.metadata?.type_pair || []);
   if (typePairLabel) {
@@ -208,7 +249,15 @@ export function buildPokeQuizzPublicationReviewTask({
   };
 
   return {
-    task_id: createTaskId('PUBLISH', reviewPayload, submittedAt),
+    task_id: createPublicationReviewTaskId({
+      publication,
+      video,
+      channelSelector,
+      reviewThreadId,
+      typePair: reviewPayload.typePair,
+      seed: reviewPayload.seed,
+      submittedAt,
+    }),
     status: 'awaiting_approval',
     approval_required: true,
     approval_reason: 'poke_quizz_publish_preview: preview uploaded and awaiting explicit publish approval',

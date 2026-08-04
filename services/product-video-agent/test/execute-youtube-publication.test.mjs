@@ -6,6 +6,7 @@ import { normalizePublicationChannelProfile } from '../src/publication-channels.
 const originalArgv1 = process.argv[1];
 process.argv[1] = '';
 const {
+  reconcilePreviewPublications,
   reconcilePublishedPublications,
   reconcileScheduledPublications,
 } = await import('../scripts/execute-youtube-publication.mjs');
@@ -257,6 +258,114 @@ test('scheduled queue reconciliation marks overdue public videos as published', 
       action: 'queue_reconcile',
       workflow_state: 'published',
       reason: 'already_public',
+    },
+  ]);
+});
+
+test('preview reconciliation marks manually published previews as published', async () => {
+  const publication = {
+    id: 'pub-preview-live',
+    video_id: 'video-4a',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'approved',
+    visibility: 'unlisted',
+    external_id: 'yt-preview-live',
+    preview_url: 'https://youtube.com/shorts/yt-preview-live',
+    scheduled_for: null,
+    metadata: {
+      workflow_state: 'preview_uploaded',
+      type_pair: ['fairy', 'steel'],
+    },
+  };
+  const store = createStore(publication);
+
+  const reconciled = await reconcilePreviewPublications({
+    publications: [publication],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    clientConfig: {},
+    refreshToken: 'refresh-token',
+    asOf: '2026-08-04T10:00:00.000Z',
+    fetchYoutubeStatuses: async () => ([
+      {
+        externalId: 'yt-preview-live',
+        found: true,
+        privacyStatus: 'public',
+        publicUrl: 'https://youtube.com/shorts/yt-preview-live',
+        publishedAt: '2026-08-04T09:58:00.000Z',
+        title: 'Fairy/Steel Pokemon Quiz - Beat the Timer',
+      },
+    ]),
+  });
+
+  assert.equal(store.updateCalls.length, 1);
+  assert.equal(store.current().status, 'published');
+  assert.equal(store.current().visibility, 'public');
+  assert.equal(store.current().metadata.workflow_state, 'published');
+  assert.equal(store.current().metadata.preview_state_reconciled_reason, 'preview_made_public');
+  assert.deepEqual(reconciled.results, [
+    {
+      publication_id: 'pub-preview-live',
+      action: 'preview_reconcile',
+      workflow_state: 'published',
+      reason: 'preview_made_public',
+    },
+  ]);
+});
+
+test('preview reconciliation marks manually scheduled previews as scheduled', async () => {
+  const publication = {
+    id: 'pub-preview-scheduled',
+    video_id: 'video-4b',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'approved',
+    visibility: 'unlisted',
+    external_id: 'yt-preview-scheduled',
+    preview_url: 'https://youtube.com/shorts/yt-preview-scheduled',
+    scheduled_for: null,
+    metadata: {
+      workflow_state: 'preview_uploaded',
+      type_pair: ['rock', 'ground'],
+    },
+  };
+  const store = createStore(publication);
+
+  const reconciled = await reconcilePreviewPublications({
+    publications: [publication],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    clientConfig: {},
+    refreshToken: 'refresh-token',
+    asOf: '2026-08-04T10:05:00.000Z',
+    fetchYoutubeStatuses: async () => ([
+      {
+        externalId: 'yt-preview-scheduled',
+        found: true,
+        privacyStatus: 'private',
+        publishAt: '2026-08-05T10:00:00.000Z',
+        publicUrl: 'https://youtube.com/shorts/yt-preview-scheduled',
+      },
+    ]),
+  });
+
+  assert.equal(store.updateCalls.length, 1);
+  assert.equal(store.current().status, 'scheduled');
+  assert.equal(store.current().scheduled_for, '2026-08-05T10:00:00.000Z');
+  assert.equal(store.current().metadata.workflow_state, 'scheduled');
+  assert.equal(store.current().metadata.preview_state_reconciled_reason, 'preview_scheduled_on_youtube');
+  assert.deepEqual(reconciled.results, [
+    {
+      publication_id: 'pub-preview-scheduled',
+      action: 'preview_reconcile',
+      workflow_state: 'scheduled',
+      scheduled_for: '2026-08-05T10:00:00.000Z',
+      reason: 'preview_scheduled_on_youtube',
     },
   ]);
 });

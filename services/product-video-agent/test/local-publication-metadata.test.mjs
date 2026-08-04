@@ -44,6 +44,14 @@ const plan = {
   },
 };
 
+const expectedSeededTitles = new Set([
+  'Psychic/Water Type Quiz - Can You Guess?',
+  'Can You Guess This Psychic/Water Pokemon?',
+  'Psychic/Water Pokemon Quiz - Beat the Timer',
+  'Which Pokemon Fits Psychic/Water?',
+  'Psychic/Water Challenge - Name These Pokemon',
+]);
+
 test('fallback publication metadata keeps the quiz type pair intact', () => {
   const metadata = buildPokeQuizzFallbackPublicationMetadata(plan);
   assert.equal(metadata.title, 'Psychic/Water Type Quiz - Can You Guess?');
@@ -103,4 +111,19 @@ test('resolved publication metadata falls back deterministically when the local 
   assert.equal(metadata.title, 'Psychic/Water Type Quiz - Can You Guess?');
   assert.equal(metadata.generation_provider, 'template');
   assert.equal(metadata.model, 'fallback');
+});
+
+test('seeded fallback publication metadata varies the title deterministically', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...plan,
+    seed: 'psychic-water-random-20260804t080000z',
+  });
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...plan,
+    seed: 'psychic-water-random-20260804t120000z',
+  });
+
+  assert.ok(expectedSeededTitles.has(firstSeeded.title));
+  assert.ok(expectedSeededTitles.has(secondSeeded.title));
+  assert.notEqual(firstSeeded.title, secondSeeded.title);
 });

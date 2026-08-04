@@ -261,6 +261,135 @@ test('planner uses all localized generations when no generation scope is configu
   assert.equal(plan.selection.selected_subjects[0].generation, 3);
 });
 
+test('planner prefers legendary subjects before final-stage evolutions when trimming a pair roster', async () => {
+  const priorityTemplate = {
+    ...template,
+    selection_rules: {
+      ...template.selection_rules,
+      type_pair_policy: {
+        ...template.selection_rules.type_pair_policy,
+        selected_subjects_min: 2,
+        selected_subjects_max: 2,
+      },
+    },
+  };
+  const priorityRows = [
+    {
+      id: 'pokedex-0148',
+      national_dex_number: 148,
+      name: 'Dragonair',
+      generation: 1,
+      region: 'kanto',
+      types: ['dragon', 'flying'],
+      sprite_path: '/tmp/0148.png',
+      silhouette_path: '/tmp/0148-silhouette.png',
+      shiny_sprite_path: '/tmp/0148-shiny.png',
+      cry_path: '/tmp/0148.wav',
+      sprite_source_url: 'https://example.test/0148.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/dragon.gif',
+          'https://www.serebii.net/pokedex-bw/type/flying.gif',
+        ],
+      },
+    },
+    {
+      id: 'pokedex-0149',
+      national_dex_number: 149,
+      name: 'Dragonite',
+      generation: 1,
+      region: 'kanto',
+      types: ['dragon', 'flying'],
+      sprite_path: '/tmp/0149.png',
+      silhouette_path: '/tmp/0149-silhouette.png',
+      shiny_sprite_path: '/tmp/0149-shiny.png',
+      cry_path: '/tmp/0149.wav',
+      sprite_source_url: 'https://example.test/0149.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/dragon.gif',
+          'https://www.serebii.net/pokedex-bw/type/flying.gif',
+        ],
+      },
+    },
+    {
+      id: 'pokedex-0384',
+      national_dex_number: 384,
+      name: 'Rayquaza',
+      generation: 3,
+      region: 'hoenn',
+      types: ['dragon', 'flying'],
+      sprite_path: '/tmp/0384.png',
+      silhouette_path: '/tmp/0384-silhouette.png',
+      shiny_sprite_path: '/tmp/0384-shiny.png',
+      cry_path: '/tmp/0384.wav',
+      sprite_source_url: 'https://example.test/0384.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        legendary: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/dragon.gif',
+          'https://www.serebii.net/pokedex-bw/type/flying.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: {
+      ...priorityTemplate,
+      selection_rules: {
+        ...priorityTemplate.selection_rules,
+        generation_scope: [],
+      },
+    },
+    pokedexRows: priorityRows,
+    seed: 'priority-subject-trim',
+    forcedTypePair: ['dragon', 'flying'],
+    assetInventory: {
+      scanned_at: '2026-08-04T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/dragon.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.deepEqual(
+    plan.selection.selected_subjects.map((subject) => subject.name),
+    ['Dragonite', 'Rayquaza'],
+  );
+});
+
 test('planner rejects disallowed or absent type pairs', async () => {
   await assert.rejects(
     () => planPokemonTypeChallenge({
