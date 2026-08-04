@@ -5,6 +5,10 @@ import { projectRoot } from '../../lib/runtime-config.mjs';
 import { runLocalProcess } from '../../product-video-agent/src/process-runner.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../../product-video-agent/src/poke-quizz-asset-layout.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../product-video-agent/src/publication-channels.mjs';
+import {
+  ensurePreferredPokeQuizzCatalogJsonPath,
+  resolvePokeQuizzReviewTaskPaths,
+} from '../../product-video-agent/src/poke-quizz-review-paths.mjs';
 import { syncPokeQuizzQueueStatusMessage } from '../../product-video-agent/src/poke-quizz-queue-status.mjs';
 import { isManagedPokeQuizzPreviewPath as isManagedPokeQuizzPreviewStoragePath } from '../../product-video-agent/src/poke-quizz-preview-storage.mjs';
 import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
@@ -137,9 +141,6 @@ function assertFeedbackTask(task) {
   if (!feedback?.reviewThreadId) {
     throw new Error('Poke Quizz feedback task is missing the review thread id.');
   }
-  if (!feedback?.planPath) {
-    throw new Error('Poke Quizz feedback task is missing the original plan path.');
-  }
   return feedback;
 }
 
@@ -167,6 +168,7 @@ async function refreshPublicationReviewMessage({
   if (!reviewThreadId || !reviewMessageId || !videoRow) {
     return null;
   }
+  const reviewPaths = await resolvePokeQuizzReviewTaskPaths(publication);
 
   const profiles = await loadPublicationChannelProfiles(
     'services/product-video-agent/publication-channels.example.json',
@@ -178,9 +180,11 @@ async function refreshPublicationReviewMessage({
     video: videoRow,
     channelProfile,
     reviewThreadId,
-    planPath: '',
+    planPath: reviewPaths.planPath,
     renderPath: publication?.metadata?.render_path || videoRow?.render?.output_path || '',
-    catalogJsonPath: '',
+    catalogJsonPath: reviewPaths.catalogJsonPath,
+    templatePath: reviewPaths.templatePath,
+    configPath: reviewPaths.configPath,
     channelSelector,
     submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
   });
@@ -331,6 +335,7 @@ async function buildRevisionPlan({
   feedback,
   revisionSeed,
   reviewRuntimeRoot,
+  processRunner = runLocalProcess,
 }) {
   const typePair = Array.isArray(feedback.typePair) ? feedback.typePair : [];
   const planPath = feedback.catalogJsonPath
@@ -345,7 +350,7 @@ async function buildRevisionPlan({
   }
 
   await mkdir(reviewRuntimeRoot, { recursive: true });
-  await runLocalProcess({
+  await processRunner({
     executable: process.execPath,
     args: [
       resolve(projectRoot, 'services/product-video-agent/scripts/plan-pokemon-type-challenge.mjs'),
@@ -464,24 +469,39 @@ async function updatePriorPublicationForRevision(feedback, config, dependencies 
 
 async function executeFeedbackRegenerationTask(task, config, dependencies = {}) {
   const feedback = assertFeedbackTask(task);
+  const resolvePreferredCatalogJsonPath =
+    dependencies.ensurePreferredPokeQuizzCatalogJsonPath
+    || ensurePreferredPokeQuizzCatalogJsonPath;
+  const effectiveCatalogJsonPath = feedback.catalogJsonPath || await resolvePreferredCatalogJsonPath();
+  if (!feedback.planPath && !effectiveCatalogJsonPath) {
+    throw new Error('Poke Quizz feedback task is missing both the original plan path and a localized catalog path.');
+  }
+  const normalizedFeedback = {
+    ...feedback,
+    catalogJsonPath: effectiveCatalogJsonPath,
+  };
   const submittedAt = task.submitted_at || new Date().toISOString();
   const revisionSeed = deriveFeedbackRevisionSeed(
-    { poke_quizz_publication_review: feedback },
-    feedback.feedback || '',
+    { poke_quizz_publication_review: normalizedFeedback },
+    normalizedFeedback.feedback || '',
     submittedAt,
   );
   const reviewRuntimeRoot = resolve(projectRoot, 'data/runtime/product-video-agent/poke-quizz/reviews');
+  const processRunner = dependencies.runProcess || runLocalProcess;
   const { planPath } = await buildRevisionPlan({
-    feedback,
+    feedback: normalizedFeedback,
     revisionSeed,
     reviewRuntimeRoot,
+    processRunner,
   });
-  const typePairSlug = slugify((feedback.typePair || []).join('-')) || 'pokemon-type-challenge';
+  const typePairSlug = slugify((normalizedFeedback.typePair || []).join('-')) || 'pokemon-type-challenge';
   const outputPath = `${POKE_QUIZZ_ASSET_LAYOUT.previews}/${typePairSlug}-${slugify(revisionSeed)}.mp4`;
 
-  await updatePriorPublicationForRevision(feedback, config, dependencies);
+  const updatePriorPublication =
+    dependencies.updatePriorPublicationForRevision
+    || updatePriorPublicationForRevision;
+  await updatePriorPublication(normalizedFeedback, config, dependencies);
 
-  const processRunner = dependencies.runProcess || runLocalProcess;
   const reviewResult = await processRunner({
     executable: process.execPath,
     args: [
@@ -489,19 +509,19 @@ async function executeFeedbackRegenerationTask(task, config, dependencies = {}) 
       '--plan',
       planPath,
       '--thread-id',
-      feedback.reviewThreadId,
+      normalizedFeedback.reviewThreadId,
       '--output',
       outputPath,
       '--channel',
-      feedback.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+      normalizedFeedback.channelSelector || DEFAULT_CHANNEL_SELECTOR,
       '--template',
-      resolve(projectRoot, feedback.templatePath || DEFAULT_TEMPLATE_PATH),
+      resolve(projectRoot, normalizedFeedback.templatePath || DEFAULT_TEMPLATE_PATH),
       '--config',
-      resolve(projectRoot, feedback.configPath || DEFAULT_CONFIG_PATH),
+      resolve(projectRoot, normalizedFeedback.configPath || DEFAULT_CONFIG_PATH),
       '--as-of',
       submittedAt,
-      ...(feedback.catalogJsonPath
-        ? ['--catalog-json', resolve(projectRoot, feedback.catalogJsonPath)]
+      ...(normalizedFeedback.catalogJsonPath
+        ? ['--catalog-json', resolve(projectRoot, normalizedFeedback.catalogJsonPath)]
         : []),
     ],
     cwd: projectRoot,
@@ -514,13 +534,13 @@ async function executeFeedbackRegenerationTask(task, config, dependencies = {}) 
     report: {
       state: 'preview_regenerated',
       severity: 'success',
-      summary: `Generated a revised Poke Quizz preview for ${formatTypePairLabel(feedback.typePair || []) || 'the requested type pair'} and posted it back to the review thread.`,
+      summary: `Generated a revised Poke Quizz preview for ${formatTypePairLabel(normalizedFeedback.typePair || []) || 'the requested type pair'} and posted it back to the review thread.`,
       publicationId: reviewPayload.publication_id || '',
       previewUrl: reviewPayload.preview_url || '',
       reviewTaskId: reviewPayload.task_id || '',
       reviewMessageId: reviewPayload.message_id || '',
       renderPath: reviewPayload.render_path || outputPath,
-      feedback: feedback.feedback || '',
+      feedback: normalizedFeedback.feedback || '',
     },
   };
 }

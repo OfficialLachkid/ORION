@@ -202,3 +202,65 @@ test('delete action refreshes the Poke Quizz queue status message after removal'
   assert.equal(result.report.state, 'deleted');
   assert.equal(result.report.workflowState, 'deleted');
 });
+
+test('feedback regeneration falls back to the preferred localized catalog when the rehydrated task has no plan path', async () => {
+  const runCalls = [];
+  const normalizePath = (value) => String(value || '').replaceAll('\\', '/');
+
+  const result = await executeProductVideoAction(
+    'poke_quizz_feedback_regenerate',
+    {
+      task_id: 'TASK-ORION-PQ-REGENERATE-TEST',
+      submitted_at: '2026-08-04T13:54:40.000Z',
+      poke_quizz_feedback: {
+        publicationId: 'publication-rock-ground',
+        reviewThreadId: '1532709429902839810',
+        channelSelector: 'poke-quizz-youtube',
+        typePair: ['rock', 'ground'],
+        feedback: 'Use a different background.',
+        planPath: '',
+        catalogJsonPath: '',
+        templatePath: '',
+        configPath: '',
+      },
+    },
+    { env: {} },
+    {
+      ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+      runProcess: async (options) => {
+        runCalls.push(options);
+        return {
+          stdout: JSON.stringify({
+            publication_id: 'publication-rock-ground-v2',
+            preview_url: 'https://youtube.com/shorts/revised-preview',
+            task_id: 'TASK-ORION-PQ-PUBLISH-NEW',
+            message_id: '1533600000000000000',
+            render_path: 'data/runtime/product-video-agent/poke-quizz/revised.mp4',
+          }, null, 2),
+        };
+      },
+      updatePriorPublicationForRevision: async () => {},
+    },
+  );
+
+  assert.equal(runCalls.length, 2);
+  assert.equal(
+    normalizePath(runCalls[0].args[0]).endsWith('services/product-video-agent/scripts/plan-pokemon-type-challenge.mjs'),
+    true,
+  );
+  assert.deepEqual(runCalls[0].args.slice(-2), [
+    '--type-pair',
+    'rock,ground',
+  ]);
+  assert.equal(
+    normalizePath(runCalls[1].args[0]).endsWith('services/product-video-agent/scripts/generate-poke-quizz-review.mjs'),
+    true,
+  );
+  assert.equal(runCalls[1].args.includes('--catalog-json'), true);
+  assert.equal(
+    normalizePath(runCalls[1].args[runCalls[1].args.indexOf('--catalog-json') + 1]).endsWith('data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json'),
+    true,
+  );
+  assert.equal(result.report.state, 'preview_regenerated');
+  assert.equal(result.report.previewUrl, 'https://youtube.com/shorts/revised-preview');
+});

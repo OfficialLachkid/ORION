@@ -19,6 +19,7 @@ import {
   buildPokeQuizzPublicationReviewPayload,
   buildPokeQuizzPublicationReviewTask,
 } from '../../src/poke-quizz-publication-review.mjs';
+import { buildPersistedPokeQuizzReviewPathPatch } from '../../src/poke-quizz-review-paths.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import {
@@ -306,6 +307,12 @@ export async function reviewPokeQuizzPublication({
       review_thread_id: reviewThreadId,
       review_message_id: posted.messageId || '',
       review_requested_at: submittedAt,
+      ...buildPersistedPokeQuizzReviewPathPatch({
+        planPath,
+        catalogJsonPath,
+        templatePath,
+        configPath,
+      }),
     }),
   });
   await syncPokeQuizzQueueStatusMessage({
