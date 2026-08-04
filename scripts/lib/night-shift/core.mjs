@@ -44,7 +44,7 @@ function getArgValue(argv, flag, fallbackValue = '') {
 
 export async function runNightShift(argv = process.argv) {
   const isFallback = hasFlag(argv, '--fallback');
-  const limit = Number(getArgValue(argv, '--limit', '10'));
+  const limit = Number(getArgValue(argv, '--limit', '30'));
   const config = loadRuntimeConfig();
   const marker = markerPath();
 

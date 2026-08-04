@@ -26,7 +26,11 @@ import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.m
 
 const NIGHT_SHIFT_LABEL = 'io.vbj.orion.night-shift';
 const FALLBACK_LABEL = 'io.vbj.orion.qualification-schedule';
-const DEFAULT_LIMIT = 10;
+// Bumped 10→20 (2026-07-22) as trust in the pipeline grew, then 20→30
+// (2026-08-03) once daily backlog + rate-limit headroom made 30 comfortable.
+// Max ceiling stays roomy (50) so future bumps don't require another commit.
+const DEFAULT_LIMIT = 30;
+const MAX_LIMIT = 50;
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -89,7 +93,7 @@ function loadAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-night-shift-schedule.mjs [--hour 1] [--minute 30] [--limit 10] [--no-load]',
+      'Usage: node scripts/install-night-shift-schedule.mjs [--hour 1] [--minute 30] [--limit 30] [--no-load]',
       '',
       'Installs io.vbj.orion.night-shift (default 01:30) and reconfigures',
       'io.vbj.orion.qualification-schedule (07:00) as its rate-limit fallback.',
@@ -104,7 +108,7 @@ function main() {
   const config = loadRuntimeConfig();
   const hour = getNumberArg('--hour', 1, 23);
   const minute = getNumberArg('--minute', 30, 59);
-  const limit = getNumberArg('--limit', DEFAULT_LIMIT, 25);
+  const limit = getNumberArg('--limit', DEFAULT_LIMIT, MAX_LIMIT);
   const shouldLoad = !hasFlag('--no-load');
 
   const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');

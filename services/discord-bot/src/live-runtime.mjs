@@ -34,6 +34,7 @@ import {
   hasResumableSession,
 } from './gateway-state.mjs';
 import { parseGitHubCiObservation } from './github-ci-observer.mjs';
+import { deleteGmailDraft } from '../../gmail/src/send.mjs';
 import {
   buildDeveloperMergeApprovalEvents,
   buildDeveloperMergeApprovalTask,
@@ -1773,6 +1774,22 @@ export async function runLiveDiscordBot(config) {
           });
         } catch (error) {
           process.stderr.write(`Could not persist rejection feedback for lead ${pendingTask.lead_id}: ${error.message}\n`);
+        }
+      }
+
+      // Delete the underlying Gmail draft on reject so a rejected version can
+      // never be sent later — either by a stray click on a still-live approval
+      // card or by the operator opening it in Gmail — and so the next
+      // qualification pass (--redraft-rejected) doesn't leave the previous
+      // draft behind as an orphan. Best-effort; a Gmail API blip must never
+      // break the reject flow. 404 is already treated as success by
+      // deleteGmailDraft (idempotent).
+      const rejectedDraftId = String(pendingTask?.gmail_draft?.draftId || '').trim();
+      if (rejectedDraftId && pendingTask.runtime_action === 'gmail_send_draft') {
+        try {
+          await deleteGmailDraft(config.env, rejectedDraftId);
+        } catch (error) {
+          process.stderr.write(`Could not delete rejected Gmail draft ${rejectedDraftId} for ${decision.taskId}: ${error.message}\n`);
         }
       }
 
