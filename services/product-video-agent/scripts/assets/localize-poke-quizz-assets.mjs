@@ -13,6 +13,7 @@ import {
   projectRoot,
 } from '../../../../scripts/lib/ruflo-wrapper-utils.mjs';
 import { createHeaders, fetchJson, getRuntimeApiKey } from '../../../../scripts/lib/supabase-bridge-api.mjs';
+import { enrichPokedexRows } from '../../src/pokedex-enrichment.mjs';
 import { fetchSerebiiPokedex } from '../../src/pokedex-source.mjs';
 import {
   buildPokeQuizzShinySpritePath,
@@ -165,6 +166,9 @@ async function localizeRows(rows, options = {}) {
   await mkdir(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, { recursive: true });
   await mkdir(POKE_QUIZZ_ASSET_LAYOUT.soundEffects, { recursive: true });
 
+  const enrichment = await enrichPokedexRows(targetRows, {
+    concurrency: options.enrichmentConcurrency ?? 6,
+  });
   const typeIconCount = await ensureTypeIcons(targetRows);
 
   for (const row of targetRows) {
@@ -224,7 +228,12 @@ async function localizeRows(rows, options = {}) {
     });
   }
 
-  return { rows: targetRows, report, typeIconCount };
+  return {
+    rows: targetRows,
+    report,
+    typeIconCount,
+    enrichment: enrichment.stats,
+  };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
@@ -238,6 +247,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --generations <csv>       Generations to fetch and localize. Default: 1,2,3,4,5,6,7,8,9',
       '  --persist-supabase        Upsert localized rows back into Supabase `pokedex`',
       '  --limit <n>               Optional row limit for testing',
+      '  --enrichment-concurrency <n> Concurrent PokeAPI species enrichment workers. Default: 6',
       '  --write-json <path>       Write a localization report JSON under the repo root',
       '  --write-rows-json <path>  Write planner-ready localized pokedex rows under the repo root',
     ]);
@@ -258,8 +268,17 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
 
   const localized = await localizeRows(rows, {
     limit: getStringOption(options, 'limit', ''),
+    enrichmentConcurrency: Number.parseInt(
+      getStringOption(options, 'enrichment-concurrency', '6'),
+      10,
+    ) || 6,
   });
-  printInfo(`Localized ${localized.report.length} Pokemon row(s) and ${localized.typeIconCount} type icon(s).`);
+  printInfo(
+    `Localized ${localized.report.length} Pokemon row(s), `
+    + `${localized.typeIconCount} type icon(s), `
+    + `${localized.enrichment.speciesRequests} species request(s), and `
+    + `${localized.enrichment.evolutionChainRequests} evolution chain request(s).`,
+  );
 
   if (getBooleanOption(options, 'persist-supabase', false)) {
     const upserted = await upsertPokedexRows(localized.rows, runtimeEnv);
@@ -278,6 +297,8 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       generated_at: new Date().toISOString(),
       generations,
       type_icons_localized: localized.typeIconCount,
+      species_requests: localized.enrichment.speciesRequests,
+      evolution_chain_requests: localized.enrichment.evolutionChainRequests,
       localized_rows: localized.report,
     });
     printInfo(`Wrote localization report to ${absoluteOutputPath}`);
