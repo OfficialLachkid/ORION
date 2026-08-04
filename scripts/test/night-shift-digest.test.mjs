@@ -57,17 +57,21 @@ test('pokemon night shift digest combines maintenance, fallback, replenish, and 
       generated: 3,
       finalReviewReadyCount: 10,
       targetReviewReadyCount: 10,
-      errors: [],
+      errors: ['transient render failure'],
     },
     reviewMessageRefresh: {
       refreshed: 7,
-      failed: 0,
+      failed: 2,
       retried: 2,
+      failures: [
+        { reason: 'discord_api_404' },
+        { reason: 'rate_limit_retry_exhausted' },
+      ],
     },
   });
 
-  assert.match(digest, /Video queue maintenance: \*\*2\*\* scheduled, \*\*1\*\* marked live, \*\*1\*\* withdrawn, \*\*1\*\* schedule\(s\) corrected\./u);
+  assert.match(digest, /Video queue maintenance: \*\*2\*\* scheduled item\(s\) checked, \*\*1\*\* marked live, \*\*1\*\* withdrawn, \*\*1\*\* schedule\(s\) corrected\./u);
   assert.match(digest, /Preview fallback storage: moved \*\*1\*\* back to SSD\./u);
-  assert.match(digest, /Review backlog replenish: generated \*\*3\*\* preview\(s\)/u);
-  assert.match(digest, /Review card refresh updated \*\*7\*\* card\(s\) after \*\*2\*\* rate-limit retry\/retries\./u);
+  assert.match(digest, /Review backlog replenish: generated \*\*3\*\* preview\(s\), review queue now holds \*\*10\/10\*\* ready for approval, with \*\*1\*\* failed attempt\(s\)\./u);
+  assert.match(digest, /Review card refresh updated \*\*7\*\* card\(s\); \*\*1\*\* stored review card\(s\) are missing in Discord, \*\*1\*\* still need another pass\./u);
 });

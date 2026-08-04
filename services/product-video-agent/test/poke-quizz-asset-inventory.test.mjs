@@ -15,8 +15,8 @@ test('asset inventory ignores hidden and AppleDouble metadata files', () => {
   assert.equal(isAssetCandidateFileName(''), false);
 });
 
-test('background inventory accepts avif assets alongside legacy image formats', () => {
-  assert.equal(BACKGROUND_EXTENSIONS.has('.avif'), true);
+test('background inventory excludes avif assets until the renderer supports them', () => {
+  assert.equal(BACKGROUND_EXTENSIONS.has('.avif'), false);
   assert.equal(BACKGROUND_EXTENSIONS.has('.jpg'), true);
 });
 

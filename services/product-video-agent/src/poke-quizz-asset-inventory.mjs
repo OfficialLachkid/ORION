@@ -6,7 +6,7 @@ import {
   POKE_QUIZZ_ASSET_LAYOUT,
 } from './poke-quizz-asset-layout.mjs';
 
-export const BACKGROUND_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.avif', '.mp4', '.mov', '.webm']);
+export const BACKGROUND_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.mov', '.webm']);
 const BACKGROUND_THEME_DIRECTORIES = Object.freeze([
   'beach-backgrounds',
   'fire-backgrounds',

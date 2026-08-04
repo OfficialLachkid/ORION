@@ -85,7 +85,7 @@ function buildVideoQueueMaintenanceLine(summary) {
     return '';
   }
   const parts = [];
-  if (summary.scheduled > 0) parts.push(`**${summary.scheduled}** scheduled`);
+  if (summary.scheduled > 0) parts.push(`**${summary.scheduled}** scheduled item(s) checked`);
   if (summary.published > 0) parts.push(`**${summary.published}** marked live`);
   if (summary.withdrawn > 0) parts.push(`**${summary.withdrawn}** withdrawn`);
   if (summary.returnedToApproval > 0) parts.push(`**${summary.returnedToApproval}** returned to approval`);
@@ -130,11 +130,28 @@ function buildReviewBacklogReplenishmentLine(report) {
     return `Review backlog replenish failed: ${report.errors[0]}`;
   }
   if (report.generated > 0) {
-    return `Review backlog replenish: generated **${report.generated}** preview(s), review queue now holds **${report.finalReviewReadyCount}/${report.targetReviewReadyCount}** ready for approval.`;
+    const failureNote = report.errors?.length
+      ? `, with **${report.errors.length}** failed attempt(s)`
+      : '';
+    return `Review backlog replenish: generated **${report.generated}** preview(s), review queue now holds **${report.finalReviewReadyCount}/${report.targetReviewReadyCount}** ready for approval${failureNote}.`;
   }
   return report.finalReviewReadyCount < report.targetReviewReadyCount
     ? `Review backlog replenish is still below target at **${report.finalReviewReadyCount}/${report.targetReviewReadyCount}** ready preview(s).`
     : `Review backlog replenish found **${report.finalReviewReadyCount}/${report.targetReviewReadyCount}** ready preview(s); no fill-up was needed.`;
+}
+
+function summarizeReviewRefreshFailures(report) {
+  const failures = Array.isArray(report?.failures) ? report.failures : [];
+  const missingDiscordCards = failures.filter((failure) => String(failure?.reason || '') === 'discord_api_404').length;
+  const remainingFailures = Math.max(0, Number(report?.failed || 0) - missingDiscordCards);
+  const parts = [];
+  if (missingDiscordCards > 0) {
+    parts.push(`**${missingDiscordCards}** stored review card(s) are missing in Discord`);
+  }
+  if (remainingFailures > 0) {
+    parts.push(`**${remainingFailures}** still need another pass`);
+  }
+  return parts.join(', ');
 }
 
 function buildReviewMessageRefreshLine(report) {
@@ -145,7 +162,8 @@ function buildReviewMessageRefreshLine(report) {
     return `Review card refresh failed: ${report.error}`;
   }
   if (report.failed > 0) {
-    return `Review card refresh updated **${report.refreshed || 0}** card(s), but **${report.failed}** still need another pass.`;
+    const failureSummary = summarizeReviewRefreshFailures(report) || `**${report.failed}** still need another pass`;
+    return `Review card refresh updated **${report.refreshed || 0}** card(s); ${failureSummary}.`;
   }
   if (report.refreshed > 0) {
     const retryNote = report.retried > 0
