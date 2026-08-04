@@ -9,6 +9,7 @@ import {
 export const BACKGROUND_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.mov', '.webm']);
 const BACKGROUND_THEME_DIRECTORIES = Object.freeze([
   'beach-backgrounds',
+  'cave-backgrounds',
   'fire-backgrounds',
 ]);
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg']);

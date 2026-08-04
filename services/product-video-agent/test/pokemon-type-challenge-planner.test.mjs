@@ -768,6 +768,122 @@ test('planner excludes beach backgrounds for non-water type pairs', async () => 
   assert.equal(plan.assets.background.selected_path, '/tmp/background-plain.png');
 });
 
+test('planner prefers cave backgrounds for ground type pairs', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template: {
+      ...template,
+      selection_rules: {
+        ...template.selection_rules,
+        generation_scope: [],
+      },
+    },
+    pokedexRows: [
+      ...pokedexRows,
+      {
+        id: 'pokedex-0343',
+        national_dex_number: 343,
+        name: 'Baltoy',
+        generation: 3,
+        region: 'hoenn',
+        types: ['ground', 'psychic'],
+        sprite_path: '/tmp/0343.png',
+        silhouette_path: '/tmp/0343-silhouette.png',
+        shiny_sprite_path: '/tmp/0343-shiny.png',
+        cry_path: '/tmp/0343.wav',
+        sprite_source_url: 'https://example.test/0343.png',
+        shiny_sprite_source_url: null,
+        silhouette_source_url: null,
+        cry_source_url: null,
+        metadata: {
+          type_icon_source_urls: [
+            'https://www.serebii.net/pokedex-bw/type/ground.gif',
+            'https://www.serebii.net/pokedex-bw/type/psychic.gif',
+          ],
+        },
+      },
+    ],
+    seed: 'ground-cave-background',
+    forcedTypePair: ['ground', 'psychic'],
+    assetInventory: {
+      scanned_at: '2026-08-04T00:00:00.000Z',
+      directories: {},
+      backgrounds: [
+        '/tmp/background-plain.png',
+        '/tmp/beach-backgrounds/beach-1.png',
+        '/tmp/cave-backgrounds/cave-1.png',
+        '/tmp/fire-backgrounds/fire-1.png',
+      ],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/ground.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/psychic.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.match(plan.assets.background.selected_path || '', /\/cave-backgrounds\//u);
+});
+
+test('planner excludes cave backgrounds for non-ground non-rock type pairs', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'non-cave-background-guard',
+    forcedTypePair: ['poison', 'flying'],
+    assetInventory: {
+      scanned_at: '2026-08-04T00:00:00.000Z',
+      directories: {},
+      backgrounds: [
+        '/tmp/background-plain.png',
+        '/tmp/beach-backgrounds/beach-1.png',
+        '/tmp/cave-backgrounds/cave-1.png',
+        '/tmp/fire-backgrounds/fire-1.png',
+      ],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.equal(plan.assets.background.selected_path, '/tmp/background-plain.png');
+});
+
 test('planner ignores archived backgrounds even when they appear in inventory', async () => {
   const archivedSafeRows = [
     {

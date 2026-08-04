@@ -12,6 +12,8 @@ import {
 
 const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
   fire: ['fire-backgrounds'],
+  ground: ['cave-backgrounds'],
+  rock: ['cave-backgrounds'],
   water: ['beach-backgrounds'],
 });
 
@@ -23,17 +25,25 @@ function isFireBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/fire-backgrounds/');
 }
 
+function isCaveBackgroundPath(backgroundPath) {
+  return String(backgroundPath || '').toLowerCase().includes('/cave-backgrounds/');
+}
+
 function isArchivedBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/archived-backgrounds/');
 }
 
 const TYPE_THEMED_BACKGROUND_PRIORITY = Object.freeze([
+  'ground',
+  'rock',
   'fire',
   'water',
 ]);
 
 function isThemedBackgroundPath(backgroundPath) {
-  return isBeachBackgroundPath(backgroundPath) || isFireBackgroundPath(backgroundPath);
+  return isBeachBackgroundPath(backgroundPath)
+    || isCaveBackgroundPath(backgroundPath)
+    || isFireBackgroundPath(backgroundPath);
 }
 
 function normalizeAssetPath(assetPath) {
