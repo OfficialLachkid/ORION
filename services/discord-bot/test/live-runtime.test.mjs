@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildApprovalDecisionModal,
   buildApprovalRejectModal,
   buildApprovalButtons,
   buildResolvedApprovalButtons,
   buildResolvedApprovalContent,
   buildResolvedApprovalEmbeds,
+  getApprovalModalRequest,
   normalizeInteractionAsApprovalMessage,
   parseApprovalButtonCustomId,
   shouldOpenRejectApprovalModal,
@@ -17,7 +19,7 @@ import {
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
 
-test('parseApprovalButtonCustomId understands approve and reject actions', () => {
+test('parseApprovalButtonCustomId understands approve, reject, and delete actions', () => {
   assert.deepEqual(
     parseApprovalButtonCustomId('approve:TASK-202606291339-2AA8A8F209'),
     {
@@ -30,6 +32,14 @@ test('parseApprovalButtonCustomId understands approve and reject actions', () =>
     parseApprovalButtonCustomId('reject:TASK-202606291339-2AA8A8F209'),
     {
       decision: 'reject',
+      taskId: 'TASK-202606291339-2AA8A8F209',
+    }
+  );
+
+  assert.deepEqual(
+    parseApprovalButtonCustomId('delete:TASK-202606291339-2AA8A8F209'),
+    {
+      decision: 'delete',
       taskId: 'TASK-202606291339-2AA8A8F209',
     }
   );
@@ -54,6 +64,21 @@ test('buildApprovalButtons uses email-specific labels without changing custom_id
   assert.equal(components[0].components[1].custom_id, 'reject:TASK-202606291339-2AA8A8F209');
 });
 
+test('buildApprovalButtons accepts explicit label overrides for custom approval flows', () => {
+  const components = buildApprovalButtons('TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456', {
+    approveLabel: 'Publish',
+    rejectLabel: 'Give Feedback',
+    deleteLabel: 'Delete',
+  });
+
+  assert.equal(components[0].components[0].label, 'Publish');
+  assert.equal(components[0].components[0].style, 3);
+  assert.equal(components[0].components[1].label, 'Give Feedback');
+  assert.equal(components[0].components[1].style, 2);
+  assert.equal(components[0].components[2].label, 'Delete');
+  assert.equal(components[0].components[2].style, 4);
+});
+
 test('buildApprovalRejectModal creates a required feedback form', () => {
   const modal = buildApprovalRejectModal('TASK-202606291339-2AA8A8F209');
 
@@ -67,6 +92,21 @@ test('buildApprovalRejectModal uses PR-specific copy for merge approvals', () =>
 
   assert.equal(modal.title, 'Reject PR Merge');
   assert.match(modal.components[0].components[0].label, /PR remain open/u);
+});
+
+test('buildApprovalRejectModal uses preview-feedback copy for Poke Quizz review tasks', () => {
+  const modal = buildApprovalRejectModal('TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+
+  assert.equal(modal.title, 'Give Preview Feedback');
+  assert.match(modal.components[0].components[0].label, /next preview/u);
+});
+
+test('buildApprovalDecisionModal creates a delete confirmation form for Poke Quizz review tasks', () => {
+  const modal = buildApprovalDecisionModal('delete', 'TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+
+  assert.equal(modal.title, 'Delete Preview');
+  assert.equal(modal.custom_id, 'delete-modal:TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+  assert.equal(modal.components[0].components[0].custom_id, 'delete_confirmation');
 });
 
 test('buildResolvedApprovalButtons removes the approval buttons after resolution', () => {
@@ -99,6 +139,50 @@ test('buildResolvedApprovalEmbeds recolors and retitles the first embed on resol
 test('buildResolvedApprovalEmbeds returns undefined when there are no embeds to clone', () => {
   assert.equal(buildResolvedApprovalEmbeds([], 'approve', 'TASK-1'), undefined);
   assert.equal(buildResolvedApprovalEmbeds(undefined, 'approve', 'TASK-1'), undefined);
+});
+
+test('buildResolvedApprovalEmbeds marks Poke Quizz approvals as queued for publish', () => {
+  const originalEmbeds = [
+    {
+      title: 'Approval Needed',
+      color: 0x9B59B6,
+      fields: [
+        { name: 'State', value: '`preview_uploaded`', inline: true },
+      ],
+    },
+  ];
+
+  const approved = buildResolvedApprovalEmbeds(
+    originalEmbeds,
+    'approve',
+    'TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456',
+  );
+
+  assert.equal(approved[0].title, 'Publish Queued · TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+  assert.equal(approved[0].color, 0x3498DB);
+  assert.equal(approved[0].fields[0].value, '`queued_for_publish`');
+});
+
+test('buildResolvedApprovalEmbeds marks Poke Quizz deletes as queued removal', () => {
+  const originalEmbeds = [
+    {
+      title: 'Approval Needed',
+      color: 0x9B59B6,
+      fields: [
+        { name: 'State', value: '`preview_uploaded`', inline: true },
+      ],
+    },
+  ];
+
+  const deleted = buildResolvedApprovalEmbeds(
+    originalEmbeds,
+    'delete',
+    'TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456',
+  );
+
+  assert.equal(deleted[0].title, 'Delete Queued · TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456');
+  assert.equal(deleted[0].color, 0xED4245);
+  assert.equal(deleted[0].fields[0].value, '`delete_requested`');
 });
 
 test('shouldScheduleDeferredDiscordBotRestart only triggers for deferred Mac sync completions', () => {
@@ -154,6 +238,7 @@ test('normalizeInteractionAsApprovalMessage converts an approve button click int
     channelId: 'channel-1',
     messageId: 'message-1',
     content: 'approve TASK-202606291339-2AA8A8F209',
+    validationError: '',
     attachments: [],
     author: {
       id: 'user-1',
@@ -165,6 +250,31 @@ test('normalizeInteractionAsApprovalMessage converts an approve button click int
   });
 });
 
+test('normalizeInteractionAsApprovalMessage converts a delete button click into delete text', () => {
+  const message = normalizeInteractionAsApprovalMessage({
+    type: 3,
+    guild_id: 'guild-1',
+    channel_id: 'channel-1',
+    data: {
+      custom_id: 'delete:TASK-202606291339-2AA8A8F209',
+    },
+    message: {
+      id: 'message-1',
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'delete TASK-202606291339-2AA8A8F209');
+});
+
 test('shouldOpenRejectApprovalModal flags reject button interactions', () => {
   assert.equal(shouldOpenRejectApprovalModal({
     type: 3,
@@ -172,6 +282,18 @@ test('shouldOpenRejectApprovalModal flags reject button interactions', () => {
       custom_id: 'reject:TASK-202606291339-2AA8A8F209',
     },
   }), true);
+});
+
+test('getApprovalModalRequest flags delete button interactions for confirmation', () => {
+  assert.deepEqual(getApprovalModalRequest({
+    type: 3,
+    data: {
+      custom_id: 'delete:TASK-202606291339-2AA8A8F209',
+    },
+  }), {
+    decision: 'delete',
+    taskId: 'TASK-202606291339-2AA8A8F209',
+  });
 });
 
 test('normalizeInteractionAsApprovalMessage converts a reject modal submit into approval text with feedback', () => {
@@ -210,6 +332,71 @@ test('normalizeInteractionAsApprovalMessage converts a reject modal submit into 
     message?.content,
     'reject TASK-202606291339-2AA8A8F209 because Needs a clearer CTA and shorter opening sentence.'
   );
+});
+
+test('normalizeInteractionAsApprovalMessage requires DELETE confirmation for delete modals', () => {
+  const message = normalizeInteractionAsApprovalMessage({
+    type: 5,
+    guild_id: 'guild-1',
+    channel_id: 'channel-1',
+    data: {
+      custom_id: 'delete-modal:TASK-202606291339-2AA8A8F209',
+      components: [
+        {
+          components: [
+            {
+              custom_id: 'delete_confirmation',
+              value: 'yes',
+            },
+          ],
+        },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.validationError, 'Type DELETE exactly to confirm preview deletion.');
+});
+
+test('normalizeInteractionAsApprovalMessage converts a confirmed delete modal submit into delete text', () => {
+  const message = normalizeInteractionAsApprovalMessage({
+    type: 5,
+    guild_id: 'guild-1',
+    channel_id: 'channel-1',
+    data: {
+      custom_id: 'delete-modal:TASK-202606291339-2AA8A8F209',
+      components: [
+        {
+          components: [
+            {
+              custom_id: 'delete_confirmation',
+              value: 'DELETE',
+            },
+          ],
+        },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'delete TASK-202606291339-2AA8A8F209');
+  assert.equal(message?.validationError, '');
 });
 
 test('mergeImageAttachments de-duplicates image attachments by id', () => {

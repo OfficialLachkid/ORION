@@ -15,6 +15,10 @@ import {
   describeExplicitPullRequestMergeAction,
   executePullRequestMergeAction,
 } from './pr-merge-executor.mjs';
+import {
+  describeExplicitProductVideoAction,
+  executeProductVideoAction,
+} from './product-video-executor.mjs';
 
 function event(channelKey, type, body, metadata = {}) {
   return {
@@ -23,6 +27,23 @@ function event(channelKey, type, body, metadata = {}) {
     body,
     metadata,
   };
+}
+
+function resolvePokeQuizzPublicationId(task) {
+  return String(
+    task?.poke_quizz_publication_review?.publicationId
+    || task?.poke_quizz_feedback?.publicationId
+    || task?.poke_quizz_delete?.publicationId
+    || '',
+  ).trim();
+}
+
+function isPokeQuizzPublicationWorkflowAction(action) {
+  return (
+    action === 'poke_quizz_publish_preview'
+    || action === 'poke_quizz_feedback_regenerate'
+    || action === 'poke_quizz_delete_preview'
+  );
 }
 
 function isPausedExecutionReport(report = {}) {
@@ -336,6 +357,11 @@ function isMacRuntimeSafeSync(task) {
 }
 
 export function buildExecutionPlan(task) {
+  const explicitProductVideoAction = describeExplicitProductVideoAction(task);
+  if (explicitProductVideoAction) {
+    return explicitProductVideoAction;
+  }
+
   const explicitPullRequestMergeAction = describeExplicitPullRequestMergeAction(task);
   if (explicitPullRequestMergeAction) {
     return explicitPullRequestMergeAction;
@@ -473,6 +499,7 @@ export function buildExecutionPlan(task) {
 }
 
 export function buildExecutionStartedEvents(task, executionPlan) {
+  const publicationId = resolvePokeQuizzPublicationId(task);
   return [
     event(
       'taskQueue',
@@ -486,6 +513,7 @@ export function buildExecutionStartedEvents(task, executionPlan) {
         priority: task.priority,
         targetAgent: task.target_agent,
         domain: task.domain,
+        publicationId,
       }
     ),
     event(
@@ -1405,6 +1433,11 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
       : isBlocked
         ? 'blocked'
         : 'completed';
+  const publicationId = String(
+    report.publicationId
+    || resolvePokeQuizzPublicationId(followUpTask || task)
+    || '',
+  ).trim();
   const commonQueueEvent = event(
     'taskQueue',
     'task_queue_update',
@@ -1420,6 +1453,7 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
       state,
       severity: report.severity || '',
       reason: isPaused || isAwaitingApproval || isBlocked ? (report.summary || state) : '',
+      publicationId,
     }
   );
   const commonSystemEvent = event(
@@ -1818,6 +1852,13 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
     );
   }
 
+  if (isPokeQuizzPublicationWorkflowAction(executionPlan.action)) {
+    return withTerminalAlert([
+      commonQueueEvent,
+      commonSystemEvent,
+    ]);
+  }
+
   if (executionPlan.action === 'mac_runtime_safe_sync') {
     return buildCompletedResultEvents(
       report.didPull === true ? 'deployments' : 'agentResults',
@@ -1884,6 +1925,7 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
 }
 
 function buildFailedEvents(task, executionPlan, error) {
+  const publicationId = resolvePokeQuizzPublicationId(task);
   return [
     event(
       'taskQueue',
@@ -1897,6 +1939,7 @@ function buildFailedEvents(task, executionPlan, error) {
         priority: task.priority,
         targetAgent: task.target_agent,
         domain: task.domain,
+        publicationId,
       }
     ),
     event(
@@ -1999,6 +2042,12 @@ export async function executeTask(task, config, options = {}) {
           workflowRunner: options.pullRequestMergeWorkflow,
           commandRunner: options.pullRequestMergeCommandRunner,
         }),
+      };
+    } else if (isPokeQuizzPublicationWorkflowAction(executionPlan.action)) {
+      const productVideoActionRunner = options.productVideoActionRunner || executeProductVideoAction;
+      executionState = {
+        outcome: 'completed',
+        executionResult: await productVideoActionRunner(executionPlan.action, task, config),
       };
     } else {
       const commandRunner = options.commandRunner

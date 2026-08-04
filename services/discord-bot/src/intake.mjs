@@ -25,7 +25,14 @@ const IMAGE_CONTENT_TYPE_PREFIX = 'image/';
 // added alongside the developer-agent PR-merge-approval feature.
 // 'outreachFollowups' (the #outreach-followups thread) added 2026-07-24 for
 // the follow-up sequence — its approvals must reach the same handler.
-const APPROVAL_CHANNEL_KEYS = new Set(['approvals', 'outreachAgent', 'pullRequests', 'outreachFollowups']);
+const APPROVAL_CHANNEL_KEYS = new Set([
+  'approvals',
+  'outreachAgent',
+  'pullRequests',
+  'outreachFollowups',
+  'orionReview',
+  'pokeQuizzReview',
+]);
 
 function resolveChannelKey(message, config) {
   if (message.channelKey) {
@@ -37,10 +44,6 @@ function resolveChannelKey(message, config) {
 }
 
 function isAuthorizedOperator(message, config) {
-  if (message.author?.isOperator === true) {
-    return true;
-  }
-
   if (message.author?.id && config.operatorUserIds.includes(message.author.id)) {
     return true;
   }
@@ -49,7 +52,12 @@ function isAuthorizedOperator(message, config) {
     return message.author.roleIds.includes(config.operatorRoleId);
   }
 
-  return false;
+  const hasConfiguredOperatorGate = Boolean(config.operatorRoleId)
+    || (Array.isArray(config.operatorUserIds) && config.operatorUserIds.length > 0);
+
+  return hasConfiguredOperatorGate
+    ? false
+    : message.author?.isOperator === true;
 }
 
 function event(channelKey, type, body, metadata = {}) {
@@ -205,7 +213,7 @@ export function processDiscordEvent(message, config) {
     return {
       accepted: false,
       route: 'rejected',
-      reason: 'Message channel is not mapped to the phase-1 bot surface.',
+      reason: 'Message channel is not mapped to an ORION bot surface.',
       outboundEvents: [event('alerts', 'unexpected_channel', 'Message channel is not mapped.', { channelId: message.channelId || '' })],
     };
   }
@@ -267,10 +275,16 @@ export function processDiscordEvent(message, config) {
 
   if (APPROVAL_CHANNEL_KEYS.has(channelKey)) {
     const decision = parseApprovalResponse(message);
-    const resolvedStatus = decision.decision === 'approve' ? 'approved' : 'rejected';
+    const resolvedStatus = decision.decision === 'approve'
+      ? 'approved'
+      : decision.decision === 'delete'
+        ? 'deleted'
+        : 'rejected';
     const resolvedBody = decision.decision === 'approve'
       ? `Approved ${decision.taskId}.`
-      : `Rejected ${decision.taskId}.`;
+      : decision.decision === 'delete'
+        ? `Delete requested for ${decision.taskId}.`
+        : `Rejected ${decision.taskId}.`;
     const outboundEvents = decision.valid
       ? [
           event('taskQueue', 'approval_outcome', resolvedBody, {
@@ -330,7 +344,7 @@ export function processDiscordEvent(message, config) {
   return {
     accepted: false,
     route: 'ignored',
-    reason: `Channel '${channelKey}' is not handled in the phase-1 narrow workflow.`,
+    reason: `Channel '${channelKey}' is not handled in the ORION workflow.`,
     outboundEvents: [],
   };
 }

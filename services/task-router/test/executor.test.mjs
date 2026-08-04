@@ -928,6 +928,37 @@ test('launch agents health checks omit an intentionally disabled daemon', async 
   assert.equal(checkedLabels.includes('io.vbj.orion.daemon'), false);
 });
 
+test('executeTask suppresses extra agent-results cards for Poke Quizz review actions', async () => {
+  const result = await executeTask({
+    task_id: 'TASK-ORION-PQ-PUBLISH-TEST',
+    runtime_action: 'poke_quizz_publish_preview',
+    summary: 'Publish Poke Quizz preview for Fire / Ghost.',
+    target_agent: 'product-video-agent',
+    domain: 'content',
+    priority: 'normal',
+    poke_quizz_publication_review: {
+      publicationId: 'publication-fire-ghost',
+    },
+  }, loadRuntimeConfig(), {
+    productVideoActionRunner: async () => ({
+      report: {
+        state: 'scheduled',
+        severity: 'success',
+        summary: 'Scheduled publication publication-fire-ghost for 2026-08-05T06:00:00.000Z.',
+        publicationId: 'publication-fire-ghost',
+        workflowState: 'scheduled',
+      },
+    }),
+  });
+
+  assert.equal(result.executionPlan.action, 'poke_quizz_publish_preview');
+  assert.equal(result.outboundEvents.length, 2);
+  assert.deepEqual(
+    result.outboundEvents.map((event) => event.channelKey),
+    ['taskQueue', 'systemLogs'],
+  );
+});
+
 test('executeTask returns completed events for session checkpoint health checks', async () => {
   const config = loadRuntimeConfig();
   const tempRoot = mkdtempSync(join(tmpdir(), 'ruflo-checkpoints-'));

@@ -24,6 +24,8 @@ export const EMBED_COLORS = {
   blocked: 0xED4245,
 };
 
+const POKE_QUIZZ_PUBLISH_TASK_PREFIX = 'TASK-ORION-PQ-PUBLISH-';
+
 function truncateText(value, maxLength) {
   const text = String(value || '').trim();
   if (text.length <= maxLength) {
@@ -125,6 +127,18 @@ function compactPath(value) {
   const normalized = text.replace(/\\/gu, '/');
   const parts = normalized.split('/');
   return parts.length <= 2 ? normalized : parts.slice(-2).join('/');
+}
+
+function formatMarkdownLink(label, url) {
+  const text = String(label || '').trim();
+  const href = String(url || '').trim();
+  if (!text) {
+    return href;
+  }
+  if (!href) {
+    return text;
+  }
+  return `[${text}](${href})`;
 }
 
 function createField(name, value, inline = true) {
@@ -350,6 +364,50 @@ function queueTitleText(metadata = {}, outboundEvent = {}) {
   return String(metadata.taskId || '').trim();
 }
 
+function publicationReviewColor(approvalState) {
+  switch (String(approvalState || '').trim().toLowerCase()) {
+    case 'preview_approved':
+    case 'queued_for_publish':
+    case 'scheduled':
+      return EMBED_COLORS.queue;
+    case 'published':
+      return EMBED_COLORS.success;
+    case 'withdrawn':
+      return EMBED_COLORS.warning;
+    case 'delete_failed':
+    case 'deleted':
+    case 'revision_requested':
+    case 'rejected':
+      return EMBED_COLORS.blocked;
+    default:
+      return EMBED_COLORS.awaitingReview;
+  }
+}
+
+function publicationReviewTitle(metadata = {}) {
+  const taskId = String(metadata.taskId || '').trim();
+  const approvalState = String(metadata.approvalState || '').trim().toLowerCase();
+  switch (approvalState) {
+    case 'preview_approved':
+    case 'queued_for_publish':
+      return taskTitle('Publish Queued', taskId);
+    case 'scheduled':
+      return taskTitle('Scheduled For Publish', taskId);
+    case 'published':
+      return taskTitle('Published', taskId);
+    case 'withdrawn':
+      return taskTitle('Withdrawn', taskId);
+    case 'delete_failed':
+      return taskTitle('Delete Failed', taskId);
+    case 'deleted':
+      return taskTitle('Deleted', taskId);
+    case 'revision_requested':
+      return taskTitle('Feedback Received', taskId);
+    default:
+      return approvalStateTitle(metadata);
+  }
+}
+
 function formatTaskMetadata(task = {}) {
   return lines(
     task.task_id ? `Task: \`${task.task_id}\`` : '',
@@ -413,8 +471,13 @@ function formatApprovalRequest(outboundEvent) {
 function buildApprovalRequestPayload(outboundEvent) {
   const metadata = outboundEvent.metadata || {};
   const isProductVideoApproval = Boolean(metadata.productVideoStage);
+  const isPublicationReview = metadata.publicationReview === true;
+  const showReasonField = !metadata.emailTo && !isPublicationReview;
+  const showActionField = !isPublicationReview;
   const actionText = metadata.emailTo
     ? 'Approve sends the current Gmail draft. Reject opens a feedback form for revisions.'
+    : isPublicationReview
+      ? 'Publish adds this preview to the publish queue. Give Feedback opens a revision form and generates a new preview in the same review thread.'
     : isProductVideoApproval && metadata.approvalBlocked
       ? 'Approval is disabled until every listed blocker is resolved. Reject remains available.'
       : isProductVideoApproval && metadata.approvalResolved
@@ -431,6 +494,25 @@ function buildApprovalRequestPayload(outboundEvent) {
     createField('Draft', metadata.gmailDraftId ? `\`${metadata.gmailDraftId}\`` : '', true),
     createField('Body', formatEmailBody(metadata.emailBody || ''), false),
     createField('Stage', metadata.productVideoStage ? `\`${metadata.productVideoStage}\`` : '', true),
+    createField('Publication', metadata.publicationId ? `\`${metadata.publicationId}\`` : '', true),
+    createField('Genre', metadata.genreLabel || '', true),
+    createField(
+      'Channel',
+      metadata.channelName || metadata.channelUrl
+        ? formatMarkdownLink(metadata.channelName || metadata.channelUrl, metadata.channelUrl || '')
+        : '',
+      true
+    ),
+    createField('Preview', metadata.previewUrl ? `[Open Preview](${metadata.previewUrl})` : '', true),
+    createField('Type Pair', metadata.typePairLabel || '', true),
+    createField('Seed', metadata.seed ? `\`${metadata.seed}\`` : '', true),
+    createField('Busy Time', metadata.generationDurationLabel || '', true),
+    createField('Scheduled For', metadata.scheduledForLabel || '', true),
+    createField('Preview Deletion', metadata.previewDeletionLabel || '', false),
+    createField('Title', metadata.publicationTitle || '', false),
+    createField('Description', metadata.publicationDescription || '', false),
+    createField('Render', metadata.renderPath ? `\`${compactPath(metadata.renderPath)}\`` : '', false),
+    createField('Plan', metadata.planPath ? `\`${compactPath(metadata.planPath)}\`` : '', false),
     createField('Product', metadata.productName || '', true),
     createField('State', metadata.approvalState ? `\`${metadata.approvalState}\`` : '', true),
     createField('Subject', metadata.subjectId ? `\`${metadata.subjectId}\`` : '', false),
@@ -464,14 +546,14 @@ function buildApprovalRequestPayload(outboundEvent) {
     // request (2026-07-20) — Preview always duplicated Body regardless of
     // approval type, but Reason still carries real signal for non-email
     // approvals (PR merges, infra sync), so it only drops for emailTo.
-    createField('Reason', metadata.emailTo ? '' : (metadata.approvalReason || ''), false),
+    createField('Reason', showReasonField ? (metadata.approvalReason || '') : '', false),
     createField('Image Files', Array.isArray(metadata.imageAttachmentFilenames) ? metadata.imageAttachmentFilenames.join('\n') : '', false),
-    createField('Action', actionText, false),
+    createField('Action', showActionField ? actionText : '', false),
   ].filter(Boolean);
 
   return buildEmbedPayload({
-    color: EMBED_COLORS.approval,
-    title: approvalStateTitle(metadata),
+    color: isPublicationReview ? publicationReviewColor(metadata.approvalState) : EMBED_COLORS.approval,
+    title: isPublicationReview ? publicationReviewTitle(metadata) : approvalStateTitle(metadata),
     description: metadata.summary || outboundEvent.body || 'Approval requested.',
     fields: embedFields,
     footerText: metadata.submittedBy ? `Requested by ${metadata.submittedBy}` : 'Ruflo approval gate',

@@ -85,14 +85,19 @@ export function buildToolReportEmbed(tool, verdict, summary, fields = []) {
   };
 }
 
-export async function sendDiscordChannelMessage(config, channelId, payload, options = {}) {
+async function sendDiscordChannelRequest(config, channelId, payload, options = {}) {
   const fetchImpl = options.fetch || fetch;
   const token = config?.env?.DISCORD_BOT_TOKEN;
   if (!token || !channelId) {
     return { posted: false, reason: !token ? 'no_token' : 'no_channel_id' };
   }
-  const response = await fetchImpl(`${DISCORD_API_BASE_URL}/channels/${channelId}/messages`, {
-    method: 'POST',
+  const messageId = String(options.messageId || '').trim();
+  const method = messageId ? 'PATCH' : 'POST';
+  const requestPath = messageId
+    ? `${DISCORD_API_BASE_URL}/channels/${channelId}/messages/${messageId}`
+    : `${DISCORD_API_BASE_URL}/channels/${channelId}/messages`;
+  const response = await fetchImpl(requestPath, {
+    method,
     headers: {
       Authorization: `Bot ${token}`,
       'Content-Type': 'application/json',
@@ -105,6 +110,17 @@ export async function sendDiscordChannelMessage(config, channelId, payload, opti
   }
   const created = await response.json();
   return { posted: true, messageId: created.id || '', channelId };
+}
+
+export async function sendDiscordChannelMessage(config, channelId, payload, options = {}) {
+  return sendDiscordChannelRequest(config, channelId, payload, options);
+}
+
+export async function editDiscordChannelMessage(config, channelId, messageId, payload, options = {}) {
+  return sendDiscordChannelRequest(config, channelId, payload, {
+    ...options,
+    messageId,
+  });
 }
 
 export async function postToolReport(config, tool, verdict, summary, fields = [], options = {}) {

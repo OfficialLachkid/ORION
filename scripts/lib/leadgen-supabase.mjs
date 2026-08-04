@@ -1,5 +1,10 @@
 import { loadRuntimeConfig } from '../../services/lib/runtime-config.mjs';
-import { createHeaders, fetchJson, getRuntimeApiKey } from './supabase-bridge-api.mjs';
+import {
+  createHeaders,
+  fetchJson,
+  getRuntimeApiKey,
+  retryTransientSupabaseOperation,
+} from './supabase-bridge-api.mjs';
 
 export const DEFAULT_LEADS_TABLE = 'leads';
 
@@ -120,13 +125,13 @@ export async function updateLead(id, patch, config = getLeadgenPersistenceConfig
   const url = new URL(`/rest/v1/${config.leadsTable}`, config.supabaseUrl);
   url.searchParams.set('id', `eq.${id}`);
 
-  return fetchJson(url.toString(), {
+  return retryTransientSupabaseOperation(() => fetchJson(url.toString(), {
     method: 'PATCH',
     headers: createHeaders(config.apiKey, {
       Prefer: 'return=representation',
     }),
     body: JSON.stringify(patch),
-  });
+  }));
 }
 
 // For rows that should never have been leads at all (directory/aggregator
@@ -210,7 +215,7 @@ export async function fetchLeads(filters = {}, config = getLeadgenPersistenceCon
     url.searchParams.set('niche', `eq.${filters.niche}`);
   }
 
-  return fetchJson(url.toString(), {
+  return retryTransientSupabaseOperation(() => fetchJson(url.toString(), {
     headers: createHeaders(config.apiKey),
-  });
+  }));
 }

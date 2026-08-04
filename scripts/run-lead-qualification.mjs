@@ -1,16 +1,7 @@
 #!/usr/bin/env node
 // Qualify-and-draft: reads status='new' leads, has Claude judge fit against
-// VBJ's offers (fetching the lead's real site), and for qualified leads with
-// a public email creates a Gmail draft routed through the same Discord
-// approval flow as /email-draft — Approve/Reject buttons in #outreach-agent
-// (draft + approval merged into one message), nothing sends without
-// explicit approval.
-//
-// Usage:
-//   node scripts/run-lead-qualification.mjs --limit 3
-//   node scripts/run-lead-qualification.mjs --limit 5 --niche plumbing
-//   node scripts/run-lead-qualification.mjs --dry-run   (qualify only, no draft/discord/db writes)
-//   node scripts/run-lead-qualification.mjs --no-screenshot   (skip the playwright-cli visual step, text-only judgment)
+// VBJ's offers, and for qualified leads with a public email creates a Gmail
+// draft routed through the Discord approval flow.
 
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
@@ -29,6 +20,7 @@ import {
 } from '../services/discord-bot/src/message-formatting.mjs';
 import { buildApprovalButtons } from '../services/discord-bot/src/approval-buttons.mjs';
 import { postLeadQualificationReport, renderLiveProgressBody } from './lib/lead-qualification-report.mjs';
+import { postQualifiedCallLeads } from './lib/qualified-call-leads.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 
@@ -41,8 +33,6 @@ function hasFlag(flag) {
   return process.argv.includes(flag);
 }
 
-// Headless-browser render for sites that 403 plain fetches — one page, one
-// attempt, hard timeout, no crawling. Used only in --retry-unreachable mode.
 function renderPageText(url) {
   const venvPython = resolve(projectRoot, '.venv-leadgen', 'bin', 'python3');
   const script = resolve(projectRoot, 'services', 'leadgen-scraper', 'render_page.py');
@@ -79,9 +69,6 @@ async function postToChannel(config, channelId, body) {
   return response.json();
 }
 
-// PATCH the given message — used to keep the live-progress card current as
-// each lead finishes. Best-effort: a Discord/network blip is written to stderr
-// and swallowed so the qualification loop never breaks over a UI update.
 async function patchChannelMessage(config, channelId, messageId, body) {
   try {
     const response = await fetch(`${DISCORD_API_BASE_URL}/channels/${channelId}/messages/${messageId}`, {
@@ -101,11 +88,6 @@ async function patchChannelMessage(config, channelId, messageId, body) {
   }
 }
 
-// DELETE the given message — used to clean up the live-progress card once the
-// full summary has posted, so the channel is left with one authoritative
-// message per run instead of a "completed" progress card sitting redundantly
-// above the summary. Best-effort: 404 is treated as success (already gone);
-// any other failure writes to stderr and is swallowed.
 async function deleteChannelMessage(config, channelId, messageId) {
   try {
     const response = await fetch(`${DISCORD_API_BASE_URL}/channels/${channelId}/messages/${messageId}`, {
@@ -121,9 +103,6 @@ async function deleteChannelMessage(config, channelId, messageId) {
   }
 }
 
-// Mirrors the live bot's fanOutOutboundEvents closely enough for this
-// standalone script: resolve channel by key, format the event, attach
-// Approve/Reject buttons on approval requests.
 async function dispatchOutboundEvents(config, outboundEvents = []) {
   for (const outboundEvent of outboundEvents) {
     const channelId = config.channelIds[outboundEvent.channelKey];
@@ -132,12 +111,6 @@ async function dispatchOutboundEvents(config, outboundEvents = []) {
     }
 
     if (outboundEvent.type === 'approval_request') {
-      // approverMentions must be a joined string (it becomes the message's
-      // `content` verbatim) — this previously stayed an array and only
-      // "worked" by accident, since a single-element array stringifies to
-      // its bare element; it also never included operatorUserIds at all, so
-      // the individual operator (lachkid) was never actually pinged here,
-      // only the operator role — unlike #approvals, which pings both.
       const roleMentions = config.operatorRoleId ? [`<@&${config.operatorRoleId}>`] : [];
       const userMentions = (config.operatorUserIds || []).map((userId) => `<@${userId}>`);
       outboundEvent.metadata = {
@@ -159,15 +132,6 @@ async function dispatchOutboundEvents(config, outboundEvents = []) {
   }
 }
 
-// executeTask() for gmail_create_draft returns a redundant pair for lead
-// outreach: an 'agentResults' notice ("Gmail draft created for X") and a
-// separate 'approvals' request with Approve/Reject buttons — the approval
-// embed already carries the full draft (To/Subject/Body), so the notice is
-// dropped here and the approval alone is redirected into #outreach-agent.
-// That gives one message with the draft AND the buttons instead of two
-// messages split across two channels (operator request, 2026-07-20).
-// Falls back to the original 'approvals' channel key if DISCORD_OUTREACH_
-// AGENT_CHANNEL_ID isn't configured yet, so nothing silently stops posting.
 async function dispatchLeadOutreachEvents(config, outboundEvents = []) {
   const hasOutreachChannel = Boolean(config.channelIds.outreachAgent);
   const merged = outboundEvents
@@ -227,9 +191,6 @@ async function main() {
   const dryRun = hasFlag('--dry-run');
   const retryUnreachable = hasFlag('--retry-unreachable');
   const redraftRejected = hasFlag('--redraft-rejected');
-  // Re-check leads that were qualified but dropped for a missing email — the
-  // qualifier now hunts for the address on the site itself, so many are
-  // recoverable (see the email-recovery block below).
   const recoverEmails = hasFlag('--recover-emails');
   const noScreenshot = hasFlag('--no-screenshot');
   const config = loadRuntimeConfig();
@@ -238,18 +199,12 @@ async function main() {
     : recoverEmails ? 'qualified_no_email'
     : (retryUnreachable ? 'site_unreachable' : 'new');
 
-  // Oldest first so the backlog drains in discovery order. (Server-side
-  // ascending order — reversing a newest-N window silently skipped the
-  // true oldest once the table outgrew the window.)
   const allNew = await fetchLeads({
     status,
     niche: niche || undefined,
     limit: 100,
     order: 'oldest',
   });
-  // Cap at the fetch window, not a hard 10 — the old Math.min(limit, 10)
-  // silently clamped every run to 10 regardless of --limit (so a --limit 20
-  // night shift only ever did 10).
   const batch = allNew.slice(0, Math.max(1, Math.min(limit, 100)));
 
   if (batch.length === 0) {
@@ -257,18 +212,16 @@ async function main() {
     return;
   }
 
-  // Resolve channel + run title up front so the live-progress message can post
-  // BEFORE the loop starts — otherwise the operator sees nothing until every
-  // lead is done (30 leads * ~60-90s = 45+ minutes of silence).
   const channelId = config.channelIds.leadQualificationAgent
     || config.channelIds.leadGeneration
     || config.channelIds.agentResults;
-  const runTitle = redraftRejected ? 'Lead Qualification — Redraft (rejected drafts)'
-    : recoverEmails ? 'Lead Qualification — Email recovery'
-    : retryUnreachable ? 'Lead Qualification — Retry (unreachable sites)'
+  const runTitle = redraftRejected ? 'Lead Qualification - Redraft (rejected drafts)'
+    : recoverEmails ? 'Lead Qualification - Email recovery'
+    : retryUnreachable ? 'Lead Qualification - Retry (unreachable sites)'
     : 'Lead Qualification';
   const canPostLive = Boolean(!dryRun && channelId && config.env.DISCORD_BOT_TOKEN);
   const outcomes = [];
+  const pendingQualifiedCallLeads = [];
   let progressMessageId = null;
 
   if (canPostLive) {
@@ -282,13 +235,11 @@ async function main() {
       const posted = await postToChannel(config, channelId, { content: initialBody });
       progressMessageId = posted?.id || null;
     } catch (error) {
-      // Non-fatal — silence during the run is a UX regression, not a data
-      // problem. The final summary post at the end still lands.
       process.stderr.write(`Live-progress initial post failed (non-fatal): ${error.message}\n`);
     }
   }
 
-  const updateProgress = async ({ state = 'in_progress', currentLead = '' } = {}) => {
+  const updateProgress = async ({ state: progressState = 'in_progress', currentLead = '' } = {}) => {
     if (!canPostLive || !progressMessageId) {
       return;
     }
@@ -296,7 +247,7 @@ async function main() {
       outcomes,
       total: batch.length,
       runTitle,
-      state,
+      state: progressState,
       currentLead,
     });
     await patchChannelMessage(config, channelId, progressMessageId, { content: body });
@@ -304,41 +255,30 @@ async function main() {
 
   for (const lead of batch) {
     await updateProgress({ currentLead: lead.business_name });
-    // Slow site = concrete website-builder signal; measured before the
-    // judgment call so the real number can land in the draft.
+
     const pageSpeed = await measurePageSpeed(
       lead.source_url,
       config.env.PAGESPEED_API_KEY || process.env.PAGESPEED_API_KEY,
     );
 
-    // In retry mode the site blocked plain fetches last time — render it
-    // once with a real browser and hand the text to the qualifier.
     const renderedSiteText = retryUnreachable ? renderPageText(lead.source_url) : null;
-
-    // In redraft mode, feed the operator's saved rejection feedback back into
-    // the qualifier so the new draft addresses exactly what they flagged.
     const operatorFeedback = redraftRejected ? (lead.qualification?.rejection_feedback || null) : null;
 
     let qualification;
     try {
-      qualification = await qualifyLead(lead, config, { pageSpeed, renderedSiteText, enableScreenshot: !noScreenshot, operatorFeedback });
+      qualification = await qualifyLead(lead, config, {
+        pageSpeed,
+        renderedSiteText,
+        enableScreenshot: !noScreenshot,
+        operatorFeedback,
+      });
     } catch (error) {
-      // sourceUrl must be included here too — omitting it silently drops the
-      // markdown link for every errored lead in the summary message (this is
-      // exactly what happened during the ENOENT-broken run: every one of the
-      // 10 leads hit this path, so the whole summary showed plain text names).
       outcomes.push({ lead: lead.business_name, sourceUrl: lead.source_url, error: error.message });
       await updateProgress();
       continue;
     }
     qualification.page_speed = pageSpeed;
 
-    // Email recovery: the local Ollama extractor misses emails that ARE on the
-    // site (elbouw.com showed info@elbouw.com yet was stored with none) — and a
-    // qualified lead without an email is dropped from outreach entirely. 23
-    // leads had been lost this way. Claude is already reading the site here, so
-    // trust a discovered address, but only if it's plausibly real and on-domain
-    // or a common provider — never let a hallucinated address reach a draft.
     const discoveredEmail = String(qualification.contact_email || '').trim().toLowerCase();
     const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/u.test(discoveredEmail);
     if (!lead.contact_email && emailLooksValid) {
@@ -349,51 +289,49 @@ async function main() {
       }
     }
 
-    let status;
+    let finalStatus;
     let approvalTaskId = null;
+    let draftError = '';
     if (qualification.decision === 'qualified') {
-      status = lead.contact_email ? 'qualified' : 'qualified_no_email';
+      finalStatus = lead.contact_email ? 'qualified' : 'qualified_no_email';
     } else if (qualification.decision === 'extraction_error') {
-      status = 'extraction_error';
+      finalStatus = 'extraction_error';
     } else if (qualification.decision === 'unverifiable') {
-      // Site blocked our fetch — parked for retry, not a verdict on the
-      // business. Left as 'new' would retry immediately (and hammer a site
-      // that's rate-limiting us); a distinct status lets a later pass
-      // re-queue these deliberately.
-      status = 'site_unreachable';
+      finalStatus = 'site_unreachable';
     } else {
-      status = 'rejected_fit';
+      finalStatus = 'rejected_fit';
     }
 
-    if (!dryRun && status === 'qualified') {
+    if (!dryRun && finalStatus === 'qualified') {
       try {
         approvalTaskId = await createDraftWithApproval(config, lead, qualification);
       } catch (error) {
-        outcomes.push({ lead: lead.business_name, sourceUrl: lead.source_url, decision: qualification.decision, draftError: error.message });
-        status = 'qualified_draft_failed';
-        await updateProgress();
-        continue;
+        draftError = error.message;
+        finalStatus = 'qualified_draft_failed';
       }
     }
 
+    let storedQualification = null;
     if (!dryRun) {
+      storedQualification = {
+        ...qualification,
+        ...(lead.qualification?.rejection_feedback ? {
+          rejection_feedback: lead.qualification.rejection_feedback,
+          rejected_by: lead.qualification.rejected_by,
+          rejected_at: lead.qualification.rejected_at,
+          redrafted_after_feedback_at: new Date().toISOString(),
+        } : {}),
+        ...(lead.qualification?.qualified_call_leads_posted_at ? {
+          qualified_call_leads_posted_at: lead.qualification.qualified_call_leads_posted_at,
+          qualified_call_leads_thread_id: lead.qualification.qualified_call_leads_thread_id,
+          qualified_call_leads_message_id: lead.qualification.qualified_call_leads_message_id,
+        } : {}),
+        approval_task_id: approvalTaskId,
+        qualified_by: 'claude',
+      };
       await updateLead(lead.id, {
-        status,
-        // Re-qualifying REPLACES this jsonb, which silently wiped the operator's
-        // rejection feedback (it had done its job feeding the redraft, but the
-        // audit trail vanished — TFG lost its "te Engels / ziet er oud uit" note
-        // this way). Carry the rejection history forward explicitly.
-        qualification: {
-          ...qualification,
-          ...(lead.qualification?.rejection_feedback ? {
-            rejection_feedback: lead.qualification.rejection_feedback,
-            rejected_by: lead.qualification.rejected_by,
-            rejected_at: lead.qualification.rejected_at,
-            redrafted_after_feedback_at: new Date().toISOString(),
-          } : {}),
-          approval_task_id: approvalTaskId,
-          qualified_by: 'claude',
-        },
+        status: finalStatus,
+        qualification: storedQualification,
         qualified_at: new Date().toISOString(),
       });
     }
@@ -402,65 +340,98 @@ async function main() {
       leadId: lead.id,
       domain: lead.domain,
       decision: qualification.decision,
-      status,
+      status: finalStatus,
       offerAngle: qualification.offer_angle || '',
       approvalTaskId: approvalTaskId || '',
       dryRun,
     });
 
-    outcomes.push({
+    const outcome = {
       lead: lead.business_name,
       domain: lead.domain,
       sourceUrl: lead.source_url,
+      contactPhone: lead.contact_phone || '',
+      kvkNumber: lead.kvk_number || '',
       leadAgeDays: Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 86400000),
       decision: qualification.decision,
-      status,
+      status: finalStatus,
       offer_angle: qualification.offer_angle,
       confidence: qualification.confidence,
       lcp_seconds: pageSpeed?.lcp_seconds ?? null,
       screenshot_reviewed: qualification.screenshot_reviewed ?? null,
       reasoning: qualification.reasoning || '',
       approvalTaskId,
-    });
+      ...(draftError ? { draftError } : {}),
+    };
+    outcomes.push(outcome);
+
+    if (
+      !dryRun
+      && finalStatus === 'qualified_no_email'
+      && !lead.qualification?.qualified_call_leads_posted_at
+    ) {
+      pendingQualifiedCallLeads.push({
+        leadId: lead.id,
+        qualification: storedQualification,
+        outcome,
+      });
+    }
+
     await updateProgress();
   }
 
-  // Flip the live-progress card to a "completed" state FIRST — this is the
-  // fallback if the summary post below fails, so the operator still sees a
-  // coherent "run finished" state instead of a card stuck on "in progress".
-  // On success, the card is deleted right after the summary lands (below).
   await updateProgress({ state: 'completed' });
 
-  // Summary goes to #lead-qualification-agent (operator request — #lead-
-  // generation is for discovery activity; qualification/outreach is the
-  // sales side). Per-lead drafts + approvals go to #outreach-agent instead,
-  // via dispatchLeadOutreachEvents above.
   if (canPostLive) {
     const outreachChannel = config.channelIds.outreachAgent
       ? `<#${config.channelIds.outreachAgent}>`
       : '#outreach-agent';
+    const qualifiedCallLeadsChannel = config.channelIds.qualifiedCallLeads
+      ? `<#${config.channelIds.qualifiedCallLeads}>`
+      : '';
+
     let summaryPosted = false;
     try {
       await postLeadQualificationReport({
         channelId,
         outcomes,
         outreachChannel,
+        qualifiedCallLeadsChannel,
         runTitle,
         postMessage: (payload) => postToChannel(config, channelId, payload),
       });
       summaryPosted = true;
     } catch (error) {
-      // Surface but do NOT rethrow — the qualification results are already
-      // persisted to Supabase, so failing the whole process over a summary
-      // post would just drop the JSON on stdout that the caller consumes.
-      // The "completed" progress card above is left in place as the visible
-      // record for the operator.
       process.stderr.write(`Lead qualification summary post failed (non-fatal): ${error.message}\n`);
     }
 
-    // Delete the live-progress card once the summary lands cleanly — keeping
-    // both would leave the channel with a redundant "completed" card sitting
-    // above every summary (operator flagged 2026-08-03).
+    if (config.channelIds.qualifiedCallLeads && pendingQualifiedCallLeads.length > 0) {
+      try {
+        const threadId = config.channelIds.qualifiedCallLeads;
+        const firstMessage = await postQualifiedCallLeads({
+          channelId: threadId,
+          outcomes: pendingQualifiedCallLeads.map((record) => record.outcome),
+          postMessage: (payload) => postToChannel(config, threadId, payload),
+        });
+
+        if (firstMessage?.id) {
+          const postedAt = new Date().toISOString();
+          for (const record of pendingQualifiedCallLeads) {
+            await updateLead(record.leadId, {
+              qualification: {
+                ...record.qualification,
+                qualified_call_leads_posted_at: postedAt,
+                qualified_call_leads_thread_id: threadId,
+                qualified_call_leads_message_id: firstMessage.id,
+              },
+            });
+          }
+        }
+      } catch (error) {
+        process.stderr.write(`Qualified call-leads post failed (non-fatal): ${error.message}\n`);
+      }
+    }
+
     if (summaryPosted && progressMessageId) {
       await deleteChannelMessage(config, channelId, progressMessageId);
     }

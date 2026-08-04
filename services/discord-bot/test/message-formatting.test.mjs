@@ -315,6 +315,46 @@ test('buildOutboundEventDiscordPayload renders Gmail approval requests with draf
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Preview'), false);
 });
 
+test('buildOutboundEventDiscordPayload renders Poke Quizz publication review cards with preview actions', () => {
+  const payload = buildOutboundEventDiscordPayload({
+    type: 'approval_request',
+    body: 'Approval needed for TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456: Publish Poke Quizz preview for Water / Flying.',
+    metadata: {
+      taskId: 'TASK-ORION-PQ-PUBLISH-20260731204500-ABCDEF123456',
+      summary: 'Publish Poke Quizz preview for Water / Flying.',
+      targetAgent: 'product-video-agent',
+      domain: 'content',
+      priority: 'normal',
+      approvalReason: 'poke_quizz_publish_preview: preview uploaded and awaiting explicit publish approval',
+      publicationReview: true,
+      publicationId: 'publication-123',
+      previewUrl: 'https://youtube.com/shorts/preview-123',
+      genreLabel: 'Type Combination',
+      channelName: 'Poke Quizz',
+      channelUrl: 'https://www.youtube.com/channel/UCvMqBsEPDvjgNRMymQyefFg',
+      typePairLabel: 'Water / Flying',
+      seed: 'water-flying-random-20260731t220000z',
+      generationDurationLabel: '3 min',
+      publicationTitle: 'Can You Guess These Water / Flying Pokemon?',
+      publicationDescription: 'Beat the timer and wait for the reveal.',
+      renderPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/water-flying.mp4',
+      planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    },
+  });
+
+  assert.equal(payload.embeds.length, 1);
+  assert.equal(payload.embeds[0].color, 0x9B59B6);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Publication' && /publication-123/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Genre' && /Type Combination/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Channel' && /Poke Quizz/u.test(field.value) && /youtube\.com\/channel/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Busy Time' && /3 min/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Title' && /Water \/ Flying/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Description' && /Beat the timer/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Preview' && /Open Preview/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Action'), false);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Reason'), false);
+});
+
 test('buildHealthNotificationDiscordPayload renders alert cards with recovery guidance', () => {
   const payload = buildHealthNotificationDiscordPayload({
     kind: 'alert',

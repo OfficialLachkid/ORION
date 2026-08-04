@@ -24,6 +24,32 @@ export function getSourceDevice(env, options = {}) {
     || 'unknown-device';
 }
 
+export function isTransientSupabaseError(error) {
+  const message = String(error?.message || error || '');
+  return /fetch failed|network|socket|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|Supabase request failed \((?:408|425|429|5\d\d)\)/iu.test(message);
+}
+
+export async function retryTransientSupabaseOperation(operation, options = {}) {
+  const attempts = Math.max(1, Number(options.attempts || 3));
+  const baseDelayMs = Math.max(0, Number(options.baseDelayMs ?? 500));
+  const sleep = options.sleep || ((delayMs) => new Promise((resolvePromise) => {
+    setTimeout(resolvePromise, delayMs);
+  }));
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempt === attempts || !isTransientSupabaseError(error)) {
+        throw error;
+      }
+      await sleep(baseDelayMs * attempt);
+    }
+  }
+
+  throw new Error('Supabase operation exhausted its retry attempts.');
+}
+
 export async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   const text = await response.text();

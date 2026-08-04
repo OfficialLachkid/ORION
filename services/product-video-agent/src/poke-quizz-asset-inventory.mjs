@@ -6,7 +6,12 @@ import {
   POKE_QUIZZ_ASSET_LAYOUT,
 } from './poke-quizz-asset-layout.mjs';
 
-const BACKGROUND_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.mov', '.webm']);
+export const BACKGROUND_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.mp4', '.mov', '.webm']);
+const BACKGROUND_THEME_DIRECTORIES = Object.freeze([
+  'beach-backgrounds',
+  'cave-backgrounds',
+  'fire-backgrounds',
+]);
 const AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg']);
 const IMAGE_EXTENSIONS = new Set(['.png', '.gif', '.webp']);
 
@@ -52,6 +57,17 @@ async function listFilesRecursive(directoryPath, allowedExtensions) {
     }
   }
   return files.sort((left, right) => left.localeCompare(right));
+}
+
+async function listPokeQuizzBackgroundFiles() {
+  const rootFiles = await listFiles(POKE_QUIZZ_ASSET_LAYOUT.backgrounds, BACKGROUND_EXTENSIONS);
+  const themedBackgroundFiles = (await Promise.all(
+    BACKGROUND_THEME_DIRECTORIES.map((directoryName) => (
+      listFiles(`${POKE_QUIZZ_ASSET_LAYOUT.backgrounds}/${directoryName}`, BACKGROUND_EXTENSIONS)
+    )),
+  )).flat();
+  return [...new Set([...rootFiles, ...themedBackgroundFiles])]
+    .sort((left, right) => left.localeCompare(right));
 }
 
 function normalizeTypeName(typeName) {
@@ -148,7 +164,7 @@ export async function scanPokeQuizzAssetInventory() {
     overlays,
     transitions,
   ] = await Promise.all([
-    listFiles(POKE_QUIZZ_ASSET_LAYOUT.backgrounds, BACKGROUND_EXTENSIONS),
+    listPokeQuizzBackgroundFiles(),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.soundEffects, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.pixelTypes, IMAGE_EXTENSIONS),
@@ -161,6 +177,7 @@ export async function scanPokeQuizzAssetInventory() {
   const countdownTick = matchSoundEffect(soundEffects, ['countdown', 'tick', 'beep']);
   const timerEnd = matchSoundEffect(soundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'ding', 'reveal-hit']);
   const reveal = matchSoundEffect(soundEffects, ['reveal', 'sparkle', 'who', 'answer']) || timerEnd;
+  const pokeballWiggle = matchSoundEffect(soundEffects, ['pokeball', 'wiggle', 'wobble', 'shake']);
 
   return {
     scanned_at: new Date().toISOString(),
@@ -172,6 +189,7 @@ export async function scanPokeQuizzAssetInventory() {
       countdown_tick: countdownTick,
       timer_end: timerEnd,
       reveal,
+      pokeball_wiggle: pokeballWiggle,
     },
     type_icons: {
       pixel: pixelTypes,

@@ -9,6 +9,11 @@ import {
   extractMarkdownSummary,
   extractMarkdownTitle,
 } from '../lib/supabase-memory-sync-utils.mjs';
+import {
+  isTransientSupabaseError,
+  retryTransientSupabaseOperation,
+} from '../lib/supabase-bridge-api.mjs';
+import { getQualificationBatchTimeoutMs } from '../lib/night-shift-runtime.mjs';
 
 test('extractMarkdownTitle prefers the first markdown heading', () => {
   assert.equal(extractMarkdownTitle('# Bridge Hub\n\nSummary'), 'Bridge Hub');
@@ -170,4 +175,52 @@ test('buildBridgeCacheManifestEntry creates a machine-facing cache manifest row'
   assert.equal(entry.mergeState, 'in_sync');
   assert.equal(entry.selectedSource, 'shared');
   assert.equal(entry.version, 3);
+});
+
+test('retryTransientSupabaseOperation retries fetch failures with bounded backoff', async () => {
+  let calls = 0;
+  const delays = [];
+  const result = await retryTransientSupabaseOperation(async () => {
+    calls += 1;
+    if (calls < 3) {
+      throw new TypeError('fetch failed');
+    }
+    return 'recovered';
+  }, {
+    attempts: 3,
+    baseDelayMs: 25,
+    sleep: async (delayMs) => {
+      delays.push(delayMs);
+    },
+  });
+
+  assert.equal(result, 'recovered');
+  assert.equal(calls, 3);
+  assert.deepEqual(delays, [25, 50]);
+  assert.equal(isTransientSupabaseError(new Error('Supabase request failed (503): unavailable')), true);
+});
+
+test('retryTransientSupabaseOperation does not retry permanent Supabase errors', async () => {
+  let calls = 0;
+
+  await assert.rejects(
+    retryTransientSupabaseOperation(async () => {
+      calls += 1;
+      throw new Error('Supabase request failed (401): unauthorized');
+    }, {
+      sleep: async () => {
+        throw new Error('sleep should not run');
+      },
+    }),
+    /401/u,
+  );
+
+  assert.equal(calls, 1);
+});
+
+test('getQualificationBatchTimeoutMs scales safely for scheduled batch size', () => {
+  assert.equal(getQualificationBatchTimeoutMs(3), 60 * 60 * 1000);
+  assert.equal(getQualificationBatchTimeoutMs(10), 70 * 60 * 1000);
+  assert.equal(getQualificationBatchTimeoutMs(20), 140 * 60 * 1000);
+  assert.equal(getQualificationBatchTimeoutMs(100), 3 * 60 * 60 * 1000);
 });

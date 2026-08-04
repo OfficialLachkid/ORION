@@ -137,6 +137,20 @@ export function loadRuntimeConfig(options = {}) {
   const channelIds = Object.fromEntries(
     Object.entries(channelMap.channels || {}).map(([key, value]) => [key, substituteEnvPlaceholders(value, env)])
   );
+  // Migration fallback for existing gitignored channel-map.json files. New
+  // thread routes can be enabled by adding only the matching .env value.
+  if (!Object.prototype.hasOwnProperty.call(channelIds, 'qualifiedCallLeads')) {
+    channelIds.qualifiedCallLeads = env.DISCORD_QUALIFIED_CALL_LEADS_THREAD_ID || '';
+  }
+  if (!Object.prototype.hasOwnProperty.call(channelIds, 'pokeQuizzReview')) {
+    channelIds.pokeQuizzReview =
+      env.DISCORD_REVIEW_VIDEOS_POKE_QUIZZ_THREAD_ID
+      || env.DISCORD_POKE_QUIZZ_REVIEW_THREAD_ID
+      || '';
+  }
+  if (!Object.prototype.hasOwnProperty.call(channelIds, 'pokemon')) {
+    channelIds.pokemon = env.DISCORD_POKEMON_CHANNEL_ID || '';
+  }
 
   const resolvedTmpDir = env.RUNTIME_TMP_DIR || resolve(projectRoot, 'data', 'runtime', 'tmp');
   const resolvedLogDir = env.RUNTIME_LOG_DIR || resolve(projectRoot, 'data', 'runtime', 'logs');

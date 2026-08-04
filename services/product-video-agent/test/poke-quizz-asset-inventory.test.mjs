@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  BACKGROUND_EXTENSIONS,
   buildThreeDTypeStyleCatalog,
   isAssetCandidateFileName,
   selectOverlayPresets,
@@ -12,6 +13,11 @@ test('asset inventory ignores hidden and AppleDouble metadata files', () => {
   assert.equal(isAssetCandidateFileName('.DS_Store'), false);
   assert.equal(isAssetCandidateFileName('._grass.gif'), false);
   assert.equal(isAssetCandidateFileName(''), false);
+});
+
+test('background inventory excludes avif assets until the renderer supports them', () => {
+  assert.equal(BACKGROUND_EXTENSIONS.has('.avif'), false);
+  assert.equal(BACKGROUND_EXTENSIONS.has('.jpg'), true);
 });
 
 test('type icon selection prefers 3D assets only when every requested type exists', () => {
@@ -91,12 +97,15 @@ test('timer_finished sound effect naming is recognized by the current inventory 
   const soundEffects = [
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/countdown.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/timer_finished.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/pokeball_wiggle.mp3',
   ];
   const countdownTick = soundEffects.find((filePath) => ['countdown', 'tick', 'beep'].some((keyword) => filePath.toLowerCase().includes(keyword)));
   const timerEnd = soundEffects.find((filePath) => ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'ding', 'reveal-hit'].some((keyword) => filePath.toLowerCase().includes(keyword)));
   const reveal = soundEffects.find((filePath) => ['reveal', 'sparkle', 'who', 'answer'].some((keyword) => filePath.toLowerCase().includes(keyword))) || timerEnd;
+  const pokeballWiggle = soundEffects.find((filePath) => ['pokeball', 'wiggle', 'wobble', 'shake'].some((keyword) => filePath.toLowerCase().includes(keyword)));
 
   assert.match(countdownTick || '', /countdown\.mp3$/u);
   assert.match(timerEnd || '', /timer_finished\.mp3$/u);
   assert.match(reveal || '', /timer_finished\.mp3$/u);
+  assert.match(pokeballWiggle || '', /pokeball_wiggle\.mp3$/u);
 });

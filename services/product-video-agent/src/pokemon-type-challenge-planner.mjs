@@ -1,10 +1,69 @@
 import { createTypePairKey, DISALLOWED_TYPE_PAIR_KEYS, normalizeTypePair } from './pokemon-type-pairs.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from './poke-quizz-asset-layout.mjs';
 import {
+  createPokeQuizzVideoSignatureKey,
+  normalizePokeQuizzSelectionState,
+} from './poke-quizz-selection-state.mjs';
+import {
   scanPokeQuizzAssetInventory,
   selectSeededFile,
   selectTypeIconSet,
 } from './poke-quizz-asset-inventory.mjs';
+
+const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
+  fire: ['fire-backgrounds'],
+  ground: ['cave-backgrounds'],
+  rock: ['cave-backgrounds'],
+  water: ['beach-backgrounds'],
+});
+
+function isBeachBackgroundPath(backgroundPath) {
+  return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
+}
+
+function isFireBackgroundPath(backgroundPath) {
+  return String(backgroundPath || '').toLowerCase().includes('/fire-backgrounds/');
+}
+
+function isCaveBackgroundPath(backgroundPath) {
+  return String(backgroundPath || '').toLowerCase().includes('/cave-backgrounds/');
+}
+
+function isArchivedBackgroundPath(backgroundPath) {
+  return String(backgroundPath || '').toLowerCase().includes('/archived-backgrounds/');
+}
+
+const TYPE_THEMED_BACKGROUND_PRIORITY = Object.freeze([
+  'ground',
+  'rock',
+  'fire',
+  'water',
+]);
+
+function isThemedBackgroundPath(backgroundPath) {
+  return isBeachBackgroundPath(backgroundPath)
+    || isCaveBackgroundPath(backgroundPath)
+    || isFireBackgroundPath(backgroundPath);
+}
+
+function resolveThemedBackgroundPriority(normalizedTypes = []) {
+  const selectedTypes = new Set(normalizedTypes);
+  const prioritizedTypes = TYPE_THEMED_BACKGROUND_PRIORITY
+    .filter((typeName) => selectedTypes.has(typeName));
+
+  if (selectedTypes.has('fire') && (selectedTypes.has('ground') || selectedTypes.has('rock'))) {
+    return [
+      'fire',
+      ...prioritizedTypes.filter((typeName) => typeName !== 'fire'),
+    ];
+  }
+
+  return prioritizedTypes;
+}
+
+function normalizeAssetPath(assetPath) {
+  return String(assetPath || '').trim().replaceAll('\\', '/').toLowerCase();
+}
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -37,8 +96,13 @@ function sampleArray(values, count, random) {
 
 function getTemplateSelectionConfig(template) {
   const typePairPolicy = template.selection_rules?.type_pair_policy || {};
+  const configuredGenerationScope = Array.isArray(template.selection_rules?.generation_scope)
+    ? template.selection_rules.generation_scope
+      .map((value) => Number.parseInt(String(value), 10))
+      .filter((value) => Number.isFinite(value) && value > 0)
+    : [];
   return {
-    generationScope: template.selection_rules?.generation_scope || [1],
+    generationScope: configuredGenerationScope.length > 0 ? configuredGenerationScope : null,
     disallowedPairs: new Set(
       (typePairPolicy.disallowed_type_pairs || [])
         .map((pair) => createTypePairKey(pair)),
@@ -53,7 +117,7 @@ function buildPairCatalog(rows, config) {
   const pairCatalog = new Map();
 
   for (const row of rows) {
-    if (!config.generationScope.includes(row.generation)) continue;
+    if (Array.isArray(config.generationScope) && !config.generationScope.includes(row.generation)) continue;
     if (!row.national_dex_number || !row.name || !Array.isArray(row.types)) continue;
     if (row.types.length !== 2) continue;
 
@@ -73,7 +137,7 @@ function buildPairCatalog(rows, config) {
     .sort((left, right) => left.pair.join('|').localeCompare(right.pair.join('|')));
 }
 
-function pickPair(pairCatalog, forcedTypePair, random) {
+function pickPair(pairCatalog, forcedTypePair, random, selectionState) {
   if (forcedTypePair) {
     const pairKey = createTypePairKey(forcedTypePair);
     const forced = pairCatalog.find((entry) => createTypePairKey(entry.pair) === pairKey);
@@ -87,7 +151,66 @@ function pickPair(pairCatalog, forcedTypePair, random) {
     throw new Error('No eligible Pokemon type pairs were found in the grounded Pokedex catalog.');
   }
 
-  return pairCatalog[Math.floor(random() * pairCatalog.length)];
+  const localizedPairCatalog = pairCatalog.filter((entry) => entry.matches.some((subject) => subject.sprite_path));
+  const renderablePairCatalog = localizedPairCatalog.length > 0
+    ? localizedPairCatalog
+    : pairCatalog;
+  const lastTypePairKey = normalizePokeQuizzSelectionState(selectionState).last_type_pair_key;
+  const eligibleCatalog = lastTypePairKey && renderablePairCatalog.length > 1
+    ? renderablePairCatalog.filter((entry) => createTypePairKey(entry.pair) !== lastTypePairKey)
+    : renderablePairCatalog;
+
+  return eligibleCatalog[Math.floor(random() * eligibleCatalog.length)];
+}
+
+function selectSeededFileAvoidingPrevious(files, random, previousPath) {
+  if (!Array.isArray(files) || files.length === 0) {
+    return null;
+  }
+  if (!previousPath || files.length <= 1) {
+    return selectSeededFile(files, random);
+  }
+
+  const normalizedPreviousPath = normalizeAssetPath(previousPath);
+  const eligibleFiles = files.filter((filePath) => normalizeAssetPath(filePath) !== normalizedPreviousPath);
+  return selectSeededFile(eligibleFiles.length > 0 ? eligibleFiles : files, random);
+}
+
+function selectBackgroundCandidatesForTypePair(backgrounds, typePair = []) {
+  const allBackgrounds = (Array.isArray(backgrounds) ? backgrounds : [])
+    .filter((backgroundPath) => !isArchivedBackgroundPath(backgroundPath));
+  if (allBackgrounds.length === 0) {
+    return [];
+  }
+
+  const normalizedTypes = typePair.map((typeName) => String(typeName || '').trim().toLowerCase());
+  const prioritizedThemedTypes = resolveThemedBackgroundPriority(normalizedTypes);
+
+  for (const typeName of prioritizedThemedTypes) {
+    const folderHints = TYPE_THEMED_BACKGROUND_FOLDER_HINTS[typeName] || [];
+    const themedCandidates = allBackgrounds.filter((backgroundPath) => (
+      folderHints.some((folderHint) => backgroundPath.toLowerCase().includes(`/${folderHint.toLowerCase()}/`))
+    ));
+    if (themedCandidates.length > 0) {
+      return [...new Set(themedCandidates)];
+    }
+  }
+
+  return allBackgrounds.filter((backgroundPath) => !isThemedBackgroundPath(backgroundPath));
+}
+
+function selectBackgroundForTypePair(backgrounds, typePair, random, selectionState) {
+  const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
+  const backgroundCandidates = selectBackgroundCandidatesForTypePair(backgrounds, typePair);
+  if (backgroundCandidates.length === 0) {
+    return null;
+  }
+
+  return selectSeededFileAvoidingPrevious(
+    backgroundCandidates,
+    random,
+    normalizedSelectionState.last_background_path,
+  );
 }
 
 function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
@@ -141,7 +264,12 @@ function buildCenteredGridLayout(template, itemCount) {
   const columns = selectGridColumns(cappedItemCount, maxColumns);
   const rows = columns > 0 ? Math.ceil(cappedItemCount / columns) : 0;
   const gridHeight = rows > 0 ? (rows * itemSize) + ((rows - 1) * rowGap) : 0;
-  const originY = stageTop + Math.max(0, Math.floor((stageHeight - gridHeight) / 2));
+  const sparseGridNudgeY = rows <= 1
+    ? Math.min(120, Math.floor(stageHeight * 0.14))
+    : rows === 2
+      ? Math.min(60, Math.floor(stageHeight * 0.07))
+      : 0;
+  const originY = stageTop + Math.max(0, Math.floor((stageHeight - gridHeight) / 2) - sparseGridNudgeY);
 
   const cells = [];
   for (let index = 0; index < cappedItemCount; index += 1) {
@@ -189,19 +317,25 @@ export async function planPokemonTypeChallenge({
   seed = 'poke-quizz',
   forcedTypePair = null,
   assetInventory = null,
+  selectionState = null,
 }) {
   const config = getTemplateSelectionConfig(template);
   const random = createPrng(seed);
   const pairCatalog = buildPairCatalog(pokedexRows, config);
-  const selectedPair = pickPair(pairCatalog, forcedTypePair, random);
+  const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
+  const selectedPair = pickPair(pairCatalog, forcedTypePair, random, normalizedSelectionState);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
+  const localizedMatches = selectedPair.matches.filter((subject) => subject.sprite_path);
+  const selectableSubjects = localizedMatches.length > 0
+    ? localizedMatches
+    : selectedPair.matches;
   const selectedSubjectCount = Math.max(
     config.selectedSubjectsMin,
-    Math.min(config.selectedSubjectsMax, selectedPair.matches.length),
+    Math.min(config.selectedSubjectsMax, selectableSubjects.length),
   );
-  const selectedSubjects = sampleArray(selectedPair.matches, selectedSubjectCount, random)
+  const selectedSubjects = sampleArray(selectableSubjects, selectedSubjectCount, random)
     .sort((left, right) => left.national_dex_number - right.national_dex_number);
-  const compatibleDisplayCount = Math.min(selectedPair.matches.length, config.selectedSubjectsMax);
+  const compatibleDisplayCount = Math.min(selectableSubjects.length, config.selectedSubjectsMax);
   const pokeballGridLayout = buildCenteredGridLayout(template, compatibleDisplayCount);
 
   const firstSubjectTypeIcons = selectedPair.matches[0]?.metadata?.type_icon_source_urls || [];
@@ -237,6 +371,21 @@ export async function planPokemonTypeChallenge({
   if (!inventory.sound_effects.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
   if (!inventory.sound_effects.reveal) requiredAssetGaps.push('reveal_sfx_missing');
 
+  const selectedBackgroundPath = selectBackgroundForTypePair(
+    inventory.backgrounds,
+    selectedPair.pair,
+    random,
+    normalizedSelectionState,
+  );
+  const selectedVideoSignature = createPokeQuizzVideoSignatureKey(
+    selectedPair.pair,
+    selectedBackgroundPath,
+  );
+  const usedVideoSignatures = [
+    selectedVideoSignature,
+    ...normalizedSelectionState.used_video_signatures.filter((signature) => signature !== selectedVideoSignature),
+  ].filter(Boolean);
+
   return {
     schema_version: 'poke-quizz-plan-v1',
     channel: {
@@ -246,7 +395,7 @@ export async function planPokemonTypeChallenge({
       content_lane: 'pokemon_type_challenge',
     },
     template_id: template.template_id,
-    generation_scope: config.generationScope,
+    generation_scope: config.generationScope || [],
     seed: String(seed),
     selection: {
       type_pair: selectedPair.pair,
@@ -301,7 +450,7 @@ export async function planPokemonTypeChallenge({
     assets: {
       background: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
-        selected_path: selectSeededFile(inventory.backgrounds, random),
+        selected_path: selectedBackgroundPath,
       },
       type_icons: typeIcons,
       pokemon: selectedSubjects.map((subject) => buildSubjectAssetRecord(subject)),
@@ -332,6 +481,11 @@ export async function planPokemonTypeChallenge({
         previews_directory: POKE_QUIZZ_ASSET_LAYOUT.previews,
         masters_directory: POKE_QUIZZ_ASSET_LAYOUT.masters,
       },
+    },
+    selection_state: {
+      last_type_pair_key: createTypePairKey(selectedPair.pair),
+      last_background_path: selectedBackgroundPath,
+      used_video_signatures: usedVideoSignatures,
     },
     asset_inventory_snapshot: inventory,
     required_asset_gaps: [...new Set(requiredAssetGaps)],

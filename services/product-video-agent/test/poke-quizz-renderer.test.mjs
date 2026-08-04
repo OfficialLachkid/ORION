@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  applyNarrationDurationsToRenderPlan,
   buildCountdownMoments,
   buildAudioFilterScript,
   buildHookTypeIconLayout,
+  buildVisualFilterScript,
   escapeDrawtextText,
   formatEnableBetween,
   buildPhaseSchedule,
@@ -30,6 +32,15 @@ const template = {
     type_icons: {
       spacing_px: 42,
       icon_size_px: 252,
+    },
+    pokeball_grid: {
+      item_size_px: 300,
+      stage_bounds_px: {
+        left: 20,
+        top: 760,
+        width: 1040,
+        height: 1040,
+      },
     },
     timer: {
       countdown_from: 5,
@@ -99,32 +110,92 @@ test('prompt wrapping keeps long quiz text inside a centered two-line block', ()
 
 test('type icon layout stays centered in the upper middle', () => {
   const layout = buildTypeIconLayout(template, 2);
-  assert.deepEqual(layout[0], { x: 267, y: 320, width: 252, height: 252 });
-  assert.deepEqual(layout[1], { x: 561, y: 320, width: 252, height: 252 });
+  assert.deepEqual(layout[0], { x: 267, y: 360, width: 252, height: 252 });
+  assert.deepEqual(layout[1], { x: 561, y: 360, width: 252, height: 252 });
 });
 
 test('hook type icon layout starts larger and centered before settling', () => {
   const layout = buildHookTypeIconLayout(template, 2);
-  assert.deepEqual(layout[0], { x: 119, y: 620, width: 391, height: 391 });
-  assert.deepEqual(layout[1], { x: 570, y: 620, width: 391, height: 391 });
+  assert.deepEqual(layout[0], { x: 182, y: 684, width: 328, height: 328 });
+  assert.deepEqual(layout[1], { x: 570, y: 684, width: 328, height: 328 });
 });
 
-test('timer layout stays top-left with centered number anchors', () => {
-  const layout = buildTimerLayout(template);
-  assert.equal(layout.x, 30);
-  assert.equal(layout.y, 180);
-  assert.equal(layout.width, 320);
-  assert.equal(layout.height, 320);
-  assert.equal(layout.number_center_x, 190);
-  assert.equal(layout.number_center_y, 340);
+test('badge-style hook icons render directly without a synthetic white backdrop layer', () => {
+  const badgePlan = {
+    ...plan,
+    assets: {
+      ...plan.assets,
+      type_icons: [
+        { type: 'grass', local_path: '/tmp/badge-style/grass.png' },
+        { type: 'poison', local_path: '/tmp/badge-style/poison.png' },
+      ],
+      pokemon: [],
+      overlays: {
+        ...plan.assets.overlays,
+        pokeball_grid: {
+          cells: [],
+          item_count: 0,
+          columns: 0,
+          rows: 0,
+          item_size_px: 180,
+        },
+      },
+    },
+  };
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan: badgePlan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const visualFilter = buildVisualFilterScript(
+    badgePlan,
+    template,
+    renderPlan,
+    {
+      background: 0,
+      typeIcons: [1, 2],
+      timerCountdown: 3,
+      timerAlarm: null,
+      pokeball: 4,
+      pokemon: [],
+    },
+    null,
+    {
+      hook: { lines: [] },
+      prompt: { lines: [] },
+      reveal: { lines: [] },
+    },
+  );
+  assert.doesNotMatch(visualFilter.script, /typebg0/u);
+  assert.match(visualFilter.script, /\[v0\]\[type0\]overlay=x='/u);
+  assert.match(visualFilter.script, /0\.96/u);
+  assert.match(visualFilter.script, /0\.82/u);
 });
 
-test('countdown moments include the 0 card at reveal time', () => {
+test('timer layout sits above the pokeball grid with centered number anchors', () => {
+  const layout = buildTimerLayout(template, {
+    item_size_px: 240,
+    stage_bounds_px: {
+      left: 20,
+      top: 760,
+      width: 1040,
+      height: 1040,
+    },
+  });
+  assert.equal(layout.x, 450);
+  assert.equal(layout.y, 636);
+  assert.equal(layout.width, 180);
+  assert.equal(layout.height, 180);
+  assert.equal(layout.number_center_x, 540);
+  assert.equal(layout.number_center_y, 726);
+});
+
+test('countdown moments stop at 1 instead of showing a 0 card', () => {
   const schedule = buildPhaseSchedule(plan.timeline);
   const countdown = buildCountdownMoments(schedule, 5, 0);
-  assert.equal(countdown.length, 6);
+  assert.equal(countdown.length, 5);
   assert.deepEqual(countdown[0], { value: '5', start_seconds: 2.8, end_seconds: 3.8 });
-  assert.deepEqual(countdown.at(-1), { value: '0', start_seconds: 7.8, end_seconds: 8.15 });
+  assert.deepEqual(countdown.at(-1), { value: '1', start_seconds: 6.8, end_seconds: 8.15 });
 });
 
 test('render plan derives battle-music lead-in and preserves grid geometry', () => {
@@ -134,11 +205,82 @@ test('render plan derives battle-music lead-in and preserves grid geometry', () 
     outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
   });
   assert.equal(renderPlan.audio_cues.reveal_start_seconds, 7.8);
+  assert.equal(renderPlan.audio_cues.reveal_visual_start_seconds, 8.1);
   assert.equal(renderPlan.audio_cues.battle_music_start_seconds, 0);
   assert.equal(renderPlan.grid.cells.length, 6);
+  assert.equal(renderPlan.grid.cells[0].center_x, 228);
+  assert.equal(renderPlan.grid.cells[0].center_y, 652);
   assert.equal(renderPlan.type_icon_intro_layout[0].width > renderPlan.type_icon_layout[0].width, true);
   assert.equal(renderPlan.transitions.type_icon_settle_seconds, 0.256);
+  assert.equal(renderPlan.timer_layout.y > renderPlan.type_icon_layout[0].y, true);
+  assert.equal(renderPlan.timer_layout.y < template.layout.pokeball_grid.stage_bounds_px.top, true);
   assert.equal(renderPlan.output_path.endsWith('grass-poison-preview.mp4'), true);
+});
+
+test('visual filter script starts pokeballs earlier and enlarges the timer visual around the same center', () => {
+  const visualPlan = {
+    ...plan,
+    assets: {
+      ...plan.assets,
+      pokemon: [
+        {
+          national_dex_number: 1,
+          sprite_path: '/tmp/bulbasaur.png',
+        },
+      ],
+    },
+  };
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan: visualPlan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const visualFilter = buildVisualFilterScript(
+    visualPlan,
+    template,
+    renderPlan,
+    {
+      background: 0,
+      typeIcons: [1, 2],
+      timerCountdown: 3,
+      timerAlarm: 4,
+      pokeball: 5,
+      pokemon: [6],
+    },
+    null,
+    {
+      hook: { lines: [] },
+      prompt: { lines: [] },
+      reveal: { lines: [] },
+    },
+  );
+
+  assert.match(visualFilter.script, /trim=duration=6\.232,setpts=PTS-STARTPTS\+2\.3\/TB,scale=216:216/u);
+  assert.match(visualFilter.script, /scale=234:234:force_original_aspect_ratio=decrease/u);
+  assert.match(visualFilter.script, /overlay=x='540-w\/2':y='726-h\/2'/u);
+  assert.match(visualFilter.script, /if\(lt\(\(\(n\/30\)\),0\),0\.9,if\(lt\(\(\(n\/30\)\),0\.072\),0\.9\+\(\(\(\(n\/30\)\)-0\)\/0\.072\)\*0\.22/u);
+  assert.match(visualFilter.script, /min\(max\(\(\(\(n\/30\)\)-1\.2\)\/0\.256,0\),1\)/u);
+  assert.match(visualFilter.script, /2\.3\+\(n\/30\)/u);
+  assert.match(visualFilter.script, /eq=contrast=1\.08:saturation=1\.05/u);
+  assert.match(visualFilter.script, /max\(0\.02,pow\(max\(0\.02,1-/u);
+  assert.match(visualFilter.script, /,1\.85\)\)/u);
+  assert.doesNotMatch(visualFilter.script, /undefined/u);
+});
+
+test('prompt cue window can extend to the measured narration duration', () => {
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const adjusted = applyNarrationDurationsToRenderPlan(renderPlan, {
+    prompt_seconds: 2.6,
+  });
+  assert.equal(adjusted.audio_cues.prompt_end_seconds, 3.8);
+  assert.equal(adjusted.audio_cues.countdown_start_seconds, 3.8);
+  assert.equal(adjusted.audio_cues.reveal_start_seconds, 8.8);
+  assert.equal(adjusted.total_duration_seconds, 11.2);
+  assert.deepEqual(adjusted.countdown_numbers[0], { value: '5', start_seconds: 3.8, end_seconds: 4.8 });
 });
 
 test('audio filter script repeats short tick assets when no long countdown bed exists', () => {
@@ -188,7 +330,7 @@ test('escaped enable windows are safe for ffmpeg filter parsing', () => {
   });
   assert.match(
     JSON.stringify(renderPlan.countdown_numbers),
-    /7\.8/u,
+    /6\.8/u,
   );
   assert.equal(
     formatEnableBetween(renderPlan.phases.type_prompt.start_seconds, renderPlan.phases.reveal.start_seconds),

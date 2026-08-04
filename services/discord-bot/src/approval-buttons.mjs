@@ -3,15 +3,18 @@ import { approvalStateTitle, EMBED_COLORS } from './message-formatting.mjs';
 const DISCORD_COMPONENT_TYPE_ACTION_ROW = 1;
 const DISCORD_COMPONENT_TYPE_BUTTON = 2;
 const DISCORD_COMPONENT_TYPE_TEXT_INPUT = 4;
+const DISCORD_BUTTON_STYLE_SECONDARY = 2;
 const DISCORD_BUTTON_STYLE_SUCCESS = 3;
 const DISCORD_BUTTON_STYLE_DANGER = 4;
 const DISCORD_TEXT_INPUT_STYLE_PARAGRAPH = 2;
 const DISCORD_INTERACTION_TYPE_MESSAGE_COMPONENT = 3;
 const DISCORD_INTERACTION_TYPE_MODAL_SUBMIT = 5;
 const APPROVAL_REJECT_MODAL_PREFIX = 'reject-modal:';
+const APPROVAL_DELETE_MODAL_PREFIX = 'delete-modal:';
+const POKE_QUIZZ_PUBLISH_TASK_PREFIX = 'TASK-ORION-PQ-PUBLISH-';
 
 export function parseApprovalButtonCustomId(customId) {
-  const match = /^(approve|reject):(TASK-[A-Z0-9-]+)$/u.exec(String(customId || ''));
+  const match = /^(approve|reject|delete):(TASK-[A-Z0-9-]+)$/u.exec(String(customId || ''));
   if (!match) {
     return null;
   }
@@ -36,46 +39,99 @@ export function buildApprovalButtons(taskId, options = {}) {
   }
 
   const isEmailAction = options.isEmailAction === true;
+  const approveLabel = String(options.approveLabel || '').trim() || (isEmailAction ? 'Send Email' : 'Approve');
+  const rejectLabel = String(options.rejectLabel || '').trim() || (isEmailAction ? 'Give Feedback' : 'Reject');
+  const deleteLabel = String(options.deleteLabel || '').trim();
+  const components = [
+    {
+      type: DISCORD_COMPONENT_TYPE_BUTTON,
+      style: DISCORD_BUTTON_STYLE_SUCCESS,
+      label: approveLabel,
+      custom_id: `approve:${taskId}`,
+      disabled: options.approveDisabled === true,
+    },
+    {
+      type: DISCORD_COMPONENT_TYPE_BUTTON,
+      style: deleteLabel ? DISCORD_BUTTON_STYLE_SECONDARY : DISCORD_BUTTON_STYLE_DANGER,
+      label: rejectLabel,
+      custom_id: `reject:${taskId}`,
+      disabled: options.rejectDisabled === true,
+    },
+  ];
+  if (deleteLabel) {
+    components.push({
+      type: DISCORD_COMPONENT_TYPE_BUTTON,
+      style: DISCORD_BUTTON_STYLE_DANGER,
+      label: deleteLabel,
+      custom_id: `delete:${taskId}`,
+      disabled: options.deleteDisabled === true,
+    });
+  }
 
   return [
     {
       type: DISCORD_COMPONENT_TYPE_ACTION_ROW,
-      components: [
-        {
-          type: DISCORD_COMPONENT_TYPE_BUTTON,
-          style: DISCORD_BUTTON_STYLE_SUCCESS,
-          label: isEmailAction ? 'Send Email' : 'Approve',
-          custom_id: `approve:${taskId}`,
-          disabled: options.approveDisabled === true,
-        },
-        {
-          type: DISCORD_COMPONENT_TYPE_BUTTON,
-          style: DISCORD_BUTTON_STYLE_DANGER,
-          label: isEmailAction ? 'Give Feedback' : 'Reject',
-          custom_id: `reject:${taskId}`,
-          disabled: options.rejectDisabled === true,
-        },
-      ],
+      components,
     },
   ];
 }
 
 export function shouldOpenRejectApprovalModal(interaction) {
+  const action = getApprovalModalRequest(interaction);
+  return action?.decision === 'reject';
+}
+
+export function getApprovalModalRequest(interaction) {
   const action = parseApprovalButtonCustomId(interaction?.data?.custom_id);
-  return interaction?.type === DISCORD_INTERACTION_TYPE_MESSAGE_COMPONENT && action?.decision === 'reject';
+  if (interaction?.type !== DISCORD_INTERACTION_TYPE_MESSAGE_COMPONENT) {
+    return null;
+  }
+  return action?.decision === 'reject' || action?.decision === 'delete'
+    ? action
+    : null;
 }
 
 export function buildApprovalRejectModal(taskId) {
+  return buildApprovalDecisionModal('reject', taskId);
+}
+
+export function buildApprovalDecisionModal(decision, taskId) {
   if (!taskId) {
     return null;
   }
 
   const isPullRequestMerge = taskId.startsWith('TASK-PR-MERGE-');
   const isProductVideo = taskId.startsWith('TASK-ORION-');
+  const isPokeQuizzPublicationReview = taskId.startsWith('TASK-ORION-PQ-PUBLISH-');
+  if (decision === 'delete') {
+    return {
+      custom_id: `${APPROVAL_DELETE_MODAL_PREFIX}${taskId}`,
+      title: isPokeQuizzPublicationReview ? 'Delete Preview' : 'Confirm Delete',
+      components: [
+        {
+          type: DISCORD_COMPONENT_TYPE_ACTION_ROW,
+          components: [
+            {
+              type: DISCORD_COMPONENT_TYPE_TEXT_INPUT,
+              custom_id: 'delete_confirmation',
+              style: DISCORD_TEXT_INPUT_STYLE_PARAGRAPH,
+              label: 'Type DELETE to confirm',
+              placeholder: 'DELETE',
+              min_length: 6,
+              max_length: 32,
+              required: true,
+            },
+          ],
+        },
+      ],
+    };
+  }
 
   return {
     custom_id: `${APPROVAL_REJECT_MODAL_PREFIX}${taskId}`,
-    title: isPullRequestMerge
+    title: isPokeQuizzPublicationReview
+      ? 'Give Preview Feedback'
+      : isPullRequestMerge
       ? 'Reject PR Merge'
       : isProductVideo
         ? 'Reject Approval Request'
@@ -88,12 +144,16 @@ export function buildApprovalRejectModal(taskId) {
             type: DISCORD_COMPONENT_TYPE_TEXT_INPUT,
             custom_id: 'rejection_reason',
             style: DISCORD_TEXT_INPUT_STYLE_PARAGRAPH,
-            label: isPullRequestMerge
+            label: isPokeQuizzPublicationReview
+              ? 'What should change in the next preview?'
+              : isPullRequestMerge
               ? 'Why should this PR remain open?'
               : isProductVideo
                 ? 'Why is this approval being rejected?'
                 : 'What should be improved before this is sent?',
-            placeholder: isPullRequestMerge
+            placeholder: isPokeQuizzPublicationReview
+              ? 'Describe the revision to render next.'
+              : isPullRequestMerge
               ? 'State what must change before merging.'
               : 'State the required revision feedback.',
             min_length: 5,
@@ -128,11 +188,34 @@ export function buildResolvedApprovalEmbeds(originalEmbeds, decision, taskId) {
     return undefined;
   }
 
-  const color = decision === 'approve' ? EMBED_COLORS.success : EMBED_COLORS.blocked;
-  const resolvedTitle = approvalStateTitle({ decision, taskId });
+  const isPokeQuizzPublishApproval = decision === 'approve' && String(taskId || '').startsWith(POKE_QUIZZ_PUBLISH_TASK_PREFIX);
+  const isPokeQuizzDeleteApproval = decision === 'delete' && String(taskId || '').startsWith(POKE_QUIZZ_PUBLISH_TASK_PREFIX);
+  const color = isPokeQuizzPublishApproval
+    ? EMBED_COLORS.queue
+    : isPokeQuizzDeleteApproval
+      ? EMBED_COLORS.blocked
+    : decision === 'approve'
+      ? EMBED_COLORS.success
+      : EMBED_COLORS.blocked;
+  const resolvedTitle = isPokeQuizzPublishApproval
+    ? `Publish Queued · ${taskId}`
+    : isPokeQuizzDeleteApproval
+      ? `Delete Queued · ${taskId}`
+    : approvalStateTitle({ decision, taskId });
   return embeds.map((embed, index) => ({
     ...embed,
     color,
+    ...(Array.isArray(embed?.fields) && embed.fields.length > 0
+      ? {
+        fields: embed.fields.map((field) => (
+          field?.name === 'State' && isPokeQuizzPublishApproval
+            ? { ...field, value: '`queued_for_publish`' }
+            : field?.name === 'State' && isPokeQuizzDeleteApproval
+              ? { ...field, value: '`delete_requested`' }
+            : field
+        )),
+      }
+      : {}),
     ...(index === 0 ? { title: resolvedTitle } : {}),
   }));
 }
@@ -160,7 +243,7 @@ export function buildResolvedApprovalContent(originalContent, decision, actorDis
 
 export function normalizeInteractionAsApprovalMessage(interaction) {
   const action = interaction?.type === DISCORD_INTERACTION_TYPE_MODAL_SUBMIT
-    ? parseRejectApprovalModalInteraction(interaction)
+    ? parseApprovalModalInteraction(interaction)
     : parseApprovalButtonCustomId(interaction?.data?.custom_id);
   if (!action) {
     return null;
@@ -168,6 +251,8 @@ export function normalizeInteractionAsApprovalMessage(interaction) {
 
   const content = action.decision === 'approve'
     ? `approve ${action.taskId}`
+    : action.decision === 'delete'
+      ? `delete ${action.taskId}`
     : `reject ${action.taskId} because ${action.reason || 'rejected via approval button'}`;
 
   return {
@@ -175,6 +260,7 @@ export function normalizeInteractionAsApprovalMessage(interaction) {
     channelId: interaction.channel_id || '',
     messageId: interaction.message?.id || '',
     content,
+    validationError: action.validationError || '',
     attachments: [],
     author: {
       id: interaction.member?.user?.id || interaction.user?.id || '',
@@ -184,6 +270,11 @@ export function normalizeInteractionAsApprovalMessage(interaction) {
       isOperator: false,
     },
   };
+}
+
+function parseApprovalModalInteraction(interaction) {
+  return parseRejectApprovalModalInteraction(interaction)
+    || parseDeleteApprovalModalInteraction(interaction);
 }
 
 function parseRejectApprovalModalInteraction(interaction) {
@@ -209,11 +300,45 @@ function parseRejectApprovalModalInteraction(interaction) {
   };
 }
 
+function parseDeleteApprovalModalInteraction(interaction) {
+  const customId = String(interaction?.data?.custom_id || '');
+  const match = new RegExp(`^${APPROVAL_DELETE_MODAL_PREFIX}(TASK-[A-Z0-9-]+)$`, 'u').exec(customId);
+  if (!match) {
+    return null;
+  }
+
+  const confirmation = extractDeleteApprovalConfirmation(interaction?.data?.components);
+  if (confirmation !== 'DELETE') {
+    return {
+      decision: 'delete',
+      taskId: match[1],
+      validationError: 'Type DELETE exactly to confirm preview deletion.',
+    };
+  }
+
+  return {
+    decision: 'delete',
+    taskId: match[1],
+  };
+}
+
 function extractRejectApprovalReason(components = []) {
   for (const row of Array.isArray(components) ? components : []) {
     for (const component of Array.isArray(row?.components) ? row.components : []) {
       if (component?.custom_id === 'rejection_reason') {
         return String(component.value || '').replace(/\s+/gu, ' ').trim();
+      }
+    }
+  }
+
+  return '';
+}
+
+function extractDeleteApprovalConfirmation(components = []) {
+  for (const row of Array.isArray(components) ? components : []) {
+    for (const component of Array.isArray(row?.components) ? row.components : []) {
+      if (component?.custom_id === 'delete_confirmation') {
+        return String(component.value || '').replace(/\s+/gu, ' ').trim().toUpperCase();
       }
     }
   }
