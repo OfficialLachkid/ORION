@@ -106,3 +106,123 @@ test('buildStudioEditUrl returns empty string for a missing external id', () => 
   assert.equal(buildStudioEditUrl(null), '');
   assert.equal(buildStudioEditUrl(undefined), '');
 });
+
+// The following four tests exercise applyYoutubeRelatedVideoSelection's
+// parsing of playwright-cli's `run-code --json` output. The real playwright-cli
+// wraps the returned value as {"result": "<JSON string>"}; older releases
+// returned the flat object directly. Both must map to the correct applyStatus.
+
+const applyPublication = { external_id: 'yt-current' };
+const applyRelatedVideo = {
+  selection_status: 'planned',
+  target_title: 'Guess the Pokemon: Bug / Ground',
+  target_external_id: 'yt-target',
+  target_url: 'https://youtube.com/shorts/yt-target',
+};
+
+function stubCliRunner(runResponses) {
+  const calls = [];
+  return {
+    calls,
+    runner(executable, args) {
+      const subcommand = args[2] || '';
+      calls.push({ executable, args, subcommand });
+      const responseKey = subcommand === 'run-code' ? 'runCode' : subcommand;
+      const spec = runResponses[responseKey] || { status: 0, stdout: '', stderr: '' };
+      return { executable, args, ok: (spec.status ?? 0) === 0, exitCode: spec.status ?? 0, stdout: spec.stdout || '', stderr: spec.stderr || '', error: '' };
+    },
+  };
+}
+
+test('applyYoutubeRelatedVideoSelection unwraps playwright-cli run-code result wrapper and reports login_required', async () => {
+  const stub = stubCliRunner({
+    open: { status: 0, stdout: '{}' },
+    runCode: {
+      status: 0,
+      // Real playwright-cli response shape observed 2026-08-05: {"result": "<JSON string>"}.
+      stdout: JSON.stringify({ result: JSON.stringify({ status: 'login_required', url: 'https://accounts.google.com/v3/signin/identifier' }) }),
+    },
+    close: { status: 0, stdout: '' },
+  });
+
+  const result = await applyYoutubeRelatedVideoSelection({
+    channelProfile,
+    publication: applyPublication,
+    relatedVideo: applyRelatedVideo,
+    fsExists: () => true,
+    cliRunner: stub.runner,
+  });
+
+  assert.equal(result.capability.status, 'login_required');
+  assert.equal(result.capability.canAttempt, false);
+  assert.match(result.capability.reason || '', /not logged in/i);
+  assert.equal(result.applyStatus, 'login_required');
+});
+
+test('applyYoutubeRelatedVideoSelection unwraps run-code wrapper and reports applied', async () => {
+  const stub = stubCliRunner({
+    open: { status: 0, stdout: '{}' },
+    runCode: {
+      status: 0,
+      stdout: JSON.stringify({ result: JSON.stringify({ status: 'applied', saveDisabled: false, body: 'Related video added.' }) }),
+    },
+    close: { status: 0, stdout: '' },
+  });
+
+  const result = await applyYoutubeRelatedVideoSelection({
+    channelProfile,
+    publication: applyPublication,
+    relatedVideo: applyRelatedVideo,
+    fsExists: () => true,
+    cliRunner: stub.runner,
+    asOf: '2026-08-05T12:00:00.000Z',
+  });
+
+  assert.equal(result.applyStatus, 'applied');
+  assert.equal(result.appliedAt, '2026-08-05T12:00:00.000Z');
+  assert.equal(result.lastError, '');
+});
+
+test('applyYoutubeRelatedVideoSelection falls back to flat payload shape (older playwright-cli releases)', async () => {
+  const stub = stubCliRunner({
+    open: { status: 0, stdout: '{}' },
+    runCode: {
+      status: 0,
+      // No {"result": ...} wrapper — the flat object shape older playwright-cli releases returned.
+      stdout: JSON.stringify({ status: 'applied', saveDisabled: true }),
+    },
+    close: { status: 0, stdout: '' },
+  });
+
+  const result = await applyYoutubeRelatedVideoSelection({
+    channelProfile,
+    publication: applyPublication,
+    relatedVideo: applyRelatedVideo,
+    fsExists: () => true,
+    cliRunner: stub.runner,
+  });
+
+  assert.equal(result.applyStatus, 'applied');
+});
+
+test('applyYoutubeRelatedVideoSelection propagates feature_unavailable through the wrapper', async () => {
+  const stub = stubCliRunner({
+    open: { status: 0, stdout: '{}' },
+    runCode: {
+      status: 0,
+      stdout: JSON.stringify({ result: JSON.stringify({ status: 'feature_unavailable', body: 'No related video option visible.' }) }),
+    },
+    close: { status: 0, stdout: '' },
+  });
+
+  const result = await applyYoutubeRelatedVideoSelection({
+    channelProfile,
+    publication: applyPublication,
+    relatedVideo: applyRelatedVideo,
+    fsExists: () => true,
+    cliRunner: stub.runner,
+  });
+
+  assert.equal(result.applyStatus, 'feature_unavailable');
+  assert.match(result.lastError, /No related video option visible/u);
+});
