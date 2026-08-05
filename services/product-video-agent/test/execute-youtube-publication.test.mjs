@@ -543,6 +543,84 @@ test('related-video refresh backfills planned metadata for existing preview rows
   ]);
 });
 
+test('related-video refresh applies preview_uploaded rows that already carry an external_id', async () => {
+  // Preview rows with an external_id have already been uploaded to YouTube as
+  // private — the video exists in Studio, so the related-video setting can be
+  // pushed there without waiting for the publication to hit `scheduled` state.
+  // Safe because the schedule-time flow re-plans and re-applies anyway, so a
+  // preview-time apply can only ever be overwritten by a later, better pick.
+  const publication = {
+    id: 'pub-preview-with-external',
+    video_id: 'video-preview-with-external',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'approved',
+    visibility: 'unlisted',
+    external_id: 'yt-preview-live',
+    preview_url: 'https://youtube.com/shorts/yt-preview-live',
+    metadata: {
+      workflow_state: 'preview_uploaded',
+      type_pair: ['electric', 'ghost'],
+      template_id: 'pokemon-type-challenge-v1',
+    },
+  };
+  const publishedCandidate = {
+    id: 'pub-fighting-water',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-related',
+    public_url: 'https://youtube.com/shorts/yt-related',
+    published_at: '2026-08-04T08:00:00.000Z',
+    title: 'Guess the Pokemon: Fighting / Water',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['fighting', 'water'],
+      template_id: 'pokemon-type-challenge-v1',
+    },
+  };
+  const store = createStore(publication);
+
+  const applyCalls = [];
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [publication, publishedCandidate],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-08-05T10:10:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async (args) => {
+      applyCalls.push(args);
+      return {
+        capability: { status: 'configured' },
+        applyStatus: 'applied',
+        appliedAt: '2026-08-05T10:10:00.000Z',
+        lastAttemptedAt: '2026-08-05T10:10:00.000Z',
+        lastError: '',
+        studioEditUrl: 'https://studio.youtube.com/video/yt-preview-live/edit?hl=en',
+      };
+    },
+  });
+
+  assert.equal(applyCalls.length, 1);
+  assert.equal(applyCalls[0].publication.id, 'pub-preview-with-external');
+  assert.equal(store.current().metadata.related_video.apply_status, 'applied');
+  assert.equal(store.current().metadata.related_video.capability_status, 'configured');
+  assert.deepEqual(refreshed.results, [
+    {
+      publication_id: 'pub-preview-with-external',
+      action: 'related_video_refresh',
+      workflow_state: 'preview_uploaded',
+      related_video_selection_status: 'planned',
+      related_video_target_publication_id: 'pub-fighting-water',
+      related_video_capability_status: 'configured',
+      related_video_apply_status: 'applied',
+    },
+  ]);
+});
+
 test('related-video refresh reapplies scheduled rows through the automation hook', async () => {
   const publication = {
     id: 'pub-scheduled-related',

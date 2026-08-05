@@ -21,9 +21,17 @@ function expandHomeDirectory(inputPath) {
   return value;
 }
 
+// Force English UI via ?hl=en so the automation's button-name selectors
+// (matching /related video/i, /save/i, /done/i, /show more/i) work regardless
+// of the operator account's Studio language setting. Without this, a Dutch
+// account rendered "Gerelateerde video" and the selector silently returned
+// nothing — the automation reached Studio but never found the picker, yielding
+// apply_status='unknown' with zero real changes (observed 2026-08-05 against
+// the Poke Quizz channel). ?hl=en only affects the automation's Chromium
+// profile session; the operator's own browser stays on their preferred locale.
 function buildStudioEditUrl(externalId) {
   const normalized = String(externalId || '').trim();
-  return normalized ? `https://studio.youtube.com/video/${normalized}/edit` : '';
+  return normalized ? `https://studio.youtube.com/video/${normalized}/edit?hl=en` : '';
 }
 
 function createRunnerResult(executable, args, result) {
