@@ -460,7 +460,18 @@ export async function applyYoutubeRelatedVideoSelection({
       };
     }
 
-    const payload = parseJsonPayload(applied.stdout) || {};
+    // playwright-cli's `run-code --json` wraps the returned value as
+    // {"result": "<JSON string>"}. Without unwrapping, `payload.status` was
+    // always undefined and every automation run got misclassified as
+    // 'unknown' — including the login_required and *_not_found diagnostics
+    // that would otherwise have made the auth blocker visible from day one
+    // (root cause of the silent-failure loop observed 2026-08-05). Fallback
+    // to the outer object handles older playwright-cli releases that
+    // returned the flat shape directly.
+    const rawPayload = parseJsonPayload(applied.stdout) || {};
+    const payload = typeof rawPayload.result === 'string'
+      ? (parseJsonPayload(rawPayload.result) || {})
+      : rawPayload;
     const scriptStatus = normalizeToken(payload.status || 'unknown');
     const loginRequired = scriptStatus === 'login_required';
     const appliedState = scriptStatus === 'applied'
