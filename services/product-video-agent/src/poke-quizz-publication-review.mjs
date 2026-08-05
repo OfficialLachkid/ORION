@@ -2,6 +2,23 @@ import { stableHash } from './ids.mjs';
 import { buildApprovalButtons } from '../../discord-bot/src/approval-buttons.mjs';
 import { buildOutboundEventDiscordPayload } from '../../discord-bot/src/message-formatting.mjs';
 
+// Publications in these workflow states still need the operator's Publish /
+// Give Feedback / Delete buttons on the Discord review card. Any other state
+// means the review is past the decision point (already approved, scheduled,
+// published, or terminal), so the buttons are correctly stripped.
+//
+// Exported so every call site that PATCHes a review message uses the same
+// rule. Before this was shared, execute-youtube-publication.mjs's
+// updatePublicationReviewMessage blindly wiped components to [] every time it
+// touched a message — which meant every publication reconcile (including the
+// related-video refresh) silently stripped the buttons off actionable
+// preview_uploaded reviews. Live incident 2026-08-05: operator lost approval
+// controls on every Poke Quizz review after a batch refresh ran.
+export function isActionableReviewPublication(publication) {
+  const workflowState = String(publication?.metadata?.workflow_state || '').trim().toLowerCase();
+  return workflowState === 'preview_uploaded' || workflowState === 'delete_failed';
+}
+
 const DEFAULT_CHANNEL_SELECTOR = 'poke-quizz-youtube';
 const DEFAULT_TEMPLATE_PATH = 'services/product-video-agent/pokemon-type-challenge-v1.template.json';
 const DEFAULT_CONFIG_PATH = 'services/product-video-agent/config.example.json';

@@ -359,6 +359,9 @@ test('buildOutboundEventDiscordPayload renders Poke Quizz publication review car
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Related State' && /planned/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Action'), false);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Reason'), false);
+  // Operator asked to drop the noisy "Related Reason" field from review
+  // cards (2026-08-05). Guard so a future re-add doesn't slip in unnoticed.
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Related Reason'), false);
 });
 
 test('buildHealthNotificationDiscordPayload renders alert cards with recovery guidance', () => {

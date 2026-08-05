@@ -517,7 +517,6 @@ function buildApprovalRequestPayload(outboundEvent) {
       false,
     ),
     createField('Related State', metadata.relatedVideoStatusLabel || '', true),
-    createField('Related Reason', metadata.relatedVideoReason || '', false),
     createField('Title', metadata.publicationTitle || '', false),
     createField('Description', metadata.publicationDescription || '', false),
     createField('Render', metadata.renderPath ? `\`${compactPath(metadata.renderPath)}\`` : '', false),
