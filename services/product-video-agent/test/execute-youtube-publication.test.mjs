@@ -9,6 +9,7 @@ const {
   reconcilePreviewPublications,
   reconcilePublishedPublications,
   reconcileScheduledPublications,
+  refreshRelatedVideoAssignments,
 } = await import('../scripts/execute-youtube-publication.mjs');
 process.argv[1] = originalArgv1;
 
@@ -40,7 +41,7 @@ const channelProfile = normalizePublicationChannelProfile({
   },
 });
 
-function createStore(initialPublication) {
+function createStore(initialPublication, videoRow = null) {
   let currentPublication = structuredClone(initialPublication);
   const updateCalls = [];
   return {
@@ -59,7 +60,7 @@ function createStore(initialPublication) {
       return structuredClone(currentPublication);
     },
     async fetchVideoById() {
-      return null;
+      return videoRow ? structuredClone(videoRow) : null;
     },
     current() {
       return structuredClone(currentPublication);
@@ -480,6 +481,133 @@ test('published queue reconciliation marks manually deleted videos as deleted', 
       action: 'published_reconcile',
       workflow_state: 'deleted',
       reason: 'youtube_video_missing',
+    },
+  ]);
+});
+
+test('related-video refresh backfills planned metadata for existing preview rows', async () => {
+  const publication = {
+    id: 'pub-review',
+    video_id: 'video-review',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'approved',
+    visibility: 'unlisted',
+    preview_url: 'https://youtube.com/shorts/yt-review',
+    metadata: {
+      workflow_state: 'preview_uploaded',
+      type_pair: ['fire', 'water'],
+      template_id: 'pokemon-type-challenge-v1',
+    },
+  };
+  const publishedCandidate = {
+    id: 'pub-bug-ground',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-bug-ground',
+    public_url: 'https://youtube.com/shorts/yt-bug-ground',
+    published_at: '2026-08-04T08:00:00.000Z',
+    title: 'Guess the Pokemon: Bug / Ground',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['bug', 'ground'],
+      template_id: 'pokemon-type-challenge-v1',
+    },
+  };
+  const store = createStore(publication);
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [publication, publishedCandidate],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-08-05T10:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+  });
+
+  assert.equal(store.current().metadata.related_video.selection_status, 'planned');
+  assert.equal(store.current().metadata.related_video.target_publication_id, 'pub-bug-ground');
+  assert.deepEqual(refreshed.results, [
+    {
+      publication_id: 'pub-review',
+      action: 'related_video_refresh',
+      workflow_state: 'preview_uploaded',
+      related_video_selection_status: 'planned',
+      related_video_target_publication_id: 'pub-bug-ground',
+      related_video_capability_status: 'pending',
+      related_video_apply_status: 'pending',
+    },
+  ]);
+});
+
+test('related-video refresh reapplies scheduled rows through the automation hook', async () => {
+  const publication = {
+    id: 'pub-scheduled-related',
+    video_id: 'video-scheduled-related',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'scheduled',
+    visibility: 'private',
+    external_id: 'yt-current',
+    scheduled_for: '2026-08-06T06:00:00.000Z',
+    preview_url: 'https://youtube.com/shorts/yt-current',
+    metadata: {
+      workflow_state: 'scheduled',
+      type_pair: ['electric', 'ghost'],
+      template_id: 'pokemon-type-challenge-v1',
+    },
+  };
+  const publishedCandidate = {
+    id: 'pub-fighting-water',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-related',
+    public_url: 'https://youtube.com/shorts/yt-related',
+    published_at: '2026-08-04T08:00:00.000Z',
+    title: 'Guess the Pokemon: Fighting / Water',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['fighting', 'water'],
+      template_id: 'pokemon-type-challenge-v1',
+    },
+  };
+  const store = createStore(publication);
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [publication, publishedCandidate],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-08-05T10:05:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async () => ({
+      capability: { status: 'configured' },
+      applyStatus: 'applied',
+      appliedAt: '2026-08-05T10:05:00.000Z',
+      lastAttemptedAt: '2026-08-05T10:05:00.000Z',
+      lastError: '',
+      studioEditUrl: 'https://studio.youtube.com/video/yt-current/edit',
+    }),
+  });
+
+  assert.equal(store.current().metadata.related_video.target_publication_id, 'pub-fighting-water');
+  assert.equal(store.current().metadata.related_video.apply_status, 'applied');
+  assert.equal(store.current().metadata.related_video.capability_status, 'configured');
+  assert.deepEqual(refreshed.results, [
+    {
+      publication_id: 'pub-scheduled-related',
+      action: 'related_video_refresh',
+      workflow_state: 'scheduled',
+      related_video_selection_status: 'planned',
+      related_video_target_publication_id: 'pub-fighting-water',
+      related_video_capability_status: 'configured',
+      related_video_apply_status: 'applied',
     },
   ]);
 });

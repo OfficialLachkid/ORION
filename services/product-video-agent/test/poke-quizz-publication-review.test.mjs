@@ -19,6 +19,14 @@ const publication = {
     type_pair: ['water', 'flying'],
     seed: 'water-flying-random-20260731t220000z',
     render_path: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/water-flying.mp4',
+    related_video: {
+      selection_status: 'planned',
+      target_publication_id: 'publication-456',
+      target_external_id: 'yt-456',
+      target_url: 'https://youtube.com/shorts/yt-456',
+      target_title: 'Guess the Pokemon: Bug / Ground',
+      match_reason: 'Selected for same content lane, same template; the recent related-target reuse guard was respected.',
+    },
   },
 };
 
@@ -57,6 +65,9 @@ test('buildPokeQuizzPublicationReviewTask creates an approval-gated publish task
   assert.equal(task.poke_quizz_publication_review.channelName, 'Poke Quizz');
   assert.equal(task.poke_quizz_publication_review.channelUrl, 'https://www.youtube.com/channel/UCvMqBsEPDvjgNRMymQyefFg');
   assert.equal(task.poke_quizz_publication_review.generationDurationLabel, '3 min');
+  assert.equal(task.poke_quizz_publication_review.relatedVideoLabel, 'Guess the Pokemon: Bug / Ground');
+  assert.equal(task.poke_quizz_publication_review.relatedVideoUrl, 'https://youtube.com/shorts/yt-456');
+  assert.equal(task.poke_quizz_publication_review.relatedVideoStatusLabel, 'planned');
 });
 
 test('buildPokeQuizzPublicationReviewTask keeps the same task id when mutable review fields change', () => {
@@ -137,6 +148,8 @@ test('buildPokeQuizzPublicationReviewEvent adds preview-review metadata and labe
   assert.equal(event.metadata.genreLabel, 'Type Combination');
   assert.equal(event.metadata.channelName, 'Poke Quizz');
   assert.equal(event.metadata.generationDurationLabel, '2 min');
+  assert.equal(event.metadata.relatedVideoLabel, 'Guess the Pokemon: Bug / Ground');
+  assert.equal(event.metadata.relatedVideoReason.includes('same content lane'), true);
 });
 
 test('buildPokeQuizzPublicationReviewPayload renders Publish, Give Feedback, and Delete buttons', () => {

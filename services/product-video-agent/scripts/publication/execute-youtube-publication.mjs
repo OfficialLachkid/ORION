@@ -21,6 +21,8 @@ import {
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import { resolvePokeQuizzReviewTaskPaths } from '../../src/poke-quizz-review-paths.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
+import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs';
+import { applyYoutubeRelatedVideoSelection } from '../../src/related-video/youtube-studio-automation.mjs';
 import {
   fetchYoutubeVideoStatus,
   fetchYoutubeVideoStatuses,
@@ -152,6 +154,173 @@ async function persistPublicationState({
     channelSelector,
   });
   return updatedPublication;
+}
+
+async function refreshPlannedRelatedVideo({
+  store,
+  publication,
+  videoRow,
+  channelProfile,
+  asOf,
+}) {
+  const publications = await store.fetchPublicationsByChannel({
+    platform: channelProfile.platform,
+    accountKey: channelProfile.account_key,
+  });
+  const { relatedVideo } = planRelatedVideoSelection({
+    publications,
+    targetPublication: publication,
+    targetVideo: videoRow,
+    channelProfile,
+    asOf,
+  });
+  const updatedPublication = await store.updatePublication(publication.id, {
+    metadata: {
+      ...(publication.metadata || {}),
+      related_video: relatedVideo,
+    },
+  });
+  return updatedPublication || {
+    ...publication,
+    metadata: {
+      ...(publication.metadata || {}),
+      related_video: relatedVideo,
+    },
+  };
+}
+
+function buildRelatedVideoRuntimePatch(publication, applyResult, asOf) {
+  const existingRelatedVideo = publication?.metadata?.related_video || {};
+  return {
+    ...existingRelatedVideo,
+    capability_status: String(applyResult?.capability?.status || existingRelatedVideo.capability_status || 'pending').trim(),
+    capability_checked_at: String(applyResult?.lastAttemptedAt || asOf || '').trim(),
+    apply_status: String(applyResult?.applyStatus || existingRelatedVideo.apply_status || 'pending').trim(),
+    applied_at: String(applyResult?.appliedAt || '').trim(),
+    last_attempted_at: String(applyResult?.lastAttemptedAt || asOf || '').trim(),
+    last_error: String(applyResult?.lastError || '').trim(),
+    studio_edit_url: String(applyResult?.studioEditUrl || existingRelatedVideo.studio_edit_url || '').trim(),
+  };
+}
+
+function isRelatedVideoRefreshCandidate(publication) {
+  return ['preview_uploaded', 'preview_approved', 'scheduled'].includes(normalizeWorkflowState(publication));
+}
+
+export async function refreshRelatedVideoAssignments({
+  publications,
+  store,
+  runtimeConfig,
+  channelProfile,
+  channelSelector,
+  asOf = new Date().toISOString(),
+  dryRun = false,
+  applyScheduled = true,
+  applyYoutubeRelatedVideoSelectionImpl = applyYoutubeRelatedVideoSelection,
+} = {}) {
+  let refreshedPublications = [...publications];
+  const results = [];
+  const candidates = refreshedPublications.filter((publication) => isRelatedVideoRefreshCandidate(publication));
+
+  for (const publication of candidates) {
+    const videoRow = publication.video_id
+      ? await store.fetchVideoById(publication.video_id)
+      : null;
+    const { relatedVideo } = planRelatedVideoSelection({
+      publications: refreshedPublications,
+      targetPublication: publication,
+      targetVideo: videoRow,
+      channelProfile,
+      asOf,
+    });
+
+    let updatedPublication = {
+      ...publication,
+      metadata: {
+        ...(publication.metadata || {}),
+        related_video: relatedVideo,
+      },
+    };
+
+    if (!dryRun) {
+      updatedPublication = await store.updatePublication(publication.id, {
+        metadata: {
+          ...(publication.metadata || {}),
+          related_video: relatedVideo,
+        },
+      }) || updatedPublication;
+    }
+
+    let applyStatus = '';
+    let capabilityStatus = '';
+    if (
+      applyScheduled
+      && normalizeWorkflowState(updatedPublication) === 'scheduled'
+      && String(updatedPublication?.external_id || '').trim()
+    ) {
+      const applyResult = dryRun
+        ? {
+          capability: { status: 'dry_run' },
+          applyStatus: 'dry_run',
+          appliedAt: '',
+          lastAttemptedAt: asOf,
+          lastError: '',
+          studioEditUrl: '',
+        }
+        : await applyYoutubeRelatedVideoSelectionImpl({
+          channelProfile,
+          publication: updatedPublication,
+          relatedVideo: updatedPublication?.metadata?.related_video || {},
+          cwd: projectRoot,
+          env: process.env,
+          asOf,
+        });
+      applyStatus = String(applyResult?.applyStatus || '').trim();
+      capabilityStatus = String(applyResult?.capability?.status || '').trim();
+
+      updatedPublication = {
+        ...updatedPublication,
+        metadata: {
+          ...(updatedPublication.metadata || {}),
+          related_video: buildRelatedVideoRuntimePatch(updatedPublication, applyResult, asOf),
+        },
+      };
+      if (!dryRun) {
+        updatedPublication = await store.updatePublication(publication.id, {
+          metadata: {
+            ...(updatedPublication?.metadata || {}),
+            related_video: buildRelatedVideoRuntimePatch(updatedPublication, applyResult, asOf),
+          },
+        }) || updatedPublication;
+      }
+    }
+
+    if (!dryRun && videoRow) {
+      await updatePublicationReviewMessage({
+        runtimeConfig,
+        publication: updatedPublication,
+        videoRow,
+        channelProfile,
+        channelSelector,
+      });
+    }
+
+    refreshedPublications = replacePublication(refreshedPublications, updatedPublication);
+    results.push({
+      publication_id: publication.id,
+      action: 'related_video_refresh',
+      workflow_state: normalizeWorkflowState(updatedPublication),
+      related_video_selection_status: updatedPublication?.metadata?.related_video?.selection_status || '',
+      related_video_target_publication_id: updatedPublication?.metadata?.related_video?.target_publication_id || '',
+      related_video_capability_status: capabilityStatus || updatedPublication?.metadata?.related_video?.capability_status || '',
+      related_video_apply_status: applyStatus || updatedPublication?.metadata?.related_video?.apply_status || '',
+    });
+  }
+
+  return {
+    publications: refreshedPublications,
+    results,
+  };
 }
 
 export async function reconcilePreviewPublications({
@@ -754,6 +923,7 @@ async function main() {
       '  --channels <path>          Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
       '  --publication-id <id>      Limit execution to one publication id.',
       '  --limit <n>                Maximum publications to process in this run.',
+      '  --refresh-related-videos   Re-plan related-video metadata for existing preview/scheduled rows.',
       '  --schedule-approved        Apply schedule updates instead of preview uploads.',
       '  --dry-run                  Print the planned work without calling YouTube.',
       '  --as-of <ISO>              Deterministic schedule planning timestamp. Default: now.',
@@ -770,6 +940,7 @@ async function main() {
   const channelSelector = getStringOption(options, 'channel', 'poke-quizz-youtube');
   const publicationId = getStringOption(options, 'publication-id', '');
   const dryRun = getBooleanOption(options, 'dry-run', false);
+  const refreshRelatedVideosOnly = getBooleanOption(options, 'refresh-related-videos', false);
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
 
   const runtimeConfig = loadRuntimeConfig();
@@ -795,6 +966,31 @@ async function main() {
   const scopedPublications = publicationId
     ? publications.filter((publication) => publication.id === publicationId)
     : publications;
+
+  if (refreshRelatedVideosOnly) {
+    const refreshed = await refreshRelatedVideoAssignments({
+      publications: scopedPublications,
+      store,
+      runtimeConfig,
+      channelProfile,
+      channelSelector,
+      asOf,
+      dryRun,
+      applyScheduled: true,
+    });
+    if (!dryRun) {
+      await syncPokeQuizzQueueStatusMessage({
+        runtimeConfig,
+        store,
+        channelProfile,
+        channelSelector,
+        asOf,
+      });
+    }
+    process.stdout.write(`${JSON.stringify(refreshed.results, null, 2)}\n`);
+    return;
+  }
+
   let effectivePublications = scopedPublications;
   let preflightResults = [];
   if (!previewUploadMode) {
@@ -975,7 +1171,7 @@ async function main() {
       clientConfig,
       refreshToken,
     });
-    const updatedPublication = await store.updatePublication(publication.id, {
+    let updatedPublication = await store.updatePublication(publication.id, {
       status: 'scheduled',
       visibility: 'private',
       scheduled_for: scheduled.scheduledFor,
@@ -984,17 +1180,46 @@ async function main() {
         workflow_state: 'scheduled',
       },
     });
+    updatedPublication = updatedPublication || {
+      ...publication,
+      status: 'scheduled',
+      visibility: 'private',
+      scheduled_for: scheduled.scheduledFor,
+      metadata: {
+        ...(publication.metadata || {}),
+        workflow_state: 'scheduled',
+      },
+    };
+    updatedPublication = await refreshPlannedRelatedVideo({
+      store,
+      publication: updatedPublication,
+      videoRow,
+      channelProfile,
+      asOf,
+    });
+    const relatedVideoResult = await applyYoutubeRelatedVideoSelection({
+      channelProfile,
+      publication: updatedPublication,
+      relatedVideo: updatedPublication?.metadata?.related_video || {},
+      cwd: projectRoot,
+      env: process.env,
+      asOf,
+    });
+    updatedPublication = await store.updatePublication(publication.id, {
+      metadata: {
+        ...(updatedPublication?.metadata || publication.metadata || {}),
+        related_video: buildRelatedVideoRuntimePatch(updatedPublication, relatedVideoResult, asOf),
+      },
+    }) || {
+      ...updatedPublication,
+      metadata: {
+        ...(updatedPublication?.metadata || publication.metadata || {}),
+        related_video: buildRelatedVideoRuntimePatch(updatedPublication, relatedVideoResult, asOf),
+      },
+    };
     await updatePublicationReviewMessage({
       runtimeConfig,
-      publication: updatedPublication || {
-        ...publication,
-        status: 'scheduled',
-        scheduled_for: scheduled.scheduledFor,
-        metadata: {
-          ...(publication.metadata || {}),
-          workflow_state: 'scheduled',
-        },
-      },
+      publication: updatedPublication,
       videoRow,
       channelProfile,
       channelSelector,
@@ -1005,6 +1230,10 @@ async function main() {
       external_id: publication.external_id,
       scheduled_for: scheduled.scheduledFor,
       workflow_state: updatedPublication?.metadata?.workflow_state || 'scheduled',
+      related_video_selection_status: updatedPublication?.metadata?.related_video?.selection_status || '',
+      related_video_target_publication_id: updatedPublication?.metadata?.related_video?.target_publication_id || '',
+      related_video_capability_status: updatedPublication?.metadata?.related_video?.capability_status || '',
+      related_video_apply_status: updatedPublication?.metadata?.related_video?.apply_status || '',
     });
     printInfo(`Scheduled publication ${publication.id} for ${scheduled.scheduledFor}`);
   }

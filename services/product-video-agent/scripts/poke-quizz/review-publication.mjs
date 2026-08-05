@@ -11,6 +11,7 @@ import {
   createPokeQuizzPublicationRegistration,
   mergeRegisteredPublicationRow,
 } from '../../src/poke-quizz-publication-registration.mjs';
+import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs';
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
@@ -164,6 +165,37 @@ async function ensurePreviewUploaded({
   };
 }
 
+async function persistPlannedRelatedVideo({
+  publication,
+  video,
+  store,
+  channelProfile,
+  asOf,
+}) {
+  const publications = await store.fetchPublicationsByChannel({
+    platform: channelProfile.platform,
+    accountKey: channelProfile.account_key,
+  });
+  const { relatedVideo } = planRelatedVideoSelection({
+    publications,
+    targetPublication: publication,
+    targetVideo: video,
+    channelProfile,
+    asOf,
+  });
+  const updatedPublication = await store.updatePublication(publication.id, {
+    metadata: mergePublicationMetadata(publication, {
+      related_video: relatedVideo,
+    }),
+  });
+  return updatedPublication || {
+    ...publication,
+    metadata: mergePublicationMetadata(publication, {
+      related_video: relatedVideo,
+    }),
+  };
+}
+
 function replaceExistingReviewTasks(runtimeConfig, nextTask) {
   const existingTasks = loadPersistedPendingTasks(runtimeConfig);
   const filtered = existingTasks.filter((task) => {
@@ -278,6 +310,13 @@ export async function reviewPokeQuizzPublication({
     store,
   });
   publication = ensuredPreview.publication;
+  publication = await persistPlannedRelatedVideo({
+    publication,
+    video,
+    store,
+    channelProfile,
+    asOf: submittedAt,
+  });
 
   const reviewTask = buildPokeQuizzPublicationReviewTask({
     publication,

@@ -1,4 +1,5 @@
 import { normalizeScheduleSlots } from './publication-channels.mjs';
+import { selectRelatedPublicationCandidate as selectGenericRelatedPublicationCandidate } from './related-video/selector.mjs';
 
 export const DEFAULT_MINIMUM_SCHEDULE_LEAD_MINUTES = 20;
 export const DEFAULT_SCHEDULE_PUBLISH_GRACE_MINUTES = 30;
@@ -278,29 +279,7 @@ export function assignScheduleSlots(
 }
 
 export function selectRelatedPublicationCandidate(publications, targetPublication) {
-  const targetTypePair = JSON.stringify(targetPublication?.metadata?.type_pair || []);
-  const candidates = publications.filter((publication) => {
-    if (!publication || publication.id === targetPublication?.id) return false;
-    if (publication.account_key !== targetPublication?.account_key) return false;
-    if (publication.platform !== targetPublication?.platform) return false;
-    if (!publication.public_url && !publication.preview_url) return false;
-    if (workflowState(publication) !== 'published') return false;
-    return JSON.stringify(publication.metadata?.type_pair || []) === targetTypePair;
-  });
-
-  const sameTypePair = sortByOldestFirst(candidates).reverse()[0];
-  if (sameTypePair) return sameTypePair;
-
-  return sortByOldestFirst(
-    publications.filter((publication) => (
-      publication
-      && publication.id !== targetPublication?.id
-      && publication.account_key === targetPublication?.account_key
-      && publication.platform === targetPublication?.platform
-      && workflowState(publication) === 'published'
-      && (publication.public_url || publication.preview_url)
-    )),
-  ).reverse()[0] || null;
+  return selectGenericRelatedPublicationCandidate(publications, targetPublication);
 }
 
 export function buildPublicationQueuePlan({ publications, channelProfiles, asOf = new Date() }) {
