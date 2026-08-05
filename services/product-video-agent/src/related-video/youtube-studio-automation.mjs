@@ -250,6 +250,25 @@ async (page) => {
     return { status: 'login_required', url: currentUrl };
   }
 
+  // Playwright-driven Chrome triggers YouTube's "unsupported browser" splash
+  // every session (per-session, not dismissible with a preference) — same
+  // profile in a normal Chrome window doesn't see it. Splash has one link:
+  // "SKIP TO YOUTUBE STUDIO", which takes us to the video edit page we
+  // actually want. Before 2026-08-05 the automation ran its show-more +
+  // related-video selectors against the splash body and silently returned
+  // feature_unavailable on every publication; verified end-to-end that
+  // clicking skip lands on the real edit page where the picker is reachable.
+  const skipToStudio = await firstVisible([
+    page.getByRole('link', { name: /skip to youtube studio/i }),
+    page.getByRole('button', { name: /skip to youtube studio/i }),
+    page.locator('a, button, [role="link"]').filter({ hasText: /skip to youtube studio/i }),
+  ]);
+  if (skipToStudio) {
+    await skipToStudio.click({ timeout: 5000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+  }
+
   await clickFirstVisible([
     page.getByRole('button', { name: /show more/i }),
     page.locator('button, [role="button"]').filter({ hasText: /show more/i }),

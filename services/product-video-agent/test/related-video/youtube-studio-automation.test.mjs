@@ -94,6 +94,15 @@ test('related-video run-code script includes the selected target title', () => {
   assert.match(code, /save/i);
 });
 
+test('related-video run-code dismisses the SKIP TO YOUTUBE STUDIO splash before searching for the picker', () => {
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  // Regression guard: YouTube's per-session splash blocks Playwright-driven
+  // Chrome. Without a skip step, the show-more + related-video selectors
+  // run against the splash body and always return feature_unavailable.
+  assert.match(code, /skip to youtube studio/i);
+});
+
 test('buildStudioEditUrl forces the English UI so button-name selectors match regardless of account locale', () => {
   const url = buildStudioEditUrl('yt-target');
 
