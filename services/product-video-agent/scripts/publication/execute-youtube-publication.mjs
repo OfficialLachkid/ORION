@@ -253,9 +253,17 @@ export async function refreshRelatedVideoAssignments({
 
     let applyStatus = '';
     let capabilityStatus = '';
+    // Apply during preview_uploaded / preview_approved too, not just scheduled
+    // — the operator preferred private previews to already carry the related
+    // video so it's set from the moment the video first appears in Studio,
+    // rather than only at schedule time. Safe because the schedule-time flow
+    // (execute-youtube-publication.mjs:1193) re-plans and re-applies from
+    // fresh channel state anyway, so a preview-time apply can only ever be
+    // overwritten by a later, more-informed pick — never locked in.
+    const applyableStates = ['preview_uploaded', 'preview_approved', 'scheduled'];
     if (
       applyScheduled
-      && normalizeWorkflowState(updatedPublication) === 'scheduled'
+      && applyableStates.includes(normalizeWorkflowState(updatedPublication))
       && String(updatedPublication?.external_id || '').trim()
     ) {
       const applyResult = dryRun

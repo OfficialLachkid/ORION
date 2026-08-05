@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   applyYoutubeRelatedVideoSelection,
+  buildStudioEditUrl,
   buildYoutubeRelatedVideoRunCode,
   probeYoutubeRelatedVideoCapability,
   resolveYoutubeRelatedVideoAutomationSettings,
@@ -91,4 +92,17 @@ test('related-video run-code script includes the selected target title', () => {
   assert.match(code, /Guess the Pokemon: Bug \/ Ground/u);
   assert.match(code, /related video/i);
   assert.match(code, /save/i);
+});
+
+test('buildStudioEditUrl forces the English UI so button-name selectors match regardless of account locale', () => {
+  const url = buildStudioEditUrl('yt-target');
+
+  assert.match(url, /studio\.youtube\.com\/video\/yt-target\/edit/u);
+  assert.match(url, /\?hl=en/u);
+});
+
+test('buildStudioEditUrl returns empty string for a missing external id', () => {
+  assert.equal(buildStudioEditUrl(''), '');
+  assert.equal(buildStudioEditUrl(null), '');
+  assert.equal(buildStudioEditUrl(undefined), '');
 });
