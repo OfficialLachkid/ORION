@@ -17,6 +17,7 @@ import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '.
 import {
   buildPokeQuizzPublicationMessagePayload,
   buildPokeQuizzPublicationReviewTask,
+  isActionableReviewPublication,
 } from '../../src/poke-quizz-publication-review.mjs';
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import { resolvePokeQuizzReviewTaskPaths } from '../../src/poke-quizz-review-paths.mjs';
@@ -112,7 +113,15 @@ async function updatePublicationReviewMessage({
     submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
   });
   const payload = buildPokeQuizzPublicationMessagePayload(reviewTask);
-  payload.components = [];
+  // Only strip the approval buttons when the review is past its decision
+  // point (e.g., already scheduled, published, deleted). For actionable
+  // states (preview_uploaded, delete_failed) the payload's own buttons must
+  // survive — otherwise a publication reconcile silently locks the operator
+  // out of Approve / Give Feedback / Delete on the review card (see the
+  // comment on isActionableReviewPublication for the 2026-08-05 incident).
+  if (!isActionableReviewPublication(publication)) {
+    payload.components = [];
+  }
   return editDiscordChannelMessage(runtimeConfig, reviewThreadId, reviewMessageId, payload);
 }
 
