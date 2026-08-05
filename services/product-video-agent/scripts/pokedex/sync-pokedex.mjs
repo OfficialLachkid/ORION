@@ -18,6 +18,7 @@ import {
   fetchSerebiiPokedex,
   getSerebiiPokedexGenerationConfig,
 } from '../../src/pokedex-source.mjs';
+import { enrichPokedexRows } from '../../src/pokedex-enrichment.mjs';
 
 async function upsertPokedexRows(rows, options = {}) {
   const runtimeConfig = loadRuntimeConfig();
@@ -59,6 +60,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       'Options:',
       '  --generation <n>          National generation page to sync. Default: 1',
       '  --source-url <url>        Override the Serebii generation page',
+      '  --skip-species-enrichment Skip PokeAPI legendary/mythical/evolution enrichment',
       '  --write-json <path>       Write the parsed rows to a JSON file under the repo root',
       '  --persist-supabase        Upsert the parsed rows into Supabase table `pokedex`',
       '  --table <name>            Target Supabase table. Default: pokedex',
@@ -74,6 +76,15 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   const sourceUrl = getStringOption(options, 'source-url', defaultSourceUrl);
   const rows = await fetchSerebiiPokedex({ sourceUrl, generation });
   printInfo(`Parsed ${rows.length} Gen ${generation} Pokedex row(s) from ${sourceUrl}.`);
+
+  if (!getBooleanOption(options, 'skip-species-enrichment', false)) {
+    const enriched = await enrichPokedexRows(rows);
+    printInfo(
+      `Enriched ${enriched.stats.enrichedRows} row(s) with PokeAPI species metadata `
+      + `using ${enriched.stats.speciesRequests} species request(s) and `
+      + `${enriched.stats.evolutionChainRequests} evolution chain request(s).`,
+    );
+  }
 
   const writeJsonPath = getStringOption(options, 'write-json', '');
   if (writeJsonPath) {

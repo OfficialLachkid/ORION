@@ -50,6 +50,7 @@ import {
   buildPokeQuizzFeedbackRegenerationTask,
   buildPokeQuizzPublicationReviewTask,
 } from '../../product-video-agent/src/poke-quizz-publication-review.mjs';
+import { resolvePokeQuizzReviewTaskPaths } from '../../product-video-agent/src/poke-quizz-review-paths.mjs';
 import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../product-video-agent/src/publication-channels.mjs';
 
@@ -142,15 +143,18 @@ async function rehydratePokeQuizzReviewTask(decision, config) {
     if (!video || !reviewThreadId) {
       return null;
     }
+    const reviewPaths = await resolvePokeQuizzReviewTaskPaths(publication);
 
     return buildPokeQuizzPublicationReviewTask({
       publication,
       video,
       channelProfile,
       reviewThreadId,
-      planPath: '',
+      planPath: reviewPaths.planPath,
       renderPath: publication?.metadata?.render_path || video?.render?.output_path || '',
-      catalogJsonPath: '',
+      catalogJsonPath: reviewPaths.catalogJsonPath,
+      templatePath: reviewPaths.templatePath,
+      configPath: reviewPaths.configPath,
       channelSelector: channelProfile.account_key,
       submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
     });

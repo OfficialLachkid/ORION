@@ -1,7 +1,18 @@
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import process from 'node:process';
+import { projectRoot } from '../../../services/lib/runtime-config.mjs';
 import { buildNoticeDiscordPayload } from '../../../services/discord-bot/src/message-formatting.mjs';
+import {
+  editDiscordChannelMessage,
+  sendDiscordChannelMessage,
+} from '../discord-post.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
+const POKEMON_NIGHT_SHIFT_STATE_PATH = resolve(
+  projectRoot,
+  'data/runtime/night-shift/pokemon-digest-message.json',
+);
 
 function getLeadDigestChannelId(config) {
   return config.channelIds.leadQualificationAgent || config.channelIds.leadGeneration;
@@ -23,6 +34,23 @@ export async function postDiscord(config, channelId, payload) {
   } catch (error) {
     process.stderr.write(`Night-shift digest post failed (non-fatal): ${error.message}\n`);
   }
+}
+
+async function readPokemonNightShiftState() {
+  try {
+    return JSON.parse(await readFile(POKEMON_NIGHT_SHIFT_STATE_PATH, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+async function writePokemonNightShiftState(payload) {
+  await mkdir(dirname(POKEMON_NIGHT_SHIFT_STATE_PATH), { recursive: true });
+  await writeFile(
+    POKEMON_NIGHT_SHIFT_STATE_PATH,
+    `${JSON.stringify(payload, null, 2)}\n`,
+    'utf8',
+  );
 }
 
 export function buildLeadNightShiftDigest(outcomes, backlogCount, openDraftCount, extras = {}) {
@@ -261,10 +289,31 @@ export async function postPokemonNightShiftDigest(config, title, options = {}) {
   }
 
   const hasError = Boolean(options.videoQueueMaintenanceError || options.previewFallbackError);
-  await postDiscord(config, channelId, buildNoticeDiscordPayload({
+  const payload = buildNoticeDiscordPayload({
     title,
     description: buildPokemonNightShiftDigest(options),
     color: hasError ? 0xED4245 : 0x57F287,
     footerText: 'ORION video gen night shift',
-  }));
+  });
+  const state = await readPokemonNightShiftState();
+  const knownMessageId = String(state.messageId || '').trim();
+  let result = null;
+
+  if (knownMessageId) {
+    result = await editDiscordChannelMessage(config, channelId, knownMessageId, payload);
+  }
+
+  if (!knownMessageId || result?.reason === 'discord_api_404') {
+    result = await sendDiscordChannelMessage(config, channelId, payload);
+  }
+
+  if (result?.posted && result.messageId) {
+    await writePokemonNightShiftState({
+      channelId,
+      messageId: result.messageId,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  return result;
 }

@@ -9,6 +9,7 @@ import {
   buildPokeQuizzPublicationMessagePayload,
   buildPokeQuizzPublicationReviewTask,
 } from '../../src/poke-quizz-publication-review.mjs';
+import { resolvePokeQuizzReviewTaskPaths } from '../../src/poke-quizz-review-paths.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import {
@@ -148,15 +149,18 @@ async function main() {
     }
 
     inspectedCount += 1;
+    const reviewPaths = await resolvePokeQuizzReviewTaskPaths(publication);
 
     const reviewTask = buildPokeQuizzPublicationReviewTask({
       publication,
       video: videoRow,
       channelProfile,
       reviewThreadId,
-      planPath: '',
+      planPath: reviewPaths.planPath,
       renderPath: publication?.metadata?.render_path || videoRow?.render?.output_path || '',
-      catalogJsonPath: '',
+      catalogJsonPath: reviewPaths.catalogJsonPath,
+      templatePath: reviewPaths.templatePath,
+      configPath: reviewPaths.configPath,
       channelSelector,
       submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
     });

@@ -94,6 +94,83 @@ function sampleArray(values, count, random) {
   return items.slice(0, count);
 }
 
+function readSubjectMetadataValue(subject, keys = []) {
+  const metadata = subject?.metadata && typeof subject.metadata === 'object'
+    ? subject.metadata
+    : {};
+  for (const key of keys) {
+    if (subject?.[key] !== undefined) {
+      return subject[key];
+    }
+    if (metadata[key] !== undefined) {
+      return metadata[key];
+    }
+  }
+  return undefined;
+}
+
+function isTruthyMetadataFlag(value) {
+  if (value === true) return true;
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function isLegendaryLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
+    'is_legendary',
+    'legendary',
+    'isLegendary',
+    'is_mythical',
+    'mythical',
+    'isMythical',
+  ]))) {
+    return true;
+  }
+
+  const classification = String(readSubjectMetadataValue(subject, [
+    'classification',
+    'category',
+  ]) || '').trim().toLowerCase();
+  return classification === 'legendary' || classification === 'mythical';
+}
+
+function isFinalEvolutionLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
+    'is_final_evolution',
+    'final_evolution',
+    'isFinalEvolution',
+    'is_fully_evolved',
+    'fully_evolved',
+    'isFullyEvolved',
+  ]))) {
+    return true;
+  }
+
+  const evolutionStage = String(readSubjectMetadataValue(subject, [
+    'evolution_stage',
+    'evolutionStage',
+  ]) || '').trim().toLowerCase();
+  return evolutionStage === 'final' || evolutionStage === 'fully_evolved';
+}
+
+function subjectSelectionPriority(subject) {
+  if (isLegendaryLikeSubject(subject)) {
+    return 0;
+  }
+  if (isFinalEvolutionLikeSubject(subject)) {
+    return 1;
+  }
+  return 2;
+}
+
+function prioritizeSelectableSubjects(subjects, random) {
+  const buckets = [[], [], []];
+  for (const subject of subjects || []) {
+    buckets[subjectSelectionPriority(subject)].push(subject);
+  }
+  return buckets.flatMap((bucket) => sampleArray(bucket, bucket.length, random));
+}
+
 function getTemplateSelectionConfig(template) {
   const typePairPolicy = template.selection_rules?.type_pair_policy || {};
   const configuredGenerationScope = Array.isArray(template.selection_rules?.generation_scope)
@@ -329,11 +406,13 @@ export async function planPokemonTypeChallenge({
   const selectableSubjects = localizedMatches.length > 0
     ? localizedMatches
     : selectedPair.matches;
+  const prioritizedSelectableSubjects = prioritizeSelectableSubjects(selectableSubjects, random);
   const selectedSubjectCount = Math.max(
     config.selectedSubjectsMin,
     Math.min(config.selectedSubjectsMax, selectableSubjects.length),
   );
-  const selectedSubjects = sampleArray(selectableSubjects, selectedSubjectCount, random)
+  const selectedSubjects = prioritizedSelectableSubjects
+    .slice(0, selectedSubjectCount)
     .sort((left, right) => left.national_dex_number - right.national_dex_number);
   const compatibleDisplayCount = Math.min(selectableSubjects.length, config.selectedSubjectsMax);
   const pokeballGridLayout = buildCenteredGridLayout(template, compatibleDisplayCount);
