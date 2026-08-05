@@ -152,7 +152,7 @@ function loadLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-mac-sync-watch-schedule.mjs [--interval-seconds 1800] [--hours 6,10,14,18,22 --minute 0] [--no-load]',
+      'Usage: node scripts/install-mac-sync-watch-schedule.mjs [--interval-seconds 3600] [--hours 6,10,14,18,22 --minute 0] [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.mac-sync-watch.plist and loads it by default.',
       'Schedule is detect-only: it can raise approval-gated sync requests, but it does not auto-pull.',
@@ -165,7 +165,12 @@ function main() {
   }
 
   const config = loadRuntimeConfig();
-  const intervalSeconds = getNumberArgValue('--interval-seconds', 1800);
+  // Default 3600s (hourly). Previously 1800s (30-min), but the historical
+  // installed plist actually used --hours 6,10,14,18 (4x/day). Bumped to
+  // hourly so a merge to main surfaces as an approval-gated sync request in
+  // Discord within ~60 min of the merge, without hammering github or
+  // competing with Ollama for CPU (a git-fetch is a few KB + ms of work).
+  const intervalSeconds = getNumberArgValue('--interval-seconds', 3600);
   const scheduleHours = getHourListArgValue('--hours');
   const minute = getMinuteArgValue('--minute', 0);
   const shouldLoad = !hasFlag('--no-load');
