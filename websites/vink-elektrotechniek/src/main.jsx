@@ -5,6 +5,9 @@ import App from './App.jsx'
 import PrivacyPolicy from './pages/PrivacyPolicy.jsx'
 import Terms from './pages/Terms.jsx'
 import './index.css'
+import { installWebsiteBuilderContentBridge } from '../../shared/builder-content-bridge.js'
+
+installWebsiteBuilderContentBridge()
 
 const basename = import.meta.env.BASE_URL.replace(/\/$/, '') || '/'
 

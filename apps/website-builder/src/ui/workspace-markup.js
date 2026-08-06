@@ -73,7 +73,11 @@ function renderOverviewCard(entry, view, renderTemplate, templateName, sourceDes
     <article class="workspace-card">
       <div class="workspace-card-preview-shell">
         <div class="workspace-card-preview-scale">
-          <div class="preview-root workspace-card-preview-root preview-static-root" style="${getThemeStyle(entry.draft)}">
+          <div
+            class="preview-root workspace-card-preview-root preview-static-root"
+            data-preview-entry-id="${escapeHtml(entry.id)}"
+            style="${getThemeStyle(entry.draft)}"
+          >
             ${renderTemplate(entry.draft)}
           </div>
         </div>
@@ -115,7 +119,11 @@ function renderBuildCard(entry, isSelected, renderTemplate, templateName) {
     <article class="workspace-card workspace-card-selectable ${isSelected ? 'is-selected' : ''}">
       <div class="workspace-card-preview-shell">
         <div class="workspace-card-preview-scale">
-          <div class="preview-root workspace-card-preview-root preview-static-root" style="${getThemeStyle(entry.draft)}">
+          <div
+            class="preview-root workspace-card-preview-root preview-static-root"
+            data-preview-entry-id="${escapeHtml(entry.id)}"
+            style="${getThemeStyle(entry.draft)}"
+          >
             ${renderTemplate(entry.draft)}
           </div>
         </div>

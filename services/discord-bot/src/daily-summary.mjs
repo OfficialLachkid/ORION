@@ -119,10 +119,6 @@ function averageByValue(events, selector, valueSelector) {
   );
 }
 
-function isAutomationApprovalEvent(event) {
-  return Boolean(event?.payload?.automationType);
-}
-
 function topEntries(map, limit = 3) {
   return [...map.entries()]
     .sort((left, right) => right[1] - left[1])
@@ -191,6 +187,68 @@ function getEventTimestampMs(event) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function correlateApprovalDecisions(events, decisions) {
+  const taskStates = events.filter((event) => event.type === 'task_state_changed');
+  const syncTaskIds = new Set(
+    events
+      .filter((event) => event.type === 'mac_sync_watch_request_created')
+      .map((event) => event.payload?.taskId)
+      .filter(Boolean)
+  );
+
+  return decisions.map((event) => {
+    const taskId = event.payload?.taskId || '';
+    const matchingStates = taskStates.filter((candidate) => candidate.payload?.taskId === taskId);
+    const resolutionState = matchingStates
+      .filter((candidate) => ['approved', 'rejected'].includes(candidate.payload?.status))
+      .sort((left, right) => getEventTimestampMs(right) - getEventTimestampMs(left))[0];
+    const sourceType = event.payload?.sourceType || resolutionState?.payload?.sourceType || '';
+    const automationType = event.payload?.automationType
+      || resolutionState?.payload?.automationType
+      || (sourceType === 'scheduled_sync_watch' || syncTaskIds.has(taskId) ? 'mac_sync_watch' : '');
+    const reportedWaitMs = Number(event.payload?.approvalWaitMs || 0);
+    const recoveredWaitMs = Number(resolutionState?.payload?.approvalWaitMs || 0);
+
+    return {
+      ...event,
+      payload: {
+        ...event.payload,
+        approvalWaitMs: reportedWaitMs > 0 ? reportedWaitMs : recoveredWaitMs,
+        sourceType,
+        automationType,
+        countTowardHumanTaskLatency:
+          event.payload?.countTowardHumanTaskLatency !== false && !automationType,
+      },
+    };
+  });
+}
+
+function calculatePostApprovalQueueWaits(taskStateChanges) {
+  const approvedAtByTaskId = new Map();
+  const waits = [];
+
+  for (const event of [...taskStateChanges].sort((left, right) => getEventTimestampMs(left) - getEventTimestampMs(right))) {
+    const taskId = event.payload?.taskId;
+    if (!taskId) {
+      continue;
+    }
+
+    if (event.payload?.status === 'approved') {
+      approvedAtByTaskId.set(taskId, getEventTimestampMs(event));
+      continue;
+    }
+
+    if (event.payload?.status === 'running' && approvedAtByTaskId.has(taskId)) {
+      const waitMs = getEventTimestampMs(event) - approvedAtByTaskId.get(taskId);
+      if (waitMs >= 0) {
+        waits.push(waitMs);
+      }
+    }
+  }
+
+  return waits;
+}
+
 export function summarizeOpsEvents(events, options = {}) {
   const { now, windowStart, events: windowEvents } = selectWindow(events, options);
   const counts = countByType(windowEvents);
@@ -202,9 +260,10 @@ export function summarizeOpsEvents(events, options = {}) {
 
   const executionFinishes = windowEvents.filter((event) => event.type === 'task_execution_finished');
   const approvalResolutions = windowEvents.filter((event) => event.type === 'approval_button_resolution' || event.type === 'approval_text_resolution');
-  const approvalDecisionEvents = windowEvents.filter((event) => event.type === 'approval_decision_received');
+  const rawApprovalDecisionEvents = windowEvents.filter((event) => event.type === 'approval_decision_received');
+  const approvalDecisionEvents = correlateApprovalDecisions(windowEvents, rawApprovalDecisionEvents);
   const humanTaskApprovalDecisions = approvalDecisionEvents.filter((event) => event.payload?.countTowardHumanTaskLatency !== false);
-  const automationApprovalDecisions = approvalDecisionEvents.filter((event) => isAutomationApprovalEvent(event));
+  const automationApprovalDecisions = approvalDecisionEvents.filter((event) => Boolean(event.payload?.automationType));
   const rejectedEvents = windowEvents.filter((event) => event.type === 'discord_event_rejected');
   const acceptedCommandEvents = windowEvents.filter((event) => event.type === 'command_accepted' || event.type === 'transcribed_command_accepted');
   const acknowledgementEvents = windowEvents.filter((event) => event.type === 'source_acknowledged');
@@ -243,12 +302,19 @@ export function summarizeOpsEvents(events, options = {}) {
     .filter((event) => event.payload?.route === 'command')
     .map((event) => Number(event.payload?.latencyMs || 0))
     .filter((value) => value > 0);
-  const approvalWaits = humanTaskApprovalDecisions
+  const approvalWaits = approvalDecisionEvents
+    .map((event) => Number(event.payload?.approvalWaitMs || 0))
+    .filter((value) => value > 0);
+  const humanApprovalWaits = humanTaskApprovalDecisions
+    .map((event) => Number(event.payload?.approvalWaitMs || 0))
+    .filter((value) => value > 0);
+  const automationApprovalWaits = automationApprovalDecisions
     .map((event) => Number(event.payload?.approvalWaitMs || 0))
     .filter((value) => value > 0);
   const queueDwellEvents = taskStateChanges
     .filter((event) => event.payload?.status === 'running')
     .filter((event) => Number(event.payload?.queueDwellMs || 0) > 0);
+  const postApprovalQueueWaits = calculatePostApprovalQueueWaits(taskStateChanges);
   const latestRuntimeReadyMs = runtimeReadyEvents.reduce((latest, event) => Math.max(latest, getEventTimestampMs(event)), 0);
   const queuedStates = taskStateLatest.filter((event) => event.payload?.status === 'queued');
   const awaitingApprovalStates = taskStateLatest.filter((event) => event.payload?.status === 'awaiting_approval');
@@ -297,7 +363,9 @@ export function summarizeOpsEvents(events, options = {}) {
     );
   };
 
-  const workflowEventCount = windowEvents.filter((event) => event.type !== 'health_monitor_check').length;
+  const workflowEventCount = windowEvents.filter((event) => (
+    event.type !== 'health_monitor_check' && event.type !== 'health_monitor_run_completed'
+  )).length;
 
   return {
     generatedAt: now.toISOString(),
@@ -326,6 +394,8 @@ export function summarizeOpsEvents(events, options = {}) {
     automationApprovalsResolved: automationApprovalDecisions.length,
     avgApprovalWaitMs: average(approvalWaits),
     p95ApprovalWaitMs: p95(approvalWaits),
+    avgHumanApprovalWaitMs: average(humanApprovalWaits),
+    avgAutomationApprovalWaitMs: average(automationApprovalWaits),
     rejectedEvents: rejectedEvents.length,
     executionsCompleted: executionByOutcome.get('completed') || 0,
     executionsFailed: executionByOutcome.get('failed') || 0,
@@ -349,6 +419,7 @@ export function summarizeOpsEvents(events, options = {}) {
     oldestQueuedMs: oldestAgeMs(currentQueuedStates),
     oldestRunningMs: oldestAgeMs(currentRunningStates),
     avgQueueDwellMs: average(queueDwellEvents.map((event) => Number(event.payload?.queueDwellMs || 0)).filter((value) => value > 0)),
+    avgPostApprovalQueueWaitMs: average(postApprovalQueueWaits),
     estimatedInputTokens,
     avgEstimatedTokensPerAcceptedCommand: acceptedCommandEvents.length ? estimatedInputTokens / acceptedCommandEvents.length : 0,
     estimatedPaidCostUsd: estimatedCostUsd,
@@ -372,7 +443,7 @@ export function formatDailySummary(summary) {
     `Window: last ${summary.windowHours}h`,
     '',
     `**Workflow**`,
-    `- Workflow events: ${summary.workflowEvents ?? summary.totalEvents} (excludes health monitor per-check telemetry)`,
+    `- Non-monitor workflow events: ${summary.workflowEvents ?? summary.totalEvents}`,
     `- Total tracked events: ${summary.totalEvents}`,
     `- Runtime reconnects: ${summary.runtimeReadyCount}`,
     `- Commands accepted: ${summary.commandsAccepted}`,
@@ -398,16 +469,19 @@ export function formatDailySummary(summary) {
     `- Failed actions: ${summary.executionsFailed}`,
     `- Rejected/blocked events: ${summary.rejectedEvents}`,
     `- Avg Mac sync execution: ${formatDurationMs(summary.avgMacSyncExecutionDurationMs)}`,
-    `- Avg approval-to-sync completion: ${formatDurationMs(summary.avgMacSyncLifecycleMs)}`,
+    `- Avg sync request-to-completion: ${formatDurationMs(summary.avgMacSyncLifecycleMs)}`,
     '',
     `**Queue + Approval Age**`,
-    `- Avg approval wait: ${formatDurationMs(summary.avgApprovalWaitMs)}`,
-    `- P95 approval wait: ${formatDurationMs(summary.p95ApprovalWaitMs)}`,
+    `- Avg approval wait (all): ${formatDurationMs(summary.avgApprovalWaitMs)}`,
+    `- P95 approval wait (all): ${formatDurationMs(summary.p95ApprovalWaitMs)}`,
+    `- Avg human-task approval wait: ${formatDurationMs(summary.avgHumanApprovalWaitMs)}`,
+    `- Avg automation approval wait: ${formatDurationMs(summary.avgAutomationApprovalWaitMs)}`,
     `- Oldest awaiting approval: ${formatDurationMs(summary.oldestAwaitingApprovalMs)}`,
     `- Stale interrupted executable tasks: ${countValue(summary.staleInterruptedTasks)}`,
     `- Oldest queued task: ${formatDurationMs(summary.oldestQueuedMs)}`,
     `- Oldest running task: ${formatDurationMs(summary.oldestRunningMs)}`,
-    `- Avg queue dwell: ${formatDurationMs(summary.avgQueueDwellMs)}`,
+    `- Avg intake-to-execution delay: ${formatDurationMs(summary.avgQueueDwellMs)}`,
+    `- Avg post-approval queue delay: ${formatDurationMs(summary.avgPostApprovalQueueWaitMs)}`,
     '',
     `**Token + Cost**`,
     `- Estimated intake tokens: ${Math.round(summary.estimatedInputTokens || 0)}`,
@@ -464,14 +538,14 @@ export function formatDailySummary(summary) {
   }
 
   if ((summary.avgQueueDwellByDomain || []).length > 0) {
-    lines.push('', '**Avg queue dwell by domain**');
+    lines.push('', '**Avg intake-to-execution delay by domain**');
     for (const [domain, durationMs] of summary.avgQueueDwellByDomain || []) {
       lines.push(`- ${domain}: ${formatDurationMs(durationMs)}`);
     }
   }
 
   if ((summary.avgQueueDwellByAction || []).length > 0) {
-    lines.push('', '**Avg queue dwell by action**');
+    lines.push('', '**Avg intake-to-execution delay by action**');
     for (const [action, durationMs] of summary.avgQueueDwellByAction || []) {
       lines.push(`- ${action}: ${formatDurationMs(durationMs)}`);
     }

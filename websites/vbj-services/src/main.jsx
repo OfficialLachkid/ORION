@@ -4,6 +4,9 @@ import { HashRouter, Routes, Route } from "react-router-dom";
 import App from "./App.jsx";
 import Legal from "./Legal.jsx";
 import "./index.css";
+import { installWebsiteBuilderContentBridge } from "../../shared/builder-content-bridge.js";
+
+installWebsiteBuilderContentBridge();
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
