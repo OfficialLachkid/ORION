@@ -57,29 +57,46 @@ function runCommand(command, args) {
   }).trim();
 }
 
-function readGitSyncState() {
-  const currentBranch = runCommand('git', ['branch', '--show-current']);
-  const worktreeStatus = runCommand('git', ['status', '--porcelain']);
-  const worktree = classifyWorktreeStatus(worktreeStatus);
-  let upstreamRef = '';
+// The watcher's job is "did production drift?" and production = main.
+// Compare LOCAL main to origin/main unconditionally — not the current
+// branch's upstream. If we watched @{u} (as this used to), leaving any
+// feature branch checked out silently masked origin/main moves: the
+// watcher happily reported "up to date with origin/<feature>" while main
+// pulled ahead, and no approval card appeared in #approvals. Operator
+// flagged 2026-08-06 after PR #31 merged but stayed unsynced for hours.
+export const WATCHED_UPSTREAM_REF = 'origin/main';
+export const WATCHED_LOCAL_REF = 'main';
 
+export function computeGitSyncState({
+  runGit = (args) => runCommand('git', args),
+} = {}) {
+  const currentBranch = runGit(['branch', '--show-current']);
+  const worktreeStatus = runGit(['status', '--porcelain']);
+  const worktree = classifyWorktreeStatus(worktreeStatus);
+
+  // Verify local main exists; a fresh clone or a corrupted repo without it
+  // should fail cleanly rather than crash the whole scheduled fetch.
+  let hasLocalMain = false;
   try {
-    upstreamRef = runCommand('git', ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+    runGit(['rev-parse', '--verify', '--quiet', `refs/heads/${WATCHED_LOCAL_REF}`]);
+    hasLocalMain = true;
   } catch {
-    upstreamRef = '';
+    hasLocalMain = false;
   }
 
   let aheadCount = 0;
   let behindCount = 0;
-  if (upstreamRef) {
-    const counts = parseRevListCounts(runCommand('git', ['rev-list', '--left-right', '--count', `HEAD...${upstreamRef}`]));
+  if (hasLocalMain) {
+    const counts = parseRevListCounts(
+      runGit(['rev-list', '--left-right', '--count', `${WATCHED_LOCAL_REF}...${WATCHED_UPSTREAM_REF}`]),
+    );
     aheadCount = counts.aheadCount;
     behindCount = counts.behindCount;
   }
 
   return {
     currentBranch,
-    upstreamRef,
+    upstreamRef: hasLocalMain ? WATCHED_UPSTREAM_REF : '',
     isClean: worktree.isClean,
     hasOnlyAllowedRuntimeDrift: worktree.hasOnlyAllowedRuntimeDrift,
     isEffectivelyClean: worktree.isEffectivelyClean,
@@ -87,6 +104,10 @@ function readGitSyncState() {
     aheadCount,
     behindCount,
   };
+}
+
+function readGitSyncState() {
+  return computeGitSyncState();
 }
 
 function buildApprovalMentions(config) {
