@@ -54,13 +54,14 @@ export async function runNightShift(argv = process.argv) {
   }
 
   const label = isFallback ? 'Night Shift (07:00 fallback)' : 'Night Shift';
-  const { outcomes, systemicFailure, exitCode, stderr } = runQualification(limit);
+  const { outcomes, systemicFailure, rateLimited, exitCode, stderr } = runQualification(limit);
 
   recordOpsMetric(config, 'night_shift_run', {
     fallback: isFallback,
     processed: outcomes.length,
     drafted: outcomes.filter((outcome) => outcome.approvalTaskId).length,
     systemicFailure,
+    rateLimited,
     exitCode,
   });
 
@@ -152,8 +153,19 @@ export async function runNightShift(argv = process.argv) {
     process.stderr.write(`Review card refresh failed (non-fatal): ${error.message}\n`);
   }
 
-  mkdirSync(dirname(marker), { recursive: true });
-  writeFileSync(marker, new Date().toISOString());
+  // Skip the marker when the primary run partially completed but hit a
+  // Claude usage-limit / rate-limit — that leaves the fallback slot (07:00,
+  // after Claude's window resets) armed to pick up the leads still marked
+  // `new` in Supabase. Without this, a partial-success primary silently
+  // trapped rate-limited leads for a full day (operator flagged 2026-08-06).
+  // Digest and downstream steps still run so the operator sees what did
+  // complete on this pass.
+  if (rateLimited) {
+    process.stderr.write(`Night shift qualification hit Claude usage limits — ${outcomes.filter((o) => o.error).length}/${outcomes.length} lead(s) errored. Marker skipped so the fallback slot re-runs qualification after the usage window resets.\n`);
+  } else {
+    mkdirSync(dirname(marker), { recursive: true });
+    writeFileSync(marker, new Date().toISOString());
+  }
 
   const backlog = await fetchLeads({ status: 'new', limit: 2000 })
     .then((leads) => leads.length)
