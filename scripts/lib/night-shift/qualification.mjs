@@ -5,6 +5,34 @@ import {
   runProjectNodeScript,
 } from './process-utils.mjs';
 
+// Matches the shapes Claude's `claude -p` subprocess surfaces when it can't
+// serve a request due to usage-quota / rate-limit exhaustion. Kept generous
+// on purpose — false positives just cause a benign 07:00 fallback re-run,
+// but a false negative traps rate-limited leads for a full day.
+//
+// Observed shapes as of 2026-08-06:
+//   - "Claude Code usage limit reached"
+//   - "Please try again after 2026-..."
+//   - HTTP 429 wrapped errors
+//   - "rate_limit_error" (Anthropic API code)
+//   - "overloaded_error" (5xx transient bursts, resets faster than usage)
+//   - "too many requests"
+export function isClaudeUsageLimitError(errorMessage) {
+  const text = String(errorMessage || '').toLowerCase();
+  if (!text) return false;
+  return /usage limit|usage_limit|rate.?limit|rate_limit|\b429\b|overloaded_error|please try again after|too many requests|quota exceeded|resource_exhausted/u.test(text);
+}
+
+// True if any qualification outcome errored with a Claude usage-limit-shaped
+// error. Used by the night-shift core to decide whether to leave the daily
+// marker unwritten so the 07:00 fallback picks up the unfinished leads once
+// Claude's window resets.
+export function hasClaudeUsageLimitOutcome(outcomes = []) {
+  return (Array.isArray(outcomes) ? outcomes : []).some((outcome) => (
+    outcome && outcome.error && isClaudeUsageLimitError(outcome.error)
+  ));
+}
+
 function runQualificationScript(args, timeoutMs) {
   const result = runProjectNodeScript('scripts/run-lead-qualification.mjs', args, {
     timeoutMs,
@@ -18,10 +46,17 @@ function runQualificationScript(args, timeoutMs) {
   const processError = result.error?.message
     || (result.signal ? `Qualification process ended with signal ${result.signal}.` : '');
   const diagnostic = childStderr || outcomeErrors.slice(0, 3).join(' | ') || processError;
+  // rateLimited surfaces the partial-progress-plus-usage-cap case separately
+  // from systemicFailure. Both leave the marker unwritten so the 07:00
+  // fallback re-runs; the two are distinguished so telemetry / the digest
+  // can report the recoverable path without flagging it as an outage.
+  const rateLimited = hasClaudeUsageLimitOutcome(outcomes)
+    || isClaudeUsageLimitError(childStderr);
 
   return {
     outcomes,
     systemicFailure,
+    rateLimited,
     exitCode: result.status ?? -1,
     stderr: diagnostic,
   };
