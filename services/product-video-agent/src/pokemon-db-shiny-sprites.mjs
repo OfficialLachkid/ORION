@@ -12,9 +12,9 @@ export function buildPokemonDbShinySpriteSlug(input) {
   return readPokemonDbName(input)
     .normalize('NFKD')
     .replace(/[\u0300-\u036f]/gu, '')
-    .replaceAll('♀', '-f')
-    .replaceAll('♂', '-m')
-    .replace(/[’']/gu, '')
+    .replaceAll('\u2640', '-f')
+    .replaceAll('\u2642', '-m')
+    .replace(/[\u2019']/gu, '')
     .replace(/[.:]/gu, '')
     .replace(/[\\/]/gu, '-')
     .trim()
@@ -29,4 +29,12 @@ export function buildPokemonDbShinySpriteUrl(input) {
   return slug
     ? `https://img.pokemondb.net/sprites/home/shiny/2x/${slug}.jpg`
     : null;
+}
+
+export function resolvePreferredShinySpriteSourceUrl(pokeApiPayload, input) {
+  return pokeApiPayload?.sprites?.other?.home?.front_shiny
+    || pokeApiPayload?.sprites?.other?.['official-artwork']?.front_shiny
+    || buildPokemonDbShinySpriteUrl(input)
+    || pokeApiPayload?.sprites?.front_shiny
+    || null;
 }

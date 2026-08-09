@@ -13,6 +13,7 @@ import {
 const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
   fire: ['fire-backgrounds'],
   ground: ['cave-backgrounds'],
+  ice: ['ice-backgrounds'],
   rock: ['cave-backgrounds'],
   water: ['beach-backgrounds'],
 });
@@ -29,11 +30,16 @@ function isCaveBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/cave-backgrounds/');
 }
 
+function isIceBackgroundPath(backgroundPath) {
+  return String(backgroundPath || '').toLowerCase().includes('/ice-backgrounds/');
+}
+
 function isArchivedBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/archived-backgrounds/');
 }
 
 const TYPE_THEMED_BACKGROUND_PRIORITY = Object.freeze([
+  'ice',
   'ground',
   'rock',
   'fire',
@@ -47,11 +53,18 @@ const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
 function isThemedBackgroundPath(backgroundPath) {
   return isBeachBackgroundPath(backgroundPath)
     || isCaveBackgroundPath(backgroundPath)
+    || isIceBackgroundPath(backgroundPath)
     || isFireBackgroundPath(backgroundPath);
 }
 
 function resolveThemedBackgroundPriority(normalizedTypes = []) {
   const selectedTypes = new Set(normalizedTypes);
+  if (selectedTypes.has('ice')) {
+    return [
+      'ice',
+      ...TYPE_THEMED_BACKGROUND_PRIORITY.filter((typeName) => typeName !== 'ice' && selectedTypes.has(typeName)),
+    ];
+  }
   const prioritizedTypes = TYPE_THEMED_BACKGROUND_PRIORITY
     .filter((typeName) => selectedTypes.has(typeName));
 

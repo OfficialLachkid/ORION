@@ -23,7 +23,7 @@ import {
   buildPokeQuizzTypeIconPath,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../src/poke-quizz-asset-layout.mjs';
-import { buildPokemonDbShinySpriteUrl } from '../../src/pokemon-db-shiny-sprites.mjs';
+import { resolvePreferredShinySpriteSourceUrl } from '../../src/pokemon-db-shiny-sprites.mjs';
 import { runLocalProcess } from '../../src/process-runner.mjs';
 import { resolveFfmpegExecutable } from '../../src/runtime-executables.mjs';
 
@@ -109,14 +109,15 @@ async function downloadToFile(url, outputPath, options = {}) {
   await writeFile(outputPath, buffer);
 }
 
-async function fetchPokeApiSpriteMetadata(nationalDexNumber) {
+async function fetchPokeApiSpriteMetadata(row) {
+  const nationalDexNumber = row?.national_dex_number;
   const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${nationalDexNumber}`);
   if (!response.ok) {
     throw new Error(`Could not fetch PokeAPI sprite metadata for #${nationalDexNumber} (${response.status}).`);
   }
   const payload = await response.json();
   return {
-    fallbackShinySpriteSourceUrl: payload?.sprites?.front_shiny || null,
+    preferredShinySpriteSourceUrl: resolvePreferredShinySpriteSourceUrl(payload, row),
     crySourceUrl: payload?.cries?.latest || payload?.cries?.legacy || null,
   };
 }
@@ -247,11 +248,8 @@ async function localizeRows(rows, options = {}) {
     const spritePath = buildPokeQuizzSpritePath(row);
     const shinySpritePath = buildPokeQuizzShinySpritePath(row);
     const silhouettePath = buildPokeQuizzSilhouettePath(row);
-    const spriteMetadata = await fetchPokeApiSpriteMetadata(row.national_dex_number);
-    const shinySpriteSourceCandidates = [
-      buildPokemonDbShinySpriteUrl(row),
-      spriteMetadata.fallbackShinySpriteSourceUrl,
-    ].filter(Boolean);
+    const spriteMetadata = await fetchPokeApiSpriteMetadata(row);
+    const shinySpriteSourceCandidates = [spriteMetadata.preferredShinySpriteSourceUrl].filter(Boolean);
 
     if (!row.sprite_source_url) {
       report.push({ id: row.id, status: 'skipped', reason: 'sprite_source_url_missing' });
