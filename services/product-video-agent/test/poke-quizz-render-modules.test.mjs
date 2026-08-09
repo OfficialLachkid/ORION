@@ -68,6 +68,46 @@ test('visual inputs choose loop strategy by media type and preserve reveal sprit
   assert.deepEqual(stillInputs.at(-1).args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/squirtle.png']);
 });
 
+test('visual inputs prefer resolved reveal sprite paths and append the shiny sparkle overlay once', () => {
+  const renderPlan = {
+    total_duration_seconds: 10.2,
+    canvas: {
+      fps: 30,
+    },
+    phases: {
+      reveal: {
+        duration_seconds: 2.4,
+      },
+    },
+  };
+
+  const inputs = buildVisualInputs({
+    shiny_reveal: {
+      active: true,
+    },
+    assets: {
+      background: { selected_path: '/tmp/beach.png' },
+      type_icons: [],
+      overlays: {
+        selected_timer_path: '/tmp/timer.gif',
+        selected_primary_pokeball_overlay_path: '/tmp/pokeballs.gif',
+        selected_shiny_sparkle_path: '/tmp/shiny_sparkle.gif',
+      },
+      pokemon: [
+        {
+          national_dex_number: 25,
+          sprite_path: '/tmp/pikachu.png',
+          reveal_sprite_path: '/tmp/pikachu-shiny.png',
+        },
+      ],
+    },
+  }, renderPlan);
+
+  assert.equal(inputs.at(-2).path, '/tmp/pikachu-shiny.png');
+  assert.deepEqual(inputs.at(-2).args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/pikachu-shiny.png']);
+  assert.deepEqual(inputs.at(-1).args, ['-ignore_loop', '1', '-i', '/tmp/shiny_sparkle.gif']);
+});
+
 test('drawtext artifacts expose progressive word-by-word segments per phase', () => {
   const renderPlan = {
     text: {

@@ -1318,3 +1318,118 @@ test('planner prefers pairs with localized reveal sprites during random selectio
   assert.deepEqual(plan.selection.type_pair, ['ground', 'psychic']);
   assert.equal(plan.assets.pokemon.every((subject) => Boolean(subject.sprite_path)), true);
 });
+
+test('planner selects at most one shiny reveal per video and records the deterministic roll', async () => {
+  const shinyTemplate = {
+    ...template,
+    reveal: {
+      shiny: {
+        enabled: true,
+        odds_numerator: 1,
+        odds_denominator: 1,
+        sparkle_duration_seconds: 0.9,
+        sparkle_scale_multiplier: 1.35,
+      },
+    },
+  };
+  const shinyRows = [
+    {
+      id: 'pokedex-0001',
+      national_dex_number: 1,
+      name: 'Bulbasaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0001.png',
+      silhouette_path: '/tmp/0001-silhouette.png',
+      shiny_sprite_path: '/tmp/0001-shiny.png',
+      cry_path: '/tmp/0001.wav',
+      sprite_source_url: 'https://example.test/0001.png',
+      shiny_sprite_source_url: 'https://example.test/0001-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+    {
+      id: 'pokedex-0002',
+      national_dex_number: 2,
+      name: 'Ivysaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0002.png',
+      silhouette_path: '/tmp/0002-silhouette.png',
+      shiny_sprite_path: '/tmp/0002-shiny.png',
+      cry_path: '/tmp/0002.wav',
+      sprite_source_url: 'https://example.test/0002.png',
+      shiny_sprite_source_url: 'https://example.test/0002-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: shinyTemplate,
+    pokedexRows: shinyRows,
+    seed: 'always-one-shiny',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-08-09T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav', '/tmp/shiny-sound.mp3'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+        shiny: '/tmp/shiny-sound.mp3',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        shiny_sparkle: '/tmp/shiny_sparkle.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: [
+        '/tmp/Timer Countdown.gif',
+        '/tmp/Timer Alarm.gif',
+        '/tmp/shiny_sparkle.gif',
+        '/tmp/3D Pokeball Wiggle.gif',
+      ],
+      transitions: [],
+    },
+  });
+
+  const shinySubjects = plan.assets.pokemon.filter((subject) => subject.is_shiny_reveal);
+
+  assert.equal(plan.shiny_reveal.active, true);
+  assert.equal(plan.shiny_reveal.roll_value, 1);
+  assert.equal(plan.shiny_reveal.max_per_video, 1);
+  assert.equal(plan.shiny_reveal.chance_percentage, 100);
+  assert.equal(shinySubjects.length, 1);
+  assert.equal(shinySubjects[0].reveal_variant, 'shiny');
+  assert.equal(shinySubjects[0].reveal_sprite_path, shinySubjects[0].shiny_sprite_path);
+  assert.equal(plan.assets.pokemon.filter((subject) => subject.reveal_variant === 'shiny').length, 1);
+  assert.equal(plan.assets.overlays.selected_shiny_sparkle_path, '/tmp/shiny_sparkle.gif');
+  assert.equal(plan.assets.audio.selected_sound_effects.shiny, '/tmp/shiny-sound.mp3');
+});

@@ -143,11 +143,15 @@ export function selectOverlayPresets(overlays) {
   const timerAlarm = matchOverlay(overlays, ['timer', 'alarm'])
     || matchOverlay(overlays, ['timer-alarm'])
     || matchOverlay(overlays, ['timer_alarm']);
+  const shinySparkle = matchOverlay(overlays, ['shiny', 'sparkle'])
+    || matchOverlay(overlays, ['shiny-sparkle'])
+    || matchOverlay(overlays, ['shiny_sparkle']);
   const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
     timer,
     timer_countdown: timerCountdown || timer,
     timer_alarm: timerAlarm,
+    shiny_sparkle: shinySparkle,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
       || matchOverlay(overlays, ['open', 'close', 'pokeball']),
@@ -176,7 +180,8 @@ export async function scanPokeQuizzAssetInventory() {
 
   const countdownTick = matchSoundEffect(soundEffects, ['countdown', 'tick', 'beep']);
   const timerEnd = matchSoundEffect(soundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'ding', 'reveal-hit']);
-  const reveal = matchSoundEffect(soundEffects, ['reveal', 'sparkle', 'who', 'answer']) || timerEnd;
+  const reveal = matchSoundEffect(soundEffects, ['reveal', 'who', 'answer']) || timerEnd;
+  const shiny = matchSoundEffect(soundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
   const pokeballWiggle = matchSoundEffect(soundEffects, ['pokeball', 'wiggle', 'wobble', 'shake']);
 
   return {
@@ -189,6 +194,7 @@ export async function scanPokeQuizzAssetInventory() {
       countdown_tick: countdownTick,
       timer_end: timerEnd,
       reveal,
+      shiny,
       pokeball_wiggle: pokeballWiggle,
     },
     type_icons: {

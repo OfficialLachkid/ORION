@@ -322,6 +322,87 @@ test('audio filter script time-warps a full countdown bed to the reveal boundary
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[music\]\[countdown\]\[timerend\]amix/u);
 });
 
+test('audio filter script starts shiny sfx at the reveal visual cue', () => {
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const script = buildAudioFilterScript({
+    narrationPaths: ['/tmp/hook.wav', '/tmp/prompt.wav', '/tmp/reveal.wav'],
+    musicPath: null,
+    countdownPath: null,
+    timerEndPath: null,
+    pokeballWigglePath: null,
+    shinyPath: '/tmp/shiny-sound.mp3',
+    renderPlan,
+  });
+
+  assert.match(script, /\[3:a\]adelay=8100\|8100,volume=0\.82\[shiny\]/u);
+  assert.match(script, /\[n0\]\[n1\]\[n2\]\[shiny\]amix/u);
+});
+
+test('visual filter script overlays the shiny sparkle on the selected shiny subject only once', () => {
+  const visualPlan = {
+    ...plan,
+    shiny_reveal: {
+      active: true,
+      selected_subject_index: 0,
+      selected_pokedex_id: 'pokedex-0001',
+      sparkle_duration_seconds: 0.9,
+      sparkle_scale_multiplier: 1.35,
+    },
+    assets: {
+      ...plan.assets,
+      pokemon: [
+        {
+          pokedex_id: 'pokedex-0001',
+          national_dex_number: 1,
+          sprite_path: '/tmp/bulbasaur.png',
+          shiny_sprite_path: '/tmp/bulbasaur-shiny.png',
+          reveal_sprite_path: '/tmp/bulbasaur-shiny.png',
+          reveal_variant: 'shiny',
+          is_shiny_reveal: true,
+        },
+      ],
+      overlays: {
+        ...plan.assets.overlays,
+        selected_shiny_sparkle_path: '/tmp/shiny_sparkle.gif',
+        selected_shiny_sparkle_duration_seconds: 0.9,
+      },
+    },
+  };
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan: visualPlan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const visualFilter = buildVisualFilterScript(
+    visualPlan,
+    template,
+    renderPlan,
+    {
+      background: 0,
+      typeIcons: [1, 2],
+      timerCountdown: 3,
+      timerAlarm: 4,
+      pokeball: 5,
+      pokemon: [6],
+      shinySparkle: 7,
+    },
+    null,
+    {
+      hook: { lines: [] },
+      prompt: { lines: [] },
+      reveal: { lines: [] },
+    },
+  );
+
+  assert.match(visualFilter.script, /\[7:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+8\.1\/TB/u);
+  assert.match(visualFilter.script, /\[shinysparkle0\]/u);
+  assert.match(visualFilter.script, /overlay=228-w\/2:652-h\/2:enable='between\(t,8\.1,9\)'/u);
+});
+
 test('escaped enable windows are safe for ffmpeg filter parsing', () => {
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
