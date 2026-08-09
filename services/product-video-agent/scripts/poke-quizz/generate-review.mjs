@@ -238,12 +238,16 @@ async function generateAndReviewPokeQuizz(options) {
     typePair: plan.selection?.type_pair || [],
     title: overrideTitle,
     description: overrideDescription,
+    genreLabel: templateRuntime.genreLabel,
+    presentation: templateRuntime.generationProgressPresentation,
   });
   const progress = beginPokeQuizzGenerationProgress(runtimeConfig, startedMessage, {
     channelProfile,
     typePair: plan.selection?.type_pair || [],
     title: overrideTitle,
     description: overrideDescription,
+    genreLabel: templateRuntime.genreLabel,
+    presentation: templateRuntime.generationProgressPresentation,
   });
 
   try {
@@ -275,6 +279,8 @@ async function generateAndReviewPokeQuizz(options) {
           description: overrideDescription,
           elapsedMs: progress.getElapsedMs(),
           attemptLabel: `${attempt + 1}/${maxRenderAttempts}`,
+          genreLabel: templateRuntime.genreLabel,
+          presentation: templateRuntime.generationProgressPresentation,
         }, error);
       }
     }
@@ -329,6 +335,8 @@ async function generateAndReviewPokeQuizz(options) {
       description: overrideDescription,
       elapsedMs: progress.getElapsedMs(),
       attemptLabel: '2/2',
+      genreLabel: templateRuntime.genreLabel,
+      presentation: templateRuntime.generationProgressPresentation,
     }, error);
     throw error;
   }

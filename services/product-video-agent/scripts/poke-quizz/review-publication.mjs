@@ -351,6 +351,7 @@ export async function reviewPokeQuizzPublication({
     configPath: effectiveConfigPath,
     channelSelector: effectiveChannelSelector,
     genreLabel: effectiveGenreLabel,
+    reviewPresentation: templateRuntime.reviewPresentation,
     generationDurationMinutes,
     submittedAt,
   });
@@ -382,6 +383,7 @@ export async function reviewPokeQuizzPublication({
     channelProfile,
     channelSelector: effectiveChannelSelector,
     asOf: submittedAt,
+    presentation: templateRuntime.queueStatusPresentation,
   });
 
   return {

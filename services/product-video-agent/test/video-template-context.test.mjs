@@ -28,6 +28,12 @@ test('loadVideoTemplateContext resolves the default Poke Quizz ownership stack',
   assert.equal(context.templateId, 'pokemon.dual-type-reveal.v1');
   assert.equal(context.publicationChannelSelector, DEFAULT_CHANNEL_SELECTOR);
   assert.equal(context.genreLabel, DEFAULT_GENRE_LABEL);
+  assert.equal(context.reviewPresentation.approve_label, 'Publish');
+  assert.equal(context.queueStatusPresentation.title, 'Poke Quizz Queue Status');
+  assert.equal(
+    context.generationProgressPresentation.status_titles.started,
+    'Poke Quizz Video Gen - Started',
+  );
 });
 
 test('resolveVideoTemplateRuntime preserves explicit runtime overrides', async () => {

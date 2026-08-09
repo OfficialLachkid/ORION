@@ -16,7 +16,11 @@ import {
   syncPokeQuizzQueueStatusMessage,
 } from '../../src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
-import { DEFAULT_VIDEO_CHANNEL_CONFIG_PATH } from '../../src/video-template-context.mjs';
+import {
+  DEFAULT_CHANNEL_SELECTOR,
+  DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+  resolveVideoTemplateRuntime,
+} from '../../src/video-template-context.mjs';
 import {
   getBooleanOption,
   getStringOption,
@@ -26,7 +30,6 @@ import {
   projectRoot,
 } from '../../../../scripts/lib/ruflo-wrapper-utils.mjs';
 
-const DEFAULT_CHANNEL_SELECTOR = 'poke-quizz-youtube';
 const DEFAULT_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 
 function parsePositiveInteger(value, fallbackValue) {
@@ -131,9 +134,14 @@ async function main() {
     return;
   }
 
-  const runtimeConfig = loadRuntimeConfig();
   const channelConfigPath = getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH);
-  const channelSelector = getStringOption(options, 'channel', DEFAULT_CHANNEL_SELECTOR);
+  const templateRuntime = await resolveVideoTemplateRuntime({
+    projectRoot,
+    channelConfigPath,
+    channelSelector: getStringOption(options, 'channel', ''),
+  });
+  const channelSelector = templateRuntime.channelSelector;
+  const runtimeConfig = loadRuntimeConfig();
   const channelsPath = getStringOption(options, 'channels', DEFAULT_CHANNELS_PATH);
   const reviewThreadId = getStringOption(options, 'thread-id', String(runtimeConfig.channelIds.pokeQuizzReview || '').trim());
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
@@ -250,6 +258,7 @@ async function main() {
     channelProfile,
     channelSelector,
     asOf,
+    presentation: templateRuntime.queueStatusPresentation,
   });
 
   const result = {

@@ -170,6 +170,34 @@ test('buildPokeQuizzPublicationReviewPayload renders Publish, Give Feedback, and
   assert.equal(payload.components[0].components[2].label, 'Delete');
 });
 
+test('buildPokeQuizzPublicationReviewPayload honors review presentation overrides', () => {
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    channelProfile,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    reviewPresentation: {
+      genre_label: 'Pokemon Challenge',
+      approve_label: 'Schedule',
+      reject_label: 'Revise',
+      delete_label: 'Remove',
+      summary_with_pair_prefix: 'Queue challenge for',
+    },
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+
+  const { event, payload } = buildPokeQuizzPublicationReviewPayload(task);
+  assert.equal(task.summary, 'Queue challenge for Water / Flying.');
+  assert.equal(task.poke_quizz_publication_review.genreLabel, 'Pokemon Challenge');
+  assert.equal(event.metadata.approveLabel, 'Schedule');
+  assert.equal(payload.components[0].components[0].label, 'Schedule');
+  assert.equal(payload.components[0].components[1].label, 'Revise');
+  assert.equal(payload.components[0].components[2].label, 'Remove');
+});
+
 test('collapsed deleted review payload removes the embed and keeps the preview link', () => {
   const task = buildPokeQuizzPublicationReviewTask({
     publication: {
