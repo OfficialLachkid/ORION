@@ -264,3 +264,64 @@ test('feedback regeneration falls back to the preferred localized catalog when t
   assert.equal(result.report.state, 'preview_regenerated');
   assert.equal(result.report.previewUrl, 'https://youtube.com/shorts/revised-preview');
 });
+
+test('feedback regeneration rebuilds from the localized catalog even when the original review task still has a plan path', async () => {
+  const runCalls = [];
+  const normalizePath = (value) => String(value || '').replaceAll('\\', '/');
+
+  const result = await executeProductVideoAction(
+    'poke_quizz_feedback_regenerate',
+    {
+      task_id: 'TASK-ORION-PQ-REGENERATE-PLAN-REBUILD',
+      submitted_at: '2026-08-04T14:12:00.000Z',
+      poke_quizz_feedback: {
+        publicationId: 'publication-rock-fairy',
+        reviewThreadId: '1532709429902839810',
+        channelSelector: 'poke-quizz-youtube',
+        typePair: ['rock', 'fairy'],
+        feedback: 'Use the latest spacing changes.',
+        planPath: 'data/runtime/product-video-agent/poke-quizz/old-review.plan.json',
+        catalogJsonPath: '',
+        templatePath: 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json',
+        configPath: 'services/product-video-agent/config.example.json',
+      },
+    },
+    { env: {} },
+    {
+      ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+      runProcess: async (options) => {
+        runCalls.push(options);
+        return {
+          stdout: JSON.stringify({
+            publication_id: 'publication-rock-fairy-v2',
+            preview_url: 'https://youtube.com/shorts/rebuilt-preview',
+            task_id: 'TASK-ORION-PQ-PUBLISH-NEWER',
+            message_id: '1533600000000001234',
+            render_path: 'data/runtime/product-video-agent/poke-quizz/rebuilt.mp4',
+          }, null, 2),
+        };
+      },
+      updatePriorPublicationForRevision: async () => {},
+    },
+  );
+
+  assert.equal(runCalls.length, 2);
+  assert.equal(
+    normalizePath(runCalls[0].args[0]).endsWith('services/product-video-agent/scripts/plan-pokemon-type-challenge.mjs'),
+    true,
+  );
+  assert.equal(
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--template') + 1]).endsWith('services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json'),
+    true,
+  );
+  assert.equal(
+    normalizePath(runCalls[1].args[runCalls[1].args.indexOf('--plan') + 1]).includes('/data/runtime/product-video-agent/poke-quizz/reviews/'),
+    true,
+  );
+  assert.equal(
+    normalizePath(runCalls[1].args[runCalls[1].args.indexOf('--plan') + 1]).endsWith('/old-review.plan.json'),
+    false,
+  );
+  assert.equal(result.report.state, 'preview_regenerated');
+  assert.equal(result.report.previewUrl, 'https://youtube.com/shorts/rebuilt-preview');
+});

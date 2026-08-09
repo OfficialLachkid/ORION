@@ -12,6 +12,7 @@ import {
 } from '../../../../scripts/lib/ruflo-wrapper-utils.mjs';
 import { normalizeTypePair } from '../../src/pokemon-type-pairs.mjs';
 import { planPokemonTypeChallenge } from '../../src/pokemon-type-challenge-planner.mjs';
+import { resolvePokeQuizzSelectionStatePath } from '../../src/poke-quizz-selection-state.mjs';
 import {
   DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
   resolveVideoTemplateRuntime,
@@ -53,7 +54,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --output <path>           Output planning JSON path',
       '  --seed <text>             Deterministic seed. Default: current timestamp',
       '  --type-pair <a,b>         Optional forced pair such as grass,poison',
-      '  --state <path>            Selection state JSON path. Default: data/runtime/product-video-agent/poke-quizz/selection-state.json',
+      '  --state <path>            Selection state JSON path. Default: template-scoped runtime file under data/runtime/product-video-agent/poke-quizz/',
     ]);
     process.exit(0);
   }
@@ -74,18 +75,17 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     'output',
     'data/runtime/product-video-agent/poke-quizz/first-type-challenge-plan.json',
   );
-  const statePath = getStringOption(
-    options,
-    'state',
-    'data/runtime/product-video-agent/poke-quizz/selection-state.json',
-  );
   const forcedTypePairInput = getStringOption(options, 'type-pair', '');
   const forcedTypePair = forcedTypePairInput
     ? normalizeTypePair(forcedTypePairInput.split(','))
     : null;
-
-  const [template, pokedexRows, selectionState] = await Promise.all([
-    loadJson(templatePath),
+  const template = await loadJson(templatePath);
+  const statePath = getStringOption(
+    options,
+    'state',
+    resolvePokeQuizzSelectionStatePath(template),
+  );
+  const [pokedexRows, selectionState] = await Promise.all([
     loadJson(catalogJson),
     loadOptionalJson(statePath),
   ]);

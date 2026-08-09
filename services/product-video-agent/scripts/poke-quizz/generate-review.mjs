@@ -11,6 +11,7 @@ import { renderPokeQuizzVideo } from '../../src/poke-quizz-renderer.mjs';
 import {
   loadPokeQuizzSelectionStateFromStore,
   mergePokeQuizzSelectionStates,
+  resolvePokeQuizzSelectionStatePath,
 } from '../../src/poke-quizz-selection-state.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
@@ -109,11 +110,6 @@ async function resolvePlan(
   if (!templatePath) {
     throw new Error('No template path could be resolved for the requested video flow.');
   }
-  const statePath = getStringOption(
-    options,
-    'state',
-    'data/runtime/product-video-agent/poke-quizz/selection-state.json',
-  );
   const outputPlanPath = getStringOption(
     options,
     'plan-output',
@@ -123,9 +119,13 @@ async function resolvePlan(
   const forcedTypePair = forcedTypePairInput
     ? normalizeTypePair(forcedTypePairInput.split(','))
     : null;
-
-  const [template, pokedexRows, localSelectionState] = await Promise.all([
-    loadJson(templatePath),
+  const template = await loadJson(templatePath);
+  const statePath = getStringOption(
+    options,
+    'state',
+    resolvePokeQuizzSelectionStatePath(template),
+  );
+  const [pokedexRows, localSelectionState] = await Promise.all([
     loadJson(catalogJsonPath),
     loadOptionalJson(statePath),
   ]);
@@ -146,7 +146,7 @@ async function resolvePlan(
   };
 }
 
-async function resolveLiveSelectionState(runtimeConfig, channelProfile) {
+async function resolveLiveSelectionState(runtimeConfig, channelProfile, template) {
   const supabaseUrl = runtimeConfig.env.SUPABASE_URL || '';
   const apiKey = runtimeConfig.env.SUPABASE_SECRET_KEY || runtimeConfig.env.SUPABASE_PUBLISHABLE_KEY || '';
   if (!supabaseUrl || !apiKey) {
@@ -163,6 +163,7 @@ async function resolveLiveSelectionState(runtimeConfig, channelProfile) {
       store,
       channelProfile,
       limit: 32,
+      template,
     });
   } catch (error) {
     printWarn(`Could not load recent Poke Quizz selection history from Supabase: ${error.message}`);
@@ -199,7 +200,7 @@ async function generateAndReviewPokeQuizz(options) {
     loadRuntimeConfigJson(configPath),
   ]);
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
-  const liveSelectionState = await resolveLiveSelectionState(runtimeConfig, channelProfile);
+  const liveSelectionState = await resolveLiveSelectionState(runtimeConfig, channelProfile, template);
   const { plan, planPath } = await resolvePlan(
     options,
     liveSelectionState,
@@ -350,7 +351,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --plan <path>              Optional existing Poke Quizz plan JSON path.',
       '  --catalog-json <path>      Catalog JSON used when a new plan should be built.',
       '  --plan-output <path>       Output path for a generated plan JSON.',
-      '  --state <path>             Selection-state JSON path used by the planner.',
+      '  --state <path>             Selection-state JSON path used by the planner. Defaults to a template-scoped runtime file.',
       '  --seed <text>              Deterministic planning seed.',
       '  --type-pair <a,b>          Optional forced pair such as water,flying.',
       '  --output <path>            Render output MP4 path.',
