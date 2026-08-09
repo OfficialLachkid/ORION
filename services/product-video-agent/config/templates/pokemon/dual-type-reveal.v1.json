@@ -170,8 +170,8 @@
     "default_mode": "silhouette_hold_then_answer",
     "shiny": {
       "enabled": true,
-      "odds_numerator": 1,
-      "odds_denominator": 11,
+      "odds_numerator": 2,
+      "odds_denominator": 17,
       "max_per_video": 1,
       "sparkle_overlay_role": "shiny_sparkle",
       "sound_effect_role": "shiny",
