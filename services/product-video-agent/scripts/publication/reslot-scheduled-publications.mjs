@@ -21,7 +21,12 @@ import {
   loadPublicationChannelProfiles,
 } from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
+import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import { runLocalProcess } from '../../src/process-runner.mjs';
+import {
+  loadYoutubeClientCredentials,
+  scheduleYoutubePublication,
+} from '../../src/youtube-publication-executor.mjs';
 
 function parseLimit(value) {
   if (!value) return null;
@@ -29,25 +34,37 @@ function parseLimit(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function parseTrailingJsonArray(stdout) {
+function parseTrailingJsonValue(stdout, guard) {
   const text = String(stdout || '').trim();
   if (!text) {
-    return [];
+    return null;
   }
 
   for (let index = text.lastIndexOf('['); index >= 0; index = text.lastIndexOf('[', index - 1)) {
     const candidate = text.slice(index);
     try {
       const parsed = JSON.parse(candidate);
-      if (Array.isArray(parsed)) {
+      if (guard(parsed)) {
         return parsed;
       }
     } catch {
-      // Continue scanning backward until the trailing JSON array is found.
+      // Continue scanning backward until the trailing JSON value is found.
     }
   }
 
-  throw new Error('Could not parse the trailing JSON array from schedule execution output.');
+  for (let index = text.lastIndexOf('{'); index >= 0; index = text.lastIndexOf('{', index - 1)) {
+    const candidate = text.slice(index);
+    try {
+      const parsed = JSON.parse(candidate);
+      if (guard(parsed)) {
+        return parsed;
+      }
+    } catch {
+      // Continue scanning backward until the trailing JSON value is found.
+    }
+  }
+
+  throw new Error('Could not parse the trailing JSON value from maintenance output.');
 }
 
 function createPublicationStore(runtimeConfig) {
@@ -71,25 +88,31 @@ function buildReopenedPublication(publication, asOf) {
   };
 }
 
-async function executeScheduleUpdates({
+function parseTrailingJsonArray(stdout) {
+  return parseTrailingJsonValue(stdout, (value) => Array.isArray(value)) || [];
+}
+
+function parseTrailingJsonObject(stdout) {
+  return parseTrailingJsonValue(stdout, (value) => Boolean(value) && !Array.isArray(value) && typeof value === 'object') || {};
+}
+
+async function refreshReviewMessages({
   channelSelector,
   channelsPath,
-  asOf,
-  limit,
+  delayMs = 300,
+  maxRetries = 3,
 }) {
   const args = [
-    resolve(projectRoot, 'services/product-video-agent/scripts/publication/execute-youtube-publication.mjs'),
+    resolve(projectRoot, 'services/product-video-agent/scripts/poke-quizz/refresh-review-messages.mjs'),
     '--channel',
     channelSelector,
     '--channels',
     channelsPath,
-    '--schedule-approved',
-    '--as-of',
-    asOf,
+    '--delay-ms',
+    String(delayMs),
+    '--max-retries',
+    String(maxRetries),
   ];
-  if (limit) {
-    args.push('--limit', String(limit));
-  }
 
   const result = await runLocalProcess({
     executable: process.execPath,
@@ -97,7 +120,7 @@ async function executeScheduleUpdates({
     cwd: projectRoot,
     timeoutMs: 1_200_000,
   });
-  return parseTrailingJsonArray(result.stdout);
+  return parseTrailingJsonObject(result.stdout);
 }
 
 export async function reslotScheduledPublications(options = {}) {
@@ -115,10 +138,18 @@ export async function reslotScheduledPublications(options = {}) {
   const profiles = await loadPublicationChannelProfiles(channelsPath, { projectRoot });
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
   const store = createPublicationStore(runtimeConfig);
+  const refreshToken = runtimeConfig.env[channelProfile.youtube.oauth_refresh_token_env] || '';
+  if (!refreshToken) {
+    throw new Error(`Missing refresh token env value: ${channelProfile.youtube.oauth_refresh_token_env}`);
+  }
   const publications = await store.fetchPublicationsByChannel({
     platform: channelProfile.platform,
     accountKey: channelProfile.account_key,
   });
+  const clientConfig = await loadYoutubeClientCredentials(
+    channelProfile.youtube.oauth_client_secret_path,
+    projectRoot,
+  );
   const asOfMs = new Date(asOf).getTime();
   const futureCommitted = listCommittedScheduledPublications(publications, channelProfile, asOf)
     .filter((publication) => new Date(publication.scheduled_for).getTime() > asOfMs);
@@ -146,6 +177,7 @@ export async function reslotScheduledPublications(options = {}) {
   }
 
   const reopenedResults = [];
+  const reopenedById = new Map();
   for (const publication of targetPublications) {
     const updatedPublication = await store.updatePublication(publication.id, {
       status: 'approved',
@@ -157,19 +189,58 @@ export async function reslotScheduledPublications(options = {}) {
         schedule_reconciled_reason: 'manual_reslot_requested',
       },
     });
+    const resolvedPublication = updatedPublication || buildReopenedPublication(publication, asOf);
+    reopenedById.set(publication.id, resolvedPublication);
     reopenedResults.push({
       publication_id: publication.id,
       title: publication.title,
       old_scheduled_for: publication.scheduled_for,
-      workflow_state: updatedPublication?.metadata?.workflow_state || 'preview_approved',
+      workflow_state: resolvedPublication?.metadata?.workflow_state || 'preview_approved',
     });
   }
 
-  const scheduleUpdateResults = await executeScheduleUpdates({
+  const scheduleUpdateResults = [];
+  for (const item of plannedQueue) {
+    const publication = reopenedById.get(item.id) || item;
+    if (!publication?.external_id) {
+      throw new Error(`Cannot reslot ${publication?.id || '(unknown)'} without an existing YouTube external_id.`);
+    }
+    const scheduled = await scheduleYoutubePublication({
+      publication,
+      scheduledFor: item.scheduled_for,
+      clientConfig,
+      refreshToken,
+    });
+    const updatedPublication = await store.updatePublication(publication.id, {
+      status: 'scheduled',
+      visibility: 'private',
+      scheduled_for: scheduled.scheduledFor,
+      metadata: {
+        ...(publication.metadata || {}),
+        workflow_state: 'scheduled',
+        schedule_reconciled_at: asOf,
+        schedule_reconciled_reason: 'manual_reslot_applied',
+      },
+    });
+    scheduleUpdateResults.push({
+      publication_id: publication.id,
+      title: publication.title,
+      action: 'schedule_update',
+      scheduled_for: scheduled.scheduledFor,
+      workflow_state: updatedPublication?.metadata?.workflow_state || 'scheduled',
+    });
+  }
+
+  const reviewRefreshResult = await refreshReviewMessages({
     channelSelector,
     channelsPath,
+  });
+  await syncPokeQuizzQueueStatusMessage({
+    runtimeConfig,
+    store,
+    channelProfile,
+    channelSelector,
     asOf,
-    limit,
   });
 
   return {
@@ -183,6 +254,7 @@ export async function reslotScheduledPublications(options = {}) {
       new_scheduled_for: publication.scheduled_for,
     })),
     schedule_update_results: scheduleUpdateResults,
+    review_refresh: reviewRefreshResult,
   };
 }
 
