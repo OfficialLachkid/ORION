@@ -142,6 +142,7 @@ export async function renderPokeQuizzVideo({
         ...(countdownPath ? [countdownPath] : []),
         ...(timerEndPath ? [timerEndPath] : []),
         ...(pokeballWigglePath ? [pokeballWigglePath] : []),
+        ...(shinyPath ? [shinyPath] : []),
       ]),
       '-/filter_complex',
       audioFilterScriptPath,

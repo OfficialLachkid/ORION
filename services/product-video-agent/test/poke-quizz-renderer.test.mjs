@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { buildAudioInputs } from '../src/domains/pokemon/templates/dual-type-reveal/render/audio-filter-script.mjs';
 import {
   applyNarrationDurationsToRenderPlan,
   buildCountdownMoments,
@@ -340,6 +341,29 @@ test('audio filter script starts shiny sfx at the reveal visual cue', () => {
 
   assert.match(script, /\[3:a\]adelay=8100\|8100,volume=0\.82\[shiny\]/u);
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[shiny\]amix/u);
+});
+
+test('audio input list appends shiny sfx when the reveal path is active', () => {
+  assert.deepEqual(
+    buildAudioInputs([
+      '/tmp/hook.wav',
+      '/tmp/prompt.wav',
+      '/tmp/reveal.wav',
+      '/tmp/music.mp3',
+      '/tmp/countdown.mp3',
+      '/tmp/timer_finished.mp3',
+      '/tmp/shiny-sound.mp3',
+    ]),
+    [
+      '-i', '/tmp/hook.wav',
+      '-i', '/tmp/prompt.wav',
+      '-i', '/tmp/reveal.wav',
+      '-i', '/tmp/music.mp3',
+      '-i', '/tmp/countdown.mp3',
+      '-i', '/tmp/timer_finished.mp3',
+      '-i', '/tmp/shiny-sound.mp3',
+    ],
+  );
 });
 
 test('visual filter script overlays the shiny sparkle on the selected shiny subject only once', () => {
