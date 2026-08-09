@@ -20,7 +20,7 @@ const config = {
       },
       {
         profile_id: 'us-male-kokoro-deep',
-        voice: 'am_fenrir,am_onyx',
+        voice: 'am_fenrir',
       },
     ],
   },

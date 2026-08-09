@@ -92,7 +92,7 @@
     ],
     "hook_voice_required": true,
     "type_prompt_text": "Which spot will turn shiny?",
-    "reveal_text": "Find it?"
+    "reveal_text": "Did you find it?"
   },
   "layout": {
     "sprite_grid": {
@@ -139,7 +139,7 @@
       "sprite_scale_multiplier": 1.264,
       "stage_bounds_px": {
         "left": 72,
-        "top": 680,
+        "top": 620,
         "width": 936,
         "height": 900
       }

@@ -31,7 +31,7 @@ const template = {
     hook_text: 'Find the Shiny!',
     hook_text_variants: ['Find the Shiny!', "Where's the shiny Pokemon?"],
     type_prompt_text: 'Which spot will turn shiny?',
-    reveal_text: 'Find it?',
+    reveal_text: 'Did you find it?',
   },
   layout: {
     text: {
@@ -70,7 +70,7 @@ const template = {
       sprite_scale_multiplier: 1.264,
       stage_bounds_px: {
         left: 72,
-        top: 680,
+        top: 620,
         width: 936,
         height: 900,
       },
@@ -204,7 +204,7 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.shiny_reveal.selected_name, 'Articuno');
   assert.equal(plan.shiny_reveal.selected_cell_index >= 0, true);
   assert.equal(plan.shiny_reveal.selected_cell_index < plan.selection.display_subject_count, true);
-  assert.equal(plan.timeline.find((entry) => entry.phase === 'reveal')?.spoken_text, 'Find it?');
+  assert.equal(plan.timeline.find((entry) => entry.phase === 'reveal')?.spoken_text, 'Did you find it?');
   assert.equal(plan.assets.overlays.sprite_grid.cells.every((cell) => (
     Number.isFinite(cell.pokeball_wiggle_offset_ratio)
   )), true);

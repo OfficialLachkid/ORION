@@ -64,11 +64,11 @@
         "profile_id": "us-male-kokoro-deep",
         "model": "Kokoro-82M-v1.0",
         "runtime_model": "hexgrad/Kokoro-82M",
-        "voice": "am_fenrir,am_onyx",
+        "voice": "am_fenrir",
         "language": "en-US",
         "license_record_path": "services/product-video-agent/voices/Kokoro-82M-v1.0.license.json",
         "synthesis": {
-          "speed": 1.08,
+          "speed": 1.04,
           "prosody_mode": "full_context",
           "sentence_pause_ms": 0
         }
