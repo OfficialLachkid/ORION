@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { runLocalProcess } from '../../process-runner.mjs';
+import { runLocalProcess } from '../../../../../process-runner.mjs';
 import { roundTime } from './constants.mjs';
 
 export async function verifyReadableFiles(paths) {

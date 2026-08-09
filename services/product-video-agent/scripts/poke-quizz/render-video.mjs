@@ -15,6 +15,10 @@ import { buildPokeQuizzRenderPlan, loadJson, renderPokeQuizzVideo } from '../../
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../../src/poke-quizz-asset-layout.mjs';
 import { resolveManagedPokeQuizzPreviewOutputPath } from '../../src/poke-quizz-preview-storage.mjs';
 import { resolveFfmpegExecutable } from '../../src/runtime-executables.mjs';
+import {
+  DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+  resolveVideoTemplateRuntime,
+} from '../../src/video-template-context.mjs';
 
 function resolveTypePairSlug(plan) {
   return (plan.selection?.type_pair || [])
@@ -59,7 +63,8 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '',
       'Options:',
       '  --plan <path>            Required Poke Quizz plan JSON path',
-      '  --template <path>        Template JSON path. Default: pokemon-type-challenge-v1.template.json',
+      `  --channel-config <path>  Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
+      '  --template <path>        Template JSON path. Default: services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json',
       '  --config <path>          Product-video config JSON path. Default: services/product-video-agent/config.example.json',
       '  --output <path>          Output video path. Default: T7 Pokemon/Poke Quizz/Previews/<type-pair>-<seed>.mp4',
       '  --voice-python <path>    Override Kokoro Python executable',
@@ -75,16 +80,14 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     throw new Error('The --plan option is required.');
   }
 
-  const templatePath = getStringOption(
-    options,
-    'template',
-    'services/product-video-agent/pokemon-type-challenge-v1.template.json',
-  );
-  const configPath = getStringOption(
-    options,
-    'config',
-    'services/product-video-agent/config.example.json',
-  );
+  const templateRuntime = await resolveVideoTemplateRuntime({
+    projectRoot,
+    channelConfigPath: getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH),
+    templatePath: getStringOption(options, 'template', ''),
+    configPath: getStringOption(options, 'config', ''),
+  });
+  const templatePath = templateRuntime.templatePath;
+  const configPath = templateRuntime.configPath;
 
   const [plan, template, config] = await Promise.all([
     loadJson(resolve(projectRoot, planPath)),

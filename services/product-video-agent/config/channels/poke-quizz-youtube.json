@@ -1,0 +1,8 @@
+{
+  "channel_config_id": "poke-quizz-youtube",
+  "channel_name": "Poke Quizz",
+  "publication_channel_selector": "poke-quizz-youtube",
+  "program_path": "../programs/pokemon-quiz-core.json",
+  "style_pack_path": "../style-packs/poke-quizz.json",
+  "template_id": "pokemon.dual-type-reveal.v1"
+}

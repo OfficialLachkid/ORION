@@ -1,11 +1,12 @@
 import { stableHash } from './ids.mjs';
 import { buildApprovalButtons } from '../../discord-bot/src/approval-buttons.mjs';
 import { buildOutboundEventDiscordPayload } from '../../discord-bot/src/message-formatting.mjs';
-
-const DEFAULT_CHANNEL_SELECTOR = 'poke-quizz-youtube';
-const DEFAULT_TEMPLATE_PATH = 'services/product-video-agent/pokemon-type-challenge-v1.template.json';
-const DEFAULT_CONFIG_PATH = 'services/product-video-agent/config.example.json';
-const DEFAULT_GENRE_LABEL = 'Type Combination';
+import {
+  DEFAULT_CHANNEL_SELECTOR,
+  DEFAULT_CONFIG_PATH,
+  DEFAULT_GENRE_LABEL,
+  DEFAULT_TEMPLATE_PATH,
+} from './video-template-context.mjs';
 
 function normalizeTypePair(typePair = []) {
   return typePair
