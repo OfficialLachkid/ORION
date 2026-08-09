@@ -32,21 +32,36 @@ import {
   safeFilterLabel,
 } from '../../dual-type-reveal/render/constants.mjs';
 
-function resolveCellPokeballWiggleStartSeconds({
+function resolveCellPokeballReplayStartSeconds({
   cell,
   gridLayout,
   countdownStart,
   countdownDuration,
   revealVisualStart,
   pokeballIntroStart,
-  pokeballIntroDuration,
   pokeballSourceDuration,
 }) {
+  const windowStartRatio = Math.min(
+    0.92,
+    Math.max(
+      0,
+      ensureNumber(gridLayout?.pokeball_wiggle_window_start_ratio, 0.12),
+    ),
+  );
   const windowEndRatio = Math.min(
     0.96,
     Math.max(
-      0.04,
+      windowStartRatio + 0.04,
       ensureNumber(gridLayout?.pokeball_wiggle_window_end_ratio, 0.76),
+    ),
+  );
+  const introAnimationEnd = roundTime(
+    Math.min(revealVisualStart, pokeballIntroStart + pokeballSourceDuration),
+  );
+  const availableWindowStart = roundTime(
+    Math.max(
+      introAnimationEnd + 0.12,
+      countdownStart + (countdownDuration * windowStartRatio),
     ),
   );
   const availableWindowEnd = roundTime(
@@ -55,21 +70,21 @@ function resolveCellPokeballWiggleStartSeconds({
       countdownStart + (countdownDuration * windowEndRatio),
     ),
   );
-  const earliestStart = roundTime(pokeballIntroStart);
-  const latestStart = Math.min(
-    availableWindowEnd,
-    revealVisualStart - Math.max(0.12, pokeballSourceDuration) - 0.08,
-  );
-
-  if (latestStart <= earliestStart) {
-    return roundTime(Math.max(pokeballIntroStart, earliestStart));
+  if (availableWindowEnd <= availableWindowStart) {
+    return roundTime(Math.max(introAnimationEnd + 0.12, availableWindowEnd));
   }
 
   const offsetRatio = Math.min(
     1,
-    Math.max(0, ensureNumber(cell?.pokeball_wiggle_offset_ratio, 0.5)),
+    Math.max(
+      0,
+      ensureNumber(
+        cell?.pokeball_replay_offset_ratio,
+        ensureNumber(cell?.pokeball_wiggle_offset_ratio, 0.5),
+      ),
+    ),
   );
-  return roundTime(earliestStart + ((latestStart - earliestStart) * offsetRatio));
+  return roundTime(availableWindowStart + ((availableWindowEnd - availableWindowStart) * offsetRatio));
 }
 
 function buildHalfOpenEnableExpression(startSeconds, endSeconds) {
@@ -131,7 +146,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const timerVisualHeight = roundTime(renderPlan.timer_layout.height * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
   const pokeballIntroStart = resolvePokeballIntroStartSeconds(renderPlan);
   const pokeballIntroDuration = resolveFindTheShinyPokeballIntroDurationSeconds(gridLayout);
-  const pokeballVisibleDuration = roundTime(Math.max(0.5, revealTransitionEnd - pokeballIntroStart));
   const pokeballSourceDuration = Math.max(
     0.12,
     ensureNumber(plan.assets.overlays?.selected_primary_pokeball_duration_seconds, 0.6),
@@ -143,25 +157,30 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
   if (inputRefs.pokeball != null && gridLayout.cells.length > 0) {
     const pokeballSourceLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbsrc', index));
-    const pokeballBaseLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbb', index));
+    const pokeballIntroSourceLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbisrc', index));
+    const pokeballReplaySourceLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbrsrc', index));
+    const pokeballIntroLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbi', index));
+    const pokeballReplayLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbr', index));
     const pokeballTransitionLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbt', index));
     const pokeballOverlayLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbo', index));
-    const pokeballIntroLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbi', index));
-    const pokeballWiggleWindows = gridLayout.cells.map((cell) => {
-      const start = resolveCellPokeballWiggleStartSeconds({
+    const pokeballReplayWindows = gridLayout.cells.map((cell) => {
+      const replayStart = resolveCellPokeballReplayStartSeconds({
         cell,
         gridLayout,
         countdownStart,
         countdownDuration,
         revealVisualStart,
         pokeballIntroStart,
-        pokeballIntroDuration,
         pokeballSourceDuration,
       });
+      const introAnimationEnd = roundTime(
+        Math.min(revealVisualStart, pokeballIntroStart + pokeballSourceDuration),
+      );
       return {
-        start,
-        animation_end: roundTime(
-          Math.min(revealVisualStart, start + pokeballSourceDuration),
+        intro_end: introAnimationEnd,
+        replay_start: replayStart,
+        replay_end: roundTime(
+          Math.min(revealVisualStart, replayStart + pokeballSourceDuration),
         ),
       };
     });
@@ -171,9 +190,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
     for (let index = 0; index < gridLayout.cells.length; index += 1) {
       const cell = gridLayout.cells[index];
-      const wiggleWindow = pokeballWiggleWindows[index];
-      const preHoldDuration = roundTime(Math.max(0, wiggleWindow.start - pokeballIntroStart));
-      const postHoldDuration = roundTime(Math.max(0, revealVisualStart - wiggleWindow.animation_end));
+      const replayWindow = pokeballReplayWindows[index];
+      const introHoldDuration = roundTime(Math.max(0, replayWindow.replay_start - replayWindow.intro_end));
+      const replayHoldDuration = roundTime(Math.max(0, revealVisualStart - replayWindow.replay_end));
       const introScaleExpression = buildAnimatedPopSettleExpression(
         pokeballIntroStart,
         pokeballIntroDuration,
@@ -186,19 +205,26 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         }),
       );
       filters.push(
-        `[${pokeballSourceLabels[index]}]trim=duration=${pokeballSourceDuration},tpad=start_mode=clone:start_duration=${preHoldDuration}:stop_mode=clone:stop_duration=${postHoldDuration},setpts=PTS-STARTPTS+${pokeballIntroStart}/TB[${pokeballBaseLabels[index]}]`,
+        `[${pokeballSourceLabels[index]}]split=2[${pokeballIntroSourceLabels[index]}][${pokeballReplaySourceLabels[index]}]`,
       );
       filters.push(
-        `[${pokeballBaseLabels[index]}]scale=w='${pokeballSize}*(${introScaleExpression})':h='${pokeballSize}*(${introScaleExpression})':eval=frame,setsar=1[${pokeballIntroLabels[index]}]`,
+        `[${pokeballIntroSourceLabels[index]}]trim=duration=${pokeballSourceDuration},tpad=stop_mode=clone:stop_duration=${introHoldDuration},setpts=PTS-STARTPTS+${pokeballIntroStart}/TB,scale=w='${pokeballSize}*(${introScaleExpression})':h='${pokeballSize}*(${introScaleExpression})':eval=frame,setsar=1[${pokeballIntroLabels[index]}]`,
       );
       filters.push(
-        `[${pokeballIntroLabels[index]}]split=2[${pokeballOverlayLabels[index]}][${pokeballTransitionLabels[index]}]`,
+        `[${pokeballReplaySourceLabels[index]}]trim=duration=${pokeballSourceDuration},tpad=stop_mode=clone:stop_duration=${replayHoldDuration},setpts=PTS-STARTPTS+${replayWindow.replay_start}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,setsar=1[${pokeballReplayLabels[index]}]`,
       );
-      const nextVideoLabel = safeFilterLabel('vg', index);
       filters.push(
-        `[${currentVideoLabel}][${pokeballOverlayLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${buildHalfOpenEnableExpression(pokeballIntroStart, revealVisualStart)}'[${nextVideoLabel}]`,
+        `[${pokeballReplayLabels[index]}]split=2[${pokeballOverlayLabels[index]}][${pokeballTransitionLabels[index]}]`,
       );
-      currentVideoLabel = nextVideoLabel;
+      const withIntroVideoLabel = safeFilterLabel('vg', index);
+      filters.push(
+        `[${currentVideoLabel}][${pokeballIntroLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${buildHalfOpenEnableExpression(pokeballIntroStart, replayWindow.replay_start)}'[${withIntroVideoLabel}]`,
+      );
+      const withReplayVideoLabel = safeFilterLabel('vgr', index);
+      filters.push(
+        `[${withIntroVideoLabel}][${pokeballOverlayLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${buildHalfOpenEnableExpression(replayWindow.replay_start, revealVisualStart)}'[${withReplayVideoLabel}]`,
+      );
+      currentVideoLabel = withReplayVideoLabel;
     }
 
     const transitionScaleTimeExpression = buildScaleFilterTimeExpression({

@@ -86,6 +86,10 @@
   },
   "question_contract": {
     "hook_text": "Find the Shiny!",
+    "hook_text_variants": [
+      "Find the Shiny!",
+      "Where's the shiny Pokemon?"
+    ],
     "hook_voice_required": true,
     "type_prompt_text": "Which spot will turn shiny?",
     "reveal_text": "Found it!"
@@ -132,7 +136,7 @@
       "min_item_size_px": 148,
       "column_gap_px": 26,
       "row_gap_px": 38,
-      "sprite_scale_multiplier": 1.404,
+      "sprite_scale_multiplier": 1.264,
       "stage_bounds_px": {
         "left": 72,
         "top": 680,
@@ -141,7 +145,7 @@
       }
     },
     "pokeball_grid": {
-      "overlay_scale_multiplier": 1.56,
+      "overlay_scale_multiplier": 1.404,
       "intro_duration_seconds": 0.56
     },
     "text": {

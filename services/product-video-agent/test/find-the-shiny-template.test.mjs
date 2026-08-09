@@ -29,6 +29,7 @@ const template = {
   },
   question_contract: {
     hook_text: 'Find the Shiny!',
+    hook_text_variants: ['Find the Shiny!', "Where's the shiny Pokemon?"],
     type_prompt_text: 'Which spot will turn shiny?',
     reveal_text: 'Found it!',
   },
@@ -65,7 +66,7 @@ const template = {
       min_item_size_px: 148,
       column_gap_px: 26,
       row_gap_px: 38,
-      sprite_scale_multiplier: 1.404,
+      sprite_scale_multiplier: 1.264,
       stage_bounds_px: {
         left: 72,
         top: 680,
@@ -74,7 +75,7 @@ const template = {
       },
     },
     pokeball_grid: {
-      overlay_scale_multiplier: 1.56,
+      overlay_scale_multiplier: 1.404,
       intro_duration_seconds: 0.56,
     },
     timer: {
@@ -205,7 +206,43 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.assets.overlays.sprite_grid.cells.every((cell) => (
     Number.isFinite(cell.pokeball_wiggle_offset_ratio)
   )), true);
+  assert.equal(plan.assets.overlays.sprite_grid.cells.every((cell) => (
+    Number.isFinite(cell.pokeball_replay_offset_ratio)
+  )), true);
   assert.deepEqual(plan.required_asset_gaps, []);
+});
+
+test('find-the-shiny planner picks the hook text deterministically from configured variants', async () => {
+  const seededTemplate = structuredClone(template);
+  seededTemplate.question_contract.hook_text = 'Find the Shiny!';
+  seededTemplate.question_contract.hook_text_variants = [
+    'Find the Shiny!',
+    "Where's the shiny Pokemon?",
+  ];
+
+  const planA = await planPokemonTypeChallenge({
+    template: seededTemplate,
+    pokedexRows,
+    seed: 'find-the-shiny-hook-variant',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory,
+  });
+  const planB = await planPokemonTypeChallenge({
+    template: seededTemplate,
+    pokedexRows,
+    seed: 'find-the-shiny-hook-variant',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory,
+  });
+
+  const hookLineA = planA.timeline.find((entry) => entry.phase === 'hook');
+  const hookLineB = planB.timeline.find((entry) => entry.phase === 'hook');
+  assert.equal(
+    ['Find the Shiny!', "Where's the shiny Pokemon?"].includes(hookLineA?.spoken_text || ''),
+    true,
+  );
+  assert.equal(hookLineA?.spoken_text, hookLineB?.spoken_text);
+  assert.equal(planA.narration.lines[0].text, hookLineA?.spoken_text);
 });
 
 test('find-the-shiny planner can produce each supported grid size with a max of three columns', async () => {
@@ -354,9 +391,12 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
   assert.doesNotMatch(visualFilter.script, /pokeballstaticsource/u);
   assert.match(visualFilter.script, new RegExp(`scale=${expectedSpriteHoldSize}:${expectedSpriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1\\[shinyhold\\]`, 'u'));
   assert.match(visualFilter.script, new RegExp(`scale=${expectedPokeballSize}:${expectedPokeballSize}:force_original_aspect_ratio=decrease`, 'u'));
-  assert.match(visualFilter.script, /\[pbsrc0\]trim=duration=0\.6,tpad=start_mode=clone:start_duration=[0-9.]+:stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+2\.1\/TB\[pbb0\]/u);
-  assert.match(visualFilter.script, /\[pbi0\]split=2\[pbo0\]\[pbt0\]/u);
-  assert.match(visualFilter.script, /\[v0\]\[pbo0\]overlay=.*enable='gte\(t,2\.1\)\*lt\(t,5\.68\)'/u);
+  assert.match(visualFilter.script, /\[pbsrc0\]split=2\[pbisrc0\]\[pbrsrc0\]/u);
+  assert.match(visualFilter.script, /\[pbisrc0\]trim=duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+2\.1\/TB,scale=w='/u);
+  assert.match(visualFilter.script, /\[pbrsrc0\]trim=duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=/u);
+  assert.match(visualFilter.script, /\[pbr0\]split=2\[pbo0\]\[pbt0\]/u);
+  assert.match(visualFilter.script, /\[v0\]\[pbi0\]overlay=.*enable='gte\(t,2\.1\)\*lt\(t,[0-9.]+\)'/u);
+  assert.match(visualFilter.script, /\[vg0\]\[pbo0\]overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,5\.68\)'/u);
   assert.match(visualFilter.script, new RegExp(`overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2`, 'u'));
   assert.match(visualFilter.script, /\[6:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+5\.68\/TB/u);
   assert.match(visualFilter.script, /pokeballpop/u);

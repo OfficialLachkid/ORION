@@ -121,6 +121,54 @@ function sampleArray(values, count, random) {
   return items.slice(0, count);
 }
 
+function normalizeQuestionTextOptions(primaryText, variants = []) {
+  const options = [];
+  const normalizedPrimaryText = String(primaryText || '').trim();
+  if (normalizedPrimaryText) {
+    options.push(normalizedPrimaryText);
+  }
+
+  for (const variant of Array.isArray(variants) ? variants : []) {
+    const normalizedVariant = String(variant || '').trim();
+    if (normalizedVariant && !options.includes(normalizedVariant)) {
+      options.push(normalizedVariant);
+    }
+  }
+
+  return options;
+}
+
+function pickSeededQuestionText(primaryText, variants, random) {
+  const options = normalizeQuestionTextOptions(primaryText, variants);
+  if (!options.length) {
+    return '';
+  }
+  return options[Math.floor(random() * options.length)];
+}
+
+function resolveQuestionContractTexts(template, random) {
+  const questionContract = template?.question_contract && typeof template.question_contract === 'object'
+    ? template.question_contract
+    : {};
+  return {
+    hook: pickSeededQuestionText(
+      questionContract.hook_text,
+      questionContract.hook_text_variants,
+      random,
+    ),
+    prompt: pickSeededQuestionText(
+      questionContract.type_prompt_text,
+      questionContract.type_prompt_text_variants,
+      random,
+    ),
+    reveal: pickSeededQuestionText(
+      questionContract.reveal_text,
+      questionContract.reveal_text_variants,
+      random,
+    ),
+  };
+}
+
 function readSubjectMetadataValue(subject, keys = []) {
   const metadata = subject?.metadata && typeof subject.metadata === 'object'
     ? subject.metadata
@@ -550,6 +598,7 @@ function buildFindTheShinyLayout(template, difficulty, random) {
       center_x: x + Math.floor(itemSize / 2),
       center_y: y + Math.floor(itemSize / 2),
       pokeball_wiggle_offset_ratio: roundRatio(random()),
+      pokeball_replay_offset_ratio: roundRatio(random()),
     });
   }
 
@@ -633,6 +682,7 @@ export async function planFindTheShinyChallenge({
 
   const selectedDifficulty = chooseDifficulty(config.difficultyCatalog, random);
   const spriteGridLayout = buildFindTheShinyLayout(template, selectedDifficulty, random);
+  const questionContractTexts = resolveQuestionContractTexts(template, random);
   const shinyReveal = buildShinyRevealState({
     template,
     inventory,
@@ -716,23 +766,23 @@ export async function planFindTheShinyChallenge({
       local_model_required: false,
       tts_provider: 'kokoro',
       lines: [
-        { role: 'hook', text: template.question_contract.hook_text },
-        { role: 'prompt', text: template.question_contract.type_prompt_text },
-        { role: 'reveal', text: template.question_contract.reveal_text },
+        { role: 'hook', text: questionContractTexts.hook },
+        { role: 'prompt', text: questionContractTexts.prompt },
+        { role: 'reveal', text: questionContractTexts.reveal },
       ],
     },
     timeline: [
       {
         phase: 'hook',
         duration_seconds: 1.2,
-        spoken_text: template.question_contract.hook_text,
-        on_screen_text: template.question_contract.hook_text,
+        spoken_text: questionContractTexts.hook,
+        on_screen_text: questionContractTexts.hook,
       },
       {
         phase: 'type_prompt',
         duration_seconds: 1.4,
-        spoken_text: template.question_contract.type_prompt_text,
-        on_screen_text: template.question_contract.type_prompt_text,
+        spoken_text: questionContractTexts.prompt,
+        on_screen_text: questionContractTexts.prompt,
       },
       {
         phase: 'countdown',
@@ -743,7 +793,7 @@ export async function planFindTheShinyChallenge({
       {
         phase: 'reveal',
         duration_seconds: 2.4,
-        spoken_text: template.question_contract.reveal_text,
+        spoken_text: questionContractTexts.reveal,
         reveal_mode: 'swap_one_grid_cell_to_shiny_and_play_sparkle',
       },
     ],
