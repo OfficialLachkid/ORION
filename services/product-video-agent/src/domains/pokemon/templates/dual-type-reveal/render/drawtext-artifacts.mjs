@@ -7,6 +7,7 @@ import {
   DEFAULT_PROMPT_FONT_SIZE,
   DEFAULT_PROMPT_TEXT_Y,
   DEFAULT_REVEAL_FONT_SIZE,
+  DEFAULT_REVEAL_TEXT_DELAY_SECONDS,
   DEFAULT_REVEAL_TEXT_Y,
   ensureNumber,
   slugify,
@@ -14,6 +15,14 @@ import {
 import { buildProgressiveTextArtifacts } from './text-layout.mjs';
 
 export function buildTextArtifacts({ renderPlan, template }) {
+  const revealTextStartSeconds = Math.min(
+    Math.max(0, renderPlan.total_duration_seconds - 0.12),
+    ensureNumber(
+      renderPlan.audio_cues?.reveal_start_seconds,
+      renderPlan.phases.reveal.start_seconds,
+    ) + DEFAULT_REVEAL_TEXT_DELAY_SECONDS,
+  );
+
   return {
     hook: buildProgressiveTextArtifacts(renderPlan.text.hook, {
       template,
@@ -39,7 +48,7 @@ export function buildTextArtifacts({ renderPlan, template }) {
       fontSize: DEFAULT_REVEAL_FONT_SIZE,
       maxLines: 2,
       baseY: DEFAULT_REVEAL_TEXT_Y,
-      startSeconds: renderPlan.phases.reveal.start_seconds,
+      startSeconds: revealTextStartSeconds,
       endSeconds: renderPlan.total_duration_seconds,
     }),
   };

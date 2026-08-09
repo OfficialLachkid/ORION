@@ -133,5 +133,6 @@ test('drawtext artifacts expose progressive word-by-word segments per phase', ()
   assert.equal(artifacts.prompt.segments[0].text, 'Which');
   assert.equal(artifacts.prompt.segments.at(-1).text, 'types?');
   assert.equal(artifacts.reveal.segments.at(-1).text, 'Pokemon?');
+  assert.equal(artifacts.reveal.segments[0].start_seconds, 7.96);
   assert.equal(artifacts.prompt.segments[0].start_seconds < artifacts.prompt.segments.at(-1).start_seconds, true);
 });

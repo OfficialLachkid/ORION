@@ -339,7 +339,7 @@ test('audio filter script starts shiny sfx at the reveal visual cue', () => {
     renderPlan,
   });
 
-  assert.match(script, /\[3:a\]adelay=8100\|8100,volume=0\.6\[shiny\]/u);
+  assert.match(script, /\[3:a\]adelay=8100\|8100,volume=0\.5\[shiny\]/u);
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[shiny\]amix/u);
 });
 
