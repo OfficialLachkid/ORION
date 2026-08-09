@@ -9,6 +9,7 @@ import {
   buildPokeQuizzPublicationReviewPayload,
   buildPokeQuizzPublicationReviewTask,
   deriveFeedbackRevisionSeed,
+  isActionableReviewPublication,
 } from '../src/poke-quizz-publication-review.mjs';
 
 const publication = {
@@ -261,6 +262,24 @@ test('collapsed withdrawn review payload removes the embed and keeps the preview
   assert.match(payload.content, /Withdrawn published video for Water \/ Flying\./u);
   assert.match(payload.content, /Withdrawn from public view on/u);
   assert.match(payload.content, /Previous preview: https:\/\/youtube\.com\/shorts\/preview-123/u);
+});
+
+test('isActionableReviewPublication keeps buttons on preview_uploaded and delete_failed only', () => {
+  // Regression guard for the 2026-08-05 incident where a publication reconcile
+  // wiped approval buttons off every actionable review card in
+  // #review-videos-poke-quizz. Both call sites (execute-youtube-publication
+  // and refresh-review-messages) must agree on which states keep buttons.
+  assert.equal(isActionableReviewPublication({ metadata: { workflow_state: 'preview_uploaded' } }), true);
+  assert.equal(isActionableReviewPublication({ metadata: { workflow_state: 'delete_failed' } }), true);
+  assert.equal(isActionableReviewPublication({ metadata: { workflow_state: 'preview_approved' } }), false);
+  assert.equal(isActionableReviewPublication({ metadata: { workflow_state: 'scheduled' } }), false);
+  assert.equal(isActionableReviewPublication({ metadata: { workflow_state: 'published' } }), false);
+  assert.equal(isActionableReviewPublication({ metadata: { workflow_state: 'deleted' } }), false);
+  assert.equal(isActionableReviewPublication({ metadata: { workflow_state: 'revision_requested' } }), false);
+  assert.equal(isActionableReviewPublication({}), false);
+  assert.equal(isActionableReviewPublication(null), false);
+  // Case-insensitive: PREVIEW_UPLOADED (as YouTube API sometimes returns) still counts.
+  assert.equal(isActionableReviewPublication({ metadata: { workflow_state: 'PREVIEW_UPLOADED' } }), true);
 });
 
 test('feedback regeneration task carries the operator notes forward', () => {

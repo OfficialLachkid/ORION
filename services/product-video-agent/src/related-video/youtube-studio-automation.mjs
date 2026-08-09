@@ -21,9 +21,17 @@ function expandHomeDirectory(inputPath) {
   return value;
 }
 
+// Force English UI via ?hl=en so the automation's button-name selectors
+// (matching /related video/i, /save/i, /done/i, /show more/i) work regardless
+// of the operator account's Studio language setting. Without this, a Dutch
+// account rendered "Gerelateerde video" and the selector silently returned
+// nothing — the automation reached Studio but never found the picker, yielding
+// apply_status='unknown' with zero real changes (observed 2026-08-05 against
+// the Poke Quizz channel). ?hl=en only affects the automation's Chromium
+// profile session; the operator's own browser stays on their preferred locale.
 function buildStudioEditUrl(externalId) {
   const normalized = String(externalId || '').trim();
-  return normalized ? `https://studio.youtube.com/video/${normalized}/edit` : '';
+  return normalized ? `https://studio.youtube.com/video/${normalized}/edit?hl=en` : '';
 }
 
 function createRunnerResult(executable, args, result) {
@@ -242,6 +250,25 @@ async (page) => {
     return { status: 'login_required', url: currentUrl };
   }
 
+  // Playwright-driven Chrome triggers YouTube's "unsupported browser" splash
+  // every session (per-session, not dismissible with a preference) — same
+  // profile in a normal Chrome window doesn't see it. Splash has one link:
+  // "SKIP TO YOUTUBE STUDIO", which takes us to the video edit page we
+  // actually want. Before 2026-08-05 the automation ran its show-more +
+  // related-video selectors against the splash body and silently returned
+  // feature_unavailable on every publication; verified end-to-end that
+  // clicking skip lands on the real edit page where the picker is reachable.
+  const skipToStudio = await firstVisible([
+    page.getByRole('link', { name: /skip to youtube studio/i }),
+    page.getByRole('button', { name: /skip to youtube studio/i }),
+    page.locator('a, button, [role="link"]').filter({ hasText: /skip to youtube studio/i }),
+  ]);
+  if (skipToStudio) {
+    await skipToStudio.click({ timeout: 5000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(1500);
+  }
+
   await clickFirstVisible([
     page.getByRole('button', { name: /show more/i }),
     page.locator('button, [role="button"]').filter({ hasText: /show more/i }),
@@ -452,7 +479,18 @@ export async function applyYoutubeRelatedVideoSelection({
       };
     }
 
-    const payload = parseJsonPayload(applied.stdout) || {};
+    // playwright-cli's `run-code --json` wraps the returned value as
+    // {"result": "<JSON string>"}. Without unwrapping, `payload.status` was
+    // always undefined and every automation run got misclassified as
+    // 'unknown' — including the login_required and *_not_found diagnostics
+    // that would otherwise have made the auth blocker visible from day one
+    // (root cause of the silent-failure loop observed 2026-08-05). Fallback
+    // to the outer object handles older playwright-cli releases that
+    // returned the flat shape directly.
+    const rawPayload = parseJsonPayload(applied.stdout) || {};
+    const payload = typeof rawPayload.result === 'string'
+      ? (parseJsonPayload(rawPayload.result) || {})
+      : rawPayload;
     const scriptStatus = normalizeToken(payload.status || 'unknown');
     const loginRequired = scriptStatus === 'login_required';
     const appliedState = scriptStatus === 'applied'

@@ -8,6 +8,7 @@ import {
   DEFAULT_CHANNEL_SELECTOR,
   buildPokeQuizzPublicationMessagePayload,
   buildPokeQuizzPublicationReviewTask,
+  isActionableReviewPublication,
 } from '../../src/poke-quizz-publication-review.mjs';
 import { resolvePokeQuizzReviewTaskPaths } from '../../src/poke-quizz-review-paths.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
@@ -30,11 +31,6 @@ import {
   printUsage,
   projectRoot,
 } from '../../../../scripts/lib/ruflo-wrapper-utils.mjs';
-
-function isActionableReview(publication) {
-  const workflowState = String(publication?.metadata?.workflow_state || '').trim().toLowerCase();
-  return workflowState === 'preview_uploaded' || workflowState === 'delete_failed';
-}
 
 function sleep(ms) {
   if (!Number.isFinite(ms) || ms <= 0) {
@@ -150,7 +146,7 @@ async function main() {
     if (!reviewThreadId || !reviewMessageId) {
       continue;
     }
-    if (pendingOnly && !isActionableReview(publication)) {
+    if (pendingOnly && !isActionableReviewPublication(publication)) {
       continue;
     }
 
@@ -177,7 +173,7 @@ async function main() {
       submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
     });
     const payload = buildPokeQuizzPublicationMessagePayload(reviewTask);
-    if (!isActionableReview(publication)) {
+    if (!isActionableReviewPublication(publication)) {
       payload.components = [];
     } else {
       refreshedTasks.push(reviewTask);
