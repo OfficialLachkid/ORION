@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-import { access, mkdir, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../lib/runtime-config.mjs';
 import {
@@ -64,13 +65,47 @@ async function fileExists(filePath) {
   }
 }
 
-async function downloadToFile(url, outputPath) {
+async function downloadToFile(url, outputPath, options = {}) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Could not download ${url} (${response.status}).`);
   }
-  await ensureDirectory(outputPath);
   const buffer = Buffer.from(await response.arrayBuffer());
+  const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+  const shouldConvertToPng = Boolean(
+    options.ffmpegExecutable
+    && String(outputPath || '').toLowerCase().endsWith('.png')
+    && (
+      contentType.includes('image/jpeg')
+      || /\.jpe?g(?:$|\?)/iu.test(String(url || ''))
+    )
+  );
+
+  if (shouldConvertToPng) {
+    const temporaryDirectory = await mkdtemp(join(tmpdir(), 'poke-quizz-shiny-'));
+    const temporaryInputPath = join(temporaryDirectory, 'downloaded-image.jpg');
+    await writeFile(temporaryInputPath, buffer);
+    await ensureDirectory(outputPath);
+    try {
+      await runLocalProcess({
+        executable: options.ffmpegExecutable,
+        args: [
+          '-y',
+          '-i',
+          temporaryInputPath,
+          '-frames:v',
+          '1',
+          outputPath,
+        ],
+        timeoutMs: 120000,
+      });
+      return;
+    } finally {
+      await rm(temporaryDirectory, { recursive: true, force: true });
+    }
+  }
+
+  await ensureDirectory(outputPath);
   await writeFile(outputPath, buffer);
 }
 
@@ -100,7 +135,9 @@ async function localizeOptionalAsset(sourceUrls, outputPath, options = {}) {
   let lastError = null;
   for (const sourceUrl of sourceUrls.filter(Boolean)) {
     try {
-      await downloadToFile(sourceUrl, outputPath);
+      await downloadToFile(sourceUrl, outputPath, {
+        ffmpegExecutable: options.ffmpegExecutable,
+      });
       return {
         localized: true,
         reusedExistingFile: false,
@@ -222,13 +259,16 @@ async function localizeRows(rows, options = {}) {
     }
 
     if (!(await fileExists(spritePath))) {
-      await downloadToFile(row.sprite_source_url, spritePath);
+      await downloadToFile(row.sprite_source_url, spritePath, { ffmpegExecutable });
     }
 
     const localizedShinySprite = await localizeOptionalAsset(
       shinySpriteSourceCandidates,
       shinySpritePath,
-      { overwrite: overwriteShinySprites },
+      {
+        overwrite: overwriteShinySprites,
+        ffmpegExecutable,
+      },
     );
 
     if (!(await fileExists(silhouettePath))) {
