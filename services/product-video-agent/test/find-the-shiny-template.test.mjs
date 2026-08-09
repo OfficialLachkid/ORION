@@ -139,18 +139,20 @@ const assetInventory = {
   ],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/shiny.mp3'],
+    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/pokeball-intro.mp3', '/tmp/shiny.mp3'],
     countdown_tick: '/tmp/countdown.mp3',
     timer_end: '/tmp/timer-end.mp3',
+    pokeball_intro: '/tmp/pokeball-intro.mp3',
     shiny: '/tmp/shiny.mp3',
   },
   overlay_presets: {
+    pokeball_primary: '/tmp/pokeball.gif',
     timer: '/tmp/timer.gif',
     timer_countdown: '/tmp/timer-countdown.gif',
     timer_alarm: '/tmp/timer-alarm.gif',
     shiny_sparkle: '/tmp/shiny-sparkle.gif',
   },
-  overlays: ['/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/shiny-sparkle.gif'],
+  overlays: ['/tmp/pokeball.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/shiny-sparkle.gif'],
   transitions: [],
 };
 
@@ -172,10 +174,15 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.selection.grid.columns, 4);
   assert.equal(plan.assets.background.selected_path, '/tmp/ice-backgrounds/glacier.png');
   assert.equal(plan.assets.pokemon[0].name, 'Articuno');
+  assert.equal(plan.assets.overlays.selected_primary_pokeball_overlay_path, '/tmp/pokeball.gif');
+  assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, '/tmp/pokeball-intro.mp3');
   assert.equal(plan.shiny_reveal.active, true);
   assert.equal(plan.shiny_reveal.selected_name, 'Articuno');
   assert.equal(plan.shiny_reveal.selected_cell_index >= 0, true);
   assert.equal(plan.shiny_reveal.selected_cell_index < 12, true);
+  assert.equal(plan.assets.overlays.sprite_grid.cells.every((cell) => (
+    Number.isFinite(cell.pokeball_wiggle_offset_ratio)
+  )), true);
   assert.deepEqual(plan.required_asset_gaps, []);
 });
 
@@ -222,27 +229,31 @@ test('visual inputs and audio cues use one normal sprite source plus one shiny r
     'background',
     'timer-countdown',
     'timer-alarm',
+    'pokeball-grid',
     'normal-sprite',
     'shiny-sprite',
     'shiny-sparkle',
   ]);
-  assert.deepEqual(inputs[3].args, ['-loop', '1', '-framerate', '30', '-t', '10', '-i', '/tmp/articuno.png']);
-  assert.deepEqual(inputs[4].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno-shiny.png']);
+  assert.deepEqual(inputs[3].args, ['-stream_loop', '-1', '-ignore_loop', '0', '-t', '10', '-i', '/tmp/pokeball.gif']);
+  assert.deepEqual(inputs[4].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno.png']);
+  assert.deepEqual(inputs[5].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno-shiny.png']);
 
   const script = buildAudioFilterScript({
     narrationPaths: ['/tmp/hook.wav', '/tmp/prompt.wav', '/tmp/reveal.wav'],
     musicPath: null,
     countdownPath: null,
     timerEndPath: null,
+    pokeballIntroPath: '/tmp/pokeball-intro.mp3',
     shinyPath: '/tmp/shiny.mp3',
     renderPlan,
   });
 
-  assert.match(script, /\[3:a\]adelay=7680\|7680,volume=0\.5\[shiny\]/u);
-  assert.match(script, /\[n0\]\[n1\]\[n2\]\[shiny\]amix/u);
+  assert.match(script, /\[3:a\]atrim=start=0\.3,asetpts=PTS-STARTPTS,adelay=2100\|2100,volume=0\.5\[pokeballintro\]/u);
+  assert.match(script, /\[4:a\]adelay=7680\|7680,volume=0\.5\[shiny\]/u);
+  assert.match(script, /\[n0\]\[n1\]\[n2\]\[pokeballintro\]\[shiny\]amix/u);
 });
 
-test('visual filter swaps exactly one cell to the shiny sprite and overlays the sparkle on that cell', async () => {
+test('visual filter starts with pokeballs, then reveals the grid with exactly one shiny cell and sparkle', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -265,9 +276,10 @@ test('visual filter swaps exactly one cell to the shiny sprite and overlays the 
       background: 0,
       timerCountdown: 1,
       timerAlarm: 2,
-      normalSprite: 3,
-      shinySprite: 4,
-      shinySparkle: 5,
+      pokeball: 3,
+      normalSprite: 4,
+      shinySprite: 5,
+      shinySparkle: 6,
     },
     null,
     {
@@ -277,8 +289,11 @@ test('visual filter swaps exactly one cell to the shiny sprite and overlays the 
     },
   );
 
-  assert.match(visualFilter.script, /\[4:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+7\.68\/TB/u);
+  assert.match(visualFilter.script, /\[3:v\]fps=30,format=rgba,scale=/u);
+  assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+7\.68\/TB/u);
   assert.match(visualFilter.script, new RegExp(`overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2`, 'u'));
-  assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+7\.68\/TB/u);
-  assert.doesNotMatch(visualFilter.script, /pokeball/u);
+  assert.match(visualFilter.script, /\[6:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+7\.68\/TB/u);
+  assert.match(visualFilter.script, /pokeballstaticsource/u);
+  assert.match(visualFilter.script, /pokeballpop/u);
+  assert.match(visualFilter.script, /normaltransition/u);
 });

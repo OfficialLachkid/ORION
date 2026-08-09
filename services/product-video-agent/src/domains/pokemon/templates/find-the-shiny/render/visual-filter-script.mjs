@@ -8,11 +8,17 @@ import {
   buildScaleFilterTimeExpression,
   buildTimerAlarmExitScaleExpression,
   formatEnableBetween,
+  normalizeAnimationTimeExpression,
+  resolveRevealSpriteHoldSize,
 } from '../../dual-type-reveal/render/animation-expressions.mjs';
 import {
   DEFAULT_HOOK_FONT_SIZE,
+  DEFAULT_POKEBALL_INTRO_SECONDS,
+  DEFAULT_POKEBALL_SCALE_MULTIPLIER,
   DEFAULT_PROMPT_FONT_SIZE,
   DEFAULT_REVEAL_FONT_SIZE,
+  DEFAULT_REVEAL_TRANSITION_SECONDS,
+  DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER,
   DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
   DEFAULT_TEXT_BORDER,
   DEFAULT_TIMER_ALARM_EXIT_SECONDS,
@@ -22,47 +28,188 @@ import {
   escapeDrawtextText,
   escapeFilterPath,
   ensureNumber,
+  resolvePokeballIntroStartSeconds,
   roundTime,
+  safeFilterLabel,
 } from '../../dual-type-reveal/render/constants.mjs';
+
+function resolveCellPokeballWiggleStartSeconds({
+  cell,
+  gridLayout,
+  countdownStart,
+  countdownDuration,
+  revealVisualStart,
+  pokeballIntroStart,
+  pokeballIntroDuration,
+  pokeballSourceDuration,
+}) {
+  const windowStartRatio = Math.min(
+    0.92,
+    Math.max(0, ensureNumber(gridLayout?.pokeball_wiggle_window_start_ratio, 0.12)),
+  );
+  const windowEndRatio = Math.min(
+    0.96,
+    Math.max(
+      windowStartRatio + 0.04,
+      ensureNumber(gridLayout?.pokeball_wiggle_window_end_ratio, 0.76),
+    ),
+  );
+  const windowStart = countdownStart + (countdownDuration * windowStartRatio);
+  const windowEnd = countdownStart + (countdownDuration * windowEndRatio);
+  const earliestStart = Math.max(
+    windowStart,
+    pokeballIntroStart + Math.min(0.42, pokeballIntroDuration + 0.08),
+  );
+  const latestStart = Math.min(
+    windowEnd,
+    revealVisualStart - Math.max(0.12, pokeballSourceDuration) - 0.08,
+  );
+
+  if (latestStart <= earliestStart) {
+    return roundTime(Math.max(pokeballIntroStart, earliestStart));
+  }
+
+  const offsetRatio = Math.min(
+    1,
+    Math.max(0, ensureNumber(cell?.pokeball_wiggle_offset_ratio, 0.5)),
+  );
+  return roundTime(earliestStart + ((latestStart - earliestStart) * offsetRatio));
+}
 
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts) {
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
   const gridLayout = renderPlan.grid || { cells: [] };
-  const spriteScaleMultiplier = Math.max(
-    0.8,
-    ensureNumber(gridLayout.sprite_scale_multiplier, 1.08),
-  );
-  const spriteSize = roundTime(gridLayout.item_size_px * spriteScaleMultiplier);
+  const selectedShinyCellIndex = Number(plan.shiny_reveal?.selected_cell_index ?? -1);
+  const gridItemSize = ensureNumber(gridLayout.item_size_px, 180);
   const countdownDuration = Math.max(0.5, ensureNumber(renderPlan.phases.countdown?.duration_seconds, 0));
   const countdownStart = ensureNumber(renderPlan.phases.countdown?.start_seconds, 0);
   const revealVisualStart = ensureNumber(
     renderPlan.audio_cues?.reveal_visual_start_seconds,
     ensureNumber(renderPlan.phases.reveal?.start_seconds, 0),
   );
-  const shinyPopDuration = ensureNumber(renderPlan.transitions?.shiny_pop_seconds, 0.32);
-  filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
-
-  const normalBaseLabel = 'normalspritebase';
-  const normalLabels = gridLayout.cells.map((cell) => `normal${cell.index}`);
-  filters.push(
-    `[${inputRefs.normalSprite}:v]fps=${fps},trim=duration=${renderPlan.total_duration_seconds},setpts=PTS-STARTPTS,format=rgba,eq=contrast=1.04:saturation=1.03,scale=${spriteSize}:${spriteSize}:force_original_aspect_ratio=decrease,setsar=1[${normalBaseLabel}]`,
+  const revealTransitionDuration = ensureNumber(
+    renderPlan.transitions?.reveal_cross_scale_seconds,
+    DEFAULT_REVEAL_TRANSITION_SECONDS,
   );
-  filters.push(
-    `[${normalBaseLabel}]split=${Math.max(1, normalLabels.length)}${normalLabels.map((label) => `[${label}]`).join('')}`,
+  const revealTransitionEnd = roundTime(
+    Math.min(renderPlan.total_duration_seconds, revealVisualStart + revealTransitionDuration),
   );
-
-  let currentVideoLabel = 'v0';
-  for (const cell of gridLayout.cells) {
-    const nextVideoLabel = `grid${cell.index}`;
-    filters.push(
-      `[${currentVideoLabel}][normal${cell.index}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(0, renderPlan.total_duration_seconds)}'[${nextVideoLabel}]`,
-    );
-    currentVideoLabel = nextVideoLabel;
-  }
-
+  const revealDurationSeconds = Math.max(
+    0.5,
+    ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0),
+  );
+  const spriteHoldSize = resolveRevealSpriteHoldSize({
+    gridItemSize,
+    itemCount: gridLayout.sprite_count || gridLayout.cells.length,
+    configuredMultiplier: ensureNumber(
+      gridLayout.sprite_scale_multiplier,
+      DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER,
+    ),
+  });
+  const pokeballSize = roundTime(
+    gridItemSize * Math.max(
+      1,
+      ensureNumber(
+        template?.layout?.pokeball_grid?.overlay_scale_multiplier,
+        DEFAULT_POKEBALL_SCALE_MULTIPLIER,
+      ),
+    ),
+  );
   const timerVisualWidth = roundTime(renderPlan.timer_layout.width * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
   const timerVisualHeight = roundTime(renderPlan.timer_layout.height * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
+  const pokeballIntroStart = resolvePokeballIntroStartSeconds(renderPlan);
+  const pokeballIntroDuration = roundTime(DEFAULT_POKEBALL_INTRO_SECONDS);
+  const pokeballVisibleDuration = roundTime(Math.max(0.5, revealTransitionEnd - pokeballIntroStart));
+  const pokeballSourceDuration = Math.max(
+    0.12,
+    ensureNumber(plan.assets.overlays?.selected_primary_pokeball_duration_seconds, 0.6),
+  );
+
+  filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
+
+  let currentVideoLabel = 'v0';
+
+  if (inputRefs.pokeball != null && gridLayout.cells.length > 0) {
+    const pokeballWiggleSourceLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbwigsrc', index));
+    const pokeballStaticLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbs', index));
+    const pokeballIntroLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbi', index));
+    const pokeballTransitionLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbt', index));
+    const pokeballAnimatedLabels = gridLayout.cells.map((_, index) => safeFilterLabel('pbw', index));
+    const staticFreezeDuration = roundTime(Math.min(0.08, pokeballSourceDuration));
+    const pokeballSourceSplitLabels = ['[pokeballstaticsource]', ...pokeballWiggleSourceLabels.map((label) => `[${label}]`)];
+    filters.push(
+      `[${inputRefs.pokeball}:v]fps=${fps},format=rgba,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,setsar=1,split=${pokeballSourceSplitLabels.length}${pokeballSourceSplitLabels.join('')}`,
+    );
+    filters.push(
+      `[pokeballstaticsource]trim=duration=${staticFreezeDuration},tpad=stop_mode=clone:stop_duration=${pokeballVisibleDuration},setpts=PTS-STARTPTS+${pokeballIntroStart}/TB[pokeballstaticbase]`,
+    );
+    filters.push(
+      `[pokeballstaticbase]split=${pokeballStaticLabels.length + pokeballTransitionLabels.length}${[...pokeballStaticLabels, ...pokeballTransitionLabels].map((label) => `[${label}]`).join('')}`,
+    );
+
+    for (let index = 0; index < gridLayout.cells.length; index += 1) {
+      const cell = gridLayout.cells[index];
+      const introScaleExpression = buildAnimatedPopSettleExpression(
+        pokeballIntroStart,
+        pokeballIntroDuration,
+        0,
+        1.08,
+        1,
+        buildScaleFilterTimeExpression({
+          fps,
+          streamStartSeconds: pokeballIntroStart,
+        }),
+      );
+      filters.push(
+        `[${pokeballStaticLabels[index]}]scale=w='${pokeballSize}*(${introScaleExpression})':h='${pokeballSize}*(${introScaleExpression})':eval=frame,setsar=1[${pokeballIntroLabels[index]}]`,
+      );
+      const nextVideoLabel = safeFilterLabel('vg', index);
+      filters.push(
+        `[${currentVideoLabel}][${pokeballIntroLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(pokeballIntroStart, revealVisualStart)}'[${nextVideoLabel}]`,
+      );
+      currentVideoLabel = nextVideoLabel;
+    }
+
+    for (let index = 0; index < gridLayout.cells.length; index += 1) {
+      const cell = gridLayout.cells[index];
+      const wiggleStart = resolveCellPokeballWiggleStartSeconds({
+        cell,
+        gridLayout,
+        countdownStart,
+        countdownDuration,
+        revealVisualStart,
+        pokeballIntroStart,
+        pokeballIntroDuration,
+        pokeballSourceDuration,
+      });
+      const wiggleEnd = roundTime(
+        Math.min(revealVisualStart, wiggleStart + pokeballSourceDuration),
+      );
+      filters.push(
+        `[${pokeballWiggleSourceLabels[index]}]trim=duration=${pokeballSourceDuration},setpts=PTS-STARTPTS+${wiggleStart}/TB[${pokeballAnimatedLabels[index]}]`,
+      );
+      const nextVideoLabel = safeFilterLabel('vwg', index);
+      filters.push(
+        `[${currentVideoLabel}][${pokeballAnimatedLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(wiggleStart, wiggleEnd)}'[${nextVideoLabel}]`,
+      );
+      currentVideoLabel = nextVideoLabel;
+    }
+
+    const transitionScaleTimeExpression = buildScaleFilterTimeExpression({
+      fps,
+      streamStartSeconds: revealVisualStart,
+    });
+    const transitionProgressExpression = `min(max((${normalizeAnimationTimeExpression(transitionScaleTimeExpression)}-${revealVisualStart})/${revealTransitionDuration},0),1)`;
+    const pokeballScaleFactor = `max(0.02,pow(max(0.02,1-${transitionProgressExpression}),1.85))`;
+    const pokeballScaleExpression = `max(6,${pokeballSize}*(${pokeballScaleFactor}))`;
+    for (let index = 0; index < gridLayout.cells.length; index += 1) {
+      filters.push(
+        `[${pokeballTransitionLabels[index]}]scale=w='${pokeballScaleExpression}':h='${pokeballScaleExpression}':eval=frame,setsar=1[${safeFilterLabel('pokeballpop', index)}]`,
+      );
+    }
+  }
+
   const timerSourceDuration = Math.max(
     0.12,
     ensureNumber(
@@ -122,59 +269,135 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     currentVideoLabel = timerAlarmVideoLabel;
   }
 
-  const shinyCell = gridLayout.cells[plan.shiny_reveal?.selected_cell_index];
-  if (shinyCell) {
-    const shinyLabel = 'shinysprite';
-    const shinyScaleExpression = buildAnimatedPopSettleExpression(
-      revealVisualStart,
-      shinyPopDuration,
-      0.82,
-      1.16,
-      1,
-      buildScaleFilterTimeExpression({
-        fps,
-        streamStartSeconds: revealVisualStart,
-      }),
-    );
-    filters.push(
-      `[${inputRefs.shinySprite}:v]fps=${fps},trim=duration=${Math.max(0.5, ensureNumber(renderPlan.phases.reveal?.duration_seconds, 0))},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.08:saturation=1.08,scale=w='${spriteSize}*(${shinyScaleExpression})':h='${spriteSize}*(${shinyScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,setsar=1[${shinyLabel}]`,
-    );
-    const shinyVideoLabel = `${currentVideoLabel}s`;
-    filters.push(
-      `[${currentVideoLabel}][${shinyLabel}]overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2:enable='${formatEnableBetween(revealVisualStart, renderPlan.total_duration_seconds)}'[${shinyVideoLabel}]`,
-    );
-    currentVideoLabel = shinyVideoLabel;
-
-    if (plan.assets.overlays?.selected_shiny_sparkle_path && inputRefs.shinySparkle != null) {
-      const sparkleLabel = 'shinysparkle';
-      const sparkleDuration = Math.max(
-        0.12,
-        ensureNumber(
-          plan.assets.overlays?.selected_shiny_sparkle_duration_seconds,
-          ensureNumber(plan.shiny_reveal?.sparkle_duration_seconds, 0.9),
-        ),
-      );
-      const sparkleEnd = roundTime(
-        Math.min(renderPlan.total_duration_seconds, revealVisualStart + sparkleDuration),
-      );
-      const sparkleSize = roundTime(
-        spriteSize * Math.max(
-          1,
-          ensureNumber(
-            plan.shiny_reveal?.sparkle_scale_multiplier,
-            DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
-          ),
-        ),
-      );
-      filters.push(
-        `[${inputRefs.shinySparkle}:v]fps=${fps},trim=duration=${sparkleDuration},setpts=PTS-STARTPTS+${revealVisualStart}/TB,scale=${sparkleSize}:${sparkleSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${sparkleLabel}]`,
-      );
-      const sparkleVideoLabel = `${currentVideoLabel}ss`;
-      filters.push(
-        `[${currentVideoLabel}][${sparkleLabel}]overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2:enable='${formatEnableBetween(revealVisualStart, sparkleEnd)}'[${sparkleVideoLabel}]`,
-      );
-      currentVideoLabel = sparkleVideoLabel;
+  const nonShinyCells = gridLayout.cells.filter((cell) => cell.index !== selectedShinyCellIndex);
+  const normalTransitionLabelByCellIndex = new Map();
+  const normalHoldLabelByCellIndex = new Map();
+  if (nonShinyCells.length > 0) {
+    const normalSplitLabels = [];
+    for (const cell of nonShinyCells) {
+      normalSplitLabels.push(`[${safeFilterLabel('normalsrc', cell.index)}]`);
+      normalSplitLabels.push(`[${safeFilterLabel('normalholdsrc', cell.index)}]`);
     }
+    filters.push(
+      `[${inputRefs.normalSprite}:v]fps=${fps},trim=duration=${revealDurationSeconds},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.08:saturation=1.05,split=${normalSplitLabels.length}${normalSplitLabels.join('')}`,
+    );
+    const transitionScaleTimeExpression = buildScaleFilterTimeExpression({
+      fps,
+      streamStartSeconds: revealVisualStart,
+    });
+    const transitionProgressExpression = `min(max((${normalizeAnimationTimeExpression(transitionScaleTimeExpression)}-${revealVisualStart})/${revealTransitionDuration},0),1)`;
+    const spriteScaleFactor = `max(0.03,if(lt(${transitionProgressExpression},0.22),0.06+(${transitionProgressExpression}/0.22)*0.34,0.40+(((${transitionProgressExpression}-0.22)/0.78)*0.80)))`;
+    const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;
+    for (const cell of nonShinyCells) {
+      const holdSourceLabel = safeFilterLabel('normalholdsrc', cell.index);
+      const holdLabel = safeFilterLabel('normalhold', cell.index);
+      const transitionSourceLabel = safeFilterLabel('normalsrc', cell.index);
+      const transitionLabel = safeFilterLabel('normaltransition', cell.index);
+      filters.push(
+        `[${holdSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${holdLabel}]`,
+      );
+      filters.push(
+        `[${transitionSourceLabel}]scale=w='${spriteScaleExpression}':h='${spriteScaleExpression}':eval=frame,setsar=1[${transitionLabel}]`,
+      );
+      normalHoldLabelByCellIndex.set(cell.index, holdLabel);
+      normalTransitionLabelByCellIndex.set(cell.index, transitionLabel);
+    }
+  }
+
+  let shinyHoldLabel = null;
+  let shinyTransitionLabel = null;
+  const shinyCell = gridLayout.cells.find((cell) => cell.index === selectedShinyCellIndex) || null;
+  if (shinyCell) {
+    const transitionScaleTimeExpression = buildScaleFilterTimeExpression({
+      fps,
+      streamStartSeconds: revealVisualStart,
+    });
+    const transitionProgressExpression = `min(max((${normalizeAnimationTimeExpression(transitionScaleTimeExpression)}-${revealVisualStart})/${revealTransitionDuration},0),1)`;
+    const spriteScaleFactor = `max(0.03,if(lt(${transitionProgressExpression},0.22),0.06+(${transitionProgressExpression}/0.22)*0.34,0.40+(((${transitionProgressExpression}-0.22)/0.78)*0.80)))`;
+    const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;
+    shinyHoldLabel = 'shinyhold';
+    shinyTransitionLabel = 'shinytransition';
+    filters.push(
+      `[${inputRefs.shinySprite}:v]fps=${fps},trim=duration=${revealDurationSeconds},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.08:saturation=1.08,split=2[shinysrc][shinyholdsrc]`,
+    );
+    filters.push(
+      `[shinyholdsrc]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${shinyHoldLabel}]`,
+    );
+    filters.push(
+      `[shinysrc]scale=w='${spriteScaleExpression}':h='${spriteScaleExpression}':eval=frame,setsar=1[${shinyTransitionLabel}]`,
+    );
+  }
+
+  for (const cell of gridLayout.cells) {
+    const transitionLabel = cell.index === selectedShinyCellIndex
+      ? shinyTransitionLabel
+      : normalTransitionLabelByCellIndex.get(cell.index);
+    if (!transitionLabel) {
+      continue;
+    }
+    let transitionBaseLabel = currentVideoLabel;
+    const pokeballTransitionLabel = inputRefs.pokeball != null
+      ? safeFilterLabel('pokeballpop', cell.index)
+      : null;
+    if (pokeballTransitionLabel) {
+      const withPokeballTransitionLabel = safeFilterLabel('vxp', cell.index);
+      const progressExpression = `min(max((t-${revealVisualStart})/${revealTransitionDuration},0),1)`;
+      const pokeballBounceExpression = `if(lt(${progressExpression},0.24),(${progressExpression}/0.24)*26,max(0,26-(((${progressExpression}-0.24)/0.76)*26)))`;
+      filters.push(
+        `[${currentVideoLabel}][${pokeballTransitionLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2-${pokeballBounceExpression}':enable='${formatEnableBetween(revealVisualStart, revealTransitionEnd)}'[${withPokeballTransitionLabel}]`,
+      );
+      transitionBaseLabel = withPokeballTransitionLabel;
+    }
+    const withSpriteTransitionLabel = safeFilterLabel('vxs', cell.index);
+    filters.push(
+      `[${transitionBaseLabel}][${transitionLabel}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(revealVisualStart, revealTransitionEnd)}'[${withSpriteTransitionLabel}]`,
+    );
+    currentVideoLabel = withSpriteTransitionLabel;
+  }
+
+  for (const cell of gridLayout.cells) {
+    const holdLabel = cell.index === selectedShinyCellIndex
+      ? shinyHoldLabel
+      : normalHoldLabelByCellIndex.get(cell.index);
+    if (!holdLabel) {
+      continue;
+    }
+    const nextVideoLabel = safeFilterLabel('vr', cell.index);
+    filters.push(
+      `[${currentVideoLabel}][${holdLabel}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(revealTransitionEnd, renderPlan.total_duration_seconds)}'[${nextVideoLabel}]`,
+    );
+    currentVideoLabel = nextVideoLabel;
+  }
+
+  if (shinyCell && plan.assets.overlays?.selected_shiny_sparkle_path && inputRefs.shinySparkle != null) {
+    const sparkleLabel = 'shinysparkle';
+    const sparkleDuration = Math.max(
+      0.12,
+      ensureNumber(
+        plan.assets.overlays?.selected_shiny_sparkle_duration_seconds,
+        ensureNumber(plan.shiny_reveal?.sparkle_duration_seconds, 0.9),
+      ),
+    );
+    const sparkleEnd = roundTime(
+      Math.min(renderPlan.total_duration_seconds, revealVisualStart + sparkleDuration),
+    );
+    const sparkleSize = roundTime(
+      spriteHoldSize * Math.max(
+        1,
+        ensureNumber(
+          plan.shiny_reveal?.sparkle_scale_multiplier,
+          DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
+        ),
+      ),
+    );
+    filters.push(
+      `[${inputRefs.shinySparkle}:v]fps=${fps},trim=duration=${sparkleDuration},setpts=PTS-STARTPTS+${revealVisualStart}/TB,scale=${sparkleSize}:${sparkleSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${sparkleLabel}]`,
+    );
+    const sparkleVideoLabel = `${currentVideoLabel}ss`;
+    filters.push(
+      `[${currentVideoLabel}][${sparkleLabel}]overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2:enable='${formatEnableBetween(revealVisualStart, sparkleEnd)}'[${sparkleVideoLabel}]`,
+    );
+    currentVideoLabel = sparkleVideoLabel;
   }
 
   const drawtextParts = [];

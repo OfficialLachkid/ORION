@@ -55,18 +55,21 @@ export async function renderPokeQuizzVideo({
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
   const countdownPath = plan.assets.audio.selected_sound_effects?.countdown_tick || null;
   const timerEndPath = plan.assets.audio.selected_sound_effects?.timer_end || null;
+  const pokeballIntroPath = plan.assets.audio.selected_sound_effects?.pokeball_intro || null;
   const shinyPath = plan.assets.audio.selected_sound_effects?.shiny || null;
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
     ...(countdownPath ? [countdownPath] : []),
     ...(timerEndPath ? [timerEndPath] : []),
+    ...(pokeballIntroPath ? [pokeballIntroPath] : []),
     ...(shinyPath ? [shinyPath] : []),
   ]);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
   const [
     narrationDurations,
+    pokeballDurationSeconds,
     timerCountdownDurationSeconds,
     timerAlarmDurationSeconds,
     countdownDurationSeconds,
@@ -79,6 +82,11 @@ export async function renderPokeQuizzVideo({
         cwd: projectRoot,
       })
     ))),
+    probeMediaDurationSeconds({
+      ffmpegExecutable,
+      mediaPath: plan.assets.overlays.selected_primary_pokeball_overlay_path,
+      cwd: projectRoot,
+    }),
     probeMediaDurationSeconds({
       ffmpegExecutable,
       mediaPath: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
@@ -113,6 +121,9 @@ export async function renderPokeQuizzVideo({
     plan.assets.overlays.selected_timer_duration_seconds = timerCountdownDurationSeconds;
     plan.assets.overlays.selected_timer_countdown_duration_seconds = timerCountdownDurationSeconds;
   }
+  if (pokeballDurationSeconds) {
+    plan.assets.overlays.selected_primary_pokeball_duration_seconds = pokeballDurationSeconds;
+  }
   if (timerAlarmDurationSeconds) {
     plan.assets.overlays.selected_timer_alarm_duration_seconds = timerAlarmDurationSeconds;
   }
@@ -124,6 +135,7 @@ export async function renderPokeQuizzVideo({
     musicPath,
     countdownPath,
     timerEndPath,
+    pokeballIntroPath,
     shinyPath,
     renderPlan,
     mediaDurations: {
@@ -140,6 +152,7 @@ export async function renderPokeQuizzVideo({
         ...(musicPath ? [musicPath] : []),
         ...(countdownPath ? [countdownPath] : []),
         ...(timerEndPath ? [timerEndPath] : []),
+        ...(pokeballIntroPath ? [pokeballIntroPath] : []),
         ...(shinyPath ? [shinyPath] : []),
       ]),
       '-/filter_complex',
@@ -165,6 +178,7 @@ export async function renderPokeQuizzVideo({
     background: inputRoleIndex.get('background'),
     timerCountdown: inputRoleIndex.get('timer-countdown'),
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
+    pokeball: inputRoleIndex.get('pokeball-grid'),
     normalSprite: inputRoleIndex.get('normal-sprite'),
     shinySprite: inputRoleIndex.get('shiny-sprite'),
     shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,

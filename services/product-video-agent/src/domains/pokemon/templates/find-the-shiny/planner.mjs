@@ -27,6 +27,8 @@ const DEFAULT_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SPARKLE_SCALE_MULTIPLIER = 1.35;
 const DEFAULT_SPRITE_SCALE_MULTIPLIER = 1.08;
 const DEFAULT_MIN_ITEM_SIZE_PX = 148;
+const DEFAULT_POKEBALL_WIGGLE_WINDOW_START_RATIO = 0.12;
+const DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO = 0.76;
 
 function isBeachBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
@@ -83,6 +85,10 @@ function normalizeAssetPath(assetPath) {
 function ensurePositiveInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function roundRatio(value) {
+  return Number(Number(value || 0).toFixed(4));
 }
 
 function hashSeed(input) {
@@ -485,8 +491,9 @@ function buildSubjectAssetRecord(subject) {
   };
 }
 
-function buildFindTheShinyLayout(template, difficulty) {
+function buildFindTheShinyLayout(template, difficulty, random) {
   const gridConfig = template?.layout?.sprite_grid || {};
+  const pokeballGridConfig = template?.layout?.pokeball_grid || {};
   const safeZone = template?.canvas?.safe_zone || {};
   const canvasWidth = Number(template?.canvas?.width || 1080);
   const canvasHeight = Number(template?.canvas?.height || 1920);
@@ -511,6 +518,19 @@ function buildFindTheShinyLayout(template, difficulty) {
   const gridHeight = (rows * itemSize) + ((rows - 1) * rowGap);
   const originX = stageLeft + Math.max(0, Math.floor((stageWidth - gridWidth) / 2));
   const originY = stageTop + Math.max(0, Math.floor((stageHeight - gridHeight) / 2));
+  const wiggleWindowStartRatio = Math.min(
+    0.92,
+    Math.max(0, Number(
+      pokeballGridConfig.wiggle_window_start_ratio ?? DEFAULT_POKEBALL_WIGGLE_WINDOW_START_RATIO,
+    )),
+  );
+  const wiggleWindowEndRatio = Math.min(
+    0.96,
+    Math.max(
+      wiggleWindowStartRatio + 0.04,
+      Number(pokeballGridConfig.wiggle_window_end_ratio ?? DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO),
+    ),
+  );
   const cells = [];
 
   for (let index = 0; index < difficulty.sprite_count; index += 1) {
@@ -528,6 +548,7 @@ function buildFindTheShinyLayout(template, difficulty) {
       height: itemSize,
       center_x: x + Math.floor(itemSize / 2),
       center_y: y + Math.floor(itemSize / 2),
+      pokeball_wiggle_offset_ratio: roundRatio(random()),
     });
   }
 
@@ -548,6 +569,8 @@ function buildFindTheShinyLayout(template, difficulty) {
     column_gap_px: columnGap,
     row_gap_px: rowGap,
     sprite_scale_multiplier: Number(gridConfig.sprite_scale_multiplier ?? DEFAULT_SPRITE_SCALE_MULTIPLIER),
+    pokeball_wiggle_window_start_ratio: wiggleWindowStartRatio,
+    pokeball_wiggle_window_end_ratio: wiggleWindowEndRatio,
     cells,
   };
 }
@@ -605,7 +628,7 @@ export async function planFindTheShinyChallenge({
   }
 
   const selectedDifficulty = chooseDifficulty(config.difficultyCatalog, random);
-  const spriteGridLayout = buildFindTheShinyLayout(template, selectedDifficulty);
+  const spriteGridLayout = buildFindTheShinyLayout(template, selectedDifficulty, random);
   const shinyReveal = buildShinyRevealState({
     template,
     inventory,
@@ -640,7 +663,9 @@ export async function planFindTheShinyChallenge({
   if (!inventory.backgrounds.length) requiredAssetGaps.push('background_missing');
   if (!inventory.sound_effects.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
   if (!inventory.sound_effects.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
+  if (!inventory.sound_effects.pokeball_intro) requiredAssetGaps.push('pokeball_intro_sfx_missing');
   if (!inventory.sound_effects.shiny) requiredAssetGaps.push('shiny_sfx_missing');
+  if (!inventory.overlay_presets?.pokeball_primary) requiredAssetGaps.push('pokeball_overlay_missing');
   if (!inventory.overlay_presets?.timer_countdown && !inventory.overlay_presets?.timer) requiredAssetGaps.push('timer_overlay_missing');
   if (!inventory.overlay_presets?.timer_alarm) requiredAssetGaps.push('timer_alarm_overlay_missing');
   if (!inventory.overlay_presets?.shiny_sparkle) requiredAssetGaps.push('shiny_sparkle_overlay_missing');
@@ -729,6 +754,7 @@ export async function planFindTheShinyChallenge({
       ],
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
+        selected_primary_pokeball_overlay_path: inventory.overlay_presets?.pokeball_primary || null,
         selected_timer_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
         selected_timer_countdown_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
         selected_timer_alarm_path: inventory.overlay_presets?.timer_alarm || null,
@@ -746,6 +772,7 @@ export async function planFindTheShinyChallenge({
         selected_battle_intro_music_path: selectSeededFile(inventory.music, random),
         selected_sound_effects: {
           ...(inventory.sound_effects || {}),
+          pokeball_intro: inventory.sound_effects?.pokeball_intro || null,
           shiny: inventory.sound_effects?.shiny || null,
         },
       },

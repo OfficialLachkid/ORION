@@ -31,16 +31,32 @@ export function buildVisualInputs(plan, renderPlan) {
     });
   }
 
+  inputs.push({
+    role: 'pokeball-grid',
+    path: plan.assets.overlays.selected_primary_pokeball_overlay_path,
+    args: [
+      '-stream_loop',
+      '-1',
+      '-ignore_loop',
+      '0',
+      '-t',
+      String(totalDuration),
+      '-i',
+      plan.assets.overlays.selected_primary_pokeball_overlay_path,
+    ],
+  });
+
   const selectedPokemon = plan.assets.pokemon?.[0] || {};
+  const revealDuration = String(Math.max(0.5, renderPlan.phases.reveal?.duration_seconds || 0));
   inputs.push({
     role: 'normal-sprite',
     path: selectedPokemon.sprite_path,
-    args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(totalDuration), '-i', selectedPokemon.sprite_path],
+    args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', revealDuration, '-i', selectedPokemon.sprite_path],
   });
   inputs.push({
     role: 'shiny-sprite',
     path: selectedPokemon.shiny_sprite_path || selectedPokemon.reveal_sprite_path || selectedPokemon.sprite_path,
-    args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(Math.max(0.5, renderPlan.phases.reveal?.duration_seconds || 0)), '-i', selectedPokemon.shiny_sprite_path || selectedPokemon.reveal_sprite_path || selectedPokemon.sprite_path],
+    args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', revealDuration, '-i', selectedPokemon.shiny_sprite_path || selectedPokemon.reveal_sprite_path || selectedPokemon.sprite_path],
   });
 
   if (plan.assets.overlays?.selected_shiny_sparkle_path) {
