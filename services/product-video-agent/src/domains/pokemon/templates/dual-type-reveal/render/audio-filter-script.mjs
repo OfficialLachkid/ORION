@@ -1,6 +1,7 @@
 import {
   DEFAULT_COUNTDOWN_VOLUME,
   DEFAULT_MUSIC_VOLUME,
+  DEFAULT_POKEBALL_INTRO_SFX_TRIM_SECONDS,
   DEFAULT_POKEBALL_INTRO_SFX_VOLUME,
   DEFAULT_POKEBALL_WIGGLE_VOLUME,
   DEFAULT_SHINY_SFX_VOLUME,
@@ -84,7 +85,7 @@ export function buildAudioFilterScript({
 
   if (pokeballIntroPath) {
     const delayMs = Math.max(0, Math.round(resolvePokeballIntroStartSeconds(renderPlan) * 1000));
-    filters.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=${DEFAULT_POKEBALL_INTRO_SFX_VOLUME}[pokeballintro]`);
+    filters.push(`[${inputIndex}:a]atrim=start=${DEFAULT_POKEBALL_INTRO_SFX_TRIM_SECONDS},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs},volume=${DEFAULT_POKEBALL_INTRO_SFX_VOLUME}[pokeballintro]`);
     mixLabels.push('pokeballintro');
     inputIndex += 1;
   }

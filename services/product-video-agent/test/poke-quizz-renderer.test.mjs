@@ -360,7 +360,7 @@ test('audio filter script starts pokeball intro sfx at the scale-in cue and keep
     renderPlan,
   });
 
-  assert.match(script, /\[3:a\]adelay=2300\|2300,volume=0\.5\[pokeballintro\]/u);
+  assert.match(script, /\[3:a\]atrim=start=0\.3,asetpts=PTS-STARTPTS,adelay=2300\|2300,volume=0\.5\[pokeballintro\]/u);
   assert.match(script, /\[4:a\]asplit=5\[w0\]\[w1\]\[w2\]\[w3\]\[w4\]/u);
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[pokeballintro\]\[wig0\]\[wig1\]\[wig2\]\[wig3\]\[wig4\]amix/u);
 });
