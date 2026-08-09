@@ -78,7 +78,7 @@ const template = {
       intro_duration_seconds: 0.56,
     },
     timer: {
-      countdown_from: 5,
+      countdown_from: 3,
       countdown_to: 0,
     },
   },
@@ -258,8 +258,8 @@ test('generic render-plan dispatch keeps the shiny grid centered and reveal timi
   assert.equal(renderPlan.grid.cells.length, plan.selection.grid.sprite_count);
   assert.equal(renderPlan.grid.rows, plan.selection.grid.rows);
   assert.equal(renderPlan.grid.columns, 3);
-  assert.equal(renderPlan.audio_cues.reveal_start_seconds, 7.6);
-  assert.equal(renderPlan.audio_cues.reveal_visual_start_seconds, 7.68);
+  assert.equal(renderPlan.audio_cues.reveal_start_seconds, 5.6);
+  assert.equal(renderPlan.audio_cues.reveal_visual_start_seconds, 5.68);
   assert.equal(renderPlan.timer_layout.y < renderPlan.grid.stage_bounds_px.top, true);
   assert.equal(renderPlan.output_path, '/tmp/find-the-shiny.mp4');
 });
@@ -288,7 +288,7 @@ test('visual inputs and audio cues use one normal sprite source plus one shiny r
     'shiny-sprite',
     'shiny-sparkle',
   ]);
-  assert.deepEqual(inputs[3].args, ['-stream_loop', '-1', '-ignore_loop', '0', '-t', '10', '-i', '/tmp/pokeball.gif']);
+  assert.deepEqual(inputs[3].args, ['-stream_loop', '-1', '-ignore_loop', '0', '-t', '8', '-i', '/tmp/pokeball.gif']);
   assert.deepEqual(inputs[4].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno.png']);
   assert.deepEqual(inputs[5].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno-shiny.png']);
 
@@ -303,7 +303,7 @@ test('visual inputs and audio cues use one normal sprite source plus one shiny r
   });
 
   assert.match(script, /\[3:a\]atrim=start=0\.3,asetpts=PTS-STARTPTS,adelay=2100\|2100,volume=0\.5\[pokeballintro\]/u);
-  assert.match(script, /\[4:a\]adelay=7680\|7680,volume=0\.5\[shiny\]/u);
+  assert.match(script, /\[4:a\]adelay=5680\|5680,volume=0\.5\[shiny\]/u);
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[pokeballintro\]\[shiny\]amix/u);
 });
 
@@ -350,15 +350,15 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
   );
 
   assert.match(visualFilter.script, /\[3:v\]fps=30,format=rgba,scale=/u);
-  assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+7\.68\/TB/u);
+  assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+5\.68\/TB/u);
   assert.doesNotMatch(visualFilter.script, /pokeballstaticsource/u);
   assert.match(visualFilter.script, new RegExp(`scale=${expectedSpriteHoldSize}:${expectedSpriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1\\[shinyhold\\]`, 'u'));
   assert.match(visualFilter.script, new RegExp(`scale=${expectedPokeballSize}:${expectedPokeballSize}:force_original_aspect_ratio=decrease`, 'u'));
   assert.match(visualFilter.script, /\[pbsrc0\]trim=duration=0\.6,tpad=start_mode=clone:start_duration=[0-9.]+:stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+2\.1\/TB\[pbb0\]/u);
   assert.match(visualFilter.script, /\[pbi0\]split=2\[pbo0\]\[pbt0\]/u);
-  assert.match(visualFilter.script, /\[v0\]\[pbo0\]overlay=.*enable='gte\(t,2\.1\)\*lt\(t,7\.68\)'/u);
+  assert.match(visualFilter.script, /\[v0\]\[pbo0\]overlay=.*enable='gte\(t,2\.1\)\*lt\(t,5\.68\)'/u);
   assert.match(visualFilter.script, new RegExp(`overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2`, 'u'));
-  assert.match(visualFilter.script, /\[6:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+7\.68\/TB/u);
+  assert.match(visualFilter.script, /\[6:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+5\.68\/TB/u);
   assert.match(visualFilter.script, /pokeballpop/u);
   assert.match(visualFilter.script, /normaltransition/u);
 });

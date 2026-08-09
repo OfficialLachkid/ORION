@@ -150,7 +150,7 @@
       "reveal_y": 260
     },
     "timer": {
-      "countdown_from": 5,
+      "countdown_from": 3,
       "countdown_to": 0,
       "position": "upper_middle",
       "display_mode": "numeric_with_small_ring",
