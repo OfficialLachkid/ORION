@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { buildAudioInputs } from '../src/domains/pokemon/templates/dual-type-reveal/render/audio-filter-script.mjs';
 import {
   applyNarrationDurationsToRenderPlan,
   buildCountdownMoments,
@@ -258,7 +259,7 @@ test('visual filter script starts pokeballs earlier and enlarges the timer visua
   assert.match(visualFilter.script, /trim=duration=6\.232,setpts=PTS-STARTPTS\+2\.3\/TB,scale=216:216/u);
   assert.match(visualFilter.script, /scale=234:234:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /overlay=x='540-w\/2':y='726-h\/2'/u);
-  assert.match(visualFilter.script, /if\(lt\(\(\(n\/30\)\),0\),0\.9,if\(lt\(\(\(n\/30\)\),0\.072\),0\.9\+\(\(\(\(n\/30\)\)-0\)\/0\.072\)\*0\.22/u);
+  assert.match(visualFilter.script, /if\(lt\(\(\(2\.3\+\(n\/30\)\)\),2\.3\),0,if\(lt\(\(\(2\.3\+\(n\/30\)\)\),2\.43\),0\+\(\(\(\(2\.3\+\(n\/30\)\)\)-2\.3\)\/0\.13\)\*1\.08/u);
   assert.match(visualFilter.script, /min\(max\(\(\(\(n\/30\)\)-1\.2\)\/0\.256,0\),1\)/u);
   assert.match(visualFilter.script, /2\.3\+\(n\/30\)/u);
   assert.match(visualFilter.script, /eq=contrast=1\.08:saturation=1\.05/u);
@@ -320,6 +321,132 @@ test('audio filter script time-warps a full countdown bed to the reveal boundary
   assert.doesNotMatch(script, /asplit=5/u);
   assert.match(script, /\[4:a\]atrim=0:5\.533,atempo=1\.107,atrim=0:5/u);
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[music\]\[countdown\]\[timerend\]amix/u);
+});
+
+test('audio filter script starts shiny sfx at the reveal visual cue', () => {
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const script = buildAudioFilterScript({
+    narrationPaths: ['/tmp/hook.wav', '/tmp/prompt.wav', '/tmp/reveal.wav'],
+    musicPath: null,
+    countdownPath: null,
+    timerEndPath: null,
+    pokeballWigglePath: null,
+    shinyPath: '/tmp/shiny-sound.mp3',
+    renderPlan,
+  });
+
+  assert.match(script, /\[3:a\]adelay=8100\|8100,volume=0\.5\[shiny\]/u);
+  assert.match(script, /\[n0\]\[n1\]\[n2\]\[shiny\]amix/u);
+});
+
+test('audio filter script starts pokeball intro sfx at the scale-in cue and keeps wiggle indexing stable', () => {
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const script = buildAudioFilterScript({
+    narrationPaths: ['/tmp/hook.wav', '/tmp/prompt.wav', '/tmp/reveal.wav'],
+    musicPath: null,
+    countdownPath: null,
+    timerEndPath: null,
+    pokeballIntroPath: '/tmp/enlarge-pokeball.mp3',
+    pokeballWigglePath: '/tmp/pokeball_wiggle.mp3',
+    shinyPath: null,
+    renderPlan,
+  });
+
+  assert.match(script, /\[3:a\]atrim=start=0\.3,asetpts=PTS-STARTPTS,adelay=2300\|2300,volume=0\.5\[pokeballintro\]/u);
+  assert.match(script, /\[4:a\]asplit=5\[w0\]\[w1\]\[w2\]\[w3\]\[w4\]/u);
+  assert.match(script, /\[n0\]\[n1\]\[n2\]\[pokeballintro\]\[wig0\]\[wig1\]\[wig2\]\[wig3\]\[wig4\]amix/u);
+});
+
+test('audio input list appends shiny sfx when the reveal path is active', () => {
+  assert.deepEqual(
+    buildAudioInputs([
+      '/tmp/hook.wav',
+      '/tmp/prompt.wav',
+      '/tmp/reveal.wav',
+      '/tmp/music.mp3',
+      '/tmp/countdown.mp3',
+      '/tmp/timer_finished.mp3',
+      '/tmp/shiny-sound.mp3',
+    ]),
+    [
+      '-i', '/tmp/hook.wav',
+      '-i', '/tmp/prompt.wav',
+      '-i', '/tmp/reveal.wav',
+      '-i', '/tmp/music.mp3',
+      '-i', '/tmp/countdown.mp3',
+      '-i', '/tmp/timer_finished.mp3',
+      '-i', '/tmp/shiny-sound.mp3',
+    ],
+  );
+});
+
+test('visual filter script overlays the shiny sparkle on the selected shiny subject only once', () => {
+  const visualPlan = {
+    ...plan,
+    shiny_reveal: {
+      active: true,
+      selected_subject_index: 0,
+      selected_pokedex_id: 'pokedex-0001',
+      sparkle_duration_seconds: 0.9,
+      sparkle_scale_multiplier: 1.35,
+    },
+    assets: {
+      ...plan.assets,
+      pokemon: [
+        {
+          pokedex_id: 'pokedex-0001',
+          national_dex_number: 1,
+          sprite_path: '/tmp/bulbasaur.png',
+          shiny_sprite_path: '/tmp/bulbasaur-shiny.png',
+          reveal_sprite_path: '/tmp/bulbasaur-shiny.png',
+          reveal_variant: 'shiny',
+          is_shiny_reveal: true,
+        },
+      ],
+      overlays: {
+        ...plan.assets.overlays,
+        selected_shiny_sparkle_path: '/tmp/shiny_sparkle.gif',
+        selected_shiny_sparkle_duration_seconds: 0.9,
+      },
+    },
+  };
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan: visualPlan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const visualFilter = buildVisualFilterScript(
+    visualPlan,
+    template,
+    renderPlan,
+    {
+      background: 0,
+      typeIcons: [1, 2],
+      timerCountdown: 3,
+      timerAlarm: 4,
+      pokeball: 5,
+      pokemon: [6],
+      shinySparkle: 7,
+    },
+    null,
+    {
+      hook: { lines: [] },
+      prompt: { lines: [] },
+      reveal: { lines: [] },
+    },
+  );
+
+  assert.match(visualFilter.script, /\[7:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+8\.1\/TB/u);
+  assert.match(visualFilter.script, /\[shinysparkle0\]/u);
+  assert.match(visualFilter.script, /overlay=228-w\/2:652-h\/2:enable='between\(t,8\.1,9\)'/u);
 });
 
 test('escaped enable windows are safe for ffmpeg filter parsing', () => {

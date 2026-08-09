@@ -51,17 +51,29 @@ export async function renderPokeQuizzVideo({
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
   const countdownPath = plan.assets.audio.selected_sound_effects?.countdown_tick || null;
   const timerEndPath = plan.assets.audio.selected_sound_effects?.timer_end || null;
+  const pokeballIntroPath = plan.assets.audio.selected_sound_effects?.pokeball_intro || null;
   const pokeballWigglePath = plan.assets.audio.selected_sound_effects?.pokeball_wiggle || null;
+  const shinyPath = plan.shiny_reveal?.active
+    ? plan.assets.audio.selected_sound_effects?.shiny || null
+    : null;
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
     ...(countdownPath ? [countdownPath] : []),
     ...(timerEndPath ? [timerEndPath] : []),
+    ...(pokeballIntroPath ? [pokeballIntroPath] : []),
     ...(pokeballWigglePath ? [pokeballWigglePath] : []),
+    ...(shinyPath ? [shinyPath] : []),
   ]);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
-  const [narrationDurations, timerCountdownDurationSeconds, timerAlarmDurationSeconds, countdownDurationSeconds] = await Promise.all([
+  const [
+    narrationDurations,
+    timerCountdownDurationSeconds,
+    timerAlarmDurationSeconds,
+    countdownDurationSeconds,
+    shinySparkleDurationSeconds,
+  ] = await Promise.all([
     Promise.all(narrationPaths.map((narrationPath) => (
       probeMediaDurationSeconds({
         ffmpegExecutable,
@@ -88,6 +100,13 @@ export async function renderPokeQuizzVideo({
         cwd: projectRoot,
       })
       : Promise.resolve(null),
+    plan.shiny_reveal?.active && plan.assets.overlays.selected_shiny_sparkle_path
+      ? probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: plan.assets.overlays.selected_shiny_sparkle_path,
+        cwd: projectRoot,
+      })
+      : Promise.resolve(null),
   ]);
   renderPlan = applyNarrationDurationsToRenderPlan(renderPlan, {
     prompt_seconds: narrationDurations[1],
@@ -99,12 +118,17 @@ export async function renderPokeQuizzVideo({
   if (timerAlarmDurationSeconds) {
     plan.assets.overlays.selected_timer_alarm_duration_seconds = timerAlarmDurationSeconds;
   }
+  if (shinySparkleDurationSeconds) {
+    plan.assets.overlays.selected_shiny_sparkle_duration_seconds = shinySparkleDurationSeconds;
+  }
   const audioFilterScript = buildAudioFilterScript({
     narrationPaths,
     musicPath,
     countdownPath,
     timerEndPath,
+    pokeballIntroPath,
     pokeballWigglePath,
+    shinyPath,
     renderPlan,
     mediaDurations: {
       countdown_audio_duration_seconds: countdownDurationSeconds,
@@ -120,7 +144,9 @@ export async function renderPokeQuizzVideo({
         ...(musicPath ? [musicPath] : []),
         ...(countdownPath ? [countdownPath] : []),
         ...(timerEndPath ? [timerEndPath] : []),
+        ...(pokeballIntroPath ? [pokeballIntroPath] : []),
         ...(pokeballWigglePath ? [pokeballWigglePath] : []),
+        ...(shinyPath ? [shinyPath] : []),
       ]),
       '-/filter_complex',
       audioFilterScriptPath,
@@ -147,7 +173,8 @@ export async function renderPokeQuizzVideo({
     timerCountdown: inputRoleIndex.get('timer-countdown'),
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
     pokeball: inputRoleIndex.get('pokeball-grid'),
-    pokemon: plan.assets.pokemon.map((pokemon) => inputRoleIndex.get(`pokemon-${pokemon.national_dex_number}`)),
+    pokemon: plan.assets.pokemon.map((pokemon) => inputRoleIndex.get(`pokemon-${pokemon.pokedex_id || pokemon.national_dex_number}`)),
+    shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
   };
   const fontPath = await resolveFontPath(fontCandidates);
   const textArtifacts = await writeDrawtextArtifacts({

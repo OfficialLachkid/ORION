@@ -168,6 +168,16 @@
     "trigger_seconds": 5,
     "visual_delay_seconds": 0.3,
     "default_mode": "silhouette_hold_then_answer",
+    "shiny": {
+      "enabled": true,
+      "odds_numerator": 1,
+      "odds_denominator": 11,
+      "max_per_video": 1,
+      "sparkle_overlay_role": "shiny_sparkle",
+      "sound_effect_role": "shiny",
+      "sparkle_duration_seconds": 0.9,
+      "sparkle_scale_multiplier": 1.35
+    },
     "supported_variants": [
       "silhouette_hold_then_answer",
       "question_marks_transform_into_pokemon"

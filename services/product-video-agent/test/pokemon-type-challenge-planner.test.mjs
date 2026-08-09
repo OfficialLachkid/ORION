@@ -390,6 +390,212 @@ test('planner prefers legendary subjects before final-stage evolutions when trim
   );
 });
 
+test('planner collapses same-dex variants and prefers Mega forms over base and Gigantamax final evolutions', async () => {
+  const megaPriorityTemplate = {
+    ...template,
+    selection_rules: {
+      ...template.selection_rules,
+      type_pair_policy: {
+        ...template.selection_rules.type_pair_policy,
+        selected_subjects_min: 2,
+        selected_subjects_max: 2,
+      },
+    },
+  };
+  const megaPriorityRows = [
+    {
+      id: 'pokedex-0002',
+      national_dex_number: 2,
+      name: 'Ivysaur',
+      slug: 'ivysaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0002.png',
+      silhouette_path: '/tmp/0002-silhouette.png',
+      shiny_sprite_path: '/tmp/0002-shiny.png',
+      cry_path: '/tmp/0002.wav',
+      sprite_source_url: 'https://example.test/0002.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+    {
+      id: 'pokedex-0003',
+      national_dex_number: 3,
+      name: 'Venusaur',
+      slug: 'venusaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0003.png',
+      silhouette_path: '/tmp/0003-silhouette.png',
+      shiny_sprite_path: '/tmp/0003-shiny.png',
+      cry_path: '/tmp/0003.wav',
+      sprite_source_url: 'https://example.test/0003.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      is_default_form: true,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+        pokemon_api: {
+          pokemon_name: 'venusaur',
+          is_default_form: true,
+          is_mega: false,
+          is_battle_only: false,
+          order: 3,
+          form_order: 1,
+        },
+      },
+    },
+    {
+      id: 'pokedex-0003-venusaur-mega',
+      national_dex_number: 3,
+      name: 'Venusaur (Mega)',
+      slug: 'venusaur-mega',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0003-mega.png',
+      silhouette_path: '/tmp/0003-mega-silhouette.png',
+      shiny_sprite_path: '/tmp/0003-mega-shiny.png',
+      cry_path: '/tmp/0003-mega.wav',
+      sprite_source_url: 'https://example.test/0003-mega.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      is_default_form: false,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+        pokemon_api: {
+          pokemon_name: 'venusaur-mega',
+          is_default_form: false,
+          is_mega: true,
+          is_battle_only: true,
+          order: 4,
+          form_order: 2,
+        },
+      },
+    },
+    {
+      id: 'pokedex-0003-venusaur-gmax',
+      national_dex_number: 3,
+      name: 'Venusaur (Gigantamax)',
+      slug: 'venusaur-gmax',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0003-gmax.png',
+      silhouette_path: '/tmp/0003-gmax-silhouette.png',
+      shiny_sprite_path: '/tmp/0003-gmax-shiny.png',
+      cry_path: '/tmp/0003-gmax.wav',
+      sprite_source_url: 'https://example.test/0003-gmax.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      is_default_form: false,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+        pokemon_api: {
+          pokemon_name: 'venusaur-gmax',
+          form_name: 'Gigantamax',
+          is_default_form: false,
+          is_mega: false,
+          is_battle_only: true,
+          order: 5,
+          form_order: 3,
+        },
+      },
+    },
+    {
+      id: 'pokedex-0071',
+      national_dex_number: 71,
+      name: 'Victreebel',
+      slug: 'victreebel',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0071.png',
+      silhouette_path: '/tmp/0071-silhouette.png',
+      shiny_sprite_path: '/tmp/0071-shiny.png',
+      cry_path: '/tmp/0071.wav',
+      sprite_source_url: 'https://example.test/0071.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: megaPriorityTemplate,
+    pokedexRows: megaPriorityRows,
+    seed: 'mega-variant-preference',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-08-09T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.deepEqual(
+    plan.selection.selected_subjects.map((subject) => subject.name),
+    ['Venusaur (Mega)', 'Victreebel'],
+  );
+  assert.equal(
+    plan.selection.selected_subjects.filter((subject) => subject.national_dex_number === 3).length,
+    1,
+  );
+});
+
 test('planner rejects disallowed or absent type pairs', async () => {
   await assert.rejects(
     () => planPokemonTypeChallenge({
@@ -716,6 +922,56 @@ test('planner allows reuse when only one type pair or background exists', async 
 
   assert.deepEqual(plan.selection.type_pair, ['grass', 'poison']);
   assert.equal(plan.assets.background.selected_path, '/tmp/background-1.png');
+});
+
+test('planner prefers the least-used type pair bucket before random tie-breaking', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'least-used-first',
+    assetInventory: {
+      scanned_at: '2026-07-31T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/fairy.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+    selectionState: {
+      last_type_pair_key: 'poison|flying',
+      type_pair_usage_counts: {
+        'poison|flying': 0,
+        'fairy|flying': 2,
+        'grass|poison': 1,
+      },
+    },
+  });
+
+  assert.deepEqual(plan.selection.type_pair, ['grass', 'poison']);
+  assert.equal(plan.selection_state.type_pair_usage_counts['grass|poison'], 2);
 });
 
 test('planner prefers beach backgrounds when a water type is in the selected pair', async () => {
@@ -1116,6 +1372,150 @@ test('planner prefers fire backgrounds for fire and rock pairs', async () => {
   assert.match(plan.assets.background.selected_path || '', /\/fire-backgrounds\//u);
 });
 
+test('planner prefers ice backgrounds for ice and fire pairs', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template: {
+      ...template,
+      selection_rules: {
+        ...template.selection_rules,
+        generation_scope: [],
+      },
+    },
+    pokedexRows: [
+      ...pokedexRows,
+      {
+        id: 'pokedex-ice-fire-test',
+        national_dex_number: 225,
+        name: 'Delibird',
+        generation: 2,
+        region: 'johto',
+        types: ['ice', 'fire'],
+        sprite_path: '/tmp/0225.png',
+        silhouette_path: '/tmp/0225-silhouette.png',
+        shiny_sprite_path: '/tmp/0225-shiny.png',
+        cry_path: '/tmp/0225.wav',
+        sprite_source_url: 'https://example.test/0225.png',
+        shiny_sprite_source_url: null,
+        silhouette_source_url: null,
+        cry_source_url: null,
+        metadata: {
+          type_icon_source_urls: [
+            'https://www.serebii.net/pokedex-bw/type/ice.gif',
+            'https://www.serebii.net/pokedex-bw/type/fire.gif',
+          ],
+        },
+      },
+    ],
+    seed: 'ice-fire-background-priority',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory: {
+      scanned_at: '2026-08-09T00:00:00.000Z',
+      directories: {},
+      backgrounds: [
+        '/tmp/background-plain.png',
+        '/tmp/fire-backgrounds/fire-1.png',
+        '/tmp/ice-backgrounds/ice-1.png',
+      ],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/ice.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/fire.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.match(plan.assets.background.selected_path || '', /\/ice-backgrounds\//u);
+});
+
+test('planner prefers ice backgrounds for ice and ground pairs', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template: {
+      ...template,
+      selection_rules: {
+        ...template.selection_rules,
+        generation_scope: [],
+      },
+    },
+    pokedexRows: [
+      ...pokedexRows,
+      {
+        id: 'pokedex-ice-ground-test',
+        national_dex_number: 361,
+        name: 'Snorunt',
+        generation: 3,
+        region: 'hoenn',
+        types: ['ice', 'ground'],
+        sprite_path: '/tmp/0361.png',
+        silhouette_path: '/tmp/0361-silhouette.png',
+        shiny_sprite_path: '/tmp/0361-shiny.png',
+        cry_path: '/tmp/0361.wav',
+        sprite_source_url: 'https://example.test/0361.png',
+        shiny_sprite_source_url: null,
+        silhouette_source_url: null,
+        cry_source_url: null,
+        metadata: {
+          type_icon_source_urls: [
+            'https://www.serebii.net/pokedex-bw/type/ice.gif',
+            'https://www.serebii.net/pokedex-bw/type/ground.gif',
+          ],
+        },
+      },
+    ],
+    seed: 'ice-ground-background-priority',
+    forcedTypePair: ['ice', 'ground'],
+    assetInventory: {
+      scanned_at: '2026-08-09T00:00:00.000Z',
+      directories: {},
+      backgrounds: [
+        '/tmp/background-plain.png',
+        '/tmp/cave-backgrounds/cave-1.png',
+        '/tmp/ice-backgrounds/ice-1.png',
+      ],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/ice.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/ground.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.match(plan.assets.background.selected_path || '', /\/ice-backgrounds\//u);
+});
+
 test('planner excludes cave backgrounds for non-ground non-rock type pairs', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
@@ -1317,4 +1717,197 @@ test('planner prefers pairs with localized reveal sprites during random selectio
 
   assert.deepEqual(plan.selection.type_pair, ['ground', 'psychic']);
   assert.equal(plan.assets.pokemon.every((subject) => Boolean(subject.sprite_path)), true);
+});
+
+test('planner selects at most one shiny reveal per video and records the deterministic roll', async () => {
+  const shinyTemplate = {
+    ...template,
+    reveal: {
+      shiny: {
+        enabled: true,
+        odds_numerator: 1,
+        odds_denominator: 1,
+        sparkle_duration_seconds: 0.9,
+        sparkle_scale_multiplier: 1.35,
+      },
+    },
+  };
+  const shinyRows = [
+    {
+      id: 'pokedex-0001',
+      national_dex_number: 1,
+      name: 'Bulbasaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0001.png',
+      silhouette_path: '/tmp/0001-silhouette.png',
+      shiny_sprite_path: '/tmp/0001-shiny.png',
+      cry_path: '/tmp/0001.wav',
+      sprite_source_url: 'https://example.test/0001.png',
+      shiny_sprite_source_url: 'https://example.test/0001-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+    {
+      id: 'pokedex-0002',
+      national_dex_number: 2,
+      name: 'Ivysaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0002.png',
+      silhouette_path: '/tmp/0002-silhouette.png',
+      shiny_sprite_path: '/tmp/0002-shiny.png',
+      cry_path: '/tmp/0002.wav',
+      sprite_source_url: 'https://example.test/0002.png',
+      shiny_sprite_source_url: 'https://example.test/0002-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: shinyTemplate,
+    pokedexRows: shinyRows,
+    seed: 'always-one-shiny',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-08-09T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav', '/tmp/shiny-sound.mp3', '/tmp/enlarge-pokeball.mp3'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+        shiny: '/tmp/shiny-sound.mp3',
+        pokeball_intro: '/tmp/enlarge-pokeball.mp3',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        shiny_sparkle: '/tmp/shiny_sparkle.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: [
+        '/tmp/Timer Countdown.gif',
+        '/tmp/Timer Alarm.gif',
+        '/tmp/shiny_sparkle.gif',
+        '/tmp/3D Pokeball Wiggle.gif',
+      ],
+      transitions: [],
+    },
+  });
+
+  const shinySubjects = plan.assets.pokemon.filter((subject) => subject.is_shiny_reveal);
+
+  assert.equal(plan.shiny_reveal.active, true);
+  assert.equal(plan.shiny_reveal.roll_value, 1);
+  assert.equal(plan.shiny_reveal.max_per_video, 1);
+  assert.equal(plan.shiny_reveal.chance_percentage, 100);
+  assert.equal(shinySubjects.length, 1);
+  assert.equal(shinySubjects[0].reveal_variant, 'shiny');
+  assert.equal(shinySubjects[0].reveal_sprite_path, shinySubjects[0].shiny_sprite_path);
+  assert.equal(plan.assets.pokemon.filter((subject) => subject.reveal_variant === 'shiny').length, 1);
+  assert.equal(plan.assets.overlays.selected_shiny_sparkle_path, '/tmp/shiny_sparkle.gif');
+  assert.equal(plan.assets.audio.selected_sound_effects.shiny, '/tmp/shiny-sound.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, '/tmp/enlarge-pokeball.mp3');
+});
+
+test('planner defaults shiny odds to one in eleven when the template omits an override', async () => {
+  const shinyRows = [
+    {
+      id: 'pokedex-0001',
+      national_dex_number: 1,
+      name: 'Bulbasaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0001.png',
+      silhouette_path: '/tmp/0001-silhouette.png',
+      shiny_sprite_path: '/tmp/0001-shiny.png',
+      cry_path: '/tmp/0001.wav',
+      sprite_source_url: 'https://example.test/0001.png',
+      shiny_sprite_source_url: 'https://example.test/0001-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: {
+      ...template,
+      reveal: {},
+    },
+    pokedexRows: shinyRows,
+    seed: 'default-shiny-odds',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-08-09T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav', '/tmp/shiny-sound.mp3'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+        shiny: '/tmp/shiny-sound.mp3',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        shiny_sparkle: '/tmp/shiny_sparkle.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: [
+        '/tmp/Timer Countdown.gif',
+        '/tmp/Timer Alarm.gif',
+        '/tmp/shiny_sparkle.gif',
+        '/tmp/3D Pokeball Wiggle.gif',
+      ],
+      transitions: [],
+    },
+  });
+
+  assert.equal(plan.shiny_reveal.odds_numerator, 1);
+  assert.equal(plan.shiny_reveal.odds_denominator, 11);
+  assert.equal(plan.shiny_reveal.chance_percentage, 9.090909);
+  assert.equal(plan.shiny_reveal.max_per_video, 1);
 });

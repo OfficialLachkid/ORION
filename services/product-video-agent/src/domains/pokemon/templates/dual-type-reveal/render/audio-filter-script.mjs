@@ -1,10 +1,14 @@
 import {
   DEFAULT_COUNTDOWN_VOLUME,
   DEFAULT_MUSIC_VOLUME,
+  DEFAULT_POKEBALL_INTRO_SFX_TRIM_SECONDS,
+  DEFAULT_POKEBALL_INTRO_SFX_VOLUME,
   DEFAULT_POKEBALL_WIGGLE_VOLUME,
+  DEFAULT_SHINY_SFX_VOLUME,
   DEFAULT_TIMER_END_VOLUME,
   DEFAULT_VOICE_VOLUME,
   ensureNumber,
+  resolvePokeballIntroStartSeconds,
   roundTime,
 } from './constants.mjs';
 
@@ -17,7 +21,9 @@ export function buildAudioFilterScript({
   musicPath,
   countdownPath,
   timerEndPath,
+  pokeballIntroPath,
   pokeballWigglePath,
+  shinyPath,
   renderPlan,
   mediaDurations = {},
 }) {
@@ -77,6 +83,13 @@ export function buildAudioFilterScript({
     inputIndex += 1;
   }
 
+  if (pokeballIntroPath) {
+    const delayMs = Math.max(0, Math.round(resolvePokeballIntroStartSeconds(renderPlan) * 1000));
+    filters.push(`[${inputIndex}:a]atrim=start=${DEFAULT_POKEBALL_INTRO_SFX_TRIM_SECONDS},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs},volume=${DEFAULT_POKEBALL_INTRO_SFX_VOLUME}[pokeballintro]`);
+    mixLabels.push('pokeballintro');
+    inputIndex += 1;
+  }
+
   if (pokeballWigglePath) {
     const wiggleCount = Math.max(
       1,
@@ -90,6 +103,12 @@ export function buildAudioFilterScript({
       filters.push(`[w${wiggleIndex}]atrim=0:0.34,adelay=${delayMs}|${delayMs},volume=${DEFAULT_POKEBALL_WIGGLE_VOLUME}[${label}]`);
       mixLabels.push(label);
     }
+  }
+
+  if (shinyPath) {
+    const delayMs = Math.max(0, Math.round(renderPlan.audio_cues.reveal_visual_start_seconds * 1000));
+    filters.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=${DEFAULT_SHINY_SFX_VOLUME}[shiny]`);
+    mixLabels.push('shiny');
   }
 
   filters.push(`${mixLabels.map((label) => `[${label}]`).join('')}amix=inputs=${mixLabels.length}:normalize=0,alimiter=limit=0.95[aout]`);

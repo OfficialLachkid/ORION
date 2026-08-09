@@ -132,6 +132,13 @@ function matchSoundEffect(files, keywords) {
   return files.find((filePath) => keywords.some((keyword) => filePath.toLowerCase().includes(keyword))) || null;
 }
 
+function matchSoundEffectKeywordGroups(files, keywordGroups) {
+  return files.find((filePath) => {
+    const normalizedPath = filePath.toLowerCase();
+    return keywordGroups.some((keywords) => keywords.every((keyword) => normalizedPath.includes(keyword)));
+  }) || null;
+}
+
 function matchOverlay(files, keywords) {
   return files.find((filePath) => keywords.every((keyword) => filePath.toLowerCase().includes(keyword))) || null;
 }
@@ -143,11 +150,15 @@ export function selectOverlayPresets(overlays) {
   const timerAlarm = matchOverlay(overlays, ['timer', 'alarm'])
     || matchOverlay(overlays, ['timer-alarm'])
     || matchOverlay(overlays, ['timer_alarm']);
+  const shinySparkle = matchOverlay(overlays, ['shiny', 'sparkle'])
+    || matchOverlay(overlays, ['shiny-sparkle'])
+    || matchOverlay(overlays, ['shiny_sparkle']);
   const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
     timer,
     timer_countdown: timerCountdown || timer,
     timer_alarm: timerAlarm,
+    shiny_sparkle: shinySparkle,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
       || matchOverlay(overlays, ['open', 'close', 'pokeball']),
@@ -176,8 +187,21 @@ export async function scanPokeQuizzAssetInventory() {
 
   const countdownTick = matchSoundEffect(soundEffects, ['countdown', 'tick', 'beep']);
   const timerEnd = matchSoundEffect(soundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'ding', 'reveal-hit']);
-  const reveal = matchSoundEffect(soundEffects, ['reveal', 'sparkle', 'who', 'answer']) || timerEnd;
-  const pokeballWiggle = matchSoundEffect(soundEffects, ['pokeball', 'wiggle', 'wobble', 'shake']);
+  const reveal = matchSoundEffect(soundEffects, ['reveal', 'who', 'answer']) || timerEnd;
+  const shiny = matchSoundEffect(soundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
+  const pokeballIntro = matchSoundEffectKeywordGroups(soundEffects, [
+    ['enlarge', 'pokeball'],
+    ['pokeball', 'intro'],
+    ['pokeball', 'appear'],
+    ['pokeball', 'spawn'],
+    ['pokeball', 'scale'],
+    ['pokeball', 'grow'],
+  ]);
+  const pokeballWiggle = matchSoundEffectKeywordGroups(soundEffects, [
+    ['pokeball', 'wiggle'],
+    ['pokeball', 'wobble'],
+    ['pokeball', 'shake'],
+  ]);
 
   return {
     scanned_at: new Date().toISOString(),
@@ -189,6 +213,8 @@ export async function scanPokeQuizzAssetInventory() {
       countdown_tick: countdownTick,
       timer_end: timerEnd,
       reveal,
+      shiny,
+      pokeball_intro: pokeballIntro,
       pokeball_wiggle: pokeballWiggle,
     },
     type_icons: {

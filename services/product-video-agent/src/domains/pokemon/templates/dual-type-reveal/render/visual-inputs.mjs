@@ -46,10 +46,19 @@ export function buildVisualInputs(plan, renderPlan) {
   });
 
   for (const pokemon of plan.assets.pokemon) {
+    const revealSpritePath = pokemon.reveal_sprite_path || pokemon.sprite_path;
     inputs.push({
-      role: `pokemon-${pokemon.national_dex_number}`,
-      path: pokemon.sprite_path,
-      args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(Math.max(0.5, renderPlan.phases.reveal?.duration_seconds || 0)), '-i', pokemon.sprite_path],
+      role: `pokemon-${pokemon.pokedex_id || pokemon.national_dex_number}`,
+      path: revealSpritePath,
+      args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(Math.max(0.5, renderPlan.phases.reveal?.duration_seconds || 0)), '-i', revealSpritePath],
+    });
+  }
+
+  if (plan.shiny_reveal?.active && plan.assets.overlays?.selected_shiny_sparkle_path) {
+    inputs.push({
+      role: 'shiny-sparkle',
+      path: plan.assets.overlays.selected_shiny_sparkle_path,
+      args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_shiny_sparkle_path],
     });
   }
 

@@ -16,13 +16,13 @@ import {
 import {
   DEFAULT_COUNTDOWN_VOLUME,
   DEFAULT_HOOK_FONT_SIZE,
-  DEFAULT_POKEBALL_INTRO_LEAD_SECONDS,
   DEFAULT_POKEBALL_INTRO_SECONDS,
   DEFAULT_POKEBALL_SCALE_MULTIPLIER,
   DEFAULT_PROMPT_FONT_SIZE,
   DEFAULT_REVEAL_TRANSITION_SECONDS,
   DEFAULT_REVEAL_FONT_SIZE,
   DEFAULT_REVEALED_SPRITE_SCALE_MULTIPLIER,
+  DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
   DEFAULT_TEXT_BORDER,
   DEFAULT_TIMER_ALARM_EXIT_SECONDS,
   DEFAULT_TIMER_ALARM_EXTRA_HOLD_SECONDS,
@@ -43,6 +43,7 @@ import {
   escapeFilterPath,
   ensureNumber,
   roundTime,
+  resolvePokeballIntroStartSeconds,
   safeFilterLabel,
   typeIconUsesOpaqueBadgeArt,
 } from './constants.mjs';
@@ -175,10 +176,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
   const timerVisualWidth = roundTime(renderPlan.timer_layout.width * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
   const timerVisualHeight = roundTime(renderPlan.timer_layout.height * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
-  const pokeballIntroStart = roundTime(Math.max(
-    ensureNumber(renderPlan.phases.type_prompt?.start_seconds, 0),
-    countdownStart - DEFAULT_POKEBALL_INTRO_LEAD_SECONDS,
-  ));
+  const pokeballIntroStart = resolvePokeballIntroStartSeconds(renderPlan);
   const pokeballIntroDuration = roundTime(
     DEFAULT_POKEBALL_INTRO_SECONDS,
   );
@@ -218,7 +216,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const introScaleExpression = buildAnimatedPopSettleExpression(
         pokeballIntroStart,
         pokeballIntroDuration,
-        0.42,
+        0,
         1.08,
         1,
         introScaleTimeExpression,
@@ -336,6 +334,40 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       `[${currentVideoLabel}][${spriteHoldLabels[index]}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${formatEnableBetween(revealTransitionEnd, renderPlan.total_duration_seconds)}'[${nextVideoLabel}]`,
     );
     currentVideoLabel = nextVideoLabel;
+  }
+
+  if (plan.shiny_reveal?.active && inputRefs.shinySparkle != null) {
+    const shinyCell = renderPlan.grid.cells[plan.shiny_reveal.selected_subject_index];
+    if (shinyCell) {
+      const sparkleLabel = safeFilterLabel('shinysparkle', plan.shiny_reveal.selected_subject_index);
+      const sparkleVideoLabel = `${currentVideoLabel}ss`;
+      const sparkleDuration = Math.max(
+        0.12,
+        ensureNumber(
+          plan.assets.overlays?.selected_shiny_sparkle_duration_seconds,
+          ensureNumber(plan.shiny_reveal?.sparkle_duration_seconds, 0.9),
+        ),
+      );
+      const sparkleEnd = roundTime(
+        Math.min(renderPlan.total_duration_seconds, revealVisualStart + sparkleDuration),
+      );
+      const sparkleSize = roundTime(
+        spriteHoldSize * Math.max(
+          1,
+          ensureNumber(
+            plan.shiny_reveal?.sparkle_scale_multiplier,
+            DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
+          ),
+        ),
+      );
+      filters.push(
+        `[${inputRefs.shinySparkle}:v]fps=${fps},trim=duration=${sparkleDuration},setpts=PTS-STARTPTS+${revealVisualStart}/TB,scale=${sparkleSize}:${sparkleSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${sparkleLabel}]`,
+      );
+      filters.push(
+        `[${currentVideoLabel}][${sparkleLabel}]overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2:enable='${formatEnableBetween(revealVisualStart, sparkleEnd)}'[${sparkleVideoLabel}]`,
+      );
+      currentVideoLabel = sparkleVideoLabel;
+    }
   }
 
   const drawtextParts = [];
