@@ -48,7 +48,7 @@ export function buildVisualInputs(plan, renderPlan) {
   for (const pokemon of plan.assets.pokemon) {
     const revealSpritePath = pokemon.reveal_sprite_path || pokemon.sprite_path;
     inputs.push({
-      role: `pokemon-${pokemon.national_dex_number}`,
+      role: `pokemon-${pokemon.pokedex_id || pokemon.national_dex_number}`,
       path: revealSpritePath,
       args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(Math.max(0.5, renderPlan.phases.reveal?.duration_seconds || 0)), '-i', revealSpritePath],
     });

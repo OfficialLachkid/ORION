@@ -31,6 +31,13 @@ export function buildPokemonDbShinySpriteUrl(input) {
     : null;
 }
 
+export function resolvePreferredSpriteSourceUrl(pokeApiPayload, input) {
+  return pokeApiPayload?.sprites?.other?.home?.front_default
+    || pokeApiPayload?.sprites?.other?.['official-artwork']?.front_default
+    || pokeApiPayload?.sprites?.front_default
+    || null;
+}
+
 export function resolvePreferredShinySpriteSourceUrl(pokeApiPayload, input) {
   return pokeApiPayload?.sprites?.other?.home?.front_shiny
     || pokeApiPayload?.sprites?.other?.['official-artwork']?.front_shiny

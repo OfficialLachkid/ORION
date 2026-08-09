@@ -16,6 +16,7 @@ import {
 import { createHeaders, fetchJson, getRuntimeApiKey } from '../../../../scripts/lib/supabase-bridge-api.mjs';
 import { enrichPokedexRows } from '../../src/pokedex-enrichment.mjs';
 import { fetchSerebiiPokedex } from '../../src/pokedex-source.mjs';
+import { expandPokedexRowsWithPokeApiVarieties } from '../../src/pokedex-varieties.mjs';
 import {
   buildPokeQuizzShinySpritePath,
   buildPokeQuizzSilhouettePath,
@@ -110,10 +111,12 @@ async function downloadToFile(url, outputPath, options = {}) {
 }
 
 async function fetchPokeApiSpriteMetadata(row) {
-  const nationalDexNumber = row?.national_dex_number;
-  const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${nationalDexNumber}`);
+  const pokemonLookupKey = row?.metadata?.pokemon_api?.pokemon_id
+    || row?.slug
+    || row?.national_dex_number;
+  const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${encodeURIComponent(String(pokemonLookupKey))}`);
   if (!response.ok) {
-    throw new Error(`Could not fetch PokeAPI sprite metadata for #${nationalDexNumber} (${response.status}).`);
+    throw new Error(`Could not fetch PokeAPI sprite metadata for ${pokemonLookupKey} (${response.status}).`);
   }
   const payload = await response.json();
   return {
@@ -326,8 +329,10 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '',
       'Options:',
       '  --generations <csv>       Generations to fetch and localize. Default: 1,2,3,4,5,6,7,8,9',
+      '  --skip-form-expansion     Keep only the base Serebii species rows and skip PokeAPI variety expansion',
       '  --persist-supabase        Upsert localized rows back into Supabase `pokedex`',
       '  --limit <n>               Optional row limit for testing',
+      '  --form-expansion-concurrency <n> Concurrent PokeAPI variety workers. Default: 6',
       '  --enrichment-concurrency <n> Concurrent PokeAPI species enrichment workers. Default: 6',
       '  --overwrite-shiny-sprites Replace existing shiny sprite files with the current source set',
       '  --write-json <path>       Write a localization report JSON under the repo root',
@@ -348,7 +353,24 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     printInfo(`Fetched ${fetched.length} Pokedex row(s) for generation ${generation}.`);
   }
 
-  const localized = await localizeRows(rows, {
+  let formExpandedRows = rows;
+  if (!getBooleanOption(options, 'skip-form-expansion', false)) {
+    const expanded = await expandPokedexRowsWithPokeApiVarieties(rows, {
+      concurrency: Number.parseInt(
+        getStringOption(options, 'form-expansion-concurrency', '6'),
+        10,
+      ) || 6,
+    });
+    formExpandedRows = expanded.rows;
+    printInfo(
+      `Expanded ${expanded.stats.baseRows} base Pokedex row(s) into ${expanded.stats.expandedRows} form-aware row(s) `
+      + `using ${expanded.stats.speciesRequests} species request(s), `
+      + `${expanded.stats.pokemonRequests} Pokemon request(s), and `
+      + `${expanded.stats.formRequests} form request(s).`,
+    );
+  }
+
+  const localized = await localizeRows(formExpandedRows, {
     limit: getStringOption(options, 'limit', ''),
     enrichmentConcurrency: Number.parseInt(
       getStringOption(options, 'enrichment-concurrency', '6'),

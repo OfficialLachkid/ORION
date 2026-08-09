@@ -19,6 +19,7 @@ import {
   getSerebiiPokedexGenerationConfig,
 } from '../../src/pokedex-source.mjs';
 import { enrichPokedexRows } from '../../src/pokedex-enrichment.mjs';
+import { expandPokedexRowsWithPokeApiVarieties } from '../../src/pokedex-varieties.mjs';
 
 async function upsertPokedexRows(rows, options = {}) {
   const runtimeConfig = loadRuntimeConfig();
@@ -60,7 +61,9 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       'Options:',
       '  --generation <n>          National generation page to sync. Default: 1',
       '  --source-url <url>        Override the Serebii generation page',
+      '  --skip-form-expansion     Keep only the base Serebii species rows and skip PokeAPI variety expansion',
       '  --skip-species-enrichment Skip PokeAPI legendary/mythical/evolution enrichment',
+      '  --form-expansion-concurrency <n> Concurrent PokeAPI variety workers. Default: 6',
       '  --write-json <path>       Write the parsed rows to a JSON file under the repo root',
       '  --persist-supabase        Upsert the parsed rows into Supabase table `pokedex`',
       '  --table <name>            Target Supabase table. Default: pokedex',
@@ -75,10 +78,22 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     : getSerebiiPokedexGenerationConfig(generation).sourceUrl;
   const sourceUrl = getStringOption(options, 'source-url', defaultSourceUrl);
   const rows = await fetchSerebiiPokedex({ sourceUrl, generation });
-  printInfo(`Parsed ${rows.length} Gen ${generation} Pokedex row(s) from ${sourceUrl}.`);
+  printInfo(`Parsed ${rows.length} Gen ${generation} base Pokedex row(s) from ${sourceUrl}.`);
+
+  const expandedRows = getBooleanOption(options, 'skip-form-expansion', false)
+    ? rows
+    : (await expandPokedexRowsWithPokeApiVarieties(rows, {
+      concurrency: Number.parseInt(
+        getStringOption(options, 'form-expansion-concurrency', '6'),
+        10,
+      ) || 6,
+    })).rows;
+  if (expandedRows !== rows) {
+    printInfo(`Expanded Gen ${generation} rows to ${expandedRows.length} form-aware Pokedex row(s).`);
+  }
 
   if (!getBooleanOption(options, 'skip-species-enrichment', false)) {
-    const enriched = await enrichPokedexRows(rows);
+    const enriched = await enrichPokedexRows(expandedRows);
     printInfo(
       `Enriched ${enriched.stats.enrichedRows} row(s) with PokeAPI species metadata `
       + `using ${enriched.stats.speciesRequests} species request(s) and `
@@ -88,17 +103,17 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
 
   const writeJsonPath = getStringOption(options, 'write-json', '');
   if (writeJsonPath) {
-    const absolutePath = await writeRowsToJson(rows, writeJsonPath);
+    const absolutePath = await writeRowsToJson(expandedRows, writeJsonPath);
     printInfo(`Wrote parsed rows to ${absolutePath}`);
   }
 
   if (getBooleanOption(options, 'persist-supabase', false)) {
     const table = getStringOption(options, 'table', 'pokedex');
-    const upserted = await upsertPokedexRows(rows, { table });
-    printInfo(`Upserted ${Array.isArray(upserted) ? upserted.length : rows.length} row(s) into ${table}.`);
+    const upserted = await upsertPokedexRows(expandedRows, { table });
+    printInfo(`Upserted ${Array.isArray(upserted) ? upserted.length : expandedRows.length} row(s) into ${table}.`);
   }
 
   if (getBooleanOption(options, 'print-json', false)) {
-    process.stdout.write(`${JSON.stringify(rows, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(expandedRows, null, 2)}\n`);
   }
 }

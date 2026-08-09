@@ -1,6 +1,15 @@
 import { createTypePairKey, normalizeTypePair } from './pokemon-type-pairs.mjs';
 
 const MAX_USED_VIDEO_SIGNATURES = 160;
+const MAX_TYPE_PAIR_USAGE_KEYS = 256;
+
+const NON_COUNTING_PUBLICATION_STATUSES = new Set([
+  'deleted',
+  'failed',
+  'rejected',
+  'withdrawn',
+  'cancelled',
+]);
 
 function normalizeBackgroundPath(backgroundPath) {
   return String(backgroundPath || '')
@@ -16,9 +25,27 @@ function normalizeSignatureList(signatureList) {
 
   return [...new Set(
     signatureList
-      .map((signature) => String(signature || '').trim())
+      .map((signature) => normalizeVideoSignature(signature))
       .filter(Boolean),
   )].slice(0, MAX_USED_VIDEO_SIGNATURES);
+}
+
+function normalizeTypePairUsageCounts(typePairUsageCounts) {
+  if (!typePairUsageCounts || typeof typePairUsageCounts !== 'object') {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(typePairUsageCounts)
+      .map(([typePairKey, value]) => {
+        const normalizedKey = normalizeTypePairKeyString(typePairKey);
+        const normalizedValue = Number.parseInt(String(value ?? ''), 10);
+        return [normalizedKey, normalizedValue];
+      })
+      .filter(([typePairKey, value]) => typePairKey && Number.isFinite(value) && value >= 0)
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .slice(0, MAX_TYPE_PAIR_USAGE_KEYS),
+  );
 }
 
 function normalizeTypePairKey(typePair) {
@@ -31,6 +58,29 @@ function normalizeTypePairKey(typePair) {
   } catch {
     return null;
   }
+}
+
+function normalizeTypePairKeyString(typePairKey) {
+  const normalizedInput = String(typePairKey || '').trim().toLowerCase();
+  if (!normalizedInput) {
+    return null;
+  }
+  if (!normalizedInput.includes('|')) {
+    return normalizedInput;
+  }
+  return normalizeTypePairKey(normalizedInput.split('|'));
+}
+
+function normalizeVideoSignature(signature) {
+  const normalizedInput = String(signature || '').trim();
+  if (!normalizedInput) {
+    return '';
+  }
+  const [typePairKey, backgroundPath] = normalizedInput.split('::');
+  if (!backgroundPath) {
+    return normalizedInput;
+  }
+  return createPokeQuizzVideoSignatureKey(typePairKey, backgroundPath) || '';
 }
 
 function extractHistoryTypePairKey(entry = {}) {
@@ -46,10 +96,19 @@ function extractHistoryBackgroundPath(entry = {}) {
   return normalized || null;
 }
 
+function extractHistoryPublicationStatus(entry = {}) {
+  return String(entry?.publication?.status || '').trim().toLowerCase();
+}
+
+function shouldCountHistoryEntryForUsage(entry = {}) {
+  const status = extractHistoryPublicationStatus(entry);
+  return !NON_COUNTING_PUBLICATION_STATUSES.has(status);
+}
+
 export function createPokeQuizzVideoSignatureKey(typePair, backgroundPath) {
   const typePairKey = Array.isArray(typePair)
     ? normalizeTypePairKey(typePair)
-    : String(typePair || '').trim().toLowerCase() || null;
+    : normalizeTypePairKeyString(typePair) || null;
   const normalizedBackgroundPath = normalizeBackgroundPath(backgroundPath);
   if (!typePairKey || !normalizedBackgroundPath) {
     return null;
@@ -58,9 +117,10 @@ export function createPokeQuizzVideoSignatureKey(typePair, backgroundPath) {
 }
 
 export function normalizePokeQuizzSelectionState(selectionState) {
-  const lastTypePairKey = String(selectionState?.last_type_pair_key || '').trim().toLowerCase() || null;
+  const lastTypePairKey = normalizeTypePairKeyString(selectionState?.last_type_pair_key) || null;
   const lastBackgroundPath = normalizeBackgroundPath(selectionState?.last_background_path);
   const usedVideoSignatures = normalizeSignatureList(selectionState?.used_video_signatures);
+  const typePairUsageCounts = normalizeTypePairUsageCounts(selectionState?.type_pair_usage_counts);
   const lastVideoSignature = createPokeQuizzVideoSignatureKey(
     lastTypePairKey,
     lastBackgroundPath,
@@ -73,6 +133,7 @@ export function normalizePokeQuizzSelectionState(selectionState) {
       lastVideoSignature,
       ...usedVideoSignatures,
     ]),
+    type_pair_usage_counts: typePairUsageCounts,
   };
 }
 
@@ -88,6 +149,13 @@ export function mergePokeQuizzSelectionStates(...states) {
     used_video_signatures: normalizeSignatureList(
       normalizedStates.flatMap((state) => state.used_video_signatures || []),
     ),
+    type_pair_usage_counts: normalizedStates.reduce((mergedCounts, state) => {
+      const counts = normalizeTypePairUsageCounts(state.type_pair_usage_counts);
+      for (const [typePairKey, value] of Object.entries(counts)) {
+        mergedCounts[typePairKey] = Math.max(mergedCounts[typePairKey] || 0, value);
+      }
+      return mergedCounts;
+    }, {}),
   };
 }
 
@@ -101,11 +169,23 @@ export function buildPokeQuizzSelectionStateFromHistory(historyEntries = []) {
       extractHistoryBackgroundPath(entry),
     )),
   );
+  const typePairUsageCounts = {};
+  for (const entry of historyEntries) {
+    if (!shouldCountHistoryEntryForUsage(entry)) {
+      continue;
+    }
+    const typePairKey = extractHistoryTypePairKey(entry);
+    if (!typePairKey) {
+      continue;
+    }
+    typePairUsageCounts[typePairKey] = (typePairUsageCounts[typePairKey] || 0) + 1;
+  }
 
   return {
     last_type_pair_key: latestTypePairKey,
     last_background_path: latestBackgroundPath,
     used_video_signatures: usedVideoSignatures,
+    type_pair_usage_counts: normalizeTypePairUsageCounts(typePairUsageCounts),
   };
 }
 

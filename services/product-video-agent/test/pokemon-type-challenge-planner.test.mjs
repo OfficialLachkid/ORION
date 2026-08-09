@@ -718,6 +718,56 @@ test('planner allows reuse when only one type pair or background exists', async 
   assert.equal(plan.assets.background.selected_path, '/tmp/background-1.png');
 });
 
+test('planner prefers the least-used type pair bucket before random tie-breaking', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'least-used-first',
+    assetInventory: {
+      scanned_at: '2026-07-31T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/fairy.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/flying.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+    selectionState: {
+      last_type_pair_key: 'poison|flying',
+      type_pair_usage_counts: {
+        'poison|flying': 0,
+        'fairy|flying': 2,
+        'grass|poison': 1,
+      },
+    },
+  });
+
+  assert.deepEqual(plan.selection.type_pair, ['grass', 'poison']);
+  assert.equal(plan.selection_state.type_pair_usage_counts['grass|poison'], 2);
+});
+
 test('planner prefers beach backgrounds when a water type is in the selected pair', async () => {
   const waterRows = [
     {

@@ -254,12 +254,33 @@ function pickPair(pairCatalog, forcedTypePair, random, selectionState) {
   const renderablePairCatalog = localizedPairCatalog.length > 0
     ? localizedPairCatalog
     : pairCatalog;
-  const lastTypePairKey = normalizePokeQuizzSelectionState(selectionState).last_type_pair_key;
-  const eligibleCatalog = lastTypePairKey && renderablePairCatalog.length > 1
-    ? renderablePairCatalog.filter((entry) => createTypePairKey(entry.pair) !== lastTypePairKey)
-    : renderablePairCatalog;
+  const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
+  const lastTypePairKey = normalizedSelectionState.last_type_pair_key;
+  const typePairUsageCounts = normalizedSelectionState.type_pair_usage_counts || {};
+  const pairUsageEntries = renderablePairCatalog.map((entry) => {
+    const pairKey = createTypePairKey(entry.pair);
+    return {
+      entry,
+      pairKey,
+      usageCount: Number(typePairUsageCounts[pairKey] || 0),
+    };
+  });
+  const usageLevels = [...new Set(pairUsageEntries.map((entry) => entry.usageCount))]
+    .sort((left, right) => left - right);
 
-  return eligibleCatalog[Math.floor(random() * eligibleCatalog.length)];
+  for (const usageCount of usageLevels) {
+    const levelEntries = pairUsageEntries.filter((entry) => entry.usageCount === usageCount);
+    if (lastTypePairKey && renderablePairCatalog.length > 1) {
+      const nonRepeatedEntries = levelEntries.filter((entry) => entry.pairKey !== lastTypePairKey);
+      if (nonRepeatedEntries.length > 0) {
+        return nonRepeatedEntries[Math.floor(random() * nonRepeatedEntries.length)].entry;
+      }
+      continue;
+    }
+    return levelEntries[Math.floor(random() * levelEntries.length)].entry;
+  }
+
+  return pairUsageEntries[Math.floor(random() * pairUsageEntries.length)].entry;
 }
 
 function selectSeededFileAvoidingPrevious(files, random, previousPath) {
@@ -524,7 +545,10 @@ export async function planPokemonTypeChallenge({
   );
   const selectedSubjects = prioritizedSelectableSubjects
     .slice(0, selectedSubjectCount)
-    .sort((left, right) => left.national_dex_number - right.national_dex_number);
+    .sort((left, right) => (
+      (left.national_dex_number - right.national_dex_number)
+      || String(left.slug || '').localeCompare(String(right.slug || ''))
+    ));
   const shinyReveal = resolveSingleShinyReveal({
     template,
     inventory,
@@ -581,6 +605,12 @@ export async function planPokemonTypeChallenge({
     selectedVideoSignature,
     ...normalizedSelectionState.used_video_signatures.filter((signature) => signature !== selectedVideoSignature),
   ].filter(Boolean);
+  const selectedTypePairKey = createTypePairKey(selectedPair.pair);
+  const typePairUsageCounts = {
+    ...(normalizedSelectionState.type_pair_usage_counts || {}),
+    [selectedTypePairKey]: Number(normalizedSelectionState.type_pair_usage_counts?.[selectedTypePairKey] || 0),
+  };
+  typePairUsageCounts[selectedTypePairKey] += 1;
 
   return {
     schema_version: 'poke-quizz-plan-v1',
@@ -688,9 +718,10 @@ export async function planPokemonTypeChallenge({
       },
     },
     selection_state: {
-      last_type_pair_key: createTypePairKey(selectedPair.pair),
+      last_type_pair_key: selectedTypePairKey,
       last_background_path: selectedBackgroundPath,
       used_video_signatures: usedVideoSignatures,
+      type_pair_usage_counts: typePairUsageCounts,
     },
     asset_inventory_snapshot: inventory,
     required_asset_gaps: [...new Set(requiredAssetGaps)],
