@@ -16,6 +16,7 @@ export const DEFAULT_MUSIC_VOLUME = 0.18;
 export const DEFAULT_VOICE_VOLUME = 1;
 export const DEFAULT_COUNTDOWN_VOLUME = 0.72;
 export const DEFAULT_POKEBALL_WIGGLE_VOLUME = 0.38;
+export const DEFAULT_POKEBALL_INTRO_SFX_VOLUME = 0.5;
 export const DEFAULT_TIMER_END_VOLUME = 0.9;
 export const DEFAULT_SHINY_SFX_VOLUME = 0.5;
 export const DEFAULT_REVEAL_TRANSITION_SECONDS = 0.42;
@@ -71,6 +72,17 @@ export function escapeFilterPath(filePath) {
 export function ensureNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export function resolvePokeballIntroStartSeconds(renderPlan) {
+  const countdownStart = ensureNumber(renderPlan?.phases?.countdown?.start_seconds, 0);
+  return roundTime(Math.max(
+    ensureNumber(
+      renderPlan?.phases?.type_prompt?.start_seconds,
+      ensureNumber(renderPlan?.audio_cues?.prompt_start_seconds, 0),
+    ),
+    countdownStart - DEFAULT_POKEBALL_INTRO_LEAD_SECONDS,
+  ));
 }
 
 export function slugify(value) {

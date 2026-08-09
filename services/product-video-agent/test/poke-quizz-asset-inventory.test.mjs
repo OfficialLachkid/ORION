@@ -96,8 +96,15 @@ test('overlay preset selection prefers split timer gifs and the 3D pokeball over
 });
 
 test('timer_finished and shiny sound effect naming are recognized by the current inventory contract', async () => {
+  const matchSoundEffectKeywordGroups = (files, keywordGroups) => (
+    files.find((filePath) => {
+      const normalizedPath = filePath.toLowerCase();
+      return keywordGroups.some((keywords) => keywords.every((keyword) => normalizedPath.includes(keyword)));
+    }) || null
+  );
   const soundEffects = [
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/countdown.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/enlarge-pokeball.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/shiny-sound.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/timer_finished.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/pokeball_wiggle.mp3',
@@ -106,11 +113,24 @@ test('timer_finished and shiny sound effect naming are recognized by the current
   const timerEnd = soundEffects.find((filePath) => ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'ding', 'reveal-hit'].some((keyword) => filePath.toLowerCase().includes(keyword)));
   const reveal = soundEffects.find((filePath) => ['reveal', 'who', 'answer'].some((keyword) => filePath.toLowerCase().includes(keyword))) || timerEnd;
   const shiny = soundEffects.find((filePath) => ['shiny', 'sparkle', 'twinkle', 'glint'].some((keyword) => filePath.toLowerCase().includes(keyword)));
-  const pokeballWiggle = soundEffects.find((filePath) => ['pokeball', 'wiggle', 'wobble', 'shake'].some((keyword) => filePath.toLowerCase().includes(keyword)));
+  const pokeballIntro = matchSoundEffectKeywordGroups(soundEffects, [
+    ['enlarge', 'pokeball'],
+    ['pokeball', 'intro'],
+    ['pokeball', 'appear'],
+    ['pokeball', 'spawn'],
+    ['pokeball', 'scale'],
+    ['pokeball', 'grow'],
+  ]);
+  const pokeballWiggle = matchSoundEffectKeywordGroups(soundEffects, [
+    ['pokeball', 'wiggle'],
+    ['pokeball', 'wobble'],
+    ['pokeball', 'shake'],
+  ]);
 
   assert.match(countdownTick || '', /countdown\.mp3$/u);
   assert.match(timerEnd || '', /timer_finished\.mp3$/u);
   assert.match(reveal || '', /timer_finished\.mp3$/u);
   assert.match(shiny || '', /shiny-sound\.mp3$/u);
+  assert.match(pokeballIntro || '', /enlarge-pokeball\.mp3$/u);
   assert.match(pokeballWiggle || '', /pokeball_wiggle\.mp3$/u);
 });

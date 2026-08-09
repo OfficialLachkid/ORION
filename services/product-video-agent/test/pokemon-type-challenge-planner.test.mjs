@@ -1534,11 +1534,12 @@ test('planner selects at most one shiny reveal per video and records the determi
       backgrounds: ['/tmp/background-1.png'],
       music: ['/tmp/battle-intro-1.mp3'],
       sound_effects: {
-        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav', '/tmp/shiny-sound.mp3'],
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav', '/tmp/shiny-sound.mp3', '/tmp/enlarge-pokeball.mp3'],
         countdown_tick: '/tmp/countdown-tick.wav',
         timer_end: '/tmp/reveal.wav',
         reveal: '/tmp/reveal.wav',
         shiny: '/tmp/shiny-sound.mp3',
+        pokeball_intro: '/tmp/enlarge-pokeball.mp3',
       },
       type_icons: {
         pixel: [
@@ -1576,6 +1577,7 @@ test('planner selects at most one shiny reveal per video and records the determi
   assert.equal(plan.assets.pokemon.filter((subject) => subject.reveal_variant === 'shiny').length, 1);
   assert.equal(plan.assets.overlays.selected_shiny_sparkle_path, '/tmp/shiny_sparkle.gif');
   assert.equal(plan.assets.audio.selected_sound_effects.shiny, '/tmp/shiny-sound.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, '/tmp/enlarge-pokeball.mp3');
 });
 
 test('planner defaults shiny odds to one in eleven when the template omits an override', async () => {

@@ -16,7 +16,6 @@ import {
 import {
   DEFAULT_COUNTDOWN_VOLUME,
   DEFAULT_HOOK_FONT_SIZE,
-  DEFAULT_POKEBALL_INTRO_LEAD_SECONDS,
   DEFAULT_POKEBALL_INTRO_SECONDS,
   DEFAULT_POKEBALL_SCALE_MULTIPLIER,
   DEFAULT_PROMPT_FONT_SIZE,
@@ -44,6 +43,7 @@ import {
   escapeFilterPath,
   ensureNumber,
   roundTime,
+  resolvePokeballIntroStartSeconds,
   safeFilterLabel,
   typeIconUsesOpaqueBadgeArt,
 } from './constants.mjs';
@@ -176,10 +176,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
   const timerVisualWidth = roundTime(renderPlan.timer_layout.width * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
   const timerVisualHeight = roundTime(renderPlan.timer_layout.height * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
-  const pokeballIntroStart = roundTime(Math.max(
-    ensureNumber(renderPlan.phases.type_prompt?.start_seconds, 0),
-    countdownStart - DEFAULT_POKEBALL_INTRO_LEAD_SECONDS,
-  ));
+  const pokeballIntroStart = resolvePokeballIntroStartSeconds(renderPlan);
   const pokeballIntroDuration = roundTime(
     DEFAULT_POKEBALL_INTRO_SECONDS,
   );

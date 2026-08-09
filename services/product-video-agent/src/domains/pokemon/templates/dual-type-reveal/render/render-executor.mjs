@@ -51,6 +51,7 @@ export async function renderPokeQuizzVideo({
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
   const countdownPath = plan.assets.audio.selected_sound_effects?.countdown_tick || null;
   const timerEndPath = plan.assets.audio.selected_sound_effects?.timer_end || null;
+  const pokeballIntroPath = plan.assets.audio.selected_sound_effects?.pokeball_intro || null;
   const pokeballWigglePath = plan.assets.audio.selected_sound_effects?.pokeball_wiggle || null;
   const shinyPath = plan.shiny_reveal?.active
     ? plan.assets.audio.selected_sound_effects?.shiny || null
@@ -60,6 +61,7 @@ export async function renderPokeQuizzVideo({
     ...(musicPath ? [musicPath] : []),
     ...(countdownPath ? [countdownPath] : []),
     ...(timerEndPath ? [timerEndPath] : []),
+    ...(pokeballIntroPath ? [pokeballIntroPath] : []),
     ...(pokeballWigglePath ? [pokeballWigglePath] : []),
     ...(shinyPath ? [shinyPath] : []),
   ]);
@@ -124,6 +126,7 @@ export async function renderPokeQuizzVideo({
     musicPath,
     countdownPath,
     timerEndPath,
+    pokeballIntroPath,
     pokeballWigglePath,
     shinyPath,
     renderPlan,
@@ -141,6 +144,7 @@ export async function renderPokeQuizzVideo({
         ...(musicPath ? [musicPath] : []),
         ...(countdownPath ? [countdownPath] : []),
         ...(timerEndPath ? [timerEndPath] : []),
+        ...(pokeballIntroPath ? [pokeballIntroPath] : []),
         ...(pokeballWigglePath ? [pokeballWigglePath] : []),
         ...(shinyPath ? [shinyPath] : []),
       ]),

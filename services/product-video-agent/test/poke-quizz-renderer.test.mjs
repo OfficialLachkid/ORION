@@ -343,6 +343,28 @@ test('audio filter script starts shiny sfx at the reveal visual cue', () => {
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[shiny\]amix/u);
 });
 
+test('audio filter script starts pokeball intro sfx at the scale-in cue and keeps wiggle indexing stable', () => {
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Previews/Poke Quizz/grass-poison-preview.mp4',
+  });
+  const script = buildAudioFilterScript({
+    narrationPaths: ['/tmp/hook.wav', '/tmp/prompt.wav', '/tmp/reveal.wav'],
+    musicPath: null,
+    countdownPath: null,
+    timerEndPath: null,
+    pokeballIntroPath: '/tmp/enlarge-pokeball.mp3',
+    pokeballWigglePath: '/tmp/pokeball_wiggle.mp3',
+    shinyPath: null,
+    renderPlan,
+  });
+
+  assert.match(script, /\[3:a\]adelay=2300\|2300,volume=0\.5\[pokeballintro\]/u);
+  assert.match(script, /\[4:a\]asplit=5\[w0\]\[w1\]\[w2\]\[w3\]\[w4\]/u);
+  assert.match(script, /\[n0\]\[n1\]\[n2\]\[pokeballintro\]\[wig0\]\[wig1\]\[wig2\]\[wig3\]\[wig4\]amix/u);
+});
+
 test('audio input list appends shiny sfx when the reveal path is active', () => {
   assert.deepEqual(
     buildAudioInputs([
