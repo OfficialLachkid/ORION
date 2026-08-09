@@ -114,7 +114,7 @@ function loadLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-video-publication-schedule.mjs [--hours 8,12,16 --minute 0] [--no-load]',
+      'Usage: node scripts/install-video-publication-schedule.mjs [--hours 8,12,14 --minute 0] [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.video-publication-scheduler.plist and loads it by default.',
       'The scheduled worker executes ORION YouTube preview uploads and approved schedule updates.',
@@ -127,7 +127,7 @@ function main() {
   }
 
   const config = loadRuntimeConfig();
-  const scheduleHours = getHourListArgValue('--hours', [8, 12, 16]);
+  const scheduleHours = getHourListArgValue('--hours', [8, 12, 14]);
   const minute = getMinuteArgValue('--minute', 0);
   const shouldLoad = !hasFlag('--no-load');
 

@@ -390,6 +390,212 @@ test('planner prefers legendary subjects before final-stage evolutions when trim
   );
 });
 
+test('planner collapses same-dex variants and prefers Mega forms over base and Gigantamax final evolutions', async () => {
+  const megaPriorityTemplate = {
+    ...template,
+    selection_rules: {
+      ...template.selection_rules,
+      type_pair_policy: {
+        ...template.selection_rules.type_pair_policy,
+        selected_subjects_min: 2,
+        selected_subjects_max: 2,
+      },
+    },
+  };
+  const megaPriorityRows = [
+    {
+      id: 'pokedex-0002',
+      national_dex_number: 2,
+      name: 'Ivysaur',
+      slug: 'ivysaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0002.png',
+      silhouette_path: '/tmp/0002-silhouette.png',
+      shiny_sprite_path: '/tmp/0002-shiny.png',
+      cry_path: '/tmp/0002.wav',
+      sprite_source_url: 'https://example.test/0002.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+    {
+      id: 'pokedex-0003',
+      national_dex_number: 3,
+      name: 'Venusaur',
+      slug: 'venusaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0003.png',
+      silhouette_path: '/tmp/0003-silhouette.png',
+      shiny_sprite_path: '/tmp/0003-shiny.png',
+      cry_path: '/tmp/0003.wav',
+      sprite_source_url: 'https://example.test/0003.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      is_default_form: true,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+        pokemon_api: {
+          pokemon_name: 'venusaur',
+          is_default_form: true,
+          is_mega: false,
+          is_battle_only: false,
+          order: 3,
+          form_order: 1,
+        },
+      },
+    },
+    {
+      id: 'pokedex-0003-venusaur-mega',
+      national_dex_number: 3,
+      name: 'Venusaur (Mega)',
+      slug: 'venusaur-mega',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0003-mega.png',
+      silhouette_path: '/tmp/0003-mega-silhouette.png',
+      shiny_sprite_path: '/tmp/0003-mega-shiny.png',
+      cry_path: '/tmp/0003-mega.wav',
+      sprite_source_url: 'https://example.test/0003-mega.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      is_default_form: false,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+        pokemon_api: {
+          pokemon_name: 'venusaur-mega',
+          is_default_form: false,
+          is_mega: true,
+          is_battle_only: true,
+          order: 4,
+          form_order: 2,
+        },
+      },
+    },
+    {
+      id: 'pokedex-0003-venusaur-gmax',
+      national_dex_number: 3,
+      name: 'Venusaur (Gigantamax)',
+      slug: 'venusaur-gmax',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0003-gmax.png',
+      silhouette_path: '/tmp/0003-gmax-silhouette.png',
+      shiny_sprite_path: '/tmp/0003-gmax-shiny.png',
+      cry_path: '/tmp/0003-gmax.wav',
+      sprite_source_url: 'https://example.test/0003-gmax.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      is_default_form: false,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+        pokemon_api: {
+          pokemon_name: 'venusaur-gmax',
+          form_name: 'Gigantamax',
+          is_default_form: false,
+          is_mega: false,
+          is_battle_only: true,
+          order: 5,
+          form_order: 3,
+        },
+      },
+    },
+    {
+      id: 'pokedex-0071',
+      national_dex_number: 71,
+      name: 'Victreebel',
+      slug: 'victreebel',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0071.png',
+      silhouette_path: '/tmp/0071-silhouette.png',
+      shiny_sprite_path: '/tmp/0071-shiny.png',
+      cry_path: '/tmp/0071.wav',
+      sprite_source_url: 'https://example.test/0071.png',
+      shiny_sprite_source_url: null,
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: megaPriorityTemplate,
+    pokedexRows: megaPriorityRows,
+    seed: 'mega-variant-preference',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-08-09T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.deepEqual(
+    plan.selection.selected_subjects.map((subject) => subject.name),
+    ['Venusaur (Mega)', 'Victreebel'],
+  );
+  assert.equal(
+    plan.selection.selected_subjects.filter((subject) => subject.national_dex_number === 3).length,
+    1,
+  );
+});
+
 test('planner rejects disallowed or absent type pairs', async () => {
   await assert.rejects(
     () => planPokemonTypeChallenge({

@@ -5,7 +5,7 @@ import { z } from 'zod';
 export const DEFAULT_PUBLICATION_SCHEDULE_SLOTS = Object.freeze([
   Object.freeze({ hour: 8, minute: 0 }),
   Object.freeze({ hour: 12, minute: 0 }),
-  Object.freeze({ hour: 16, minute: 0 }),
+  Object.freeze({ hour: 14, minute: 0 }),
 ]);
 
 const DailyScheduleSlotSchema = z.object({

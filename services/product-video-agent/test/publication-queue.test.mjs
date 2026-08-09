@@ -24,7 +24,7 @@ const channelProfile = normalizePublicationChannelProfile({
   schedule_slots: [
     { hour: 8, minute: 0 },
     { hour: 12, minute: 0 },
-    { hour: 16, minute: 0 },
+    { hour: 14, minute: 0 },
   ],
   workflow: {
     preview_visibility: 'unlisted',
@@ -183,7 +183,7 @@ test('queue planning preserves future scheduled rows and assigns the next free s
       publication_id: 'pub-schedule',
       title: 'Guess the Pokemon: Dark / Dragon',
       workflow_state: 'scheduled',
-      scheduled_for: '2026-07-30T14:00:00.000Z',
+      scheduled_for: '2026-07-30T12:00:00.000Z',
       schedule_update_required: true,
     },
   ]);
@@ -212,7 +212,7 @@ test('queue planning keeps just-due scheduled rows committed during publish grac
       publication_id: 'pub-schedule',
       title: 'Guess the Pokemon: Dark / Dragon',
       workflow_state: 'scheduled',
-      scheduled_for: '2026-07-30T14:00:00.000Z',
+      scheduled_for: '2026-07-30T12:00:00.000Z',
       schedule_update_required: true,
     },
   ]);
@@ -230,7 +230,7 @@ test('queue planning skips slots that are too close for a new YouTube schedule u
       publication_id: 'pub-schedule',
       title: 'Guess the Pokemon: Dark / Dragon',
       workflow_state: 'scheduled',
-      scheduled_for: '2026-07-30T14:00:00.000Z',
+      scheduled_for: '2026-07-30T12:00:00.000Z',
       schedule_update_required: true,
     },
   ]);

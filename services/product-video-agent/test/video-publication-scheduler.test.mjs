@@ -14,7 +14,7 @@ const activeChannelProfile = normalizePublicationChannelProfile({
   schedule_slots: [
     { hour: 8, minute: 0 },
     { hour: 12, minute: 0 },
-    { hour: 16, minute: 0 },
+    { hour: 14, minute: 0 },
   ],
   workflow: {
     preview_visibility: 'unlisted',
