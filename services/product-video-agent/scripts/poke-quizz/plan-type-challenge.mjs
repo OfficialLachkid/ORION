@@ -12,6 +12,10 @@ import {
 } from '../../../../scripts/lib/ruflo-wrapper-utils.mjs';
 import { normalizeTypePair } from '../../src/pokemon-type-pairs.mjs';
 import { planPokemonTypeChallenge } from '../../src/pokemon-type-challenge-planner.mjs';
+import {
+  DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+  resolveVideoTemplateRuntime,
+} from '../../src/video-template-context.mjs';
 
 async function loadJson(relativePath) {
   const absolutePath = resolve(projectRoot, relativePath);
@@ -44,7 +48,8 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '',
       'Options:',
       '  --catalog-json <path>     Parsed Pokedex rows JSON. Required.',
-      '  --template <path>         Template JSON path. Default: pokemon-type-challenge-v1.template.json',
+      `  --channel-config <path>   Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
+      '  --template <path>         Template JSON path. Default: services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json',
       '  --output <path>           Output planning JSON path',
       '  --seed <text>             Deterministic seed. Default: current timestamp',
       '  --type-pair <a,b>         Optional forced pair such as grass,poison',
@@ -58,11 +63,12 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     throw new Error('The --catalog-json option is required.');
   }
 
-  const templatePath = getStringOption(
-    options,
-    'template',
-    'services/product-video-agent/pokemon-type-challenge-v1.template.json',
-  );
+  const templateRuntime = await resolveVideoTemplateRuntime({
+    projectRoot,
+    channelConfigPath: getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH),
+    templatePath: getStringOption(options, 'template', ''),
+  });
+  const templatePath = templateRuntime.templatePath;
   const outputPath = getStringOption(
     options,
     'output',

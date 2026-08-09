@@ -1,6 +1,6 @@
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { runLocalProcess } from '../../process-runner.mjs';
+import { runLocalProcess } from '../../../../../process-runner.mjs';
 import { buildAudioFilterScript, buildAudioInputs } from './audio-filter-script.mjs';
 import {
   DEFAULT_FONT_CANDIDATES,

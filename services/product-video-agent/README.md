@@ -295,7 +295,7 @@ npm run product-video:sync-pokedex -- --generation 2 --persist-supabase
 
 The current sources are Serebii's Generation I and Generation II pages. On July 28, 2026, Playwright verification confirmed that those pages expose both current small-sprite URLs and type-icon URLs for the listed species. The sync stores those truth-safe fields in `sprite_source_url` and `metadata.type_icon_source_urls`. Current canonical typings shown on the page are preserved, so species such as Magnemite/Magneton (`electric`,`steel`) and Mr. Mime (`psychic`,`fairy`) remain truthful to the current Pokédex rather than the original 1996-only typings. Missing silhouette, shiny-sprite, or cry sources stay null until a later verified source is added.
 
-The first Poke Quizz workflow contract now lives at `services/product-video-agent/pokemon-type-challenge-v1.template.json`. It locks the shared rules for type-pair eligibility, impossible pair exclusions, countdown timing, silhouette presentation, SFX hooks, battle-intro music timing, and reveal behavior without turning one Pokemon prompt into the engine itself.
+The current dual-type reveal contract now lives at `services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json`. It locks the shared rules for type-pair eligibility, impossible pair exclusions, countdown timing, silhouette presentation, SFX hooks, battle-intro music timing, and reveal behavior without turning one Pokemon prompt into the engine itself.
 
 Generate a deterministic first video package without calling any hosted model:
 

@@ -25,10 +25,9 @@ import { reviewPokeQuizzPublication } from './review-publication.mjs';
 import { resolveFfmpegExecutable } from '../../src/runtime-executables.mjs';
 import { moveOlderPreviewFiles } from './organize-previews.mjs';
 import {
-  DEFAULT_CHANNEL_SELECTOR,
-  DEFAULT_CONFIG_PATH,
-  DEFAULT_TEMPLATE_PATH,
-} from '../../src/poke-quizz-publication-review.mjs';
+  DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+  resolveVideoTemplateRuntime,
+} from '../../src/video-template-context.mjs';
 import {
   getBooleanOption,
   getStringOption,
@@ -100,7 +99,12 @@ function resolveTypePairSlug(plan) {
     .join('-');
 }
 
-async function resolvePlan(options, selectionState = null, defaultSeed = new Date().toISOString()) {
+async function resolvePlan(
+  options,
+  selectionState = null,
+  defaultSeed = new Date().toISOString(),
+  defaults = {},
+) {
   const planPath = getStringOption(options, 'plan', '');
   if (planPath) {
     return {
@@ -114,7 +118,10 @@ async function resolvePlan(options, selectionState = null, defaultSeed = new Dat
     throw new Error('Provide either --plan or --catalog-json.');
   }
 
-  const templatePath = getStringOption(options, 'template', DEFAULT_TEMPLATE_PATH);
+  const templatePath = getStringOption(options, 'template', defaults.templatePath || '');
+  if (!templatePath) {
+    throw new Error('No template path could be resolved for the requested video flow.');
+  }
   const statePath = getStringOption(
     options,
     'state',
@@ -187,9 +194,16 @@ async function generateAndReviewPokeQuizz(options) {
     'channels',
     'services/product-video-agent/publication-channels.example.json',
   );
-  const configPath = getStringOption(options, 'config', DEFAULT_CONFIG_PATH);
-  const templatePath = getStringOption(options, 'template', DEFAULT_TEMPLATE_PATH);
-  const channelSelector = getStringOption(options, 'channel', DEFAULT_CHANNEL_SELECTOR);
+  const templateRuntime = await resolveVideoTemplateRuntime({
+    projectRoot,
+    channelConfigPath: getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH),
+    templatePath: getStringOption(options, 'template', ''),
+    configPath: getStringOption(options, 'config', ''),
+    channelSelector: getStringOption(options, 'channel', ''),
+  });
+  const configPath = templateRuntime.configPath;
+  const templatePath = templateRuntime.templatePath;
+  const channelSelector = templateRuntime.channelSelector;
   const submittedAt = getStringOption(options, 'as-of', new Date().toISOString());
   const runtimeConfig = loadRuntimeConfig();
   const [profiles, template, config] = await Promise.all([
@@ -199,7 +213,12 @@ async function generateAndReviewPokeQuizz(options) {
   ]);
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
   const liveSelectionState = await resolveLiveSelectionState(runtimeConfig, channelProfile);
-  const { plan, planPath } = await resolvePlan(options, liveSelectionState, submittedAt);
+  const { plan, planPath } = await resolvePlan(
+    options,
+    liveSelectionState,
+    submittedAt,
+    { templatePath },
+  );
   const typePairSlug = resolveTypePairSlug(plan) || 'pokemon-type-challenge';
   const seedSlug = slugify(plan.seed || 'preview');
   const outputPath = getStringOption(
@@ -219,12 +238,16 @@ async function generateAndReviewPokeQuizz(options) {
     typePair: plan.selection?.type_pair || [],
     title: overrideTitle,
     description: overrideDescription,
+    genreLabel: templateRuntime.genreLabel,
+    presentation: templateRuntime.generationProgressPresentation,
   });
   const progress = beginPokeQuizzGenerationProgress(runtimeConfig, startedMessage, {
     channelProfile,
     typePair: plan.selection?.type_pair || [],
     title: overrideTitle,
     description: overrideDescription,
+    genreLabel: templateRuntime.genreLabel,
+    presentation: templateRuntime.generationProgressPresentation,
   });
 
   try {
@@ -256,6 +279,8 @@ async function generateAndReviewPokeQuizz(options) {
           description: overrideDescription,
           elapsedMs: progress.getElapsedMs(),
           attemptLabel: `${attempt + 1}/${maxRenderAttempts}`,
+          genreLabel: templateRuntime.genreLabel,
+          presentation: templateRuntime.generationProgressPresentation,
         }, error);
       }
     }
@@ -274,6 +299,8 @@ async function generateAndReviewPokeQuizz(options) {
       configPath,
       templatePath,
       channelSelector,
+      channelConfigPath: templateRuntime.channelConfigPath,
+      genreLabel: templateRuntime.genreLabel,
       submittedAt,
       title: overrideTitle,
       description: overrideDescription,
@@ -308,6 +335,8 @@ async function generateAndReviewPokeQuizz(options) {
       description: overrideDescription,
       elapsedMs: progress.getElapsedMs(),
       attemptLabel: '2/2',
+      genreLabel: templateRuntime.genreLabel,
+      presentation: templateRuntime.generationProgressPresentation,
     }, error);
     throw error;
   }
@@ -329,10 +358,11 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --seed <text>              Deterministic planning seed.',
       '  --type-pair <a,b>          Optional forced pair such as water,flying.',
       '  --output <path>            Render output MP4 path.',
-      '  --channel <id>             Channel id or account_key. Default: poke-quizz-youtube',
+      `  --channel-config <path>    Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
+      '  --channel <id>             Channel id or account_key. Default: derived from channel config',
       '  --channels <path>          Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
       '  --config <path>            Product-video config JSON. Default: services/product-video-agent/config.example.json',
-      '  --template <path>          Template JSON. Default: services/product-video-agent/pokemon-type-challenge-v1.template.json',
+      '  --template <path>          Template JSON. Default: services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json',
       '  --title <text>             Optional metadata title override.',
       '  --description <text>       Optional metadata description override.',
       '  --hashtags <a,b,c>         Optional metadata hashtag override.',

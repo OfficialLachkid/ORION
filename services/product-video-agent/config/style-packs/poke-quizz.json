@@ -1,0 +1,54 @@
+{
+  "style_pack_id": "poke-quizz",
+  "display_name": "Poke Quizz",
+  "review": {
+    "genre_label": "Type Combination",
+    "summary_with_pair_prefix": "Publish preview for",
+    "summary_without_pair_prefix": "Publish preview",
+    "feedback_summary_prefix": "Regenerate preview with operator feedback for",
+    "delete_summary_prefix": "Delete the current preview for",
+    "collapsed_deleted_prefix": "Deleted preview for",
+    "collapsed_withdrawn_prefix": "Withdrawn published video for",
+    "collapsed_revision_prefix": "Feedback recorded for",
+    "approve_label": "Publish",
+    "reject_label": "Give Feedback",
+    "delete_label": "Delete",
+    "event_body_fallback": "Publish this preview.",
+    "event_summary_fallback": "Publish this preview.",
+    "response_patterns": [
+      "approve TASK-123",
+      "reject TASK-123 because <feedback to use in the next preview>",
+      "delete TASK-123"
+    ],
+    "feedback_seed_prefix": "poke-quizz-feedback"
+  },
+  "queue_status": {
+    "title": "Poke Quizz Queue Status",
+    "footer_text": "ORION video queue status",
+    "not_scheduled_label": "Not scheduled"
+  },
+  "generation_progress": {
+    "footer_text": "ORION video gen",
+    "field_labels": {
+      "genre": "Genre",
+      "channel": "Channel",
+      "type_pair": "Type Pair",
+      "busy_time": "Busy Time",
+      "attempt": "Attempt",
+      "title": "Title",
+      "description": "Description"
+    },
+    "status_titles": {
+      "started": "Poke Quizz Video Gen - Started",
+      "running": "Poke Quizz Video Gen - Running",
+      "retrying": "Poke Quizz Video Gen - Retrying",
+      "failed": "Poke Quizz Video Gen - Failed"
+    },
+    "status_descriptions": {
+      "started": "Video generation has started. This message will update until the review card is ready.",
+      "running": "Rendering is in progress. This message updates while the preview is being assembled.",
+      "retrying_fallback": "Render attempt failed, retrying automatically. Transient render issue detected.",
+      "failed_fallback": "Video generation stopped: unknown error."
+    }
+  }
+}

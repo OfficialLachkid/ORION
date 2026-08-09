@@ -14,9 +14,6 @@ import {
 import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs';
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import {
-  DEFAULT_CHANNEL_SELECTOR,
-  DEFAULT_CONFIG_PATH,
-  DEFAULT_TEMPLATE_PATH,
   buildPokeQuizzPublicationReviewPayload,
   buildPokeQuizzPublicationReviewTask,
 } from '../../src/poke-quizz-publication-review.mjs';
@@ -35,6 +32,14 @@ import {
   editDiscordChannelMessage,
   sendDiscordChannelMessage,
 } from '../../../../scripts/lib/discord-post.mjs';
+import {
+  DEFAULT_CHANNEL_SELECTOR,
+  DEFAULT_CONFIG_PATH,
+  DEFAULT_GENRE_LABEL,
+  DEFAULT_TEMPLATE_PATH,
+  DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+  resolveVideoTemplateRuntime,
+} from '../../src/video-template-context.mjs';
 import {
   getBooleanOption,
   getStringOption,
@@ -229,9 +234,11 @@ export async function reviewPokeQuizzPublication({
   publicationId = '',
   catalogJsonPath = '',
   channelsPath = 'services/product-video-agent/publication-channels.example.json',
+  channelConfigPath = DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
   configPath = DEFAULT_CONFIG_PATH,
   templatePath = DEFAULT_TEMPLATE_PATH,
   channelSelector = DEFAULT_CHANNEL_SELECTOR,
+  genreLabel = DEFAULT_GENRE_LABEL,
   submittedAt = new Date().toISOString(),
   title = '',
   description = '',
@@ -246,13 +253,27 @@ export async function reviewPokeQuizzPublication({
     throw new Error('The --thread-id option is required.');
   }
 
+  const templateRuntime = await resolveVideoTemplateRuntime({
+    projectRoot,
+    channelConfigPath,
+    templatePath,
+    configPath,
+    channelSelector,
+  });
+  const effectiveConfigPath = templateRuntime.configPath;
+  const effectiveTemplatePath = templateRuntime.templatePath;
+  const effectiveChannelSelector = templateRuntime.channelSelector;
+  const effectiveGenreLabel = String(
+    genreLabel || templateRuntime.genreLabel || DEFAULT_GENRE_LABEL,
+  ).trim() || DEFAULT_GENRE_LABEL;
+
   const [plan, profiles, config] = await Promise.all([
     loadJson(planPath),
     loadPublicationChannelProfiles(channelsPath, { projectRoot }),
-    loadPipelineConfig(configPath, projectRoot),
+    loadPipelineConfig(effectiveConfigPath, projectRoot),
   ]);
 
-  const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
+  const channelProfile = findPublicationChannelProfile(profiles, effectiveChannelSelector);
   const runtimeConfig = loadRuntimeConfig();
   const store = new SupabasePublicationStore({
     supabaseUrl: runtimeConfig.env.SUPABASE_URL,
@@ -326,9 +347,11 @@ export async function reviewPokeQuizzPublication({
     planPath,
     renderPath: renderPath || publication.metadata?.render_path || video.render?.output_path || '',
     catalogJsonPath,
-    templatePath,
-    configPath,
-    channelSelector,
+    templatePath: effectiveTemplatePath,
+    configPath: effectiveConfigPath,
+    channelSelector: effectiveChannelSelector,
+    genreLabel: effectiveGenreLabel,
+    reviewPresentation: templateRuntime.reviewPresentation,
     generationDurationMinutes,
     submittedAt,
   });
@@ -349,8 +372,8 @@ export async function reviewPokeQuizzPublication({
       ...buildPersistedPokeQuizzReviewPathPatch({
         planPath,
         catalogJsonPath,
-        templatePath,
-        configPath,
+        templatePath: effectiveTemplatePath,
+        configPath: effectiveConfigPath,
       }),
     }),
   });
@@ -358,8 +381,9 @@ export async function reviewPokeQuizzPublication({
     runtimeConfig,
     store,
     channelProfile,
-    channelSelector,
+    channelSelector: effectiveChannelSelector,
     asOf: submittedAt,
+    presentation: templateRuntime.queueStatusPresentation,
   });
 
   return {
@@ -386,10 +410,11 @@ async function main() {
       '  --message-id <id>          Optional existing Discord message id to patch in place.',
       '  --publication-id <id>      Reuse an existing publication row instead of registering a new one.',
       '  --catalog-json <path>      Catalog JSON used for feedback-driven revisions.',
-      '  --channel <id>             Channel id or account_key. Default: poke-quizz-youtube',
+      `  --channel-config <path>    Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
+      '  --channel <id>             Channel id or account_key. Default: derived from channel config',
       '  --channels <path>          Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
       '  --config <path>            Product-video config JSON. Default: services/product-video-agent/config.example.json',
-      '  --template <path>          Template JSON. Default: services/product-video-agent/pokemon-type-challenge-v1.template.json',
+      '  --template <path>          Template JSON. Default: services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json',
       '  --title <text>             Override generated title.',
       '  --description <text>       Override generated description.',
       '  --hashtags <a,b,c>         Override generated hashtags.',
@@ -413,6 +438,7 @@ async function main() {
       'channels',
       'services/product-video-agent/publication-channels.example.json',
     ),
+    channelConfigPath: getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH),
     configPath: getStringOption(options, 'config', DEFAULT_CONFIG_PATH),
     templatePath: getStringOption(options, 'template', DEFAULT_TEMPLATE_PATH),
     channelSelector: getStringOption(options, 'channel', DEFAULT_CHANNEL_SELECTOR),

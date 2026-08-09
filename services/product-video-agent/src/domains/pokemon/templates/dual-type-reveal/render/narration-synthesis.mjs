@@ -1,6 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { runLocalProcess } from '../../process-runner.mjs';
+import { runLocalProcess } from '../../../../../process-runner.mjs';
 
 export async function synthesizeNarrationTrack({ pythonExecutable, scriptPath, cacheDir, profile, outputPath, text, cwd }) {
   await mkdir(dirname(outputPath), { recursive: true });

@@ -19,6 +19,10 @@ import {
 } from '../../../discord-bot/src/pending-task-store.mjs';
 import { editDiscordChannelMessage } from '../../../../scripts/lib/discord-post.mjs';
 import {
+  DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+  resolveVideoTemplateRuntime,
+} from '../../src/video-template-context.mjs';
+import {
   getBooleanOption,
   getStringOption,
   parseArgs,
@@ -94,6 +98,7 @@ async function main() {
       'Usage: node services/product-video-agent/scripts/refresh-poke-quizz-review-messages.mjs [options]',
       '',
       'Options:',
+      `  --channel-config <path> Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
       '  --channel <id>       Channel id or account_key. Default: poke-quizz-youtube',
       '  --channels <path>    Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
       '  --pending-only       Refresh only preview_uploaded cards that still await approval.',
@@ -103,7 +108,13 @@ async function main() {
     return;
   }
 
-  const channelSelector = getStringOption(options, 'channel', DEFAULT_CHANNEL_SELECTOR);
+  const channelConfigPath = getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH);
+  const templateRuntime = await resolveVideoTemplateRuntime({
+    projectRoot,
+    channelConfigPath,
+    channelSelector: getStringOption(options, 'channel', ''),
+  });
+  const channelSelector = templateRuntime.channelSelector;
   const channelsPath = getStringOption(
     options,
     'channels',
@@ -158,6 +169,7 @@ async function main() {
       templatePath: reviewPaths.templatePath,
       configPath: reviewPaths.configPath,
       channelSelector,
+      reviewPresentation: templateRuntime.reviewPresentation,
       submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
     });
     const payload = buildPokeQuizzPublicationMessagePayload(reviewTask);

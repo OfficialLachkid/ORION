@@ -85,3 +85,26 @@ test('Poke Quizz queue status payload includes queue and review counts', () => {
   assert.match(payload.embeds?.[0]?.description || '', /1532709429902839810/u);
   assert.equal(payload.embeds?.[0]?.color, 0xFEE75C);
 });
+
+test('Poke Quizz queue status payload honors presentation overrides', () => {
+  const payload = buildPokeQuizzQueueStatusPayload({
+    channelProfile,
+    queueStatus: {
+      reviewReadyCount: 10,
+      publishQueueCount: 0,
+      nextScheduledFor: '',
+    },
+    reviewThreadId: '1532709429902839810',
+    reviewTargetCount: 10,
+    presentation: {
+      title: 'Pokemon Channel Status',
+      footer_text: 'Template-driven queue status',
+      not_scheduled_label: 'No slot yet',
+    },
+  });
+
+  assert.equal(payload.embeds?.[0]?.title, 'Pokemon Channel Status');
+  assert.match(payload.embeds?.[0]?.description || '', /No slot yet/u);
+  assert.equal(payload.embeds?.[0]?.footer?.text, 'Template-driven queue status');
+  assert.equal(payload.embeds?.[0]?.color, 0x99AAB5);
+});

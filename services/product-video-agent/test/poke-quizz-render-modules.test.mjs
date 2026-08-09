@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildTextArtifacts } from '../src/poke-quizz/render/drawtext-artifacts.mjs';
-import { buildVisualInputs } from '../src/poke-quizz/render/visual-inputs.mjs';
+import { buildTextArtifacts } from '../src/domains/pokemon/templates/dual-type-reveal/render/drawtext-artifacts.mjs';
+import { buildVisualInputs } from '../src/domains/pokemon/templates/dual-type-reveal/render/visual-inputs.mjs';
 
 const template = {
   canvas: {
