@@ -219,7 +219,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const introScaleExpression = buildAnimatedPopSettleExpression(
         pokeballIntroStart,
         pokeballIntroDuration,
-        0.42,
+        0,
         1.08,
         1,
         introScaleTimeExpression,
