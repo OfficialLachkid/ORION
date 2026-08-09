@@ -222,6 +222,26 @@ function extractJson(text) {
 // Chromium process running indefinitely on a shared 16GB machine. Fire-
 // and-forget: closing a session that was never opened is a harmless no-op,
 // not worth blocking or failing the qualification result over.
+// Build the error message for a non-zero `claude -p` exit. Claude Code's
+// usage-limit rejection message is written to STDOUT (as part of the JSON
+// error envelope), not stderr — so a bare `stderr.trim() || "claude exited
+// with code N."` fallback silently discards the real reason. The observed
+// 2026-08-09 incident: iQ Makelaars Groningen errored, digest showed only
+// "(claude exited with code 1.)", and the night-shift rate-limit detector
+// couldn't match it → marker was written → 07:00 fallback no-op'd → the
+// lead sat trapped for the day.
+//
+// Prefer stderr first (that's where real crash traces live when Claude Code
+// itself throws), fall back to stdout (which carries usage-limit rejection
+// text), fall back to the exit-code string only if BOTH are empty.
+export function formatQualifierExitError(code, stdout, stderr) {
+  const trimmedStderr = String(stderr || '').trim();
+  const trimmedStdout = String(stdout || '').trim();
+  if (trimmedStderr) return trimmedStderr;
+  if (trimmedStdout) return trimmedStdout;
+  return `claude exited with code ${code}.`;
+}
+
 function closePlaywrightSession(sessionName) {
   if (!sessionName) {
     return;
@@ -287,7 +307,7 @@ export function qualifyLead(lead, config, options = {}) {
       clearTimeout(timer);
       closePlaywrightSession(screenshotSessionName);
       if (code !== 0) {
-        rejectPromise(new Error(stderr.trim() || `claude exited with code ${code}.`));
+        rejectPromise(new Error(formatQualifierExitError(code, stdout, stderr)));
         return;
       }
 

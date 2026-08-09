@@ -6,7 +6,7 @@ import {
 } from '../lib/night-shift/qualification.mjs';
 
 test('isClaudeUsageLimitError matches the shapes claude -p surfaces on quota exhaustion', () => {
-  // Verbatim / near-verbatim strings observed in the wild (2026-08-06).
+  // Verbatim / near-verbatim strings observed in the wild (2026-08-06 + 2026-08-09).
   assert.equal(isClaudeUsageLimitError('Claude Code usage limit reached. Please try again after 2026-08-06T18:00:00Z.'), true);
   assert.equal(isClaudeUsageLimitError('claude exited with code 1. rate_limit_error: quota exceeded'), true);
   assert.equal(isClaudeUsageLimitError('Anthropic API returned HTTP 429: Too Many Requests'), true);
@@ -15,6 +15,15 @@ test('isClaudeUsageLimitError matches the shapes claude -p surfaces on quota exh
   // Case + whitespace tolerance
   assert.equal(isClaudeUsageLimitError('  USAGE LIMIT  '), true);
   assert.equal(isClaudeUsageLimitError('Rate-limit hit'), true);
+  // Expanded patterns (2026-08-09) — Claude Code sometimes surfaces
+  // shorter human-readable phrases without the "usage" keyword.
+  assert.equal(isClaudeUsageLimitError('5-hour limit reached'), true);
+  assert.equal(isClaudeUsageLimitError('5 hour limit reached'), true);
+  assert.equal(isClaudeUsageLimitError('Please wait until 20:00 CET'), true);
+  assert.equal(isClaudeUsageLimitError('Try again in 4h'), true);
+  assert.equal(isClaudeUsageLimitError('Retry after 2026-08-09T18:00:00Z'), true);
+  assert.equal(isClaudeUsageLimitError('Insufficient credits on your account'), true);
+  assert.equal(isClaudeUsageLimitError('Message limit reached for this conversation'), true);
 });
 
 test('isClaudeUsageLimitError does not misfire on benign errors we want to leave as-is', () => {
