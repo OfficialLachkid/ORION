@@ -146,6 +146,14 @@ function pickSeededQuestionText(primaryText, variants, random) {
   return options[Math.floor(random() * options.length)];
 }
 
+function buildSpreadReplayOffsetRatios(count, random) {
+  const safeCount = Math.max(1, ensurePositiveInteger(count, 1));
+  const stratifiedOffsets = Array.from({ length: safeCount }, (_, index) => roundRatio(
+    (index + 0.2 + (random() * 0.6)) / safeCount,
+  ));
+  return sampleArray(stratifiedOffsets, safeCount, random);
+}
+
 function resolveQuestionContractTexts(template, random) {
   const questionContract = template?.question_contract && typeof template.question_contract === 'object'
     ? template.question_contract
@@ -580,6 +588,7 @@ function buildFindTheShinyLayout(template, difficulty, random) {
       Number(pokeballGridConfig.wiggle_window_end_ratio ?? DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO),
     ),
   );
+  const replayOffsetRatios = buildSpreadReplayOffsetRatios(difficulty.sprite_count, random);
   const cells = [];
 
   for (let index = 0; index < difficulty.sprite_count; index += 1) {
@@ -598,7 +607,7 @@ function buildFindTheShinyLayout(template, difficulty, random) {
       center_x: x + Math.floor(itemSize / 2),
       center_y: y + Math.floor(itemSize / 2),
       pokeball_wiggle_offset_ratio: roundRatio(random()),
-      pokeball_replay_offset_ratio: roundRatio(random()),
+      pokeball_replay_offset_ratio: replayOffsetRatios[index],
     });
   }
 

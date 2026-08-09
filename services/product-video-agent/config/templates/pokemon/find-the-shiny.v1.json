@@ -92,7 +92,7 @@
     ],
     "hook_voice_required": true,
     "type_prompt_text": "Which spot will turn shiny?",
-    "reveal_text": "Found it!"
+    "reveal_text": "Find it?"
   },
   "layout": {
     "sprite_grid": {
@@ -134,8 +134,8 @@
       ],
       "item_size_px": 228,
       "min_item_size_px": 148,
-      "column_gap_px": 26,
-      "row_gap_px": 38,
+      "column_gap_px": 48,
+      "row_gap_px": 62,
       "sprite_scale_multiplier": 1.264,
       "stage_bounds_px": {
         "left": 72,
@@ -151,7 +151,8 @@
     "text": {
       "hook_y": 180,
       "prompt_y": 290,
-      "reveal_y": 260
+      "reveal_y": 260,
+      "prompt_font_size": 108
     },
     "timer": {
       "countdown_from": 3,

@@ -144,6 +144,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
   const timerVisualWidth = roundTime(renderPlan.timer_layout.width * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
   const timerVisualHeight = roundTime(renderPlan.timer_layout.height * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
+  const promptFontSize = Math.max(
+    DEFAULT_PROMPT_FONT_SIZE,
+    ensureNumber(template?.layout?.text?.prompt_font_size, DEFAULT_PROMPT_FONT_SIZE),
+  );
   const pokeballIntroStart = resolvePokeballIntroStartSeconds(renderPlan);
   const pokeballIntroDuration = resolveFindTheShinyPokeballIntroDurationSeconds(gridLayout);
   const pokeballSourceDuration = Math.max(
@@ -451,7 +455,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const startSeconds = ensureNumber(line.start_seconds, renderPlan.phases.type_prompt.start_seconds);
     const endSeconds = ensureNumber(line.end_seconds, promptTextEndSeconds);
     drawtextParts.push(
-      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_PROMPT_FONT_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'`,
+      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${promptFontSize}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'`,
     );
   }
   for (const line of revealSegments) {

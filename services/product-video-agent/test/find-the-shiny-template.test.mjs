@@ -31,13 +31,14 @@ const template = {
     hook_text: 'Find the Shiny!',
     hook_text_variants: ['Find the Shiny!', "Where's the shiny Pokemon?"],
     type_prompt_text: 'Which spot will turn shiny?',
-    reveal_text: 'Found it!',
+    reveal_text: 'Find it?',
   },
   layout: {
     text: {
       hook_y: 180,
       prompt_y: 290,
       reveal_y: 260,
+      prompt_font_size: 108,
     },
     sprite_grid: {
       difficulty_levels: {
@@ -64,8 +65,8 @@ const template = {
       },
       item_size_px: 228,
       min_item_size_px: 148,
-      column_gap_px: 26,
-      row_gap_px: 38,
+      column_gap_px: 48,
+      row_gap_px: 62,
       sprite_scale_multiplier: 1.264,
       stage_bounds_px: {
         left: 72,
@@ -203,12 +204,17 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.shiny_reveal.selected_name, 'Articuno');
   assert.equal(plan.shiny_reveal.selected_cell_index >= 0, true);
   assert.equal(plan.shiny_reveal.selected_cell_index < plan.selection.display_subject_count, true);
+  assert.equal(plan.timeline.find((entry) => entry.phase === 'reveal')?.spoken_text, 'Find it?');
   assert.equal(plan.assets.overlays.sprite_grid.cells.every((cell) => (
     Number.isFinite(cell.pokeball_wiggle_offset_ratio)
   )), true);
   assert.equal(plan.assets.overlays.sprite_grid.cells.every((cell) => (
     Number.isFinite(cell.pokeball_replay_offset_ratio)
   )), true);
+  assert.equal(
+    new Set(plan.assets.overlays.sprite_grid.cells.map((cell) => cell.pokeball_replay_offset_ratio)).size,
+    plan.assets.overlays.sprite_grid.cells.length,
+  );
   assert.deepEqual(plan.required_asset_gaps, []);
 });
 
@@ -381,12 +387,22 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
     null,
     {
       hook: { segments: [] },
-      prompt: { segments: [] },
+      prompt: {
+        segments: [
+          {
+            file_path: '/tmp/prompt-line.txt',
+            y: template.layout.text.prompt_y,
+            start_seconds: renderPlan.phases.type_prompt.start_seconds,
+            end_seconds: renderPlan.audio_cues.prompt_end_seconds,
+          },
+        ],
+      },
       reveal: { segments: [] },
     },
   );
 
   assert.match(visualFilter.script, /\[3:v\]fps=30,format=rgba,scale=/u);
+  assert.match(visualFilter.script, /fontsize=108/u);
   assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+5\.68\/TB/u);
   assert.doesNotMatch(visualFilter.script, /pokeballstaticsource/u);
   assert.match(visualFilter.script, new RegExp(`scale=${expectedSpriteHoldSize}:${expectedSpriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1\\[shinyhold\\]`, 'u'));
