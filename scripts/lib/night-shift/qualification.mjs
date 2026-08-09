@@ -10,17 +10,22 @@ import {
 // on purpose — false positives just cause a benign 07:00 fallback re-run,
 // but a false negative traps rate-limited leads for a full day.
 //
-// Observed shapes as of 2026-08-06:
-//   - "Claude Code usage limit reached"
-//   - "Please try again after 2026-..."
+// Observed shapes as of 2026-08-09:
+//   - "Claude Code usage limit reached. Please try again after ..."
+//   - "5-hour limit reached"
+//   - "Please wait until 20:00 CET"
+//   - "Try again in 4h"
+//   - "Retry after 2026-..."
+//   - "Insufficient credits"
 //   - HTTP 429 wrapped errors
-//   - "rate_limit_error" (Anthropic API code)
+//   - "rate_limit_error" / "rate_limit_exceeded" (Anthropic API codes)
 //   - "overloaded_error" (5xx transient bursts, resets faster than usage)
 //   - "too many requests"
+//   - "quota exceeded" / "resource_exhausted"
 export function isClaudeUsageLimitError(errorMessage) {
   const text = String(errorMessage || '').toLowerCase();
   if (!text) return false;
-  return /usage limit|usage_limit|rate.?limit|rate_limit|\b429\b|overloaded_error|please try again after|too many requests|quota exceeded|resource_exhausted/u.test(text);
+  return /usage limit|usage_limit|rate.?limit|rate_limit|\b429\b|overloaded_error|please try again after|please wait until|try again in\b|retry after|too many requests|quota exceeded|resource_exhausted|insufficient credits|\b5.?hour\b.*(limit|reached)|limit reached/u.test(text);
 }
 
 // True if any qualification outcome errored with a Claude usage-limit-shaped
