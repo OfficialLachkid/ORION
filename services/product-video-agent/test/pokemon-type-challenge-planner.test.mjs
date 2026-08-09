@@ -1433,3 +1433,79 @@ test('planner selects at most one shiny reveal per video and records the determi
   assert.equal(plan.assets.overlays.selected_shiny_sparkle_path, '/tmp/shiny_sparkle.gif');
   assert.equal(plan.assets.audio.selected_sound_effects.shiny, '/tmp/shiny-sound.mp3');
 });
+
+test('planner defaults shiny odds to one in eleven when the template omits an override', async () => {
+  const shinyRows = [
+    {
+      id: 'pokedex-0001',
+      national_dex_number: 1,
+      name: 'Bulbasaur',
+      generation: 1,
+      region: 'kanto',
+      types: ['grass', 'poison'],
+      sprite_path: '/tmp/0001.png',
+      silhouette_path: '/tmp/0001-silhouette.png',
+      shiny_sprite_path: '/tmp/0001-shiny.png',
+      cry_path: '/tmp/0001.wav',
+      sprite_source_url: 'https://example.test/0001.png',
+      shiny_sprite_source_url: 'https://example.test/0001-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/grass.gif',
+          'https://www.serebii.net/pokedex-bw/type/poison.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: {
+      ...template,
+      reveal: {},
+    },
+    pokedexRows: shinyRows,
+    seed: 'default-shiny-odds',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-08-09T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav', '/tmp/shiny-sound.mp3'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+        shiny: '/tmp/shiny-sound.mp3',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        shiny_sparkle: '/tmp/shiny_sparkle.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: [
+        '/tmp/Timer Countdown.gif',
+        '/tmp/Timer Alarm.gif',
+        '/tmp/shiny_sparkle.gif',
+        '/tmp/3D Pokeball Wiggle.gif',
+      ],
+      transitions: [],
+    },
+  });
+
+  assert.equal(plan.shiny_reveal.odds_numerator, 1);
+  assert.equal(plan.shiny_reveal.odds_denominator, 11);
+  assert.equal(plan.shiny_reveal.chance_percentage, 9.090909);
+  assert.equal(plan.shiny_reveal.max_per_video, 1);
+});

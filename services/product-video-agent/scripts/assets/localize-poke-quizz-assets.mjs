@@ -22,6 +22,7 @@ import {
   buildPokeQuizzTypeIconPath,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../src/poke-quizz-asset-layout.mjs';
+import { buildPokemonDbShinySpriteUrl } from '../../src/pokemon-db-shiny-sprites.mjs';
 import { runLocalProcess } from '../../src/process-runner.mjs';
 import { resolveFfmpegExecutable } from '../../src/runtime-executables.mjs';
 
@@ -80,8 +81,41 @@ async function fetchPokeApiSpriteMetadata(nationalDexNumber) {
   }
   const payload = await response.json();
   return {
-    shinySpriteSourceUrl: payload?.sprites?.front_shiny || null,
+    fallbackShinySpriteSourceUrl: payload?.sprites?.front_shiny || null,
     crySourceUrl: payload?.cries?.latest || payload?.cries?.legacy || null,
+  };
+}
+
+async function localizeOptionalAsset(sourceUrls, outputPath, options = {}) {
+  const overwrite = options.overwrite === true;
+  const existing = await fileExists(outputPath);
+  if (existing && !overwrite) {
+    return {
+      localized: true,
+      reusedExistingFile: true,
+      sourceUrl: null,
+    };
+  }
+
+  let lastError = null;
+  for (const sourceUrl of sourceUrls.filter(Boolean)) {
+    try {
+      await downloadToFile(sourceUrl, outputPath);
+      return {
+        localized: true,
+        reusedExistingFile: false,
+        sourceUrl,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  return {
+    localized: existing,
+    reusedExistingFile: existing,
+    sourceUrl: null,
+    error: lastError ? String(lastError.message || lastError) : null,
   };
 }
 
@@ -154,6 +188,7 @@ function parseLimit(value) {
 async function localizeRows(rows, options = {}) {
   const ffmpegExecutable = options.ffmpegExecutable || resolveFfmpegExecutable({});
   const limit = parseLimit(options.limit);
+  const overwriteShinySprites = options.overwriteShinySprites === true;
   const targetRows = limit ? rows.slice(0, limit) : rows;
   const report = [];
 
@@ -176,6 +211,10 @@ async function localizeRows(rows, options = {}) {
     const shinySpritePath = buildPokeQuizzShinySpritePath(row);
     const silhouettePath = buildPokeQuizzSilhouettePath(row);
     const spriteMetadata = await fetchPokeApiSpriteMetadata(row.national_dex_number);
+    const shinySpriteSourceCandidates = [
+      buildPokemonDbShinySpriteUrl(row),
+      spriteMetadata.fallbackShinySpriteSourceUrl,
+    ].filter(Boolean);
 
     if (!row.sprite_source_url) {
       report.push({ id: row.id, status: 'skipped', reason: 'sprite_source_url_missing' });
@@ -186,18 +225,20 @@ async function localizeRows(rows, options = {}) {
       await downloadToFile(row.sprite_source_url, spritePath);
     }
 
-    if (spriteMetadata.shinySpriteSourceUrl && !(await fileExists(shinySpritePath))) {
-      await downloadToFile(spriteMetadata.shinySpriteSourceUrl, shinySpritePath);
-    }
+    const localizedShinySprite = await localizeOptionalAsset(
+      shinySpriteSourceCandidates,
+      shinySpritePath,
+      { overwrite: overwriteShinySprites },
+    );
 
     if (!(await fileExists(silhouettePath))) {
       await createSilhouetteFromSprite(spritePath, silhouettePath, ffmpegExecutable);
     }
 
     row.sprite_path = spritePath;
-    row.shiny_sprite_path = spriteMetadata.shinySpriteSourceUrl ? shinySpritePath : null;
+    row.shiny_sprite_path = localizedShinySprite.localized ? shinySpritePath : null;
     row.silhouette_path = silhouettePath;
-    row.shiny_sprite_source_url = spriteMetadata.shinySpriteSourceUrl;
+    row.shiny_sprite_source_url = localizedShinySprite.sourceUrl || row.shiny_sprite_source_url || null;
     row.cry_source_url = row.cry_source_url || spriteMetadata.crySourceUrl;
     row.asset_status = row.shiny_sprite_path
       ? 'localized_with_shiny_and_silhouette'
@@ -215,6 +256,7 @@ async function localizeRows(rows, options = {}) {
         localized_at: new Date().toISOString(),
         silhouette_generation: 'ffmpeg_black_fill_from_sprite_alpha',
         type_icons_localized: true,
+        shiny_sprite_overwrite_enabled: overwriteShinySprites,
       },
     };
     report.push({
@@ -222,6 +264,7 @@ async function localizeRows(rows, options = {}) {
       generation: row.generation,
       sprite_path: row.sprite_path,
       shiny_sprite_path: row.shiny_sprite_path,
+      shiny_sprite_source_url: row.shiny_sprite_source_url,
       silhouette_path: row.silhouette_path,
       cry_source_url: row.cry_source_url,
       status: 'localized',
@@ -248,6 +291,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --persist-supabase        Upsert localized rows back into Supabase `pokedex`',
       '  --limit <n>               Optional row limit for testing',
       '  --enrichment-concurrency <n> Concurrent PokeAPI species enrichment workers. Default: 6',
+      '  --overwrite-shiny-sprites Replace existing shiny sprite files with the current source set',
       '  --write-json <path>       Write a localization report JSON under the repo root',
       '  --write-rows-json <path>  Write planner-ready localized pokedex rows under the repo root',
     ]);
@@ -272,6 +316,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       getStringOption(options, 'enrichment-concurrency', '6'),
       10,
     ) || 6,
+    overwriteShinySprites: getBooleanOption(options, 'overwrite-shiny-sprites', false),
   });
   printInfo(
     `Localized ${localized.report.length} Pokemon row(s), `
