@@ -14,9 +14,9 @@
     "fps": 30,
     "safe_zone": {
       "top": 160,
-      "right": 100,
+      "right": 140,
       "bottom": 260,
-      "left": 100
+      "left": 140
     }
   },
   "selection_rules": {
@@ -91,7 +91,7 @@
       "Where's the shiny Pokemon?"
     ],
     "hook_voice_required": true,
-    "type_prompt_text": "Which spot will turn shiny?",
+    "type_prompt_text": "Guess where it's hiding",
     "reveal_text": "Did you find it?"
   },
   "layout": {

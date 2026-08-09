@@ -15,13 +15,10 @@ export function estimateWrapCharacterLimit(template, fontSize) {
   return Math.max(12, Math.floor(maxTextWidth / Math.max(1, ensureNumber(fontSize, 60) * 0.56)));
 }
 
-export function wrapTextBlock(value, { maxCharactersPerLine, maxLines = 2 }) {
+function wrapTextLines(value, maxCharactersPerLine) {
   const sourceText = normalizeDrawtextText(value).trim();
   if (!sourceText) {
-    return {
-      wrapped_text: '',
-      lines: [],
-    };
+    return [];
   }
 
   const normalizedMaxCharacters = Math.max(8, Math.floor(ensureNumber(maxCharactersPerLine, 24)));
@@ -43,6 +40,18 @@ export function wrapTextBlock(value, { maxCharactersPerLine, maxLines = 2 }) {
     lines.push(currentLine);
   }
 
+  return lines;
+}
+
+export function wrapTextBlock(value, { maxCharactersPerLine, maxLines = 2 }) {
+  const lines = wrapTextLines(value, maxCharactersPerLine);
+  if (lines.length === 0) {
+    return {
+      wrapped_text: '',
+      lines: [],
+    };
+  }
+
   if (lines.length > maxLines) {
     const preservedLines = lines.slice(0, Math.max(0, maxLines - 1));
     const lastLine = lines.slice(Math.max(0, maxLines - 1)).join(' ');
@@ -56,6 +65,37 @@ export function wrapTextBlock(value, { maxCharactersPerLine, maxLines = 2 }) {
   };
 }
 
+function fitTextBlockToLineCount(text, {
+  template,
+  fontSize,
+  maxLines,
+}) {
+  const requestedFontSize = Math.max(24, Math.floor(ensureNumber(fontSize, 60)));
+  const minimumFontSize = Math.max(48, Math.floor(requestedFontSize * 0.72));
+  let fittedFontSize = requestedFontSize;
+  let fittedLines = wrapTextLines(text, estimateWrapCharacterLimit(template, fittedFontSize));
+
+  while (fittedLines.length > maxLines && fittedFontSize > minimumFontSize) {
+    fittedFontSize -= 2;
+    fittedLines = wrapTextLines(text, estimateWrapCharacterLimit(template, fittedFontSize));
+  }
+
+  const wrapped = fittedLines.length <= maxLines
+    ? {
+      wrapped_text: fittedLines.join('\n'),
+      lines: fittedLines,
+    }
+    : wrapTextBlock(text, {
+      maxCharactersPerLine: estimateWrapCharacterLimit(template, fittedFontSize),
+      maxLines,
+    });
+
+  return {
+    font_size: fittedFontSize,
+    wrapped,
+  };
+}
+
 function computeTextBlockY(baseY, lineCount, fontSize, template) {
   const safeTop = ensureNumber(template?.canvas?.safe_zone?.top, 160);
   if (lineCount <= 1) return baseY;
@@ -64,16 +104,21 @@ function computeTextBlockY(baseY, lineCount, fontSize, template) {
 }
 
 function buildTextLineArtifacts(text, { template, fontSize, maxLines, baseY }) {
-  const wrapped = wrapTextBlock(text, {
-    maxCharactersPerLine: estimateWrapCharacterLimit(template, fontSize),
+  const fitted = fitTextBlockToLineCount(text, {
+    template,
+    fontSize,
     maxLines,
   });
-  const lineHeight = fontSize + DEFAULT_TEXT_LINE_SPACING;
-  const blockY = computeTextBlockY(baseY, wrapped.lines.length, fontSize, template);
+  const effectiveFontSize = fitted.font_size;
+  const wrapped = fitted.wrapped;
+  const lineHeight = effectiveFontSize + DEFAULT_TEXT_LINE_SPACING;
+  const blockY = computeTextBlockY(baseY, wrapped.lines.length, effectiveFontSize, template);
   return {
+    font_size: effectiveFontSize,
     line_height: lineHeight,
     lines: wrapped.lines.map((lineText, index) => ({
       text: lineText,
+      font_size: effectiveFontSize,
       y: blockY + (index * lineHeight),
     })),
   };
@@ -132,6 +177,7 @@ export function buildProgressiveTextArtifacts(text, {
       globalWordIndex += 1;
       lineSegments.push({
         text: words.slice(0, index + 1).join(' '),
+        font_size: line.font_size,
         y: line.y,
         start_seconds: segmentStart,
         end_seconds: end,

@@ -30,7 +30,7 @@ const template = {
   question_contract: {
     hook_text: 'Find the Shiny!',
     hook_text_variants: ['Find the Shiny!', "Where's the shiny Pokemon?"],
-    type_prompt_text: 'Which spot will turn shiny?',
+    type_prompt_text: "Guess where it's hiding",
     reveal_text: 'Did you find it?',
   },
   layout: {
