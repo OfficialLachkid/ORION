@@ -51,3 +51,17 @@ test('resolveVideoTemplateRuntime preserves explicit runtime overrides', async (
   assert.equal(runtime.channelSelector, 'custom-channel-selector');
   assert.equal(runtime.genreLabel, DEFAULT_GENRE_LABEL);
 });
+
+test('loadVideoTemplateContext resolves the dedicated Find the Shiny channel config', async () => {
+  const context = await loadVideoTemplateContext({
+    projectRoot,
+    channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-find-the-shiny-youtube.json',
+  });
+
+  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/poke-quizz-find-the-shiny-youtube.json');
+  assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
+  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json');
+  assert.equal(context.templateId, 'pokemon.find-the-shiny.v1');
+  assert.equal(context.publicationChannelSelector, DEFAULT_CHANNEL_SELECTOR);
+  assert.equal(context.genreLabel, 'Find the Shiny');
+});
