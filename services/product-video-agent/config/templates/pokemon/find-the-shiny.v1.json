@@ -99,22 +99,26 @@
       },
       "difficulty_levels": {
         "easy": {
+          "sprite_count": 3,
+          "rows": 1,
+          "columns": 3
+        },
+        "medium": {
           "sprite_count": 6,
           "rows": 2,
           "columns": 3
         },
-        "medium": {
-          "sprite_count": 12,
-          "rows": 3,
-          "columns": 4
-        },
         "hard": {
-          "sprite_count": 20,
-          "rows": 4,
-          "columns": 5
+          "sprite_count": 9,
+          "rows": 3,
+          "columns": 3
         }
       },
       "available_grids": [
+        {
+          "rows": 1,
+          "columns": 3
+        },
         {
           "rows": 2,
           "columns": 3
@@ -122,31 +126,23 @@
         {
           "rows": 3,
           "columns": 3
-        },
-        {
-          "rows": 3,
-          "columns": 4
-        },
-        {
-          "rows": 4,
-          "columns": 4
-        },
-        {
-          "rows": 4,
-          "columns": 5
         }
       ],
       "item_size_px": 228,
       "min_item_size_px": 148,
       "column_gap_px": 26,
       "row_gap_px": 38,
-      "sprite_scale_multiplier": 1.08,
+      "sprite_scale_multiplier": 1.404,
       "stage_bounds_px": {
         "left": 72,
         "top": 680,
         "width": 936,
         "height": 900
       }
+    },
+    "pokeball_grid": {
+      "overlay_scale_multiplier": 1.56,
+      "intro_duration_seconds": 0.56
     },
     "text": {
       "hook_y": 180,
@@ -163,6 +159,17 @@
   },
   "audio": {
     "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ],
+      "allow_profile_ids": [
+        "us-female-kokoro-heart",
+        "us-male-kokoro-deep"
+      ]
+    },
     "music_enabled": true,
     "music_source_policy": "local_rights_cleared_only",
     "battle_intro_music": {

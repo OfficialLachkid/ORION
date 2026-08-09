@@ -530,29 +530,55 @@ function resolveSingleShinyReveal({
   if (!sparkleOverlayPath) activationBlockers.push('shiny_sparkle_overlay_missing');
   if (!shinySoundPath) activationBlockers.push('shiny_sound_effect_missing');
 
-  const rollValue = 1 + Math.floor(random() * config.odds_denominator);
-  const rollHit = rollValue <= config.odds_numerator;
-  const active = activationBlockers.length === 0 && rollHit;
-  const selectedSubject = active
-    ? eligibleSubjects[Math.floor(random() * eligibleSubjects.length)] || null
+  const rollOutcomes = eligibleSubjects.map(({ subject, index }) => ({
+    subject,
+    index,
+    roll_value: 1 + Math.floor(random() * config.odds_denominator),
+  })).map((outcome) => ({
+    ...outcome,
+    roll_hit: outcome.roll_value <= config.odds_numerator,
+  }));
+  const hitOutcomes = rollOutcomes.filter((outcome) => outcome.roll_hit);
+  const active = activationBlockers.length === 0 && hitOutcomes.length > 0;
+  const selectedOutcome = active
+    ? hitOutcomes[Math.floor(random() * hitOutcomes.length)] || null
     : null;
+  const effectiveVideoChancePercentage = Number((
+    100 * (1 - Math.pow(
+      (config.odds_denominator - config.odds_numerator) / config.odds_denominator,
+      eligibleSubjects.length,
+    ))
+  ).toFixed(6));
 
   return {
     ...config,
+    roll_mode: 'per_selected_subject',
     eligible_subject_count: eligibleSubjects.length,
     eligible_subject_dex_numbers: eligibleSubjects.map(({ subject }) => subject.national_dex_number),
-    roll_value: rollValue,
-    roll_hit: rollHit,
+    effective_video_chance_percentage: effectiveVideoChancePercentage,
+    roll_value: selectedOutcome?.roll_value ?? rollOutcomes[0]?.roll_value ?? null,
+    roll_values: rollOutcomes.map((outcome) => outcome.roll_value),
+    roll_hit: hitOutcomes.length > 0,
+    hit_subject_count: hitOutcomes.length,
+    hit_subject_indexes: hitOutcomes.map((outcome) => outcome.index),
+    roll_outcomes: rollOutcomes.map((outcome) => ({
+      selected_subject_index: outcome.index,
+      pokedex_id: outcome.subject?.id ?? null,
+      national_dex_number: outcome.subject?.national_dex_number ?? null,
+      name: outcome.subject?.name ?? null,
+      roll_value: outcome.roll_value,
+      roll_hit: outcome.roll_hit,
+    })),
     active,
     inactive_reason: active
       ? null
       : activationBlockers[0] || 'roll_missed',
     activation_blockers: activationBlockers,
-    selected_subject_index: selectedSubject?.index ?? null,
-    selected_pokedex_id: selectedSubject?.subject?.id ?? null,
-    selected_national_dex_number: selectedSubject?.subject?.national_dex_number ?? null,
-    selected_name: selectedSubject?.subject?.name ?? null,
-    selected_sprite_path: selectedSubject?.subject?.shiny_sprite_path ?? null,
+    selected_subject_index: selectedOutcome?.index ?? null,
+    selected_pokedex_id: selectedOutcome?.subject?.id ?? null,
+    selected_national_dex_number: selectedOutcome?.subject?.national_dex_number ?? null,
+    selected_name: selectedOutcome?.subject?.name ?? null,
+    selected_sprite_path: selectedOutcome?.subject?.shiny_sprite_path ?? null,
     sparkle_overlay_path: sparkleOverlayPath,
     sound_effect_path: shinySoundPath,
   };

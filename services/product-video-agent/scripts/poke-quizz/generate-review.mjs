@@ -28,6 +28,7 @@ import {
   DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
   resolveVideoTemplateRuntime,
 } from '../../src/video-template-context.mjs';
+import { resolvePokeQuizzVoiceRuntime } from '../../src/poke-quizz-voice-runtime.mjs';
 import {
   getBooleanOption,
   getStringOption,
@@ -68,20 +69,6 @@ async function writeJson(relativePath, payload) {
 
 async function loadRuntimeConfigJson(relativePath) {
   return JSON.parse(await readFile(resolve(projectRoot, relativePath), 'utf8'));
-}
-
-function resolveVoiceRuntime(config, options) {
-  const defaultProfileId = getStringOption(options, 'voice-profile-id', config.voice.default_profile_id);
-  const profile = (config.voice.profiles || []).find((item) => item.profile_id === defaultProfileId);
-  if (!profile) {
-    throw new Error(`Voice profile ${defaultProfileId} was not found in ${config.voice.default_profile_id}.`);
-  }
-  return {
-    pythonExecutable: resolve(projectRoot, getStringOption(options, 'voice-python', config.voice.executable)),
-    scriptPath: resolve(projectRoot, getStringOption(options, 'voice-script', config.voice.script_path)),
-    cacheDir: resolve(projectRoot, getStringOption(options, 'voice-cache-dir', config.voice.data_directory)),
-    profile,
-  };
 }
 
 function slugify(value) {
@@ -228,7 +215,16 @@ async function generateAndReviewPokeQuizz(options) {
   );
   const resolvedOutput = await resolveManagedPokeQuizzPreviewOutputPath(outputPath);
   const ffmpegExecutable = resolveFfmpegExecutable(config.render || config);
-  const kokoro = resolveVoiceRuntime(config, options);
+  const kokoro = resolvePokeQuizzVoiceRuntime({
+    config,
+    template,
+    plan,
+    projectRoot,
+    voiceProfileId: getStringOption(options, 'voice-profile-id', ''),
+    voicePython: getStringOption(options, 'voice-python', ''),
+    voiceScript: getStringOption(options, 'voice-script', ''),
+    voiceCacheDir: getStringOption(options, 'voice-cache-dir', ''),
+  });
   const runtimeRoot = resolve(projectRoot, 'data/runtime/product-video-agent/poke-quizz-render');
   const overrideTitle = getStringOption(options, 'title', '');
   const overrideDescription = getStringOption(options, 'description', '');

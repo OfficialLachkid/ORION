@@ -29,6 +29,7 @@ const DEFAULT_SPRITE_SCALE_MULTIPLIER = 1.08;
 const DEFAULT_MIN_ITEM_SIZE_PX = 148;
 const DEFAULT_POKEBALL_WIGGLE_WINDOW_START_RATIO = 0.12;
 const DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO = 0.76;
+const DEFAULT_POKEBALL_INTRO_DURATION_SECONDS = 0.56;
 
 function isBeachBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
@@ -569,6 +570,9 @@ function buildFindTheShinyLayout(template, difficulty, random) {
     column_gap_px: columnGap,
     row_gap_px: rowGap,
     sprite_scale_multiplier: Number(gridConfig.sprite_scale_multiplier ?? DEFAULT_SPRITE_SCALE_MULTIPLIER),
+    pokeball_intro_duration_seconds: Number(
+      pokeballGridConfig.intro_duration_seconds ?? DEFAULT_POKEBALL_INTRO_DURATION_SECONDS
+    ),
     pokeball_wiggle_window_start_ratio: wiggleWindowStartRatio,
     pokeball_wiggle_window_end_ratio: wiggleWindowEndRatio,
     cells,

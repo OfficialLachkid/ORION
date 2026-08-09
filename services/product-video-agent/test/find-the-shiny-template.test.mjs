@@ -40,20 +40,32 @@ const template = {
     },
     sprite_grid: {
       difficulty_levels: {
+        easy: {
+          sprite_count: 3,
+          rows: 1,
+          columns: 3,
+        },
         medium: {
-          sprite_count: 12,
+          sprite_count: 6,
+          rows: 2,
+          columns: 3,
+        },
+        hard: {
+          sprite_count: 9,
           rows: 3,
-          columns: 4,
+          columns: 3,
         },
       },
       difficulty_weights: {
+        easy: 1,
         medium: 1,
+        hard: 1,
       },
       item_size_px: 228,
       min_item_size_px: 148,
       column_gap_px: 26,
       row_gap_px: 38,
-      sprite_scale_multiplier: 1.08,
+      sprite_scale_multiplier: 1.404,
       stage_bounds_px: {
         left: 72,
         top: 680,
@@ -61,9 +73,20 @@ const template = {
         height: 900,
       },
     },
+    pokeball_grid: {
+      overlay_scale_multiplier: 1.56,
+      intro_duration_seconds: 0.56,
+    },
     timer: {
       countdown_from: 5,
       countdown_to: 0,
+    },
+  },
+  audio: {
+    voice_profile_selection: {
+      mode: 'seeded_random',
+      allowed_genders: ['female', 'male'],
+      allow_profile_ids: ['us-female-kokoro-heart', 'us-male-kokoro-deep'],
     },
   },
   reveal: {
@@ -168,10 +191,9 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.template_id, 'pokemon.find-the-shiny.v1');
   assert.deepEqual(plan.selection.type_pair, ['fire', 'ice']);
   assert.equal(plan.selection.selected_subject_count, 1);
-  assert.equal(plan.selection.display_subject_count, 12);
-  assert.equal(plan.selection.grid.difficulty_id, 'medium');
-  assert.equal(plan.selection.grid.rows, 3);
-  assert.equal(plan.selection.grid.columns, 4);
+  assert.equal([3, 6, 9].includes(plan.selection.display_subject_count), true);
+  assert.equal(plan.selection.grid.columns, 3);
+  assert.equal(plan.selection.grid.rows, Math.ceil(plan.selection.display_subject_count / 3));
   assert.equal(plan.assets.background.selected_path, '/tmp/ice-backgrounds/glacier.png');
   assert.equal(plan.assets.pokemon[0].name, 'Articuno');
   assert.equal(plan.assets.overlays.selected_primary_pokeball_overlay_path, '/tmp/pokeball.gif');
@@ -179,11 +201,43 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.shiny_reveal.active, true);
   assert.equal(plan.shiny_reveal.selected_name, 'Articuno');
   assert.equal(plan.shiny_reveal.selected_cell_index >= 0, true);
-  assert.equal(plan.shiny_reveal.selected_cell_index < 12, true);
+  assert.equal(plan.shiny_reveal.selected_cell_index < plan.selection.display_subject_count, true);
   assert.equal(plan.assets.overlays.sprite_grid.cells.every((cell) => (
     Number.isFinite(cell.pokeball_wiggle_offset_ratio)
   )), true);
   assert.deepEqual(plan.required_asset_gaps, []);
+});
+
+test('find-the-shiny planner can produce each supported grid size with a max of three columns', async () => {
+  const displayCounts = new Set();
+
+  for (const seed of [
+    'find-the-shiny-grid-1',
+    'find-the-shiny-grid-2',
+    'find-the-shiny-grid-3',
+    'find-the-shiny-grid-4',
+    'find-the-shiny-grid-5',
+    'find-the-shiny-grid-6',
+    'find-the-shiny-grid-7',
+    'find-the-shiny-grid-8',
+    'find-the-shiny-grid-9',
+    'find-the-shiny-grid-10',
+    'find-the-shiny-grid-11',
+    'find-the-shiny-grid-12',
+  ]) {
+    const plan = await planPokemonTypeChallenge({
+      template,
+      pokedexRows,
+      seed,
+      forcedTypePair: ['ice', 'fire'],
+      assetInventory,
+    });
+    displayCounts.add(plan.selection.display_subject_count);
+    assert.equal(plan.selection.grid.columns, 3);
+    assert.equal(plan.assets.overlays.sprite_grid.columns, 3);
+  }
+
+  assert.deepEqual([...displayCounts].sort((left, right) => left - right), [3, 6, 9]);
 });
 
 test('generic render-plan dispatch keeps the shiny grid centered and reveal timing deterministic', async () => {
@@ -201,9 +255,9 @@ test('generic render-plan dispatch keeps the shiny grid centered and reveal timi
     outputPath: '/tmp/find-the-shiny.mp4',
   });
 
-  assert.equal(renderPlan.grid.cells.length, 12);
-  assert.equal(renderPlan.grid.rows, 3);
-  assert.equal(renderPlan.grid.columns, 4);
+  assert.equal(renderPlan.grid.cells.length, plan.selection.grid.sprite_count);
+  assert.equal(renderPlan.grid.rows, plan.selection.grid.rows);
+  assert.equal(renderPlan.grid.columns, 3);
   assert.equal(renderPlan.audio_cues.reveal_start_seconds, 7.6);
   assert.equal(renderPlan.audio_cues.reveal_visual_start_seconds, 7.68);
   assert.equal(renderPlan.timer_layout.y < renderPlan.grid.stage_bounds_px.top, true);
@@ -267,6 +321,12 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
     outputPath: '/tmp/find-the-shiny.mp4',
   });
   const shinyCell = renderPlan.grid.cells[plan.shiny_reveal.selected_cell_index];
+  const expectedSpriteHoldSize = Number(
+    (renderPlan.grid.item_size_px * template.layout.sprite_grid.sprite_scale_multiplier).toFixed(3),
+  );
+  const expectedPokeballSize = Number(
+    (renderPlan.grid.item_size_px * template.layout.pokeball_grid.overlay_scale_multiplier).toFixed(3),
+  );
 
   const visualFilter = buildVisualFilterScript(
     plan,
@@ -291,9 +351,14 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
 
   assert.match(visualFilter.script, /\[3:v\]fps=30,format=rgba,scale=/u);
   assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+7\.68\/TB/u);
+  assert.doesNotMatch(visualFilter.script, /pokeballstaticsource/u);
+  assert.match(visualFilter.script, new RegExp(`scale=${expectedSpriteHoldSize}:${expectedSpriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1\\[shinyhold\\]`, 'u'));
+  assert.match(visualFilter.script, new RegExp(`scale=${expectedPokeballSize}:${expectedPokeballSize}:force_original_aspect_ratio=decrease`, 'u'));
+  assert.match(visualFilter.script, /\[pbsrc0\]trim=duration=0\.6,tpad=start_mode=clone:start_duration=[0-9.]+:stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+2\.1\/TB\[pbb0\]/u);
+  assert.match(visualFilter.script, /\[pbi0\]split=2\[pbo0\]\[pbt0\]/u);
+  assert.match(visualFilter.script, /\[v0\]\[pbo0\]overlay=.*enable='gte\(t,2\.1\)\*lt\(t,7\.68\)'/u);
   assert.match(visualFilter.script, new RegExp(`overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2`, 'u'));
   assert.match(visualFilter.script, /\[6:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+7\.68\/TB/u);
-  assert.match(visualFilter.script, /pokeballstaticsource/u);
   assert.match(visualFilter.script, /pokeballpop/u);
   assert.match(visualFilter.script, /normaltransition/u);
 });

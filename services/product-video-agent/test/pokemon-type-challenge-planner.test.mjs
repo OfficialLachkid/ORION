@@ -1824,9 +1824,12 @@ test('planner selects at most one shiny reveal per video and records the determi
   const shinySubjects = plan.assets.pokemon.filter((subject) => subject.is_shiny_reveal);
 
   assert.equal(plan.shiny_reveal.active, true);
-  assert.equal(plan.shiny_reveal.roll_value, 1);
+  assert.equal(plan.shiny_reveal.roll_mode, 'per_selected_subject');
+  assert.deepEqual(plan.shiny_reveal.roll_values, [1, 1]);
+  assert.equal(plan.shiny_reveal.hit_subject_count, 2);
   assert.equal(plan.shiny_reveal.max_per_video, 1);
   assert.equal(plan.shiny_reveal.chance_percentage, 100);
+  assert.equal(plan.shiny_reveal.effective_video_chance_percentage, 100);
   assert.equal(shinySubjects.length, 1);
   assert.equal(shinySubjects[0].reveal_variant, 'shiny');
   assert.equal(shinySubjects[0].reveal_sprite_path, shinySubjects[0].shiny_sprite_path);
