@@ -3,6 +3,10 @@ import { dirname, resolve } from 'node:path';
 import { projectRoot } from '../../../../../../lib/runtime-config.mjs';
 import { buildNoticeDiscordPayload } from '../../../../../../discord-bot/src/message-formatting.mjs';
 import {
+  resolvePublicationChannelUrl,
+  resolvePublicationReviewThreadId,
+} from '../../../../publication-channels.mjs';
+import {
   editDiscordChannelMessage,
   sendDiscordChannelMessage,
 } from '../../../../../../../scripts/lib/discord-post.mjs';
@@ -45,11 +49,6 @@ function workflowState(publication = {}) {
   if (publication.status === 'blocked') return 'blocked';
   if (publication.preview_url) return 'preview_uploaded';
   return 'preview_upload_pending';
-}
-
-function buildYoutubeChannelUrl(channelProfile = {}) {
-  const channelId = String(channelProfile?.youtube?.channel_id || '').trim();
-  return channelId ? `https://www.youtube.com/channel/${channelId}` : '';
 }
 
 function formatMarkdownLink(label, url) {
@@ -128,7 +127,7 @@ export function buildPokeQuizzQueueStatusPayload({
   const effectivePresentation = normalizeQueueStatusPresentation(presentation);
   const channelLabel = formatMarkdownLink(
     String(channelProfile?.name || '').trim(),
-    buildYoutubeChannelUrl(channelProfile),
+    resolvePublicationChannelUrl(channelProfile),
   );
   const queueCount = Number(queueStatus?.publishQueueCount || 0);
   const reviewReadyCount = Number(queueStatus?.reviewReadyCount || 0);
@@ -165,7 +164,7 @@ export async function syncPokeQuizzQueueStatusMessage({
   presentation = DEFAULT_QUEUE_STATUS_PRESENTATION,
 } = {}) {
   const channelId = String(runtimeConfig?.channelIds?.pokemon || '').trim();
-  const reviewThreadId = String(runtimeConfig?.channelIds?.pokeQuizzReview || '').trim();
+  const reviewThreadId = resolvePublicationReviewThreadId(runtimeConfig, channelProfile);
   if (!channelId || !store || !channelProfile) {
     return {
       posted: false,

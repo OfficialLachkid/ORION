@@ -6,6 +6,10 @@ import {
 } from '../../developer-agent/src/command-parser.mjs';
 import { parseDraftEmailCommand, summarizeDraftEmailRequest } from './email-command-parser.mjs';
 import { parseLeadgenCommand, summarizeLeadgenRequest } from './leadgen-command-parser.mjs';
+import {
+  parseProductVideoCommand,
+  summarizeProductVideoRequest,
+} from './product-video-command-parser.mjs';
 
 const DOMAIN_KEYWORDS = {
   infra: ['deploy', 'production', 'server', 'host', 'tailscale', 'docker', 'colima', 'restart', 'service', 'mac mini'],
@@ -72,6 +76,7 @@ export function splitCommandMessage(content) {
 
   if (
     parseDeveloperTaskCommand(rawContent)
+    || parseProductVideoCommand(rawContent)
     || parseDraftEmailCommand(rawContent)
     || parseLeadgenCommand(rawContent)
   ) {
@@ -182,16 +187,32 @@ export function normalizeTaskMessage(message, config) {
 
   const submittedAt = message.submittedAt || new Date().toISOString();
   const developerRequest = parseDeveloperTaskCommand(rawContent);
-  const draftEmailRequest = developerRequest ? null : parseDraftEmailCommand(rawContent);
-  const leadgenRequest = developerRequest || draftEmailRequest ? null : parseLeadgenCommand(rawContent);
-  const hasExplicitRequest = Boolean(developerRequest || draftEmailRequest || leadgenRequest);
+  const productVideoRequest = developerRequest ? null : parseProductVideoCommand(rawContent);
+  const draftEmailRequest = developerRequest || productVideoRequest ? null : parseDraftEmailCommand(rawContent);
+  const leadgenRequest = developerRequest || productVideoRequest || draftEmailRequest
+    ? null
+    : parseLeadgenCommand(rawContent);
+  const hasExplicitRequest = Boolean(
+    developerRequest
+    || productVideoRequest
+    || draftEmailRequest
+    || leadgenRequest
+  );
   const taskText = hasExplicitRequest ? rawContent : content;
   const taskId = buildTaskId(taskText, submittedAt);
-  const domain = developerRequest ? 'developer' : hasExplicitRequest ? 'sales' : inferDomain(content);
+  const domain = developerRequest
+    ? 'developer'
+    : productVideoRequest
+      ? 'content'
+      : hasExplicitRequest
+        ? 'sales'
+        : inferDomain(content);
   const targetAgent = developerRequest
     ? 'developer-agent'
-    : hasExplicitRequest
-      ? 'orchestrator'
+    : productVideoRequest
+      ? 'product-video-agent'
+      : hasExplicitRequest
+        ? 'orchestrator'
       : (TARGET_AGENT_BY_DOMAIN[domain] || 'orchestrator');
   const approvalCheck = developerRequest
     ? {
@@ -201,12 +222,16 @@ export function normalizeTaskMessage(message, config) {
           description: 'creates GitHub writes and invokes Claude in an isolated worktree',
         }],
       }
+    : productVideoRequest
+      ? { approvalRequired: false, matchedRules: [] }
     : hasExplicitRequest
       ? { approvalRequired: false, matchedRules: [] }
       : detectApproval(content, config.approvalRules);
   const matchedRuleDescriptions = approvalCheck.matchedRules.map((rule) => `${rule.rule}: ${rule.description}`);
   const summary = developerRequest
     ? summarizeDeveloperTaskRequest(developerRequest)
+    : productVideoRequest
+      ? summarizeProductVideoRequest(productVideoRequest)
     : draftEmailRequest
       ? summarizeDraftEmailRequest(draftEmailRequest)
       : leadgenRequest
@@ -233,6 +258,12 @@ export function normalizeTaskMessage(message, config) {
           runtime_action: 'developer_agent_workflow',
           automation_type: 'developer_agent_workflow',
           developer_request: developerRequest,
+        }
+      : productVideoRequest
+      ? {
+          runtime_action: 'poke_quizz_generate_review',
+          automation_type: 'poke_quizz_generate_review',
+          poke_quizz_generate_review: productVideoRequest,
         }
       : draftEmailRequest
       ? {

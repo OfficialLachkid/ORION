@@ -140,7 +140,7 @@ test('seeded fallback publication metadata varies the title deterministically', 
 test('fallback publication metadata frames find-the-shiny as a shiny challenge', () => {
   const metadata = buildPokeQuizzFallbackPublicationMetadata(findTheShinyPlan);
 
-  assert.equal(metadata.title, 'Find the Shiny Rock/Fairy Pokemon');
+  assert.equal(metadata.title, 'Find the Shiny Pokemon');
   assert.equal(
     metadata.description,
     'One of these Rock/Fairy Pokemon turns shiny after the countdown. Pick a spot before the reveal.',

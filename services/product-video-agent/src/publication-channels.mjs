@@ -79,6 +79,48 @@ export function normalizePublicationChannelProfile(profile) {
   };
 }
 
+export function resolvePublicationChannelUrl(profile = {}) {
+  const channelId = String(profile?.youtube?.channel_id || '').trim();
+  if (channelId) {
+    return `https://www.youtube.com/channel/${channelId}`;
+  }
+
+  const metadataUrl = String(
+    profile?.metadata?.channel_url
+      || profile?.metadata?.youtube_url
+      || '',
+  ).trim();
+  if (metadataUrl) {
+    return metadataUrl;
+  }
+
+  const handle = String(
+    profile?.metadata?.youtube_handle
+      || profile?.metadata?.channel_handle
+      || '',
+  ).trim();
+  if (!handle) {
+    return '';
+  }
+
+  const normalizedHandle = handle.startsWith('@')
+    ? handle
+    : `@${handle.replace(/^@+/u, '')}`;
+  return `https://www.youtube.com/${normalizedHandle}`;
+}
+
+export function resolvePublicationReviewThreadId(runtimeConfig, channelProfile = {}) {
+  const configuredThreadId = String(
+    channelProfile?.metadata?.review_thread_id
+      || channelProfile?.metadata?.reviewThreadId
+      || '',
+  ).trim();
+  if (configuredThreadId) {
+    return configuredThreadId;
+  }
+  return String(runtimeConfig?.channelIds?.pokeQuizzReview || '').trim();
+}
+
 export function findPublicationChannelProfile(profiles, selector) {
   const normalizedSelector = String(selector || '').trim();
   const matches = profiles.filter((profile) => (

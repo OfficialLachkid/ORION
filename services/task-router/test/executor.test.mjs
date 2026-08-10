@@ -199,6 +199,21 @@ test('buildExecutionPlan prefers explicit Gmail runtime actions over text heuris
   });
 });
 
+test('buildExecutionPlan recognizes explicit Poke Quizz generation requests', () => {
+  const plan = buildExecutionPlan({
+    runtime_action: 'poke_quizz_generate_review',
+    poke_quizz_generate_review: {
+      templateKey: 'find-the-shiny',
+      channelSelector: 'trivamon-youtube',
+    },
+  });
+
+  assert.deepEqual(plan, {
+    action: 'poke_quizz_generate_review',
+    description: 'Generate and post a fresh Poke Quizz review video for the selected template and channel.',
+  });
+});
+
 test('parseLaunchctlReport extracts daemon state fields', () => {
   const report = parseLaunchctlReport(`
 gui/502/io.vbj.orion.daemon = {
@@ -952,6 +967,38 @@ test('executeTask suppresses extra agent-results cards for Poke Quizz review act
   });
 
   assert.equal(result.executionPlan.action, 'poke_quizz_publish_preview');
+  assert.equal(result.outboundEvents.length, 2);
+  assert.deepEqual(
+    result.outboundEvents.map((event) => event.channelKey),
+    ['taskQueue', 'systemLogs'],
+  );
+});
+
+test('executeTask suppresses extra agent-results cards for manual Poke Quizz generation', async () => {
+  const result = await executeTask({
+    task_id: 'TASK-ORION-PQ-GENERATE-TEST',
+    runtime_action: 'poke_quizz_generate_review',
+    summary: 'Generate Find the Shiny review for TrivaMon',
+    target_agent: 'product-video-agent',
+    domain: 'content',
+    priority: 'normal',
+    poke_quizz_generate_review: {
+      templateKey: 'find-the-shiny',
+      channelSelector: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+    },
+  }, loadRuntimeConfig(), {
+    productVideoActionRunner: async () => ({
+      report: {
+        state: 'preview_generated',
+        severity: 'success',
+        summary: 'Generated a Find the Shiny review video for TrivaMon.',
+        publicationId: 'publication-trivamon-review-1',
+      },
+    }),
+  });
+
+  assert.equal(result.executionPlan.action, 'poke_quizz_generate_review');
   assert.equal(result.outboundEvents.length, 2);
   assert.deepEqual(
     result.outboundEvents.map((event) => event.channelKey),

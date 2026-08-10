@@ -10,7 +10,7 @@ import {
 test('buildGuildSlashCommands returns the supported slash commands', () => {
   const commands = buildGuildSlashCommands();
 
-  assert.equal(commands.length, 9);
+  assert.equal(commands.length, 10);
   assert.deepEqual(commands.map((command) => command.name), [
     'commands',
     'help',
@@ -18,6 +18,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'status',
     'sync',
     'ops',
+    'generate-video',
     'leadgen',
     'create-developer-issue',
     'email-draft',
@@ -77,6 +78,11 @@ test('isSupportedSlashCommandInteraction accepts supported slash commands', () =
   assert.equal(isSupportedSlashCommandInteraction({
     type: 2,
     data: { name: 'sync' },
+  }), true);
+
+  assert.equal(isSupportedSlashCommandInteraction({
+    type: 2,
+    data: { name: 'generate-video' },
   }), true);
 
   assert.equal(isSupportedSlashCommandInteraction({
@@ -259,6 +265,34 @@ test('normalizeSupportedSlashCommandInteraction converts a leadgen slash command
   });
 
   assert.equal(message?.content, 'find leads for electricians in Rotterdam max: 8');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts a manual video generation slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-1',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-7',
+    data: {
+      name: 'generate-video',
+      options: [
+        { name: 'template', value: 'find-the-shiny' },
+        { name: 'channel', value: 'trivamon-youtube' },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'generate video template: find-the-shiny channel: trivamon-youtube');
   assert.equal(message?.channelKey, 'commands');
 });
 

@@ -41,7 +41,7 @@ export function buildCommandHelpDescriptor(config = {}) {
         name: 'How To Ask',
         value: [
           `- Send one request or multiple requests on separate lines in ${commandsChannel}.`,
-          '- Or use the slash picker with `/commands`, `/health`, `/status`, or `/sync`.',
+          '- Or use the slash picker with `/commands`, `/health`, `/status`, `/sync`, or `/generate-video`.',
           `- Current parser is still keyword-based, so if something fails, use one of the example phrasings below.`,
           `- Parsed tasks appear in ${parsedTasksChannel} and queue state appears in ${taskQueueChannel}.`,
         ].join('\n'),
@@ -99,6 +99,16 @@ export function buildCommandHelpDescriptor(config = {}) {
           '- Developer issues require approval before Claude quota or GitHub writes are used.',
           '- Approved work runs in an isolated branch and opens a draft PR.',
           '- Green PR CI creates a final approval; approving it in Discord revalidates and merges the tested commit.',
+        ].join('\n'),
+        inline: false,
+      },
+      {
+        name: 'Manual Video Generation',
+        value: [
+          '`generate video template: find-the-shiny channel: trivamon-youtube`',
+          '`generate video template: dual-type-reveal channel: poke-quizz-youtube`',
+          '`/generate-video template:Find the Shiny channel:TrivaMon`',
+          '- The selected channel decides which review-videos thread receives the preview card.',
         ].join('\n'),
         inline: false,
       },

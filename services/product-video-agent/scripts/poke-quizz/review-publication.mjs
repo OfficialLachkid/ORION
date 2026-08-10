@@ -18,7 +18,11 @@ import {
   buildPokeQuizzPublicationReviewTask,
 } from '../../src/poke-quizz-publication-review.mjs';
 import { buildPersistedPokeQuizzReviewPathPatch } from '../../src/poke-quizz-review-paths.mjs';
-import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
+import {
+  findPublicationChannelProfile,
+  loadPublicationChannelProfiles,
+  resolvePublicationReviewThreadId,
+} from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import {
   loadYoutubeClientCredentials,
@@ -249,9 +253,6 @@ export async function reviewPokeQuizzPublication({
   if (!planPath) {
     throw new Error('The --plan option is required.');
   }
-  if (!reviewThreadId) {
-    throw new Error('The --thread-id option is required.');
-  }
 
   const templateRuntime = await resolveVideoTemplateRuntime({
     projectRoot,
@@ -275,6 +276,12 @@ export async function reviewPokeQuizzPublication({
 
   const channelProfile = findPublicationChannelProfile(profiles, effectiveChannelSelector);
   const runtimeConfig = loadRuntimeConfig();
+  const effectiveReviewThreadId = String(
+    reviewThreadId || resolvePublicationReviewThreadId(runtimeConfig, channelProfile),
+  ).trim();
+  if (!effectiveReviewThreadId) {
+    throw new Error(`No review thread id is configured for ${channelProfile.account_key}. Provide --thread-id or set metadata.review_thread_id.`);
+  }
   const store = new SupabasePublicationStore({
     supabaseUrl: runtimeConfig.env.SUPABASE_URL,
     apiKey: runtimeConfig.env.SUPABASE_SECRET_KEY || runtimeConfig.env.SUPABASE_PUBLISHABLE_KEY,
@@ -343,7 +350,7 @@ export async function reviewPokeQuizzPublication({
     publication,
     video,
     channelProfile,
-    reviewThreadId,
+    reviewThreadId: effectiveReviewThreadId,
     planPath,
     renderPath: renderPath || publication.metadata?.render_path || video.render?.output_path || '',
     catalogJsonPath,
@@ -358,7 +365,7 @@ export async function reviewPokeQuizzPublication({
   replaceExistingReviewTasks(runtimeConfig, reviewTask);
 
   const { payload } = buildPokeQuizzPublicationReviewPayload(reviewTask);
-  const posted = await postReviewPayload(runtimeConfig, reviewThreadId, reviewMessageId, payload);
+  const posted = await postReviewPayload(runtimeConfig, effectiveReviewThreadId, reviewMessageId, payload);
   if (!posted.posted) {
     throw new Error(`Could not post the Poke Quizz review card: ${posted.reason}${posted.error ? ` (${posted.error})` : ''}`);
   }
@@ -366,7 +373,7 @@ export async function reviewPokeQuizzPublication({
   const updatedPublication = await store.updatePublication(publication.id, {
     metadata: mergePublicationMetadata(publication, {
       review_task_id: reviewTask.task_id,
-      review_thread_id: reviewThreadId,
+      review_thread_id: effectiveReviewThreadId,
       review_message_id: posted.messageId || '',
       review_requested_at: submittedAt,
       ...buildPersistedPokeQuizzReviewPathPatch({
@@ -391,7 +398,7 @@ export async function reviewPokeQuizzPublication({
     video_id: updatedPublication?.video_id || publication.video_id,
     task_id: reviewTask.task_id,
     message_id: posted.messageId || '',
-    thread_id: reviewThreadId,
+    thread_id: effectiveReviewThreadId,
     preview_url: publication.preview_url || ensuredPreview.previewUrl,
     render_path: publication.metadata?.render_path || video.render?.output_path || '',
   };
@@ -405,7 +412,7 @@ async function main() {
       '',
       'Options:',
       '  --plan <path>              Required Poke Quizz plan JSON path.',
-      '  --thread-id <id>           Required Discord thread id for the review post.',
+      '  --thread-id <id>           Optional Discord review thread id override.',
       '  --render <path>            Optional rendered MP4 path. Default: derived from the plan output convention.',
       '  --message-id <id>          Optional existing Discord message id to patch in place.',
       '  --publication-id <id>      Reuse an existing publication row instead of registering a new one.',

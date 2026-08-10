@@ -13,7 +13,11 @@ import {
   mergePokeQuizzSelectionStates,
   resolvePokeQuizzSelectionStatePath,
 } from '../../src/poke-quizz-selection-state.mjs';
-import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
+import {
+  findPublicationChannelProfile,
+  loadPublicationChannelProfiles,
+  resolvePublicationReviewThreadId,
+} from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import {
   beginPokeQuizzGenerationProgress,
@@ -172,11 +176,6 @@ async function resolveLiveSelectionState(runtimeConfig, channelProfile, template
 }
 
 async function generateAndReviewPokeQuizz(options) {
-  const reviewThreadId = getStringOption(options, 'thread-id', '');
-  if (!reviewThreadId) {
-    throw new Error('The --thread-id option is required.');
-  }
-
   const channelsPath = getStringOption(
     options,
     'channels',
@@ -200,6 +199,14 @@ async function generateAndReviewPokeQuizz(options) {
     loadRuntimeConfigJson(configPath),
   ]);
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
+  const reviewThreadId = getStringOption(
+    options,
+    'thread-id',
+    resolvePublicationReviewThreadId(runtimeConfig, channelProfile),
+  );
+  if (!reviewThreadId) {
+    throw new Error(`No review thread id is configured for ${channelProfile.account_key}. Provide --thread-id or set metadata.review_thread_id.`);
+  }
   const liveSelectionState = await resolveLiveSelectionState(runtimeConfig, channelProfile, template);
   const { plan, planPath } = await resolvePlan(
     options,
@@ -347,7 +354,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       'Usage: node services/product-video-agent/scripts/generate-poke-quizz-review.mjs [options]',
       '',
       'Options:',
-      '  --thread-id <id>           Required Discord thread id for progress + review.',
+      '  --thread-id <id>           Optional Discord review thread id override.',
       '  --plan <path>              Optional existing Poke Quizz plan JSON path.',
       '  --catalog-json <path>      Catalog JSON used when a new plan should be built.',
       '  --plan-output <path>       Output path for a generated plan JSON.',

@@ -137,16 +137,7 @@ function buildTemplateAwareDefaultTitle(plan) {
   if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
     return buildDefaultTitle(plan);
   }
-
-  const typePairLabel = buildTypePairLabel(plan?.selection?.type_pair || []);
-  if (!typePairLabel) {
-    return 'Find the Shiny Pokemon';
-  }
-  const seed = String(plan?.seed || '').trim();
-  const templateIndex = seed
-    ? hashSeed(`${seed}|${typePairLabel}|find-the-shiny`) % DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS.length
-    : 0;
-  return DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS[templateIndex](typePairLabel);
+  return 'Find the Shiny Pokemon';
 }
 
 function buildTemplateAwareDefaultDescription(plan) {

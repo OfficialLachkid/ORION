@@ -31,7 +31,8 @@ function event(channelKey, type, body, metadata = {}) {
 
 function resolvePokeQuizzPublicationId(task) {
   return String(
-    task?.poke_quizz_publication_review?.publicationId
+    task?.poke_quizz_generate_review?.publicationId
+    || task?.poke_quizz_publication_review?.publicationId
     || task?.poke_quizz_feedback?.publicationId
     || task?.poke_quizz_delete?.publicationId
     || '',
@@ -40,7 +41,8 @@ function resolvePokeQuizzPublicationId(task) {
 
 function isPokeQuizzPublicationWorkflowAction(action) {
   return (
-    action === 'poke_quizz_publish_preview'
+    action === 'poke_quizz_generate_review'
+    || action === 'poke_quizz_publish_preview'
     || action === 'poke_quizz_feedback_regenerate'
     || action === 'poke_quizz_delete_preview'
   );

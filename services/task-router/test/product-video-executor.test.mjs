@@ -2,6 +2,64 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { executeProductVideoAction } from '../src/product-video-executor.mjs';
 
+test('manual review generation uses the selected channel config and default review-thread routing', async () => {
+  const runCalls = [];
+  const normalizePath = (value) => String(value || '').replaceAll('\\', '/');
+
+  const result = await executeProductVideoAction(
+    'poke_quizz_generate_review',
+    {
+      task_id: 'TASK-ORION-PQ-GENERATE-TEST',
+      submitted_at: '2026-08-10T09:45:00.000Z',
+      poke_quizz_generate_review: {
+        templateKey: 'find-the-shiny',
+        templateLabel: 'Find the Shiny',
+        channelSelector: 'trivamon-youtube',
+        channelLabel: 'TrivaMon',
+        channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      },
+    },
+    { env: {} },
+    {
+      ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+      runProcess: async (options) => {
+        runCalls.push(options);
+        return {
+          stdout: JSON.stringify({
+            publication_id: 'publication-trivamon-review-1',
+            preview_url: 'https://youtube.com/shorts/manual-preview',
+            task_id: 'TASK-ORION-PQ-PUBLISH-MANUAL',
+            message_id: '1536308033032945767',
+            render_path: 'data/runtime/product-video-agent/poke-quizz/manual-preview.mp4',
+          }, null, 2),
+        };
+      },
+    },
+  );
+
+  assert.equal(runCalls.length, 1);
+  assert.equal(
+    normalizePath(runCalls[0].args[0]).endsWith('services/product-video-agent/scripts/generate-poke-quizz-review.mjs'),
+    true,
+  );
+  assert.equal(runCalls[0].args.includes('--catalog-json'), true);
+  assert.equal(runCalls[0].args.includes('--channel-config'), true);
+  assert.equal(runCalls[0].args.includes('--channel'), true);
+  assert.equal(runCalls[0].args.includes('--thread-id'), false);
+  assert.equal(
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--catalog-json') + 1]).endsWith('data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json'),
+    true,
+  );
+  assert.equal(
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json'),
+    true,
+  );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'trivamon-youtube');
+  assert.equal(result.report.state, 'preview_generated');
+  assert.equal(result.report.previewUrl, 'https://youtube.com/shorts/manual-preview');
+  assert.equal(result.report.publicationId, 'publication-trivamon-review-1');
+});
+
 test('publish approval triggers an immediate scheduling pass and returns the scheduled slot', async () => {
   const initialPublication = {
     id: 'publication-bug-ground',

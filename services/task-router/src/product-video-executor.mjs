@@ -152,6 +152,14 @@ function assertDeleteTask(task) {
   return deletion;
 }
 
+function assertGenerateReviewTask(task) {
+  const generation = task?.poke_quizz_generate_review;
+  if (!generation?.channelConfigPath || !generation?.channelSelector) {
+    throw new Error('Poke Quizz generation task is missing channel routing metadata.');
+  }
+  return generation;
+}
+
 function isActionableReviewWorkflowState(workflowState) {
   const normalizedState = String(workflowState || '').trim().toLowerCase();
   return normalizedState === 'preview_uploaded' || normalizedState === 'delete_failed';
@@ -649,8 +657,69 @@ async function executeDeletePreviewTask(task, config, dependencies = {}) {
   };
 }
 
+async function executeGenerateReviewTask(task, _config, dependencies = {}) {
+  const generation = assertGenerateReviewTask(task);
+  const resolvePreferredCatalogJsonPath =
+    dependencies.ensurePreferredPokeQuizzCatalogJsonPath
+    || ensurePreferredPokeQuizzCatalogJsonPath;
+  const catalogJsonPath = await resolvePreferredCatalogJsonPath();
+  if (!catalogJsonPath) {
+    throw new Error('No localized Poke Quizz catalog JSON could be found.');
+  }
+
+  const submittedAt = task.submitted_at || new Date().toISOString();
+  const runProcess = dependencies.runProcess || runLocalProcess;
+  const generateReviewScriptPath = dependencies.generateReviewScriptPath
+    || resolve(projectRoot, 'services/product-video-agent/scripts/generate-poke-quizz-review.mjs');
+  const reviewResult = await runProcess({
+    executable: process.execPath,
+    args: [
+      generateReviewScriptPath,
+      '--catalog-json',
+      resolve(projectRoot, catalogJsonPath),
+      '--channel-config',
+      resolve(projectRoot, generation.channelConfigPath),
+      '--channel',
+      generation.channelSelector,
+      '--as-of',
+      submittedAt,
+    ],
+    cwd: projectRoot,
+    timeoutMs: 1_200_000,
+  });
+
+  const reviewPayload = parseLastJsonObject(reviewResult.stdout) || {};
+  if (!reviewPayload?.publication_id) {
+    throw new Error('Poke Quizz manual generation did not return a publication id.');
+  }
+
+  return {
+    rawStdout: reviewResult.stdout || '',
+    report: {
+      state: 'preview_generated',
+      severity: 'success',
+      summary: `Generated a ${generation.templateLabel || 'Poke Quizz'} review video for ${generation.channelLabel || generation.channelSelector} and posted it to the configured review thread.`,
+      publicationId: reviewPayload.publication_id || '',
+      previewUrl: reviewPayload.preview_url || '',
+      reviewTaskId: reviewPayload.task_id || '',
+      reviewMessageId: reviewPayload.message_id || '',
+      renderPath: reviewPayload.render_path || '',
+      channelSelector: generation.channelSelector,
+      channelConfigPath: generation.channelConfigPath,
+      templateKey: generation.templateKey || '',
+    },
+  };
+}
+
 export function describeExplicitProductVideoAction(task) {
   const action = String(task?.runtime_action || '').trim();
+  if (action === 'poke_quizz_generate_review') {
+    return {
+      action,
+      description: 'Generate and post a fresh Poke Quizz review video for the selected template and channel.',
+    };
+  }
+
   if (action === 'poke_quizz_publish_preview') {
     return {
       action,
@@ -676,6 +745,10 @@ export function describeExplicitProductVideoAction(task) {
 }
 
 export async function executeProductVideoAction(action, task, config, dependencies = {}) {
+  if (action === 'poke_quizz_generate_review') {
+    return executeGenerateReviewTask(task, config, dependencies);
+  }
+
   if (action === 'poke_quizz_publish_preview') {
     return executePublishPreviewTask(task, config, dependencies);
   }
