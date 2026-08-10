@@ -146,10 +146,11 @@
     },
     "pokeball_grid": {
       "overlay_scale_multiplier": 1.404,
-      "intro_duration_seconds": 0.56
+      "intro_duration_seconds": 0.72,
+      "intro_stagger_seconds": 0.32
     },
     "text": {
-      "hook_y": 180,
+      "hook_y": 360,
       "prompt_y": 290,
       "reveal_y": 260,
       "prompt_font_size": 108

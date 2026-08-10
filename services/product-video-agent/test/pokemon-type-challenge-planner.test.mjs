@@ -596,6 +596,172 @@ test('planner collapses same-dex variants and prefers Mega forms over base and G
   );
 });
 
+test('planner keeps battle-relevant form-only dual-type rows such as Meloetta Pirouette and Lopunny Mega', async () => {
+  const normalFightingRows = [
+    {
+      id: 'pokedex-0428-lopunny-mega',
+      national_dex_number: 428,
+      name: 'Lopunny (Mega)',
+      slug: 'lopunny-mega',
+      generation: 4,
+      region: 'sinnoh',
+      types: ['normal', 'fighting'],
+      sprite_path: '/tmp/0428-lopunny-mega.png',
+      silhouette_path: '/tmp/0428-lopunny-mega-silhouette.png',
+      shiny_sprite_path: '/tmp/0428-lopunny-mega-shiny.png',
+      cry_path: '/tmp/0428-lopunny-mega.wav',
+      sprite_source_url: 'https://example.test/0428-lopunny-mega.png',
+      shiny_sprite_source_url: 'https://example.test/0428-lopunny-mega-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      is_default_form: false,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/normal.gif',
+          'https://www.serebii.net/pokedex-bw/type/fighting.gif',
+        ],
+        pokemon_api: {
+          pokemon_name: 'lopunny-mega',
+          form_name: 'Mega',
+          is_default_form: false,
+          is_battle_only: true,
+          is_mega: true,
+          order: 650,
+          form_order: 2,
+        },
+      },
+    },
+    {
+      id: 'pokedex-0648-meloetta-pirouette',
+      national_dex_number: 648,
+      name: 'Meloetta (Pirouette)',
+      slug: 'meloetta-pirouette',
+      generation: 5,
+      region: 'unova',
+      types: ['normal', 'fighting'],
+      sprite_path: '/tmp/0648-meloetta-pirouette.png',
+      silhouette_path: '/tmp/0648-meloetta-pirouette-silhouette.png',
+      shiny_sprite_path: '/tmp/0648-meloetta-pirouette-shiny.png',
+      cry_path: '/tmp/0648-meloetta-pirouette.wav',
+      sprite_source_url: 'https://example.test/0648-meloetta-pirouette.png',
+      shiny_sprite_source_url: 'https://example.test/0648-meloetta-pirouette-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      is_default_form: false,
+      metadata: {
+        is_mythical: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/normal.gif',
+          'https://www.serebii.net/pokedex-bw/type/fighting.gif',
+        ],
+        pokemon_api: {
+          pokemon_name: 'meloetta-pirouette',
+          form_name: 'Pirouette',
+          is_default_form: false,
+          is_battle_only: true,
+          is_mega: false,
+          order: 982,
+          form_order: 2,
+        },
+      },
+    },
+    {
+      id: 'pokedex-0759',
+      national_dex_number: 759,
+      name: 'Stufful',
+      slug: 'stufful',
+      generation: 7,
+      region: 'alola',
+      types: ['normal', 'fighting'],
+      sprite_path: '/tmp/0759.png',
+      silhouette_path: '/tmp/0759-silhouette.png',
+      shiny_sprite_path: '/tmp/0759-shiny.png',
+      cry_path: '/tmp/0759.wav',
+      sprite_source_url: 'https://example.test/0759.png',
+      shiny_sprite_source_url: 'https://example.test/0759-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/normal.gif',
+          'https://www.serebii.net/pokedex-bw/type/fighting.gif',
+        ],
+      },
+    },
+    {
+      id: 'pokedex-0760',
+      national_dex_number: 760,
+      name: 'Bewear',
+      slug: 'bewear',
+      generation: 7,
+      region: 'alola',
+      types: ['normal', 'fighting'],
+      sprite_path: '/tmp/0760.png',
+      silhouette_path: '/tmp/0760-silhouette.png',
+      shiny_sprite_path: '/tmp/0760-shiny.png',
+      cry_path: '/tmp/0760.wav',
+      sprite_source_url: 'https://example.test/0760.png',
+      shiny_sprite_source_url: 'https://example.test/0760-shiny.png',
+      silhouette_source_url: null,
+      cry_source_url: null,
+      metadata: {
+        is_final_evolution: true,
+        type_icon_source_urls: [
+          'https://www.serebii.net/pokedex-bw/type/normal.gif',
+          'https://www.serebii.net/pokedex-bw/type/fighting.gif',
+        ],
+      },
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: {
+      ...template,
+      selection_rules: {
+        ...template.selection_rules,
+        generation_scope: [],
+      },
+    },
+    pokedexRows: normalFightingRows,
+    seed: 'normal-fighting-forms',
+    forcedTypePair: ['normal', 'fighting'],
+    assetInventory: {
+      scanned_at: '2026-08-10T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/normal.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/fighting.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  assert.deepEqual(
+    plan.selection.selected_subjects.map((subject) => subject.name),
+    ['Lopunny (Mega)', 'Meloetta (Pirouette)', 'Stufful', 'Bewear'],
+  );
+  assert.equal(plan.selection.catalog_match_count, 4);
+  assert.equal(plan.selection.selected_subject_count, 4);
+});
+
 test('planner rejects disallowed or absent type pairs', async () => {
   await assert.rejects(
     () => planPokemonTypeChallenge({

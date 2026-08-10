@@ -30,6 +30,7 @@ const DEFAULT_MIN_ITEM_SIZE_PX = 148;
 const DEFAULT_POKEBALL_WIGGLE_WINDOW_START_RATIO = 0.12;
 const DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO = 0.76;
 const DEFAULT_POKEBALL_INTRO_DURATION_SECONDS = 0.56;
+const DEFAULT_POKEBALL_INTRO_STAGGER_SECONDS = 0.32;
 
 function isBeachBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
@@ -146,7 +147,7 @@ function pickSeededQuestionText(primaryText, variants, random) {
   return options[Math.floor(random() * options.length)];
 }
 
-function buildSpreadReplayOffsetRatios(count, random) {
+function buildSpreadOffsetRatios(count, random) {
   const safeCount = Math.max(1, ensurePositiveInteger(count, 1));
   const stratifiedOffsets = Array.from({ length: safeCount }, (_, index) => roundRatio(
     (index + 0.2 + (random() * 0.6)) / safeCount,
@@ -588,7 +589,12 @@ function buildFindTheShinyLayout(template, difficulty, random) {
       Number(pokeballGridConfig.wiggle_window_end_ratio ?? DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO),
     ),
   );
-  const replayOffsetRatios = buildSpreadReplayOffsetRatios(difficulty.sprite_count, random);
+  const introStaggerSeconds = Math.max(
+    0,
+    Number(pokeballGridConfig.intro_stagger_seconds ?? DEFAULT_POKEBALL_INTRO_STAGGER_SECONDS),
+  );
+  const introOffsetRatios = buildSpreadOffsetRatios(difficulty.sprite_count, random);
+  const replayOffsetRatios = buildSpreadOffsetRatios(difficulty.sprite_count, random);
   const cells = [];
 
   for (let index = 0; index < difficulty.sprite_count; index += 1) {
@@ -606,6 +612,7 @@ function buildFindTheShinyLayout(template, difficulty, random) {
       height: itemSize,
       center_x: x + Math.floor(itemSize / 2),
       center_y: y + Math.floor(itemSize / 2),
+      pokeball_intro_offset_ratio: introOffsetRatios[index],
       pokeball_wiggle_offset_ratio: roundRatio(random()),
       pokeball_replay_offset_ratio: replayOffsetRatios[index],
     });
@@ -631,6 +638,7 @@ function buildFindTheShinyLayout(template, difficulty, random) {
     pokeball_intro_duration_seconds: Number(
       pokeballGridConfig.intro_duration_seconds ?? DEFAULT_POKEBALL_INTRO_DURATION_SECONDS
     ),
+    pokeball_intro_stagger_seconds: introStaggerSeconds,
     pokeball_wiggle_window_start_ratio: wiggleWindowStartRatio,
     pokeball_wiggle_window_end_ratio: wiggleWindowEndRatio,
     cells,

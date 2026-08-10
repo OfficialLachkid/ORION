@@ -35,7 +35,7 @@ const template = {
   },
   layout: {
     text: {
-      hook_y: 180,
+      hook_y: 360,
       prompt_y: 290,
       reveal_y: 260,
       prompt_font_size: 108,
@@ -77,7 +77,8 @@ const template = {
     },
     pokeball_grid: {
       overlay_scale_multiplier: 1.404,
-      intro_duration_seconds: 0.56,
+      intro_duration_seconds: 0.72,
+      intro_stagger_seconds: 0.32,
     },
     timer: {
       countdown_from: 3,
@@ -205,6 +206,13 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.shiny_reveal.selected_cell_index >= 0, true);
   assert.equal(plan.shiny_reveal.selected_cell_index < plan.selection.display_subject_count, true);
   assert.equal(plan.timeline.find((entry) => entry.phase === 'reveal')?.spoken_text, 'Did you find it?');
+  assert.equal(plan.assets.overlays.sprite_grid.cells.every((cell) => (
+    Number.isFinite(cell.pokeball_intro_offset_ratio)
+  )), true);
+  assert.equal(
+    new Set(plan.assets.overlays.sprite_grid.cells.map((cell) => cell.pokeball_intro_offset_ratio)).size,
+    plan.assets.overlays.sprite_grid.cells.length,
+  );
   assert.equal(plan.assets.overlays.sprite_grid.cells.every((cell) => (
     Number.isFinite(cell.pokeball_wiggle_offset_ratio)
   )), true);
@@ -408,13 +416,13 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
   assert.match(visualFilter.script, new RegExp(`scale=${expectedSpriteHoldSize}:${expectedSpriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1\\[shinyhold\\]`, 'u'));
   assert.match(visualFilter.script, new RegExp(`scale=${expectedPokeballSize}:${expectedPokeballSize}:force_original_aspect_ratio=decrease`, 'u'));
   assert.match(visualFilter.script, /\[pbsrc0\]split=2\[pbisrc0\]\[pbrsrc0\]/u);
-  assert.match(visualFilter.script, /\[pbisrc0\]trim=duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+2\.1\/TB,scale=w='/u);
-  assert.match(visualFilter.script, /\[pbrsrc0\]trim=duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=/u);
   assert.match(visualFilter.script, /\[pbr0\]split=2\[pbo0\]\[pbt0\]/u);
-  assert.match(visualFilter.script, /\[v0\]\[pbi0\]overlay=.*enable='gte\(t,2\.1\)\*lt\(t,[0-9.]+\)'/u);
   assert.match(visualFilter.script, /\[vg0\]\[pbo0\]overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,5\.68\)'/u);
   assert.match(visualFilter.script, new RegExp(`overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2`, 'u'));
   assert.match(visualFilter.script, /\[6:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+5\.68\/TB/u);
   assert.match(visualFilter.script, /pokeballpop/u);
   assert.match(visualFilter.script, /normaltransition/u);
+  assert.match(visualFilter.script, /\[pbisrc0\]trim=start=[0-9.]+:duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=w='/u);
+  assert.match(visualFilter.script, /\[pbrsrc0\]trim=start=[0-9.]+:duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=/u);
+  assert.match(visualFilter.script, /\[v0\]\[pbi0\]overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,[0-9.]+\)'/u);
 });
