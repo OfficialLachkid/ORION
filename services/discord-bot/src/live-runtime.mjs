@@ -466,6 +466,100 @@ function buildTaskDispatchBlockedEvents(task) {
   ];
 }
 
+export function prepareCommandTasksForExecution(
+  result,
+  message,
+  {
+    activeExecutionTaskId = '',
+    executionQueueLength = 0,
+    queueExecutableTask = () => ({
+      taskId: '',
+      state: 'no_executor',
+      action: '',
+      queuePosition: 0,
+      blockedByTaskId: '',
+    }),
+    rememberPendingTaskIfNeeded = () => {},
+    recordTaskStateChange = () => {},
+    safeRecordMetric = () => {},
+  } = {},
+) {
+  if (result?.route !== 'command') {
+    return {
+      tasks: [],
+      runtimeOutboundEvents: [],
+    };
+  }
+
+  const tasks = Array.isArray(result.normalizedTasks) && result.normalizedTasks.length > 0
+    ? result.normalizedTasks
+    : result.normalizedTask?.task_id
+      ? [result.normalizedTask]
+      : [];
+  const queueBacklogBefore = (activeExecutionTaskId ? 1 : 0) + executionQueueLength;
+  const executionStates = [];
+  const runtimeOutboundEvents = [];
+
+  for (const task of tasks) {
+    safeRecordMetric('command_accepted', {
+      taskId: task.task_id,
+      domain: task.domain,
+      priority: task.priority,
+      approvalRequired: task.approval_required,
+      targetAgent: task.target_agent,
+      authorId: message?.author?.id || '',
+      submittedBy: task.submitted_by,
+      sourceType: task.source_type,
+      estimatedInputTokens: estimateTextTokens(task.full_text),
+      estimatedCostUsd: 0,
+    });
+    recordTaskStateChange(task, task.status);
+    rememberPendingTaskIfNeeded(task);
+
+    if (task.approval_required) {
+      executionStates.push({
+        taskId: task.task_id,
+        state: 'awaiting_approval',
+        action: '',
+        queuePosition: 0,
+        blockedByTaskId: '',
+      });
+      continue;
+    }
+
+    const executionState = queueExecutableTask(task);
+    executionStates.push(executionState);
+    if (executionState.state === 'no_executor') {
+      runtimeOutboundEvents.push(...buildTaskDispatchBlockedEvents(task));
+      safeRecordMetric('task_dispatch_blocked', {
+        taskId: task.task_id,
+        domain: task.domain || '',
+        targetAgent: task.target_agent || '',
+        reason: 'no_executor',
+      });
+      recordTaskStateChange(task, 'blocked', {
+        reason: 'No executor is mapped for this request yet.',
+      });
+    }
+  }
+
+  result.commandRuntimeSummary = {
+    taskCount: tasks.length,
+    queueBacklogBefore,
+    activeExecutionTaskId,
+    executionStates,
+    awaitingApprovalCount: executionStates.filter((item) => item.state === 'awaiting_approval').length,
+    queuedCount: executionStates.filter((item) => item.state === 'queued').length,
+    startingCount: executionStates.filter((item) => item.state === 'starting').length,
+    noExecutorCount: executionStates.filter((item) => item.state === 'no_executor').length,
+  };
+
+  return {
+    tasks,
+    runtimeOutboundEvents,
+  };
+}
+
 function isBlockedExecution(execution) {
   const report = execution?.executionResult?.report || {};
   const state = String(report.state || '').trim().toLowerCase();
@@ -929,6 +1023,14 @@ export async function runLiveDiscordBot(config) {
           const slashCommandMessage = normalizeSupportedSlashCommandInteraction(payload.d);
           if (slashCommandMessage) {
             const result = processDiscordEvent(slashCommandMessage, config);
+            const { runtimeOutboundEvents } = prepareCommandTasksForExecution(result, slashCommandMessage, {
+              activeExecutionTaskId,
+              executionQueueLength: executionQueue.length,
+              queueExecutableTask,
+              rememberPendingTaskIfNeeded,
+              recordTaskStateChange,
+              safeRecordMetric,
+            });
             const acknowledgement = result.accepted
               ? buildSourceAcknowledgement(result, config)
               : result.reason || 'Slash command request was rejected.';
@@ -946,8 +1048,15 @@ export async function runLiveDiscordBot(config) {
                   },
             });
 
-            if (result.outboundEvents?.length) {
-              await fanOutOutboundEvents(token, config, result.outboundEvents, trackedTaskMessages);
+            const outboundEvents = result.route === 'command'
+              ? [...(result.outboundEvents || []), ...runtimeOutboundEvents]
+              : (result.outboundEvents || []);
+            if (outboundEvents.length > 0) {
+              await fanOutOutboundEvents(token, config, outboundEvents, trackedTaskMessages);
+            }
+
+            if (result.route === 'command') {
+              ensureExecutionDrain();
             }
             return;
           }
@@ -1278,67 +1387,15 @@ export async function runLiveDiscordBot(config) {
         }
 
         if (result.route === 'command') {
-          const tasks = Array.isArray(result.normalizedTasks) && result.normalizedTasks.length > 0
-            ? result.normalizedTasks
-            : result.normalizedTask?.task_id
-              ? [result.normalizedTask]
-              : [];
-          const queueBacklogBefore = (activeExecutionTaskId ? 1 : 0) + executionQueue.length;
-          const executionStates = [];
-
-          for (const task of tasks) {
-            safeRecordMetric('command_accepted', {
-              taskId: task.task_id,
-              domain: task.domain,
-              priority: task.priority,
-              approvalRequired: task.approval_required,
-              targetAgent: task.target_agent,
-              authorId: message.author?.id || '',
-              submittedBy: task.submitted_by,
-              sourceType: task.source_type,
-              estimatedInputTokens: estimateTextTokens(task.full_text),
-              estimatedCostUsd: 0,
-            });
-            recordTaskStateChange(task, task.status);
-            rememberPendingTaskIfNeeded(task);
-
-            if (task.approval_required) {
-              executionStates.push({
-                taskId: task.task_id,
-                state: 'awaiting_approval',
-                action: '',
-                queuePosition: 0,
-                blockedByTaskId: '',
-              });
-              continue;
-            }
-
-            const executionState = queueExecutableTask(task);
-            executionStates.push(executionState);
-            if (executionState.state === 'no_executor') {
-              runtimeOutboundEvents.push(...buildTaskDispatchBlockedEvents(task));
-              safeRecordMetric('task_dispatch_blocked', {
-                taskId: task.task_id,
-                domain: task.domain || '',
-                targetAgent: task.target_agent || '',
-                reason: 'no_executor',
-              });
-              recordTaskStateChange(task, 'blocked', {
-                reason: 'No executor is mapped for this request yet.',
-              });
-            }
-          }
-
-          result.commandRuntimeSummary = {
-            taskCount: tasks.length,
-            queueBacklogBefore,
+          const { tasks, runtimeOutboundEvents: commandRuntimeOutboundEvents } = prepareCommandTasksForExecution(result, message, {
             activeExecutionTaskId,
-            executionStates,
-            awaitingApprovalCount: executionStates.filter((item) => item.state === 'awaiting_approval').length,
-            queuedCount: executionStates.filter((item) => item.state === 'queued').length,
-            startingCount: executionStates.filter((item) => item.state === 'starting').length,
-            noExecutorCount: executionStates.filter((item) => item.state === 'no_executor').length,
-          };
+            executionQueueLength: executionQueue.length,
+            queueExecutableTask,
+            rememberPendingTaskIfNeeded,
+            recordTaskStateChange,
+            safeRecordMetric,
+          });
+          runtimeOutboundEvents.push(...commandRuntimeOutboundEvents);
           rememberRecentCommandTasks(message, tasks);
         }
 

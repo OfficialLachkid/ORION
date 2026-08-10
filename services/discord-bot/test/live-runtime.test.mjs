@@ -16,6 +16,7 @@ import {
   attachImageContextToTasks,
   buildImageContextKey,
   mergeImageAttachments,
+  prepareCommandTasksForExecution,
   rehydratePokeQuizzReviewTask,
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
@@ -436,6 +437,50 @@ test('buildImageContextKey scopes image context by author and channel', () => {
     }),
     'user-1:channel-1'
   );
+});
+
+test('prepareCommandTasksForExecution queues executable slash-command tasks', () => {
+  const queuedTasks = [];
+  const result = {
+    route: 'command',
+    normalizedTask: {
+      task_id: 'TASK-ORION-PQ-GENERATE-TEST',
+      full_text: 'generate video template: find-the-shiny channel: trivamon-youtube',
+      domain: 'content',
+      priority: 'normal',
+      approval_required: false,
+      target_agent: 'product-video-agent',
+      submitted_by: 'Valen',
+      source_type: 'discord_text_command',
+      status: 'queued',
+    },
+  };
+
+  const prepared = prepareCommandTasksForExecution(result, {
+    author: {
+      id: 'operator-1',
+    },
+  }, {
+    activeExecutionTaskId: '',
+    executionQueueLength: 0,
+    queueExecutableTask: (task) => {
+      queuedTasks.push(task.task_id);
+      return {
+        taskId: task.task_id,
+        state: 'starting',
+        action: 'poke_quizz_generate_review',
+        queuePosition: 0,
+        blockedByTaskId: '',
+      };
+    },
+  });
+
+  assert.deepEqual(queuedTasks, ['TASK-ORION-PQ-GENERATE-TEST']);
+  assert.equal(prepared.tasks.length, 1);
+  assert.equal(prepared.runtimeOutboundEvents.length, 0);
+  assert.equal(result.commandRuntimeSummary.taskCount, 1);
+  assert.equal(result.commandRuntimeSummary.startingCount, 1);
+  assert.equal(result.commandRuntimeSummary.queuedCount, 0);
 });
 
 test('rehydratePokeQuizzReviewTask finds TrivaMon reviews without assuming the Poke Quizz account', async () => {
