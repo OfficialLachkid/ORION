@@ -6,6 +6,10 @@
     {
       "template_id": "pokemon.dual-type-reveal.v1",
       "path": "../templates/pokemon/dual-type-reveal.v1.json"
+    },
+    {
+      "template_id": "pokemon.find-the-shiny.v1",
+      "path": "../templates/pokemon/find-the-shiny.v1.json"
     }
   ]
 }

@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
+import {
+  normalizePublicationChannelProfile,
+  resolvePublicationChannelUrl,
+  resolvePublicationReviewThreadId,
+} from '../src/publication-channels.mjs';
 import {
   buildPokeQuizzQueueStatusPayload,
   computePokeQuizzQueueStatus,
@@ -107,4 +111,49 @@ test('Poke Quizz queue status payload honors presentation overrides', () => {
   assert.match(payload.embeds?.[0]?.description || '', /No slot yet/u);
   assert.equal(payload.embeds?.[0]?.footer?.text, 'Template-driven queue status');
   assert.equal(payload.embeds?.[0]?.color, 0x99AAB5);
+});
+
+test('publication channel helpers support per-channel handle URLs and review threads', () => {
+  const trivamonProfile = normalizePublicationChannelProfile({
+    id: 'video-channel-trivamon-youtube',
+    name: 'TrivaMon',
+    niche: 'pokemon_quiz',
+    content_lane: 'poke-quizz',
+    platform: 'youtube_shorts',
+    account_key: 'trivamon-youtube',
+    timezone: 'Europe/Amsterdam',
+    schedule_slots: [
+      { hour: 8, minute: 0 },
+      { hour: 12, minute: 0 },
+      { hour: 14, minute: 0 },
+    ],
+    workflow: {
+      preview_visibility: 'unlisted',
+      publish_visibility: 'public',
+      require_preview_approval: true,
+      require_publish_approval: true,
+      delete_preview_on_reject: true,
+    },
+    youtube: {
+      channel_id: '',
+      default_category_id: '24',
+      oauth_client_secret_path: 'config/youtube/client-secret.json',
+      oauth_refresh_token_env: 'YOUTUBE_TRIVAMON_REFRESH_TOKEN',
+    },
+    metadata: {
+      channel_url: 'https://www.youtube.com/@TrivaMon',
+      youtube_handle: '@TrivaMon',
+      review_thread_id: '1536146358749233222',
+    },
+  });
+
+  assert.equal(resolvePublicationChannelUrl(trivamonProfile), 'https://www.youtube.com/@TrivaMon');
+  assert.equal(
+    resolvePublicationReviewThreadId({
+      channelIds: {
+        pokeQuizzReview: 'legacy-thread-id',
+      },
+    }, trivamonProfile),
+    '1536146358749233222',
+  );
 });

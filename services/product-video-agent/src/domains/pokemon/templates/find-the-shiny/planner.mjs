@@ -7,7 +7,6 @@ import {
 import {
   scanPokeQuizzAssetInventory,
   selectSeededFile,
-  selectTypeIconSet,
 } from '../../../../poke-quizz-asset-inventory.mjs';
 
 const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
@@ -17,6 +16,21 @@ const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
   rock: ['cave-backgrounds'],
   water: ['beach-backgrounds'],
 });
+const TYPE_THEMED_BACKGROUND_PRIORITY = Object.freeze([
+  'ice',
+  'ground',
+  'rock',
+  'fire',
+  'water',
+]);
+const DEFAULT_SPARKLE_DURATION_SECONDS = 0.9;
+const DEFAULT_SPARKLE_SCALE_MULTIPLIER = 1.35;
+const DEFAULT_SPRITE_SCALE_MULTIPLIER = 1.08;
+const DEFAULT_MIN_ITEM_SIZE_PX = 148;
+const DEFAULT_POKEBALL_WIGGLE_WINDOW_START_RATIO = 0.12;
+const DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO = 0.76;
+const DEFAULT_POKEBALL_INTRO_DURATION_SECONDS = 0.56;
+const DEFAULT_POKEBALL_INTRO_STAGGER_SECONDS = 0.32;
 
 function isBeachBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
@@ -37,18 +51,6 @@ function isIceBackgroundPath(backgroundPath) {
 function isArchivedBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/archived-backgrounds/');
 }
-
-const TYPE_THEMED_BACKGROUND_PRIORITY = Object.freeze([
-  'ice',
-  'ground',
-  'rock',
-  'fire',
-  'water',
-]);
-const DEFAULT_SHINY_ODDS_NUMERATOR = 1;
-const DEFAULT_SHINY_ODDS_DENOMINATOR = 11;
-const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
-const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
 
 function isThemedBackgroundPath(backgroundPath) {
   return isBeachBackgroundPath(backgroundPath)
@@ -87,6 +89,10 @@ function ensurePositiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function roundRatio(value) {
+  return Number(Number(value || 0).toFixed(4));
+}
+
 function hashSeed(input) {
   let hash = 2166136261;
   for (const character of String(input || 'poke-quizz-default-seed')) {
@@ -114,6 +120,62 @@ function sampleArray(values, count, random) {
     [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
   return items.slice(0, count);
+}
+
+function normalizeQuestionTextOptions(primaryText, variants = []) {
+  const options = [];
+  const normalizedPrimaryText = String(primaryText || '').trim();
+  if (normalizedPrimaryText) {
+    options.push(normalizedPrimaryText);
+  }
+
+  for (const variant of Array.isArray(variants) ? variants : []) {
+    const normalizedVariant = String(variant || '').trim();
+    if (normalizedVariant && !options.includes(normalizedVariant)) {
+      options.push(normalizedVariant);
+    }
+  }
+
+  return options;
+}
+
+function pickSeededQuestionText(primaryText, variants, random) {
+  const options = normalizeQuestionTextOptions(primaryText, variants);
+  if (!options.length) {
+    return '';
+  }
+  return options[Math.floor(random() * options.length)];
+}
+
+function buildSpreadOffsetRatios(count, random) {
+  const safeCount = Math.max(1, ensurePositiveInteger(count, 1));
+  const stratifiedOffsets = Array.from({ length: safeCount }, (_, index) => roundRatio(
+    (index + 0.2 + (random() * 0.6)) / safeCount,
+  ));
+  return sampleArray(stratifiedOffsets, safeCount, random);
+}
+
+function resolveQuestionContractTexts(template, random) {
+  const questionContract = template?.question_contract && typeof template.question_contract === 'object'
+    ? template.question_contract
+    : {};
+  return {
+    hook: pickSeededQuestionText(
+      questionContract.hook_text,
+      questionContract.hook_text_variants,
+      random,
+    ),
+    prompt: pickSeededQuestionText(
+      questionContract.type_prompt_text,
+      questionContract.type_prompt_text_variants,
+      random,
+    ),
+    reveal: pickSeededQuestionText(
+      questionContract.reveal_text,
+      questionContract.reveal_text_variants,
+      random,
+    ),
+  };
 }
 
 function readSubjectMetadataValue(subject, keys = []) {
@@ -303,6 +365,36 @@ function prioritizeSelectableSubjects(subjects, random) {
   return buckets.flatMap((bucket) => sampleArray(bucket, bucket.length, random));
 }
 
+function buildDifficultyCatalog(template) {
+  const configuredLevels = template?.layout?.sprite_grid?.difficulty_levels || {};
+  const difficultyWeights = template?.layout?.sprite_grid?.difficulty_weights || {};
+  return Object.entries(configuredLevels)
+    .map(([difficultyId, entry]) => {
+      const rows = ensurePositiveInteger(entry?.rows, 0);
+      const columns = ensurePositiveInteger(entry?.columns, 0);
+      const spriteCount = ensurePositiveInteger(entry?.sprite_count, rows * columns);
+      return {
+        id: difficultyId,
+        rows,
+        columns,
+        sprite_count: spriteCount,
+        weight: Math.max(1, ensurePositiveInteger(difficultyWeights[difficultyId], 1)),
+      };
+    })
+    .filter((entry) => entry.rows > 0 && entry.columns > 0 && entry.sprite_count > 0);
+}
+
+function chooseDifficulty(difficultyCatalog, random) {
+  if (!Array.isArray(difficultyCatalog) || difficultyCatalog.length === 0) {
+    throw new Error('Find the Shiny requires at least one configured sprite-grid difficulty level.');
+  }
+
+  const weightedDifficultyPool = difficultyCatalog.flatMap((entry) => (
+    Array.from({ length: entry.weight }, () => entry)
+  ));
+  return weightedDifficultyPool[Math.floor(random() * weightedDifficultyPool.length)] || difficultyCatalog[0];
+}
+
 function getTemplateSelectionConfig(template) {
   const typePairPolicy = template.selection_rules?.type_pair_policy || {};
   const configuredGenerationScope = Array.isArray(template.selection_rules?.generation_scope)
@@ -317,8 +409,7 @@ function getTemplateSelectionConfig(template) {
         .map((pair) => createTypePairKey(pair)),
     ),
     minCatalogMatches: Number(typePairPolicy.min_catalog_matches || 1),
-    selectedSubjectsMin: Number(typePairPolicy.selected_subjects_min || 1),
-    selectedSubjectsMax: Number(typePairPolicy.selected_subjects_max || 4),
+    difficultyCatalog: buildDifficultyCatalog(template),
   };
 }
 
@@ -329,6 +420,7 @@ function buildPairCatalog(rows, config) {
     if (Array.isArray(config.generationScope) && !config.generationScope.includes(row.generation)) continue;
     if (!row.national_dex_number || !row.name || !Array.isArray(row.types)) continue;
     if (row.types.length !== 2) continue;
+    if (!row.sprite_path || !row.shiny_sprite_path) continue;
 
     const pair = normalizeTypePair(row.types);
     const pairKey = createTypePairKey(pair);
@@ -351,23 +443,19 @@ function pickPair(pairCatalog, forcedTypePair, random, selectionState) {
     const pairKey = createTypePairKey(forcedTypePair);
     const forced = pairCatalog.find((entry) => createTypePairKey(entry.pair) === pairKey);
     if (!forced) {
-      throw new Error(`No eligible Pokemon match the requested type pair: ${forcedTypePair.join(' / ')}.`);
+      throw new Error(`No eligible Pokemon with local normal and shiny sprites match the requested type pair: ${forcedTypePair.join(' / ')}.`);
     }
     return forced;
   }
 
   if (pairCatalog.length === 0) {
-    throw new Error('No eligible Pokemon type pairs were found in the grounded Pokedex catalog.');
+    throw new Error('No eligible Pokemon type pairs with local normal and shiny sprites were found in the grounded Pokedex catalog.');
   }
 
-  const localizedPairCatalog = pairCatalog.filter((entry) => entry.matches.some((subject) => subject.sprite_path));
-  const renderablePairCatalog = localizedPairCatalog.length > 0
-    ? localizedPairCatalog
-    : pairCatalog;
   const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
   const lastTypePairKey = normalizedSelectionState.last_type_pair_key;
   const typePairUsageCounts = normalizedSelectionState.type_pair_usage_counts || {};
-  const pairUsageEntries = renderablePairCatalog.map((entry) => {
+  const pairUsageEntries = pairCatalog.map((entry) => {
     const pairKey = createTypePairKey(entry.pair);
     return {
       entry,
@@ -380,7 +468,7 @@ function pickPair(pairCatalog, forcedTypePair, random, selectionState) {
 
   for (const usageCount of usageLevels) {
     const levelEntries = pairUsageEntries.filter((entry) => entry.usageCount === usageCount);
-    if (lastTypePairKey && renderablePairCatalog.length > 1) {
+    if (lastTypePairKey && pairCatalog.length > 1) {
       const nonRepeatedEntries = levelEntries.filter((entry) => entry.pairKey !== lastTypePairKey);
       if (nonRepeatedEntries.length > 0) {
         return nonRepeatedEntries[Math.floor(random() * nonRepeatedEntries.length)].entry;
@@ -443,28 +531,7 @@ function selectBackgroundForTypePair(backgrounds, typePair, random, selectionSta
   );
 }
 
-function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
-  return {
-    type,
-    local_path: localPath,
-    source_url: sourceUrl || null,
-    style,
-    style_variant: styleVariant || style,
-  };
-}
-
-function buildSubjectAssetRecord(subject, shinyRevealState = null) {
-  const isShinyReveal = Boolean(
-    shinyRevealState?.active
-    && shinyRevealState.selected_pokedex_id
-    && shinyRevealState.selected_pokedex_id === subject.id,
-  );
-  const revealSpritePath = isShinyReveal
-    ? subject.shiny_sprite_path || subject.sprite_path
-    : subject.sprite_path;
-  const revealSpriteSourceUrl = isShinyReveal
-    ? subject.shiny_sprite_source_url || subject.sprite_source_url
-    : subject.sprite_source_url;
+function buildSubjectAssetRecord(subject) {
   return {
     pokedex_id: subject.id,
     national_dex_number: subject.national_dex_number,
@@ -477,153 +544,63 @@ function buildSubjectAssetRecord(subject, shinyRevealState = null) {
     shiny_sprite_source_url: subject.shiny_sprite_source_url,
     silhouette_source_url: subject.silhouette_source_url,
     cry_source_url: subject.cry_source_url,
-    reveal_sprite_path: revealSpritePath,
-    reveal_sprite_source_url: revealSpriteSourceUrl,
-    reveal_variant: isShinyReveal ? 'shiny' : 'normal',
-    is_shiny_reveal: isShinyReveal,
+    reveal_variant: 'shiny',
+    is_shiny_reveal: true,
   };
 }
 
-function getShinyRevealConfig(template) {
-  const configured = template?.reveal?.shiny && typeof template.reveal.shiny === 'object'
-    ? template.reveal.shiny
-    : {};
-  const oddsNumerator = ensurePositiveInteger(
-    configured.odds_numerator,
-    DEFAULT_SHINY_ODDS_NUMERATOR,
-  );
-  const oddsDenominator = Math.max(
-    oddsNumerator,
-    ensurePositiveInteger(configured.odds_denominator, DEFAULT_SHINY_ODDS_DENOMINATOR),
-  );
-  return {
-    enabled: configured.enabled !== false,
-    odds_numerator: oddsNumerator,
-    odds_denominator: oddsDenominator,
-    max_per_video: 1,
-    chance_percentage: Number((((oddsNumerator / oddsDenominator) * 100)).toFixed(6)),
-    sparkle_duration_seconds: Number(
-      configured.sparkle_duration_seconds ?? DEFAULT_SHINY_SPARKLE_DURATION_SECONDS,
-    ),
-    sparkle_scale_multiplier: Number(
-      configured.sparkle_scale_multiplier ?? DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
-    ),
-  };
-}
-
-function resolveSingleShinyReveal({
-  template,
-  inventory,
-  selectedSubjects,
-  random,
-}) {
-  const config = getShinyRevealConfig(template);
-  const eligibleSubjects = (selectedSubjects || [])
-    .map((subject, index) => ({ subject, index }))
-    .filter(({ subject }) => Boolean(subject?.shiny_sprite_path));
-  const sparkleOverlayPath = inventory?.overlay_presets?.shiny_sparkle || null;
-  const shinySoundPath = inventory?.sound_effects?.shiny || null;
-  const activationBlockers = [];
-
-  if (!config.enabled) activationBlockers.push('disabled');
-  if (eligibleSubjects.length === 0) activationBlockers.push('no_localized_shiny_sprite');
-  if (!sparkleOverlayPath) activationBlockers.push('shiny_sparkle_overlay_missing');
-  if (!shinySoundPath) activationBlockers.push('shiny_sound_effect_missing');
-
-  const rollOutcomes = eligibleSubjects.map(({ subject, index }) => ({
-    subject,
-    index,
-    roll_value: 1 + Math.floor(random() * config.odds_denominator),
-  })).map((outcome) => ({
-    ...outcome,
-    roll_hit: outcome.roll_value <= config.odds_numerator,
-  }));
-  const hitOutcomes = rollOutcomes.filter((outcome) => outcome.roll_hit);
-  const active = activationBlockers.length === 0 && hitOutcomes.length > 0;
-  const selectedOutcome = active
-    ? hitOutcomes[Math.floor(random() * hitOutcomes.length)] || null
-    : null;
-  const effectiveVideoChancePercentage = Number((
-    100 * (1 - Math.pow(
-      (config.odds_denominator - config.odds_numerator) / config.odds_denominator,
-      eligibleSubjects.length,
-    ))
-  ).toFixed(6));
-
-  return {
-    ...config,
-    roll_mode: 'per_selected_subject',
-    eligible_subject_count: eligibleSubjects.length,
-    eligible_subject_dex_numbers: eligibleSubjects.map(({ subject }) => subject.national_dex_number),
-    effective_video_chance_percentage: effectiveVideoChancePercentage,
-    roll_value: selectedOutcome?.roll_value ?? rollOutcomes[0]?.roll_value ?? null,
-    roll_values: rollOutcomes.map((outcome) => outcome.roll_value),
-    roll_hit: hitOutcomes.length > 0,
-    hit_subject_count: hitOutcomes.length,
-    hit_subject_indexes: hitOutcomes.map((outcome) => outcome.index),
-    roll_outcomes: rollOutcomes.map((outcome) => ({
-      selected_subject_index: outcome.index,
-      pokedex_id: outcome.subject?.id ?? null,
-      national_dex_number: outcome.subject?.national_dex_number ?? null,
-      name: outcome.subject?.name ?? null,
-      roll_value: outcome.roll_value,
-      roll_hit: outcome.roll_hit,
-    })),
-    active,
-    inactive_reason: active
-      ? null
-      : activationBlockers[0] || 'roll_missed',
-    activation_blockers: activationBlockers,
-    selected_subject_index: selectedOutcome?.index ?? null,
-    selected_pokedex_id: selectedOutcome?.subject?.id ?? null,
-    selected_national_dex_number: selectedOutcome?.subject?.national_dex_number ?? null,
-    selected_name: selectedOutcome?.subject?.name ?? null,
-    selected_sprite_path: selectedOutcome?.subject?.shiny_sprite_path ?? null,
-    sparkle_overlay_path: sparkleOverlayPath,
-    sound_effect_path: shinySoundPath,
-  };
-}
-
-function selectGridColumns(itemCount, maxColumns) {
-  if (itemCount <= 0) return 0;
-  return Math.min(maxColumns, Math.ceil(Math.sqrt(itemCount)));
-}
-
-function buildCenteredGridLayout(template, itemCount) {
-  const gridConfig = template.layout?.pokeball_grid || {};
-  const safeZone = template.canvas?.safe_zone || {};
-  const canvasWidth = Number(template.canvas?.width || 1080);
-  const canvasHeight = Number(template.canvas?.height || 1920);
+function buildFindTheShinyLayout(template, difficulty, random) {
+  const gridConfig = template?.layout?.sprite_grid || {};
+  const pokeballGridConfig = template?.layout?.pokeball_grid || {};
+  const safeZone = template?.canvas?.safe_zone || {};
+  const canvasWidth = Number(template?.canvas?.width || 1080);
+  const canvasHeight = Number(template?.canvas?.height || 1920);
   const stageBounds = gridConfig.stage_bounds_px || {};
-  const itemSize = Number(gridConfig.item_size_px || 180);
-  const columnGap = Number(gridConfig.column_gap_px || 28);
-  const rowGap = Number(gridConfig.row_gap_px || 28);
-  const maxColumns = Number(gridConfig.max_columns || 4);
-  const maxItems = Number(gridConfig.max_items || maxColumns);
   const stageLeft = Number(stageBounds.left ?? safeZone.left ?? 100);
-  const stageTop = Number(stageBounds.top ?? 520);
+  const stageTop = Number(stageBounds.top ?? 640);
   const stageWidth = Number(stageBounds.width ?? (canvasWidth - stageLeft - Number(safeZone.right ?? 100)));
-  const stageHeight = Number(stageBounds.height ?? 760);
-
-  const cappedItemCount = Math.max(0, Math.min(itemCount, maxItems));
-  const columns = selectGridColumns(cappedItemCount, maxColumns);
-  const rows = columns > 0 ? Math.ceil(cappedItemCount / columns) : 0;
-  const gridHeight = rows > 0 ? (rows * itemSize) + ((rows - 1) * rowGap) : 0;
-  const sparseGridNudgeY = rows <= 1
-    ? Math.min(120, Math.floor(stageHeight * 0.14))
-    : rows === 2
-      ? Math.min(60, Math.floor(stageHeight * 0.07))
-      : 0;
-  const originY = stageTop + Math.max(0, Math.floor((stageHeight - gridHeight) / 2) - sparseGridNudgeY);
-
+  const stageHeight = Number(stageBounds.height ?? (canvasHeight - stageTop - Number(safeZone.bottom ?? 260)));
+  const baseItemSize = Number(gridConfig.item_size_px || 220);
+  const minItemSize = Number(gridConfig.min_item_size_px || DEFAULT_MIN_ITEM_SIZE_PX);
+  const columnGap = Number(gridConfig.column_gap_px || 26);
+  const rowGap = Number(gridConfig.row_gap_px || 38);
+  const columns = Number(difficulty.columns || 0);
+  const rows = Number(difficulty.rows || 0);
+  const fitWidth = Math.floor((stageWidth - ((columns - 1) * columnGap)) / columns);
+  const fitHeight = Math.floor((stageHeight - ((rows - 1) * rowGap)) / rows);
+  const itemSize = Math.max(
+    minItemSize,
+    Math.min(baseItemSize, fitWidth, fitHeight),
+  );
+  const gridWidth = (columns * itemSize) + ((columns - 1) * columnGap);
+  const gridHeight = (rows * itemSize) + ((rows - 1) * rowGap);
+  const originX = stageLeft + Math.max(0, Math.floor((stageWidth - gridWidth) / 2));
+  const originY = stageTop + Math.max(0, Math.floor((stageHeight - gridHeight) / 2));
+  const wiggleWindowStartRatio = Math.min(
+    0.92,
+    Math.max(0, Number(
+      pokeballGridConfig.wiggle_window_start_ratio ?? DEFAULT_POKEBALL_WIGGLE_WINDOW_START_RATIO,
+    )),
+  );
+  const wiggleWindowEndRatio = Math.min(
+    0.96,
+    Math.max(
+      wiggleWindowStartRatio + 0.04,
+      Number(pokeballGridConfig.wiggle_window_end_ratio ?? DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO),
+    ),
+  );
+  const introStaggerSeconds = Math.max(
+    0,
+    Number(pokeballGridConfig.intro_stagger_seconds ?? DEFAULT_POKEBALL_INTRO_STAGGER_SECONDS),
+  );
+  const introOffsetRatios = buildSpreadOffsetRatios(difficulty.sprite_count, random);
+  const replayOffsetRatios = buildSpreadOffsetRatios(difficulty.sprite_count, random);
   const cells = [];
-  for (let index = 0; index < cappedItemCount; index += 1) {
+
+  for (let index = 0; index < difficulty.sprite_count; index += 1) {
     const row = Math.floor(index / columns);
     const column = index % columns;
-    const itemsInRow = Math.min(columns, cappedItemCount - (row * columns));
-    const rowWidth = (itemsInRow * itemSize) + ((itemsInRow - 1) * columnGap);
-    const rowOriginX = stageLeft + Math.max(0, Math.floor((stageWidth - rowWidth) / 2));
-    const x = rowOriginX + (column * (itemSize + columnGap));
+    const x = originX + (column * (itemSize + columnGap));
     const y = originY + (row * (itemSize + rowGap));
     cells.push({
       index,
@@ -635,28 +612,71 @@ function buildCenteredGridLayout(template, itemCount) {
       height: itemSize,
       center_x: x + Math.floor(itemSize / 2),
       center_y: y + Math.floor(itemSize / 2),
+      pokeball_intro_offset_ratio: introOffsetRatios[index],
+      pokeball_wiggle_offset_ratio: roundRatio(random()),
+      pokeball_replay_offset_ratio: replayOffsetRatios[index],
     });
   }
 
   return {
-    centered_from_middle: true,
+    difficulty_id: difficulty.id,
+    sprite_count: difficulty.sprite_count,
+    rows,
+    columns,
     stage_bounds_px: {
       left: stageLeft,
       top: stageTop,
       width: stageWidth,
       height: stageHeight,
     },
-    item_count: cappedItemCount,
-    columns,
-    rows,
+    centered_from_middle: true,
     item_size_px: itemSize,
+    min_item_size_px: minItemSize,
     column_gap_px: columnGap,
     row_gap_px: rowGap,
+    sprite_scale_multiplier: Number(gridConfig.sprite_scale_multiplier ?? DEFAULT_SPRITE_SCALE_MULTIPLIER),
+    pokeball_intro_duration_seconds: Number(
+      pokeballGridConfig.intro_duration_seconds ?? DEFAULT_POKEBALL_INTRO_DURATION_SECONDS
+    ),
+    pokeball_intro_stagger_seconds: introStaggerSeconds,
+    pokeball_wiggle_window_start_ratio: wiggleWindowStartRatio,
+    pokeball_wiggle_window_end_ratio: wiggleWindowEndRatio,
     cells,
   };
 }
 
-export async function planPokemonTypeChallenge({
+function buildShinyRevealState({
+  template,
+  inventory,
+  selectedSubject,
+  gridLayout,
+  random,
+}) {
+  const configured = template?.reveal?.shiny && typeof template.reveal.shiny === 'object'
+    ? template.reveal.shiny
+    : {};
+  return {
+    enabled: configured.enabled !== false,
+    active: true,
+    max_per_video: 1,
+    selected_subject_index: 0,
+    selected_cell_index: Math.floor(random() * Math.max(1, gridLayout.cells.length)),
+    selected_pokedex_id: selectedSubject.id,
+    selected_national_dex_number: selectedSubject.national_dex_number,
+    selected_name: selectedSubject.name,
+    selected_sprite_path: selectedSubject.shiny_sprite_path,
+    sparkle_overlay_path: inventory?.overlay_presets?.shiny_sparkle || null,
+    sound_effect_path: inventory?.sound_effects?.shiny || null,
+    sparkle_duration_seconds: Number(
+      configured.sparkle_duration_seconds ?? DEFAULT_SPARKLE_DURATION_SECONDS,
+    ),
+    sparkle_scale_multiplier: Number(
+      configured.sparkle_scale_multiplier ?? DEFAULT_SPARKLE_SCALE_MULTIPLIER,
+    ),
+  };
+}
+
+export async function planFindTheShinyChallenge({
   template,
   pokedexRows,
   seed = 'poke-quizz',
@@ -670,63 +690,23 @@ export async function planPokemonTypeChallenge({
   const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
   const selectedPair = pickPair(pairCatalog, forcedTypePair, random, normalizedSelectionState);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
-  const localizedMatches = selectedPair.matches.filter((subject) => subject.sprite_path);
-  const selectableSubjects = collapseSubjectVariants(localizedMatches.length > 0
-    ? localizedMatches
-    : selectedPair.matches);
+  const selectableSubjects = collapseSubjectVariants(selectedPair.matches);
   const prioritizedSelectableSubjects = prioritizeSelectableSubjects(selectableSubjects, random);
-  const selectedSubjectCount = Math.max(
-    config.selectedSubjectsMin,
-    Math.min(config.selectedSubjectsMax, selectableSubjects.length),
-  );
-  const selectedSubjects = prioritizedSelectableSubjects
-    .slice(0, selectedSubjectCount)
-    .sort((left, right) => (
-      (left.national_dex_number - right.national_dex_number)
-      || String(left.slug || '').localeCompare(String(right.slug || ''))
-    ));
-  const shinyReveal = resolveSingleShinyReveal({
+  const selectedSubject = prioritizedSelectableSubjects[0] || null;
+  if (!selectedSubject) {
+    throw new Error(`No localized Pokemon with normal and shiny sprites are available for ${selectedPair.pair.join(' / ')}.`);
+  }
+
+  const selectedDifficulty = chooseDifficulty(config.difficultyCatalog, random);
+  const spriteGridLayout = buildFindTheShinyLayout(template, selectedDifficulty, random);
+  const questionContractTexts = resolveQuestionContractTexts(template, random);
+  const shinyReveal = buildShinyRevealState({
     template,
     inventory,
-    selectedSubjects,
+    selectedSubject,
+    gridLayout: spriteGridLayout,
     random,
   });
-  const compatibleDisplayCount = Math.min(selectableSubjects.length, config.selectedSubjectsMax);
-  const pokeballGridLayout = buildCenteredGridLayout(template, compatibleDisplayCount);
-
-  const firstSubjectTypeIcons = selectedPair.matches[0]?.metadata?.type_icon_source_urls || [];
-  const selectedTypeIconSet = selectTypeIconSet(selectedPair.pair, inventory);
-  const selectedTypeIconPaths = new Set(
-    selectedTypeIconSet.style === 'three_d'
-      ? inventory.type_icons.three_d
-      : inventory.type_icons.pixel,
-  );
-  const typeIcons = selectedPair.pair.map((type, index) => (
-    buildTypeIconRecord(
-      type,
-      firstSubjectTypeIcons[index],
-      selectedTypeIconSet.file_paths[index],
-      selectedTypeIconSet.style,
-      selectedTypeIconSet.style_variant,
-    )
-  ));
-
-  const requiredAssetGaps = [];
-  if (!selectedSubjects.every((subject) => subject.silhouette_path || subject.sprite_path)) {
-    requiredAssetGaps.push('pokemon_silhouette_or_sprite_local_assets_missing');
-  }
-  if (!selectedSubjects.every((subject) => subject.sprite_path)) {
-    requiredAssetGaps.push('pokemon_reveal_sprite_local_assets_missing');
-  }
-  if (!selectedTypeIconSet.file_paths.every((filePath) => selectedTypeIconPaths.has(filePath))) {
-    requiredAssetGaps.push('type_icons_missing');
-  }
-  if (!inventory.backgrounds.length) requiredAssetGaps.push('background_missing');
-  if (!inventory.music.length) requiredAssetGaps.push('battle_intro_music_missing');
-  if (!inventory.sound_effects.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
-  if (!inventory.sound_effects.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
-  if (!inventory.sound_effects.reveal) requiredAssetGaps.push('reveal_sfx_missing');
-
   const selectedBackgroundPath = selectBackgroundForTypePair(
     inventory.backgrounds,
     selectedPair.pair,
@@ -748,13 +728,26 @@ export async function planPokemonTypeChallenge({
   };
   typePairUsageCounts[selectedTypePairKey] += 1;
 
+  const requiredAssetGaps = [];
+  if (!selectedSubject.sprite_path) requiredAssetGaps.push('pokemon_normal_sprite_local_asset_missing');
+  if (!selectedSubject.shiny_sprite_path) requiredAssetGaps.push('pokemon_shiny_sprite_local_asset_missing');
+  if (!inventory.backgrounds.length) requiredAssetGaps.push('background_missing');
+  if (!inventory.sound_effects.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
+  if (!inventory.sound_effects.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
+  if (!inventory.sound_effects.pokeball_intro) requiredAssetGaps.push('pokeball_intro_sfx_missing');
+  if (!inventory.sound_effects.shiny) requiredAssetGaps.push('shiny_sfx_missing');
+  if (!inventory.overlay_presets?.pokeball_primary) requiredAssetGaps.push('pokeball_overlay_missing');
+  if (!inventory.overlay_presets?.timer_countdown && !inventory.overlay_presets?.timer) requiredAssetGaps.push('timer_overlay_missing');
+  if (!inventory.overlay_presets?.timer_alarm) requiredAssetGaps.push('timer_alarm_overlay_missing');
+  if (!inventory.overlay_presets?.shiny_sparkle) requiredAssetGaps.push('shiny_sparkle_overlay_missing');
+
   return {
     schema_version: 'poke-quizz-plan-v1',
     channel: {
       id: 'poke-quizz',
       name: 'Poke Quizz',
       niche: 'pokemon_quiz',
-      content_lane: 'pokemon_type_challenge',
+      content_lane: 'pokemon_find_the_shiny',
     },
     template_id: template.template_id,
     generation_scope: config.generationScope || [],
@@ -762,44 +755,51 @@ export async function planPokemonTypeChallenge({
     selection: {
       type_pair: selectedPair.pair,
       catalog_match_count: selectedPair.matches.length,
-      compatible_display_count: compatibleDisplayCount,
-      display_subject_count: selectedSubjects.length,
-      selected_subject_count: selectedSubjects.length,
-      selected_subjects: selectedSubjects.map((subject) => ({
-        pokedex_id: subject.id,
-        national_dex_number: subject.national_dex_number,
-        name: subject.name,
-        generation: subject.generation,
-        region: subject.region,
-        types: subject.types,
-        reveal_variant: shinyReveal.active && shinyReveal.selected_pokedex_id === subject.id
-          ? 'shiny'
-          : 'normal',
-        is_shiny_reveal: shinyReveal.active && shinyReveal.selected_pokedex_id === subject.id,
-      })),
+      compatible_display_count: spriteGridLayout.sprite_count,
+      display_subject_count: spriteGridLayout.sprite_count,
+      selected_subject_count: 1,
+      selected_subjects: [
+        {
+          pokedex_id: selectedSubject.id,
+          national_dex_number: selectedSubject.national_dex_number,
+          name: selectedSubject.name,
+          generation: selectedSubject.generation,
+          region: selectedSubject.region,
+          types: selectedSubject.types,
+          reveal_variant: 'shiny',
+          is_shiny_reveal: true,
+        },
+      ],
+      grid: {
+        difficulty_id: spriteGridLayout.difficulty_id,
+        sprite_count: spriteGridLayout.sprite_count,
+        rows: spriteGridLayout.rows,
+        columns: spriteGridLayout.columns,
+        shiny_cell_index: shinyReveal.selected_cell_index,
+      },
     },
     shiny_reveal: shinyReveal,
     narration: {
       local_model_required: false,
       tts_provider: 'kokoro',
       lines: [
-        { role: 'hook', text: template.question_contract.hook_text },
-        { role: 'prompt', text: template.question_contract.type_prompt_text },
-        { role: 'reveal', text: template.question_contract.reveal_text },
+        { role: 'hook', text: questionContractTexts.hook },
+        { role: 'prompt', text: questionContractTexts.prompt },
+        { role: 'reveal', text: questionContractTexts.reveal },
       ],
     },
     timeline: [
       {
         phase: 'hook',
         duration_seconds: 1.2,
-        spoken_text: template.question_contract.hook_text,
-        on_screen_text: template.question_contract.hook_text,
+        spoken_text: questionContractTexts.hook,
+        on_screen_text: questionContractTexts.hook,
       },
       {
         phase: 'type_prompt',
-        duration_seconds: 1.6,
-        spoken_text: template.question_contract.type_prompt_text,
-        on_screen_text: template.question_contract.type_prompt_text,
+        duration_seconds: 1.4,
+        spoken_text: questionContractTexts.prompt,
+        on_screen_text: questionContractTexts.prompt,
       },
       {
         phase: 'countdown',
@@ -810,8 +810,8 @@ export async function planPokemonTypeChallenge({
       {
         phase: 'reveal',
         duration_seconds: 2.4,
-        spoken_text: template.question_contract.reveal_text,
-        reveal_mode: 'swap_silhouette_sprites_for_colored_sprites_and_play_sound',
+        spoken_text: questionContractTexts.reveal,
+        reveal_mode: 'swap_one_grid_cell_to_shiny_and_play_sparkle',
       },
     ],
     assets: {
@@ -819,20 +819,18 @@ export async function planPokemonTypeChallenge({
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
         selected_path: selectedBackgroundPath,
       },
-      type_icons: typeIcons,
-      pokemon: selectedSubjects.map((subject) => buildSubjectAssetRecord(subject, shinyReveal)),
+      type_icons: [],
+      pokemon: [
+        buildSubjectAssetRecord(selectedSubject),
+      ],
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
+        selected_primary_pokeball_overlay_path: inventory.overlay_presets?.pokeball_primary || null,
         selected_timer_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
         selected_timer_countdown_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
         selected_timer_alarm_path: inventory.overlay_presets?.timer_alarm || null,
         selected_shiny_sparkle_path: inventory.overlay_presets?.shiny_sparkle || null,
-        selected_primary_pokeball_overlay_path: inventory.overlay_presets?.pokeball_primary || null,
-        pokeball_grid: {
-          overlay_path: inventory.overlay_presets?.pokeball_primary || null,
-          count_basis: `compatible_catalog_match_count_capped_to_${template.layout?.pokeball_grid?.max_items || 9}`,
-          ...pokeballGridLayout,
-        },
+        sprite_grid: spriteGridLayout,
         available_paths: inventory.overlays,
       },
       transitions: {
@@ -845,6 +843,7 @@ export async function planPokemonTypeChallenge({
         selected_battle_intro_music_path: selectSeededFile(inventory.music, random),
         selected_sound_effects: {
           ...(inventory.sound_effects || {}),
+          pokeball_intro: inventory.sound_effects?.pokeball_intro || null,
           shiny: inventory.sound_effects?.shiny || null,
         },
       },

@@ -1,4 +1,8 @@
-import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../../services/product-video-agent/src/publication-channels.mjs';
+import {
+  findPublicationChannelProfile,
+  loadPublicationChannelProfiles,
+  resolvePublicationReviewThreadId,
+} from '../../../services/product-video-agent/src/publication-channels.mjs';
 import { reconcilePokeQuizzPreviewFallbackStorage } from '../../../services/product-video-agent/src/poke-quizz-preview-storage.mjs';
 import {
   computePokeQuizzQueueStatus,
@@ -120,7 +124,9 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString()) 
 }
 
 export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().toISOString()) {
-  const reviewThreadId = String(config.channelIds.pokeQuizzReview || '').trim();
+  const profiles = await loadPublicationChannelProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
+  const channelProfile = findPublicationChannelProfile(profiles, 'poke-quizz-youtube');
+  const reviewThreadId = resolvePublicationReviewThreadId(config, channelProfile);
   if (!reviewThreadId) {
     return {
       status: 'skipped',
@@ -128,7 +134,7 @@ export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().
       initialReviewReadyCount: 0,
       finalReviewReadyCount: 0,
       targetReviewReadyCount: POKE_QUIZZ_REVIEW_TARGET_COUNT,
-      errors: ['Missing pokeQuizzReview channel/thread id.'],
+      errors: [`Missing review thread id for ${channelProfile.account_key}.`],
     };
   }
 
@@ -144,8 +150,6 @@ export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().
     };
   }
 
-  const profiles = await loadPublicationChannelProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
-  const channelProfile = findPublicationChannelProfile(profiles, 'poke-quizz-youtube');
   const store = createPublicationStore(config);
 
   const fetchQueueStatus = async () => {

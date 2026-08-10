@@ -145,3 +145,27 @@ test('normalizeTaskMessage creates an approval-gated developer-agent workflow', 
     'Fix the CI branch labels and add regression tests.'
   );
 });
+
+test('normalizeTaskMessage recognizes product-video generation commands as explicit runtime actions', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    channelKey: 'commands',
+    submittedAt: '2026-08-10T10:00:00.000Z',
+    content: 'generate video template: find-the-shiny channel: trivamon-youtube',
+    author: { id: 'operator-1', displayName: 'VBJ Services' },
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
+  assert.equal(result.task.automation_type, 'poke_quizz_generate_review');
+  assert.equal(result.task.target_agent, 'product-video-agent');
+  assert.equal(result.task.domain, 'content');
+  assert.equal(result.task.approval_required, false);
+  assert.equal(result.task.status, 'queued');
+  assert.equal(result.task.summary, 'Generate Find the Shiny review for TrivaMon');
+  assert.equal(result.task.poke_quizz_generate_review.templateKey, 'find-the-shiny');
+  assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'trivamon-youtube');
+  assert.equal(
+    result.task.poke_quizz_generate_review.channelConfigPath,
+    'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json'
+  );
+});

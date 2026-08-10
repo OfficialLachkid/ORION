@@ -136,3 +136,31 @@ test('drawtext artifacts expose progressive word-by-word segments per phase', ()
   assert.equal(artifacts.reveal.segments[0].start_seconds, 7.96);
   assert.equal(artifacts.prompt.segments[0].start_seconds < artifacts.prompt.segments.at(-1).start_seconds, true);
 });
+
+test('drawtext artifacts reduce long hook font size to stay within the allowed line count', () => {
+  const renderPlan = {
+    text: {
+      hook: "Where's the shiny Pokemon?",
+      prompt: "Guess where it's hiding",
+      reveal: 'Did you find it?',
+    },
+    phases: {
+      hook: { start_seconds: 0, end_seconds: 1.2 },
+      type_prompt: { start_seconds: 1.2 },
+      countdown: { start_seconds: 2.8 },
+      reveal: { start_seconds: 7.8 },
+    },
+    audio_cues: {
+      prompt_end_seconds: 2.8,
+    },
+    total_duration_seconds: 10.2,
+  };
+
+  const artifacts = buildTextArtifacts({ renderPlan, template });
+  const hookLines = artifacts.hook.lines || [];
+
+  assert.equal(hookLines.length, 2);
+  assert.equal(hookLines.every((line) => Number.isFinite(line.font_size)), true);
+  assert.equal(hookLines[0].font_size < 138, true);
+  assert.equal(artifacts.hook.segments.every((segment) => segment.font_size === hookLines[0].font_size), true);
+});

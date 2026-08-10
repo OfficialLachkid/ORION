@@ -129,7 +129,7 @@ Research note, 2026-07-20: Amazon's current [Operating Agreement](https://affili
 
 ## Selected voices
 
-The default local engine is [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), an Apache-2.0 82M-parameter model that is substantially more natural than the current Piper voices while remaining practical on the Mac mini. The default US female voice is `af_heart`; the alternating US male profile blends `am_fenrir,am_onyx`. Local sample analysis measured the blend near 111 Hz versus about 140 Hz for Fenrir alone, giving the requested deeper baseline without adding another model. The upstream model card states that its training sources are permissive or non-copyrighted. The operational license review is recorded under `voices/` and must be revisited if the upstream model or intended use changes.
+The default local engine is [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M), an Apache-2.0 82M-parameter model that is substantially more natural than the current Piper voices while remaining practical on the Mac mini. The default US female voice is `af_heart`; the alternating US male profile now uses `am_fenrir` directly for a more expressive delivery than the earlier deeper blend. The upstream model card states that its training sources are permissive or non-copyrighted. The operational license review is recorded under `voices/` and must be revisited if the upstream model or intended use changes.
 
 `voice.assignment_strategy` is `round_robin`, so the example's three script variants use female, male, female narrators. Set it to `default_only` to use `voice.default_profile_id` for every video. Each voice job records its profile, model, speaker, synthesis settings, and license record.
 
@@ -150,7 +150,7 @@ This keeps deterministic work outside the language model. The renderer consumes 
 
 The existing local faster-whisper worker is the caption-timing source after local TTS produces narration. O.R.I.O.N. disables VAD for clean synthesized input because VAD can discard valid speech; other transcription workflows keep the worker's existing VAD default. Approved-script tokens replace same-length recognition substitutions, while faster-whisper remains the timing authority. Caption phrases are balanced into two to four words and split at sentence boundaries, so a new sentence never appears in the previous sentence's caption. Each active-word event lasts until the next measured word start, so pauses do not make the highlight run ahead of narration.
 
-Kokoro now synthesizes the full narration context so punctuation can drive pitch, emphasis, energy, and natural sentence pauses. No artificial sentence silence is added. The female profile runs at speed `1.04`; the deeper male blend runs at `1.08`. The optional `sentence_isolated` mode and `sentence_pause_ms` setting remain available for scripts that require deterministic pauses, but they are not the default because short isolated utterances reset prosody and sounded monotonous in testing.
+Kokoro now synthesizes the full narration context so punctuation can drive pitch, emphasis, energy, and natural sentence pauses. No artificial sentence silence is added. The female profile runs at speed `1.04`; the current male profile also runs at `1.04` to preserve a more natural cadence. The optional `sentence_isolated` mode and `sentence_pause_ms` setting remain available for scripts that require deterministic pauses, but they are not the default because short isolated utterances reset prosody and sounded monotonous in testing.
 
 Mac engine setup:
 

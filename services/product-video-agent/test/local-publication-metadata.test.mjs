@@ -38,9 +38,18 @@ const channelProfile = normalizePublicationChannelProfile({
 });
 
 const plan = {
+  template_id: 'pokemon.dual-type-reveal.v1',
   selection: {
     type_pair: ['psychic', 'water'],
     selected_subjects: [{ name: 'Slowpoke' }, { name: 'Starmie' }],
+  },
+};
+
+const findTheShinyPlan = {
+  template_id: 'pokemon.find-the-shiny.v1',
+  selection: {
+    type_pair: ['rock', 'fairy'],
+    selected_subjects: [{ name: 'Carbink' }],
   },
 };
 
@@ -126,4 +135,22 @@ test('seeded fallback publication metadata varies the title deterministically', 
   assert.ok(expectedSeededTitles.has(firstSeeded.title));
   assert.ok(expectedSeededTitles.has(secondSeeded.title));
   assert.notEqual(firstSeeded.title, secondSeeded.title);
+});
+
+test('fallback publication metadata frames find-the-shiny as a shiny challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(findTheShinyPlan);
+
+  assert.equal(metadata.title, 'Find the Shiny Pokemon');
+  assert.equal(
+    metadata.description,
+    'One of these Rock/Fairy Pokemon turns shiny after the countdown. Pick a spot before the reveal.',
+  );
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#findtheshiny',
+    '#shinypokemon',
+    '#rocktype',
+    '#fairytype',
+    '#shorts',
+  ]);
 });

@@ -12,6 +12,7 @@ import { normalizeTaskMessage } from '../../task-router/src/router.mjs';
 import { buildExecutionPlan, buildExecutionStartedEvents, executeTask } from '../../task-router/src/executor.mjs';
 import { processTranscriptionRequest } from '../../transcription-worker/src/worker.mjs';
 import { recordOpsMetric } from '../../lib/metrics-store.mjs';
+import { projectRoot } from '../../lib/runtime-config.mjs';
 import {
   buildApprovalOutcomeWriteBackCandidates,
   buildExecutionWriteBackCandidates,
@@ -52,7 +53,10 @@ import {
 } from '../../product-video-agent/src/poke-quizz-publication-review.mjs';
 import { resolvePokeQuizzReviewTaskPaths } from '../../product-video-agent/src/poke-quizz-review-paths.mjs';
 import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
-import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../product-video-agent/src/publication-channels.mjs';
+import {
+  loadPublicationChannelProfiles,
+  resolvePublicationReviewThreadId,
+} from '../../product-video-agent/src/publication-channels.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -108,7 +112,23 @@ function buildAuthHeaders(token) {
   };
 }
 
-async function rehydratePokeQuizzReviewTask(decision, config) {
+function matchesPokeQuizzReviewPublication(publication, decision) {
+  const taskId = String(decision?.taskId || '').trim();
+  const messageId = String(decision?.messageId || '').trim();
+  if (!taskId && !messageId) {
+    return false;
+  }
+
+  return (
+    String(publication?.metadata?.review_task_id || '').trim() === taskId
+    || (
+      messageId
+      && String(publication?.metadata?.review_message_id || '').trim() === messageId
+    )
+  );
+}
+
+export async function rehydratePokeQuizzReviewTask(decision, config, dependencies = {}) {
   if (!String(decision?.taskId || '').startsWith('TASK-ORION-PQ-PUBLISH-')) {
     return null;
   }
@@ -117,47 +137,51 @@ async function rehydratePokeQuizzReviewTask(decision, config) {
   }
 
   try {
-    const profiles = await loadPublicationChannelProfiles(POKE_QUIZZ_CHANNELS_PATH, { projectRoot });
-    const channelProfile = findPublicationChannelProfile(profiles, 'poke-quizz-youtube');
-    const store = new SupabasePublicationStore({
+    const profilesLoader = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
+    const reviewPathsResolver = dependencies.resolvePokeQuizzReviewTaskPaths || resolvePokeQuizzReviewTaskPaths;
+    const store = dependencies.publicationStore || new SupabasePublicationStore({
       supabaseUrl: config.env.SUPABASE_URL,
       apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY || '',
     });
-    const publications = await store.fetchPublicationsByChannel({
-      platform: channelProfile.platform,
-      accountKey: channelProfile.account_key,
-    });
-    const publication = publications.find((item) => (
-      String(item?.metadata?.review_task_id || '').trim() === String(decision.taskId || '').trim()
-      || (
-        decision.messageId
-        && String(item?.metadata?.review_message_id || '').trim() === String(decision.messageId || '').trim()
-      )
-    ));
-    if (!publication?.video_id) {
-      return null;
+    const profiles = await profilesLoader(POKE_QUIZZ_CHANNELS_PATH, { projectRoot });
+
+    for (const channelProfile of profiles) {
+      const publications = await store.fetchPublicationsByChannel({
+        platform: channelProfile.platform,
+        accountKey: channelProfile.account_key,
+      });
+      const publication = publications.find((item) => matchesPokeQuizzReviewPublication(item, decision));
+      if (!publication?.video_id) {
+        continue;
+      }
+
+      const video = await store.fetchVideoById(publication.video_id);
+      const reviewThreadId = String(
+        publication?.metadata?.review_thread_id
+          || resolvePublicationReviewThreadId(config, channelProfile)
+          || '',
+      ).trim();
+      if (!video || !reviewThreadId) {
+        return null;
+      }
+
+      const reviewPaths = await reviewPathsResolver(publication);
+      return buildPokeQuizzPublicationReviewTask({
+        publication,
+        video,
+        channelProfile,
+        reviewThreadId,
+        planPath: reviewPaths.planPath,
+        renderPath: publication?.metadata?.render_path || video?.render?.output_path || '',
+        catalogJsonPath: reviewPaths.catalogJsonPath,
+        templatePath: reviewPaths.templatePath,
+        configPath: reviewPaths.configPath,
+        channelSelector: channelProfile.account_key,
+        submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
+      });
     }
 
-    const video = await store.fetchVideoById(publication.video_id);
-    const reviewThreadId = String(publication?.metadata?.review_thread_id || '').trim();
-    if (!video || !reviewThreadId) {
-      return null;
-    }
-    const reviewPaths = await resolvePokeQuizzReviewTaskPaths(publication);
-
-    return buildPokeQuizzPublicationReviewTask({
-      publication,
-      video,
-      channelProfile,
-      reviewThreadId,
-      planPath: reviewPaths.planPath,
-      renderPath: publication?.metadata?.render_path || video?.render?.output_path || '',
-      catalogJsonPath: reviewPaths.catalogJsonPath,
-      templatePath: reviewPaths.templatePath,
-      configPath: reviewPaths.configPath,
-      channelSelector: channelProfile.account_key,
-      submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
-    });
+    return null;
   } catch (error) {
     process.stderr.write(`Could not rehydrate Poke Quizz review task ${decision?.taskId || ''}: ${error.message}\n`);
     return null;
@@ -440,6 +464,100 @@ function buildTaskDispatchBlockedEvents(task) {
       },
     },
   ];
+}
+
+export function prepareCommandTasksForExecution(
+  result,
+  message,
+  {
+    activeExecutionTaskId = '',
+    executionQueueLength = 0,
+    queueExecutableTask = () => ({
+      taskId: '',
+      state: 'no_executor',
+      action: '',
+      queuePosition: 0,
+      blockedByTaskId: '',
+    }),
+    rememberPendingTaskIfNeeded = () => {},
+    recordTaskStateChange = () => {},
+    safeRecordMetric = () => {},
+  } = {},
+) {
+  if (result?.route !== 'command') {
+    return {
+      tasks: [],
+      runtimeOutboundEvents: [],
+    };
+  }
+
+  const tasks = Array.isArray(result.normalizedTasks) && result.normalizedTasks.length > 0
+    ? result.normalizedTasks
+    : result.normalizedTask?.task_id
+      ? [result.normalizedTask]
+      : [];
+  const queueBacklogBefore = (activeExecutionTaskId ? 1 : 0) + executionQueueLength;
+  const executionStates = [];
+  const runtimeOutboundEvents = [];
+
+  for (const task of tasks) {
+    safeRecordMetric('command_accepted', {
+      taskId: task.task_id,
+      domain: task.domain,
+      priority: task.priority,
+      approvalRequired: task.approval_required,
+      targetAgent: task.target_agent,
+      authorId: message?.author?.id || '',
+      submittedBy: task.submitted_by,
+      sourceType: task.source_type,
+      estimatedInputTokens: estimateTextTokens(task.full_text),
+      estimatedCostUsd: 0,
+    });
+    recordTaskStateChange(task, task.status);
+    rememberPendingTaskIfNeeded(task);
+
+    if (task.approval_required) {
+      executionStates.push({
+        taskId: task.task_id,
+        state: 'awaiting_approval',
+        action: '',
+        queuePosition: 0,
+        blockedByTaskId: '',
+      });
+      continue;
+    }
+
+    const executionState = queueExecutableTask(task);
+    executionStates.push(executionState);
+    if (executionState.state === 'no_executor') {
+      runtimeOutboundEvents.push(...buildTaskDispatchBlockedEvents(task));
+      safeRecordMetric('task_dispatch_blocked', {
+        taskId: task.task_id,
+        domain: task.domain || '',
+        targetAgent: task.target_agent || '',
+        reason: 'no_executor',
+      });
+      recordTaskStateChange(task, 'blocked', {
+        reason: 'No executor is mapped for this request yet.',
+      });
+    }
+  }
+
+  result.commandRuntimeSummary = {
+    taskCount: tasks.length,
+    queueBacklogBefore,
+    activeExecutionTaskId,
+    executionStates,
+    awaitingApprovalCount: executionStates.filter((item) => item.state === 'awaiting_approval').length,
+    queuedCount: executionStates.filter((item) => item.state === 'queued').length,
+    startingCount: executionStates.filter((item) => item.state === 'starting').length,
+    noExecutorCount: executionStates.filter((item) => item.state === 'no_executor').length,
+  };
+
+  return {
+    tasks,
+    runtimeOutboundEvents,
+  };
 }
 
 function isBlockedExecution(execution) {
@@ -905,6 +1023,14 @@ export async function runLiveDiscordBot(config) {
           const slashCommandMessage = normalizeSupportedSlashCommandInteraction(payload.d);
           if (slashCommandMessage) {
             const result = processDiscordEvent(slashCommandMessage, config);
+            const { runtimeOutboundEvents } = prepareCommandTasksForExecution(result, slashCommandMessage, {
+              activeExecutionTaskId,
+              executionQueueLength: executionQueue.length,
+              queueExecutableTask,
+              rememberPendingTaskIfNeeded,
+              recordTaskStateChange,
+              safeRecordMetric,
+            });
             const acknowledgement = result.accepted
               ? buildSourceAcknowledgement(result, config)
               : result.reason || 'Slash command request was rejected.';
@@ -922,8 +1048,15 @@ export async function runLiveDiscordBot(config) {
                   },
             });
 
-            if (result.outboundEvents?.length) {
-              await fanOutOutboundEvents(token, config, result.outboundEvents, trackedTaskMessages);
+            const outboundEvents = result.route === 'command'
+              ? [...(result.outboundEvents || []), ...runtimeOutboundEvents]
+              : (result.outboundEvents || []);
+            if (outboundEvents.length > 0) {
+              await fanOutOutboundEvents(token, config, outboundEvents, trackedTaskMessages);
+            }
+
+            if (result.route === 'command') {
+              ensureExecutionDrain();
             }
             return;
           }
@@ -1254,67 +1387,15 @@ export async function runLiveDiscordBot(config) {
         }
 
         if (result.route === 'command') {
-          const tasks = Array.isArray(result.normalizedTasks) && result.normalizedTasks.length > 0
-            ? result.normalizedTasks
-            : result.normalizedTask?.task_id
-              ? [result.normalizedTask]
-              : [];
-          const queueBacklogBefore = (activeExecutionTaskId ? 1 : 0) + executionQueue.length;
-          const executionStates = [];
-
-          for (const task of tasks) {
-            safeRecordMetric('command_accepted', {
-              taskId: task.task_id,
-              domain: task.domain,
-              priority: task.priority,
-              approvalRequired: task.approval_required,
-              targetAgent: task.target_agent,
-              authorId: message.author?.id || '',
-              submittedBy: task.submitted_by,
-              sourceType: task.source_type,
-              estimatedInputTokens: estimateTextTokens(task.full_text),
-              estimatedCostUsd: 0,
-            });
-            recordTaskStateChange(task, task.status);
-            rememberPendingTaskIfNeeded(task);
-
-            if (task.approval_required) {
-              executionStates.push({
-                taskId: task.task_id,
-                state: 'awaiting_approval',
-                action: '',
-                queuePosition: 0,
-                blockedByTaskId: '',
-              });
-              continue;
-            }
-
-            const executionState = queueExecutableTask(task);
-            executionStates.push(executionState);
-            if (executionState.state === 'no_executor') {
-              runtimeOutboundEvents.push(...buildTaskDispatchBlockedEvents(task));
-              safeRecordMetric('task_dispatch_blocked', {
-                taskId: task.task_id,
-                domain: task.domain || '',
-                targetAgent: task.target_agent || '',
-                reason: 'no_executor',
-              });
-              recordTaskStateChange(task, 'blocked', {
-                reason: 'No executor is mapped for this request yet.',
-              });
-            }
-          }
-
-          result.commandRuntimeSummary = {
-            taskCount: tasks.length,
-            queueBacklogBefore,
+          const { tasks, runtimeOutboundEvents: commandRuntimeOutboundEvents } = prepareCommandTasksForExecution(result, message, {
             activeExecutionTaskId,
-            executionStates,
-            awaitingApprovalCount: executionStates.filter((item) => item.state === 'awaiting_approval').length,
-            queuedCount: executionStates.filter((item) => item.state === 'queued').length,
-            startingCount: executionStates.filter((item) => item.state === 'starting').length,
-            noExecutorCount: executionStates.filter((item) => item.state === 'no_executor').length,
-          };
+            executionQueueLength: executionQueue.length,
+            queueExecutableTask,
+            rememberPendingTaskIfNeeded,
+            recordTaskStateChange,
+            safeRecordMetric,
+          });
+          runtimeOutboundEvents.push(...commandRuntimeOutboundEvents);
           rememberRecentCommandTasks(message, tasks);
         }
 

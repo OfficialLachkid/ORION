@@ -8,6 +8,7 @@ import { loadRuntimeConfig } from '../../../lib/runtime-config.mjs';
 import {
   findPublicationChannelProfile,
   loadPublicationChannelProfiles,
+  resolvePublicationReviewThreadId,
 } from '../../src/publication-channels.mjs';
 import {
   computePokeQuizzQueueStatus,
@@ -143,7 +144,13 @@ async function main() {
   const channelSelector = templateRuntime.channelSelector;
   const runtimeConfig = loadRuntimeConfig();
   const channelsPath = getStringOption(options, 'channels', DEFAULT_CHANNELS_PATH);
-  const reviewThreadId = getStringOption(options, 'thread-id', String(runtimeConfig.channelIds.pokeQuizzReview || '').trim());
+  const profiles = await loadPublicationChannelProfiles(channelsPath, { projectRoot });
+  const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
+  const reviewThreadId = getStringOption(
+    options,
+    'thread-id',
+    resolvePublicationReviewThreadId(runtimeConfig, channelProfile),
+  );
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
   const targetReviewReadyCount = parsePositiveInteger(
     getStringOption(options, 'target', ''),
@@ -153,7 +160,7 @@ async function main() {
   const dryRun = getBooleanOption(options, 'dry-run', false);
 
   if (!reviewThreadId) {
-    throw new Error('No pokeQuizzReview thread id is configured. Provide --thread-id.');
+    throw new Error(`No review thread id is configured for ${channelProfile.account_key}. Provide --thread-id or set metadata.review_thread_id.`);
   }
 
   const catalogJsonPath = getStringOption(options, 'catalog-json', '')
@@ -162,8 +169,6 @@ async function main() {
     throw new Error('No localized Poke Quizz catalog JSON could be found.');
   }
 
-  const profiles = await loadPublicationChannelProfiles(channelsPath, { projectRoot });
-  const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
   const store = createPublicationStore(runtimeConfig);
   const generationScriptPath = resolve(
     projectRoot,

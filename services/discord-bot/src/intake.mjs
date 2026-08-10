@@ -34,13 +34,28 @@ const APPROVAL_CHANNEL_KEYS = new Set([
   'pokeQuizzReview',
 ]);
 
+function resolvePublicationReviewChannelKey(message, config) {
+  const channelId = String(message.channelId || '').trim();
+  if (!channelId) {
+    return '';
+  }
+
+  return config?.publicationReviewThreads?.byThreadId?.[channelId]
+    ? 'pokeQuizzReview'
+    : '';
+}
+
 function resolveChannelKey(message, config) {
   if (message.channelKey) {
     return message.channelKey;
   }
 
   const match = Object.entries(config.channelIds).find(([, channelId]) => channelId && channelId === message.channelId);
-  return match ? match[0] : '';
+  if (match) {
+    return match[0];
+  }
+
+  return resolvePublicationReviewChannelKey(message, config);
 }
 
 function isAuthorizedOperator(message, config) {

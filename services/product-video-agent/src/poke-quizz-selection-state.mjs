@@ -2,6 +2,7 @@ import { createTypePairKey, normalizeTypePair } from './pokemon-type-pairs.mjs';
 
 const MAX_USED_VIDEO_SIGNATURES = 160;
 const MAX_TYPE_PAIR_USAGE_KEYS = 256;
+const DEFAULT_SELECTION_STATE_SCOPE = 'dual-type-reveal';
 
 const NON_COUNTING_PUBLICATION_STATUSES = new Set([
   'deleted',
@@ -71,6 +72,34 @@ function normalizeTypePairKeyString(typePairKey) {
   return normalizeTypePairKey(normalizedInput.split('|'));
 }
 
+function normalizeTemplateScopeValue(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return '';
+  }
+  if (normalized.includes('find-the-shiny')) {
+    return 'find-the-shiny';
+  }
+  if (normalized.includes('dual-type-reveal')) {
+    return 'dual-type-reveal';
+  }
+  return '';
+}
+
+function extractTemplateScope(input = {}, fallbackScope = '') {
+  if (typeof input === 'string') {
+    return normalizeTemplateScopeValue(input) || fallbackScope;
+  }
+
+  return (
+    normalizeTemplateScopeValue(input?.template_key)
+    || normalizeTemplateScopeValue(input?.templateKey)
+    || normalizeTemplateScopeValue(input?.template_id)
+    || normalizeTemplateScopeValue(input?.templateId)
+    || fallbackScope
+  );
+}
+
 function normalizeVideoSignature(signature) {
   const normalizedInput = String(signature || '').trim();
   if (!normalizedInput) {
@@ -81,6 +110,17 @@ function normalizeVideoSignature(signature) {
     return normalizedInput;
   }
   return createPokeQuizzVideoSignatureKey(typePairKey, backgroundPath) || '';
+}
+
+function extractHistoryTemplateScope(entry = {}) {
+  return (
+    normalizeTemplateScopeValue(entry?.publication?.metadata?.template_id)
+    || normalizeTemplateScopeValue(entry?.publication?.metadata?.template_key)
+    || normalizeTemplateScopeValue(entry?.video?.render?.template_id)
+    || normalizeTemplateScopeValue(entry?.video?.render?.template_key)
+    || normalizeTemplateScopeValue(entry?.video?.template_key)
+    || ''
+  );
 }
 
 function extractHistoryTypePairKey(entry = {}) {
@@ -114,6 +154,24 @@ export function createPokeQuizzVideoSignatureKey(typePair, backgroundPath) {
     return null;
   }
   return `${typePairKey}::${normalizedBackgroundPath}`;
+}
+
+export function resolvePokeQuizzSelectionStateScope(
+  template = {},
+  fallbackScope = DEFAULT_SELECTION_STATE_SCOPE,
+) {
+  return extractTemplateScope(template, fallbackScope);
+}
+
+export function resolvePokeQuizzSelectionStatePath(
+  template = {},
+  runtimeRoot = 'data/runtime/product-video-agent/poke-quizz',
+) {
+  const scope = resolvePokeQuizzSelectionStateScope(template, DEFAULT_SELECTION_STATE_SCOPE);
+  const normalizedRuntimeRoot = String(runtimeRoot || 'data/runtime/product-video-agent/poke-quizz')
+    .trim()
+    .replace(/\/+$/u, '');
+  return `${normalizedRuntimeRoot}/selection-state-${scope}.json`;
 }
 
 export function normalizePokeQuizzSelectionState(selectionState) {
@@ -193,6 +251,9 @@ export async function loadPokeQuizzSelectionStateFromStore({
   store,
   channelProfile,
   limit = 24,
+  template = null,
+  templateId = '',
+  templateKey = '',
 }) {
   if (!store || !channelProfile) {
     return normalizePokeQuizzSelectionState(null);
@@ -215,12 +276,18 @@ export async function loadPokeQuizzSelectionStateFromStore({
       .filter(Boolean)
       .map((video) => [video.id, video]),
   );
-
-  return buildPokeQuizzSelectionStateFromHistory(
-    (publications || [])
-      .map((publication) => ({
-        publication,
-        video: videosById.get(publication.video_id) || null,
-      })),
+  const templateScope = (
+    extractTemplateScope(template)
+    || extractTemplateScope({ template_id: templateId, template_key: templateKey }, '')
   );
+  const historyEntries = (publications || [])
+    .map((publication) => ({
+      publication,
+      video: videosById.get(publication.video_id) || null,
+    }));
+  const filteredHistoryEntries = templateScope
+    ? historyEntries.filter((entry) => extractHistoryTemplateScope(entry) === templateScope)
+    : historyEntries;
+
+  return buildPokeQuizzSelectionStateFromHistory(filteredHistoryEntries);
 }

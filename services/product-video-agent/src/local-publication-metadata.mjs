@@ -58,12 +58,29 @@ function buildTypeHashtags(types = []) {
     .map((type) => `#${type}type`);
 }
 
-const DEFAULT_TITLE_BUILDERS = Object.freeze([
+function resolveTemplateFlavor(plan = {}) {
+  const templateKey = String(plan?.template_key || '').trim().toLowerCase();
+  const templateId = String(plan?.template_id || '').trim().toLowerCase();
+  if (templateKey.includes('find-the-shiny') || templateId.includes('find-the-shiny')) {
+    return 'find-the-shiny';
+  }
+  return 'dual-type-reveal';
+}
+
+const DEFAULT_QUIZ_TITLE_BUILDERS = Object.freeze([
   (typePairLabel) => `${typePairLabel} Type Quiz - Can You Guess?`,
   (typePairLabel) => `Can You Guess This ${typePairLabel} Pokemon?`,
   (typePairLabel) => `${typePairLabel} Pokemon Quiz - Beat the Timer`,
   (typePairLabel) => `Which Pokemon Fits ${typePairLabel}?`,
   (typePairLabel) => `${typePairLabel} Challenge - Name These Pokemon`,
+]);
+
+const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
+  (typePairLabel) => `Find the Shiny ${typePairLabel} Pokemon`,
+  (typePairLabel) => `Which ${typePairLabel} Spot Turns Shiny?`,
+  (typePairLabel) => `Spot the Shiny ${typePairLabel} Pokemon`,
+  (typePairLabel) => `One ${typePairLabel} Pokemon Turns Shiny`,
+  (typePairLabel) => `Pick the Shiny ${typePairLabel} Spot`,
 ]);
 
 function hashSeed(input) {
@@ -82,9 +99,9 @@ function buildDefaultTitle(plan) {
   }
   const seed = String(plan?.seed || '').trim();
   const templateIndex = seed
-    ? hashSeed(`${seed}|${typePairLabel}`) % DEFAULT_TITLE_BUILDERS.length
+    ? hashSeed(`${seed}|${typePairLabel}`) % DEFAULT_QUIZ_TITLE_BUILDERS.length
     : 0;
-  return DEFAULT_TITLE_BUILDERS[templateIndex](typePairLabel);
+  return DEFAULT_QUIZ_TITLE_BUILDERS[templateIndex](typePairLabel);
 }
 
 function buildDefaultDescription(plan) {
@@ -116,6 +133,68 @@ function buildMetadataPrompt(plan) {
   ].join('\n');
 }
 
+function buildTemplateAwareDefaultTitle(plan) {
+  if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
+    return buildDefaultTitle(plan);
+  }
+  return 'Find the Shiny Pokemon';
+}
+
+function buildTemplateAwareDefaultDescription(plan) {
+  if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
+    return buildDefaultDescription(plan);
+  }
+
+  const typePairLabel = buildTypePairLabel(plan?.selection?.type_pair || []);
+  return `One of these ${typePairLabel} Pokemon turns shiny after the countdown. Pick a spot before the reveal.`;
+}
+
+function buildTemplateAwareMetadataPrompt(plan) {
+  if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
+    return buildMetadataPrompt(plan);
+  }
+
+  const typePairLabel = buildTypePairLabel(plan?.selection?.type_pair || []);
+  const selectedSubjects = plan?.selection?.selected_subjects || [];
+  return [
+    'Write YouTube Shorts publication metadata as JSON for a Pokemon shiny-finding challenge video.',
+    `Type pair: ${typePairLabel}`,
+    `Displayed Pokemon count: ${selectedSubjects.length}`,
+    `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+    'Return JSON with title, description, and hashtags.',
+    'Requirements:',
+    '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+    '- Do not spoil the exact Pokemon name in the title.',
+    '- The description should frame the video as a shiny-spotting challenge, not a quiz.',
+    '- Mention that only one spot turns shiny after the countdown.',
+    '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+    '- Keep the tone playful and sharp, not childish and not corporate.',
+    'Return JSON only.',
+  ].join('\n');
+}
+
+function buildTemplateAwareHashtags(plan) {
+  const typePair = plan?.selection?.type_pair || [];
+  const typeHashtags = buildTypeHashtags(typePair);
+  if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
+    return normalizeHashtags([
+      'pokemon',
+      'pokequizz',
+      'whosthatpokemon',
+      ...typeHashtags,
+      'shorts',
+    ]);
+  }
+
+  return normalizeHashtags([
+    'pokemon',
+    'findtheshiny',
+    'shinypokemon',
+    ...typeHashtags,
+    'shorts',
+  ]);
+}
+
 function parseGeneratedMetadataPayload(responseText) {
   let payload;
   try {
@@ -145,18 +224,10 @@ function parseGeneratedMetadataPayload(responseText) {
 }
 
 export function buildPokeQuizzFallbackPublicationMetadata(plan) {
-  const typePair = plan?.selection?.type_pair || [];
-  const typeHashtags = buildTypeHashtags(typePair);
   return {
-    title: buildDefaultTitle(plan),
-    description: buildDefaultDescription(plan),
-    hashtags: normalizeHashtags([
-      'pokemon',
-      'pokequizz',
-      'whosthatpokemon',
-      ...typeHashtags,
-      'shorts',
-    ]),
+    title: buildTemplateAwareDefaultTitle(plan),
+    description: buildTemplateAwareDefaultDescription(plan),
+    hashtags: buildTemplateAwareHashtags(plan),
     generation_provider: 'template',
     model: 'fallback',
   };
@@ -227,7 +298,7 @@ export async function generatePokeQuizzPublicationMetadata({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: config.script.model,
-        prompt: buildMetadataPrompt(plan),
+        prompt: buildTemplateAwareMetadataPrompt(plan),
         stream: false,
         format: METADATA_RESPONSE_SCHEMA,
         options: {
@@ -246,8 +317,8 @@ export async function generatePokeQuizzPublicationMetadata({
     const parsed = parseGeneratedMetadataPayload(payload.response);
     return {
       ...parsed,
-      title: buildDefaultTitle(plan),
-      description: buildDefaultDescription(plan),
+      title: buildTemplateAwareDefaultTitle(plan),
+      description: buildTemplateAwareDefaultDescription(plan),
       generation_provider: 'ollama',
       model: config.script.model,
     };

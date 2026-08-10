@@ -6,6 +6,7 @@ import {
   loadPokeQuizzSelectionStateFromStore,
   mergePokeQuizzSelectionStates,
   normalizePokeQuizzSelectionState,
+  resolvePokeQuizzSelectionStatePath,
 } from '../src/poke-quizz-selection-state.mjs';
 
 test('normalizePokeQuizzSelectionState folds the last video into the used signature history', () => {
@@ -144,5 +145,95 @@ test('loadPokeQuizzSelectionStateFromStore derives history from recent channel p
       createPokeQuizzVideoSignatureKey(['grass', 'poison'], '/tmp/background-1.png'),
     ),
     true,
+  );
+});
+
+test('resolvePokeQuizzSelectionStatePath scopes runtime state by template', () => {
+  assert.equal(
+    resolvePokeQuizzSelectionStatePath({ template_id: 'pokemon.find-the-shiny.v1' }),
+    'data/runtime/product-video-agent/poke-quizz/selection-state-find-the-shiny.json',
+  );
+  assert.equal(
+    resolvePokeQuizzSelectionStatePath({ template_id: 'pokemon.dual-type-reveal.v1' }),
+    'data/runtime/product-video-agent/poke-quizz/selection-state-dual-type-reveal.json',
+  );
+});
+
+test('loadPokeQuizzSelectionStateFromStore filters history by template scope', async () => {
+  const store = {
+    async fetchPublicationsByChannel() {
+      return [
+        {
+          id: 'pub-find-2',
+          video_id: 'video-find-2',
+          status: 'approved',
+          metadata: { type_pair: ['rock', 'fairy'], template_id: 'pokemon.find-the-shiny.v1' },
+        },
+        {
+          id: 'pub-dual-1',
+          video_id: 'video-dual-1',
+          status: 'approved',
+          metadata: { type_pair: ['water', 'flying'], template_id: 'pokemon.dual-type-reveal.v1' },
+        },
+        {
+          id: 'pub-find-1',
+          video_id: 'video-find-1',
+          status: 'deleted',
+          metadata: { type_pair: ['bug', 'poison'], template_id: 'pokemon.find-the-shiny.v1' },
+        },
+      ];
+    },
+    async fetchVideoById(videoId) {
+      if (videoId === 'video-find-2') {
+        return {
+          id: videoId,
+          template_key: 'find-the-shiny',
+          source_data: {
+            type_pair: ['rock', 'fairy'],
+            background_path: '/tmp/background-find-2.png',
+          },
+        };
+      }
+      if (videoId === 'video-dual-1') {
+        return {
+          id: videoId,
+          template_key: 'dual-type-reveal',
+          source_data: {
+            type_pair: ['water', 'flying'],
+            background_path: '/tmp/background-dual-1.png',
+          },
+        };
+      }
+      return {
+        id: videoId,
+        template_key: 'find-the-shiny',
+        source_data: {
+          type_pair: ['bug', 'poison'],
+          background_path: '/tmp/background-find-1.png',
+        },
+      };
+    },
+  };
+
+  const state = await loadPokeQuizzSelectionStateFromStore({
+    store,
+    channelProfile: {
+      platform: 'youtube_shorts',
+      account_key: 'poke-quizz-youtube',
+    },
+    templateId: 'pokemon.find-the-shiny.v1',
+    limit: 8,
+  });
+
+  assert.equal(state.last_type_pair_key, 'fairy|rock');
+  assert.equal(state.last_background_path, '/tmp/background-find-2.png');
+  assert.deepEqual(state.type_pair_usage_counts, {
+    'fairy|rock': 1,
+  });
+  assert.equal(
+    state.used_video_signatures.includes(
+      createPokeQuizzVideoSignatureKey(['water', 'flying'], '/tmp/background-dual-1.png'),
+    ),
+    false,
   );
 });

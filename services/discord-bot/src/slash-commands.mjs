@@ -1,5 +1,10 @@
 import { serializeDraftEmailCommand } from '../../task-router/src/email-command-parser.mjs';
 import { serializeLeadgenCommand } from '../../task-router/src/leadgen-command-parser.mjs';
+import {
+  PRODUCT_VIDEO_CHANNEL_OPTIONS,
+  PRODUCT_VIDEO_TEMPLATE_OPTIONS,
+  serializeProductVideoCommand,
+} from '../../task-router/src/product-video-command-parser.mjs';
 import { serializeDeveloperTaskCommand } from '../../developer-agent/src/command-parser.mjs';
 
 const DISCORD_INTERACTION_TYPE_APPLICATION_COMMAND = 2;
@@ -12,6 +17,7 @@ const OPS_COMMAND_NAMES = new Set(['ops']);
 const EMAIL_DRAFT_COMMAND_NAMES = new Set(['email-draft']);
 const LEADGEN_COMMAND_NAMES = new Set(['leadgen']);
 const DEVELOPER_TASK_COMMAND_NAMES = new Set(['create-developer-issue']);
+const PRODUCT_VIDEO_COMMAND_NAMES = new Set(['generate-video']);
 
 const HEALTH_TARGETS = [
   {
@@ -214,6 +220,33 @@ export function buildGuildSlashCommands() {
       ],
     },
     {
+      name: 'generate-video',
+      description: 'Generate a manual Poke Quizz review video for a chosen template and channel.',
+      type: 1,
+      options: [
+        {
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING,
+          name: 'template',
+          description: 'Which video template to generate.',
+          required: true,
+          choices: PRODUCT_VIDEO_TEMPLATE_OPTIONS.map((option) => ({
+            name: option.name,
+            value: option.value,
+          })),
+        },
+        {
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING,
+          name: 'channel',
+          description: 'Which channel should receive the review video.',
+          required: true,
+          choices: PRODUCT_VIDEO_CHANNEL_OPTIONS.map((option) => ({
+            name: option.name,
+            value: option.value,
+          })),
+        },
+      ],
+    },
+    {
       name: 'leadgen',
       description: 'Search public pages for candidate leads and extract structured records.',
       type: 1,
@@ -284,6 +317,7 @@ export function isSupportedSlashCommandInteraction(interaction) {
       || EMAIL_DRAFT_COMMAND_NAMES.has(commandName)
       || LEADGEN_COMMAND_NAMES.has(commandName)
       || DEVELOPER_TASK_COMMAND_NAMES.has(commandName)
+      || PRODUCT_VIDEO_COMMAND_NAMES.has(commandName)
     );
 }
 
@@ -338,6 +372,13 @@ function resolveSlashCommandContent(interaction) {
   if (OPS_COMMAND_NAMES.has(commandName)) {
     const actionValue = getSlashCommandOptionValue(interaction, 'action');
     return OPS_TARGETS.find((target) => target.value === actionValue)?.content || '';
+  }
+
+  if (PRODUCT_VIDEO_COMMAND_NAMES.has(commandName)) {
+    return serializeProductVideoCommand({
+      templateKey: getSlashCommandOptionValue(interaction, 'template'),
+      channelSelector: getSlashCommandOptionValue(interaction, 'channel'),
+    });
   }
 
   if (EMAIL_DRAFT_COMMAND_NAMES.has(commandName)) {

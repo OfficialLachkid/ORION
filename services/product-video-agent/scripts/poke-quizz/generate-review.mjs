@@ -11,8 +11,13 @@ import { renderPokeQuizzVideo } from '../../src/poke-quizz-renderer.mjs';
 import {
   loadPokeQuizzSelectionStateFromStore,
   mergePokeQuizzSelectionStates,
+  resolvePokeQuizzSelectionStatePath,
 } from '../../src/poke-quizz-selection-state.mjs';
-import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
+import {
+  findPublicationChannelProfile,
+  loadPublicationChannelProfiles,
+  resolvePublicationReviewThreadId,
+} from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import {
   beginPokeQuizzGenerationProgress,
@@ -28,6 +33,7 @@ import {
   DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
   resolveVideoTemplateRuntime,
 } from '../../src/video-template-context.mjs';
+import { resolvePokeQuizzVoiceRuntime } from '../../src/poke-quizz-voice-runtime.mjs';
 import {
   getBooleanOption,
   getStringOption,
@@ -70,20 +76,6 @@ async function loadRuntimeConfigJson(relativePath) {
   return JSON.parse(await readFile(resolve(projectRoot, relativePath), 'utf8'));
 }
 
-function resolveVoiceRuntime(config, options) {
-  const defaultProfileId = getStringOption(options, 'voice-profile-id', config.voice.default_profile_id);
-  const profile = (config.voice.profiles || []).find((item) => item.profile_id === defaultProfileId);
-  if (!profile) {
-    throw new Error(`Voice profile ${defaultProfileId} was not found in ${config.voice.default_profile_id}.`);
-  }
-  return {
-    pythonExecutable: resolve(projectRoot, getStringOption(options, 'voice-python', config.voice.executable)),
-    scriptPath: resolve(projectRoot, getStringOption(options, 'voice-script', config.voice.script_path)),
-    cacheDir: resolve(projectRoot, getStringOption(options, 'voice-cache-dir', config.voice.data_directory)),
-    profile,
-  };
-}
-
 function slugify(value) {
   return String(value || '')
     .trim()
@@ -122,11 +114,6 @@ async function resolvePlan(
   if (!templatePath) {
     throw new Error('No template path could be resolved for the requested video flow.');
   }
-  const statePath = getStringOption(
-    options,
-    'state',
-    'data/runtime/product-video-agent/poke-quizz/selection-state.json',
-  );
   const outputPlanPath = getStringOption(
     options,
     'plan-output',
@@ -136,9 +123,13 @@ async function resolvePlan(
   const forcedTypePair = forcedTypePairInput
     ? normalizeTypePair(forcedTypePairInput.split(','))
     : null;
-
-  const [template, pokedexRows, localSelectionState] = await Promise.all([
-    loadJson(templatePath),
+  const template = await loadJson(templatePath);
+  const statePath = getStringOption(
+    options,
+    'state',
+    resolvePokeQuizzSelectionStatePath(template),
+  );
+  const [pokedexRows, localSelectionState] = await Promise.all([
     loadJson(catalogJsonPath),
     loadOptionalJson(statePath),
   ]);
@@ -159,7 +150,7 @@ async function resolvePlan(
   };
 }
 
-async function resolveLiveSelectionState(runtimeConfig, channelProfile) {
+async function resolveLiveSelectionState(runtimeConfig, channelProfile, template) {
   const supabaseUrl = runtimeConfig.env.SUPABASE_URL || '';
   const apiKey = runtimeConfig.env.SUPABASE_SECRET_KEY || runtimeConfig.env.SUPABASE_PUBLISHABLE_KEY || '';
   if (!supabaseUrl || !apiKey) {
@@ -176,6 +167,7 @@ async function resolveLiveSelectionState(runtimeConfig, channelProfile) {
       store,
       channelProfile,
       limit: 32,
+      template,
     });
   } catch (error) {
     printWarn(`Could not load recent Poke Quizz selection history from Supabase: ${error.message}`);
@@ -184,11 +176,6 @@ async function resolveLiveSelectionState(runtimeConfig, channelProfile) {
 }
 
 async function generateAndReviewPokeQuizz(options) {
-  const reviewThreadId = getStringOption(options, 'thread-id', '');
-  if (!reviewThreadId) {
-    throw new Error('The --thread-id option is required.');
-  }
-
   const channelsPath = getStringOption(
     options,
     'channels',
@@ -212,7 +199,15 @@ async function generateAndReviewPokeQuizz(options) {
     loadRuntimeConfigJson(configPath),
   ]);
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
-  const liveSelectionState = await resolveLiveSelectionState(runtimeConfig, channelProfile);
+  const reviewThreadId = getStringOption(
+    options,
+    'thread-id',
+    resolvePublicationReviewThreadId(runtimeConfig, channelProfile),
+  );
+  if (!reviewThreadId) {
+    throw new Error(`No review thread id is configured for ${channelProfile.account_key}. Provide --thread-id or set metadata.review_thread_id.`);
+  }
+  const liveSelectionState = await resolveLiveSelectionState(runtimeConfig, channelProfile, template);
   const { plan, planPath } = await resolvePlan(
     options,
     liveSelectionState,
@@ -228,7 +223,16 @@ async function generateAndReviewPokeQuizz(options) {
   );
   const resolvedOutput = await resolveManagedPokeQuizzPreviewOutputPath(outputPath);
   const ffmpegExecutable = resolveFfmpegExecutable(config.render || config);
-  const kokoro = resolveVoiceRuntime(config, options);
+  const kokoro = resolvePokeQuizzVoiceRuntime({
+    config,
+    template,
+    plan,
+    projectRoot,
+    voiceProfileId: getStringOption(options, 'voice-profile-id', ''),
+    voicePython: getStringOption(options, 'voice-python', ''),
+    voiceScript: getStringOption(options, 'voice-script', ''),
+    voiceCacheDir: getStringOption(options, 'voice-cache-dir', ''),
+  });
   const runtimeRoot = resolve(projectRoot, 'data/runtime/product-video-agent/poke-quizz-render');
   const overrideTitle = getStringOption(options, 'title', '');
   const overrideDescription = getStringOption(options, 'description', '');
@@ -350,11 +354,11 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       'Usage: node services/product-video-agent/scripts/generate-poke-quizz-review.mjs [options]',
       '',
       'Options:',
-      '  --thread-id <id>           Required Discord thread id for progress + review.',
+      '  --thread-id <id>           Optional Discord review thread id override.',
       '  --plan <path>              Optional existing Poke Quizz plan JSON path.',
       '  --catalog-json <path>      Catalog JSON used when a new plan should be built.',
       '  --plan-output <path>       Output path for a generated plan JSON.',
-      '  --state <path>             Selection-state JSON path used by the planner.',
+      '  --state <path>             Selection-state JSON path used by the planner. Defaults to a template-scoped runtime file.',
       '  --seed <text>              Deterministic planning seed.',
       '  --type-pair <a,b>          Optional forced pair such as water,flying.',
       '  --output <path>            Render output MP4 path.',

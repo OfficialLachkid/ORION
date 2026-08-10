@@ -35,6 +35,31 @@ function parseGenerationList(input) {
     .filter((value) => Number.isFinite(value) && value > 0);
 }
 
+function buildLocalizedRowsOutputPath(generations = []) {
+  const orderedGenerations = [...new Set(
+    (Array.isArray(generations) ? generations : [])
+      .map((value) => Number.parseInt(String(value), 10))
+      .filter((value) => Number.isFinite(value) && value > 0),
+  )].sort((left, right) => left - right);
+
+  if (orderedGenerations.length === 0) {
+    return 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json';
+  }
+
+  if (orderedGenerations.length === 1) {
+    return `data/runtime/product-video-agent/pokedex/gen${orderedGenerations[0]}-localized.json`;
+  }
+
+  const isContiguous = orderedGenerations.every((generation, index) => (
+    index === 0 || generation === (orderedGenerations[index - 1] + 1)
+  ));
+  if (isContiguous) {
+    return `data/runtime/product-video-agent/pokedex/gen${orderedGenerations[0]}-gen${orderedGenerations.at(-1)}-localized.json`;
+  }
+
+  return `data/runtime/product-video-agent/pokedex/${orderedGenerations.map((generation) => `gen${generation}`).join('-')}-localized.json`;
+}
+
 function parseDotEnvValue(value) {
   const trimmed = String(value || '').trim();
   if (
@@ -336,7 +361,9 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --enrichment-concurrency <n> Concurrent PokeAPI species enrichment workers. Default: 6',
       '  --overwrite-shiny-sprites Replace existing shiny sprite files with the current source set',
       '  --write-json <path>       Write a localization report JSON under the repo root',
-      '  --write-rows-json <path>  Write planner-ready localized pokedex rows under the repo root',
+      '  --write-rows-json <path>  Write planner-ready localized pokedex rows under the repo root.',
+      '                           Default: a generation-derived runtime catalog path such as',
+      '                           data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
     ]);
     process.exit(0);
   }
@@ -390,11 +417,13 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     printInfo(`Upserted ${Array.isArray(upserted) ? upserted.length : localized.rows.length} localized row(s) into pokedex.`);
   }
 
-  const rowsOutputPath = getStringOption(options, 'write-rows-json', '');
-  if (rowsOutputPath) {
-    const absoluteOutputPath = await writeJsonFile(rowsOutputPath, localized.rows);
-    printInfo(`Wrote localized pokedex rows to ${absoluteOutputPath}`);
-  }
+  const rowsOutputPath = getStringOption(
+    options,
+    'write-rows-json',
+    buildLocalizedRowsOutputPath(generations),
+  );
+  const absoluteRowsOutputPath = await writeJsonFile(rowsOutputPath, localized.rows);
+  printInfo(`Wrote localized pokedex rows to ${absoluteRowsOutputPath}`);
 
   const outputPath = getStringOption(options, 'write-json', '');
   if (outputPath) {
