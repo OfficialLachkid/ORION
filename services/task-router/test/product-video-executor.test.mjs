@@ -22,6 +22,16 @@ test('manual review generation uses the selected channel config and default revi
     { env: {} },
     {
       ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+      loadPublicationChannelProfiles: async () => ([
+        {
+          platform: 'youtube_shorts',
+          account_key: 'trivamon-youtube',
+          metadata: {
+            review_thread_id: '1536146358749233222',
+          },
+        },
+      ]),
+      findPublicationChannelProfile: (profiles) => profiles[0],
       runProcess: async (options) => {
         runCalls.push(options);
         return {
@@ -45,7 +55,7 @@ test('manual review generation uses the selected channel config and default revi
   assert.equal(runCalls[0].args.includes('--catalog-json'), true);
   assert.equal(runCalls[0].args.includes('--channel-config'), true);
   assert.equal(runCalls[0].args.includes('--channel'), true);
-  assert.equal(runCalls[0].args.includes('--thread-id'), false);
+  assert.equal(runCalls[0].args.includes('--thread-id'), true);
   assert.equal(
     normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--catalog-json') + 1]).endsWith('data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json'),
     true,
@@ -55,6 +65,7 @@ test('manual review generation uses the selected channel config and default revi
     true,
   );
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'trivamon-youtube');
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1536146358749233222');
   assert.equal(result.report.state, 'preview_generated');
   assert.equal(result.report.previewUrl, 'https://youtube.com/shorts/manual-preview');
   assert.equal(result.report.publicationId, 'publication-trivamon-review-1');

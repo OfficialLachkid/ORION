@@ -12,6 +12,7 @@ import { normalizeTaskMessage } from '../../task-router/src/router.mjs';
 import { buildExecutionPlan, buildExecutionStartedEvents, executeTask } from '../../task-router/src/executor.mjs';
 import { processTranscriptionRequest } from '../../transcription-worker/src/worker.mjs';
 import { recordOpsMetric } from '../../lib/metrics-store.mjs';
+import { projectRoot } from '../../lib/runtime-config.mjs';
 import {
   buildApprovalOutcomeWriteBackCandidates,
   buildExecutionWriteBackCandidates,
@@ -52,7 +53,10 @@ import {
 } from '../../product-video-agent/src/poke-quizz-publication-review.mjs';
 import { resolvePokeQuizzReviewTaskPaths } from '../../product-video-agent/src/poke-quizz-review-paths.mjs';
 import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
-import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../product-video-agent/src/publication-channels.mjs';
+import {
+  loadPublicationChannelProfiles,
+  resolvePublicationReviewThreadId,
+} from '../../product-video-agent/src/publication-channels.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -108,7 +112,23 @@ function buildAuthHeaders(token) {
   };
 }
 
-async function rehydratePokeQuizzReviewTask(decision, config) {
+function matchesPokeQuizzReviewPublication(publication, decision) {
+  const taskId = String(decision?.taskId || '').trim();
+  const messageId = String(decision?.messageId || '').trim();
+  if (!taskId && !messageId) {
+    return false;
+  }
+
+  return (
+    String(publication?.metadata?.review_task_id || '').trim() === taskId
+    || (
+      messageId
+      && String(publication?.metadata?.review_message_id || '').trim() === messageId
+    )
+  );
+}
+
+export async function rehydratePokeQuizzReviewTask(decision, config, dependencies = {}) {
   if (!String(decision?.taskId || '').startsWith('TASK-ORION-PQ-PUBLISH-')) {
     return null;
   }
@@ -117,47 +137,51 @@ async function rehydratePokeQuizzReviewTask(decision, config) {
   }
 
   try {
-    const profiles = await loadPublicationChannelProfiles(POKE_QUIZZ_CHANNELS_PATH, { projectRoot });
-    const channelProfile = findPublicationChannelProfile(profiles, 'poke-quizz-youtube');
-    const store = new SupabasePublicationStore({
+    const profilesLoader = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
+    const reviewPathsResolver = dependencies.resolvePokeQuizzReviewTaskPaths || resolvePokeQuizzReviewTaskPaths;
+    const store = dependencies.publicationStore || new SupabasePublicationStore({
       supabaseUrl: config.env.SUPABASE_URL,
       apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY || '',
     });
-    const publications = await store.fetchPublicationsByChannel({
-      platform: channelProfile.platform,
-      accountKey: channelProfile.account_key,
-    });
-    const publication = publications.find((item) => (
-      String(item?.metadata?.review_task_id || '').trim() === String(decision.taskId || '').trim()
-      || (
-        decision.messageId
-        && String(item?.metadata?.review_message_id || '').trim() === String(decision.messageId || '').trim()
-      )
-    ));
-    if (!publication?.video_id) {
-      return null;
+    const profiles = await profilesLoader(POKE_QUIZZ_CHANNELS_PATH, { projectRoot });
+
+    for (const channelProfile of profiles) {
+      const publications = await store.fetchPublicationsByChannel({
+        platform: channelProfile.platform,
+        accountKey: channelProfile.account_key,
+      });
+      const publication = publications.find((item) => matchesPokeQuizzReviewPublication(item, decision));
+      if (!publication?.video_id) {
+        continue;
+      }
+
+      const video = await store.fetchVideoById(publication.video_id);
+      const reviewThreadId = String(
+        publication?.metadata?.review_thread_id
+          || resolvePublicationReviewThreadId(config, channelProfile)
+          || '',
+      ).trim();
+      if (!video || !reviewThreadId) {
+        return null;
+      }
+
+      const reviewPaths = await reviewPathsResolver(publication);
+      return buildPokeQuizzPublicationReviewTask({
+        publication,
+        video,
+        channelProfile,
+        reviewThreadId,
+        planPath: reviewPaths.planPath,
+        renderPath: publication?.metadata?.render_path || video?.render?.output_path || '',
+        catalogJsonPath: reviewPaths.catalogJsonPath,
+        templatePath: reviewPaths.templatePath,
+        configPath: reviewPaths.configPath,
+        channelSelector: channelProfile.account_key,
+        submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
+      });
     }
 
-    const video = await store.fetchVideoById(publication.video_id);
-    const reviewThreadId = String(publication?.metadata?.review_thread_id || '').trim();
-    if (!video || !reviewThreadId) {
-      return null;
-    }
-    const reviewPaths = await resolvePokeQuizzReviewTaskPaths(publication);
-
-    return buildPokeQuizzPublicationReviewTask({
-      publication,
-      video,
-      channelProfile,
-      reviewThreadId,
-      planPath: reviewPaths.planPath,
-      renderPath: publication?.metadata?.render_path || video?.render?.output_path || '',
-      catalogJsonPath: reviewPaths.catalogJsonPath,
-      templatePath: reviewPaths.templatePath,
-      configPath: reviewPaths.configPath,
-      channelSelector: channelProfile.account_key,
-      submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
-    });
+    return null;
   } catch (error) {
     process.stderr.write(`Could not rehydrate Poke Quizz review task ${decision?.taskId || ''}: ${error.message}\n`);
     return null;

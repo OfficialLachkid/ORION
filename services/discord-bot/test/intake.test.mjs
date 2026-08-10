@@ -132,6 +132,34 @@ test('processDiscordEvent accepts approval replies from the configured operator 
   assert.equal(result.decision.taskId, 'TASK-PR-MERGE-42-1234567890AB');
 });
 
+test('processDiscordEvent routes approval replies from dynamically discovered publication review threads', () => {
+  const baseConfig = loadRuntimeConfig();
+  const config = {
+    ...baseConfig,
+    publicationReviewThreads: {
+      threadIds: ['1536146358749233222'],
+      byThreadId: {
+        '1536146358749233222': {
+          threadId: '1536146358749233222',
+          channelId: 'video-channel-trivamon-youtube',
+          channelName: 'TrivaMon',
+          accountKey: 'trivamon-youtube',
+        },
+      },
+    },
+  };
+  const result = processDiscordEvent({
+    guildId: config.guildId || 'DISCORD_GUILD_ID',
+    channelId: '1536146358749233222',
+    content: 'approve TASK-ORION-PQ-PUBLISH-20260810093937-6EF1E8780A08',
+    author: buildAuthorizedOperator(config),
+  }, config);
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.route, 'approval');
+  assert.equal(result.decision.taskId, 'TASK-ORION-PQ-PUBLISH-20260810093937-6EF1E8780A08');
+});
+
 for (const channelKey of ['outreachAgent', 'pullRequests', 'outreachFollowups', 'orionReview', 'pokeQuizzReview']) {
   test(`processDiscordEvent routes approval replies from ${channelKey}`, () => {
     const baseConfig = loadRuntimeConfig();

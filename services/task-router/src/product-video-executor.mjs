@@ -4,7 +4,11 @@ import { resolve } from 'node:path';
 import { projectRoot } from '../../lib/runtime-config.mjs';
 import { runLocalProcess } from '../../product-video-agent/src/process-runner.mjs';
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../../product-video-agent/src/poke-quizz-asset-layout.mjs';
-import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../product-video-agent/src/publication-channels.mjs';
+import {
+  findPublicationChannelProfile,
+  loadPublicationChannelProfiles,
+  resolvePublicationReviewThreadId,
+} from '../../product-video-agent/src/publication-channels.mjs';
 import {
   ensurePreferredPokeQuizzCatalogJsonPath,
   resolvePokeQuizzReviewTaskPaths,
@@ -671,6 +675,14 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
   const runProcess = dependencies.runProcess || runLocalProcess;
   const generateReviewScriptPath = dependencies.generateReviewScriptPath
     || resolve(projectRoot, 'services/product-video-agent/scripts/generate-poke-quizz-review.mjs');
+  const profilesLoader = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
+  const channelFinder = dependencies.findPublicationChannelProfile || findPublicationChannelProfile;
+  const profiles = await profilesLoader(
+    'services/product-video-agent/publication-channels.example.json',
+    { projectRoot },
+  );
+  const channelProfile = channelFinder(profiles, generation.channelSelector);
+  const reviewThreadId = resolvePublicationReviewThreadId(_config, channelProfile);
   const reviewResult = await runProcess({
     executable: process.execPath,
     args: [
@@ -681,6 +693,7 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
       resolve(projectRoot, generation.channelConfigPath),
       '--channel',
       generation.channelSelector,
+      ...(reviewThreadId ? ['--thread-id', reviewThreadId] : []),
       '--as-of',
       submittedAt,
     ],

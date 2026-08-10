@@ -69,6 +69,15 @@ function resolveEnvFilePath(explicitPath) {
   return resolve(projectRoot, 'config/discord/.env.example');
 }
 
+function resolvePublicationChannelsPath() {
+  const preferredPath = resolve(projectRoot, 'services/product-video-agent/publication-channels.json');
+  if (existsSync(preferredPath)) {
+    return preferredPath;
+  }
+
+  return resolve(projectRoot, 'services/product-video-agent/publication-channels.example.json');
+}
+
 function parseBoolean(value, fallbackValue = false) {
   if (value === undefined || value === null || value === '') {
     return fallbackValue;
@@ -125,6 +134,50 @@ function getPositiveInteger(value, fallbackValue) {
   return parsed;
 }
 
+function loadPublicationReviewThreads() {
+  const channelsPath = resolvePublicationChannelsPath();
+  if (!existsSync(channelsPath)) {
+    return {
+      threadIds: [],
+      byThreadId: {},
+    };
+  }
+
+  try {
+    const payload = readJson(channelsPath);
+    const channels = Array.isArray(payload?.channels) ? payload.channels : [];
+    const byThreadId = {};
+
+    for (const channel of channels) {
+      const threadId = String(
+        channel?.metadata?.review_thread_id
+          || channel?.metadata?.reviewThreadId
+          || '',
+      ).trim();
+      if (!threadId) {
+        continue;
+      }
+
+      byThreadId[threadId] = {
+        threadId,
+        channelId: String(channel?.id || '').trim(),
+        channelName: String(channel?.name || '').trim(),
+        accountKey: String(channel?.account_key || '').trim(),
+      };
+    }
+
+    return {
+      threadIds: Object.keys(byThreadId),
+      byThreadId,
+    };
+  } catch {
+    return {
+      threadIds: [],
+      byThreadId: {},
+    };
+  }
+}
+
 export function loadRuntimeConfig(options = {}) {
   const env = loadRuntimeEnv(options.envFilePath);
 
@@ -157,6 +210,7 @@ export function loadRuntimeConfig(options = {}) {
   const resolvedMetricsEventsFile = env.METRICS_EVENTS_PATH || resolve(resolvedLogDir, 'ops-events.jsonl');
   const resolvedHealthMonitorStateFile =
     env.HEALTH_MONITOR_STATE_PATH || resolve(resolvedLogDir, 'health-monitor-state.json');
+  const publicationReviewThreads = loadPublicationReviewThreads();
 
   return {
     env,
@@ -164,6 +218,7 @@ export function loadRuntimeConfig(options = {}) {
     operatorUserIds: splitCsv(env.DISCORD_OPERATOR_USER_IDS || env.DISCORD_ALLOWED_OPERATOR_USER_IDS || ''),
     guildId: substituteEnvPlaceholders(channelMap.guildId, env),
     channelIds,
+    publicationReviewThreads,
     approvalRules: readJson(approvalRulesPath),
     memoryNamespaces: readJson(memoryNamespacesPath),
     memoryPromotionRules: readJson(memoryPromotionRulesPath),

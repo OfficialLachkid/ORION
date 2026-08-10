@@ -16,6 +16,7 @@ import {
   attachImageContextToTasks,
   buildImageContextKey,
   mergeImageAttachments,
+  rehydratePokeQuizzReviewTask,
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
 
@@ -435,4 +436,82 @@ test('buildImageContextKey scopes image context by author and channel', () => {
     }),
     'user-1:channel-1'
   );
+});
+
+test('rehydratePokeQuizzReviewTask finds TrivaMon reviews without assuming the Poke Quizz account', async () => {
+  const publication = {
+    id: 'publication-trivamon-review-1',
+    video_id: 'video-trivamon-review-1',
+    created_at: '2026-08-10T09:39:37.000Z',
+    metadata: {
+      review_task_id: 'TASK-ORION-PQ-PUBLISH-20260810093937-6EF1E8780A08',
+      review_thread_id: '1536146358749233222',
+      review_requested_at: '2026-08-10T09:39:37.000Z',
+      type_pair: ['rock', 'fairy'],
+      seed: 'shiny-review-3',
+      render_path: 'data/runtime/product-video-agent/poke-quizz/reviews/trivamon-rock-fairy.mp4',
+    },
+  };
+  const video = {
+    id: 'video-trivamon-review-1',
+    render: {
+      type_pair: ['rock', 'fairy'],
+      output_path: 'data/runtime/product-video-agent/poke-quizz/reviews/trivamon-rock-fairy.mp4',
+    },
+  };
+
+  const task = await rehydratePokeQuizzReviewTask(
+    {
+      taskId: 'TASK-ORION-PQ-PUBLISH-20260810093937-6EF1E8780A08',
+      messageId: '1536308033032945767',
+    },
+    {
+      env: {
+        SUPABASE_URL: 'https://example.supabase.co',
+        SUPABASE_SECRET_KEY: 'secret',
+      },
+      channelIds: {},
+    },
+    {
+      loadPublicationChannelProfiles: async () => ([
+        {
+          id: 'video-channel-poke-quizz-youtube',
+          name: 'Poke Quizz',
+          platform: 'youtube_shorts',
+          account_key: 'poke-quizz-youtube',
+          metadata: {
+            review_thread_id: '1532709429902839810',
+          },
+        },
+        {
+          id: 'video-channel-trivamon-youtube',
+          name: 'TrivaMon',
+          platform: 'youtube_shorts',
+          account_key: 'trivamon-youtube',
+          metadata: {
+            review_thread_id: '1536146358749233222',
+          },
+        },
+      ]),
+      publicationStore: {
+        async fetchPublicationsByChannel({ accountKey }) {
+          return accountKey === 'trivamon-youtube' ? [publication] : [];
+        },
+        async fetchVideoById(id) {
+          assert.equal(id, 'video-trivamon-review-1');
+          return video;
+        },
+      },
+      resolvePokeQuizzReviewTaskPaths: async () => ({
+        planPath: 'data/runtime/product-video-agent/poke-quizz/reviews/trivamon-rock-fairy.plan.json',
+        catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+        templatePath: 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json',
+        configPath: 'services/product-video-agent/config.example.json',
+      }),
+    },
+  );
+
+  assert.equal(task?.poke_quizz_publication_review?.publicationId, 'publication-trivamon-review-1');
+  assert.equal(task?.poke_quizz_publication_review?.channelSelector, 'trivamon-youtube');
+  assert.equal(task?.poke_quizz_publication_review?.reviewThreadId, '1536146358749233222');
 });
