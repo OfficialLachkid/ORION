@@ -17,4 +17,6 @@ Store per-channel refresh tokens in:
 Recommended variable names already referenced by the channel registry:
 
 - `YOUTUBE_POKE_QUIZZ_REFRESH_TOKEN=`
+- `YOUTUBE_TRIVAMON_REFRESH_TOKEN=`
+- `YOUTUBE_POKE_QUESS_REFRESH_TOKEN=`
 - `YOUTUBE_TECHY_GADGETS_REFRESH_TOKEN=`

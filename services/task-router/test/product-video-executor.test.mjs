@@ -122,6 +122,58 @@ test('manual review generation supports the type-speed-quiz channel config for T
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'trivamon-youtube');
 });
 
+test('manual review generation supports the type-speed-quiz channel config for Poke Quess', async () => {
+  const runCalls = [];
+  const normalizePath = (value) => String(value || '').replaceAll('\\', '/');
+
+  await executeProductVideoAction(
+    'poke_quizz_generate_review',
+    {
+      task_id: 'TASK-ORION-PQ-GENERATE-TEST-3',
+      submitted_at: '2026-08-11T15:10:00.000Z',
+      poke_quizz_generate_review: {
+        templateKey: 'type-speed-quiz',
+        templateLabel: 'Type Speed Quiz',
+        channelSelector: 'poke-quess-youtube',
+        channelLabel: 'Poke Quess',
+        channelConfigPath: 'services/product-video-agent/config/channels/poke-quess-type-speed-quiz-youtube.json',
+      },
+    },
+    { env: {} },
+    {
+      ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+      loadPublicationChannelProfiles: async () => ([{
+        platform: 'youtube_shorts',
+        account_key: 'poke-quess-youtube',
+        metadata: {
+          review_thread_id: '1536721345440780339',
+        },
+      }]),
+      findPublicationChannelProfile: (profiles) => profiles[0],
+      runProcess: async (options) => {
+        runCalls.push(options);
+        return {
+          stdout: JSON.stringify({
+            publication_id: 'publication-poke-quess-speed-quiz-1',
+            preview_url: 'https://youtube.com/shorts/manual-preview-poke-quess-speed-quiz',
+            task_id: 'TASK-ORION-PQ-PUBLISH-MANUAL-3',
+            message_id: '1536721345440780340',
+            render_path: 'data/runtime/product-video-agent/poke-quizz/manual-preview-poke-quess-speed-quiz.mp4',
+          }, null, 2),
+        };
+      },
+    },
+  );
+
+  assert.equal(runCalls.length, 1);
+  assert.equal(
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-quess-type-speed-quiz-youtube.json'),
+    true,
+  );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'poke-quess-youtube');
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1536721345440780339');
+});
+
 test('publish approval triggers an immediate scheduling pass and returns the scheduled slot', async () => {
   const initialPublication = {
     id: 'publication-bug-ground',

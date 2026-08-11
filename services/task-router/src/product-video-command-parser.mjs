@@ -24,6 +24,10 @@ export const PRODUCT_VIDEO_CHANNEL_OPTIONS = Object.freeze([
     name: 'TrivaMon',
     value: 'trivamon-youtube',
   }),
+  Object.freeze({
+    name: 'Poke Quess',
+    value: 'poke-quess-youtube',
+  }),
 ]);
 
 const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
@@ -36,6 +40,11 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/trivamon-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json',
+  }),
+  'poke-quess-youtube': Object.freeze({
+    'dual-type-reveal': 'services/product-video-agent/config/channels/poke-quess-youtube.json',
+    'find-the-shiny': 'services/product-video-agent/config/channels/poke-quess-find-the-shiny-youtube.json',
+    'type-speed-quiz': 'services/product-video-agent/config/channels/poke-quess-type-speed-quiz-youtube.json',
   }),
 });
 
