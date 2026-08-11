@@ -84,9 +84,9 @@ const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
 ]);
 
 const DEFAULT_TYPE_SPEED_QUIZ_TITLE_BUILDERS = Object.freeze([
-  () => 'Pokemon Type Speed Quiz',
+  () => 'Guess the Pokemon Types',
   () => 'Can You Get 5/5 Pokemon Types?',
-  () => 'Name These Pokemon Types Fast',
+  () => 'Guess the Type Before the Reveal',
 ]);
 
 function hashSeed(input) {

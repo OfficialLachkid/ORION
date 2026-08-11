@@ -1,4 +1,5 @@
 import {
+  buildAnimatedLiftExpression,
   buildAnimatedPopSettleExpression,
   buildAnimatedTextSegmentAlphaExpression,
   buildAnimatedTextYExpression,
@@ -29,14 +30,44 @@ function formatCounterText(round) {
 function buildSceneSpriteFilter({
   inputIndex,
   fps,
-  spriteSize,
-  centerX,
-  centerY,
+  spriteLayout,
+  round,
   roundIndex,
 }) {
+  const introStartSeconds = 0.04;
+  const introDurationSeconds = roundTime(Math.max(
+    0.18,
+    Math.min(
+      ensureNumber(spriteLayout.intro_duration_seconds, 0.34),
+      Math.max(0.2, round.local.reveal_start_seconds - 0.08),
+    ),
+  ));
+  const scaleExpression = buildAnimatedPopSettleExpression(
+    introStartSeconds,
+    introDurationSeconds,
+    0.08,
+    1.12,
+    1,
+    buildScaleFilterTimeExpression({ fps, streamStartSeconds: 0 }),
+  );
+  const introLiftExpression = buildAnimatedLiftExpression(
+    introStartSeconds,
+    introDurationSeconds,
+    ensureNumber(spriteLayout.intro_lift_px, 44),
+  );
+  const bobStartSeconds = roundTime(introStartSeconds + (introDurationSeconds * 0.58));
+  const bobAmplitude = roundTime(Math.max(
+    0,
+    ensureNumber(spriteLayout.countdown_float_amplitude_px, 18),
+  ));
+  const bobFrequencyRadians = roundTime(Math.max(
+    0.4,
+    ensureNumber(spriteLayout.countdown_float_frequency_hz, 2.1),
+  ) * 6.283185307);
+  const bobExpression = `if(lt(t,${bobStartSeconds}),0,if(lt(t,${round.local.reveal_start_seconds}),sin((t-${bobStartSeconds})*${bobFrequencyRadians})*${bobAmplitude},0))`;
   return [
-    `[${inputIndex}:v]fps=${fps},trim=duration=${roundTime(9999)},setpts=PTS-STARTPTS,scale=${spriteSize}:${spriteSize}:force_original_aspect_ratio=decrease,setsar=1[spr${roundIndex}]`,
-    `[scene${roundIndex}b][spr${roundIndex}]overlay=${centerX}-w/2:${centerY}-h/2[scene${roundIndex}s]`,
+    `[${inputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${spriteLayout.render_size_px}*(${scaleExpression})':h='${spriteLayout.render_size_px}*(${scaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
+    `[scene${roundIndex}b][spr${roundIndex}]overlay=${spriteLayout.center_x}-w/2:${spriteLayout.center_y}-h/2-${introLiftExpression}-${bobExpression}[scene${roundIndex}s]`,
   ];
 }
 
@@ -75,9 +106,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     filters.push(...buildSceneSpriteFilter({
       inputIndex: roundSpriteInput,
       fps,
-      spriteSize: renderPlan.sprite_layout.render_size_px,
-      centerX: renderPlan.sprite_layout.center_x,
-      centerY: renderPlan.sprite_layout.center_y,
+      spriteLayout: renderPlan.sprite_layout,
+      round,
       roundIndex,
     }));
 
@@ -103,29 +133,36 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = timerSceneLabel;
     }
 
-    const hookAlphaExpression = roundIndex === 0
-      ? buildAnimatedTextSegmentAlphaExpression(0, round.local.countdown_start_seconds)
-      : '0';
-    const hookYExpression = roundIndex === 0
-      ? buildAnimatedTextYExpression(renderPlan.text_layout.hook_y, 0)
-      : renderPlan.text_layout.hook_y;
-    if (roundIndex === 0 && renderPlan.hook_text) {
-      const hookSceneLabel = `scene${roundIndex}h`;
-      filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(renderPlan.hook_text)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.hook_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=(w-text_w)/2:y='${hookYExpression}-text_h/2':alpha='${hookAlphaExpression}':enable='${formatEnableBetween(0, round.local.countdown_start_seconds)}'[${hookSceneLabel}]`,
-      );
-      currentLabel = hookSceneLabel;
-    }
-
     const counterSceneLabel = `scene${roundIndex}c`;
+    const counterScaleExpression = buildAnimatedPopSettleExpression(
+      0.03,
+      0.24,
+      0.62,
+      1.18,
+      1,
+    );
     filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(formatCounterText(round))}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.counter_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=${renderPlan.text_layout.counter_x}:y=${renderPlan.text_layout.counter_y}[${counterSceneLabel}]`,
+      `[${currentLabel}]drawtext=text='${escapeDrawtextText(formatCounterText(round))}'${fontPart}:fontcolor=white:fontsize='${renderPlan.text_layout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.text_layout.counter_x}:y='${renderPlan.text_layout.counter_y}-${buildAnimatedLiftExpression(0.03, 0.24, 16)}':alpha='${buildAnimatedTextSegmentAlphaExpression(0.03, round.local.scene_duration_seconds)}'[${counterSceneLabel}]`,
     );
     currentLabel = counterSceneLabel;
 
+    const promptSceneLabel = `scene${roundIndex}p`;
+    const promptText = round.prompt_text || renderPlan.hook_text;
+    const promptScaleExpression = buildAnimatedPopSettleExpression(
+      0.04,
+      0.26,
+      0.72,
+      1.08,
+      1,
+    );
+    filters.push(
+      `[${currentLabel}]drawtext=text='${escapeDrawtextText(promptText)}'${fontPart}:fontcolor=white:fontsize='${renderPlan.text_layout.prompt_font_size}*(${promptScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(renderPlan.text_layout.prompt_y, 0.04)}-text_h/2':alpha='${buildAnimatedTextSegmentAlphaExpression(0.04, round.local.reveal_start_seconds)}':enable='${formatEnableBetween(0, round.local.reveal_start_seconds)}'[${promptSceneLabel}]`,
+    );
+    currentLabel = promptSceneLabel;
+
     const nameSceneLabel = `scene${roundIndex}n`;
     filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.subject.name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=(w-text_w)/2:y=${renderPlan.text_layout.name_y}-text_h/2[${nameSceneLabel}]`,
+      `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.subject.name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${renderPlan.text_layout.name_y}-text_h/2[${nameSceneLabel}]`,
     );
     currentLabel = nameSceneLabel;
 
@@ -143,7 +180,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
     const typeTextSceneLabel = `scene${roundIndex}txt`;
     filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.type_label)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.type_text_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(renderPlan.text_layout.type_text_y, round.local.reveal_visual_start_seconds)}-text_h/2':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='gte(t,${round.local.reveal_visual_start_seconds})'[${typeTextSceneLabel}]`,
+      `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.type_label)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.type_text_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(renderPlan.text_layout.type_text_y, round.local.reveal_visual_start_seconds)}-text_h/2':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='gte(t,${round.local.reveal_visual_start_seconds})'[${typeTextSceneLabel}]`,
     );
     currentLabel = typeTextSceneLabel;
 
@@ -167,6 +204,34 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       currentLabel = iconSceneLabel;
     });
+
+    if (round.subject?.is_shiny_reveal && plan.assets.overlays?.selected_shiny_sparkle_path && inputRefs.shinySparkle != null) {
+      const sparkleLabel = `scene${roundIndex}sparkle`;
+      const sparkleDuration = Math.max(
+        0.12,
+        ensureNumber(
+          plan.assets.overlays?.selected_shiny_sparkle_duration_seconds,
+          ensureNumber(plan.shiny_reveal?.sparkle_duration_seconds, 0.9),
+        ),
+      );
+      const sparkleEnd = roundTime(
+        Math.min(round.local.scene_duration_seconds, round.local.reveal_visual_start_seconds + sparkleDuration),
+      );
+      const sparkleSize = roundTime(
+        renderPlan.sprite_layout.render_size_px * Math.max(
+          1,
+          ensureNumber(plan.shiny_reveal?.sparkle_scale_multiplier, 1.35),
+        ),
+      );
+      filters.push(
+        `[${inputRefs.shinySparkle}:v]fps=${fps},trim=duration=${sparkleDuration},setpts=PTS-STARTPTS+${round.local.reveal_visual_start_seconds}/TB,scale=${sparkleSize}:${sparkleSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${sparkleLabel}]`,
+      );
+      const sparkleSceneLabel = `scene${roundIndex}ss`;
+      filters.push(
+        `[${currentLabel}][${sparkleLabel}]overlay=${renderPlan.sprite_layout.center_x}-w/2:${renderPlan.sprite_layout.center_y}-h/2:enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, sparkleEnd)}'[${sparkleSceneLabel}]`,
+      );
+      currentLabel = sparkleSceneLabel;
+    }
 
     filters.push(`[${currentLabel}]setsar=1[scene${roundIndex}]`);
   });

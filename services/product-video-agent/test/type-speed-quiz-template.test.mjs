@@ -26,30 +26,36 @@ const template = {
     type_cardinality: 'any',
   },
   question_contract: {
-    hook_text: 'Can you get 5/5?',
-    hook_text_variants: ['Can you get 5/5?', 'Pokemon Type Speed Quiz'],
+    hook_text: 'Guess the Type',
+    hook_text_variants: ['Guess the Type', 'Guess the Types'],
   },
   layout: {
     text: {
-      hook_y: 300,
-      hook_font_size: 156,
-      counter_x: 96,
-      counter_y: 188,
+      hook_y: 336,
+      hook_font_size: 132,
+      prompt_y: 336,
+      prompt_font_size: 132,
+      counter_x: 72,
+      counter_y: 144,
       counter_font_size: 96,
-      name_y: 1160,
+      name_y: 1336,
       name_font_size: 132,
-      type_text_y: 1448,
-      type_text_font_size: 94,
+      type_text_y: 420,
+      type_text_font_size: 141,
     },
     sprite: {
       center_x: 540,
-      center_y: 820,
+      center_y: 930,
       size_px: 620,
       scale_multiplier: 1.18,
+      intro_duration_seconds: 0.34,
+      intro_lift_px: 44,
+      countdown_float_amplitude_px: 18,
+      countdown_float_frequency_hz: 2.1,
     },
     type_badges: {
-      center_y: 1322,
-      icon_size_px: 208,
+      center_y: 570,
+      icon_size_px: 300,
       spacing_px: 42,
       pop_in_duration_seconds: 0.22,
     },
@@ -68,6 +74,14 @@ const template = {
       final_hold_seconds: 1.12,
     },
   },
+  reveal: {
+    visual_delay_seconds: 0.16,
+    shiny: {
+      enabled: true,
+      sparkle_duration_seconds: 0.9,
+      sparkle_scale_multiplier: 1.35,
+    },
+  },
   audio: {
     battle_intro_music: {
       start_seconds: 0,
@@ -84,6 +98,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['electric'],
     sprite_path: '/tmp/pikachu.png',
+    shiny_sprite_path: '/tmp/pikachu-shiny.png',
     sprite_source_url: 'https://example.test/pikachu.png',
   },
   {
@@ -94,6 +109,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['grass', 'poison'],
     sprite_path: '/tmp/bulbasaur.png',
+    shiny_sprite_path: '/tmp/bulbasaur-shiny.png',
     sprite_source_url: 'https://example.test/bulbasaur.png',
   },
   {
@@ -104,6 +120,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['ghost', 'poison'],
     sprite_path: '/tmp/gengar.png',
+    shiny_sprite_path: '/tmp/gengar-shiny.png',
     sprite_source_url: 'https://example.test/gengar.png',
   },
   {
@@ -114,6 +131,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['normal'],
     sprite_path: '/tmp/eevee.png',
+    shiny_sprite_path: '/tmp/eevee-shiny.png',
     sprite_source_url: 'https://example.test/eevee.png',
   },
   {
@@ -124,6 +142,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['dragon', 'flying'],
     sprite_path: '/tmp/dragonite.png',
+    shiny_sprite_path: '/tmp/dragonite-shiny.png',
     sprite_source_url: 'https://example.test/dragonite.png',
   },
   {
@@ -134,6 +153,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['water'],
     sprite_path: '/tmp/magikarp.png',
+    shiny_sprite_path: '/tmp/magikarp-shiny.png',
     sprite_source_url: 'https://example.test/magikarp.png',
   },
 ];
@@ -148,16 +168,18 @@ const assetInventory = {
   ],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3'],
+    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/shiny.mp3'],
     countdown_tick: '/tmp/countdown.mp3',
     timer_end: '/tmp/timer-end.mp3',
+    shiny: '/tmp/shiny.mp3',
   },
   overlay_presets: {
     timer: '/tmp/timer.gif',
     timer_countdown: '/tmp/timer-countdown.gif',
     timer_alarm: '/tmp/timer-alarm.gif',
+    shiny_sparkle: '/tmp/shiny-sparkle.gif',
   },
-  overlays: ['/tmp/timer.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif'],
+  overlays: ['/tmp/timer.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/shiny-sparkle.gif'],
   transitions: [],
   type_icons: {
     pixel: [
@@ -227,6 +249,8 @@ test('generic planner dispatch builds a random type speed quiz plan from localiz
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 1), true);
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 2), true);
   assert.equal(plan.rounds.every((round) => round.type_icons.length === round.subject.types.length), true);
+  assert.equal(plan.rounds.filter((round) => round.subject.is_shiny_reveal).length, 1);
+  assert.equal(plan.shiny_reveal.active, true);
   assert.equal(plan.required_asset_gaps.length, 0);
 });
 
@@ -269,7 +293,7 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.output_path, '/tmp/type-speed-quiz.mp4');
 });
 
-test('visual inputs loop gif backgrounds and include one sprite plus type icon set per round', async () => {
+test('visual inputs loop gif backgrounds, use one shiny round, and include the sparkle overlay once', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -285,6 +309,7 @@ test('visual inputs loop gif backgrounds and include one sprite plus type icon s
   const inputs = buildVisualInputs(plan, renderPlan);
   const spriteInputs = inputs.filter((input) => input.role.endsWith('-sprite'));
   const typeIconInputs = inputs.filter((input) => input.role.includes('type-icon'));
+  const shinyRound = renderPlan.rounds.find((round) => round.subject.is_shiny_reveal);
 
   if (plan.assets.background.selected_path.endsWith('.gif')) {
     assert.deepEqual(inputs[0].args, ['-ignore_loop', '0', '-t', String(renderPlan.total_duration_seconds), '-i', plan.assets.background.selected_path]);
@@ -293,9 +318,14 @@ test('visual inputs loop gif backgrounds and include one sprite plus type icon s
   }
   assert.equal(spriteInputs.length, 5);
   assert.equal(typeIconInputs.length >= 5, true);
+  assert.equal(inputs.filter((input) => input.role === 'shiny-sparkle').length, 1);
+  assert.equal(
+    spriteInputs.some((input) => input.path === shinyRound?.subject?.render_sprite_path),
+    true,
+  );
 });
 
-test('audio filter schedules countdown ticks and timer-end cues for every round', async () => {
+test('audio filter schedules countdown ticks, timer-end cues, and one shiny hit', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -313,6 +343,7 @@ test('audio filter schedules countdown ticks and timer-end cues for every round'
     musicPath: '/tmp/music.mp3',
     countdownPath: '/tmp/countdown.mp3',
     timerEndPath: '/tmp/timer-end.mp3',
+    shinyPath: '/tmp/shiny.mp3',
     renderPlan,
     mediaDurations: {
       countdown_audio_duration_seconds: 0.7,
@@ -323,6 +354,7 @@ test('audio filter schedules countdown ticks and timer-end cues for every round'
   assert.match(script, /\[2:a\]asplit=15/u);
   assert.match(script, /\[3:a\]asplit=5/u);
   assert.match(script, /timerend4/u);
+  assert.match(script, /\[4:a\]adelay=\d+\|\d+,volume=0\.5\[shiny\]/u);
   assert.match(script, /\[n0\]\[music\]\[cd0\]/u);
 });
 
@@ -351,13 +383,15 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
         sprite: 3 + roundIndex,
         typeIcons: round.type_icons.map((_, iconIndex) => 8 + (roundIndex * 2) + iconIndex),
       })),
+      shinySparkle: 18,
     },
     '/tmp/font.ttf',
   );
 
   assert.match(visualFilter.script, /split=5\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]/u);
-  assert.match(visualFilter.script, /drawtext=text='Can you get 5\/5\?'/u);
+  assert.match(visualFilter.script, /drawtext=text='Guess the Type/u);
   assert.match(visualFilter.script, /drawtext=text='1\/5'/u);
+  assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
   assert.match(visualFilter.script, /\[sceneout4\]format=yuv420p\[vout\]/u);
 });

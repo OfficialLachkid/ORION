@@ -45,26 +45,46 @@ export async function renderPokeQuizzVideo({
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
   const countdownPath = plan.assets.audio.selected_sound_effects?.countdown_tick || null;
   const timerEndPath = plan.assets.audio.selected_sound_effects?.timer_end || null;
+  const shinyPath = plan.shiny_reveal?.active
+    ? plan.assets.audio.selected_sound_effects?.shiny || null
+    : null;
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
     ...(countdownPath ? [countdownPath] : []),
     ...(timerEndPath ? [timerEndPath] : []),
+    ...(shinyPath ? [shinyPath] : []),
   ]);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
-  const countdownDurationSeconds = countdownPath
-    ? await probeMediaDurationSeconds({
-      ffmpegExecutable,
-      mediaPath: countdownPath,
-      cwd: projectRoot,
-    })
-    : null;
+  const [
+    countdownDurationSeconds,
+    shinySparkleDurationSeconds,
+  ] = await Promise.all([
+    countdownPath
+      ? probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: countdownPath,
+        cwd: projectRoot,
+      })
+      : Promise.resolve(null),
+    plan.shiny_reveal?.active && plan.assets.overlays.selected_shiny_sparkle_path
+      ? probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: plan.assets.overlays.selected_shiny_sparkle_path,
+        cwd: projectRoot,
+      })
+      : Promise.resolve(null),
+  ]);
+  if (shinySparkleDurationSeconds) {
+    plan.assets.overlays.selected_shiny_sparkle_duration_seconds = shinySparkleDurationSeconds;
+  }
   const audioFilterScript = buildAudioFilterScript({
     narrationPaths,
     musicPath,
     countdownPath,
     timerEndPath,
+    shinyPath,
     renderPlan,
     mediaDurations: {
       countdown_audio_duration_seconds: countdownDurationSeconds,
@@ -80,6 +100,7 @@ export async function renderPokeQuizzVideo({
         ...(musicPath ? [musicPath] : []),
         ...(countdownPath ? [countdownPath] : []),
         ...(timerEndPath ? [timerEndPath] : []),
+        ...(shinyPath ? [shinyPath] : []),
       ]),
       '-/filter_complex',
       audioFilterScriptPath,
@@ -110,6 +131,7 @@ export async function renderPokeQuizzVideo({
         inputRoleIndex.get(`round-${round.round_number}-type-icon-${iconIndex + 1}`)
       )),
     })),
+    shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
   };
   const fontPath = await resolveFontPath(fontCandidates);
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);

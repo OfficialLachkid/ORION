@@ -6,6 +6,9 @@ import {
 import { POKE_QUIZZ_ASSET_LAYOUT } from '../../../../poke-quizz-asset-layout.mjs';
 import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selection-state.mjs';
 
+const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
+const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
+
 function hashSeed(input) {
   let hash = 2166136261;
   for (const character of String(input || 'poke-quizz-speed-quiz')) {
@@ -73,16 +76,18 @@ function normalizeBackgroundPath(backgroundPath) {
     .toLowerCase();
 }
 
-function selectHookText(template, random) {
-  const variants = Array.isArray(template?.question_contract?.hook_text_variants)
-    ? template.question_contract.hook_text_variants
-        .map((value) => String(value || '').trim())
-        .filter(Boolean)
-    : [];
-  if (variants.length > 0) {
-    return variants[Math.floor(random() * variants.length)] || variants[0];
+function buildPromptText(types = []) {
+  return Array.isArray(types) && types.filter(Boolean).length > 1
+    ? 'Guess the Types'
+    : 'Guess the Type';
+}
+
+function selectHookText(template, subjectTypes = []) {
+  const promptText = buildPromptText(subjectTypes);
+  if (promptText) {
+    return promptText;
   }
-  return String(template?.question_contract?.hook_text || 'Can you get 5/5?').trim() || 'Can you get 5/5?';
+  return String(template?.question_contract?.hook_text || 'Guess the Type').trim() || 'Guess the Type';
 }
 
 function shuffle(values, random) {
@@ -117,6 +122,51 @@ function buildTypeIconRecord(type, localPath, iconSet) {
     local_path: localPath,
     style: iconSet.style,
     style_variant: iconSet.style_variant,
+  };
+}
+
+function resolveShinyRevealState({
+  template,
+  inventory,
+  selectedSubjects,
+  random,
+}) {
+  const configured = template?.reveal?.shiny && typeof template.reveal.shiny === 'object'
+    ? template.reveal.shiny
+    : {};
+  const eligibleSubjects = (Array.isArray(selectedSubjects) ? selectedSubjects : [])
+    .map((subject, index) => ({ index, subject }))
+    .filter(({ subject }) => Boolean(subject?.shiny_sprite_path));
+  const sparkleOverlayPath = inventory?.overlay_presets?.shiny_sparkle || null;
+  const shinySoundPath = inventory?.sound_effects?.shiny || null;
+  const enabled = configured.enabled !== false;
+  const activationBlockers = [];
+  if (eligibleSubjects.length === 0) activationBlockers.push('no_round_with_shiny_sprite');
+  if (!sparkleOverlayPath) activationBlockers.push('shiny_sparkle_overlay_missing');
+  if (!shinySoundPath) activationBlockers.push('shiny_sound_effect_missing');
+  const active = enabled && activationBlockers.length === 0;
+  const selectedOutcome = active
+    ? eligibleSubjects[Math.floor(random() * eligibleSubjects.length)] || eligibleSubjects[0]
+    : null;
+
+  return {
+    enabled,
+    active,
+    max_per_video: 1,
+    selected_round_index: selectedOutcome?.index ?? -1,
+    selected_pokedex_id: selectedOutcome?.subject?.id ?? null,
+    selected_national_dex_number: selectedOutcome?.subject?.national_dex_number ?? null,
+    selected_name: selectedOutcome?.subject?.name ?? null,
+    selected_sprite_path: selectedOutcome?.subject?.shiny_sprite_path ?? null,
+    sparkle_overlay_path: sparkleOverlayPath,
+    sound_effect_path: shinySoundPath,
+    sparkle_duration_seconds: Number(
+      configured.sparkle_duration_seconds ?? DEFAULT_SHINY_SPARKLE_DURATION_SECONDS,
+    ),
+    sparkle_scale_multiplier: Number(
+      configured.sparkle_scale_multiplier ?? DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
+    ),
+    activation_blockers: activationBlockers,
   };
 }
 
@@ -200,16 +250,23 @@ export async function planPokemonTypeSpeedQuizChallenge({
 
   const shuffledSubjects = shuffle(eligibleSubjects, random);
   const selectedSubjects = shuffledSubjects.slice(0, roundCount);
+  const shinyReveal = resolveShinyRevealState({
+    template,
+    inventory,
+    selectedSubjects,
+    random,
+  });
   const selectedBackgroundPath = selectGifBackground(
     inventory.gif_backgrounds,
     random,
     normalizedSelectionState,
   );
-  const hookText = selectHookText(template, random);
+  const hookText = selectHookText(template, selectedSubjects[0]?.types || []);
 
   const rounds = selectedSubjects.map((subject, index) => {
     const subjectTypes = subject.types.map((type) => String(type || '').trim().toLowerCase()).filter(Boolean);
     const typeIconSet = selectTypeIconSet(subjectTypes, inventory);
+    const isShinyReveal = shinyReveal.active && shinyReveal.selected_round_index === index;
     const sceneLeadSeconds = index === 0
       ? hookHoldSeconds + preCountdownHoldSeconds
       : transitionDurationSeconds + preCountdownHoldSeconds;
@@ -223,10 +280,18 @@ export async function planPokemonTypeSpeedQuizChallenge({
         generation: subject.generation,
         region: subject.region,
         sprite_path: subject.sprite_path,
+        shiny_sprite_path: subject.shiny_sprite_path || null,
+        render_sprite_path: isShinyReveal
+          ? subject.shiny_sprite_path || subject.sprite_path
+          : subject.sprite_path,
         sprite_source_url: subject.sprite_source_url || null,
+        shiny_sprite_source_url: subject.shiny_sprite_source_url || null,
         types: subjectTypes,
         type_count: subjectTypes.length,
+        reveal_variant: isShinyReveal ? 'shiny' : 'normal',
+        is_shiny_reveal: isShinyReveal,
       },
+      prompt_text: buildPromptText(subjectTypes),
       type_label: buildTypeLabel(subjectTypes),
       type_icons: subjectTypes.map((type, typeIndex) => buildTypeIconRecord(
         type,
@@ -248,11 +313,16 @@ export async function planPokemonTypeSpeedQuizChallenge({
   if (!selectedBackgroundPath) requiredAssetGaps.push('gif_background_missing');
   if (!inventory.sound_effects?.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
   if (!inventory.sound_effects?.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
+  if (!inventory.sound_effects?.shiny) requiredAssetGaps.push('shiny_sfx_missing');
   if (!inventory.overlay_presets?.timer_countdown && !inventory.overlay_presets?.timer) {
     requiredAssetGaps.push('timer_overlay_missing');
   }
+  if (!inventory.overlay_presets?.shiny_sparkle) requiredAssetGaps.push('shiny_sparkle_overlay_missing');
   if (!selectedSubjects.every((subject) => subject.sprite_path)) {
     requiredAssetGaps.push('pokemon_reveal_sprite_local_assets_missing');
+  }
+  if (!selectedSubjects.some((subject) => subject.shiny_sprite_path)) {
+    requiredAssetGaps.push('pokemon_shiny_sprite_local_assets_missing');
   }
   if (!rounds.every((round) => round.type_icons.every((icon) => icon.local_path))) {
     requiredAssetGaps.push('type_icons_missing');
@@ -278,9 +348,11 @@ export async function planPokemonTypeSpeedQuizChallenge({
       type_pair: [],
       selected_subjects: rounds.map((round) => ({
         ...round.subject,
+        prompt_text: round.prompt_text,
         type_label: round.type_label,
       })),
     },
+    shiny_reveal: shinyReveal,
     narration: {
       local_model_required: false,
       tts_provider: 'kokoro',
@@ -306,6 +378,7 @@ export async function planPokemonTypeSpeedQuizChallenge({
         selected_timer_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
         selected_timer_countdown_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
         selected_timer_alarm_path: inventory.overlay_presets?.timer_alarm || null,
+        selected_shiny_sparkle_path: inventory.overlay_presets?.shiny_sparkle || null,
         available_paths: inventory.overlays,
       },
       audio: {
@@ -313,8 +386,10 @@ export async function planPokemonTypeSpeedQuizChallenge({
         sound_effects_directory: POKE_QUIZZ_ASSET_LAYOUT.soundEffects,
         selected_battle_intro_music_path: selectSeededFile(inventory.music, random),
         selected_sound_effects: {
+          ...(inventory.sound_effects || {}),
           countdown_tick: inventory.sound_effects?.countdown_tick || null,
           timer_end: inventory.sound_effects?.timer_end || null,
+          shiny: inventory.sound_effects?.shiny || null,
         },
       },
       outputs: {

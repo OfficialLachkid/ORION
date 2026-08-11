@@ -16,6 +16,7 @@ export function buildAudioFilterScript({
   musicPath,
   countdownPath,
   timerEndPath,
+  shinyPath,
   renderPlan,
   mediaDurations = {},
 }) {
@@ -78,6 +79,13 @@ export function buildAudioFilterScript({
       filters.push(`[tsrc${roundIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_TIMER_END_VOLUME}[${label}]`);
       mixLabels.push(label);
     });
+    inputIndex += 1;
+  }
+
+  if (shinyPath && renderPlan.audio_cues?.shiny_reveal_start_seconds != null) {
+    const delayMs = Math.max(0, Math.round(renderPlan.audio_cues.shiny_reveal_start_seconds * 1000));
+    filters.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=0.5[shiny]`);
+    mixLabels.push('shiny');
   }
 
   filters.push(`${mixLabels.map((label) => `[${label}]`).join('')}amix=inputs=${mixLabels.length}:normalize=0,alimiter=limit=0.95[aout]`);

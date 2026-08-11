@@ -20,7 +20,7 @@ function buildTimerLayout(template) {
 
 function buildSpriteLayout(template) {
   const centerX = ensureNumber(template?.layout?.sprite?.center_x, 540);
-  const centerY = ensureNumber(template?.layout?.sprite?.center_y, 820);
+  const centerY = ensureNumber(template?.layout?.sprite?.center_y, 930);
   const size = ensureNumber(template?.layout?.sprite?.size_px, 620);
   const scaleMultiplier = ensureNumber(template?.layout?.sprite?.scale_multiplier, 1.18);
   return {
@@ -28,6 +28,16 @@ function buildSpriteLayout(template) {
     center_y: centerY,
     size_px: size,
     scale_multiplier: scaleMultiplier,
+    intro_duration_seconds: ensureNumber(template?.layout?.sprite?.intro_duration_seconds, 0.34),
+    intro_lift_px: ensureNumber(template?.layout?.sprite?.intro_lift_px, 44),
+    countdown_float_amplitude_px: ensureNumber(
+      template?.layout?.sprite?.countdown_float_amplitude_px,
+      18,
+    ),
+    countdown_float_frequency_hz: ensureNumber(
+      template?.layout?.sprite?.countdown_float_frequency_hz,
+      2.1,
+    ),
     render_size_px: roundTime(size * scaleMultiplier),
   };
 }
@@ -145,6 +155,14 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     text_layout: {
       hook_y: ensureNumber(template?.layout?.text?.hook_y, 300),
       hook_font_size: ensureNumber(template?.layout?.text?.hook_font_size, 156),
+      prompt_y: ensureNumber(
+        template?.layout?.text?.prompt_y,
+        ensureNumber(template?.layout?.text?.hook_y, 300),
+      ),
+      prompt_font_size: ensureNumber(
+        template?.layout?.text?.prompt_font_size,
+        ensureNumber(template?.layout?.text?.hook_font_size, 156),
+      ),
       counter_x: ensureNumber(template?.layout?.text?.counter_x, 96),
       counter_y: ensureNumber(template?.layout?.text?.counter_y, 188),
       counter_font_size: ensureNumber(template?.layout?.text?.counter_font_size, 96),
@@ -156,6 +174,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     audio_cues: {
       hook_start_seconds: 0,
       battle_music_start_seconds: roundTime(Math.max(0, ensureNumber(template?.audio?.battle_intro_music?.start_seconds, 0))),
+      shiny_reveal_start_seconds: renderedRounds.find((round) => round.subject?.is_shiny_reveal)?.reveal_visual_start_seconds ?? null,
     },
     hook_text: plan?.narration?.lines?.[0]?.text || '',
     rounds: renderedRounds,

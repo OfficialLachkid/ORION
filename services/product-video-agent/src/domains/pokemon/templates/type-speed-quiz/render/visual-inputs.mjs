@@ -41,11 +41,12 @@ export function buildVisualInputs(plan, renderPlan) {
   }
 
   renderPlan.rounds.forEach((round) => {
+    const renderSpritePath = round.subject.render_sprite_path || round.subject.sprite_path;
     inputs.push({
       role: `round-${round.round_number}-sprite`,
-      path: round.subject.sprite_path,
+      path: renderSpritePath,
       args: buildLoopingVisualInput(
-        round.subject.sprite_path,
+        renderSpritePath,
         round.scene_duration_seconds,
         renderPlan.canvas.fps,
       ),
@@ -62,6 +63,14 @@ export function buildVisualInputs(plan, renderPlan) {
       });
     });
   });
+
+  if (plan.shiny_reveal?.active && plan.assets.overlays?.selected_shiny_sparkle_path) {
+    inputs.push({
+      role: 'shiny-sparkle',
+      path: plan.assets.overlays.selected_shiny_sparkle_path,
+      args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_shiny_sparkle_path],
+    });
+  }
 
   return inputs;
 }

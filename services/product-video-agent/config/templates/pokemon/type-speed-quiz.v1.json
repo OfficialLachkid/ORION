@@ -42,10 +42,10 @@
     "type_cardinality": "any"
   },
   "question_contract": {
-    "hook_text": "Can you get 5/5?",
+    "hook_text": "Guess the Type",
     "hook_text_variants": [
-      "Can you get 5/5?",
-      "Pokemon Type Speed Quiz"
+      "Guess the Type",
+      "Guess the Types"
     ]
   },
   "layout": {
@@ -55,25 +55,31 @@
       "fit": "cover"
     },
     "text": {
-      "hook_y": 300,
-      "hook_font_size": 156,
-      "counter_x": 96,
-      "counter_y": 188,
+      "hook_y": 336,
+      "hook_font_size": 132,
+      "prompt_y": 336,
+      "prompt_font_size": 132,
+      "counter_x": 72,
+      "counter_y": 144,
       "counter_font_size": 96,
-      "name_y": 1160,
+      "name_y": 1336,
       "name_font_size": 132,
-      "type_text_y": 1448,
-      "type_text_font_size": 94
+      "type_text_y": 420,
+      "type_text_font_size": 141
     },
     "sprite": {
       "center_x": 540,
-      "center_y": 820,
+      "center_y": 930,
       "size_px": 620,
-      "scale_multiplier": 1.18
+      "scale_multiplier": 1.18,
+      "intro_duration_seconds": 0.34,
+      "intro_lift_px": 44,
+      "countdown_float_amplitude_px": 18,
+      "countdown_float_frequency_hz": 2.1
     },
     "type_badges": {
-      "center_y": 1322,
-      "icon_size_px": 208,
+      "center_y": 570,
+      "icon_size_px": 300,
       "spacing_px": 42,
       "pop_in_duration_seconds": 0.22
     },
@@ -90,6 +96,14 @@
       "reveal_hold_seconds": 0.92,
       "transition_duration_seconds": 0.42,
       "final_hold_seconds": 1.12
+    }
+  },
+  "reveal": {
+    "visual_delay_seconds": 0.16,
+    "shiny": {
+      "enabled": true,
+      "sparkle_duration_seconds": 0.9,
+      "sparkle_scale_multiplier": 1.35
     }
   },
   "audio": {
