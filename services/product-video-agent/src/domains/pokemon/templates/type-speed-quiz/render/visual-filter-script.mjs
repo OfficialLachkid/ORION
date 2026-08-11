@@ -28,19 +28,29 @@ function formatCounterText(round) {
   return String(round.round_label || `${round.round_number}/${round.total_rounds || 5}`);
 }
 
+function resolveIncomingTransitionSeconds(renderPlan, roundIndex) {
+  return roundIndex > 0
+    ? roundTime(Math.max(
+      0,
+      ensureNumber(renderPlan?.rounds?.[roundIndex - 1]?.transition_duration_seconds, 0),
+    ))
+    : 0;
+}
+
 function buildSceneSpriteFilter({
   inputIndex,
   fps,
   spriteLayout,
   round,
   roundIndex,
+  incomingTransitionSeconds,
 }) {
-  const introStartSeconds = 0.04;
+  const introStartSeconds = roundTime(incomingTransitionSeconds + 0.04);
   const introDurationSeconds = roundTime(Math.max(
     0.18,
     Math.min(
       ensureNumber(spriteLayout.intro_duration_seconds, 0.34),
-      Math.max(0.2, round.local.reveal_start_seconds - 0.08),
+      Math.max(0.2, round.local.reveal_start_seconds - introStartSeconds - 0.08),
     ),
   ));
   const scaleExpression = buildAnimatedPopSettleExpression(
@@ -66,31 +76,30 @@ function buildSceneSpriteFilter({
     ensureNumber(spriteLayout.countdown_float_frequency_hz, 2.1),
   ) * 6.283185307);
   const bobExpression = `if(lt(t,${bobStartSeconds}),0,if(lt(t,${round.local.reveal_start_seconds}),sin((t-${bobStartSeconds})*${bobFrequencyRadians})*${bobAmplitude},0))`;
-  const cropRatio = roundTime(Math.min(1, Math.max(0.3, ensureNumber(spriteLayout.crop_ratio, 0.62))));
   return [
-    `[${inputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,crop=iw*${cropRatio}:ih*${cropRatio}:(iw-ow)/2:(ih-oh)/2,scale=w='${spriteLayout.render_size_px}*(${scaleExpression})':h='${spriteLayout.render_size_px}*(${scaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
+    `[${inputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${spriteLayout.render_size_px}*(${scaleExpression})':h='${spriteLayout.render_size_px}*(${scaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
     `[scene${roundIndex}b][spr${roundIndex}]overlay=${spriteLayout.center_x}-w/2:'${spriteLayout.center_y}-h/2-${introLiftExpression}-${bobExpression}'[scene${roundIndex}s]`,
   ];
 }
 
-function buildRoundPromptArtifacts(round, template, renderPlan) {
+function buildRoundPromptArtifacts(round, template, renderPlan, startSeconds) {
   return buildProgressiveTextArtifacts(round.prompt_text || renderPlan.hook_text, {
     template,
     fontSize: renderPlan.text_layout.prompt_font_size,
     maxLines: 2,
     baseY: renderPlan.text_layout.prompt_y,
-    startSeconds: 0.04,
+    startSeconds,
     endSeconds: round.local.reveal_start_seconds,
   });
 }
 
-function buildRoundNameArtifacts(round, template, renderPlan) {
+function buildRoundNameArtifacts(round, template, renderPlan, startSeconds) {
   return buildProgressiveTextArtifacts(round.subject.name, {
     template,
     fontSize: renderPlan.text_layout.name_font_size,
     maxLines: 2,
     baseY: renderPlan.text_layout.name_y,
-    startSeconds: 0.12,
+    startSeconds,
     endSeconds: round.local.scene_duration_seconds,
   });
 }
@@ -132,6 +141,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   }
 
   renderPlan.rounds.forEach((round, roundIndex) => {
+    const incomingTransitionSeconds = resolveIncomingTransitionSeconds(renderPlan, roundIndex);
     const sceneBaseLabel = `scene${roundIndex}b`;
     filters.push(
       `[${backgroundLabels[roundIndex]}]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS[${sceneBaseLabel}]`,
@@ -144,6 +154,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       spriteLayout: renderPlan.sprite_layout,
       round,
       roundIndex,
+      incomingTransitionSeconds,
     }));
 
     let currentLabel = `scene${roundIndex}s`;
@@ -169,19 +180,25 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     }
 
     const counterSceneLabel = `scene${roundIndex}c`;
+    const counterStartSeconds = roundTime(incomingTransitionSeconds + 0.03);
     const counterScaleExpression = buildAnimatedPopSettleExpression(
-      0.03,
+      counterStartSeconds,
       0.24,
       0.62,
       1.18,
       1,
     );
     filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(formatCounterText(round))}'${fontPart}:fontcolor=white:fontsize='${renderPlan.text_layout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.text_layout.counter_x}:y='${renderPlan.text_layout.counter_y}-${buildAnimatedLiftExpression(0.03, 0.24, 16)}':alpha='${buildAnimatedTextSegmentAlphaExpression(0.03, round.local.scene_duration_seconds)}'[${counterSceneLabel}]`,
+      `[${currentLabel}]drawtext=text='${escapeDrawtextText(formatCounterText(round))}'${fontPart}:fontcolor=white:fontsize='${renderPlan.text_layout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.text_layout.counter_x}:y='${renderPlan.text_layout.counter_y}-${buildAnimatedLiftExpression(counterStartSeconds, 0.24, 16)}':alpha='${buildAnimatedTextSegmentAlphaExpression(counterStartSeconds, round.local.scene_duration_seconds)}'[${counterSceneLabel}]`,
     );
     currentLabel = counterSceneLabel;
 
-    const promptArtifacts = buildRoundPromptArtifacts(round, template, renderPlan);
+    const promptArtifacts = buildRoundPromptArtifacts(
+      round,
+      template,
+      renderPlan,
+      roundTime(incomingTransitionSeconds + 0.04),
+    );
     for (let promptIndex = 0; promptIndex < promptArtifacts.segments.length; promptIndex += 1) {
       const segment = promptArtifacts.segments[promptIndex];
       const promptSceneLabel = `scene${roundIndex}p${promptIndex}`;
@@ -191,9 +208,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = promptSceneLabel;
     }
 
-    const nameArtifacts = buildRoundNameArtifacts(round, template, renderPlan);
+    const nameArtifacts = buildRoundNameArtifacts(
+      round,
+      template,
+      renderPlan,
+      roundTime(incomingTransitionSeconds + 0.12),
+    );
     const nameScaleExpression = buildAnimatedPopSettleExpression(
-      0.12,
+      roundTime(incomingTransitionSeconds + 0.12),
       0.3,
       0,
       1.08,

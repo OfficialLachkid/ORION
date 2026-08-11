@@ -46,9 +46,8 @@ const template = {
     sprite: {
       center_x: 540,
       center_y: 1030,
-      size_px: 1120,
-      scale_multiplier: 1.18,
-      crop_ratio: 0.62,
+      size_px: 1600,
+      scale_multiplier: 1,
       intro_duration_seconds: 0.34,
       intro_lift_px: 44,
       countdown_float_amplitude_px: 18,
@@ -393,6 +392,8 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /drawtext=text='Guess'/u);
   assert.match(visualFilter.script, /drawtext=text='Guess the'/u);
   assert.match(visualFilter.script, /drawtext=text='1\/5'/u);
+  assert.match(visualFilter.script, /between\(t,0\.46,/u);
+  assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
   assert.match(visualFilter.script, /\[sceneout4\]format=yuv420p\[vout\]/u);
