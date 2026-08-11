@@ -158,14 +158,14 @@ test('publication channel helpers support per-channel handle URLs and review thr
   );
 });
 
-test('publication channel helpers support the Poke Quess review thread and channel URL', () => {
-  const pokeQuessProfile = normalizePublicationChannelProfile({
-    id: 'video-channel-poke-quess-youtube',
-    name: 'Poke Quess',
+test('publication channel helpers support the Poke Guess review thread and channel URL', () => {
+  const pokeGuessProfile = normalizePublicationChannelProfile({
+    id: 'video-channel-poke-guess-youtube',
+    name: 'Poke Guess',
     niche: 'pokemon_quiz',
     content_lane: 'poke-quizz',
     platform: 'youtube_shorts',
-    account_key: 'poke-quess-youtube',
+    account_key: 'poke-guess-youtube',
     timezone: 'Europe/Amsterdam',
     schedule_slots: [
       { hour: 8, minute: 0 },
@@ -183,7 +183,7 @@ test('publication channel helpers support the Poke Quess review thread and chann
       channel_id: 'UCuHBMnscdFXFe2F9P8K1aQQ',
       default_category_id: '24',
       oauth_client_secret_path: 'config/youtube/client-secret.json',
-      oauth_refresh_token_env: 'YOUTUBE_POKE_QUESS_REFRESH_TOKEN',
+      oauth_refresh_token_env: 'YOUTUBE_POKE_GUESS_REFRESH_TOKEN',
     },
     metadata: {
       channel_url: 'https://www.youtube.com/channel/UCuHBMnscdFXFe2F9P8K1aQQ',
@@ -192,13 +192,13 @@ test('publication channel helpers support the Poke Quess review thread and chann
     },
   });
 
-  assert.equal(resolvePublicationChannelUrl(pokeQuessProfile), 'https://www.youtube.com/channel/UCuHBMnscdFXFe2F9P8K1aQQ');
+  assert.equal(resolvePublicationChannelUrl(pokeGuessProfile), 'https://www.youtube.com/channel/UCuHBMnscdFXFe2F9P8K1aQQ');
   assert.equal(
     resolvePublicationReviewThreadId({
       channelIds: {
         pokeQuizzReview: 'legacy-thread-id',
       },
-    }, pokeQuessProfile),
+    }, pokeGuessProfile),
     '1536721345440780339',
   );
 });

@@ -108,16 +108,16 @@ test('loadVideoTemplateContext resolves the TrivaMon Type Speed Quiz ownership s
   assert.equal(context.genreLabel, 'Type Speed Quiz');
 });
 
-test('loadVideoTemplateContext resolves the Poke Quess Type Speed Quiz ownership stack', async () => {
+test('loadVideoTemplateContext resolves the Poke Guess Type Speed Quiz ownership stack', async () => {
   const context = await loadVideoTemplateContext({
     projectRoot,
-    channelConfigPath: 'services/product-video-agent/config/channels/poke-quess-type-speed-quiz-youtube.json',
+    channelConfigPath: 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
   });
 
-  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/poke-quess-type-speed-quiz-youtube.json');
+  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json');
   assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
   assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/type-speed-quiz.v1.json');
   assert.equal(context.templateId, 'pokemon.type-speed-quiz.v1');
-  assert.equal(context.publicationChannelSelector, 'poke-quess-youtube');
+  assert.equal(context.publicationChannelSelector, 'poke-guess-youtube');
   assert.equal(context.genreLabel, 'Type Speed Quiz');
 });

@@ -122,7 +122,7 @@ test('manual review generation supports the type-speed-quiz channel config for T
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'trivamon-youtube');
 });
 
-test('manual review generation supports the type-speed-quiz channel config for Poke Quess', async () => {
+test('manual review generation supports the type-speed-quiz channel config for Poke Guess', async () => {
   const runCalls = [];
   const normalizePath = (value) => String(value || '').replaceAll('\\', '/');
 
@@ -134,9 +134,9 @@ test('manual review generation supports the type-speed-quiz channel config for P
       poke_quizz_generate_review: {
         templateKey: 'type-speed-quiz',
         templateLabel: 'Type Speed Quiz',
-        channelSelector: 'poke-quess-youtube',
-        channelLabel: 'Poke Quess',
-        channelConfigPath: 'services/product-video-agent/config/channels/poke-quess-type-speed-quiz-youtube.json',
+        channelSelector: 'poke-guess-youtube',
+        channelLabel: 'Poke Guess',
+        channelConfigPath: 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
       },
     },
     { env: {} },
@@ -144,7 +144,7 @@ test('manual review generation supports the type-speed-quiz channel config for P
       ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
       loadPublicationChannelProfiles: async () => ([{
         platform: 'youtube_shorts',
-        account_key: 'poke-quess-youtube',
+        account_key: 'poke-guess-youtube',
         metadata: {
           review_thread_id: '1536721345440780339',
         },
@@ -154,11 +154,11 @@ test('manual review generation supports the type-speed-quiz channel config for P
         runCalls.push(options);
         return {
           stdout: JSON.stringify({
-            publication_id: 'publication-poke-quess-speed-quiz-1',
-            preview_url: 'https://youtube.com/shorts/manual-preview-poke-quess-speed-quiz',
+            publication_id: 'publication-poke-guess-speed-quiz-1',
+            preview_url: 'https://youtube.com/shorts/manual-preview-poke-guess-speed-quiz',
             task_id: 'TASK-ORION-PQ-PUBLISH-MANUAL-3',
             message_id: '1536721345440780340',
-            render_path: 'data/runtime/product-video-agent/poke-quizz/manual-preview-poke-quess-speed-quiz.mp4',
+            render_path: 'data/runtime/product-video-agent/poke-quizz/manual-preview-poke-guess-speed-quiz.mp4',
           }, null, 2),
         };
       },
@@ -167,10 +167,10 @@ test('manual review generation supports the type-speed-quiz channel config for P
 
   assert.equal(runCalls.length, 1);
   assert.equal(
-    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-quess-type-speed-quiz-youtube.json'),
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json'),
     true,
   );
-  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'poke-quess-youtube');
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'poke-guess-youtube');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1536721345440780339');
 });
 

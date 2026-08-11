@@ -188,21 +188,21 @@ test('normalizeTaskMessage recognizes type-speed-quiz generation commands as exp
   );
 });
 
-test('normalizeTaskMessage recognizes Poke Quess type-speed-quiz generation commands as explicit runtime actions', () => {
+test('normalizeTaskMessage recognizes Poke Guess type-speed-quiz generation commands as explicit runtime actions', () => {
   const config = loadRuntimeConfig();
   const result = normalizeTaskMessage({
     channelKey: 'commands',
     submittedAt: '2026-08-11T15:00:00.000Z',
-    content: 'generate video template: type-speed-quiz channel: poke-quess-youtube',
+    content: 'generate video template: type-speed-quiz channel: poke-guess-youtube',
     author: { id: 'operator-1', displayName: 'VBJ Services' },
   }, config);
 
   assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
-  assert.equal(result.task.summary, 'Generate Type Speed Quiz review for Poke Quess');
+  assert.equal(result.task.summary, 'Generate Type Speed Quiz review for Poke Guess');
   assert.equal(result.task.poke_quizz_generate_review.templateKey, 'type-speed-quiz');
-  assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'poke-quess-youtube');
+  assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'poke-guess-youtube');
   assert.equal(
     result.task.poke_quizz_generate_review.channelConfigPath,
-    'services/product-video-agent/config/channels/poke-quess-type-speed-quiz-youtube.json'
+    'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json'
   );
 });

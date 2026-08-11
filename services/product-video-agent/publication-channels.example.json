@@ -106,12 +106,12 @@
       }
     },
     {
-      "id": "video-channel-poke-quess-youtube",
-      "name": "Poke Quess",
+      "id": "video-channel-poke-guess-youtube",
+      "name": "Poke Guess",
       "niche": "pokemon_quiz",
       "content_lane": "poke-quizz",
       "platform": "youtube_shorts",
-      "account_key": "poke-quess-youtube",
+      "account_key": "poke-guess-youtube",
       "language": "en-US",
       "timezone": "Europe/Amsterdam",
       "status": "active",
@@ -140,7 +140,7 @@
         "channel_id": "UCuHBMnscdFXFe2F9P8K1aQQ",
         "default_category_id": "24",
         "oauth_client_secret_path": "config/youtube/client-secret.json",
-        "oauth_refresh_token_env": "YOUTUBE_POKE_QUESS_REFRESH_TOKEN"
+        "oauth_refresh_token_env": "YOUTUBE_POKE_GUESS_REFRESH_TOKEN"
       },
       "metadata": {
         "channel_url": "https://www.youtube.com/channel/UCuHBMnscdFXFe2F9P8K1aQQ",
@@ -154,8 +154,8 @@
           "enabled": true,
           "provider": "youtube_studio",
           "browser": "chrome",
-          "profile_dir": "~/.orion/playwright-profile-poke-quess",
-          "session_name": "yt-related-poke-quess"
+          "profile_dir": "~/.orion/playwright-profile-poke-guess",
+          "session_name": "yt-related-poke-guess"
         }
       }
     },

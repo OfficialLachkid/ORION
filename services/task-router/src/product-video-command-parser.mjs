@@ -25,8 +25,8 @@ export const PRODUCT_VIDEO_CHANNEL_OPTIONS = Object.freeze([
     value: 'trivamon-youtube',
   }),
   Object.freeze({
-    name: 'Poke Quess',
-    value: 'poke-quess-youtube',
+    name: 'Poke Guess',
+    value: 'poke-guess-youtube',
   }),
 ]);
 
@@ -41,10 +41,10 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'find-the-shiny': 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json',
   }),
-  'poke-quess-youtube': Object.freeze({
-    'dual-type-reveal': 'services/product-video-agent/config/channels/poke-quess-youtube.json',
-    'find-the-shiny': 'services/product-video-agent/config/channels/poke-quess-find-the-shiny-youtube.json',
-    'type-speed-quiz': 'services/product-video-agent/config/channels/poke-quess-type-speed-quiz-youtube.json',
+  'poke-guess-youtube': Object.freeze({
+    'dual-type-reveal': 'services/product-video-agent/config/channels/poke-guess-youtube.json',
+    'find-the-shiny': 'services/product-video-agent/config/channels/poke-guess-find-the-shiny-youtube.json',
+    'type-speed-quiz': 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
   }),
 });
 
