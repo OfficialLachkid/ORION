@@ -187,7 +187,7 @@ test('publication channel helpers support the Poke Guess review thread and chann
     },
     metadata: {
       channel_url: 'https://www.youtube.com/channel/UCuHBMnscdFXFe2F9P8K1aQQ',
-      youtube_handle: '@PokeQuesss',
+      youtube_handle: '@PokeGuesss',
       review_thread_id: '1536721345440780339',
     },
   });

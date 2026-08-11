@@ -144,7 +144,7 @@
       },
       "metadata": {
         "channel_url": "https://www.youtube.com/channel/UCuHBMnscdFXFe2F9P8K1aQQ",
-        "youtube_handle": "@PokeQuesss",
+        "youtube_handle": "@PokeGuesss",
         "title_generation_model": "local_ollama",
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
