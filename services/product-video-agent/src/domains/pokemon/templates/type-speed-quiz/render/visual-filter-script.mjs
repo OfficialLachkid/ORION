@@ -67,7 +67,7 @@ function buildSceneSpriteFilter({
   const bobExpression = `if(lt(t,${bobStartSeconds}),0,if(lt(t,${round.local.reveal_start_seconds}),sin((t-${bobStartSeconds})*${bobFrequencyRadians})*${bobAmplitude},0))`;
   return [
     `[${inputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${spriteLayout.render_size_px}*(${scaleExpression})':h='${spriteLayout.render_size_px}*(${scaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
-    `[scene${roundIndex}b][spr${roundIndex}]overlay=${spriteLayout.center_x}-w/2:${spriteLayout.center_y}-h/2-${introLiftExpression}-${bobExpression}[scene${roundIndex}s]`,
+    `[scene${roundIndex}b][spr${roundIndex}]overlay=${spriteLayout.center_x}-w/2:'${spriteLayout.center_y}-h/2-${introLiftExpression}-${bobExpression}'[scene${roundIndex}s]`,
   ];
 }
 
