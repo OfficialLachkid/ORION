@@ -31,32 +31,33 @@ const template = {
   },
   layout: {
     text: {
-      hook_y: 336,
-      hook_font_size: 132,
-      prompt_y: 336,
-      prompt_font_size: 132,
+      hook_y: 320,
+      hook_font_size: 176,
+      prompt_y: 320,
+      prompt_font_size: 176,
       counter_x: 72,
       counter_y: 144,
       counter_font_size: 96,
-      name_y: 1336,
+      name_y: 1490,
       name_font_size: 132,
-      type_text_y: 420,
-      type_text_font_size: 141,
+      type_text_y: 280,
+      type_text_font_size: 188,
     },
     sprite: {
       center_x: 540,
-      center_y: 930,
-      size_px: 620,
+      center_y: 1030,
+      size_px: 1120,
       scale_multiplier: 1.18,
+      crop_ratio: 0.62,
       intro_duration_seconds: 0.34,
       intro_lift_px: 44,
       countdown_float_amplitude_px: 18,
       countdown_float_frequency_hz: 2.1,
     },
     type_badges: {
-      center_y: 570,
-      icon_size_px: 300,
-      spacing_px: 42,
+      center_y: 585,
+      icon_size_px: 420,
+      spacing_px: 28,
       pop_in_duration_seconds: 0.22,
     },
     timer: {
@@ -389,7 +390,8 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   );
 
   assert.match(visualFilter.script, /split=5\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]/u);
-  assert.match(visualFilter.script, /drawtext=text='Guess the Type/u);
+  assert.match(visualFilter.script, /drawtext=text='Guess'/u);
+  assert.match(visualFilter.script, /drawtext=text='Guess the'/u);
   assert.match(visualFilter.script, /drawtext=text='1\/5'/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);

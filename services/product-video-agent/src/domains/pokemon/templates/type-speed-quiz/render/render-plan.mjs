@@ -28,6 +28,7 @@ function buildSpriteLayout(template) {
     center_y: centerY,
     size_px: size,
     scale_multiplier: scaleMultiplier,
+    crop_ratio: ensureNumber(template?.layout?.sprite?.crop_ratio, 0.62),
     intro_duration_seconds: ensureNumber(template?.layout?.sprite?.intro_duration_seconds, 0.34),
     intro_lift_px: ensureNumber(template?.layout?.sprite?.intro_lift_px, 44),
     countdown_float_amplitude_px: ensureNumber(

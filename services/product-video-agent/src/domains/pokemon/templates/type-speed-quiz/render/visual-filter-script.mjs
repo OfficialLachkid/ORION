@@ -9,6 +9,7 @@ import {
   buildScaleFilterTimeExpression,
   formatEnableBetween,
 } from '../../dual-type-reveal/render/animation-expressions.mjs';
+import { buildProgressiveTextArtifacts } from '../../dual-type-reveal/render/text-layout.mjs';
 import {
   DEFAULT_TEXT_BORDER,
   DEFAULT_TIMER_NUMBER_SIZE,
@@ -65,10 +66,44 @@ function buildSceneSpriteFilter({
     ensureNumber(spriteLayout.countdown_float_frequency_hz, 2.1),
   ) * 6.283185307);
   const bobExpression = `if(lt(t,${bobStartSeconds}),0,if(lt(t,${round.local.reveal_start_seconds}),sin((t-${bobStartSeconds})*${bobFrequencyRadians})*${bobAmplitude},0))`;
+  const cropRatio = roundTime(Math.min(1, Math.max(0.3, ensureNumber(spriteLayout.crop_ratio, 0.62))));
   return [
-    `[${inputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${spriteLayout.render_size_px}*(${scaleExpression})':h='${spriteLayout.render_size_px}*(${scaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
+    `[${inputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,crop=iw*${cropRatio}:ih*${cropRatio}:(iw-ow)/2:(ih-oh)/2,scale=w='${spriteLayout.render_size_px}*(${scaleExpression})':h='${spriteLayout.render_size_px}*(${scaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
     `[scene${roundIndex}b][spr${roundIndex}]overlay=${spriteLayout.center_x}-w/2:'${spriteLayout.center_y}-h/2-${introLiftExpression}-${bobExpression}'[scene${roundIndex}s]`,
   ];
+}
+
+function buildRoundPromptArtifacts(round, template, renderPlan) {
+  return buildProgressiveTextArtifacts(round.prompt_text || renderPlan.hook_text, {
+    template,
+    fontSize: renderPlan.text_layout.prompt_font_size,
+    maxLines: 2,
+    baseY: renderPlan.text_layout.prompt_y,
+    startSeconds: 0.04,
+    endSeconds: round.local.reveal_start_seconds,
+  });
+}
+
+function buildRoundNameArtifacts(round, template, renderPlan) {
+  return buildProgressiveTextArtifacts(round.subject.name, {
+    template,
+    fontSize: renderPlan.text_layout.name_font_size,
+    maxLines: 2,
+    baseY: renderPlan.text_layout.name_y,
+    startSeconds: 0.12,
+    endSeconds: round.local.scene_duration_seconds,
+  });
+}
+
+function buildRoundRevealArtifacts(round, template, renderPlan) {
+  return buildProgressiveTextArtifacts(round.type_label, {
+    template,
+    fontSize: renderPlan.text_layout.type_text_font_size,
+    maxLines: 2,
+    baseY: renderPlan.text_layout.type_text_y,
+    startSeconds: round.local.reveal_visual_start_seconds,
+    endSeconds: round.local.scene_duration_seconds,
+  });
 }
 
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = null) {
@@ -146,25 +181,32 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
     currentLabel = counterSceneLabel;
 
-    const promptSceneLabel = `scene${roundIndex}p`;
-    const promptText = round.prompt_text || renderPlan.hook_text;
-    const promptScaleExpression = buildAnimatedPopSettleExpression(
-      0.04,
-      0.26,
-      0.72,
+    const promptArtifacts = buildRoundPromptArtifacts(round, template, renderPlan);
+    for (let promptIndex = 0; promptIndex < promptArtifacts.segments.length; promptIndex += 1) {
+      const segment = promptArtifacts.segments[promptIndex];
+      const promptSceneLabel = `scene${roundIndex}p${promptIndex}`;
+      filters.push(
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${promptSceneLabel}]`,
+      );
+      currentLabel = promptSceneLabel;
+    }
+
+    const nameArtifacts = buildRoundNameArtifacts(round, template, renderPlan);
+    const nameScaleExpression = buildAnimatedPopSettleExpression(
+      0.12,
+      0.3,
+      0,
       1.08,
       1,
     );
-    filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(promptText)}'${fontPart}:fontcolor=white:fontsize='${renderPlan.text_layout.prompt_font_size}*(${promptScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(renderPlan.text_layout.prompt_y, 0.04)}-text_h/2':alpha='${buildAnimatedTextSegmentAlphaExpression(0.04, round.local.reveal_start_seconds)}':enable='${formatEnableBetween(0, round.local.reveal_start_seconds)}'[${promptSceneLabel}]`,
-    );
-    currentLabel = promptSceneLabel;
-
-    const nameSceneLabel = `scene${roundIndex}n`;
-    filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.subject.name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${renderPlan.text_layout.name_y}-text_h/2[${nameSceneLabel}]`,
-    );
-    currentLabel = nameSceneLabel;
+    for (let nameIndex = 0; nameIndex < nameArtifacts.lines.length; nameIndex += 1) {
+      const line = nameArtifacts.lines[nameIndex];
+      const nameSceneLabel = `scene${roundIndex}n${nameIndex}`;
+      filters.push(
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize='${line.font_size}*(${nameScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${line.y}:alpha='${buildAnimatedTextSegmentAlphaExpression(0.12, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(0.12, round.local.scene_duration_seconds)}'[${nameSceneLabel}]`,
+      );
+      currentLabel = nameSceneLabel;
+    }
 
     round.countdown_numbers.forEach((countdown, countdownIndex) => {
       const scaleMultiplierExpression = buildCountdownNumberScaleMultiplierExpression(
@@ -178,11 +220,15 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = countdownSceneLabel;
     });
 
-    const typeTextSceneLabel = `scene${roundIndex}txt`;
-    filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.type_label)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.type_text_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(renderPlan.text_layout.type_text_y, round.local.reveal_visual_start_seconds)}-text_h/2':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='gte(t,${round.local.reveal_visual_start_seconds})'[${typeTextSceneLabel}]`,
-    );
-    currentLabel = typeTextSceneLabel;
+    const revealArtifacts = buildRoundRevealArtifacts(round, template, renderPlan);
+    for (let revealIndex = 0; revealIndex < revealArtifacts.lines.length; revealIndex += 1) {
+      const line = revealArtifacts.lines[revealIndex];
+      const typeTextSceneLabel = `scene${roundIndex}txt${revealIndex}`;
+      filters.push(
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${line.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='gte(t,${round.local.reveal_visual_start_seconds})'[${typeTextSceneLabel}]`,
+      );
+      currentLabel = typeTextSceneLabel;
+    }
 
     round.type_icons.forEach((_, iconIndex) => {
       const iconInput = inputRefs.rounds[roundIndex].typeIcons[iconIndex];
