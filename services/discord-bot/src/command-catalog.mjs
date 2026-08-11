@@ -107,7 +107,9 @@ export function buildCommandHelpDescriptor(config = {}) {
         value: [
           '`generate video template: find-the-shiny channel: trivamon-youtube`',
           '`generate video template: dual-type-reveal channel: poke-quizz-youtube`',
+          '`generate video template: type-speed-quiz channel: trivamon-youtube`',
           '`/generate-video template:Find the Shiny channel:TrivaMon`',
+          '`/generate-video template:Type Speed Quiz channel:TrivaMon`',
           '- The selected channel decides which review-videos thread receives the preview card.',
         ].join('\n'),
         inline: false,

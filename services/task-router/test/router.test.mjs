@@ -169,3 +169,21 @@ test('normalizeTaskMessage recognizes product-video generation commands as expli
     'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json'
   );
 });
+
+test('normalizeTaskMessage recognizes type-speed-quiz generation commands as explicit runtime actions', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    channelKey: 'commands',
+    submittedAt: '2026-08-11T11:00:00.000Z',
+    content: 'generate video template: type-speed-quiz channel: trivamon-youtube',
+    author: { id: 'operator-1', displayName: 'VBJ Services' },
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
+  assert.equal(result.task.summary, 'Generate Type Speed Quiz review for TrivaMon');
+  assert.equal(result.task.poke_quizz_generate_review.templateKey, 'type-speed-quiz');
+  assert.equal(
+    result.task.poke_quizz_generate_review.channelConfigPath,
+    'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json'
+  );
+});

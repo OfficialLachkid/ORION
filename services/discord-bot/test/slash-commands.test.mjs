@@ -34,6 +34,15 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'session_pre_limit_checkpoint',
     'verify_memory_promotion_rules',
   ]);
+  const generateVideoCommand = commands.find((command) => command.name === 'generate-video');
+  const generateTemplateChoiceValues = (generateVideoCommand?.options?.find((option) => option.name === 'template')?.choices || [])
+    .map((choice) => choice.value)
+    .sort();
+  assert.deepEqual(generateTemplateChoiceValues, [
+    'dual-type-reveal',
+    'find-the-shiny',
+    'type-speed-quiz',
+  ]);
 });
 
 test('normalizeSupportedSlashCommandInteraction routes /ops choices into router phrases', async () => {
@@ -293,6 +302,34 @@ test('normalizeSupportedSlashCommandInteraction converts a manual video generati
   });
 
   assert.equal(message?.content, 'generate video template: find-the-shiny channel: trivamon-youtube');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts a type-speed-quiz slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-2',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-8',
+    data: {
+      name: 'generate-video',
+      options: [
+        { name: 'template', value: 'type-speed-quiz' },
+        { name: 'channel', value: 'trivamon-youtube' },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'generate video template: type-speed-quiz channel: trivamon-youtube');
   assert.equal(message?.channelKey, 'commands');
 });
 
