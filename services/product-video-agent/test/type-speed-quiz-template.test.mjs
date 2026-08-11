@@ -86,6 +86,11 @@ const template = {
     battle_intro_music: {
       start_seconds: 0,
     },
+    sound_effects: {
+      timer_end: {
+        preferred_keywords: ['ding-sound'],
+      },
+    },
   },
 };
 
@@ -168,7 +173,7 @@ const assetInventory = {
   ],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/shiny.mp3'],
+    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/ding-sound.mp3', '/tmp/shiny.mp3'],
     countdown_tick: '/tmp/countdown.mp3',
     timer_end: '/tmp/timer-end.mp3',
     shiny: '/tmp/shiny.mp3',
@@ -251,6 +256,7 @@ test('generic planner dispatch builds a random type speed quiz plan from localiz
   assert.equal(plan.rounds.every((round) => round.type_icons.length === round.subject.types.length), true);
   assert.equal(plan.rounds.filter((round) => round.subject.is_shiny_reveal).length, 1);
   assert.equal(plan.shiny_reveal.active, true);
+  assert.equal(plan.assets.audio.selected_sound_effects.timer_end, '/tmp/ding-sound.mp3');
   assert.equal(plan.required_asset_gaps.length, 0);
 });
 
@@ -268,6 +274,20 @@ test('speed quiz planner can filter to single-type only when configured', async 
 
   assert.equal(plan.selection.type_cardinality, 'single');
   assert.equal(plan.rounds.every((round) => round.subject.types.length === 1), true);
+});
+
+test('speed quiz timer-end sound falls back to the shared default when the preferred ding file is unavailable', async () => {
+  const fallbackInventory = structuredClone(assetInventory);
+  fallbackInventory.sound_effects.all = ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/shiny.mp3'];
+
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'type-speed-quiz-timer-end-fallback',
+    assetInventory: fallbackInventory,
+  });
+
+  assert.equal(plan.assets.audio.selected_sound_effects.timer_end, '/tmp/timer-end.mp3');
 });
 
 test('render plan creates staggered round timing with slide transitions', async () => {

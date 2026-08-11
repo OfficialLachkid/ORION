@@ -129,7 +129,10 @@
       },
       "timer_end": {
         "enabled": true,
-        "trigger": "countdown_complete"
+        "trigger": "countdown_complete",
+        "preferred_keywords": [
+          "ding-sound"
+        ]
       }
     }
   },

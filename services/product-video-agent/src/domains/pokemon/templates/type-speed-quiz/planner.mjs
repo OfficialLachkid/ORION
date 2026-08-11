@@ -125,6 +125,30 @@ function buildTypeIconRecord(type, localPath, iconSet) {
   };
 }
 
+function normalizeSoundKeywords(values) {
+  return (Array.isArray(values) ? values : [])
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function selectTemplateScopedTimerEndSound(template, inventory) {
+  const soundEffects = inventory?.sound_effects || {};
+  const fallbackPath = soundEffects.timer_end || null;
+  const preferredKeywords = normalizeSoundKeywords(
+    template?.audio?.sound_effects?.timer_end?.preferred_keywords,
+  );
+  if (preferredKeywords.length === 0) {
+    return fallbackPath;
+  }
+
+  const preferredMatch = (Array.isArray(soundEffects.all) ? soundEffects.all : [])
+    .find((filePath) => {
+      const normalizedPath = String(filePath || '').trim().toLowerCase();
+      return preferredKeywords.every((keyword) => normalizedPath.includes(keyword));
+    });
+  return preferredMatch || fallbackPath;
+}
+
 function resolveShinyRevealState({
   template,
   inventory,
@@ -256,6 +280,7 @@ export async function planPokemonTypeSpeedQuizChallenge({
     selectedSubjects,
     random,
   });
+  const selectedTimerEndSoundPath = selectTemplateScopedTimerEndSound(template, inventory);
   const selectedBackgroundPath = selectGifBackground(
     inventory.gif_backgrounds,
     random,
@@ -312,7 +337,7 @@ export async function planPokemonTypeSpeedQuizChallenge({
   const requiredAssetGaps = [];
   if (!selectedBackgroundPath) requiredAssetGaps.push('gif_background_missing');
   if (!inventory.sound_effects?.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
-  if (!inventory.sound_effects?.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
+  if (!selectedTimerEndSoundPath) requiredAssetGaps.push('timer_end_sfx_missing');
   if (!inventory.sound_effects?.shiny) requiredAssetGaps.push('shiny_sfx_missing');
   if (!inventory.overlay_presets?.timer_countdown && !inventory.overlay_presets?.timer) {
     requiredAssetGaps.push('timer_overlay_missing');
@@ -388,7 +413,7 @@ export async function planPokemonTypeSpeedQuizChallenge({
         selected_sound_effects: {
           ...(inventory.sound_effects || {}),
           countdown_tick: inventory.sound_effects?.countdown_tick || null,
-          timer_end: inventory.sound_effects?.timer_end || null,
+          timer_end: selectedTimerEndSoundPath,
           shiny: inventory.sound_effects?.shiny || null,
         },
       },
