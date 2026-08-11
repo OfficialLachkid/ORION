@@ -70,6 +70,10 @@ async function listPokeQuizzBackgroundFiles() {
     .sort((left, right) => left.localeCompare(right));
 }
 
+async function listPokeQuizzGifBackgroundFiles() {
+  return listFiles(POKE_QUIZZ_ASSET_LAYOUT.gifBackgrounds, BACKGROUND_EXTENSIONS);
+}
+
 function normalizeTypeName(typeName) {
   return String(typeName || '').trim().toLowerCase();
 }
@@ -168,6 +172,7 @@ export function selectOverlayPresets(overlays) {
 export async function scanPokeQuizzAssetInventory() {
   const [
     backgrounds,
+    gifBackgrounds,
     music,
     soundEffects,
     pixelTypes,
@@ -176,6 +181,7 @@ export async function scanPokeQuizzAssetInventory() {
     transitions,
   ] = await Promise.all([
     listPokeQuizzBackgroundFiles(),
+    listPokeQuizzGifBackgroundFiles(),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.soundEffects, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.pixelTypes, IMAGE_EXTENSIONS),
@@ -207,6 +213,7 @@ export async function scanPokeQuizzAssetInventory() {
     scanned_at: new Date().toISOString(),
     directories: { ...POKE_QUIZZ_ASSET_LAYOUT },
     backgrounds,
+    gif_backgrounds: gifBackgrounds,
     music,
     sound_effects: {
       all: soundEffects,

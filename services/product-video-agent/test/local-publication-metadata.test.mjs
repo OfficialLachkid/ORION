@@ -53,6 +53,21 @@ const findTheShinyPlan = {
   },
 };
 
+const typeSpeedQuizPlan = {
+  template_id: 'pokemon.type-speed-quiz.v1',
+  selection: {
+    mode: 'random',
+    round_count: 5,
+    selected_subjects: [
+      { name: 'Pikachu' },
+      { name: 'Bulbasaur' },
+      { name: 'Gengar' },
+      { name: 'Eevee' },
+      { name: 'Dragonite' },
+    ],
+  },
+};
+
 const expectedSeededTitles = new Set([
   'Psychic/Water Type Quiz - Can You Guess?',
   'Can You Guess This Psychic/Water Pokemon?',
@@ -64,6 +79,12 @@ const expectedSeededTitles = new Set([
 const expectedFindTheShinySeededTitles = new Set([
   'Find the Shiny Pokemon',
   'Find the Shiny ✨',
+]);
+
+const expectedTypeSpeedQuizSeededTitles = new Set([
+  'Pokemon Type Speed Quiz',
+  'Can You Get 5/5 Pokemon Types?',
+  'Name These Pokemon Types Fast',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -173,4 +194,35 @@ test('seeded find-the-shiny fallback metadata uses the supported generic title v
   assert.ok(expectedFindTheShinySeededTitles.has(firstSeeded.title));
   assert.ok(expectedFindTheShinySeededTitles.has(secondSeeded.title));
   assert.notEqual(firstSeeded.title, secondSeeded.title);
+});
+
+test('fallback publication metadata frames type-speed-quiz as a rapid-fire challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(typeSpeedQuizPlan);
+
+  assert.equal(metadata.title, 'Pokemon Type Speed Quiz');
+  assert.equal(
+    metadata.description,
+    'Can you get 5/5? Watch each Pokemon, beat the timer, and lock in its type before the reveal.',
+  );
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#pokemontypes',
+    '#typespeedquiz',
+    '#pokemonquiz',
+    '#shorts',
+  ]);
+});
+
+test('seeded type-speed-quiz fallback metadata uses the supported generic title variants', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...typeSpeedQuizPlan,
+    seed: 'type-speed-quiz-seed-1',
+  });
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...typeSpeedQuizPlan,
+    seed: 'type-speed-quiz-seed-2',
+  });
+
+  assert.ok(expectedTypeSpeedQuizSeededTitles.has(firstSeeded.title));
+  assert.ok(expectedTypeSpeedQuizSeededTitles.has(secondSeeded.title));
 });

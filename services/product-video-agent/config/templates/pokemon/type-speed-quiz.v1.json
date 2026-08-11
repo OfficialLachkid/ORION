@@ -1,0 +1,131 @@
+{
+  "template_id": "pokemon.type-speed-quiz.v1",
+  "template_key": "type-speed-quiz",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "countdown",
+    "reveal",
+    "transition"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 100,
+      "bottom": 260,
+      "left": 100
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "require_truth_fields": [
+      "national_dex_number",
+      "name",
+      "types"
+    ],
+    "preferred_asset_fields": [
+      "sprite_path"
+    ],
+    "skip_subject_when_missing": [
+      "national_dex_number",
+      "name",
+      "types",
+      "sprite_path"
+    ],
+    "round_count": 5,
+    "mode": "random",
+    "type_cardinality": "any"
+  },
+  "question_contract": {
+    "hook_text": "Can you get 5/5?",
+    "hook_text_variants": [
+      "Can you get 5/5?",
+      "Pokemon Type Speed Quiz"
+    ]
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_gif_backgrounds",
+      "media_type": "looping_gif_or_video",
+      "fit": "cover"
+    },
+    "text": {
+      "hook_y": 300,
+      "hook_font_size": 156,
+      "counter_x": 96,
+      "counter_y": 188,
+      "counter_font_size": 96,
+      "name_y": 1160,
+      "name_font_size": 132,
+      "type_text_y": 1448,
+      "type_text_font_size": 94
+    },
+    "sprite": {
+      "center_x": 540,
+      "center_y": 820,
+      "size_px": 620,
+      "scale_multiplier": 1.18
+    },
+    "type_badges": {
+      "center_y": 1322,
+      "icon_size_px": 208,
+      "spacing_px": 42,
+      "pop_in_duration_seconds": 0.22
+    },
+    "timer": {
+      "countdown_from": 3,
+      "countdown_to": 0,
+      "size_px": 268,
+      "center_x": 540,
+      "center_y": 470
+    },
+    "rounds": {
+      "hook_hold_seconds": 1.1,
+      "pre_countdown_hold_seconds": 0.18,
+      "reveal_hold_seconds": 0.92,
+      "transition_duration_seconds": 0.42,
+      "final_hold_seconds": 1.12
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "sound_effects": {
+      "countdown_tick": {
+        "enabled": true,
+        "trigger": "each_second"
+      },
+      "timer_end": {
+        "enabled": true,
+        "trigger": "countdown_complete"
+      }
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true
+  }
+}

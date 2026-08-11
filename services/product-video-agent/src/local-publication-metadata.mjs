@@ -64,6 +64,9 @@ function resolveTemplateFlavor(plan = {}) {
   if (templateKey.includes('find-the-shiny') || templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
   }
+  if (templateKey.includes('type-speed-quiz') || templateId.includes('type-speed-quiz')) {
+    return 'type-speed-quiz';
+  }
   return 'dual-type-reveal';
 }
 
@@ -78,6 +81,12 @@ const DEFAULT_QUIZ_TITLE_BUILDERS = Object.freeze([
 const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
   () => 'Find the Shiny Pokemon',
   () => 'Find the Shiny \u2728',
+]);
+
+const DEFAULT_TYPE_SPEED_QUIZ_TITLE_BUILDERS = Object.freeze([
+  () => 'Pokemon Type Speed Quiz',
+  () => 'Can You Get 5/5 Pokemon Types?',
+  () => 'Name These Pokemon Types Fast',
 ]);
 
 function hashSeed(input) {
@@ -131,7 +140,15 @@ function buildMetadataPrompt(plan) {
 }
 
 function buildTemplateAwareDefaultTitle(plan) {
-  if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
+  const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'type-speed-quiz') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|type-speed-quiz`) % DEFAULT_TYPE_SPEED_QUIZ_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_TYPE_SPEED_QUIZ_TITLE_BUILDERS[templateIndex]();
+  }
+  if (flavor !== 'find-the-shiny') {
     return buildDefaultTitle(plan);
   }
   const seed = String(plan?.seed || '').trim();
@@ -142,7 +159,13 @@ function buildTemplateAwareDefaultTitle(plan) {
 }
 
 function buildTemplateAwareDefaultDescription(plan) {
-  if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
+  const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'type-speed-quiz') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    const subjectCount = selectedSubjects.length || Number(plan?.selection?.round_count || 0) || 5;
+    return `Can you get ${subjectCount}/${subjectCount}? Watch each Pokemon, beat the timer, and lock in its type before the reveal.`;
+  }
+  if (flavor !== 'find-the-shiny') {
     return buildDefaultDescription(plan);
   }
 
@@ -151,7 +174,26 @@ function buildTemplateAwareDefaultDescription(plan) {
 }
 
 function buildTemplateAwareMetadataPrompt(plan) {
-  if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
+  const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'type-speed-quiz') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon type speed quiz video.',
+      `Displayed Pokemon count: ${selectedSubjects.length}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      `Mode: ${String(plan?.selection?.mode || 'random').trim() || 'random'}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil every exact answer in the title.',
+      '- The description should frame the video as a rapid-fire Pokemon type challenge.',
+      '- Mention that each Pokemon reveals its type after the timer runs out.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
+  if (flavor !== 'find-the-shiny') {
     return buildMetadataPrompt(plan);
   }
 
@@ -175,9 +217,19 @@ function buildTemplateAwareMetadataPrompt(plan) {
 }
 
 function buildTemplateAwareHashtags(plan) {
+  const flavor = resolveTemplateFlavor(plan);
   const typePair = plan?.selection?.type_pair || [];
   const typeHashtags = buildTypeHashtags(typePair);
-  if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
+  if (flavor === 'type-speed-quiz') {
+    return normalizeHashtags([
+      'pokemon',
+      'pokemontypes',
+      'typespeedquiz',
+      'pokemonquiz',
+      'shorts',
+    ]);
+  }
+  if (flavor !== 'find-the-shiny') {
     return normalizeHashtags([
       'pokemon',
       'pokequizz',

@@ -3,6 +3,7 @@ export const ORION_T7_ROOT = '/Volumes/T7/O.R.I.O.N. Video Generation';
 export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   root: `${ORION_T7_ROOT}/Pokemon/Poke Quizz`,
   backgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Backgrounds`,
+  gifBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Gif Backgrounds`,
   sprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Sprites`,
   shinySprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Shiny Sprites`,
   silhouettes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Silhouettes`,

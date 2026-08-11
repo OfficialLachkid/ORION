@@ -79,3 +79,17 @@ test('loadVideoTemplateContext resolves the TrivaMon Find the Shiny ownership st
   assert.equal(context.publicationChannelSelector, 'trivamon-youtube');
   assert.equal(context.genreLabel, 'Find the Shiny');
 });
+
+test('loadVideoTemplateContext resolves the dedicated Type Speed Quiz channel config', async () => {
+  const context = await loadVideoTemplateContext({
+    projectRoot,
+    channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json',
+  });
+
+  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json');
+  assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
+  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/type-speed-quiz.v1.json');
+  assert.equal(context.templateId, 'pokemon.type-speed-quiz.v1');
+  assert.equal(context.publicationChannelSelector, DEFAULT_CHANNEL_SELECTOR);
+  assert.equal(context.genreLabel, 'Type Speed Quiz');
+});

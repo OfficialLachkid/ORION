@@ -12,6 +12,13 @@ import {
   buildPokeQuizzRenderPlan as buildFindTheShinyRenderPlan,
   renderPokeQuizzVideo as renderFindTheShinyVideo,
 } from './domains/pokemon/templates/find-the-shiny/renderer.mjs';
+import {
+  planPokemonTypeSpeedQuizChallenge,
+} from './domains/pokemon/templates/type-speed-quiz/planner.mjs';
+import {
+  buildPokeQuizzRenderPlan as buildTypeSpeedQuizRenderPlan,
+  renderPokeQuizzVideo as renderTypeSpeedQuizVideo,
+} from './domains/pokemon/templates/type-speed-quiz/renderer.mjs';
 
 const TEMPLATE_REGISTRY = Object.freeze({
   'dual-type-reveal': Object.freeze({
@@ -23,6 +30,11 @@ const TEMPLATE_REGISTRY = Object.freeze({
     planner: planFindTheShinyChallenge,
     buildRenderPlan: buildFindTheShinyRenderPlan,
     renderVideo: renderFindTheShinyVideo,
+  }),
+  'type-speed-quiz': Object.freeze({
+    planner: planPokemonTypeSpeedQuizChallenge,
+    buildRenderPlan: buildTypeSpeedQuizRenderPlan,
+    renderVideo: renderTypeSpeedQuizVideo,
   }),
 });
 
@@ -49,6 +61,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   }
   if (templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
+  }
+  if (templateId.includes('type-speed-quiz')) {
+    return 'type-speed-quiz';
   }
   if (!templateKey || templateId.includes('dual-type-reveal')) {
     return 'dual-type-reveal';
