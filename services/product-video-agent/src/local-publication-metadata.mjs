@@ -77,8 +77,7 @@ const DEFAULT_QUIZ_TITLE_BUILDERS = Object.freeze([
 
 const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
   () => 'Find the Shiny Pokemon',
-  () => '✨ Find the Shiny Pokemon',
-  () => 'Find the Shiny ✨',
+  () => 'Find the Shiny \u2728',
 ]);
 
 function hashSeed(input) {

@@ -63,7 +63,6 @@ const expectedSeededTitles = new Set([
 
 const expectedFindTheShinySeededTitles = new Set([
   'Find the Shiny Pokemon',
-  '✨ Find the Shiny Pokemon',
   'Find the Shiny ✨',
 ]);
 
