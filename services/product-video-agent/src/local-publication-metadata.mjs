@@ -76,11 +76,8 @@ const DEFAULT_QUIZ_TITLE_BUILDERS = Object.freeze([
 ]);
 
 const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
-  (typePairLabel) => `Find the Shiny ${typePairLabel} Pokemon`,
-  (typePairLabel) => `Which ${typePairLabel} Spot Turns Shiny?`,
-  (typePairLabel) => `Spot the Shiny ${typePairLabel} Pokemon`,
-  (typePairLabel) => `One ${typePairLabel} Pokemon Turns Shiny`,
-  (typePairLabel) => `Pick the Shiny ${typePairLabel} Spot`,
+  () => 'Find the Shiny Pokemon',
+  () => 'Find the Shiny \u2728',
 ]);
 
 function hashSeed(input) {
@@ -137,7 +134,11 @@ function buildTemplateAwareDefaultTitle(plan) {
   if (resolveTemplateFlavor(plan) !== 'find-the-shiny') {
     return buildDefaultTitle(plan);
   }
-  return 'Find the Shiny Pokemon';
+  const seed = String(plan?.seed || '').trim();
+  const templateIndex = seed
+    ? hashSeed(`${seed}|find-the-shiny`) % DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS.length
+    : 0;
+  return DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS[templateIndex]();
 }
 
 function buildTemplateAwareDefaultDescription(plan) {

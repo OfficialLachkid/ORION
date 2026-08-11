@@ -2005,7 +2005,7 @@ test('planner selects at most one shiny reveal per video and records the determi
   assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, '/tmp/enlarge-pokeball.mp3');
 });
 
-test('planner defaults shiny odds to one in eleven when the template omits an override', async () => {
+test('planner defaults shiny odds to one in seven when the template omits an override', async () => {
   const shinyRows = [
     {
       id: 'pokedex-0001',
@@ -2076,7 +2076,7 @@ test('planner defaults shiny odds to one in eleven when the template omits an ov
   });
 
   assert.equal(plan.shiny_reveal.odds_numerator, 1);
-  assert.equal(plan.shiny_reveal.odds_denominator, 11);
-  assert.equal(plan.shiny_reveal.chance_percentage, 9.090909);
+  assert.equal(plan.shiny_reveal.odds_denominator, 7);
+  assert.equal(plan.shiny_reveal.chance_percentage, 14.285714);
   assert.equal(plan.shiny_reveal.max_per_video, 1);
 });
