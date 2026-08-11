@@ -47,7 +47,7 @@ const template = {
       center_x: 540,
       center_y: 1030,
       size_px: 1600,
-      scale_multiplier: 1,
+      scale_multiplier: 2,
       intro_duration_seconds: 0.34,
       intro_lift_px: 44,
       countdown_float_amplitude_px: 18,
@@ -309,6 +309,7 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.rounds[1].scene_start_seconds > renderPlan.rounds[0].scene_start_seconds, true);
   assert.equal(renderPlan.rounds[0].slide_start_seconds < renderPlan.rounds[0].scene_end_seconds, true);
   assert.equal(renderPlan.rounds[4].transition_duration_seconds, 0);
+  assert.equal(renderPlan.sprite_layout.render_size_px, 3200);
   assert.equal(renderPlan.total_duration_seconds, renderPlan.rounds[4].scene_end_seconds);
   assert.equal(renderPlan.output_path, '/tmp/type-speed-quiz.mp4');
 });

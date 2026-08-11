@@ -192,7 +192,10 @@ export async function scanPokeQuizzAssetInventory() {
   const threeDTypeStyles = buildThreeDTypeStyleCatalog(threeDTypes);
 
   const countdownTick = matchSoundEffect(soundEffects, ['countdown', 'tick', 'beep']);
-  const timerEnd = matchSoundEffect(soundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'ding', 'reveal-hit']);
+  const timerEnd = (
+    matchSoundEffect(soundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'reveal-hit'])
+    || matchSoundEffect(soundEffects, ['ding'])
+  );
   const reveal = matchSoundEffect(soundEffects, ['reveal', 'who', 'answer']) || timerEnd;
   const shiny = matchSoundEffect(soundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
   const pokeballIntro = matchSoundEffectKeywordGroups(soundEffects, [
