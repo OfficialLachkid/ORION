@@ -103,6 +103,15 @@ test('publish approval triggers an immediate scheduling pass and returns the sch
       fetchCount += 1;
       return fetchCount === 1 ? initialPublication : scheduledPublication;
     },
+    async fetchVideoById(id) {
+      assert.equal(id, 'video-bug-ground');
+      return {
+        id,
+        render: {
+          output_path: 'data/runtime/product-video-agent/poke-quizz/bug-ground.mp4',
+        },
+      };
+    },
     async updatePublication(id, patch) {
       updateCalls.push({ id, patch });
       return {
@@ -173,6 +182,106 @@ test('publish approval triggers an immediate scheduling pass and returns the sch
   assert.equal(result.report.scheduledFor, '2026-08-03T06:00:00.000Z');
   assert.equal(queueSyncCalls.length, 1);
   assert.equal(queueSyncCalls[0].channelSelector, 'poke-quizz-youtube');
+});
+
+test('publish approval restores the actionable state when scheduling fails before a slot is assigned', async () => {
+  const initialPublication = {
+    id: 'publication-trivamon-review-2',
+    video_id: 'video-trivamon-review-2',
+    platform: 'youtube_shorts',
+    account_key: 'trivamon-youtube',
+    status: 'pending',
+    preview_url: 'https://youtube.com/shorts/trivamon-preview',
+    metadata: {
+      workflow_state: 'preview_uploaded',
+      review_thread_id: '',
+      review_message_id: '',
+    },
+  };
+  const videoRow = {
+    id: 'video-trivamon-review-2',
+    render: {
+      output_path: 'data/runtime/product-video-agent/poke-quizz/trivamon-preview.mp4',
+    },
+  };
+  const updateCalls = [];
+  const queueSyncCalls = [];
+  let currentPublication = structuredClone(initialPublication);
+  const publicationStore = {
+    async fetchPublicationById(id) {
+      assert.equal(id, 'publication-trivamon-review-2');
+      return currentPublication;
+    },
+    async fetchVideoById(id) {
+      assert.equal(id, 'video-trivamon-review-2');
+      return videoRow;
+    },
+    async updatePublication(id, patch) {
+      assert.equal(id, 'publication-trivamon-review-2');
+      updateCalls.push({ id, patch });
+      currentPublication = {
+        ...currentPublication,
+        ...patch,
+        metadata: {
+          ...(currentPublication.metadata || {}),
+          ...(patch.metadata || {}),
+        },
+      };
+      return currentPublication;
+    },
+  };
+
+  await assert.rejects(
+    () => executeProductVideoAction(
+      'poke_quizz_publish_preview',
+      {
+        task_id: 'TASK-ORION-PQ-PUBLISH-TRIVAMON',
+        approved_by: 'Lachkid',
+        approved_by_id: '374565340644114433',
+        poke_quizz_publication_review: {
+          publicationId: 'publication-trivamon-review-2',
+          channelSelector: 'trivamon-youtube',
+        },
+      },
+      { env: {} },
+      {
+        publicationStore,
+        loadPublicationChannelProfiles: async () => ([
+          {
+            platform: 'youtube_shorts',
+            account_key: 'trivamon-youtube',
+            youtube: {
+              oauth_client_secret_path: 'config/youtube/client-secret.json',
+              oauth_refresh_token_env: 'YOUTUBE_TRIVAMON_REFRESH_TOKEN',
+            },
+          },
+        ]),
+        findPublicationChannelProfile: (profiles) => profiles[0],
+        runProcess: async () => {
+          throw new Error('schedule sync crashed');
+        },
+        syncQueueStatusMessage: async (options) => {
+          queueSyncCalls.push(options);
+          return { posted: true };
+        },
+        queueStatusChannelProfile: {
+          platform: 'youtube_shorts',
+          account_key: 'trivamon-youtube',
+        },
+        executePublicationScriptPath: '/tmp/execute-youtube-publication.mjs',
+      },
+    ),
+    /schedule sync crashed/u,
+  );
+
+  assert.equal(updateCalls.length, 2);
+  assert.equal(updateCalls[0].patch.metadata.workflow_state, 'preview_approved');
+  assert.equal(updateCalls[1].patch.metadata.workflow_state, 'preview_uploaded');
+  assert.equal(currentPublication.metadata.workflow_state, 'preview_uploaded');
+  assert.equal(currentPublication.status, 'pending');
+  assert.equal(currentPublication.metadata.publish_attempt_error, 'schedule sync crashed');
+  assert.equal(queueSyncCalls.length, 1);
+  assert.equal(queueSyncCalls[0].channelSelector, 'trivamon-youtube');
 });
 
 test('delete action refreshes the Poke Quizz queue status message after removal', async () => {
@@ -274,6 +383,7 @@ test('delete action refreshes the Poke Quizz queue status message after removal'
 
 test('feedback regeneration falls back to the preferred localized catalog when the rehydrated task has no plan path', async () => {
   const runCalls = [];
+  const callSequence = [];
   const normalizePath = (value) => String(value || '').replaceAll('\\', '/');
 
   const result = await executeProductVideoAction(
@@ -297,6 +407,7 @@ test('feedback regeneration falls back to the preferred localized catalog when t
     {
       ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
       runProcess: async (options) => {
+        callSequence.push(`run:${normalizePath(options.args[0]).split('/').at(-1)}`);
         runCalls.push(options);
         return {
           stdout: JSON.stringify({
@@ -308,7 +419,9 @@ test('feedback regeneration falls back to the preferred localized catalog when t
           }, null, 2),
         };
       },
-      updatePriorPublicationForRevision: async () => {},
+      updatePriorPublicationForRevision: async () => {
+        callSequence.push('update-prior');
+      },
     },
   );
 
@@ -330,6 +443,11 @@ test('feedback regeneration falls back to the preferred localized catalog when t
     normalizePath(runCalls[1].args[runCalls[1].args.indexOf('--catalog-json') + 1]).endsWith('data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json'),
     true,
   );
+  assert.deepEqual(callSequence, [
+    'run:plan-pokemon-type-challenge.mjs',
+    'run:generate-poke-quizz-review.mjs',
+    'update-prior',
+  ]);
   assert.equal(result.report.state, 'preview_regenerated');
   assert.equal(result.report.previewUrl, 'https://youtube.com/shorts/revised-preview');
 });

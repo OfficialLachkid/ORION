@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { planPokemonTypeChallenge } from '../src/pokemon-type-challenge-planner.mjs';
 import { buildPokeQuizzRenderPlan } from '../src/poke-quizz-renderer.mjs';
 import { buildAudioFilterScript } from '../src/domains/pokemon/templates/find-the-shiny/render/audio-filter-script.mjs';
+import { buildTextArtifacts } from '../src/domains/pokemon/templates/find-the-shiny/render/drawtext-artifacts.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/find-the-shiny/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/find-the-shiny/render/visual-inputs.mjs';
 
@@ -35,7 +36,8 @@ const template = {
   },
   layout: {
     text: {
-      hook_y: 360,
+      hook_y: 420,
+      hook_font_size: 173,
       prompt_y: 290,
       reveal_y: 260,
       prompt_font_size: 108,
@@ -313,6 +315,30 @@ test('generic render-plan dispatch keeps the shiny grid centered and reveal timi
   assert.equal(renderPlan.audio_cues.reveal_visual_start_seconds, 5.68);
   assert.equal(renderPlan.timer_layout.y < renderPlan.grid.stage_bounds_px.top, true);
   assert.equal(renderPlan.output_path, '/tmp/find-the-shiny.mp4');
+});
+
+test('find-the-shiny hook text uses the configured lower position and larger font size', async () => {
+  const singleLineHookTemplate = structuredClone(template);
+  singleLineHookTemplate.question_contract.hook_text = 'Find the Shiny!';
+  singleLineHookTemplate.question_contract.hook_text_variants = ['Find the Shiny!'];
+  const plan = await planPokemonTypeChallenge({
+    template: singleLineHookTemplate,
+    pokedexRows,
+    seed: 'find-the-shiny-hook-layout',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template: singleLineHookTemplate,
+    outputPath: '/tmp/find-the-shiny.mp4',
+  });
+
+  const textArtifacts = buildTextArtifacts({ renderPlan, template: singleLineHookTemplate });
+  assert.equal(textArtifacts.hook.font_size, 173);
+  const hookLineYs = textArtifacts.hook.lines.map((line) => line.y);
+  const centeredY = (hookLineYs[0] + hookLineYs.at(-1)) / 2;
+  assert.equal(centeredY, 419.5);
 });
 
 test('visual inputs and audio cues use one normal sprite source plus one shiny reveal source', async () => {

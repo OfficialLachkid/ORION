@@ -164,9 +164,38 @@ function assertGenerateReviewTask(task) {
   return generation;
 }
 
+function resolveTaskPublicationId(task) {
+  return String(
+    task?.poke_quizz_publication_review?.publicationId
+    || task?.poke_quizz_feedback?.publicationId
+    || task?.poke_quizz_delete?.publicationId
+    || '',
+  ).trim();
+}
+
+function resolveTaskChannelSelector(task) {
+  return String(
+    task?.poke_quizz_publication_review?.channelSelector
+    || task?.poke_quizz_feedback?.channelSelector
+    || task?.poke_quizz_delete?.channelSelector
+    || task?.poke_quizz_generate_review?.channelSelector
+    || DEFAULT_CHANNEL_SELECTOR,
+  ).trim() || DEFAULT_CHANNEL_SELECTOR;
+}
+
 function isActionableReviewWorkflowState(workflowState) {
   const normalizedState = String(workflowState || '').trim().toLowerCase();
   return normalizedState === 'preview_uploaded' || normalizedState === 'delete_failed';
+}
+
+async function resolveChannelProfileForSelector(channelSelector, dependencies = {}) {
+  const profilesLoader = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
+  const channelFinder = dependencies.findPublicationChannelProfile || findPublicationChannelProfile;
+  const profiles = await profilesLoader(
+    'services/product-video-agent/publication-channels.example.json',
+    { projectRoot },
+  );
+  return channelFinder(profiles, channelSelector);
 }
 
 async function refreshPublicationReviewMessage({
@@ -207,6 +236,36 @@ async function refreshPublicationReviewMessage({
   return editDiscordChannelMessage(config, reviewThreadId, reviewMessageId, payload);
 }
 
+async function restorePublicationReviewMessageOnFailure(task, config, dependencies = {}) {
+  const publicationId = resolveTaskPublicationId(task);
+  if (!publicationId) {
+    return null;
+  }
+
+  try {
+    const store = dependencies.publicationStore || createPublicationStore(config);
+    const publication = await store.fetchPublicationById(publicationId);
+    if (!publication) {
+      return null;
+    }
+    const videoRow = publication.video_id ? await store.fetchVideoById(publication.video_id) : null;
+    if (!videoRow) {
+      return null;
+    }
+    return await refreshPublicationReviewMessage({
+      config,
+      publication,
+      videoRow,
+      channelSelector: resolveTaskChannelSelector(task),
+    });
+  } catch (error) {
+    process.stderr.write(
+      `Could not restore review card for ${publicationId} after task failure: ${error.message}\n`
+    );
+    return null;
+  }
+}
+
 async function syncPokeQuizzQueueStatus({
   config,
   store,
@@ -243,8 +302,11 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
   if (!publication) {
     throw new Error(`Publication ${review.publicationId} was not found.`);
   }
+  const videoRow = publication.video_id ? await store.fetchVideoById(publication.video_id) : null;
 
   const approvedAt = new Date().toISOString();
+  const channelSelector = review.channelSelector || DEFAULT_CHANNEL_SELECTOR;
+  const channelProfile = await resolveChannelProfileForSelector(channelSelector, dependencies);
   const updated = await store.updatePublication(publication.id, {
     status: 'approved',
     metadata: {
@@ -257,7 +319,6 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
     },
   });
 
-  const channelSelector = review.channelSelector || DEFAULT_CHANNEL_SELECTOR;
   const runProcess = dependencies.runProcess || runLocalProcess;
   const executePublicationScriptPath = dependencies.executePublicationScriptPath
     || resolve(projectRoot, 'services/product-video-agent/scripts/execute-youtube-publication.mjs');
@@ -293,24 +354,33 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
     }
   } catch (error) {
     scheduleSyncError = error.message || String(error);
-    refreshedPublication = await store.updatePublication(publication.id, {
-      metadata: {
-        ...((updated || publication).metadata || {}),
-        schedule_sync_error: scheduleSyncError,
-      },
-    }) || refreshedPublication;
+    const latestPublication = await store.fetchPublicationById(publication.id);
+    if (latestPublication) {
+      refreshedPublication = latestPublication;
+    }
   }
-  await syncPokeQuizzQueueStatus({
-    config,
-    store,
-    channelSelector,
-    asOf: approvedAt,
-    dependencies,
-  });
 
   const refreshedWorkflowState = refreshedPublication?.metadata?.workflow_state || 'preview_approved';
   const scheduledFor = refreshedPublication?.scheduled_for || '';
   if (refreshedWorkflowState === 'scheduled' && scheduledFor) {
+    try {
+      await refreshPublicationReviewMessage({
+        config,
+        publication: refreshedPublication,
+        videoRow,
+        channelSelector,
+      });
+    } catch (error) {
+      process.stderr.write(`Could not refresh scheduled review card ${publication.id}: ${error.message}\n`);
+    }
+    await syncPokeQuizzQueueStatus({
+      config,
+      store,
+      channelSelector,
+      asOf: approvedAt,
+      channelProfile,
+      dependencies,
+    });
     return {
       rawStdout: '',
       report: {
@@ -326,21 +396,48 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
     };
   }
 
-  return {
-    rawStdout: '',
-    report: {
-      state: 'preview_approved',
-      severity: scheduleSyncError ? 'warning' : 'success',
-      summary: scheduleSyncError
-        ? `Marked ${publication.id} as approved, but immediate schedule sync failed: ${scheduleSyncError}`
-        : `Marked ${publication.id} as approved for the Poke Quizz publish queue.`,
-      publicationId: refreshedPublication?.id || publication.id,
-      previewUrl: refreshedPublication?.preview_url || publication.preview_url || '',
-      workflowState: refreshedWorkflowState,
-      approvedAt,
-      scheduledFor,
+  const publishAttemptError = scheduleSyncError
+    || `Publish approval did not move ${publication.id} into a scheduled slot.`;
+  const revertedPublication = await store.updatePublication(publication.id, {
+    status: publication.status,
+    metadata: {
+      ...(publication.metadata || {}),
+      review_task_id: task.task_id,
+      workflow_state: publication?.metadata?.workflow_state || 'preview_uploaded',
+      publish_attempted_at: approvedAt,
+      publish_attempt_error: publishAttemptError,
+      preview_approved_at: '',
+      preview_approved_by: '',
+      preview_approved_by_id: '',
+      schedule_sync_error: scheduleSyncError,
     },
-  };
+  }) || publication;
+
+  try {
+    await refreshPublicationReviewMessage({
+      config,
+      publication: revertedPublication,
+      videoRow,
+      channelSelector,
+    });
+  } catch (error) {
+    process.stderr.write(`Could not restore review card ${publication.id} after failed publish: ${error.message}\n`);
+  }
+
+  try {
+    await syncPokeQuizzQueueStatus({
+      config,
+      store,
+      channelSelector,
+      asOf: approvedAt,
+      channelProfile,
+      dependencies,
+    });
+  } catch (error) {
+    process.stderr.write(`Could not sync queue status after failed publish ${publication.id}: ${error.message}\n`);
+  }
+
+  throw new Error(publishAttemptError);
 }
 
 async function buildRevisionPlan({
@@ -512,7 +609,6 @@ async function executeFeedbackRegenerationTask(task, config, dependencies = {}) 
   const updatePriorPublication =
     dependencies.updatePriorPublicationForRevision
     || updatePriorPublicationForRevision;
-  await updatePriorPublication(normalizedFeedback, config, dependencies);
 
   const reviewResult = await processRunner({
     executable: process.execPath,
@@ -541,18 +637,27 @@ async function executeFeedbackRegenerationTask(task, config, dependencies = {}) 
   });
 
   const reviewPayload = parseLastJsonObject(reviewResult.stdout) || {};
+  let priorPublicationUpdateError = '';
+  try {
+    await updatePriorPublication(normalizedFeedback, config, dependencies);
+  } catch (error) {
+    priorPublicationUpdateError = error.message || String(error);
+  }
   return {
     rawStdout: reviewResult.stdout || '',
     report: {
       state: 'preview_regenerated',
-      severity: 'success',
-      summary: `Generated a revised Poke Quizz preview for ${formatTypePairLabel(normalizedFeedback.typePair || []) || 'the requested type pair'} and posted it back to the review thread.`,
+      severity: priorPublicationUpdateError ? 'warning' : 'success',
+      summary: priorPublicationUpdateError
+        ? `Generated a revised Poke Quizz preview for ${formatTypePairLabel(normalizedFeedback.typePair || []) || 'the requested type pair'}, but could not collapse the prior review card: ${priorPublicationUpdateError}`
+        : `Generated a revised Poke Quizz preview for ${formatTypePairLabel(normalizedFeedback.typePair || []) || 'the requested type pair'} and posted it back to the review thread.`,
       publicationId: reviewPayload.publication_id || '',
       previewUrl: reviewPayload.preview_url || '',
       reviewTaskId: reviewPayload.task_id || '',
       reviewMessageId: reviewPayload.message_id || '',
       renderPath: reviewPayload.render_path || outputPath,
       feedback: normalizedFeedback.feedback || '',
+      priorPublicationUpdateError,
     },
   };
 }
@@ -758,21 +863,28 @@ export function describeExplicitProductVideoAction(task) {
 }
 
 export async function executeProductVideoAction(action, task, config, dependencies = {}) {
-  if (action === 'poke_quizz_generate_review') {
-    return executeGenerateReviewTask(task, config, dependencies);
-  }
+  try {
+    if (action === 'poke_quizz_generate_review') {
+      return executeGenerateReviewTask(task, config, dependencies);
+    }
 
-  if (action === 'poke_quizz_publish_preview') {
-    return executePublishPreviewTask(task, config, dependencies);
-  }
+    if (action === 'poke_quizz_publish_preview') {
+      return executePublishPreviewTask(task, config, dependencies);
+    }
 
-  if (action === 'poke_quizz_feedback_regenerate') {
-    return executeFeedbackRegenerationTask(task, config, dependencies);
-  }
+    if (action === 'poke_quizz_feedback_regenerate') {
+      return executeFeedbackRegenerationTask(task, config, dependencies);
+    }
 
-  if (action === 'poke_quizz_delete_preview') {
-    return executeDeletePreviewTask(task, config, dependencies);
-  }
+    if (action === 'poke_quizz_delete_preview') {
+      return executeDeletePreviewTask(task, config, dependencies);
+    }
 
-  throw new Error(`Unsupported product-video action '${action}'.`);
+    throw new Error(`Unsupported product-video action '${action}'.`);
+  } catch (error) {
+    if (action === 'poke_quizz_publish_preview' || action === 'poke_quizz_feedback_regenerate' || action === 'poke_quizz_delete_preview') {
+      await restorePublicationReviewMessageOnFailure(task, config, dependencies);
+    }
+    throw error;
+  }
 }

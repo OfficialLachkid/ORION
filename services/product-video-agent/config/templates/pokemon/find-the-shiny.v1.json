@@ -150,7 +150,8 @@
       "intro_stagger_seconds": 0.32
     },
     "text": {
-      "hook_y": 360,
+      "hook_y": 420,
+      "hook_font_size": 173,
       "prompt_y": 290,
       "reveal_y": 260,
       "prompt_font_size": 108

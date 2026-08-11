@@ -1,3 +1,5 @@
+import { readdir, readFile } from 'node:fs/promises';
+import { relative, resolve } from 'node:path';
 import {
   findPublicationChannelProfile,
   loadPublicationChannelProfiles,
@@ -11,6 +13,7 @@ import {
   syncPokeQuizzQueueStatusMessage,
 } from '../../../services/product-video-agent/src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../../services/product-video-agent/src/publication-store.mjs';
+import { resolveVideoTemplateRuntime } from '../../../services/product-video-agent/src/video-template-context.mjs';
 import { projectRoot } from '../../../services/lib/runtime-config.mjs';
 import {
   collectChildError,
@@ -21,12 +24,77 @@ import {
 
 export const DEFAULT_PUBLICATION_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 export const REVIEW_READY_TARGET_COUNT = POKE_QUIZZ_REVIEW_TARGET_COUNT;
+const CHANNEL_CONFIGS_DIR = resolve(projectRoot, 'services', 'product-video-agent', 'config', 'channels');
 
 function createPublicationStore(config) {
   return new SupabasePublicationStore({
     supabaseUrl: config.env.SUPABASE_URL,
     apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY,
   });
+}
+
+function normalizeProjectRelativePath(absolutePath) {
+  return relative(projectRoot, absolutePath).replaceAll('\\', '/');
+}
+
+function parsePositiveInteger(value, fallbackValue) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackValue;
+}
+
+function normalizeNightShiftSettings(channelConfig = {}) {
+  const nightShift = channelConfig?.night_shift && typeof channelConfig.night_shift === 'object'
+    ? channelConfig.night_shift
+    : {};
+  const reviewBacklog = nightShift.review_backlog && typeof nightShift.review_backlog === 'object'
+    ? nightShift.review_backlog
+    : {};
+  const reviewRefresh = nightShift.review_refresh && typeof nightShift.review_refresh === 'object'
+    ? nightShift.review_refresh
+    : {};
+  return {
+    reviewBacklogEnabled: reviewBacklog.enabled === true,
+    targetReviewReadyCount: parsePositiveInteger(
+      reviewBacklog.target_review_ready_count,
+      REVIEW_READY_TARGET_COUNT,
+    ),
+    reviewRefreshEnabled: reviewRefresh.enabled === true,
+    reviewRefreshPendingOnly: reviewRefresh.pending_only !== false,
+  };
+}
+
+async function discoverNightShiftChannelRuntimes() {
+  const entries = await readdir(CHANNEL_CONFIGS_DIR, { withFileTypes: true });
+  const runtimes = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) {
+      continue;
+    }
+
+    const absolutePath = resolve(CHANNEL_CONFIGS_DIR, entry.name);
+    const rawChannelConfig = JSON.parse(await readFile(absolutePath, 'utf8'));
+    const nightShift = normalizeNightShiftSettings(rawChannelConfig);
+    if (!nightShift.reviewBacklogEnabled && !nightShift.reviewRefreshEnabled) {
+      continue;
+    }
+
+    const channelConfigPath = normalizeProjectRelativePath(absolutePath);
+    const templateRuntime = await resolveVideoTemplateRuntime({
+      projectRoot,
+      channelConfigPath,
+    });
+    runtimes.push({
+      ...templateRuntime,
+      nightShift,
+    });
+  }
+
+  return runtimes.sort((left, right) => (
+    `${left.channelSelector}:${left.channelConfigPath}`.localeCompare(
+      `${right.channelSelector}:${right.channelConfigPath}`,
+    )
+  ));
 }
 
 function summarizeVideoQueueMaintenance(profiles, runs) {
@@ -123,17 +191,62 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString()) 
   return summarizeVideoQueueMaintenance(activeProfiles, results);
 }
 
-export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().toISOString()) {
+function summarizeReviewBacklogRuns(runs = []) {
+  const summary = {
+    status: 'skipped',
+    configuredChannels: runs.length,
+    generated: 0,
+    generatedItems: [],
+    initialReviewReadyCount: 0,
+    finalReviewReadyCount: 0,
+    targetReviewReadyCount: 0,
+    failedChannels: 0,
+    errors: [],
+    channels: runs,
+  };
+
+  for (const run of runs) {
+    summary.generated += Number(run.generated || 0);
+    summary.initialReviewReadyCount += Number(run.initialReviewReadyCount || 0);
+    summary.finalReviewReadyCount += Number(run.finalReviewReadyCount || 0);
+    summary.targetReviewReadyCount += Number(run.targetReviewReadyCount || 0);
+    summary.generatedItems.push(...(Array.isArray(run.generatedItems) ? run.generatedItems : []));
+    if (run.status === 'failed') {
+      summary.failedChannels += 1;
+    }
+    for (const error of run.errors || []) {
+      summary.errors.push(`${run.channel}: ${error}`);
+    }
+  }
+
+  if (summary.failedChannels === runs.length && runs.length > 0) {
+    summary.status = 'failed';
+  } else if (summary.generated > 0) {
+    summary.status = 'completed';
+  } else if (summary.finalReviewReadyCount < summary.targetReviewReadyCount) {
+    summary.status = 'failed';
+  }
+
+  return summary;
+}
+
+async function replenishReviewBacklogForRuntime(config, templateRuntime, asOf) {
   const profiles = await loadPublicationChannelProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
-  const channelProfile = findPublicationChannelProfile(profiles, 'poke-quizz-youtube');
+  const channelProfile = findPublicationChannelProfile(profiles, templateRuntime.channelSelector);
   const reviewThreadId = resolvePublicationReviewThreadId(config, channelProfile);
+  const targetReviewReadyCount = templateRuntime.nightShift.targetReviewReadyCount;
+
   if (!reviewThreadId) {
     return {
-      status: 'skipped',
+      status: 'failed',
+      channel: templateRuntime.channelSelector,
+      channelConfigPath: templateRuntime.channelConfigPath,
+      genreLabel: templateRuntime.genreLabel,
       generated: 0,
+      generatedItems: [],
       initialReviewReadyCount: 0,
       finalReviewReadyCount: 0,
-      targetReviewReadyCount: POKE_QUIZZ_REVIEW_TARGET_COUNT,
+      targetReviewReadyCount,
       errors: [`Missing review thread id for ${channelProfile.account_key}.`],
     };
   }
@@ -142,16 +255,19 @@ export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().
   if (!catalogJsonPath) {
     return {
       status: 'failed',
+      channel: templateRuntime.channelSelector,
+      channelConfigPath: templateRuntime.channelConfigPath,
+      genreLabel: templateRuntime.genreLabel,
       generated: 0,
+      generatedItems: [],
       initialReviewReadyCount: 0,
       finalReviewReadyCount: 0,
-      targetReviewReadyCount: POKE_QUIZZ_REVIEW_TARGET_COUNT,
+      targetReviewReadyCount,
       errors: ['No localized Poke Quizz catalog JSON could be found.'],
     };
   }
 
   const store = createPublicationStore(config);
-
   const fetchQueueStatus = async () => {
     const publications = await store.fetchPublicationsByChannel({
       platform: channelProfile.platform,
@@ -166,7 +282,7 @@ export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().
   let reviewReadyCount = initialQueueStatus.reviewReadyCount;
   let consecutiveFailures = 0;
 
-  while (reviewReadyCount < POKE_QUIZZ_REVIEW_TARGET_COUNT && consecutiveFailures < 3) {
+  while (reviewReadyCount < targetReviewReadyCount && consecutiveFailures < 3) {
     const child = runProjectNodeScript(
       'services/product-video-agent/scripts/generate-poke-quizz-review.mjs',
       [
@@ -174,8 +290,10 @@ export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().
         reviewThreadId,
         '--catalog-json',
         catalogJsonPath,
+        '--channel-config',
+        templateRuntime.channelConfigPath,
         '--channel',
-        'poke-quizz-youtube',
+        templateRuntime.channelSelector,
         '--as-of',
         new Date().toISOString(),
       ],
@@ -208,41 +326,115 @@ export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().
     runtimeConfig: config,
     store,
     channelProfile,
-    channelSelector: 'poke-quizz-youtube',
+    channelSelector: templateRuntime.channelSelector,
     asOf,
   });
 
   return {
     status: errors.length > 0 && generated.length === 0 ? 'failed' : generated.length > 0 ? 'completed' : 'skipped',
+    channel: templateRuntime.channelSelector,
+    channelConfigPath: templateRuntime.channelConfigPath,
+    genreLabel: templateRuntime.genreLabel,
     generated: generated.length,
     generatedItems: generated,
     initialReviewReadyCount: initialQueueStatus.reviewReadyCount,
     finalReviewReadyCount: finalQueueStatus.reviewReadyCount,
-    targetReviewReadyCount: POKE_QUIZZ_REVIEW_TARGET_COUNT,
+    targetReviewReadyCount,
     errors,
   };
 }
 
+export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().toISOString()) {
+  const channelRuntimes = (await discoverNightShiftChannelRuntimes())
+    .filter((runtime) => runtime.nightShift.reviewBacklogEnabled);
+  if (channelRuntimes.length === 0) {
+    return {
+      status: 'skipped',
+      configuredChannels: 0,
+      generated: 0,
+      generatedItems: [],
+      initialReviewReadyCount: 0,
+      finalReviewReadyCount: 0,
+      targetReviewReadyCount: 0,
+      failedChannels: 0,
+      errors: [],
+      channels: [],
+    };
+  }
+
+  const runs = [];
+  for (const templateRuntime of channelRuntimes) {
+    runs.push(await replenishReviewBacklogForRuntime(config, templateRuntime, asOf));
+  }
+  return summarizeReviewBacklogRuns(runs);
+}
+
 export async function refreshPokeQuizzReviewMessages() {
-  const child = runProjectNodeScript(
-    'services/product-video-agent/scripts/refresh-poke-quizz-review-messages.mjs',
-    [
+  const channelRuntimes = (await discoverNightShiftChannelRuntimes())
+    .filter((runtime) => runtime.nightShift.reviewRefreshEnabled);
+  if (channelRuntimes.length === 0) {
+    return {
+      status: 'skipped',
+      configuredChannels: 0,
+      inspected: 0,
+      refreshed: 0,
+      actionable: 0,
+      retried: 0,
+      failed: 0,
+      failures: [],
+      channels: [],
+    };
+  }
+
+  const runs = [];
+  for (const templateRuntime of channelRuntimes) {
+    const args = [
+      '--channel-config',
+      templateRuntime.channelConfigPath,
       '--channel',
-      'poke-quizz-youtube',
+      templateRuntime.channelSelector,
       '--delay-ms',
       '1200',
       '--max-retries',
       '3',
-    ],
-    {
-      timeoutMs: 20 * 60 * 1000,
-    },
-  );
-  const summary = parseLastJsonObject(child.stdout) || {};
+    ];
+    if (templateRuntime.nightShift.reviewRefreshPendingOnly) {
+      args.push('--pending-only');
+    }
+    const child = runProjectNodeScript(
+      'services/product-video-agent/scripts/refresh-poke-quizz-review-messages.mjs',
+      args,
+      {
+        timeoutMs: 20 * 60 * 1000,
+      },
+    );
+    const summary = parseLastJsonObject(child.stdout) || {};
+    runs.push({
+      status: collectChildError(child) ? 'failed' : 'completed',
+      exitCode: child.status ?? 0,
+      error: collectChildError(child),
+      channel: templateRuntime.channelSelector,
+      channelConfigPath: templateRuntime.channelConfigPath,
+      ...summary,
+    });
+  }
+
   return {
-    status: collectChildError(child) ? 'failed' : 'completed',
-    exitCode: child.status ?? 0,
-    error: collectChildError(child),
-    ...summary,
+    status: runs.every((run) => run.status === 'failed') ? 'failed' : 'completed',
+    configuredChannels: runs.length,
+    inspected: runs.reduce((sum, run) => sum + Number(run.inspected || 0), 0),
+    refreshed: runs.reduce((sum, run) => sum + Number(run.refreshed || 0), 0),
+    actionable: runs.reduce((sum, run) => sum + Number(run.actionable || 0), 0),
+    retried: runs.reduce((sum, run) => sum + Number(run.retried || 0), 0),
+    failed: runs.reduce((sum, run) => sum + Number(run.failed || 0), 0),
+    failures: runs.flatMap((run) => (
+      Array.isArray(run.failures)
+        ? run.failures.map((failure) => ({
+          channel: run.channel,
+          ...failure,
+        }))
+        : []
+    )),
+    channels: runs,
   };
 }

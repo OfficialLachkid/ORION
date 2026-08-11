@@ -61,6 +61,12 @@ const expectedSeededTitles = new Set([
   'Psychic/Water Challenge - Name These Pokemon',
 ]);
 
+const expectedFindTheShinySeededTitles = new Set([
+  'Find the Shiny Pokemon',
+  '✨ Find the Shiny Pokemon',
+  'Find the Shiny ✨',
+]);
+
 test('fallback publication metadata keeps the quiz type pair intact', () => {
   const metadata = buildPokeQuizzFallbackPublicationMetadata(plan);
   assert.equal(metadata.title, 'Psychic/Water Type Quiz - Can You Guess?');
@@ -153,4 +159,19 @@ test('fallback publication metadata frames find-the-shiny as a shiny challenge',
     '#fairytype',
     '#shorts',
   ]);
+});
+
+test('seeded find-the-shiny fallback metadata uses the supported generic title variants', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...findTheShinyPlan,
+    seed: 'find-the-shiny-rock-fairy-1',
+  });
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...findTheShinyPlan,
+    seed: 'find-the-shiny-rock-fairy-2',
+  });
+
+  assert.ok(expectedFindTheShinySeededTitles.has(firstSeeded.title));
+  assert.ok(expectedFindTheShinySeededTitles.has(secondSeeded.title));
+  assert.notEqual(firstSeeded.title, secondSeeded.title);
 });

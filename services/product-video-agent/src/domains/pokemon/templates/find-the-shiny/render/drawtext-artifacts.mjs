@@ -28,7 +28,7 @@ export function buildTextArtifacts({ renderPlan, template }) {
   return {
     hook: buildProgressiveTextArtifacts(renderPlan.text.hook, {
       template,
-      fontSize: DEFAULT_HOOK_FONT_SIZE,
+      fontSize: ensureNumber(template?.layout?.text?.hook_font_size, DEFAULT_HOOK_FONT_SIZE),
       maxLines: 2,
       baseY: resolveTextPosition(template, 'hook', 180),
       startSeconds: renderPlan.phases.hook.start_seconds,
