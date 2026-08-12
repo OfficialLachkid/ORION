@@ -69,7 +69,7 @@
     "sprite": {
       "center_x": 540,
       "center_y": 990,
-      "size_px": 1600,
+      "size_px": 800,
       "scale_multiplier": 2,
       "display_scale_multiplier": 1,
       "auto_display_scale_target_ratio": 0.58,
@@ -83,7 +83,7 @@
     },
     "type_badges": {
       "center_y": 400,
-      "icon_size_px": 630,
+      "icon_size_px": 315,
       "spacing_px": -200,
       "label_anchor_ratio": 0.24,
       "label_gap_px": 0,
