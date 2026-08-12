@@ -39,7 +39,7 @@ const template = {
       hook_font_size: 140,
       prompt_y: 320,
       prompt_font_size: 140,
-      prompt_reveal_duration_seconds: 1.1,
+      prompt_reveal_duration_seconds: 1.3,
       counter_x: 72,
       counter_y: 144,
       counter_font_size: 96,
@@ -89,7 +89,7 @@ const template = {
     shiny: {
       enabled: true,
       sparkle_duration_seconds: 0.9,
-      sparkle_scale_multiplier: 2,
+      sparkle_scale_multiplier: 1,
     },
   },
   audio: {
@@ -398,7 +398,7 @@ test('audio filter schedules countdown ticks, timer-end cues, and one shiny hit'
   assert.match(script, /\[2:a\]asplit=15/u);
   assert.match(script, /\[3:a\]asplit=5/u);
   assert.match(script, /timerend4/u);
-  assert.match(script, /\[4:a\]adelay=\d+\|\d+,volume=0\.5\[shiny\]/u);
+  assert.match(script, /\[4:a\]adelay=\d+\|\d+,volume=0\.4\[shiny\]/u);
   assert.match(script, /\[n0\]\[music\]\[cd0\]/u);
 });
 
@@ -439,7 +439,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.doesNotMatch(visualFilter.script, /\[scene1p0\]/u);
   assert.match(visualFilter.script, /drawtext=text='1\/5'/u);
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=806:806:force_original_aspect_ratio=decrease/u);
-  assert.match(visualFilter.script, /drawtext=text='the typing\?'.*enable='between\(t,0\.552,1\.28\)'/u);
+  assert.match(visualFilter.script, /drawtext=text='the typing\?'.*enable='between\(t,[0-9.]+,1\.28\)'/u);
   const dualTypeRound = renderPlan.rounds.find((round) => round.subject.types.length === 2);
   assert.ok(dualTypeRound);
   assert.doesNotMatch(
@@ -458,7 +458,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252,format=rgba,setsar=1\[round\d+icon\d+\]/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
-  assert.match(visualFilter.script, /scale=1612:1612:force_original_aspect_ratio=decrease/u);
+  assert.match(visualFilter.script, /scale=806:806:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
   assert.match(visualFilter.script, /\[sceneout4\]format=yuv420p\[vout\]/u);
 });

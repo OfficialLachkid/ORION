@@ -7,6 +7,8 @@ import {
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
 
+const TYPE_SPEED_SHINY_SFX_VOLUME = 0.4;
+
 export function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
 }
@@ -84,7 +86,7 @@ export function buildAudioFilterScript({
 
   if (shinyPath && renderPlan.audio_cues?.shiny_reveal_start_seconds != null) {
     const delayMs = Math.max(0, Math.round(renderPlan.audio_cues.shiny_reveal_start_seconds * 1000));
-    filters.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=0.5[shiny]`);
+    filters.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=${TYPE_SPEED_SHINY_SFX_VOLUME}[shiny]`);
     mixLabels.push('shiny');
   }
 

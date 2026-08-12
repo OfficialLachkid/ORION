@@ -58,7 +58,7 @@
       "hook_font_size": 140,
       "prompt_y": 320,
       "prompt_font_size": 140,
-      "prompt_reveal_duration_seconds": 1.1,
+      "prompt_reveal_duration_seconds": 1.3,
       "counter_x": 72,
       "counter_y": 144,
       "counter_font_size": 96,
@@ -110,7 +110,7 @@
     "shiny": {
       "enabled": true,
       "sparkle_duration_seconds": 0.9,
-      "sparkle_scale_multiplier": 2
+      "sparkle_scale_multiplier": 1
     }
   },
   "audio": {
