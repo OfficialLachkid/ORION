@@ -8,12 +8,6 @@ import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selecti
 
 const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
-const DEFAULT_SPRITE_VISIBLE_RATIO_TARGET = 0.58;
-const DEFAULT_MAX_AUTO_DISPLAY_SCALE_MULTIPLIER = 1.75;
-const MIN_VISIBLE_ALPHA = 8;
-
-const spriteAutoScaleCache = new Map();
-let sharpModulePromise = null;
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -49,92 +43,6 @@ function ensurePositiveInteger(value, fallback) {
 function ensureNonNegativeNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-}
-
-async function loadSharp() {
-  if (!sharpModulePromise) {
-    sharpModulePromise = import('sharp')
-      .then((module) => module.default || module)
-      .catch(() => null);
-  }
-  return sharpModulePromise;
-}
-
-function roundMultiplier(value) {
-  return Number(Number(value).toFixed(3));
-}
-
-async function resolveSpriteAutoDisplayScaleMultiplier({
-  spritePath,
-  targetVisibleRatio,
-  maxMultiplier,
-}) {
-  const normalizedPath = String(spritePath || '').trim();
-  if (!normalizedPath) {
-    return 1;
-  }
-  const cacheKey = `${normalizedPath}::${targetVisibleRatio}::${maxMultiplier}`;
-  if (spriteAutoScaleCache.has(cacheKey)) {
-    return spriteAutoScaleCache.get(cacheKey);
-  }
-
-  const multiplierPromise = (async () => {
-    const sharp = await loadSharp();
-    if (!sharp) {
-      return 1;
-    }
-
-    try {
-      const { data, info } = await sharp(normalizedPath)
-        .ensureAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-      const width = Number(info?.width || 0);
-      const height = Number(info?.height || 0);
-      if (width <= 0 || height <= 0 || !data?.length) {
-        return 1;
-      }
-
-      let minX = width;
-      let minY = height;
-      let maxX = -1;
-      let maxY = -1;
-      const channels = Number(info?.channels || 4);
-      for (let y = 0; y < height; y += 1) {
-        for (let x = 0; x < width; x += 1) {
-          const alphaIndex = (y * width * channels) + (x * channels) + 3;
-          if ((data[alphaIndex] || 0) < MIN_VISIBLE_ALPHA) {
-            continue;
-          }
-          if (x < minX) minX = x;
-          if (y < minY) minY = y;
-          if (x > maxX) maxX = x;
-          if (y > maxY) maxY = y;
-        }
-      }
-
-      if (maxX < minX || maxY < minY) {
-        return 1;
-      }
-
-      const visibleWidthRatio = (maxX - minX + 1) / width;
-      const visibleHeightRatio = (maxY - minY + 1) / height;
-      const visibleRatio = Math.max(visibleWidthRatio, visibleHeightRatio);
-      if (!Number.isFinite(visibleRatio) || visibleRatio <= 0) {
-        return 1;
-      }
-
-      return roundMultiplier(Math.min(
-        Math.max(1, maxMultiplier),
-        Math.max(1, targetVisibleRatio / visibleRatio),
-      ));
-    } catch {
-      return 1;
-    }
-  })();
-
-  spriteAutoScaleCache.set(cacheKey, multiplierPromise);
-  return multiplierPromise;
 }
 
 function normalizeTypeCardinalityMode(template = {}) {
@@ -174,12 +82,12 @@ function buildPromptText(types = []) {
     : 'Guess the Type';
 }
 
-function selectHookText(template, subjectTypes = []) {
-  const promptText = buildPromptText(subjectTypes);
-  if (promptText) {
-    return promptText;
+function selectHookText(template) {
+  const configuredHookText = String(template?.question_contract?.hook_text || '').trim();
+  if (configuredHookText) {
+    return configuredHookText;
   }
-  return String(template?.question_contract?.hook_text || 'Guess the Type').trim() || 'Guess the Type';
+  return 'Guess the Type';
 }
 
 function shuffle(values, random) {
@@ -378,34 +286,15 @@ export async function planPokemonTypeSpeedQuizChallenge({
     random,
     normalizedSelectionState,
   );
-  const hookText = selectHookText(template, selectedSubjects[0]?.types || []);
-  const spriteVisibleRatioTarget = Math.max(
-    0.1,
-    ensureNonNegativeNumber(
-      template?.layout?.sprite?.auto_display_scale_target_ratio,
-      DEFAULT_SPRITE_VISIBLE_RATIO_TARGET,
-    ),
-  );
-  const maxAutoDisplayScaleMultiplier = Math.max(
-    1,
-    ensureNonNegativeNumber(
-      template?.layout?.sprite?.max_auto_display_scale_multiplier,
-      DEFAULT_MAX_AUTO_DISPLAY_SCALE_MULTIPLIER,
-    ),
-  );
+  const hookText = selectHookText(template);
 
-  const rounds = await Promise.all(selectedSubjects.map(async (subject, index) => {
+  const rounds = selectedSubjects.map((subject, index) => {
     const subjectTypes = subject.types.map((type) => String(type || '').trim().toLowerCase()).filter(Boolean);
     const typeIconSet = selectTypeIconSet(subjectTypes, inventory);
     const isShinyReveal = shinyReveal.active && shinyReveal.selected_round_index === index;
     const renderSpritePath = isShinyReveal
       ? subject.shiny_sprite_path || subject.sprite_path
       : subject.sprite_path;
-    const spriteDisplayScaleMultiplier = await resolveSpriteAutoDisplayScaleMultiplier({
-      spritePath: renderSpritePath,
-      targetVisibleRatio: spriteVisibleRatioTarget,
-      maxMultiplier: maxAutoDisplayScaleMultiplier,
-    });
     const sceneLeadSeconds = index === 0
       ? hookHoldSeconds + preCountdownHoldSeconds
       : transitionDurationSeconds + preCountdownHoldSeconds;
@@ -423,7 +312,6 @@ export async function planPokemonTypeSpeedQuizChallenge({
         render_sprite_path: renderSpritePath,
         sprite_source_url: subject.sprite_source_url || null,
         shiny_sprite_source_url: subject.shiny_sprite_source_url || null,
-        sprite_display_scale_multiplier: spriteDisplayScaleMultiplier,
         types: subjectTypes,
         type_count: subjectTypes.length,
         reveal_variant: isShinyReveal ? 'shiny' : 'normal',
@@ -445,7 +333,7 @@ export async function planPokemonTypeSpeedQuizChallenge({
       final_hold_seconds: index === roundCount - 1 ? finalHoldSeconds : 0,
       type_cardinality_mode: typeCardinalityMode,
     };
-  }));
+  });
 
   const requiredAssetGaps = [];
   if (!selectedBackgroundPath) requiredAssetGaps.push('gif_background_missing');

@@ -38,13 +38,6 @@ function resolveIncomingTransitionSeconds(renderPlan, roundIndex) {
     : 0;
 }
 
-function resolveRoundSpriteDisplayScale(round, spriteLayout) {
-  return roundTime(
-    Math.max(0.001, ensureNumber(spriteLayout.display_scale_multiplier, 1))
-    * Math.max(1, ensureNumber(round?.subject?.sprite_display_scale_multiplier, 1)),
-  );
-}
-
 function buildSceneSpriteFilter({
   inputIndex,
   fps,
@@ -61,11 +54,14 @@ function buildSceneSpriteFilter({
       Math.max(0.2, round.local.reveal_start_seconds - introStartSeconds - 0.08),
     ),
   ));
-  const displayScaleMultiplier = resolveRoundSpriteDisplayScale(round, spriteLayout);
+  const displayScaleMultiplier = Math.max(
+    0.001,
+    ensureNumber(spriteLayout.display_scale_multiplier, 1),
+  );
   const scaleExpression = buildAnimatedLerpExpression({
     fromValue: 0.001,
     toValue: displayScaleMultiplier,
-    holdUntilSeconds: introStartSeconds,
+    holdUntilSeconds: 0,
     transitionDurationSeconds: introDurationSeconds,
     timeExpression: buildScaleFilterTimeExpression({ fps, streamStartSeconds: 0 }),
   });
@@ -85,7 +81,7 @@ function buildSceneSpriteFilter({
   ) * 6.283185307);
   const bobExpression = `if(lt(t,${bobStartSeconds}),0,if(lt(t,${round.local.reveal_start_seconds}),sin((t-${bobStartSeconds})*${bobFrequencyRadians})*${bobAmplitude},0))`;
   return [
-    `[${inputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='max(4,${spriteLayout.render_size_px}*(${scaleExpression}))':h='max(4,${spriteLayout.render_size_px}*(${scaleExpression}))':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
+    `[${inputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS+${introStartSeconds}/TB,scale=w='max(4,${spriteLayout.render_size_px}*(${scaleExpression}))':h='max(4,${spriteLayout.render_size_px}*(${scaleExpression}))':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
     `[scene${roundIndex}b][spr${roundIndex}]overlay=${spriteLayout.center_x}-w/2:'${spriteLayout.center_y}-h/2-${bobExpression}':enable='gte(t,${introStartSeconds})'[scene${roundIndex}s]`,
   ];
 }
@@ -94,7 +90,7 @@ function buildRoundPromptArtifacts(round, roundIndex, template, renderPlan, star
   if (roundIndex > 0) {
     return { segments: [] };
   }
-  return buildProgressiveTextArtifacts(round.prompt_text || renderPlan.hook_text, {
+  return buildProgressiveTextArtifacts(renderPlan.hook_text, {
     template,
     fontSize: renderPlan.text_layout.prompt_font_size,
     maxLines: 2,
@@ -274,12 +270,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const scaleExpression = buildAnimatedLerpExpression({
         fromValue: 0.001,
         toValue: 1,
-        holdUntilSeconds: round.local.reveal_visual_start_seconds,
+        holdUntilSeconds: 0,
         transitionDurationSeconds: typeBadgePopDuration,
         timeExpression: buildScaleFilterTimeExpression({ fps, streamStartSeconds: 0 }),
       });
       filters.push(
-        `[${iconInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='max(4,${badgeLayout.size_px}*(${scaleExpression}))':h='max(4,${badgeLayout.size_px}*(${scaleExpression}))':eval=frame,format=rgba,setsar=1[round${roundIndex}icon${iconIndex}]`,
+        `[${iconInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS+${round.local.reveal_visual_start_seconds}/TB,scale=w='max(4,${badgeLayout.size_px}*(${scaleExpression}))':h='max(4,${badgeLayout.size_px}*(${scaleExpression}))':eval=frame,format=rgba,setsar=1[round${roundIndex}icon${iconIndex}]`,
       );
       const iconSceneLabel = `scene${roundIndex}icon${iconIndex}`;
       filters.push(

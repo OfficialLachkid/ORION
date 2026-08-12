@@ -42,10 +42,9 @@
     "type_cardinality": "any"
   },
   "question_contract": {
-    "hook_text": "Guess the Type",
+    "hook_text": "Can you guess the typing?",
     "hook_text_variants": [
-      "Guess the Type",
-      "Guess the Types"
+      "Can you guess the typing?"
     ]
   },
   "layout": {
@@ -73,8 +72,6 @@
       "size_px": 1600,
       "scale_multiplier": 2,
       "display_scale_multiplier": 2,
-      "auto_display_scale_target_ratio": 0.58,
-      "max_auto_display_scale_multiplier": 1.75,
       "intro_duration_seconds": 0.3,
       "intro_lift_px": 44,
       "countdown_float_start_delay_seconds": 0.5,
@@ -83,9 +80,9 @@
       "countdown_float_frequency_hz": 2.1
     },
     "type_badges": {
-      "center_y": 430,
+      "center_y": 400,
       "icon_size_px": 630,
-      "spacing_px": -80,
+      "spacing_px": -200,
       "label_anchor_ratio": 0.24,
       "label_gap_px": 0,
       "pop_in_duration_seconds": 0.22
