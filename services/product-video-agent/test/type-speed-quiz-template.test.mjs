@@ -39,7 +39,7 @@ const template = {
       hook_font_size: 140,
       prompt_y: 320,
       prompt_font_size: 140,
-      prompt_reveal_duration_seconds: 0.85,
+      prompt_reveal_duration_seconds: 1.1,
       counter_x: 72,
       counter_y: 144,
       counter_font_size: 96,
@@ -51,7 +51,7 @@ const template = {
     sprite: {
       center_x: 540,
       center_y: 990,
-      size_px: 448,
+      size_px: 403,
       scale_multiplier: 2,
       display_scale_multiplier: 1,
       intro_duration_seconds: 0.3,
@@ -64,7 +64,7 @@ const template = {
     type_badges: {
       center_y: 300,
       icon_size_px: 252,
-      spacing_px: 0,
+      spacing_px: 30,
       label_anchor_ratio: 0.24,
       label_gap_px: 80,
       pop_in_duration_seconds: 0.22,
@@ -89,7 +89,7 @@ const template = {
     shiny: {
       enabled: true,
       sparkle_duration_seconds: 0.9,
-      sparkle_scale_multiplier: 1,
+      sparkle_scale_multiplier: 2,
     },
   },
   audio: {
@@ -319,7 +319,7 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.rounds[1].scene_start_seconds > renderPlan.rounds[0].scene_start_seconds, true);
   assert.equal(renderPlan.rounds[0].slide_start_seconds < renderPlan.rounds[0].scene_end_seconds, true);
   assert.equal(renderPlan.rounds[4].transition_duration_seconds, 0);
-  assert.equal(renderPlan.sprite_layout.render_size_px, 896);
+  assert.equal(renderPlan.sprite_layout.render_size_px, 806);
   assert.equal(renderPlan.text_layout.prompt_font_size, 140);
   assert.equal(renderPlan.sprite_layout.display_scale_multiplier, 1);
   assert.equal(renderPlan.sprite_layout.intro_duration_seconds, 0.3);
@@ -330,8 +330,8 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.rounds[0].type_badge_layout[0].label_y, 440.48);
   const dualTypeRound = renderPlan.rounds.find((round) => round.subject.types.length === 2);
   assert.ok(dualTypeRound);
-  assert.equal(dualTypeRound.type_badge_layout[0].center_x, 414);
-  assert.equal(dualTypeRound.type_badge_layout[1].center_x, 666);
+  assert.equal(dualTypeRound.type_badge_layout[0].center_x, 399);
+  assert.equal(dualTypeRound.type_badge_layout[1].center_x, 681);
   assert.equal(renderPlan.rounds[0].type_badge_layout[0].label_font_size, 78);
   assert.equal(renderPlan.total_duration_seconds, renderPlan.rounds[4].scene_end_seconds);
   assert.equal(renderPlan.output_path, '/tmp/type-speed-quiz.mp4');
@@ -438,7 +438,8 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /\[scene0p0\]/u);
   assert.doesNotMatch(visualFilter.script, /\[scene1p0\]/u);
   assert.match(visualFilter.script, /drawtext=text='1\/5'/u);
-  assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=896:896:force_original_aspect_ratio=decrease/u);
+  assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=806:806:force_original_aspect_ratio=decrease/u);
+  assert.match(visualFilter.script, /drawtext=text='the typing\?'.*enable='between\(t,0\.552,1\.28\)'/u);
   const dualTypeRound = renderPlan.rounds.find((round) => round.subject.types.length === 2);
   assert.ok(dualTypeRound);
   assert.doesNotMatch(
@@ -457,7 +458,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252,format=rgba,setsar=1\[round\d+icon\d+\]/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
-  assert.match(visualFilter.script, /scale=896:896:force_original_aspect_ratio=decrease/u);
+  assert.match(visualFilter.script, /scale=1612:1612:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
   assert.match(visualFilter.script, /\[sceneout4\]format=yuv420p\[vout\]/u);
 });

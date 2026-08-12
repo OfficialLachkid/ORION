@@ -58,7 +58,7 @@
       "hook_font_size": 140,
       "prompt_y": 320,
       "prompt_font_size": 140,
-      "prompt_reveal_duration_seconds": 0.85,
+      "prompt_reveal_duration_seconds": 1.1,
       "counter_x": 72,
       "counter_y": 144,
       "counter_font_size": 96,
@@ -70,7 +70,7 @@
     "sprite": {
       "center_x": 540,
       "center_y": 990,
-      "size_px": 448,
+      "size_px": 403,
       "scale_multiplier": 2,
       "display_scale_multiplier": 1,
       "auto_display_scale_target_ratio": 0.58,
@@ -85,7 +85,7 @@
     "type_badges": {
       "center_y": 300,
       "icon_size_px": 252,
-      "spacing_px": 0,
+      "spacing_px": 30,
       "label_anchor_ratio": 0.24,
       "label_gap_px": 80,
       "pop_in_duration_seconds": 0.22
@@ -110,7 +110,7 @@
     "shiny": {
       "enabled": true,
       "sparkle_duration_seconds": 0.9,
-      "sparkle_scale_multiplier": 1
+      "sparkle_scale_multiplier": 2
     }
   },
   "audio": {

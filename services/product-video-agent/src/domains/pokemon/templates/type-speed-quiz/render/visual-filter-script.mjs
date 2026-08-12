@@ -86,18 +86,26 @@ function buildRoundPromptArtifacts(round, roundIndex, template, renderPlan, star
   if (roundIndex > 0) {
     return { segments: [] };
   }
+  const visibleUntilSeconds = roundTime(Math.max(
+    startSeconds,
+    ensureNumber(round?.local?.countdown_start_seconds, round?.local?.reveal_start_seconds),
+  ));
   const revealDurationSeconds = Math.max(
     0.3,
-    ensureNumber(template?.layout?.text?.prompt_reveal_duration_seconds, 0.85),
+    ensureNumber(template?.layout?.text?.prompt_reveal_duration_seconds, 1.1),
   );
-  return buildProgressiveTextArtifacts(renderPlan.hook_text, {
+  const artifacts = buildProgressiveTextArtifacts(renderPlan.hook_text, {
     template,
     fontSize: renderPlan.text_layout.prompt_font_size,
     maxLines: 2,
     baseY: renderPlan.text_layout.prompt_y,
     startSeconds,
-    endSeconds: Math.min(round.local.reveal_start_seconds, roundTime(startSeconds + revealDurationSeconds)),
+    endSeconds: Math.min(visibleUntilSeconds, roundTime(startSeconds + revealDurationSeconds)),
   });
+  if (artifacts.segments.length > 0) {
+    artifacts.segments[artifacts.segments.length - 1].end_seconds = visibleUntilSeconds;
+  }
+  return artifacts;
 }
 
 function buildRoundNameArtifacts(round, template, renderPlan, startSeconds) {
