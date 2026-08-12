@@ -61,11 +61,11 @@ const template = {
       countdown_float_frequency_hz: 2.1,
     },
     type_badges: {
-      center_y: 310,
+      center_y: 300,
       icon_size_px: 252,
       spacing_px: 0,
       label_anchor_ratio: 0.24,
-      label_gap_px: 50,
+      label_gap_px: 80,
       pop_in_duration_seconds: 0.22,
     },
     timer: {
@@ -88,7 +88,7 @@ const template = {
     shiny: {
       enabled: true,
       sparkle_duration_seconds: 0.9,
-      sparkle_scale_multiplier: 0.25,
+      sparkle_scale_multiplier: 0.5,
     },
   },
   audio: {
@@ -324,8 +324,8 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.sprite_layout.countdown_float_start_delay_seconds, 0.5);
   assert.equal(renderPlan.sprite_layout.countdown_float_speed_multiplier, 0.75);
   assert.equal(renderPlan.rounds[0].type_badge_layout[0].size_px, 252);
-  assert.equal(renderPlan.rounds[0].type_badge_layout[0].center_y, 310);
-  assert.equal(renderPlan.rounds[0].type_badge_layout[0].label_y, 420.48);
+  assert.equal(renderPlan.rounds[0].type_badge_layout[0].center_y, 300);
+  assert.equal(renderPlan.rounds[0].type_badge_layout[0].label_y, 440.48);
   const dualTypeRound = renderPlan.rounds.find((round) => round.subject.types.length === 2);
   assert.ok(dualTypeRound);
   assert.equal(dualTypeRound.type_badge_layout[0].center_x, 414);
@@ -455,7 +455,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252,format=rgba,setsar=1\[round\d+icon\d+\]/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
-  assert.match(visualFilter.script, /scale=224:224:force_original_aspect_ratio=decrease/u);
+  assert.match(visualFilter.script, /scale=448:448:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
   assert.match(visualFilter.script, /\[sceneout4\]format=yuv420p\[vout\]/u);
 });

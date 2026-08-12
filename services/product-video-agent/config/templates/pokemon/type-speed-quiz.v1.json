@@ -82,11 +82,11 @@
       "countdown_float_frequency_hz": 2.1
     },
     "type_badges": {
-      "center_y": 310,
+      "center_y": 300,
       "icon_size_px": 252,
       "spacing_px": 0,
       "label_anchor_ratio": 0.24,
-      "label_gap_px": 50,
+      "label_gap_px": 80,
       "pop_in_duration_seconds": 0.22
     },
     "timer": {
@@ -109,7 +109,7 @@
     "shiny": {
       "enabled": true,
       "sparkle_duration_seconds": 0.9,
-      "sparkle_scale_multiplier": 0.25
+      "sparkle_scale_multiplier": 0.5
     }
   },
   "audio": {
