@@ -28,8 +28,17 @@ function buildSpriteLayout(template) {
     center_y: centerY,
     size_px: size,
     scale_multiplier: scaleMultiplier,
+    display_scale_multiplier: ensureNumber(template?.layout?.sprite?.display_scale_multiplier, 1),
     intro_duration_seconds: ensureNumber(template?.layout?.sprite?.intro_duration_seconds, 0.34),
     intro_lift_px: ensureNumber(template?.layout?.sprite?.intro_lift_px, 44),
+    countdown_float_start_delay_seconds: ensureNumber(
+      template?.layout?.sprite?.countdown_float_start_delay_seconds,
+      0,
+    ),
+    countdown_float_speed_multiplier: ensureNumber(
+      template?.layout?.sprite?.countdown_float_speed_multiplier,
+      1,
+    ),
     countdown_float_amplitude_px: ensureNumber(
       template?.layout?.sprite?.countdown_float_amplitude_px,
       18,
@@ -42,15 +51,42 @@ function buildSpriteLayout(template) {
   };
 }
 
-function buildTypeBadgeLayout(template, iconCount) {
+function buildTextLayout(template) {
+  return {
+    hook_y: ensureNumber(template?.layout?.text?.hook_y, 300),
+    hook_font_size: ensureNumber(template?.layout?.text?.hook_font_size, 156),
+    prompt_y: ensureNumber(
+      template?.layout?.text?.prompt_y,
+      ensureNumber(template?.layout?.text?.hook_y, 300),
+    ),
+    prompt_font_size: ensureNumber(
+      template?.layout?.text?.prompt_font_size,
+      ensureNumber(template?.layout?.text?.hook_font_size, 156),
+    ),
+    counter_x: ensureNumber(template?.layout?.text?.counter_x, 96),
+    counter_y: ensureNumber(template?.layout?.text?.counter_y, 188),
+    counter_font_size: ensureNumber(template?.layout?.text?.counter_font_size, 96),
+    name_y: ensureNumber(template?.layout?.text?.name_y, 1160),
+    name_font_size: ensureNumber(template?.layout?.text?.name_font_size, 132),
+    type_text_y: ensureNumber(template?.layout?.text?.type_text_y, 1448),
+    type_text_font_size: ensureNumber(template?.layout?.text?.type_text_font_size, 94),
+  };
+}
+
+function buildTypeBadgeLayout(template, iconCount, textLayout) {
   const centerY = ensureNumber(template?.layout?.type_badges?.center_y, 1322);
   const iconSize = ensureNumber(template?.layout?.type_badges?.icon_size_px, 208);
   const spacing = ensureNumber(template?.layout?.type_badges?.spacing_px, 42);
+  const labelAnchorRatio = ensureNumber(template?.layout?.type_badges?.label_anchor_ratio, 0.24);
+  const labelGap = ensureNumber(template?.layout?.type_badges?.label_gap_px, 28);
+  const labelY = roundTime(centerY + (iconSize * labelAnchorRatio) + labelGap);
   if (iconCount <= 1) {
     return [{
       center_x: 540,
       center_y: centerY,
       size_px: iconSize,
+      label_y: labelY,
+      label_font_size: textLayout.type_text_font_size,
     }];
   }
 
@@ -60,6 +96,8 @@ function buildTypeBadgeLayout(template, iconCount) {
     center_x: roundTime(left + (index * (iconSize + spacing))),
     center_y: centerY,
     size_px: iconSize,
+    label_y: labelY,
+    label_font_size: textLayout.type_text_font_size,
   }));
 }
 
@@ -88,6 +126,9 @@ function buildCountdownMoments(round, countdownFrom, countdownTo) {
 
 export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const rounds = Array.isArray(plan?.rounds) ? plan.rounds : [];
+  const spriteLayout = buildSpriteLayout(template);
+  const timerLayout = buildTimerLayout(template);
+  const textLayout = buildTextLayout(template);
   const transitionDurationSeconds = ensureNumber(
     template?.layout?.rounds?.transition_duration_seconds,
     0.42,
@@ -132,7 +173,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
         scene_duration_seconds: sceneDurationSeconds,
       },
       countdown_numbers: [],
-      type_badge_layout: buildTypeBadgeLayout(template, round.type_icons?.length || 0),
+      type_badge_layout: buildTypeBadgeLayout(template, round.type_icons?.length || 0, textLayout),
     };
     renderedRound.countdown_numbers = buildCountdownMoments(
       renderedRound,
@@ -150,27 +191,9 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       fps: ensureNumber(template?.canvas?.fps, 30),
     },
     total_duration_seconds: renderedRounds.at(-1)?.scene_end_seconds || 0,
-    sprite_layout: buildSpriteLayout(template),
-    timer_layout: buildTimerLayout(template),
-    text_layout: {
-      hook_y: ensureNumber(template?.layout?.text?.hook_y, 300),
-      hook_font_size: ensureNumber(template?.layout?.text?.hook_font_size, 156),
-      prompt_y: ensureNumber(
-        template?.layout?.text?.prompt_y,
-        ensureNumber(template?.layout?.text?.hook_y, 300),
-      ),
-      prompt_font_size: ensureNumber(
-        template?.layout?.text?.prompt_font_size,
-        ensureNumber(template?.layout?.text?.hook_font_size, 156),
-      ),
-      counter_x: ensureNumber(template?.layout?.text?.counter_x, 96),
-      counter_y: ensureNumber(template?.layout?.text?.counter_y, 188),
-      counter_font_size: ensureNumber(template?.layout?.text?.counter_font_size, 96),
-      name_y: ensureNumber(template?.layout?.text?.name_y, 1160),
-      name_font_size: ensureNumber(template?.layout?.text?.name_font_size, 132),
-      type_text_y: ensureNumber(template?.layout?.text?.type_text_y, 1448),
-      type_text_font_size: ensureNumber(template?.layout?.text?.type_text_font_size, 94),
-    },
+    sprite_layout: spriteLayout,
+    timer_layout: timerLayout,
+    text_layout: textLayout,
     audio_cues: {
       hook_start_seconds: 0,
       battle_music_start_seconds: roundTime(Math.max(0, ensureNumber(template?.audio?.battle_intro_music?.start_seconds, 0))),

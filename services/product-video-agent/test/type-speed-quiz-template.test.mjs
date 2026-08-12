@@ -6,6 +6,10 @@ import { buildAudioFilterScript } from '../src/domains/pokemon/templates/type-sp
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/type-speed-quiz/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/type-speed-quiz/render/visual-inputs.mjs';
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
 const template = {
   template_id: 'pokemon.type-speed-quiz.v1',
   template_key: 'type-speed-quiz',
@@ -41,22 +45,29 @@ const template = {
       name_y: 1490,
       name_font_size: 132,
       type_text_y: 280,
-      type_text_font_size: 188,
+      type_text_font_size: 78,
     },
     sprite: {
       center_x: 540,
-      center_y: 1030,
+      center_y: 990,
       size_px: 1600,
       scale_multiplier: 2,
-      intro_duration_seconds: 0.34,
+      display_scale_multiplier: 2,
+      auto_display_scale_target_ratio: 0.58,
+      max_auto_display_scale_multiplier: 1.75,
+      intro_duration_seconds: 0.3,
       intro_lift_px: 44,
+      countdown_float_start_delay_seconds: 0.5,
+      countdown_float_speed_multiplier: 0.75,
       countdown_float_amplitude_px: 18,
       countdown_float_frequency_hz: 2.1,
     },
     type_badges: {
-      center_y: 585,
-      icon_size_px: 420,
-      spacing_px: 28,
+      center_y: 430,
+      icon_size_px: 630,
+      spacing_px: -80,
+      label_anchor_ratio: 0.24,
+      label_gap_px: 0,
       pop_in_duration_seconds: 0.22,
     },
     timer: {
@@ -79,7 +90,7 @@ const template = {
     shiny: {
       enabled: true,
       sparkle_duration_seconds: 0.9,
-      sparkle_scale_multiplier: 1.35,
+      sparkle_scale_multiplier: 0.25,
     },
   },
   audio: {
@@ -254,6 +265,7 @@ test('generic planner dispatch builds a random type speed quiz plan from localiz
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 1), true);
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 2), true);
   assert.equal(plan.rounds.every((round) => round.type_icons.length === round.subject.types.length), true);
+  assert.equal(plan.rounds.every((round) => round.subject.sprite_display_scale_multiplier >= 1), true);
   assert.equal(plan.rounds.filter((round) => round.subject.is_shiny_reveal).length, 1);
   assert.equal(plan.shiny_reveal.active, true);
   assert.equal(plan.assets.audio.selected_sound_effects.timer_end, '/tmp/ding-sound.mp3');
@@ -310,6 +322,13 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.rounds[0].slide_start_seconds < renderPlan.rounds[0].scene_end_seconds, true);
   assert.equal(renderPlan.rounds[4].transition_duration_seconds, 0);
   assert.equal(renderPlan.sprite_layout.render_size_px, 3200);
+  assert.equal(renderPlan.sprite_layout.display_scale_multiplier, 2);
+  assert.equal(renderPlan.sprite_layout.intro_duration_seconds, 0.3);
+  assert.equal(renderPlan.sprite_layout.countdown_float_start_delay_seconds, 0.5);
+  assert.equal(renderPlan.sprite_layout.countdown_float_speed_multiplier, 0.75);
+  assert.equal(renderPlan.rounds[0].type_badge_layout[0].size_px, 630);
+  assert.equal(renderPlan.rounds[0].type_badge_layout[0].label_y, 581.2);
+  assert.equal(renderPlan.rounds[0].type_badge_layout[0].label_font_size, 78);
   assert.equal(renderPlan.total_duration_seconds, renderPlan.rounds[4].scene_end_seconds);
   assert.equal(renderPlan.output_path, '/tmp/type-speed-quiz.mp4');
 });
@@ -386,6 +405,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
     seed: 'type-speed-quiz-visual',
     assetInventory,
   });
+  plan.rounds[0].subject.sprite_display_scale_multiplier = 1.5;
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
@@ -412,10 +432,31 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /split=5\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]/u);
   assert.match(visualFilter.script, /drawtext=text='Guess'/u);
   assert.match(visualFilter.script, /drawtext=text='Guess the'/u);
+  assert.match(visualFilter.script, /\[scene0p0\]/u);
+  assert.doesNotMatch(visualFilter.script, /\[scene1p0\]/u);
   assert.match(visualFilter.script, /drawtext=text='1\/5'/u);
-  assert.match(visualFilter.script, /between\(t,0\.46,/u);
+  assert.match(visualFilter.script, /scale=w='max\(4,3200\*\(if\(lt\(\(\(n\/30\)\),0\.46\),0\.001,/u);
+  const dualTypeRound = renderPlan.rounds.find((round) => round.subject.types.length === 2);
+  assert.ok(dualTypeRound);
+  assert.doesNotMatch(
+    visualFilter.script,
+    new RegExp(escapeRegExp(dualTypeRound.type_label), 'u'),
+  );
+  dualTypeRound.subject.types.forEach((type) => {
+    const formattedType = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+    assert.match(
+      visualFilter.script,
+      new RegExp(`drawtext=text='${escapeRegExp(formattedType)}'`, 'u'),
+    );
+  });
+  assert.match(visualFilter.script, /scale=w='max\(4,3200\*\(if\(lt\(\(\(n\/30\)\),0\.04\),0\.001,/u);
+  assert.match(visualFilter.script, /min\(max\(\(\(\(n\/30\)\)-0\.04\)\/0\.3,0\),1\)\),3\)\)\)/u);
+  assert.match(visualFilter.script, /if\(lt\(t,0\.84\),0,if\(lt\(t,/u);
+  assert.match(visualFilter.script, /9\.896/u);
+  assert.match(visualFilter.script, /scale=w='max\(4,630\*\(if\(lt\(\(\(n\/30\)\),4\.44\),0\.001,/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
+  assert.match(visualFilter.script, /scale=800:800:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
   assert.match(visualFilter.script, /\[sceneout4\]format=yuv420p\[vout\]/u);
 });
