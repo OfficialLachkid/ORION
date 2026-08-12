@@ -56,7 +56,7 @@ const template = {
       display_scale_multiplier: 1,
       intro_duration_seconds: 0.3,
       intro_lift_px: 44,
-      countdown_float_start_delay_seconds: 0.5,
+      countdown_float_start_delay_seconds: 0,
       countdown_float_speed_multiplier: 0.75,
       countdown_float_amplitude_px: 18,
       countdown_float_frequency_hz: 2.1,
@@ -327,7 +327,7 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.text_layout.prompt_font_size, 140);
   assert.equal(renderPlan.sprite_layout.display_scale_multiplier, 1);
   assert.equal(renderPlan.sprite_layout.intro_duration_seconds, 0.3);
-  assert.equal(renderPlan.sprite_layout.countdown_float_start_delay_seconds, 0.5);
+  assert.equal(renderPlan.sprite_layout.countdown_float_start_delay_seconds, 0);
   assert.equal(renderPlan.sprite_layout.countdown_float_speed_multiplier, 0.75);
   assert.equal(renderPlan.rounds[0].type_badge_layout[0].size_px, 252);
   assert.equal(renderPlan.rounds[0].type_badge_layout[0].center_y, 300);
@@ -461,7 +461,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
     );
   });
   const dualTypePlaceholderStaggerStart = Number((dualTypeRound.local.countdown_start_seconds + 0.2).toFixed(3));
-  assert.match(visualFilter.script, /if\(lt\(t,0\.84\),0,if\(lt\(t,/u);
+  assert.match(visualFilter.script, /if\(lt\(t,1\.28\),0,if\(lt\(t,/u);
   assert.match(visualFilter.script, /9\.896/u);
   assert.match(visualFilter.script, /\[round\d+placeholder\d+\]/u);
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252:force_original_aspect_ratio=decrease,format=rgba,pad=298:298:\(ow-iw\)\/2:\(oh-ih\)\/2:color=black@0,rotate='if\(lt\(t,1\.28\),0,sin\(\(t-1\.28\)\*7\)\*0\.075\)':ow=iw:oh=ih:c=none,setsar=1\[round\d+placeholder\d+\]/u);

@@ -61,11 +61,11 @@ function buildSceneSpriteFilter({
   ));
   const displayScaleMultiplier = resolveRoundSpriteDisplayScale(round, spriteLayout);
   const displaySizePx = roundTime(spriteLayout.render_size_px * displayScaleMultiplier);
-  const bobStartSeconds = roundTime(
-    introStartSeconds
-    + introDurationSeconds
+  const bobStartSeconds = roundTime(Math.max(
+    introStartSeconds + introDurationSeconds,
+    round.local.countdown_start_seconds
     + Math.max(0, ensureNumber(spriteLayout.countdown_float_start_delay_seconds, 0)),
-  );
+  ));
   const bobAmplitude = roundTime(Math.max(
     0,
     ensureNumber(spriteLayout.countdown_float_amplitude_px, 18),

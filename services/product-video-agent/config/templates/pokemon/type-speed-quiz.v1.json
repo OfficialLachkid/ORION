@@ -77,7 +77,7 @@
       "max_auto_display_scale_multiplier": 1.75,
       "intro_duration_seconds": 0.3,
       "intro_lift_px": 44,
-      "countdown_float_start_delay_seconds": 0.5,
+      "countdown_float_start_delay_seconds": 0,
       "countdown_float_speed_multiplier": 0.75,
       "countdown_float_amplitude_px": 18,
       "countdown_float_frequency_hz": 2.1
