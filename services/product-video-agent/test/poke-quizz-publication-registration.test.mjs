@@ -31,7 +31,8 @@ const channelProfile = normalizePublicationChannelProfile({
 
 const plan = {
   schema_version: 'poke-quizz-plan-v1',
-  template_id: 'pokemon-type-challenge-v1',
+  template_id: 'pokemon.type-quiz.v1',
+  template_key: 'type-quiz',
   seed: 'random-20260731t190729z',
   selection: {
     type_pair: ['psychic', 'water'],
@@ -54,7 +55,7 @@ const plan = {
       selected_path: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Backgrounds/beach-backgrounds/beach-background.jpg',
     },
     outputs: {
-      previews_directory: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews',
+      previews_directory: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/Type Quiz',
     },
   },
 };
@@ -63,7 +64,7 @@ test('Poke Quizz publication registration creates pending preview-upload rows', 
   const registration = await createPokeQuizzPublicationRegistration({
     plan,
     channelProfile,
-    renderPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/psychic-water-random-20260731t190729z.mp4',
+    renderPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/Type Quiz/psychic-water-random-20260731t190729z.mp4',
     metadata: {
       title: 'Psychic/Water Type Quiz - Can You Guess?',
       description: 'Beat the timer.',

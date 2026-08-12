@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../lib/runtime-config.mjs';
 import { planPokemonTypeChallenge } from '../../src/pokemon-type-challenge-planner.mjs';
 import { normalizeTypePair } from '../../src/pokemon-type-pairs.mjs';
-import { POKE_QUIZZ_ASSET_LAYOUT } from '../../src/poke-quizz-asset-layout.mjs';
+import { buildPokeQuizzPreviewDirectory } from '../../src/poke-quizz-asset-layout.mjs';
 import { renderPokeQuizzVideo } from '../../src/poke-quizz-renderer.mjs';
 import {
   loadPokeQuizzSelectionStateFromStore,
@@ -25,7 +25,10 @@ import {
   markPokeQuizzGenerationFailed,
   postPokeQuizzGenerationStarted,
 } from '../../src/poke-quizz-discord-progress.mjs';
-import { resolveManagedPokeQuizzPreviewOutputPath } from '../../src/poke-quizz-preview-storage.mjs';
+import {
+  isManagedPokeQuizzPreviewPath,
+  resolveManagedPokeQuizzPreviewOutputPath,
+} from '../../src/poke-quizz-preview-storage.mjs';
 import { reviewPokeQuizzPublication } from './review-publication.mjs';
 import { resolveFfmpegExecutable } from '../../src/runtime-executables.mjs';
 import { moveOlderPreviewFiles } from './organize-previews.mjs';
@@ -219,7 +222,7 @@ async function generateAndReviewPokeQuizz(options) {
   const outputPath = getStringOption(
     options,
     'output',
-    `${POKE_QUIZZ_ASSET_LAYOUT.previews}/${typePairSlug}-${seedSlug}.mp4`,
+    `${buildPokeQuizzPreviewDirectory(plan)}/${typePairSlug}-${seedSlug}.mp4`,
   );
   const resolvedOutput = await resolveManagedPokeQuizzPreviewOutputPath(outputPath);
   const ffmpegExecutable = resolveFfmpegExecutable(config.render || config);
@@ -315,14 +318,14 @@ async function generateAndReviewPokeQuizz(options) {
       generationDurationMinutes: progress.getElapsedMinutes(),
     });
 
-    const previewRoot = resolve(projectRoot, POKE_QUIZZ_ASSET_LAYOUT.previews);
-    if (await fileExists(resolve(renderResult.output_path)) && resolve(renderResult.output_path).startsWith(previewRoot)) {
+    if (await fileExists(resolve(renderResult.output_path)) && isManagedPokeQuizzPreviewPath(renderResult.output_path)) {
+      const previewsDirectory = dirname(resolve(renderResult.output_path));
       const organized = await moveOlderPreviewFiles({
-        previewsDirectory: previewRoot,
-        archiveDirectory: resolve(previewRoot, 'Older Generated Videos'),
+        previewsDirectory,
+        archiveDirectory: resolve(previewsDirectory, 'Older Generated Videos'),
         keepCount: 2,
       });
-      printInfo(`Preview organizer kept ${organized.kept.length} preview(s) in root and archived ${organized.archived.length}.`);
+      printInfo(`Preview organizer kept ${organized.kept.length} preview(s) in ${previewsDirectory} and archived ${organized.archived.length}.`);
     }
 
     return {

@@ -5,6 +5,7 @@ import {
   selectTypeIconSet,
 } from '../../../../poke-quizz-asset-inventory.mjs';
 import {
+  buildPokeQuizzPreviewDirectory,
   buildPokeQuizzMirroredSpritePath,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
@@ -567,7 +568,7 @@ export async function planPokemonTypeQuizChallenge({
         },
       },
       outputs: {
-        previews_directory: POKE_QUIZZ_ASSET_LAYOUT.previews,
+        previews_directory: buildPokeQuizzPreviewDirectory(template),
         masters_directory: POKE_QUIZZ_ASSET_LAYOUT.masters,
       },
     },

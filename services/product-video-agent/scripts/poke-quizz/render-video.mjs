@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -12,8 +12,13 @@ import {
 } from '../../../../scripts/lib/ruflo-wrapper-utils.mjs';
 import { moveOlderPreviewFiles } from './organize-previews.mjs';
 import { buildPokeQuizzRenderPlan, loadJson, renderPokeQuizzVideo } from '../../src/poke-quizz-renderer.mjs';
-import { POKE_QUIZZ_ASSET_LAYOUT } from '../../src/poke-quizz-asset-layout.mjs';
-import { resolveManagedPokeQuizzPreviewOutputPath } from '../../src/poke-quizz-preview-storage.mjs';
+import {
+  buildPokeQuizzPreviewDirectory,
+} from '../../src/poke-quizz-asset-layout.mjs';
+import {
+  isManagedPokeQuizzPreviewPath,
+  resolveManagedPokeQuizzPreviewOutputPath,
+} from '../../src/poke-quizz-preview-storage.mjs';
 import { resolveFfmpegExecutable } from '../../src/runtime-executables.mjs';
 import {
   DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
@@ -26,15 +31,6 @@ function resolveTypePairSlug(plan) {
     .map((value) => String(value || '').trim().toLowerCase())
     .filter(Boolean)
     .join('-');
-}
-
-async function fileExists(filePath) {
-  try {
-    await access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function loadRuntimeConfigJson(relativePath) {
@@ -53,7 +49,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       `  --channel-config <path>  Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
       '  --template <path>        Template JSON path. Default: services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json',
       '  --config <path>          Product-video config JSON path. Default: services/product-video-agent/config.example.json',
-      '  --output <path>          Output video path. Default: T7 Pokemon/Poke Quizz/Previews/<type-pair>-<seed>.mp4',
+      '  --output <path>          Output video path. Default: T7 Pokemon/Poke Quizz/Previews/<Template>/<type-pair>-<seed>.mp4',
       '  --voice-python <path>    Override Kokoro Python executable',
       '  --voice-script <path>    Override kokoro-synthesize.py path',
       '  --voice-cache-dir <path> Override Kokoro cache/model directory',
@@ -91,7 +87,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   const outputPath = getStringOption(
     options,
     'output',
-    `${POKE_QUIZZ_ASSET_LAYOUT.previews}/${typePairSlug}-${seedSlug}.mp4`,
+    `${buildPokeQuizzPreviewDirectory(plan)}/${typePairSlug}-${seedSlug}.mp4`,
   );
   const resolvedOutput = await resolveManagedPokeQuizzPreviewOutputPath(outputPath);
   const ffmpegExecutable = resolveFfmpegExecutable(config.render || config);
@@ -125,13 +121,13 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   printInfo(`Mixed audio track: ${result.audio_mix_path}`);
   printInfo(`Video filter script: ${result.video_filter_script_path}`);
 
-  const previewRoot = resolve(projectRoot, POKE_QUIZZ_ASSET_LAYOUT.previews);
-  if (resolve(result.output_path).startsWith(previewRoot)) {
+  if (isManagedPokeQuizzPreviewPath(result.output_path)) {
+    const previewsDirectory = dirname(resolve(result.output_path));
     const organized = await moveOlderPreviewFiles({
-      previewsDirectory: previewRoot,
-      archiveDirectory: resolve(previewRoot, 'Older Generated Videos'),
+      previewsDirectory,
+      archiveDirectory: resolve(previewsDirectory, 'Older Generated Videos'),
       keepCount: 2,
     });
-    printInfo(`Preview organizer kept ${organized.kept.length} preview(s) in root and archived ${organized.archived.length}.`);
+    printInfo(`Preview organizer kept ${organized.kept.length} preview(s) in ${previewsDirectory} and archived ${organized.archived.length}.`);
   }
 }

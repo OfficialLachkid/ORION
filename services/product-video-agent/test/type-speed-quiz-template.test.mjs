@@ -261,6 +261,7 @@ test('generic planner dispatch builds a random type quiz plan from localized row
   assert.equal(plan.selection.round_count, 5);
   assert.equal(plan.selection.selected_subjects.length, 5);
   assert.equal(plan.assets.background.selected_path.startsWith('/tmp/gif-backgrounds/'), true);
+  assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Type Quiz$/u);
   assert.equal(plan.rounds.length, 5);
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 1), true);
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 2), true);

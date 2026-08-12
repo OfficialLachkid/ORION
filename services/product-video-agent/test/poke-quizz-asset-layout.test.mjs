@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   POKE_QUIZZ_ASSET_LAYOUT,
+  buildPokeQuizzPreviewArchiveDirectory,
+  buildPokeQuizzPreviewDirectory,
   buildPokeQuizzShinySpritePath,
   buildPokeQuizzSilhouettePath,
   buildPokeQuizzSpritePath,
@@ -26,4 +28,9 @@ test('asset layout helpers build deterministic Pokemon asset paths', () => {
   assert.match(buildPokeQuizzTypeIconPath('Psychic'), /Pixel Types\/psychic\.gif$/u);
   assert.match(buildPokeQuizzThreeDTypeIconPath('Psychic'), /3D Types\/psychic\.png$/u);
   assert.match(POKE_QUIZZ_ASSET_LAYOUT.previews, /Pokemon\/Poke Quizz\/Previews$/u);
+  assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'type-quiz' }), /Previews\/Type Quiz$/u);
+  assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'find-the-shiny' }), /Previews\/Find the Shiny$/u);
+  assert.match(buildPokeQuizzPreviewDirectory({ template_id: 'pokemon.dual-type-reveal-v1' }), /Previews\/Dual Type Reveal$/u);
+  assert.match(buildPokeQuizzPreviewDirectory({ template_id: 'pokemon.type-speed-quiz.v1' }), /Previews\/Type Quiz$/u);
+  assert.match(buildPokeQuizzPreviewArchiveDirectory({ template_key: 'type-quiz' }), /Previews\/Type Quiz\/Older Generated Videos$/u);
 });

@@ -20,6 +20,12 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   templates: `${ORION_T7_ROOT}/Templates/Poke Quizz`,
 });
 
+const POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES = Object.freeze({
+  'dual-type-reveal': 'Dual Type Reveal',
+  'find-the-shiny': 'Find the Shiny',
+  'type-quiz': 'Type Quiz',
+});
+
 export function formatDexNumber(value) {
   return String(Number.parseInt(String(value || 0), 10)).padStart(4, '0');
 }
@@ -32,8 +38,51 @@ export function sanitizePokemonSlug(value) {
     .replace(/^-+|-+$/gu, '');
 }
 
+function normalizeTemplateToken(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-+|-+$/gu, '');
+}
+
 function generationDirectory(generation) {
   return `Generation ${Number.parseInt(String(generation || 0), 10)}`;
+}
+
+export function resolvePokeQuizzPreviewTemplateKey(templateRef) {
+  const candidates = [
+    typeof templateRef === 'string' ? templateRef : '',
+    templateRef?.template_key,
+    templateRef?.templateKey,
+    templateRef?.template_id,
+    templateRef?.templateId,
+  ]
+    .map((value) => normalizeTemplateToken(value))
+    .filter(Boolean);
+
+  if (candidates.some((value) => value.includes('find-the-shiny'))) {
+    return 'find-the-shiny';
+  }
+  if (candidates.some((value) => value.includes('dual-type-reveal'))) {
+    return 'dual-type-reveal';
+  }
+  if (candidates.some((value) => value.includes('type-quiz') || value.includes('type-speed-quiz'))) {
+    return 'type-quiz';
+  }
+  return null;
+}
+
+export function buildPokeQuizzPreviewDirectory(templateRef) {
+  const templateKey = resolvePokeQuizzPreviewTemplateKey(templateRef);
+  const directoryName = templateKey ? POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES[templateKey] : '';
+  return directoryName
+    ? `${POKE_QUIZZ_ASSET_LAYOUT.previews}/${directoryName}`
+    : POKE_QUIZZ_ASSET_LAYOUT.previews;
+}
+
+export function buildPokeQuizzPreviewArchiveDirectory(templateRef) {
+  return `${buildPokeQuizzPreviewDirectory(templateRef)}/Older Generated Videos`;
 }
 
 export function buildPokeQuizzSpritePath(row) {

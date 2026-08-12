@@ -1,6 +1,7 @@
 import { access } from 'node:fs/promises';
 import { createTypePairKey, DISALLOWED_TYPE_PAIR_KEYS, normalizeTypePair } from '../../../../pokemon-type-pairs.mjs';
 import {
+  buildPokeQuizzPreviewDirectory,
   buildPokeQuizzMirroredSpritePath,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
@@ -883,7 +884,7 @@ export async function planFindTheShinyChallenge({
         },
       },
       outputs: {
-        previews_directory: POKE_QUIZZ_ASSET_LAYOUT.previews,
+        previews_directory: buildPokeQuizzPreviewDirectory(template),
         masters_directory: POKE_QUIZZ_ASSET_LAYOUT.masters,
       },
     },
