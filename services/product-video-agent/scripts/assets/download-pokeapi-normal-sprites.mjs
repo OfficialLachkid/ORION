@@ -110,13 +110,15 @@ async function buildGenerationRowIndex(generation) {
     concurrency: 6,
   });
   const index = new Map();
+  const defaultRowsByDex = new Map();
 
   for (const row of expanded.rows) {
+    if (row.is_default_form) {
+      defaultRowsByDex.set(Number(row.national_dex_number), row);
+    }
     const comparableSlugs = new Set([
       row.slug,
       row?.metadata?.pokemon_api?.pokemon_name,
-      row?.metadata?.pokemon_api?.species_name,
-      row?.name,
     ].filter(Boolean));
     for (const comparableSlug of comparableSlugs) {
       index.set(
@@ -130,6 +132,7 @@ async function buildGenerationRowIndex(generation) {
     baseRowCount: baseRows.length,
     expandedRowCount: expanded.rows.length,
     index,
+    defaultRowsByDex,
   };
 }
 
@@ -164,7 +167,7 @@ async function downloadGeneration({
     const outputPath = join(outputDirectory, sourceFile);
     const matchedRow = rowIndex.index.get(
       buildComparableKey(generation, parsed.dexNumber, parsed.slug),
-    ) || null;
+    ) || rowIndex.defaultRowsByDex.get(parsed.dexNumber) || null;
     if (!overwrite) {
       const existingSize = await getFileSize(outputPath);
       if (existingSize != null) {
