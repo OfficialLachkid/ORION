@@ -36,9 +36,10 @@ const template = {
   layout: {
     text: {
       hook_y: 320,
-      hook_font_size: 176,
+      hook_font_size: 140,
       prompt_y: 320,
-      prompt_font_size: 176,
+      prompt_font_size: 140,
+      prompt_reveal_duration_seconds: 0.85,
       counter_x: 72,
       counter_y: 144,
       counter_font_size: 96,
@@ -88,7 +89,7 @@ const template = {
     shiny: {
       enabled: true,
       sparkle_duration_seconds: 0.9,
-      sparkle_scale_multiplier: 0.5,
+      sparkle_scale_multiplier: 1,
     },
   },
   audio: {
@@ -319,6 +320,7 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.rounds[0].slide_start_seconds < renderPlan.rounds[0].scene_end_seconds, true);
   assert.equal(renderPlan.rounds[4].transition_duration_seconds, 0);
   assert.equal(renderPlan.sprite_layout.render_size_px, 896);
+  assert.equal(renderPlan.text_layout.prompt_font_size, 140);
   assert.equal(renderPlan.sprite_layout.display_scale_multiplier, 1);
   assert.equal(renderPlan.sprite_layout.intro_duration_seconds, 0.3);
   assert.equal(renderPlan.sprite_layout.countdown_float_start_delay_seconds, 0.5);
@@ -431,8 +433,8 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   );
 
   assert.match(visualFilter.script, /split=5\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]/u);
-  assert.match(visualFilter.script, /drawtext=text='Can you'/u);
-  assert.match(visualFilter.script, /drawtext=text='guess the typing\?'/u);
+  assert.match(visualFilter.script, /drawtext=text='Can you guess'/u);
+  assert.match(visualFilter.script, /drawtext=text='the typing\?'/u);
   assert.match(visualFilter.script, /\[scene0p0\]/u);
   assert.doesNotMatch(visualFilter.script, /\[scene1p0\]/u);
   assert.match(visualFilter.script, /drawtext=text='1\/5'/u);
@@ -455,7 +457,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252,format=rgba,setsar=1\[round\d+icon\d+\]/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
-  assert.match(visualFilter.script, /scale=448:448:force_original_aspect_ratio=decrease/u);
+  assert.match(visualFilter.script, /scale=896:896:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
   assert.match(visualFilter.script, /\[sceneout4\]format=yuv420p\[vout\]/u);
 });

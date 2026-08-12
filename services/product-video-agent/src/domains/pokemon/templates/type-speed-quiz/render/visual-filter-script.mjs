@@ -86,13 +86,17 @@ function buildRoundPromptArtifacts(round, roundIndex, template, renderPlan, star
   if (roundIndex > 0) {
     return { segments: [] };
   }
+  const revealDurationSeconds = Math.max(
+    0.3,
+    ensureNumber(template?.layout?.text?.prompt_reveal_duration_seconds, 0.85),
+  );
   return buildProgressiveTextArtifacts(renderPlan.hook_text, {
     template,
     fontSize: renderPlan.text_layout.prompt_font_size,
     maxLines: 2,
     baseY: renderPlan.text_layout.prompt_y,
     startSeconds,
-    endSeconds: round.local.reveal_start_seconds,
+    endSeconds: Math.min(round.local.reveal_start_seconds, roundTime(startSeconds + revealDurationSeconds)),
   });
 }
 
