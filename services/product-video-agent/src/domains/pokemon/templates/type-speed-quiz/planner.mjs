@@ -513,9 +513,9 @@ export async function planPokemonTypeSpeedQuizChallenge({
       },
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
-        selected_timer_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
-        selected_timer_countdown_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
-        selected_timer_alarm_path: inventory.overlay_presets?.timer_alarm || null,
+        selected_timer_path: null,
+        selected_timer_countdown_path: null,
+        selected_timer_alarm_path: null,
         selected_shiny_sparkle_path: inventory.overlay_presets?.shiny_sparkle || null,
         selected_type_placeholder_path: inventory.overlay_presets?.type_placeholder || null,
         available_paths: inventory.overlays,

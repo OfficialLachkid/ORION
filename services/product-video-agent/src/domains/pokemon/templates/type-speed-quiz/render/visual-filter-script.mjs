@@ -272,14 +272,18 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       round.type_icons.forEach((_, iconIndex) => {
         const badgeLayout = round.type_badge_layout[iconIndex];
         const placeholderCanvasSizePx = Math.ceil(badgeLayout.size_px * 1.18);
-        const placeholderRotationExpression = `if(lt(t,${round.local.countdown_start_seconds}),0,sin((t-${round.local.countdown_start_seconds})*7)*0.05)`;
+        const placeholderStartSeconds = roundTime(Math.min(
+          round.local.reveal_visual_start_seconds - 0.04,
+          round.local.countdown_start_seconds + (iconIndex * 0.2),
+        ));
+        const placeholderRotationExpression = `if(lt(t,${placeholderStartSeconds}),0,sin((t-${placeholderStartSeconds})*7)*0.075)`;
         const placeholderLabel = `round${roundIndex}placeholder${iconIndex}`;
         filters.push(
           `[${inputRefs.typePlaceholder}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${badgeLayout.size_px}:${badgeLayout.size_px}:force_original_aspect_ratio=decrease,format=rgba,pad=${placeholderCanvasSizePx}:${placeholderCanvasSizePx}:(ow-iw)/2:(oh-ih)/2:color=black@0,rotate='${placeholderRotationExpression}':ow=iw:oh=ih:c=none,setsar=1[${placeholderLabel}]`,
         );
         const placeholderSceneLabel = `scene${roundIndex}ph${iconIndex}`;
         filters.push(
-          `[${currentLabel}][${placeholderLabel}]overlay=${badgeLayout.center_x}-w/2:${badgeLayout.center_y}-h/2:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_visual_start_seconds)}'[${placeholderSceneLabel}]`,
+          `[${currentLabel}][${placeholderLabel}]overlay=${badgeLayout.center_x}-w/2:${badgeLayout.center_y}-h/2:enable='${formatEnableBetween(placeholderStartSeconds, round.local.reveal_visual_start_seconds)}'[${placeholderSceneLabel}]`,
         );
         currentLabel = placeholderSceneLabel;
       });

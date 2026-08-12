@@ -268,6 +268,8 @@ test('generic planner dispatch builds a random type speed quiz plan from localiz
   assert.equal(plan.rounds.filter((round) => round.subject.is_shiny_reveal).length, 1);
   assert.equal(plan.shiny_reveal.active, true);
   assert.equal(plan.assets.audio.selected_sound_effects.timer_end, '/tmp/ding-sound.mp3');
+  assert.equal(plan.assets.overlays.selected_timer_path, null);
+  assert.equal(plan.assets.overlays.selected_timer_countdown_path, null);
   assert.equal(plan.assets.overlays.selected_type_placeholder_path, '/tmp/question-mark.png');
   assert.equal(plan.required_asset_gaps.length, 0);
 });
@@ -364,6 +366,7 @@ test('visual inputs loop gif backgrounds, use one shiny round, and include the s
   }
   assert.equal(spriteInputs.length, 5);
   assert.equal(typeIconInputs.length >= 5, true);
+  assert.equal(inputs.filter((input) => input.role === 'timer-countdown').length, 0);
   assert.equal(inputs.filter((input) => input.role === 'type-placeholder').length, 1);
   assert.equal(inputs.filter((input) => input.role === 'shiny-sparkle').length, 1);
   assert.equal(
@@ -424,14 +427,14 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
     renderPlan,
     {
       background: 0,
-      timerCountdown: 1,
-      timerAlarm: 2,
-      typePlaceholder: 3,
+      timerCountdown: null,
+      timerAlarm: null,
+      typePlaceholder: 1,
       rounds: renderPlan.rounds.map((round, roundIndex) => ({
-        sprite: 4 + roundIndex,
-        typeIcons: round.type_icons.map((_, iconIndex) => 9 + (roundIndex * 2) + iconIndex),
+        sprite: 2 + roundIndex,
+        typeIcons: round.type_icons.map((_, iconIndex) => 7 + (roundIndex * 2) + iconIndex),
       })),
-      shinySparkle: 19,
+      shinySparkle: 17,
     },
     '/tmp/font.ttf',
   );
@@ -457,11 +460,17 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
       new RegExp(`drawtext=text='${escapeRegExp(formattedType)}'`, 'u'),
     );
   });
+  const dualTypePlaceholderStaggerStart = Number((dualTypeRound.local.countdown_start_seconds + 0.2).toFixed(3));
   assert.match(visualFilter.script, /if\(lt\(t,0\.84\),0,if\(lt\(t,/u);
   assert.match(visualFilter.script, /9\.896/u);
   assert.match(visualFilter.script, /\[round\d+placeholder\d+\]/u);
-  assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252:force_original_aspect_ratio=decrease,format=rgba,pad=298:298:\(ow-iw\)\/2:\(oh-ih\)\/2:color=black@0,rotate='if\(lt\(t,1\.28\),0,sin\(\(t-1\.28\)\*7\)\*0\.05\)':ow=iw:oh=ih:c=none,setsar=1\[round\d+placeholder\d+\]/u);
+  assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252:force_original_aspect_ratio=decrease,format=rgba,pad=298:298:\(ow-iw\)\/2:\(oh-ih\)\/2:color=black@0,rotate='if\(lt\(t,1\.28\),0,sin\(\(t-1\.28\)\*7\)\*0\.075\)':ow=iw:oh=ih:c=none,setsar=1\[round\d+placeholder\d+\]/u);
   assert.match(visualFilter.script, /overlay=\d+(?:\.\d+)?-w\/2:\d+(?:\.\d+)?-h\/2:enable='between\(t,1\.28,/u);
+  assert.match(
+    visualFilter.script,
+    new RegExp(`overlay=\\d+(?:\\.\\d+)?-w\\/2:\\d+(?:\\.\\d+)?-h\\/2:enable='between\\(t,${escapeRegExp(String(dualTypePlaceholderStaggerStart))},`, 'u'),
+  );
+  assert.doesNotMatch(visualFilter.script, /timercountdown/u);
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252,format=rgba,setsar=1\[round\d+icon\d+\]/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
