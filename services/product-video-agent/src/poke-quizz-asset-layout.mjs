@@ -3,7 +3,7 @@ export const ORION_T7_ROOT = '/Volumes/T7/O.R.I.O.N. Video Generation';
 export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   root: `${ORION_T7_ROOT}/Pokemon/Poke Quizz`,
   backgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Backgrounds`,
-  gifBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Gif Backgrounds`,
+  gifBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/type-quiz-backgrounds`,
   sprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Sprites`,
   newSprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/new pokemon sprites`,
   shinySprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Shiny Sprites`,
@@ -38,6 +38,15 @@ function generationDirectory(generation) {
 
 export function buildPokeQuizzSpritePath(row) {
   return `${POKE_QUIZZ_ASSET_LAYOUT.sprites}/${generationDirectory(row.generation)}/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug)}.png`;
+}
+
+export function buildPokeQuizzMirroredSpritePath(spritePath) {
+  const normalizedPath = String(spritePath || '').trim().replaceAll('\\', '/');
+  const sourcePrefix = `${POKE_QUIZZ_ASSET_LAYOUT.sprites}/`;
+  if (!normalizedPath.startsWith(sourcePrefix)) {
+    return null;
+  }
+  return `${POKE_QUIZZ_ASSET_LAYOUT.newSprites}/${normalizedPath.slice(sourcePrefix.length)}`;
 }
 
 export function buildPokeQuizzShinySpritePath(row) {

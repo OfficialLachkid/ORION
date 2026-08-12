@@ -48,10 +48,11 @@ export function buildVisualInputs(plan, renderPlan) {
 
   const selectedPokemon = plan.assets.pokemon?.[0] || {};
   const revealDuration = String(Math.max(0.5, renderPlan.phases.reveal?.duration_seconds || 0));
+  const normalSpritePath = selectedPokemon.render_sprite_path || selectedPokemon.sprite_path;
   inputs.push({
     role: 'normal-sprite',
-    path: selectedPokemon.sprite_path,
-    args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', revealDuration, '-i', selectedPokemon.sprite_path],
+    path: normalSpritePath,
+    args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', revealDuration, '-i', normalSpritePath],
   });
   inputs.push({
     role: 'shiny-sprite',

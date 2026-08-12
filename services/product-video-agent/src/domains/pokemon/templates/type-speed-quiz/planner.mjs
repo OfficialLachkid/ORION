@@ -4,7 +4,10 @@ import {
   selectSeededFile,
   selectTypeIconSet,
 } from '../../../../poke-quizz-asset-inventory.mjs';
-import { POKE_QUIZZ_ASSET_LAYOUT } from '../../../../poke-quizz-asset-layout.mjs';
+import {
+  buildPokeQuizzMirroredSpritePath,
+  POKE_QUIZZ_ASSET_LAYOUT,
+} from '../../../../poke-quizz-asset-layout.mjs';
 import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selection-state.mjs';
 
 const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
@@ -66,15 +69,6 @@ function roundMultiplier(value) {
   return Number(Number(value).toFixed(3));
 }
 
-function buildSharpSpriteMirrorPath(spritePath) {
-  const normalizedPath = String(spritePath || '').trim().replaceAll('\\', '/');
-  const sourcePrefix = `${POKE_QUIZZ_ASSET_LAYOUT.sprites}/`;
-  if (!normalizedPath.startsWith(sourcePrefix)) {
-    return null;
-  }
-  return `${POKE_QUIZZ_ASSET_LAYOUT.newSprites}/${normalizedPath.slice(sourcePrefix.length)}`;
-}
-
 async function canAccessPath(filePath) {
   const normalizedPath = String(filePath || '').trim();
   if (!normalizedPath) {
@@ -96,7 +90,7 @@ async function resolveTypeQuizSpritePath(spritePath) {
   if (!normalizedPath) {
     return normalizedPath;
   }
-  const mirrorPath = buildSharpSpriteMirrorPath(normalizedPath);
+  const mirrorPath = buildPokeQuizzMirroredSpritePath(normalizedPath);
   if (!mirrorPath) {
     return normalizedPath;
   }
