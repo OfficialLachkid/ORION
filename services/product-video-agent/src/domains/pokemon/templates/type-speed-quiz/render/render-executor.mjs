@@ -125,6 +125,7 @@ export async function renderPokeQuizzVideo({
     background: inputRoleIndex.get('background'),
     timerCountdown: inputRoleIndex.has('timer-countdown') ? inputRoleIndex.get('timer-countdown') : null,
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
+    typePlaceholder: inputRoleIndex.has('type-placeholder') ? inputRoleIndex.get('type-placeholder') : null,
     rounds: renderPlan.rounds.map((round) => ({
       sprite: inputRoleIndex.get(`round-${round.round_number}-sprite`),
       typeIcons: round.type_icons.map((_, iconIndex) => (

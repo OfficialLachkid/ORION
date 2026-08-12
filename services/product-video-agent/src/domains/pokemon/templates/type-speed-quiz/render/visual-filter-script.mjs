@@ -268,6 +268,21 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = typeTextSceneLabel;
     }
 
+    if (plan.assets.overlays?.selected_type_placeholder_path && inputRefs.typePlaceholder != null) {
+      round.type_icons.forEach((_, iconIndex) => {
+        const badgeLayout = round.type_badge_layout[iconIndex];
+        const placeholderLabel = `round${roundIndex}placeholder${iconIndex}`;
+        filters.push(
+          `[${inputRefs.typePlaceholder}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${badgeLayout.size_px}:${badgeLayout.size_px}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${placeholderLabel}]`,
+        );
+        const placeholderSceneLabel = `scene${roundIndex}ph${iconIndex}`;
+        filters.push(
+          `[${currentLabel}][${placeholderLabel}]overlay=${badgeLayout.center_x}-w/2:${badgeLayout.center_y}-h/2:enable='${formatEnableBetween(roundTime(incomingTransitionSeconds + 0.04), round.local.reveal_visual_start_seconds)}'[${placeholderSceneLabel}]`,
+        );
+        currentLabel = placeholderSceneLabel;
+      });
+    }
+
     round.type_icons.forEach((_, iconIndex) => {
       const iconInput = inputRefs.rounds[roundIndex].typeIcons[iconIndex];
       const badgeLayout = round.type_badge_layout[iconIndex];

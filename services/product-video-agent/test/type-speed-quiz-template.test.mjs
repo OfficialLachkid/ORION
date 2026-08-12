@@ -39,7 +39,7 @@ const template = {
       hook_font_size: 140,
       prompt_y: 320,
       prompt_font_size: 140,
-      prompt_reveal_duration_seconds: 1.3,
+      prompt_reveal_duration_seconds: 1.4,
       counter_x: 72,
       counter_y: 144,
       counter_font_size: 96,
@@ -50,7 +50,7 @@ const template = {
     },
     sprite: {
       center_x: 540,
-      center_y: 990,
+      center_y: 970,
       size_px: 403,
       scale_multiplier: 2,
       display_scale_multiplier: 1,
@@ -193,8 +193,9 @@ const assetInventory = {
     timer_countdown: '/tmp/timer-countdown.gif',
     timer_alarm: '/tmp/timer-alarm.gif',
     shiny_sparkle: '/tmp/shiny-sparkle.gif',
+    type_placeholder: '/tmp/question-mark.png',
   },
-  overlays: ['/tmp/timer.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/shiny-sparkle.gif'],
+  overlays: ['/tmp/timer.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/shiny-sparkle.gif', '/tmp/question-mark.png'],
   transitions: [],
   type_icons: {
     pixel: [
@@ -267,6 +268,7 @@ test('generic planner dispatch builds a random type speed quiz plan from localiz
   assert.equal(plan.rounds.filter((round) => round.subject.is_shiny_reveal).length, 1);
   assert.equal(plan.shiny_reveal.active, true);
   assert.equal(plan.assets.audio.selected_sound_effects.timer_end, '/tmp/ding-sound.mp3');
+  assert.equal(plan.assets.overlays.selected_type_placeholder_path, '/tmp/question-mark.png');
   assert.equal(plan.required_asset_gaps.length, 0);
 });
 
@@ -362,6 +364,7 @@ test('visual inputs loop gif backgrounds, use one shiny round, and include the s
   }
   assert.equal(spriteInputs.length, 5);
   assert.equal(typeIconInputs.length >= 5, true);
+  assert.equal(inputs.filter((input) => input.role === 'type-placeholder').length, 1);
   assert.equal(inputs.filter((input) => input.role === 'shiny-sparkle').length, 1);
   assert.equal(
     spriteInputs.some((input) => input.path === shinyRound?.subject?.render_sprite_path),
@@ -423,11 +426,12 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
       background: 0,
       timerCountdown: 1,
       timerAlarm: 2,
+      typePlaceholder: 3,
       rounds: renderPlan.rounds.map((round, roundIndex) => ({
-        sprite: 3 + roundIndex,
-        typeIcons: round.type_icons.map((_, iconIndex) => 8 + (roundIndex * 2) + iconIndex),
+        sprite: 4 + roundIndex,
+        typeIcons: round.type_icons.map((_, iconIndex) => 9 + (roundIndex * 2) + iconIndex),
       })),
-      shinySparkle: 18,
+      shinySparkle: 19,
     },
     '/tmp/font.ttf',
   );
@@ -455,6 +459,8 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   });
   assert.match(visualFilter.script, /if\(lt\(t,0\.84\),0,if\(lt\(t,/u);
   assert.match(visualFilter.script, /9\.896/u);
+  assert.match(visualFilter.script, /\[round\d+placeholder\d+\]/u);
+  assert.match(visualFilter.script, /overlay=\d+(?:\.\d+)?-w\/2:\d+(?:\.\d+)?-h\/2:enable='between\(t,0\.04,/u);
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252,format=rgba,setsar=1\[round\d+icon\d+\]/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);

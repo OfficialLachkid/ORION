@@ -157,12 +157,16 @@ export function selectOverlayPresets(overlays) {
   const shinySparkle = matchOverlay(overlays, ['shiny', 'sparkle'])
     || matchOverlay(overlays, ['shiny-sparkle'])
     || matchOverlay(overlays, ['shiny_sparkle']);
+  const typePlaceholder = matchOverlay(overlays, ['question', 'mark'])
+    || matchOverlay(overlays, ['question-mark'])
+    || matchOverlay(overlays, ['question_mark']);
   const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
     timer,
     timer_countdown: timerCountdown || timer,
     timer_alarm: timerAlarm,
     shiny_sparkle: shinySparkle,
+    type_placeholder: typePlaceholder,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
       || matchOverlay(overlays, ['open', 'close', 'pokeball']),

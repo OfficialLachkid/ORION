@@ -40,6 +40,14 @@ export function buildVisualInputs(plan, renderPlan) {
     });
   }
 
+  if (plan.assets.overlays.selected_type_placeholder_path) {
+    inputs.push({
+      role: 'type-placeholder',
+      path: plan.assets.overlays.selected_type_placeholder_path,
+      args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(renderPlan.total_duration_seconds), '-i', plan.assets.overlays.selected_type_placeholder_path],
+    });
+  }
+
   renderPlan.rounds.forEach((round) => {
     const renderSpritePath = round.subject.render_sprite_path || round.subject.sprite_path;
     inputs.push({
