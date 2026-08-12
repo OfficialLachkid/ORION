@@ -9,6 +9,10 @@ export const PRODUCT_VIDEO_TEMPLATE_OPTIONS = Object.freeze([
     name: 'Find the Shiny',
     value: 'find-the-shiny',
   }),
+  Object.freeze({
+    name: 'Type Speed Quiz',
+    value: 'type-speed-quiz',
+  }),
 ]);
 
 export const PRODUCT_VIDEO_CHANNEL_OPTIONS = Object.freeze([
@@ -20,16 +24,27 @@ export const PRODUCT_VIDEO_CHANNEL_OPTIONS = Object.freeze([
     name: 'TrivaMon',
     value: 'trivamon-youtube',
   }),
+  Object.freeze({
+    name: 'Poke Guess',
+    value: 'poke-guess-youtube',
+  }),
 ]);
 
 const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
   'poke-quizz-youtube': Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/poke-quizz-find-the-shiny-youtube.json',
+    'type-speed-quiz': 'services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json',
   }),
   'trivamon-youtube': Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/trivamon-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+    'type-speed-quiz': 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json',
+  }),
+  'poke-guess-youtube': Object.freeze({
+    'dual-type-reveal': 'services/product-video-agent/config/channels/poke-guess-youtube.json',
+    'find-the-shiny': 'services/product-video-agent/config/channels/poke-guess-find-the-shiny-youtube.json',
+    'type-speed-quiz': 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
   }),
 });
 

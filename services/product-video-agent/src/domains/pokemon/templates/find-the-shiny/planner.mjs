@@ -1,5 +1,10 @@
+import { access } from 'node:fs/promises';
 import { createTypePairKey, DISALLOWED_TYPE_PAIR_KEYS, normalizeTypePair } from '../../../../pokemon-type-pairs.mjs';
-import { POKE_QUIZZ_ASSET_LAYOUT } from '../../../../poke-quizz-asset-layout.mjs';
+import {
+  buildPokeQuizzPreviewDirectory,
+  buildPokeQuizzMirroredSpritePath,
+  POKE_QUIZZ_ASSET_LAYOUT,
+} from '../../../../poke-quizz-asset-layout.mjs';
 import {
   createPokeQuizzVideoSignatureKey,
   normalizePokeQuizzSelectionState,
@@ -31,6 +36,35 @@ const DEFAULT_POKEBALL_WIGGLE_WINDOW_START_RATIO = 0.12;
 const DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO = 0.76;
 const DEFAULT_POKEBALL_INTRO_DURATION_SECONDS = 0.56;
 const DEFAULT_POKEBALL_INTRO_STAGGER_SECONDS = 0.32;
+const mirroredSpriteAvailabilityCache = new Map();
+
+async function canAccessPath(filePath) {
+  const normalizedPath = String(filePath || '').trim();
+  if (!normalizedPath) {
+    return false;
+  }
+  if (!mirroredSpriteAvailabilityCache.has(normalizedPath)) {
+    mirroredSpriteAvailabilityCache.set(
+      normalizedPath,
+      access(normalizedPath)
+        .then(() => true)
+        .catch(() => false),
+    );
+  }
+  return mirroredSpriteAvailabilityCache.get(normalizedPath);
+}
+
+async function resolveFindTheShinySpritePath(spritePath) {
+  const normalizedPath = String(spritePath || '').trim();
+  if (!normalizedPath) {
+    return normalizedPath;
+  }
+  const mirrorPath = buildPokeQuizzMirroredSpritePath(normalizedPath);
+  if (!mirrorPath) {
+    return normalizedPath;
+  }
+  return (await canAccessPath(mirrorPath)) ? mirrorPath : normalizedPath;
+}
 
 function isBeachBackgroundPath(backgroundPath) {
   return String(backgroundPath || '').toLowerCase().includes('/beach-backgrounds/');
@@ -531,12 +565,13 @@ function selectBackgroundForTypePair(backgrounds, typePair, random, selectionSta
   );
 }
 
-function buildSubjectAssetRecord(subject) {
+function buildSubjectAssetRecord(subject, renderSpritePath) {
   return {
     pokedex_id: subject.id,
     national_dex_number: subject.national_dex_number,
     name: subject.name,
     sprite_path: subject.sprite_path,
+    render_sprite_path: renderSpritePath,
     shiny_sprite_path: subject.shiny_sprite_path,
     silhouette_path: subject.silhouette_path,
     cry_path: subject.cry_path,
@@ -696,6 +731,7 @@ export async function planFindTheShinyChallenge({
   if (!selectedSubject) {
     throw new Error(`No localized Pokemon with normal and shiny sprites are available for ${selectedPair.pair.join(' / ')}.`);
   }
+  const selectedRenderSpritePath = await resolveFindTheShinySpritePath(selectedSubject.sprite_path);
 
   const selectedDifficulty = chooseDifficulty(config.difficultyCatalog, random);
   const spriteGridLayout = buildFindTheShinyLayout(template, selectedDifficulty, random);
@@ -821,7 +857,7 @@ export async function planFindTheShinyChallenge({
       },
       type_icons: [],
       pokemon: [
-        buildSubjectAssetRecord(selectedSubject),
+        buildSubjectAssetRecord(selectedSubject, selectedRenderSpritePath),
       ],
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
@@ -848,7 +884,7 @@ export async function planFindTheShinyChallenge({
         },
       },
       outputs: {
-        previews_directory: POKE_QUIZZ_ASSET_LAYOUT.previews,
+        previews_directory: buildPokeQuizzPreviewDirectory(template),
         masters_directory: POKE_QUIZZ_ASSET_LAYOUT.masters,
       },
     },

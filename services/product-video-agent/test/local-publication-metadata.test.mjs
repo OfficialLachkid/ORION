@@ -53,6 +53,21 @@ const findTheShinyPlan = {
   },
 };
 
+const typeQuizPlan = {
+  template_id: 'pokemon.type-quiz.v1',
+  selection: {
+    mode: 'random',
+    round_count: 5,
+    selected_subjects: [
+      { name: 'Pikachu' },
+      { name: 'Bulbasaur' },
+      { name: 'Gengar' },
+      { name: 'Eevee' },
+      { name: 'Dragonite' },
+    ],
+  },
+};
+
 const expectedSeededTitles = new Set([
   'Psychic/Water Type Quiz - Can You Guess?',
   'Can You Guess This Psychic/Water Pokemon?',
@@ -64,6 +79,12 @@ const expectedSeededTitles = new Set([
 const expectedFindTheShinySeededTitles = new Set([
   'Find the Shiny Pokemon',
   'Find the Shiny ✨',
+]);
+
+const expectedTypeQuizSeededTitles = new Set([
+  'Guess the Pokemon Types',
+  'Can You Get 5/5 Pokemon Types?',
+  'Guess the Type Before the Reveal',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -173,4 +194,35 @@ test('seeded find-the-shiny fallback metadata uses the supported generic title v
   assert.ok(expectedFindTheShinySeededTitles.has(firstSeeded.title));
   assert.ok(expectedFindTheShinySeededTitles.has(secondSeeded.title));
   assert.notEqual(firstSeeded.title, secondSeeded.title);
+});
+
+test('fallback publication metadata frames type-quiz as a rapid-fire challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(typeQuizPlan);
+
+  assert.equal(metadata.title, 'Guess the Pokemon Types');
+  assert.equal(
+    metadata.description,
+    'Can you get 5/5? Watch each Pokemon, beat the timer, and lock in its type before the reveal.',
+  );
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#pokemontypes',
+    '#typequiz',
+    '#pokemonquiz',
+    '#shorts',
+  ]);
+});
+
+test('seeded type-quiz fallback metadata uses the supported generic title variants', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...typeQuizPlan,
+    seed: 'type-quiz-seed-1',
+  });
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...typeQuizPlan,
+    seed: 'type-quiz-seed-2',
+  });
+
+  assert.ok(expectedTypeQuizSeededTitles.has(firstSeeded.title));
+  assert.ok(expectedTypeQuizSeededTitles.has(secondSeeded.title));
 });

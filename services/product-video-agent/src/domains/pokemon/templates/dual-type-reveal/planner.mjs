@@ -1,5 +1,8 @@
 import { createTypePairKey, DISALLOWED_TYPE_PAIR_KEYS, normalizeTypePair } from '../../../../pokemon-type-pairs.mjs';
-import { POKE_QUIZZ_ASSET_LAYOUT } from '../../../../poke-quizz-asset-layout.mjs';
+import {
+  buildPokeQuizzPreviewDirectory,
+  POKE_QUIZZ_ASSET_LAYOUT,
+} from '../../../../poke-quizz-asset-layout.mjs';
 import {
   createPokeQuizzVideoSignatureKey,
   normalizePokeQuizzSelectionState,
@@ -849,7 +852,7 @@ export async function planPokemonTypeChallenge({
         },
       },
       outputs: {
-        previews_directory: POKE_QUIZZ_ASSET_LAYOUT.previews,
+        previews_directory: buildPokeQuizzPreviewDirectory(template),
         masters_directory: POKE_QUIZZ_ASSET_LAYOUT.masters,
       },
     },

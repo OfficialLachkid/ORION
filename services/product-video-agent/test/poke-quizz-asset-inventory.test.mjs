@@ -95,24 +95,31 @@ test('overlay preset selection prefers split timer gifs and the 3D pokeball over
   assert.match(presets.pokeball_primary || '', /3D Pokeball Wiggle\.gif$/u);
 });
 
-test('timer_finished and shiny sound effect naming are recognized by the current inventory contract', async () => {
+test('timer_finished stays the shared timer-end default when a ding file is also present', async () => {
   const matchSoundEffectKeywordGroups = (files, keywordGroups) => (
     files.find((filePath) => {
       const normalizedPath = filePath.toLowerCase();
       return keywordGroups.some((keywords) => keywords.every((keyword) => normalizedPath.includes(keyword)));
     }) || null
   );
+  const matchSoundEffect = (files, keywords) => (
+    files.find((filePath) => keywords.some((keyword) => filePath.toLowerCase().includes(keyword))) || null
+  );
   const soundEffects = [
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/countdown.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/ding-sound.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/enlarge-pokeball.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/shiny-sound.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/timer_finished.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/pokeball_wiggle.mp3',
   ];
-  const countdownTick = soundEffects.find((filePath) => ['countdown', 'tick', 'beep'].some((keyword) => filePath.toLowerCase().includes(keyword)));
-  const timerEnd = soundEffects.find((filePath) => ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'ding', 'reveal-hit'].some((keyword) => filePath.toLowerCase().includes(keyword)));
+  const countdownTick = matchSoundEffect(soundEffects, ['countdown', 'tick', 'beep']);
+  const timerEnd = (
+    matchSoundEffect(soundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'reveal-hit'])
+    || matchSoundEffect(soundEffects, ['ding'])
+  );
   const reveal = soundEffects.find((filePath) => ['reveal', 'who', 'answer'].some((keyword) => filePath.toLowerCase().includes(keyword))) || timerEnd;
-  const shiny = soundEffects.find((filePath) => ['shiny', 'sparkle', 'twinkle', 'glint'].some((keyword) => filePath.toLowerCase().includes(keyword)));
+  const shiny = matchSoundEffect(soundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
   const pokeballIntro = matchSoundEffectKeywordGroups(soundEffects, [
     ['enlarge', 'pokeball'],
     ['pokeball', 'intro'],

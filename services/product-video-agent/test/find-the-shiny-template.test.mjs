@@ -200,6 +200,7 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.selection.grid.columns, 3);
   assert.equal(plan.selection.grid.rows, Math.ceil(plan.selection.display_subject_count / 3));
   assert.equal(plan.assets.background.selected_path, '/tmp/ice-backgrounds/glacier.png');
+  assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Find the Shiny$/u);
   assert.equal(plan.assets.pokemon[0].name, 'Articuno');
   assert.equal(plan.assets.overlays.selected_primary_pokeball_overlay_path, '/tmp/pokeball.gif');
   assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, '/tmp/pokeball-intro.mp3');
