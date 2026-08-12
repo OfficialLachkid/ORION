@@ -141,7 +141,10 @@ function resolvePlaceholderPopTiming(round, roundIndex, incomingTransitionSecond
     0.12,
     ensureNumber(template?.layout?.type_badges?.pop_in_duration_seconds, DEFAULT_POKEBALL_INTRO_SECONDS),
   ));
-  const requestedStartSeconds = roundTime((roundIndex > 0 ? incomingTransitionSeconds : 0) + 1);
+  const requestedStartSeconds = roundTime(Math.max(
+    0,
+    ensureNumber(round?.local?.countdown_start_seconds, 0),
+  ));
   const latestStartSeconds = roundTime(Math.max(
     0,
     round.local.reveal_visual_start_seconds - desiredDurationSeconds - 0.04,
@@ -311,9 +314,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       round.type_icons.forEach((_, iconIndex) => {
         const badgeLayout = round.type_badge_layout[iconIndex];
+        const placeholderSizePx = roundTime(badgeLayout.size_px * 0.7);
         const placeholderLabel = `round${roundIndex}placeholder${iconIndex}`;
         filters.push(
-          `[${inputRefs.typePlaceholder}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${badgeLayout.size_px}*(${placeholderScaleExpression})':h='${badgeLayout.size_px}*(${placeholderScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${placeholderLabel}]`,
+          `[${inputRefs.typePlaceholder}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS+${placeholderPopTiming.start_seconds}/TB,scale=w='${placeholderSizePx}*(${placeholderScaleExpression})':h='${placeholderSizePx}*(${placeholderScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${placeholderLabel}]`,
         );
         const placeholderSceneLabel = `scene${roundIndex}ph${iconIndex}`;
         filters.push(

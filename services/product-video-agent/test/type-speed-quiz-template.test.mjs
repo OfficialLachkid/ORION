@@ -39,7 +39,7 @@ const template = {
       hook_font_size: 140,
       prompt_y: 320,
       prompt_font_size: 140,
-      prompt_reveal_duration_seconds: 1.4,
+      prompt_reveal_duration_seconds: 1.5,
       counter_x: 72,
       counter_y: 144,
       counter_font_size: 96,
@@ -460,8 +460,8 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /if\(lt\(t,0\.84\),0,if\(lt\(t,/u);
   assert.match(visualFilter.script, /9\.896/u);
   assert.match(visualFilter.script, /\[round\d+placeholder\d+\]/u);
-  assert.match(visualFilter.script, /scale=w='252\*\(if\(lt\(\(+n\/30\)+,1\),0,/u);
-  assert.match(visualFilter.script, /overlay=\d+(?:\.\d+)?-w\/2:\d+(?:\.\d+)?-h\/2:enable='between\(t,1,/u);
+  assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+1\.28\/TB,scale=w='176\.4\*\(if\(lt\(\(+n\/30\)+,1\.28\),0,/u);
+  assert.match(visualFilter.script, /overlay=\d+(?:\.\d+)?-w\/2:\d+(?:\.\d+)?-h\/2:enable='between\(t,1\.28,/u);
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252,format=rgba,setsar=1\[round\d+icon\d+\]/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
