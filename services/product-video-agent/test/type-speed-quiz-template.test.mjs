@@ -61,11 +61,11 @@ const template = {
       countdown_float_frequency_hz: 2.1,
     },
     type_badges: {
-      center_y: 360,
+      center_y: 330,
       icon_size_px: 252,
       spacing_px: 0,
       label_anchor_ratio: 0.24,
-      label_gap_px: 0,
+      label_gap_px: 30,
       pop_in_duration_seconds: 0.22,
     },
     timer: {
@@ -324,6 +324,7 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.sprite_layout.countdown_float_start_delay_seconds, 0.5);
   assert.equal(renderPlan.sprite_layout.countdown_float_speed_multiplier, 0.75);
   assert.equal(renderPlan.rounds[0].type_badge_layout[0].size_px, 252);
+  assert.equal(renderPlan.rounds[0].type_badge_layout[0].center_y, 330);
   assert.equal(renderPlan.rounds[0].type_badge_layout[0].label_y, 420.48);
   const dualTypeRound = renderPlan.rounds.find((round) => round.subject.types.length === 2);
   assert.ok(dualTypeRound);
