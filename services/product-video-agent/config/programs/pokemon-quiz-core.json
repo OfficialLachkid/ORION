@@ -12,8 +12,8 @@
       "path": "../templates/pokemon/find-the-shiny.v1.json"
     },
     {
-      "template_id": "pokemon.type-speed-quiz.v1",
-      "path": "../templates/pokemon/type-speed-quiz.v1.json"
+      "template_id": "pokemon.type-quiz.v1",
+      "path": "../templates/pokemon/type-quiz.v1.json"
     }
   ]
 }

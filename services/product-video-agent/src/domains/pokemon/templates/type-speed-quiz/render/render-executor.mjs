@@ -25,7 +25,7 @@ export async function renderPokeQuizzVideo({
 }) {
   const renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath });
   const outputAbsolutePath = resolve(projectRoot, outputPath);
-  const slugBase = `${slugify(plan.template_key || 'type-speed-quiz')}-${slugify(plan.selection.mode || 'random')}-${slugify(plan.seed)}`;
+  const slugBase = `${slugify(plan.template_key || 'type-quiz')}-${slugify(plan.selection.mode || 'random')}-${slugify(plan.seed)}`;
   const audioMixPath = resolve(runtimeRoot, `${slugBase}-audio.m4a`);
   const filterScriptPath = resolve(runtimeRoot, `${slugBase}-video.filters.txt`);
   const audioFilterScriptPath = resolve(runtimeRoot, `${slugBase}-audio.filters.txt`);

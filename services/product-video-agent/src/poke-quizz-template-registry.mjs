@@ -13,7 +13,7 @@ import {
   renderPokeQuizzVideo as renderFindTheShinyVideo,
 } from './domains/pokemon/templates/find-the-shiny/renderer.mjs';
 import {
-  planPokemonTypeSpeedQuizChallenge,
+  planPokemonTypeQuizChallenge,
 } from './domains/pokemon/templates/type-speed-quiz/planner.mjs';
 import {
   buildPokeQuizzRenderPlan as buildTypeSpeedQuizRenderPlan,
@@ -31,8 +31,8 @@ const TEMPLATE_REGISTRY = Object.freeze({
     buildRenderPlan: buildFindTheShinyRenderPlan,
     renderVideo: renderFindTheShinyVideo,
   }),
-  'type-speed-quiz': Object.freeze({
-    planner: planPokemonTypeSpeedQuizChallenge,
+  'type-quiz': Object.freeze({
+    planner: planPokemonTypeQuizChallenge,
     buildRenderPlan: buildTypeSpeedQuizRenderPlan,
     renderVideo: renderTypeSpeedQuizVideo,
   }),
@@ -53,6 +53,9 @@ function normalizeTemplateSelector(template = {}) {
 
 export function resolvePokeQuizzTemplateKey(template = {}) {
   const { templateKey, templateId } = normalizeTemplateSelector(template);
+  if (templateKey === 'type-quiz' || templateKey === 'type-speed-quiz') {
+    return 'type-quiz';
+  }
   if (templateKey && TEMPLATE_REGISTRY[templateKey]) {
     return templateKey;
   }
@@ -62,8 +65,8 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   if (templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
   }
-  if (templateId.includes('type-speed-quiz')) {
-    return 'type-speed-quiz';
+  if (templateId.includes('type-quiz') || templateId.includes('type-speed-quiz')) {
+    return 'type-quiz';
   }
   if (!templateKey || templateId.includes('dual-type-reveal')) {
     return 'dual-type-reveal';

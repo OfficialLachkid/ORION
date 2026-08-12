@@ -11,8 +11,8 @@ function escapeRegExp(value) {
 }
 
 const template = {
-  template_id: 'pokemon.type-speed-quiz.v1',
-  template_key: 'type-speed-quiz',
+  template_id: 'pokemon.type-quiz.v1',
+  template_key: 'type-quiz',
   canvas: {
     width: 1080,
     height: 1920,
@@ -247,16 +247,16 @@ const assetInventory = {
   },
 };
 
-test('generic planner dispatch builds a random type speed quiz plan from localized rows', async () => {
+test('generic planner dispatch builds a random type quiz plan from localized rows', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'type-speed-quiz-random',
+    seed: 'type-quiz-random',
     assetInventory,
   });
 
-  assert.equal(plan.template_id, 'pokemon.type-speed-quiz.v1');
-  assert.equal(plan.template_key, 'type-speed-quiz');
+  assert.equal(plan.template_id, 'pokemon.type-quiz.v1');
+  assert.equal(plan.template_key, 'type-quiz');
   assert.equal(plan.selection.mode, 'random');
   assert.equal(plan.selection.round_count, 5);
   assert.equal(plan.selection.selected_subjects.length, 5);
@@ -274,7 +274,7 @@ test('generic planner dispatch builds a random type speed quiz plan from localiz
   assert.equal(plan.required_asset_gaps.length, 0);
 });
 
-test('speed quiz planner can filter to single-type only when configured', async () => {
+test('type quiz planner can filter to single-type only when configured', async () => {
   const singleTypeTemplate = structuredClone(template);
   singleTypeTemplate.selection_rules.type_cardinality = 'single-type-only';
   singleTypeTemplate.selection_rules.round_count = 3;
@@ -282,7 +282,7 @@ test('speed quiz planner can filter to single-type only when configured', async 
   const plan = await planPokemonTypeChallenge({
     template: singleTypeTemplate,
     pokedexRows,
-    seed: 'type-speed-quiz-single',
+    seed: 'type-quiz-single',
     assetInventory,
   });
 
@@ -290,14 +290,14 @@ test('speed quiz planner can filter to single-type only when configured', async 
   assert.equal(plan.rounds.every((round) => round.subject.types.length === 1), true);
 });
 
-test('speed quiz timer-end sound falls back to the shared default when the preferred ding file is unavailable', async () => {
+test('type quiz timer-end sound falls back to the shared default when the preferred ding file is unavailable', async () => {
   const fallbackInventory = structuredClone(assetInventory);
   fallbackInventory.sound_effects.all = ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/shiny.mp3'];
 
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'type-speed-quiz-timer-end-fallback',
+    seed: 'type-quiz-timer-end-fallback',
     assetInventory: fallbackInventory,
   });
 
@@ -308,14 +308,14 @@ test('render plan creates staggered round timing with slide transitions', async 
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'type-speed-quiz-render-plan',
+    seed: 'type-quiz-render-plan',
     assetInventory,
   });
 
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
-    outputPath: '/tmp/type-speed-quiz.mp4',
+    outputPath: '/tmp/type-quiz.mp4',
   });
 
   assert.equal(renderPlan.rounds.length, 5);
@@ -338,20 +338,20 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(dualTypeRound.type_badge_layout[1].center_x, 681);
   assert.equal(renderPlan.rounds[0].type_badge_layout[0].label_font_size, 78);
   assert.equal(renderPlan.total_duration_seconds, renderPlan.rounds[4].scene_end_seconds);
-  assert.equal(renderPlan.output_path, '/tmp/type-speed-quiz.mp4');
+  assert.equal(renderPlan.output_path, '/tmp/type-quiz.mp4');
 });
 
 test('visual inputs loop gif backgrounds, use one shiny round, and include the sparkle overlay once', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'type-speed-quiz-inputs',
+    seed: 'type-quiz-inputs',
     assetInventory,
   });
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
-    outputPath: '/tmp/type-speed-quiz.mp4',
+    outputPath: '/tmp/type-quiz.mp4',
   });
 
   const inputs = buildVisualInputs(plan, renderPlan);
@@ -379,13 +379,13 @@ test('audio filter schedules countdown ticks, timer-end cues, and one shiny hit'
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'type-speed-quiz-audio',
+    seed: 'type-quiz-audio',
     assetInventory,
   });
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
-    outputPath: '/tmp/type-speed-quiz.mp4',
+    outputPath: '/tmp/type-quiz.mp4',
   });
 
   const script = buildAudioFilterScript({
@@ -412,13 +412,13 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'type-speed-quiz-visual',
+    seed: 'type-quiz-visual',
     assetInventory,
   });
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
-    outputPath: '/tmp/type-speed-quiz.mp4',
+    outputPath: '/tmp/type-quiz.mp4',
   });
 
   const visualFilter = buildVisualFilterScript(

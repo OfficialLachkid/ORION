@@ -5,6 +5,7 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   backgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Backgrounds`,
   gifBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Gif Backgrounds`,
   sprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Sprites`,
+  newSprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/new pokemon sprites`,
   shinySprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Shiny Sprites`,
   silhouettes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Silhouettes`,
   pixelTypes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Pixel Types`,

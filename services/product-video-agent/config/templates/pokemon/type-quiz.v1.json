@@ -1,6 +1,6 @@
 {
-  "template_id": "pokemon.type-speed-quiz.v1",
-  "template_key": "type-speed-quiz",
+  "template_id": "pokemon.type-quiz.v1",
+  "template_key": "type-quiz",
   "domain": "pokemon",
   "mechanics": [
     "selection",

@@ -64,8 +64,13 @@ function resolveTemplateFlavor(plan = {}) {
   if (templateKey.includes('find-the-shiny') || templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
   }
-  if (templateKey.includes('type-speed-quiz') || templateId.includes('type-speed-quiz')) {
-    return 'type-speed-quiz';
+  if (
+    templateKey.includes('type-quiz')
+    || templateId.includes('type-quiz')
+    || templateKey.includes('type-speed-quiz')
+    || templateId.includes('type-speed-quiz')
+  ) {
+    return 'type-quiz';
   }
   return 'dual-type-reveal';
 }
@@ -83,7 +88,7 @@ const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
   () => 'Find the Shiny \u2728',
 ]);
 
-const DEFAULT_TYPE_SPEED_QUIZ_TITLE_BUILDERS = Object.freeze([
+const DEFAULT_TYPE_QUIZ_TITLE_BUILDERS = Object.freeze([
   () => 'Guess the Pokemon Types',
   () => 'Can You Get 5/5 Pokemon Types?',
   () => 'Guess the Type Before the Reveal',
@@ -141,12 +146,12 @@ function buildMetadataPrompt(plan) {
 
 function buildTemplateAwareDefaultTitle(plan) {
   const flavor = resolveTemplateFlavor(plan);
-  if (flavor === 'type-speed-quiz') {
+  if (flavor === 'type-quiz') {
     const seed = String(plan?.seed || '').trim();
     const templateIndex = seed
-      ? hashSeed(`${seed}|type-speed-quiz`) % DEFAULT_TYPE_SPEED_QUIZ_TITLE_BUILDERS.length
+      ? hashSeed(`${seed}|type-quiz`) % DEFAULT_TYPE_QUIZ_TITLE_BUILDERS.length
       : 0;
-    return DEFAULT_TYPE_SPEED_QUIZ_TITLE_BUILDERS[templateIndex]();
+    return DEFAULT_TYPE_QUIZ_TITLE_BUILDERS[templateIndex]();
   }
   if (flavor !== 'find-the-shiny') {
     return buildDefaultTitle(plan);
@@ -160,7 +165,7 @@ function buildTemplateAwareDefaultTitle(plan) {
 
 function buildTemplateAwareDefaultDescription(plan) {
   const flavor = resolveTemplateFlavor(plan);
-  if (flavor === 'type-speed-quiz') {
+  if (flavor === 'type-quiz') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     const subjectCount = selectedSubjects.length || Number(plan?.selection?.round_count || 0) || 5;
     return `Can you get ${subjectCount}/${subjectCount}? Watch each Pokemon, beat the timer, and lock in its type before the reveal.`;
@@ -175,10 +180,10 @@ function buildTemplateAwareDefaultDescription(plan) {
 
 function buildTemplateAwareMetadataPrompt(plan) {
   const flavor = resolveTemplateFlavor(plan);
-  if (flavor === 'type-speed-quiz') {
+  if (flavor === 'type-quiz') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     return [
-      'Write YouTube Shorts publication metadata as JSON for a Pokemon type speed quiz video.',
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon type quiz video.',
       `Displayed Pokemon count: ${selectedSubjects.length}`,
       `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
       `Mode: ${String(plan?.selection?.mode || 'random').trim() || 'random'}`,
@@ -220,11 +225,11 @@ function buildTemplateAwareHashtags(plan) {
   const flavor = resolveTemplateFlavor(plan);
   const typePair = plan?.selection?.type_pair || [];
   const typeHashtags = buildTypeHashtags(typePair);
-  if (flavor === 'type-speed-quiz') {
+  if (flavor === 'type-quiz') {
     return normalizeHashtags([
       'pokemon',
       'pokemontypes',
-      'typespeedquiz',
+      'typequiz',
       'pokemonquiz',
       'shorts',
     ]);

@@ -1,3 +1,4 @@
+import { access } from 'node:fs/promises';
 import {
   scanPokeQuizzAssetInventory,
   selectSeededFile,
@@ -13,11 +14,12 @@ const DEFAULT_MAX_AUTO_DISPLAY_SCALE_MULTIPLIER = 1.75;
 const MIN_VISIBLE_ALPHA = 8;
 
 const spriteAutoScaleCache = new Map();
+const spriteMirrorAvailabilityCache = new Map();
 let sharpModulePromise = null;
 
 function hashSeed(input) {
   let hash = 2166136261;
-  for (const character of String(input || 'poke-quizz-speed-quiz')) {
+  for (const character of String(input || 'poke-quizz-type-quiz')) {
     hash ^= character.codePointAt(0);
     hash = Math.imul(hash, 16777619);
   }
@@ -62,6 +64,43 @@ async function loadSharp() {
 
 function roundMultiplier(value) {
   return Number(Number(value).toFixed(3));
+}
+
+function buildSharpSpriteMirrorPath(spritePath) {
+  const normalizedPath = String(spritePath || '').trim().replaceAll('\\', '/');
+  const sourcePrefix = `${POKE_QUIZZ_ASSET_LAYOUT.sprites}/`;
+  if (!normalizedPath.startsWith(sourcePrefix)) {
+    return null;
+  }
+  return `${POKE_QUIZZ_ASSET_LAYOUT.newSprites}/${normalizedPath.slice(sourcePrefix.length)}`;
+}
+
+async function canAccessPath(filePath) {
+  const normalizedPath = String(filePath || '').trim();
+  if (!normalizedPath) {
+    return false;
+  }
+  if (!spriteMirrorAvailabilityCache.has(normalizedPath)) {
+    spriteMirrorAvailabilityCache.set(
+      normalizedPath,
+      access(normalizedPath)
+        .then(() => true)
+        .catch(() => false),
+    );
+  }
+  return spriteMirrorAvailabilityCache.get(normalizedPath);
+}
+
+async function resolveTypeQuizSpritePath(spritePath) {
+  const normalizedPath = String(spritePath || '').trim();
+  if (!normalizedPath) {
+    return normalizedPath;
+  }
+  const mirrorPath = buildSharpSpriteMirrorPath(normalizedPath);
+  if (!mirrorPath) {
+    return normalizedPath;
+  }
+  return (await canAccessPath(mirrorPath)) ? mirrorPath : normalizedPath;
 }
 
 async function resolveSpriteAutoDisplayScaleMultiplier({
@@ -319,10 +358,10 @@ function buildTimeline({ hookText, rounds }) {
   return timeline;
 }
 
-export async function planPokemonTypeSpeedQuizChallenge({
+export async function planPokemonTypeQuizChallenge({
   template,
   pokedexRows,
-  seed = 'poke-quizz-speed-quiz',
+  seed = 'poke-quizz-type-quiz',
   assetInventory = null,
   selectionState = null,
 }) {
@@ -361,7 +400,7 @@ export async function planPokemonTypeSpeedQuizChallenge({
     .filter((row) => String(row.sprite_path || '').trim())
     .filter((row) => matchesTypeCardinality(row.types, typeCardinalityMode));
   if (eligibleSubjects.length < roundCount) {
-    throw new Error(`No sufficient localized Pokemon rows are available for a ${typeCardinalityMode} speed quiz. Need ${roundCount}, found ${eligibleSubjects.length}.`);
+    throw new Error(`No sufficient localized Pokemon rows are available for a ${typeCardinalityMode} type quiz. Need ${roundCount}, found ${eligibleSubjects.length}.`);
   }
 
   const shuffledSubjects = shuffle(eligibleSubjects, random);
@@ -398,9 +437,10 @@ export async function planPokemonTypeSpeedQuizChallenge({
     const subjectTypes = subject.types.map((type) => String(type || '').trim().toLowerCase()).filter(Boolean);
     const typeIconSet = selectTypeIconSet(subjectTypes, inventory);
     const isShinyReveal = shinyReveal.active && shinyReveal.selected_round_index === index;
+    const preferredNormalSpritePath = await resolveTypeQuizSpritePath(subject.sprite_path);
     const renderSpritePath = isShinyReveal
-      ? subject.shiny_sprite_path || subject.sprite_path
-      : subject.sprite_path;
+      ? subject.shiny_sprite_path || preferredNormalSpritePath
+      : preferredNormalSpritePath;
     const spriteDisplayScaleMultiplier = await resolveSpriteAutoDisplayScaleMultiplier({
       spritePath: renderSpritePath,
       targetVisibleRatio: spriteVisibleRatioTarget,
@@ -419,6 +459,7 @@ export async function planPokemonTypeSpeedQuizChallenge({
         generation: subject.generation,
         region: subject.region,
         sprite_path: subject.sprite_path,
+        preferred_normal_sprite_path: preferredNormalSpritePath,
         shiny_sprite_path: subject.shiny_sprite_path || null,
         render_sprite_path: renderSpritePath,
         sprite_source_url: subject.sprite_source_url || null,
@@ -467,12 +508,12 @@ export async function planPokemonTypeSpeedQuizChallenge({
   }
 
   return {
-    schema_version: 'poke-quizz-speed-quiz-plan-v1',
+    schema_version: 'poke-quizz-type-quiz-plan-v1',
     channel: {
       id: 'poke-quizz',
       name: 'Poke Quizz',
       niche: 'pokemon_quiz',
-      content_lane: 'pokemon_type_speed_quiz',
+      content_lane: 'pokemon_type_quiz',
     },
     template_id: template.template_id,
     template_key: template.template_key,
@@ -543,3 +584,5 @@ export async function planPokemonTypeSpeedQuizChallenge({
     required_asset_gaps: [...new Set(requiredAssetGaps)],
   };
 }
+
+export const planPokemonTypeSpeedQuizChallenge = planPokemonTypeQuizChallenge;

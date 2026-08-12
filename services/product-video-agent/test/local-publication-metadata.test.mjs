@@ -53,8 +53,8 @@ const findTheShinyPlan = {
   },
 };
 
-const typeSpeedQuizPlan = {
-  template_id: 'pokemon.type-speed-quiz.v1',
+const typeQuizPlan = {
+  template_id: 'pokemon.type-quiz.v1',
   selection: {
     mode: 'random',
     round_count: 5,
@@ -81,7 +81,7 @@ const expectedFindTheShinySeededTitles = new Set([
   'Find the Shiny ✨',
 ]);
 
-const expectedTypeSpeedQuizSeededTitles = new Set([
+const expectedTypeQuizSeededTitles = new Set([
   'Guess the Pokemon Types',
   'Can You Get 5/5 Pokemon Types?',
   'Guess the Type Before the Reveal',
@@ -196,8 +196,8 @@ test('seeded find-the-shiny fallback metadata uses the supported generic title v
   assert.notEqual(firstSeeded.title, secondSeeded.title);
 });
 
-test('fallback publication metadata frames type-speed-quiz as a rapid-fire challenge', () => {
-  const metadata = buildPokeQuizzFallbackPublicationMetadata(typeSpeedQuizPlan);
+test('fallback publication metadata frames type-quiz as a rapid-fire challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(typeQuizPlan);
 
   assert.equal(metadata.title, 'Guess the Pokemon Types');
   assert.equal(
@@ -207,22 +207,22 @@ test('fallback publication metadata frames type-speed-quiz as a rapid-fire chall
   assert.deepEqual(metadata.hashtags, [
     '#pokemon',
     '#pokemontypes',
-    '#typespeedquiz',
+    '#typequiz',
     '#pokemonquiz',
     '#shorts',
   ]);
 });
 
-test('seeded type-speed-quiz fallback metadata uses the supported generic title variants', () => {
+test('seeded type-quiz fallback metadata uses the supported generic title variants', () => {
   const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...typeSpeedQuizPlan,
-    seed: 'type-speed-quiz-seed-1',
+    ...typeQuizPlan,
+    seed: 'type-quiz-seed-1',
   });
   const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...typeSpeedQuizPlan,
-    seed: 'type-speed-quiz-seed-2',
+    ...typeQuizPlan,
+    seed: 'type-quiz-seed-2',
   });
 
-  assert.ok(expectedTypeSpeedQuizSeededTitles.has(firstSeeded.title));
-  assert.ok(expectedTypeSpeedQuizSeededTitles.has(secondSeeded.title));
+  assert.ok(expectedTypeQuizSeededTitles.has(firstSeeded.title));
+  assert.ok(expectedTypeQuizSeededTitles.has(secondSeeded.title));
 });
