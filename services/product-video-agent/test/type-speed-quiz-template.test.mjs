@@ -471,6 +471,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
     new RegExp(`overlay=\\d+(?:\\.\\d+)?-w\\/2:\\d+(?:\\.\\d+)?-h\\/2:enable='between\\(t,${escapeRegExp(String(dualTypePlaceholderStaggerStart))},`, 'u'),
   );
   assert.doesNotMatch(visualFilter.script, /timercountdown/u);
+  assert.doesNotMatch(visualFilter.script, /drawtext=text='0'/u);
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252,format=rgba,setsar=1\[round\d+icon\d+\]/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);

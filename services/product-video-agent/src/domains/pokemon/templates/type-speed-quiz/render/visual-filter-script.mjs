@@ -247,6 +247,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     }
 
     round.countdown_numbers.forEach((countdown, countdownIndex) => {
+      if (String(countdown.value) === '0') {
+        return;
+      }
       const scaleMultiplierExpression = buildCountdownNumberScaleMultiplierExpression(
         countdown.start_seconds - round.scene_start_seconds,
         countdown.end_seconds - round.scene_start_seconds,
