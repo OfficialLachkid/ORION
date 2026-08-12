@@ -6,12 +6,10 @@ import {
   buildCountdownNumberAlphaExpression,
   buildCountdownNumberScaleMultiplierExpression,
   buildCountdownNumberYExpression,
-  buildScaleFilterTimeExpression,
   formatEnableBetween,
 } from '../../dual-type-reveal/render/animation-expressions.mjs';
 import { buildProgressiveTextArtifacts } from '../../dual-type-reveal/render/text-layout.mjs';
 import {
-  DEFAULT_POKEBALL_INTRO_SECONDS,
   DEFAULT_TEXT_BORDER,
   DEFAULT_TIMER_NUMBER_SIZE,
   DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER,
@@ -134,33 +132,6 @@ function buildRoundTypeLabelArtifacts(round) {
     y: badgeLayout.label_y,
     font_size: badgeLayout.label_font_size,
   })).filter((artifact) => artifact.text);
-}
-
-function resolvePlaceholderPopTiming(round, roundIndex, incomingTransitionSeconds, template) {
-  const desiredDurationSeconds = roundTime(Math.max(
-    0.12,
-    ensureNumber(template?.layout?.type_badges?.pop_in_duration_seconds, DEFAULT_POKEBALL_INTRO_SECONDS),
-  ));
-  const requestedStartSeconds = roundTime(Math.max(
-    0,
-    ensureNumber(round?.local?.countdown_start_seconds, 0),
-  ));
-  const latestStartSeconds = roundTime(Math.max(
-    0,
-    round.local.reveal_visual_start_seconds - desiredDurationSeconds - 0.04,
-  ));
-  const startSeconds = roundTime(Math.max(0, Math.min(requestedStartSeconds, latestStartSeconds)));
-  const durationSeconds = roundTime(Math.max(
-    0.12,
-    Math.min(
-      desiredDurationSeconds,
-      Math.max(0.12, round.local.reveal_visual_start_seconds - startSeconds - 0.04),
-    ),
-  ));
-  return {
-    start_seconds: startSeconds,
-    duration_seconds: durationSeconds,
-  };
 }
 
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = null) {
@@ -298,30 +269,15 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     }
 
     if (plan.assets.overlays?.selected_type_placeholder_path && inputRefs.typePlaceholder != null) {
-      const placeholderPopTiming = resolvePlaceholderPopTiming(
-        round,
-        roundIndex,
-        incomingTransitionSeconds,
-        template,
-      );
-      const placeholderScaleExpression = buildAnimatedPopSettleExpression(
-        placeholderPopTiming.start_seconds,
-        placeholderPopTiming.duration_seconds,
-        0,
-        1.08,
-        1,
-        buildScaleFilterTimeExpression({ fps }),
-      );
       round.type_icons.forEach((_, iconIndex) => {
         const badgeLayout = round.type_badge_layout[iconIndex];
-        const placeholderSizePx = roundTime(badgeLayout.size_px * 0.7);
         const placeholderLabel = `round${roundIndex}placeholder${iconIndex}`;
         filters.push(
-          `[${inputRefs.typePlaceholder}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS+${placeholderPopTiming.start_seconds}/TB,scale=w='${placeholderSizePx}*(${placeholderScaleExpression})':h='${placeholderSizePx}*(${placeholderScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${placeholderLabel}]`,
+          `[${inputRefs.typePlaceholder}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${badgeLayout.size_px}:${badgeLayout.size_px}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${placeholderLabel}]`,
         );
         const placeholderSceneLabel = `scene${roundIndex}ph${iconIndex}`;
         filters.push(
-          `[${currentLabel}][${placeholderLabel}]overlay=${badgeLayout.center_x}-w/2:${badgeLayout.center_y}-h/2:enable='${formatEnableBetween(placeholderPopTiming.start_seconds, round.local.reveal_visual_start_seconds)}'[${placeholderSceneLabel}]`,
+          `[${currentLabel}][${placeholderLabel}]overlay=${badgeLayout.center_x}-w/2:${badgeLayout.center_y}-h/2:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_visual_start_seconds)}'[${placeholderSceneLabel}]`,
         );
         currentLabel = placeholderSceneLabel;
       });

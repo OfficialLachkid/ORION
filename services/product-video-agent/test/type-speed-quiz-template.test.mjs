@@ -460,7 +460,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /if\(lt\(t,0\.84\),0,if\(lt\(t,/u);
   assert.match(visualFilter.script, /9\.896/u);
   assert.match(visualFilter.script, /\[round\d+placeholder\d+\]/u);
-  assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+1\.28\/TB,scale=w='176\.4\*\(if\(lt\(\(+n\/30\)+,1\.28\),0,/u);
+  assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252:force_original_aspect_ratio=decrease,format=rgba,setsar=1\[round\d+placeholder\d+\]/u);
   assert.match(visualFilter.script, /overlay=\d+(?:\.\d+)?-w\/2:\d+(?:\.\d+)?-h\/2:enable='between\(t,1\.28,/u);
   assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=252:252,format=rgba,setsar=1\[round\d+icon\d+\]/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
