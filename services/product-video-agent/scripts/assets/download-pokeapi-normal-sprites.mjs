@@ -189,8 +189,9 @@ async function downloadGeneration({
       || parsed.slug
       || parsed.dexNumber;
     const payload = await fetchJson(`${POKEAPI_BASE_URL}/pokemon/${encodeURIComponent(String(pokemonLookupKey))}`);
-    const sourceUrl = matchedRow?.sprite_source_url
-      || resolvePreferredSpriteSourceUrl(payload, { slug: parsed.slug });
+    const sourceUrl = resolvePreferredSpriteSourceUrl(payload, { slug: parsed.slug })
+      || matchedRow?.sprite_source_url
+      || null;
     if (!sourceUrl) {
       report.push({
         dex_number: parsed.dexNumber,
