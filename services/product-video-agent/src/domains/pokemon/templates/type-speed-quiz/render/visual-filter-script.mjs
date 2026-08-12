@@ -61,14 +61,10 @@ function buildSceneSpriteFilter({
   const scaleExpression = buildAnimatedLerpExpression({
     fromValue: 0.001,
     toValue: displayScaleMultiplier,
-    holdUntilSeconds: 0,
+    holdUntilSeconds: introStartSeconds,
     transitionDurationSeconds: introDurationSeconds,
     timeExpression: buildScaleFilterTimeExpression({ fps, streamStartSeconds: 0 }),
   });
-  const visibleDurationSeconds = roundTime(Math.max(
-    0.12,
-    round.scene_duration_seconds - introStartSeconds,
-  ));
   const bobStartSeconds = roundTime(
     introStartSeconds
     + introDurationSeconds
@@ -85,7 +81,7 @@ function buildSceneSpriteFilter({
   ) * 6.283185307);
   const bobExpression = `if(lt(t,${bobStartSeconds}),0,if(lt(t,${round.local.reveal_start_seconds}),sin((t-${bobStartSeconds})*${bobFrequencyRadians})*${bobAmplitude},0))`;
   return [
-    `[${inputIndex}:v]fps=${fps},trim=duration=${visibleDurationSeconds},setpts=PTS-STARTPTS+${introStartSeconds}/TB,scale=w='max(4,${spriteLayout.render_size_px}*(${scaleExpression}))':h='max(4,${spriteLayout.render_size_px}*(${scaleExpression}))':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
+    `[${inputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='max(4,${spriteLayout.render_size_px}*(${scaleExpression}))':h='max(4,${spriteLayout.render_size_px}*(${scaleExpression}))':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[spr${roundIndex}]`,
     `[scene${roundIndex}b][spr${roundIndex}]overlay=${spriteLayout.center_x}-w/2:'${spriteLayout.center_y}-h/2-${bobExpression}':enable='gte(t,${introStartSeconds})'[scene${roundIndex}s]`,
   ];
 }
@@ -271,19 +267,15 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     round.type_icons.forEach((_, iconIndex) => {
       const iconInput = inputRefs.rounds[roundIndex].typeIcons[iconIndex];
       const badgeLayout = round.type_badge_layout[iconIndex];
-      const visibleDurationSeconds = roundTime(Math.max(
-        0.12,
-        round.scene_duration_seconds - round.local.reveal_visual_start_seconds,
-      ));
       const scaleExpression = buildAnimatedLerpExpression({
         fromValue: 0.001,
         toValue: 1,
-        holdUntilSeconds: 0,
+        holdUntilSeconds: round.local.reveal_visual_start_seconds,
         transitionDurationSeconds: typeBadgePopDuration,
         timeExpression: buildScaleFilterTimeExpression({ fps, streamStartSeconds: 0 }),
       });
       filters.push(
-        `[${iconInput}:v]fps=${fps},trim=duration=${visibleDurationSeconds},setpts=PTS-STARTPTS+${round.local.reveal_visual_start_seconds}/TB,scale=w='max(4,${badgeLayout.size_px}*(${scaleExpression}))':h='max(4,${badgeLayout.size_px}*(${scaleExpression}))':eval=frame,format=rgba,setsar=1[round${roundIndex}icon${iconIndex}]`,
+        `[${iconInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='max(4,${badgeLayout.size_px}*(${scaleExpression}))':h='max(4,${badgeLayout.size_px}*(${scaleExpression}))':eval=frame,format=rgba,setsar=1[round${roundIndex}icon${iconIndex}]`,
       );
       const iconSceneLabel = `scene${roundIndex}icon${iconIndex}`;
       filters.push(

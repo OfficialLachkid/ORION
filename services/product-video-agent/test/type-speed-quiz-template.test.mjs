@@ -435,7 +435,7 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
   assert.match(visualFilter.script, /\[scene0p0\]/u);
   assert.doesNotMatch(visualFilter.script, /\[scene1p0\]/u);
   assert.match(visualFilter.script, /drawtext=text='1\/5'/u);
-  assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+0\.04\/TB,scale=w='max\(4,3200\*\(if\(lt\(\(\(n\/30\)\),0\),0\.001,/u);
+  assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=w='max\(4,3200\*\(if\(lt\(\(\(n\/30\)\),0\.04\),0\.001,/u);
   const dualTypeRound = renderPlan.rounds.find((round) => round.subject.types.length === 2);
   assert.ok(dualTypeRound);
   assert.doesNotMatch(
@@ -449,10 +449,10 @@ test('visual filter composes round scenes and chains them with slideleft xfade t
       new RegExp(`drawtext=text='${escapeRegExp(formattedType)}'`, 'u'),
     );
   });
-  assert.match(visualFilter.script, /min\(max\(\(\(\(n\/30\)\)-0\)\/0\.3,0\),1\)\),2\)\)\)/u);
+  assert.match(visualFilter.script, /min\(max\(\(\(\(n\/30\)\)-0\.04\)\/0\.3,0\),1\)\),2\)\)\)/u);
   assert.match(visualFilter.script, /if\(lt\(t,0\.84\),0,if\(lt\(t,/u);
   assert.match(visualFilter.script, /9\.896/u);
-  assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+\d+\.\d+\/TB,scale=w='max\(4,630\*\(if\(lt\(\(\(n\/30\)\),0\),0\.001,/u);
+  assert.match(visualFilter.script, /setpts=PTS-STARTPTS,scale=w='max\(4,630\*\(if\(lt\(\(\(n\/30\)\),4\.44\),0\.001,/u);
   assert.doesNotMatch(visualFilter.script, /crop=iw\*0\.62/u);
   assert.match(visualFilter.script, /\[scene\d+sparkle\]/u);
   assert.match(visualFilter.script, /scale=800:800:force_original_aspect_ratio=decrease/u);
