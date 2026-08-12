@@ -271,9 +271,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     if (plan.assets.overlays?.selected_type_placeholder_path && inputRefs.typePlaceholder != null) {
       round.type_icons.forEach((_, iconIndex) => {
         const badgeLayout = round.type_badge_layout[iconIndex];
+        const placeholderCanvasSizePx = Math.ceil(badgeLayout.size_px * 1.18);
+        const placeholderRotationExpression = `if(lt(t,${round.local.countdown_start_seconds}),0,sin((t-${round.local.countdown_start_seconds})*7)*0.05)`;
         const placeholderLabel = `round${roundIndex}placeholder${iconIndex}`;
         filters.push(
-          `[${inputRefs.typePlaceholder}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${badgeLayout.size_px}:${badgeLayout.size_px}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${placeholderLabel}]`,
+          `[${inputRefs.typePlaceholder}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${badgeLayout.size_px}:${badgeLayout.size_px}:force_original_aspect_ratio=decrease,format=rgba,pad=${placeholderCanvasSizePx}:${placeholderCanvasSizePx}:(ow-iw)/2:(oh-ih)/2:color=black@0,rotate='${placeholderRotationExpression}':ow=iw:oh=ih:c=none,setsar=1[${placeholderLabel}]`,
         );
         const placeholderSceneLabel = `scene${roundIndex}ph${iconIndex}`;
         filters.push(
