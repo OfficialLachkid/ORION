@@ -204,6 +204,9 @@ export function loadRuntimeConfig(options = {}) {
   if (!Object.prototype.hasOwnProperty.call(channelIds, 'pokemon')) {
     channelIds.pokemon = env.DISCORD_POKEMON_CHANNEL_ID || '';
   }
+  if (!Object.prototype.hasOwnProperty.call(channelIds, 'orionAnalytics')) {
+    channelIds.orionAnalytics = env.DISCORD_ORION_ANALYTICS_CHANNEL_ID || '';
+  }
 
   const resolvedTmpDir = env.RUNTIME_TMP_DIR || resolve(projectRoot, 'data', 'runtime', 'tmp');
   const resolvedLogDir = env.RUNTIME_LOG_DIR || resolve(projectRoot, 'data', 'runtime', 'logs');

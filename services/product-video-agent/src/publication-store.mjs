@@ -85,6 +85,24 @@ export class SupabasePublicationStore {
     return rows?.[0] || null;
   }
 
+  async fetchVideosByIds(ids = []) {
+    const normalizedIds = [...new Set(
+      (Array.isArray(ids) ? ids : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    )];
+    if (normalizedIds.length === 0) {
+      return [];
+    }
+
+    return this.request('videos', {
+      params: {
+        select: '*',
+        id: `in.(${normalizedIds.map((value) => `"${value}"`).join(',')})`,
+      },
+    });
+  }
+
   async fetchPublicationById(id) {
     const rows = await this.request('video_publications', {
       params: {
@@ -123,5 +141,67 @@ export class SupabasePublicationStore {
       body: patch,
     });
     return rows?.[0] || null;
+  }
+
+  async fetchPublishedPublicationsByChannel({
+    platform,
+    accountKey,
+    order = 'published_at.desc',
+    limit = null,
+  }) {
+    return this.request('video_publications', {
+      params: {
+        select: '*',
+        platform: `eq.${platform}`,
+        account_key: `eq.${accountKey}`,
+        status: 'eq.published',
+        order,
+        limit,
+      },
+    });
+  }
+
+  async upsertVideoAnalyticsSnapshot(snapshotRow) {
+    const rows = await this.request('video_analytics', {
+      method: 'POST',
+      params: {
+        on_conflict: 'publication_id,captured_at',
+      },
+      prefer: 'resolution=merge-duplicates,return=representation',
+      body: [snapshotRow],
+    });
+    return rows?.[0] || null;
+  }
+
+  async fetchLatestAnalyticsSnapshot(publicationId) {
+    const rows = await this.request('video_analytics', {
+      params: {
+        select: '*',
+        publication_id: `eq.${publicationId}`,
+        order: 'captured_at.desc',
+        limit: 1,
+      },
+    });
+    return rows?.[0] || null;
+  }
+
+  async fetchAnalyticsSnapshotsByPublicationIds(publicationIds = [], options = {}) {
+    const ids = [...new Set(
+      (Array.isArray(publicationIds) ? publicationIds : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    )];
+    if (ids.length === 0) {
+      return [];
+    }
+
+    return this.request('video_analytics', {
+      params: {
+        select: '*',
+        publication_id: `in.(${ids.map((value) => `"${value}"`).join(',')})`,
+        order: options.order || 'captured_at.desc',
+        limit: options.limit || null,
+      },
+    });
   }
 }

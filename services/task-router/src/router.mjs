@@ -10,6 +10,10 @@ import {
   parseProductVideoCommand,
   summarizeProductVideoRequest,
 } from './product-video-command-parser.mjs';
+import {
+  parseVideoAnalyticsCommand,
+  summarizeVideoAnalyticsRequest,
+} from './video-analytics-command-parser.mjs';
 
 const DOMAIN_KEYWORDS = {
   infra: ['deploy', 'production', 'server', 'host', 'tailscale', 'docker', 'colima', 'restart', 'service', 'mac mini'],
@@ -77,6 +81,7 @@ export function splitCommandMessage(content) {
   if (
     parseDeveloperTaskCommand(rawContent)
     || parseProductVideoCommand(rawContent)
+    || parseVideoAnalyticsCommand(rawContent)
     || parseDraftEmailCommand(rawContent)
     || parseLeadgenCommand(rawContent)
   ) {
@@ -188,13 +193,15 @@ export function normalizeTaskMessage(message, config) {
   const submittedAt = message.submittedAt || new Date().toISOString();
   const developerRequest = parseDeveloperTaskCommand(rawContent);
   const productVideoRequest = developerRequest ? null : parseProductVideoCommand(rawContent);
-  const draftEmailRequest = developerRequest || productVideoRequest ? null : parseDraftEmailCommand(rawContent);
-  const leadgenRequest = developerRequest || productVideoRequest || draftEmailRequest
+  const analyticsRequest = developerRequest || productVideoRequest ? null : parseVideoAnalyticsCommand(rawContent);
+  const draftEmailRequest = developerRequest || productVideoRequest || analyticsRequest ? null : parseDraftEmailCommand(rawContent);
+  const leadgenRequest = developerRequest || productVideoRequest || analyticsRequest || draftEmailRequest
     ? null
     : parseLeadgenCommand(rawContent);
   const hasExplicitRequest = Boolean(
     developerRequest
     || productVideoRequest
+    || analyticsRequest
     || draftEmailRequest
     || leadgenRequest
   );
@@ -204,12 +211,16 @@ export function normalizeTaskMessage(message, config) {
     ? 'developer'
     : productVideoRequest
       ? 'content'
+      : analyticsRequest
+      ? 'content'
       : hasExplicitRequest
         ? 'sales'
         : inferDomain(content);
   const targetAgent = developerRequest
     ? 'developer-agent'
     : productVideoRequest
+      ? 'product-video-agent'
+      : analyticsRequest
       ? 'product-video-agent'
       : hasExplicitRequest
         ? 'orchestrator'
@@ -222,7 +233,7 @@ export function normalizeTaskMessage(message, config) {
           description: 'creates GitHub writes and invokes Claude in an isolated worktree',
         }],
       }
-    : productVideoRequest
+    : productVideoRequest || analyticsRequest
       ? { approvalRequired: false, matchedRules: [] }
     : hasExplicitRequest
       ? { approvalRequired: false, matchedRules: [] }
@@ -232,6 +243,8 @@ export function normalizeTaskMessage(message, config) {
     ? summarizeDeveloperTaskRequest(developerRequest)
     : productVideoRequest
       ? summarizeProductVideoRequest(productVideoRequest)
+    : analyticsRequest
+      ? summarizeVideoAnalyticsRequest(analyticsRequest)
     : draftEmailRequest
       ? summarizeDraftEmailRequest(draftEmailRequest)
       : leadgenRequest
@@ -264,6 +277,12 @@ export function normalizeTaskMessage(message, config) {
           runtime_action: 'poke_quizz_generate_review',
           automation_type: 'poke_quizz_generate_review',
           poke_quizz_generate_review: productVideoRequest,
+        }
+      : analyticsRequest
+      ? {
+          runtime_action: 'video_analytics_post_digest',
+          automation_type: 'video_analytics_post_digest',
+          video_analytics_request: analyticsRequest,
         }
       : draftEmailRequest
       ? {

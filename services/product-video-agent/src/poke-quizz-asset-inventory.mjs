@@ -148,12 +148,34 @@ function matchOverlay(files, keywords) {
 }
 
 export function selectOverlayPresets(overlays) {
+  const overlayImages = overlays.filter((filePath) => IMAGE_EXTENSIONS.has(extname(filePath).toLowerCase()));
+  const overlayVideos = overlays.filter((filePath) => ['.mp4', '.mov', '.webm'].includes(extname(filePath).toLowerCase()));
   const timerCountdown = matchOverlay(overlays, ['timer', 'countdown'])
     || matchOverlay(overlays, ['timer-countdown'])
     || matchOverlay(overlays, ['timer_countdown']);
   const timerAlarm = matchOverlay(overlays, ['timer', 'alarm'])
     || matchOverlay(overlays, ['timer-alarm'])
     || matchOverlay(overlays, ['timer_alarm']);
+  const longHpBar = matchOverlay(overlayVideos, ['long', 'hp', 'bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['long-hp-bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['long_hp_bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['long', 'hp', 'bar'])
+    || matchOverlay(overlayVideos, ['long-hp-bar'])
+    || matchOverlay(overlayVideos, ['long_hp_bar']);
+  const hpBar = longHpBar
+    || matchOverlay(overlayVideos, ['hp', 'bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['hp-bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['hp_bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['hp', 'bar'])
+    || matchOverlay(overlayVideos, ['hp-bar'])
+    || matchOverlay(overlayVideos, ['hp_bar']);
+  const longHpBarFrame = matchOverlay(overlayImages, ['long', 'hp', 'bar'])
+    || matchOverlay(overlayImages, ['long-hp-bar'])
+    || matchOverlay(overlayImages, ['long_hp_bar']);
+  const hpBarFrame = longHpBarFrame
+    || matchOverlay(overlayImages, ['hp', 'bar'])
+    || matchOverlay(overlayImages, ['hp-bar'])
+    || matchOverlay(overlayImages, ['hp_bar']);
   const shinySparkle = matchOverlay(overlays, ['shiny', 'sparkle'])
     || matchOverlay(overlays, ['shiny-sparkle'])
     || matchOverlay(overlays, ['shiny_sparkle']);
@@ -165,6 +187,10 @@ export function selectOverlayPresets(overlays) {
     timer,
     timer_countdown: timerCountdown || timer,
     timer_alarm: timerAlarm,
+    hp_bar: hpBar,
+    long_hp_bar: longHpBar,
+    hp_bar_frame: hpBarFrame,
+    long_hp_bar_frame: longHpBarFrame,
     shiny_sparkle: shinySparkle,
     type_placeholder: typePlaceholder,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])

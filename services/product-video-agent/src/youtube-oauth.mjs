@@ -4,9 +4,13 @@ const YOUTUBE_CHANNELS_URL = 'https://www.googleapis.com/youtube/v3/channels';
 
 export const YOUTUBE_UPLOAD_SCOPE = 'https://www.googleapis.com/auth/youtube.upload';
 export const YOUTUBE_FORCE_SSL_SCOPE = 'https://www.googleapis.com/auth/youtube.force-ssl';
+export const YOUTUBE_READONLY_SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
+export const YT_ANALYTICS_READONLY_SCOPE = 'https://www.googleapis.com/auth/yt-analytics.readonly';
 export const YOUTUBE_DEFAULT_SCOPES = Object.freeze([
   YOUTUBE_UPLOAD_SCOPE,
   YOUTUBE_FORCE_SSL_SCOPE,
+  YOUTUBE_READONLY_SCOPE,
+  YT_ANALYTICS_READONLY_SCOPE,
 ]);
 
 async function readJsonResponse(response) {

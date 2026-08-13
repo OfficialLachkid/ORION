@@ -5,6 +5,10 @@ import {
   PRODUCT_VIDEO_TEMPLATE_OPTIONS,
   serializeProductVideoCommand,
 } from '../../task-router/src/product-video-command-parser.mjs';
+import {
+  VIDEO_ANALYTICS_CHANNEL_OPTIONS,
+  serializeVideoAnalyticsCommand,
+} from '../../task-router/src/video-analytics-command-parser.mjs';
 import { serializeDeveloperTaskCommand } from '../../developer-agent/src/command-parser.mjs';
 
 const DISCORD_INTERACTION_TYPE_APPLICATION_COMMAND = 2;
@@ -18,6 +22,7 @@ const EMAIL_DRAFT_COMMAND_NAMES = new Set(['email-draft']);
 const LEADGEN_COMMAND_NAMES = new Set(['leadgen']);
 const DEVELOPER_TASK_COMMAND_NAMES = new Set(['create-developer-issue']);
 const PRODUCT_VIDEO_COMMAND_NAMES = new Set(['generate-video']);
+const VIDEO_ANALYTICS_COMMAND_NAMES = new Set(['analytics']);
 
 const HEALTH_TARGETS = [
   {
@@ -247,6 +252,29 @@ export function buildGuildSlashCommands() {
       ],
     },
     {
+      name: 'analytics',
+      description: 'Post an on-demand YouTube analytics digest for one channel or all channels.',
+      type: 1,
+      options: [
+        {
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING,
+          name: 'channel',
+          description: 'Which YouTube channel to report on, or all channels.',
+          required: true,
+          choices: VIDEO_ANALYTICS_CHANNEL_OPTIONS.map((option) => ({
+            name: option.name,
+            value: option.value,
+          })),
+        },
+        {
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_INTEGER,
+          name: 'days',
+          description: 'How many trailing days to include in the digest window.',
+          required: true,
+        },
+      ],
+    },
+    {
       name: 'leadgen',
       description: 'Search public pages for candidate leads and extract structured records.',
       type: 1,
@@ -318,6 +346,7 @@ export function isSupportedSlashCommandInteraction(interaction) {
       || LEADGEN_COMMAND_NAMES.has(commandName)
       || DEVELOPER_TASK_COMMAND_NAMES.has(commandName)
       || PRODUCT_VIDEO_COMMAND_NAMES.has(commandName)
+      || VIDEO_ANALYTICS_COMMAND_NAMES.has(commandName)
     );
 }
 
@@ -378,6 +407,13 @@ function resolveSlashCommandContent(interaction) {
     return serializeProductVideoCommand({
       templateKey: getSlashCommandOptionValue(interaction, 'template'),
       channelSelector: getSlashCommandOptionValue(interaction, 'channel'),
+    });
+  }
+
+  if (VIDEO_ANALYTICS_COMMAND_NAMES.has(commandName)) {
+    return serializeVideoAnalyticsCommand({
+      channelSelector: getSlashCommandOptionValue(interaction, 'channel'),
+      windowDays: getSlashCommandOptionValue(interaction, 'days'),
     });
   }
 

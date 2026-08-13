@@ -85,6 +85,7 @@ const template = {
     timer: {
       countdown_from: 3,
       countdown_to: 0,
+      display_mode: 'hp_bar_depletion',
     },
   },
   audio: {
@@ -178,9 +179,20 @@ const assetInventory = {
     timer: '/tmp/timer.gif',
     timer_countdown: '/tmp/timer-countdown.gif',
     timer_alarm: '/tmp/timer-alarm.gif',
+    long_hp_bar: '/tmp/long-hp-bar-countdown-1s.mp4',
+    hp_bar: '/tmp/hp-bar-countdown-1s.mp4',
+    long_hp_bar_frame: '/tmp/long-hp-bar.png',
+    hp_bar_frame: '/tmp/hp-bar.png',
     shiny_sparkle: '/tmp/shiny-sparkle.gif',
   },
-  overlays: ['/tmp/pokeball.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/shiny-sparkle.gif'],
+  overlays: [
+    '/tmp/pokeball.gif',
+    '/tmp/timer-countdown.gif',
+    '/tmp/timer-alarm.gif',
+    '/tmp/long-hp-bar-countdown-1s.mp4',
+    '/tmp/long-hp-bar.png',
+    '/tmp/shiny-sparkle.gif',
+  ],
   transitions: [],
 };
 
@@ -203,6 +215,11 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Find the Shiny$/u);
   assert.equal(plan.assets.pokemon[0].name, 'Articuno');
   assert.equal(plan.assets.overlays.selected_primary_pokeball_overlay_path, '/tmp/pokeball.gif');
+  assert.equal(plan.assets.overlays.timer_display_mode, 'hp_bar_depletion');
+  assert.equal(plan.assets.overlays.selected_timer_hp_bar_path, '/tmp/long-hp-bar-countdown-1s.mp4');
+  assert.equal(plan.assets.overlays.selected_timer_hp_bar_frame_path, '/tmp/long-hp-bar.png');
+  assert.equal(plan.assets.overlays.selected_timer_path, null);
+  assert.equal(plan.assets.overlays.selected_timer_alarm_path, null);
   assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, '/tmp/pokeball-intro.mp3');
   assert.equal(plan.shiny_reveal.active, true);
   assert.equal(plan.shiny_reveal.selected_name, 'Articuno');
@@ -314,6 +331,7 @@ test('generic render-plan dispatch keeps the shiny grid centered and reveal timi
   assert.equal(renderPlan.grid.columns, 3);
   assert.equal(renderPlan.audio_cues.reveal_start_seconds, 5.6);
   assert.equal(renderPlan.audio_cues.reveal_visual_start_seconds, 5.68);
+  assert.equal(renderPlan.timer_layout.mode, 'hp_bar_depletion');
   assert.equal(renderPlan.timer_layout.y < renderPlan.grid.stage_bounds_px.top, true);
   assert.equal(renderPlan.output_path, '/tmp/find-the-shiny.mp4');
 });
@@ -359,13 +377,15 @@ test('visual inputs and audio cues use one normal sprite source plus one shiny r
   const inputs = buildVisualInputs(plan, renderPlan);
   assert.deepEqual(inputs.map((input) => input.role), [
     'background',
-    'timer-countdown',
-    'timer-alarm',
+    'timer-hp-bar',
+    'timer-hp-bar-frame',
     'pokeball-grid',
     'normal-sprite',
     'shiny-sprite',
     'shiny-sparkle',
   ]);
+  assert.deepEqual(inputs[1].args, ['-stream_loop', '-1', '-t', '8', '-i', '/tmp/long-hp-bar-countdown-1s.mp4']);
+  assert.deepEqual(inputs[2].args, ['-loop', '1', '-framerate', '30', '-t', '8', '-i', '/tmp/long-hp-bar.png']);
   assert.deepEqual(inputs[3].args, ['-stream_loop', '-1', '-ignore_loop', '0', '-t', '8', '-i', '/tmp/pokeball.gif']);
   assert.deepEqual(inputs[4].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno.png']);
   assert.deepEqual(inputs[5].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno-shiny.png']);
@@ -385,6 +405,47 @@ test('visual inputs and audio cues use one normal sprite source plus one shiny r
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[pokeballintro\]\[shiny\]amix/u);
 });
 
+test('find-the-shiny planner prefers the greenscreen hp-bar overlay and skips the png frame mask', async () => {
+  const greenscreenInventory = structuredClone(assetInventory);
+  greenscreenInventory.overlay_presets.long_hp_bar = '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4';
+  greenscreenInventory.overlay_presets.hp_bar = '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4';
+  greenscreenInventory.overlays = [
+    '/tmp/pokeball.gif',
+    '/tmp/timer-countdown.gif',
+    '/tmp/timer-alarm.gif',
+    '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4',
+    '/tmp/long-hp-bar.png',
+    '/tmp/shiny-sparkle.gif',
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'find-the-shiny-greenscreen-hp-bar',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory: greenscreenInventory,
+  });
+
+  assert.equal(plan.assets.overlays.selected_timer_hp_bar_path, '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4');
+  assert.equal(plan.assets.overlays.selected_timer_hp_bar_frame_path, null);
+
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/find-the-shiny-greenscreen.mp4',
+  });
+  const inputs = buildVisualInputs(plan, renderPlan);
+
+  assert.deepEqual(inputs.map((input) => input.role), [
+    'background',
+    'timer-hp-bar',
+    'pokeball-grid',
+    'normal-sprite',
+    'shiny-sprite',
+    'shiny-sparkle',
+  ]);
+});
+
 test('visual filter starts with pokeballs, then reveals the grid with exactly one shiny cell and sparkle', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
@@ -398,6 +459,7 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
     template,
     outputPath: '/tmp/find-the-shiny.mp4',
   });
+  plan.assets.overlays.selected_timer_hp_bar_duration_seconds = 1;
   const shinyCell = renderPlan.grid.cells[plan.shiny_reveal.selected_cell_index];
   const expectedSpriteHoldSize = Number(
     (renderPlan.grid.item_size_px * template.layout.sprite_grid.sprite_scale_multiplier).toFixed(3),
@@ -412,8 +474,10 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
     renderPlan,
     {
       background: 0,
-      timerCountdown: 1,
-      timerAlarm: 2,
+      timerHpBar: 1,
+      timerHpBarFrame: 2,
+      timerCountdown: null,
+      timerAlarm: null,
       pokeball: 3,
       normalSprite: 4,
       shinySprite: 5,
@@ -438,8 +502,18 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
 
   assert.match(visualFilter.script, /\[3:v\]fps=30,format=rgba,scale=/u);
   assert.match(visualFilter.script, /fontsize=108/u);
+  assert.match(visualFilter.script, /\[2:v\]fps=30,scale=968:188:force_original_aspect_ratio=decrease,format=rgba,alphaextract\[timerhpbarmaskcount\]/u);
+  assert.match(visualFilter.script, /\[1:v\]fps=30,trim=duration=1,setpts=\(PTS-STARTPTS\)\*3\+2\.6\/TB,scale=968:188:force_original_aspect_ratio=decrease,format=rgba\[timerhpbarcountvideo\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarcountvideo\]\[timerhpbarmaskcount\]alphamerge,setsar=1\[timerhpbarbase\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarbase\]split=2\[timerhpbarprecountsrc\]\[timerhpbarcountdown\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarprecountsrc\]trim=duration=0\.033,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,fade=t=in:st=[0-9.]+:d=0\.3:alpha=1,format=rgba,setsar=1\[timerhpbarprecount\]/u);
+  assert.match(visualFilter.script, /\[vgr2\]\[timerhpbarprecount\]overlay=.*y='400\+if\(lt\(\(t\),[0-9.]+\),\(1-\(\(\(t\)-[0-9.]+\)\/0\.32\)\)\*18\*sin\(\(\(t\)-[0-9.]+\)\*20\),0\)'.*enable='gte\(t,[0-9.]+\)\*lt\(t,2\.6\)'/u);
+  assert.match(visualFilter.script, /\[vgr2hbp\]\[timerhpbarcountdown\]overlay=.*enable='between\(t,2\.6,5\.6\)'/u);
   assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+5\.68\/TB/u);
   assert.doesNotMatch(visualFilter.script, /pokeballstaticsource/u);
+  assert.doesNotMatch(visualFilter.script, /timercountdown/u);
+  assert.doesNotMatch(visualFilter.script, /timeralarm/u);
+  assert.doesNotMatch(visualFilter.script, /drawtext=text='3'/u);
   assert.match(visualFilter.script, new RegExp(`scale=${expectedSpriteHoldSize}:${expectedSpriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1\\[shinyhold\\]`, 'u'));
   assert.match(visualFilter.script, new RegExp(`scale=${expectedPokeballSize}:${expectedPokeballSize}:force_original_aspect_ratio=decrease`, 'u'));
   assert.match(visualFilter.script, /\[pbsrc0\]split=2\[pbisrc0\]\[pbrsrc0\]/u);
@@ -452,4 +526,62 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
   assert.match(visualFilter.script, /\[pbisrc0\]trim=start=[0-9.]+:duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=w='/u);
   assert.match(visualFilter.script, /\[pbrsrc0\]trim=start=[0-9.]+:duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=/u);
   assert.match(visualFilter.script, /\[v0\]\[pbi0\]overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,[0-9.]+\)'/u);
+});
+
+test('visual filter keys out green when the hp-bar countdown uses the greenscreen overlay', async () => {
+  const greenscreenInventory = structuredClone(assetInventory);
+  greenscreenInventory.overlay_presets.long_hp_bar = '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4';
+  greenscreenInventory.overlay_presets.hp_bar = '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4';
+  greenscreenInventory.overlays = [
+    '/tmp/pokeball.gif',
+    '/tmp/timer-countdown.gif',
+    '/tmp/timer-alarm.gif',
+    '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4',
+    '/tmp/long-hp-bar.png',
+    '/tmp/shiny-sparkle.gif',
+  ];
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'find-the-shiny-greenscreen-visual-filter',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory: greenscreenInventory,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/find-the-shiny-greenscreen.mp4',
+  });
+  plan.assets.overlays.selected_timer_hp_bar_duration_seconds = 1;
+
+  const visualFilter = buildVisualFilterScript(
+    plan,
+    template,
+    renderPlan,
+    {
+      background: 0,
+      timerHpBar: 1,
+      timerHpBarFrame: null,
+      timerCountdown: null,
+      timerAlarm: null,
+      pokeball: 2,
+      normalSprite: 3,
+      shinySprite: 4,
+      shinySparkle: 5,
+    },
+    null,
+    {
+      hook: { segments: [] },
+      prompt: { segments: [] },
+      reveal: { segments: [] },
+    },
+  );
+
+  assert.match(visualFilter.script, /colorkey=0x00FF00:0\.22:0\.08/u);
+  assert.doesNotMatch(visualFilter.script, /timerhpbarmaskcount/u);
+  assert.match(visualFilter.script, /\[timerhpbarbase\]split=2\[timerhpbarprecountsrc\]\[timerhpbarcountdown\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarprecountsrc\]trim=duration=0\.033,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,fade=t=in:st=[0-9.]+:d=0\.3:alpha=1,format=rgba,setsar=1\[timerhpbarprecount\]/u);
+  assert.match(visualFilter.script, /overlay=.*y='400\+if\(lt\(\(t\),[0-9.]+\),\(1-\(\(\(t\)-[0-9.]+\)\/0\.32\)\)\*18\*sin\(\(\(t\)-[0-9.]+\)\*20\),0\)'/u);
+  assert.match(visualFilter.script, /overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,2\.6\)'/u);
+  assert.match(visualFilter.script, /overlay=.*enable='between\(t,2\.6,5\.6\)'/u);
 });

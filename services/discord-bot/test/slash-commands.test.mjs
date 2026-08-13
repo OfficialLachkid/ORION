@@ -10,7 +10,7 @@ import {
 test('buildGuildSlashCommands returns the supported slash commands', () => {
   const commands = buildGuildSlashCommands();
 
-  assert.equal(commands.length, 10);
+  assert.equal(commands.length, 11);
   assert.deepEqual(commands.map((command) => command.name), [
     'commands',
     'help',
@@ -19,6 +19,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'sync',
     'ops',
     'generate-video',
+    'analytics',
     'leadgen',
     'create-developer-issue',
     'email-draft',
@@ -47,6 +48,16 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     .map((choice) => choice.value)
     .sort();
   assert.deepEqual(generateChannelChoiceValues, [
+    'poke-guess-youtube',
+    'poke-quizz-youtube',
+    'trivamon-youtube',
+  ]);
+  const analyticsCommand = commands.find((command) => command.name === 'analytics');
+  const analyticsChannelChoiceValues = (analyticsCommand?.options?.find((option) => option.name === 'channel')?.choices || [])
+    .map((choice) => choice.value)
+    .sort();
+  assert.deepEqual(analyticsChannelChoiceValues, [
+    'all',
     'poke-guess-youtube',
     'poke-quizz-youtube',
     'trivamon-youtube',
@@ -100,6 +111,11 @@ test('isSupportedSlashCommandInteraction accepts supported slash commands', () =
   assert.equal(isSupportedSlashCommandInteraction({
     type: 2,
     data: { name: 'generate-video' },
+  }), true);
+
+  assert.equal(isSupportedSlashCommandInteraction({
+    type: 2,
+    data: { name: 'analytics' },
   }), true);
 
   assert.equal(isSupportedSlashCommandInteraction({
@@ -310,6 +326,34 @@ test('normalizeSupportedSlashCommandInteraction converts a manual video generati
   });
 
   assert.equal(message?.content, 'generate video template: find-the-shiny channel: trivamon-youtube');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts an analytics slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-analytics-1',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-analytics-1',
+    data: {
+      name: 'analytics',
+      options: [
+        { name: 'channel', value: 'trivamon-youtube' },
+        { name: 'days', value: 3 },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'post analytics channel: trivamon-youtube days: 3');
   assert.equal(message?.channelKey, 'commands');
 });
 

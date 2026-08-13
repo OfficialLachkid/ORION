@@ -32,6 +32,8 @@ const DEFAULT_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SPARKLE_SCALE_MULTIPLIER = 1.35;
 const DEFAULT_SPRITE_SCALE_MULTIPLIER = 1.08;
 const DEFAULT_MIN_ITEM_SIZE_PX = 148;
+const HP_BAR_TIMER_DISPLAY_MODE = 'hp_bar_depletion';
+const NUMERIC_TIMER_DISPLAY_MODE = 'numeric_with_small_ring';
 const DEFAULT_POKEBALL_WIGGLE_WINDOW_START_RATIO = 0.12;
 const DEFAULT_POKEBALL_WIGGLE_WINDOW_END_RATIO = 0.76;
 const DEFAULT_POKEBALL_INTRO_DURATION_SECONDS = 0.56;
@@ -116,6 +118,30 @@ function resolveThemedBackgroundPriority(normalizedTypes = []) {
 
 function normalizeAssetPath(assetPath) {
   return String(assetPath || '').trim().replaceAll('\\', '/').toLowerCase();
+}
+
+function resolveTimerDisplayMode(template) {
+  const normalizedMode = String(template?.layout?.timer?.display_mode || '')
+    .trim()
+    .toLowerCase();
+  return normalizedMode === HP_BAR_TIMER_DISPLAY_MODE
+    ? HP_BAR_TIMER_DISPLAY_MODE
+    : NUMERIC_TIMER_DISPLAY_MODE;
+}
+
+function selectHpBarTimerOverlay(inventory) {
+  return inventory?.overlay_presets?.long_hp_bar
+    || inventory?.overlay_presets?.hp_bar
+    || null;
+}
+
+function selectHpBarTimerFrame(inventory, overlayPath) {
+  if (String(overlayPath || '').toLowerCase().includes('greenscreen')) {
+    return null;
+  }
+  return inventory?.overlay_presets?.long_hp_bar_frame
+    || inventory?.overlay_presets?.hp_bar_frame
+    || null;
 }
 
 function ensurePositiveInteger(value, fallback) {
@@ -725,6 +751,14 @@ export async function planFindTheShinyChallenge({
   const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
   const selectedPair = pickPair(pairCatalog, forcedTypePair, random, normalizedSelectionState);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
+  const preferredTimerDisplayMode = resolveTimerDisplayMode(template);
+  const hpBarTimerOverlayPath = selectHpBarTimerOverlay(inventory);
+  const hpBarTimerFramePath = selectHpBarTimerFrame(inventory, hpBarTimerOverlayPath);
+  const useHpBarTimer = preferredTimerDisplayMode === HP_BAR_TIMER_DISPLAY_MODE && Boolean(hpBarTimerOverlayPath);
+  const resolvedTimerDisplayMode = useHpBarTimer
+    ? HP_BAR_TIMER_DISPLAY_MODE
+    : NUMERIC_TIMER_DISPLAY_MODE;
+  const fallbackTimerPath = inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null;
   const selectableSubjects = collapseSubjectVariants(selectedPair.matches);
   const prioritizedSelectableSubjects = prioritizeSelectableSubjects(selectableSubjects, random);
   const selectedSubject = prioritizedSelectableSubjects[0] || null;
@@ -773,8 +807,11 @@ export async function planFindTheShinyChallenge({
   if (!inventory.sound_effects.pokeball_intro) requiredAssetGaps.push('pokeball_intro_sfx_missing');
   if (!inventory.sound_effects.shiny) requiredAssetGaps.push('shiny_sfx_missing');
   if (!inventory.overlay_presets?.pokeball_primary) requiredAssetGaps.push('pokeball_overlay_missing');
-  if (!inventory.overlay_presets?.timer_countdown && !inventory.overlay_presets?.timer) requiredAssetGaps.push('timer_overlay_missing');
-  if (!inventory.overlay_presets?.timer_alarm) requiredAssetGaps.push('timer_alarm_overlay_missing');
+  if (preferredTimerDisplayMode === HP_BAR_TIMER_DISPLAY_MODE && !hpBarTimerOverlayPath) {
+    requiredAssetGaps.push('timer_hp_bar_overlay_missing');
+  }
+  if (!useHpBarTimer && !fallbackTimerPath) requiredAssetGaps.push('timer_overlay_missing');
+  if (!useHpBarTimer && !inventory.overlay_presets?.timer_alarm) requiredAssetGaps.push('timer_alarm_overlay_missing');
   if (!inventory.overlay_presets?.shiny_sparkle) requiredAssetGaps.push('shiny_sparkle_overlay_missing');
 
   return {
@@ -862,9 +899,12 @@ export async function planFindTheShinyChallenge({
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
         selected_primary_pokeball_overlay_path: inventory.overlay_presets?.pokeball_primary || null,
-        selected_timer_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
-        selected_timer_countdown_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
-        selected_timer_alarm_path: inventory.overlay_presets?.timer_alarm || null,
+        timer_display_mode: resolvedTimerDisplayMode,
+        selected_timer_path: useHpBarTimer ? null : fallbackTimerPath,
+        selected_timer_countdown_path: useHpBarTimer ? null : fallbackTimerPath,
+        selected_timer_alarm_path: useHpBarTimer ? null : inventory.overlay_presets?.timer_alarm || null,
+        selected_timer_hp_bar_path: useHpBarTimer ? hpBarTimerOverlayPath : null,
+        selected_timer_hp_bar_frame_path: useHpBarTimer ? hpBarTimerFramePath : null,
         selected_shiny_sparkle_path: inventory.overlay_presets?.shiny_sparkle || null,
         sprite_grid: spriteGridLayout,
         available_paths: inventory.overlays,
