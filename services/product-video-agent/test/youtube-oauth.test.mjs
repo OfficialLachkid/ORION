@@ -7,6 +7,8 @@ import {
   extractYoutubeOAuthClientCredentials,
   fetchYoutubeMineChannel,
   YOUTUBE_DEFAULT_SCOPES,
+  YOUTUBE_READONLY_SCOPE,
+  YT_ANALYTICS_READONLY_SCOPE,
 } from '../src/youtube-oauth.mjs';
 
 test('youtube oauth extracts desktop client credentials', () => {
@@ -24,7 +26,7 @@ test('youtube oauth extracts desktop client credentials', () => {
   assert.deepEqual(credentials.redirectUris, ['http://localhost']);
 });
 
-test('youtube authorize url requests offline consent for upload and schedule scopes', () => {
+test('youtube authorize url requests offline consent for upload and analytics scopes', () => {
   const url = new URL(buildYoutubeAuthorizeUrl(
     { clientId: 'desktop-client-id.apps.googleusercontent.com' },
     {
@@ -41,6 +43,14 @@ test('youtube authorize url requests offline consent for upload and schedule sco
   assert.equal(url.searchParams.get('redirect_uri'), buildYoutubeLoopbackRedirectUri(54001));
   assert.match(url.searchParams.get('scope') || '', /youtube\.upload/);
   assert.match(url.searchParams.get('scope') || '', /youtube\.force-ssl/);
+  assert.match(url.searchParams.get('scope') || '', new RegExp(YOUTUBE_READONLY_SCOPE.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+  assert.match(url.searchParams.get('scope') || '', new RegExp(YT_ANALYTICS_READONLY_SCOPE.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+  assert.deepEqual(YOUTUBE_DEFAULT_SCOPES, [
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube.force-ssl',
+    'https://www.googleapis.com/auth/youtube.readonly',
+    'https://www.googleapis.com/auth/yt-analytics.readonly',
+  ]);
 });
 
 test('youtube mine-channel fetch returns the authorized channel identity', async () => {
