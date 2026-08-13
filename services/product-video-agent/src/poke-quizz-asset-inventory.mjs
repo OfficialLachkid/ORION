@@ -147,16 +147,6 @@ function matchOverlay(files, keywords) {
   return files.find((filePath) => keywords.every((keyword) => filePath.toLowerCase().includes(keyword))) || null;
 }
 
-function matchOverlayFromKeywordSets(files, keywordSets) {
-  for (const keywords of keywordSets) {
-    const match = matchOverlay(files, keywords);
-    if (match) {
-      return match;
-    }
-  }
-  return null;
-}
-
 export function selectOverlayPresets(overlays) {
   const overlayImages = overlays.filter((filePath) => IMAGE_EXTENSIONS.has(extname(filePath).toLowerCase()));
   const overlayVideos = overlays.filter((filePath) => ['.mp4', '.mov', '.webm'].includes(extname(filePath).toLowerCase()));
@@ -166,25 +156,13 @@ export function selectOverlayPresets(overlays) {
   const timerAlarm = matchOverlay(overlays, ['timer', 'alarm'])
     || matchOverlay(overlays, ['timer-alarm'])
     || matchOverlay(overlays, ['timer_alarm']);
-  const longHpBar = matchOverlayFromKeywordSets(overlayVideos, [
-    ['long', 'hp', 'bar', 'alpha'],
-    ['long', 'hp', 'bar', 'transparent'],
-    ['long-hp-bar', 'alpha'],
-    ['long_hp_bar', 'alpha'],
-    ['long', 'hp', 'bar'],
-    ['long-hp-bar'],
-    ['long_hp_bar'],
-  ]);
+  const longHpBar = matchOverlay(overlayVideos, ['long', 'hp', 'bar'])
+    || matchOverlay(overlayVideos, ['long-hp-bar'])
+    || matchOverlay(overlayVideos, ['long_hp_bar']);
   const hpBar = longHpBar
-    || matchOverlayFromKeywordSets(overlayVideos, [
-      ['hp', 'bar', 'alpha'],
-      ['hp', 'bar', 'transparent'],
-      ['hp-bar', 'alpha'],
-      ['hp_bar', 'alpha'],
-      ['hp', 'bar'],
-      ['hp-bar'],
-      ['hp_bar'],
-    ]);
+    || matchOverlay(overlayVideos, ['hp', 'bar'])
+    || matchOverlay(overlayVideos, ['hp-bar'])
+    || matchOverlay(overlayVideos, ['hp_bar']);
   const longHpBarFrame = matchOverlay(overlayImages, ['long', 'hp', 'bar'])
     || matchOverlay(overlayImages, ['long-hp-bar'])
     || matchOverlay(overlayImages, ['long_hp_bar']);

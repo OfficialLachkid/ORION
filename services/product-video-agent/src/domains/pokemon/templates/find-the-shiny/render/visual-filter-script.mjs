@@ -179,7 +179,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
   const useHpBarCountdown = String(renderPlan?.timer_layout?.mode || '').trim().toLowerCase() === 'hp_bar_depletion'
     && inputRefs.timerHpBar != null;
-  let hpBarIntroStart = countdownStart;
 
   filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
 
@@ -227,10 +226,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         ),
       };
     });
-    hpBarIntroStart = roundTime(Math.min(
-      countdownStart,
-      ...pokeballReplayWindows.map((window) => window.intro_start),
-    ));
     filters.push(
       `[${inputRefs.pokeball}:v]fps=${fps},format=rgba,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,setsar=1,split=${pokeballSourceLabels.length}${pokeballSourceLabels.map((label) => `[${label}]`).join('')}`,
     );
@@ -302,58 +297,19 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     : `PTS-STARTPTS+${countdownStart}/TB`;
 
   if (useHpBarCountdown) {
-    const hpBarIntroHoldSeconds = roundTime(Math.max(0, countdownStart - hpBarIntroStart));
-    const hpBarIntroSampleDuration = roundTime(Math.max(
-      0.04,
-      Math.min(0.12, timerSourceDuration),
-    ));
-    const hpBarScaleExpression = buildAnimatedPopSettleExpression(
-      hpBarIntroStart,
-      pokeballIntroDuration,
-      0,
-      1.08,
-      1,
-      buildScaleFilterTimeExpression({
-        fps,
-        streamStartSeconds: hpBarIntroStart,
-      }),
-    );
     if (inputRefs.timerHpBarFrame != null) {
       filters.push(
-        `[${inputRefs.timerHpBarFrame}:v]fps=${fps},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,alphaextract,split=2[timerhpbarmaskintro][timerhpbarmaskcount]`,
+        `[${inputRefs.timerHpBarFrame}:v]fps=${fps},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,alphaextract[timerhpbarmaskcount]`,
       );
-      if (hpBarIntroHoldSeconds > 0) {
-        filters.push(
-          `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${hpBarIntroSampleDuration},tpad=stop_mode=clone:stop_duration=${hpBarIntroHoldSeconds},setpts=PTS-STARTPTS+${hpBarIntroStart}/TB,scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba[timerhpbarintrovideo]`,
-        );
-        filters.push(
-          `[timerhpbarintrovideo][timerhpbarmaskintro]alphamerge,scale=w='${renderPlan.timer_layout.width}*(${hpBarScaleExpression})':h='${renderPlan.timer_layout.height}*(${hpBarScaleExpression})':eval=frame,setsar=1[timerhpbarintro]`,
-        );
-        const introTimerVideoLabel = `${currentVideoLabel}hbi`;
-        filters.push(
-          `[${currentVideoLabel}][timerhpbarintro]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${renderPlan.timer_layout.y}+((${renderPlan.timer_layout.height}-h)/2)':enable='${buildHalfOpenEnableExpression(hpBarIntroStart, countdownStart)}'[${introTimerVideoLabel}]`,
-        );
-        currentVideoLabel = introTimerVideoLabel;
-      }
       filters.push(
         `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba[timerhpbarcountvideo]`,
       );
       filters.push(
-        `[timerhpbarcountvideo][timerhpbarmaskcount]alphamerge,scale=w='${renderPlan.timer_layout.width}*(${hpBarScaleExpression})':h='${renderPlan.timer_layout.height}*(${hpBarScaleExpression})':eval=frame,setsar=1[timerhpbar]`,
+        `[timerhpbarcountvideo][timerhpbarmaskcount]alphamerge,setsar=1[timerhpbar]`,
       );
     } else {
-      if (hpBarIntroHoldSeconds > 0) {
-        filters.push(
-          `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${hpBarIntroSampleDuration},tpad=stop_mode=clone:stop_duration=${hpBarIntroHoldSeconds},setpts=PTS-STARTPTS+${hpBarIntroStart}/TB,scale=w='${renderPlan.timer_layout.width}*(${hpBarScaleExpression})':h='${renderPlan.timer_layout.height}*(${hpBarScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,setsar=1[timerhpbarintro]`,
-        );
-        const introTimerVideoLabel = `${currentVideoLabel}hbi`;
-        filters.push(
-          `[${currentVideoLabel}][timerhpbarintro]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${renderPlan.timer_layout.y}+((${renderPlan.timer_layout.height}-h)/2)':enable='${buildHalfOpenEnableExpression(hpBarIntroStart, countdownStart)}'[${introTimerVideoLabel}]`,
-        );
-        currentVideoLabel = introTimerVideoLabel;
-      }
       filters.push(
-        `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=w='${renderPlan.timer_layout.width}*(${hpBarScaleExpression})':h='${renderPlan.timer_layout.height}*(${hpBarScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,setsar=1[timerhpbar]`,
+        `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,setsar=1[timerhpbar]`,
       );
     }
     const timerVideoLabel = `${currentVideoLabel}hb`;
