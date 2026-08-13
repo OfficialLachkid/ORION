@@ -374,7 +374,9 @@ export async function reviewPokeQuizzPublication({
     metadata: mergePublicationMetadata(publication, {
       review_task_id: reviewTask.task_id,
       review_thread_id: effectiveReviewThreadId,
+      review_home_thread_id: effectiveReviewThreadId,
       review_message_id: posted.messageId || '',
+      publish_queue_message_id: '',
       review_requested_at: submittedAt,
       ...buildPersistedPokeQuizzReviewPathPatch({
         planPath,

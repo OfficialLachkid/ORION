@@ -6,18 +6,15 @@ import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../lib/runtime-config.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
-  buildPokeQuizzPublicationMessagePayload,
-  buildPokeQuizzPublicationReviewTask,
   isActionableReviewPublication,
 } from '../../src/poke-quizz-publication-review.mjs';
-import { resolvePokeQuizzReviewTaskPaths } from '../../src/poke-quizz-review-paths.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
+import { syncPublicationReviewMessage } from '../../src/publication-review-message-sync.mjs';
 import {
   loadPersistedPendingTasks,
   savePersistedPendingTasks,
 } from '../../../discord-bot/src/pending-task-store.mjs';
-import { editDiscordChannelMessage } from '../../../../scripts/lib/discord-post.mjs';
 import {
   DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
   resolveVideoTemplateRuntime,
@@ -63,23 +60,29 @@ function parseDiscordRetryAfterMs(result) {
   }
 }
 
-async function editReviewMessageWithRetry({
+async function syncReviewMessageWithRetry({
   runtimeConfig,
-  reviewThreadId,
-  reviewMessageId,
-  payload,
+  store,
+  publication,
+  videoRow,
+  channelProfile,
+  channelSelector,
+  reviewPresentation,
   delayMs,
   maxRetries,
 }) {
   let retries = 0;
   while (true) {
-    const result = await editDiscordChannelMessage(
+    const result = await syncPublicationReviewMessage({
       runtimeConfig,
-      reviewThreadId,
-      reviewMessageId,
-      payload,
-    );
-    if (result.posted || result.reason !== 'discord_api_429' || retries >= maxRetries) {
+      store,
+      publication,
+      videoRow,
+      channelProfile,
+      channelSelector,
+      reviewPresentation,
+    });
+    if (result.updated || result.reason !== 'discord_api_429' || retries >= maxRetries) {
       return {
         ...result,
         retries,
@@ -156,39 +159,23 @@ async function main() {
     }
 
     inspectedCount += 1;
-    const reviewPaths = await resolvePokeQuizzReviewTaskPaths(publication);
-
-    const reviewTask = buildPokeQuizzPublicationReviewTask({
+    const result = await syncReviewMessageWithRetry({
+      runtimeConfig,
+      store,
       publication,
-      video: videoRow,
+      videoRow,
       channelProfile,
-      reviewThreadId,
-      planPath: reviewPaths.planPath,
-      renderPath: publication?.metadata?.render_path || videoRow?.render?.output_path || '',
-      catalogJsonPath: reviewPaths.catalogJsonPath,
-      templatePath: reviewPaths.templatePath,
-      configPath: reviewPaths.configPath,
       channelSelector,
       reviewPresentation: templateRuntime.reviewPresentation,
-      submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
-    });
-    const payload = buildPokeQuizzPublicationMessagePayload(reviewTask);
-    if (!isActionableReviewPublication(publication)) {
-      payload.components = [];
-    } else {
-      refreshedTasks.push(reviewTask);
-    }
-
-    const result = await editReviewMessageWithRetry({
-      runtimeConfig,
-      reviewThreadId,
-      reviewMessageId,
-      payload,
       delayMs,
       maxRetries,
     });
     retriedEdits += result.retries || 0;
-    if (result.posted) {
+    const effectivePublication = result.publication || publication;
+    if (result.updated) {
+      if (isActionableReviewPublication(effectivePublication) && result.reviewTask) {
+        refreshedTasks.push(result.reviewTask);
+      }
       refreshedCount += 1;
       printInfo(`Refreshed ${publication.id} -> ${reviewMessageId} (ok${result.retries ? ` after ${result.retries} retry/retries` : ''}).`);
     } else {

@@ -92,21 +92,25 @@ async function sendDiscordChannelRequest(config, channelId, payload, options = {
     return { posted: false, reason: !token ? 'no_token' : 'no_channel_id' };
   }
   const messageId = String(options.messageId || '').trim();
-  const method = messageId ? 'PATCH' : 'POST';
+  const method = String(options.method || '').trim().toUpperCase() || (messageId ? 'PATCH' : 'POST');
   const requestPath = messageId
     ? `${DISCORD_API_BASE_URL}/channels/${channelId}/messages/${messageId}`
     : `${DISCORD_API_BASE_URL}/channels/${channelId}/messages`;
+  const body = method === 'DELETE' ? undefined : JSON.stringify(payload);
   const response = await fetchImpl(requestPath, {
     method,
     headers: {
       Authorization: `Bot ${token}`,
-      'Content-Type': 'application/json',
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
-    body: JSON.stringify(payload),
+    ...(body === undefined ? {} : { body }),
   });
   if (!response.ok) {
     const text = await response.text();
     return { posted: false, reason: `discord_api_${response.status}`, error: text };
+  }
+  if (response.status === 204 || method === 'DELETE') {
+    return { posted: true, messageId, channelId, deleted: method === 'DELETE' };
   }
   const created = await response.json();
   return { posted: true, messageId: created.id || '', channelId };
@@ -120,6 +124,14 @@ export async function editDiscordChannelMessage(config, channelId, messageId, pa
   return sendDiscordChannelRequest(config, channelId, payload, {
     ...options,
     messageId,
+  });
+}
+
+export async function deleteDiscordChannelMessage(config, channelId, messageId, options = {}) {
+  return sendDiscordChannelRequest(config, channelId, null, {
+    ...options,
+    messageId,
+    method: 'DELETE',
   });
 }
 

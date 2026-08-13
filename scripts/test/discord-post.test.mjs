@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildToolReportEmbed,
+  deleteDiscordChannelMessage,
   editDiscordChannelMessage,
   postToolReport,
   sendDiscordChannelMessage,
@@ -97,6 +98,34 @@ test('editDiscordChannelMessage PATCHes an existing Discord message', async () =
   assert.equal(result.messageId, 'msg-2');
   assert.equal(capturedMethod, 'PATCH');
   assert.ok(capturedUrl.endsWith('/channels/123/messages/msg-1'));
+});
+
+test('deleteDiscordChannelMessage DELETEs an existing Discord message', async () => {
+  let capturedUrl = '';
+  let capturedMethod = '';
+  const stubFetch = async (url, options) => {
+    capturedUrl = url;
+    capturedMethod = options.method;
+    return {
+      ok: true,
+      status: 204,
+      json: async () => ({}),
+      text: async () => '',
+    };
+  };
+
+  const result = await deleteDiscordChannelMessage(
+    buildConfig(),
+    '123',
+    'msg-9',
+    { fetch: stubFetch },
+  );
+
+  assert.equal(result.posted, true);
+  assert.equal(result.deleted, true);
+  assert.equal(result.messageId, 'msg-9');
+  assert.equal(capturedMethod, 'DELETE');
+  assert.ok(capturedUrl.endsWith('/channels/123/messages/msg-9'));
 });
 
 test('postToolReport skips when opt-in flag is not set', async () => {
