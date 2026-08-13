@@ -1,4 +1,5 @@
 import {
+  buildAnimatedLerpExpression,
   buildAnimatedPopSettleExpression,
   buildAnimatedTextSegmentAlphaExpression,
   buildAnimatedTextYExpression,
@@ -296,13 +297,23 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const timerSetpts = timerSourceDuration > 0
     ? `(PTS-STARTPTS)*${roundTime(countdownDuration / timerSourceDuration)}+${countdownStart}/TB`
     : `PTS-STARTPTS+${countdownStart}/TB`;
-  const hpBarIntroScaleExpression = buildAnimatedPopSettleExpression(
-    countdownStart,
-    pokeballIntroDuration,
-    0,
-    1.08,
-    1,
+  const hpBarIntroDuration = roundTime(Math.max(
+    0.12,
+    Math.min(0.3, countdownDuration),
+  ));
+  const hpBarIntroEnd = roundTime(
+    Math.min(renderPlan.phases.reveal.start_seconds, countdownStart + hpBarIntroDuration),
   );
+  const hpBarIntroScaleExpression = buildAnimatedLerpExpression({
+    fromValue: 0,
+    toValue: 1,
+    holdUntilSeconds: 0,
+    transitionDurationSeconds: hpBarIntroDuration,
+    timeExpression: buildScaleFilterTimeExpression({
+      fps,
+      streamStartSeconds: 0,
+    }),
+  });
 
   if (useHpBarCountdown) {
     if (inputRefs.timerHpBarFrame != null) {
@@ -321,11 +332,18 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
     }
     filters.push(
-      `[timerhpbarbase]scale=w='max(2,iw*(${hpBarIntroScaleExpression}))':h='max(2,ih*(${hpBarIntroScaleExpression}))':eval=frame,format=rgba,setsar=1[timerhpbar]`,
+      `[timerhpbarbase]split=2[timerhpbarintrosrc][timerhpbarhold]`,
     );
-    const timerVideoLabel = `${currentVideoLabel}hb`;
     filters.push(
-      `[${currentVideoLabel}][timerhpbar]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${renderPlan.timer_layout.y}+((${renderPlan.timer_layout.height}-h)/2)':enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${timerVideoLabel}]`,
+      `[timerhpbarintrosrc]scale=w='max(2,${renderPlan.timer_layout.width}*(${hpBarIntroScaleExpression}))':h='max(2,${renderPlan.timer_layout.height}*(${hpBarIntroScaleExpression}))':eval=frame,format=rgba,setsar=1[timerhpbarintro]`,
+    );
+    const timerIntroVideoLabel = `${currentVideoLabel}hbi`;
+    filters.push(
+      `[${currentVideoLabel}][timerhpbarintro]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${renderPlan.timer_layout.y}+((${renderPlan.timer_layout.height}-h)/2)':enable='${buildHalfOpenEnableExpression(countdownStart, hpBarIntroEnd)}'[${timerIntroVideoLabel}]`,
+    );
+    const timerVideoLabel = `${timerIntroVideoLabel}hb`;
+    filters.push(
+      `[${timerIntroVideoLabel}][timerhpbarhold]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${renderPlan.timer_layout.y}+((${renderPlan.timer_layout.height}-h)/2)':enable='${buildHalfOpenEnableExpression(hpBarIntroEnd, renderPlan.phases.reveal.start_seconds)}'[${timerVideoLabel}]`,
     );
     currentVideoLabel = timerVideoLabel;
   } else {
