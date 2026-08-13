@@ -405,6 +405,47 @@ test('visual inputs and audio cues use one normal sprite source plus one shiny r
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[pokeballintro\]\[shiny\]amix/u);
 });
 
+test('find-the-shiny planner skips the png frame when the hp-bar countdown uses a native alpha video', async () => {
+  const alphaInventory = structuredClone(assetInventory);
+  alphaInventory.overlay_presets.long_hp_bar = '/tmp/long-hp-bar-countdown-1s-alpha.mov';
+  alphaInventory.overlay_presets.hp_bar = '/tmp/long-hp-bar-countdown-1s-alpha.mov';
+  alphaInventory.overlays = [
+    '/tmp/pokeball.gif',
+    '/tmp/timer-countdown.gif',
+    '/tmp/timer-alarm.gif',
+    '/tmp/long-hp-bar-countdown-1s-alpha.mov',
+    '/tmp/long-hp-bar.png',
+    '/tmp/shiny-sparkle.gif',
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'find-the-shiny-alpha-hp-bar',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory: alphaInventory,
+  });
+
+  assert.equal(plan.assets.overlays.selected_timer_hp_bar_path, '/tmp/long-hp-bar-countdown-1s-alpha.mov');
+  assert.equal(plan.assets.overlays.selected_timer_hp_bar_frame_path, null);
+
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/find-the-shiny-alpha.mp4',
+  });
+  const inputs = buildVisualInputs(plan, renderPlan);
+
+  assert.deepEqual(inputs.map((input) => input.role), [
+    'background',
+    'timer-hp-bar',
+    'pokeball-grid',
+    'normal-sprite',
+    'shiny-sprite',
+    'shiny-sparkle',
+  ]);
+});
+
 test('visual filter starts with pokeballs, then reveals the grid with exactly one shiny cell and sparkle', async () => {
   const plan = await planPokemonTypeChallenge({
     template,

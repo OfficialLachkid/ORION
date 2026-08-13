@@ -1,4 +1,5 @@
 import { access } from 'node:fs/promises';
+import { extname } from 'node:path';
 import { createTypePairKey, DISALLOWED_TYPE_PAIR_KEYS, normalizeTypePair } from '../../../../pokemon-type-pairs.mjs';
 import {
   buildPokeQuizzPreviewDirectory,
@@ -135,7 +136,14 @@ function selectHpBarTimerOverlay(inventory) {
     || null;
 }
 
-function selectHpBarTimerFrame(inventory) {
+function shouldUseHpBarTimerFrame(overlayPath) {
+  return extname(String(overlayPath || '')).toLowerCase() === '.mp4';
+}
+
+function selectHpBarTimerFrame(inventory, overlayPath) {
+  if (!shouldUseHpBarTimerFrame(overlayPath)) {
+    return null;
+  }
   return inventory?.overlay_presets?.long_hp_bar_frame
     || inventory?.overlay_presets?.hp_bar_frame
     || null;
@@ -750,7 +758,7 @@ export async function planFindTheShinyChallenge({
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
   const preferredTimerDisplayMode = resolveTimerDisplayMode(template);
   const hpBarTimerOverlayPath = selectHpBarTimerOverlay(inventory);
-  const hpBarTimerFramePath = selectHpBarTimerFrame(inventory);
+  const hpBarTimerFramePath = selectHpBarTimerFrame(inventory, hpBarTimerOverlayPath);
   const useHpBarTimer = preferredTimerDisplayMode === HP_BAR_TIMER_DISPLAY_MODE && Boolean(hpBarTimerOverlayPath);
   const resolvedTimerDisplayMode = useHpBarTimer
     ? HP_BAR_TIMER_DISPLAY_MODE
