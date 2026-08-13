@@ -16,6 +16,14 @@ function toIsoString(value) {
   return asDate(value).toISOString();
 }
 
+function resolveScheduleWindowEnd(asOf = new Date(), maxScheduledDays = 0) {
+  const days = Number(maxScheduledDays);
+  if (!Number.isFinite(days) || days <= 0) {
+    return null;
+  }
+  return new Date(asDate(asOf).getTime() + (days * 24 * 60 * 60 * 1000));
+}
+
 function workflowState(publication = {}) {
   if (publication.metadata?.workflow_state) {
     return String(publication.metadata.workflow_state).trim();
@@ -136,6 +144,16 @@ export function selectPreviewUploadCandidates(publications, channelProfile) {
   );
 }
 
+export function selectReviewApprovalCandidates(publications, channelProfile) {
+  return sortByOldestFirst(
+    publications.filter((publication) => (
+      matchesChannel(publication, channelProfile)
+      && workflowState(publication) === 'preview_uploaded'
+      && isActivePublication(publication)
+    )),
+  );
+}
+
 export function listCommittedScheduledPublications(publications, channelProfile, asOf = new Date()) {
   return sortScheduledByTime(
     publications.filter((publication) => (
@@ -244,6 +262,10 @@ export function assignScheduleSlots(
   occupiedPublications = [],
   options = {},
 ) {
+  const scheduleWindowEnd = resolveScheduleWindowEnd(
+    asOf,
+    options.maxScheduledDays,
+  );
   const occupiedSlotKeys = new Set(
     occupiedPublications
       .map((publication) => String(publication?.scheduled_for || '').trim())
@@ -262,6 +284,9 @@ export function assignScheduleSlots(
       occupiedSlotKeys,
       channelProfile.timezone || 'UTC',
     );
+    if (scheduleWindowEnd && scheduledFor.getTime() > scheduleWindowEnd.getTime()) {
+      break;
+    }
     const scheduledForIso = toIsoString(scheduledFor);
     scheduled.push({
       ...publication,
@@ -278,23 +303,90 @@ export function assignScheduleSlots(
   return scheduled;
 }
 
+export function listAvailableScheduleSlots(
+  channelProfile,
+  asOf = new Date(),
+  occupiedPublications = [],
+  options = {},
+) {
+  const scheduleWindowEnd = resolveScheduleWindowEnd(
+    asOf,
+    options.maxScheduledDays,
+  );
+  const occupiedSlotKeys = new Set(
+    occupiedPublications
+      .map((publication) => String(publication?.scheduled_for || '').trim())
+      .filter(Boolean)
+      .map((value) => toIsoString(value)),
+  );
+  const slots = [];
+  let cursor = applyMinimumScheduleLead(
+    asOf,
+    options.minimumLeadMinutes ?? DEFAULT_MINIMUM_SCHEDULE_LEAD_MINUTES,
+  );
+
+  for (let attempt = 0; attempt < 128; attempt += 1) {
+    const scheduledFor = nextAvailableSlotAfter(
+      cursor,
+      channelProfile.schedule_slots,
+      occupiedSlotKeys,
+      channelProfile.timezone || 'UTC',
+    );
+    if (scheduleWindowEnd && scheduledFor.getTime() > scheduleWindowEnd.getTime()) {
+      break;
+    }
+    const scheduledForIso = toIsoString(scheduledFor);
+    slots.push(scheduledForIso);
+    occupiedSlotKeys.add(scheduledForIso);
+    cursor = new Date(scheduledFor.getTime() + 60_000);
+  }
+
+  return slots;
+}
+
 export function selectRelatedPublicationCandidate(publications, targetPublication) {
   return selectGenericRelatedPublicationCandidate(publications, targetPublication);
+}
+
+export function buildChannelPublicationQueue(
+  publications,
+  channelProfile,
+  asOf = new Date(),
+  options = {},
+) {
+  const scheduleWindowEnd = resolveScheduleWindowEnd(
+    asOf,
+    options.maxScheduledDays,
+  );
+  const committedScheduled = listCommittedScheduledPublications(publications, channelProfile, asOf)
+    .filter((publication) => (
+      !scheduleWindowEnd || asDate(publication.scheduled_for).getTime() <= scheduleWindowEnd.getTime()
+    ))
+    .map((publication) => ({
+      ...publication,
+      schedule_update_required: false,
+    }));
+  const scheduleCandidates = selectScheduleCandidates(publications, channelProfile, asOf);
+  return sortScheduledByTime([
+    ...committedScheduled,
+    ...assignScheduleSlots(
+      scheduleCandidates,
+      channelProfile,
+      asOf,
+      committedScheduled,
+      options,
+    ),
+  ]);
 }
 
 export function buildPublicationQueuePlan({ publications, channelProfiles, asOf = new Date() }) {
   const planChannels = channelProfiles.map((channelProfile) => {
     const previewUploads = selectPreviewUploadCandidates(publications, channelProfile);
-    const committedScheduled = listCommittedScheduledPublications(publications, channelProfile, asOf)
-      .map((publication) => ({
-        ...publication,
-        schedule_update_required: false,
-      }));
-    const scheduleCandidates = selectScheduleCandidates(publications, channelProfile, asOf);
-    const scheduledQueue = sortScheduledByTime([
-      ...committedScheduled,
-      ...assignScheduleSlots(scheduleCandidates, channelProfile, asOf, committedScheduled),
-    ]);
+    const scheduledQueue = buildChannelPublicationQueue(
+      publications,
+      channelProfile,
+      asOf,
+    );
     return {
       channel: {
         id: channelProfile.id,

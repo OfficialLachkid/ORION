@@ -28,6 +28,10 @@ export const PRODUCT_VIDEO_CHANNEL_OPTIONS = Object.freeze([
     name: 'Poke Guess',
     value: 'poke-guess-youtube',
   }),
+  Object.freeze({
+    name: 'DexGuess',
+    value: 'dexguess-youtube',
+  }),
 ]);
 
 const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
@@ -45,6 +49,11 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/poke-guess-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/poke-guess-find-the-shiny-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
+  }),
+  'dexguess-youtube': Object.freeze({
+    'dual-type-reveal': 'services/product-video-agent/config/channels/dexguess-youtube.json',
+    'find-the-shiny': 'services/product-video-agent/config/channels/dexguess-find-the-shiny-youtube.json',
+    'type-speed-quiz': 'services/product-video-agent/config/channels/dexguess-type-speed-quiz-youtube.json',
   }),
 });
 

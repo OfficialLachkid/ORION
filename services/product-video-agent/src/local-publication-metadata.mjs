@@ -89,9 +89,7 @@ const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
 ]);
 
 const DEFAULT_TYPE_QUIZ_TITLE_BUILDERS = Object.freeze([
-  () => 'Guess the Pokemon Types',
-  () => 'Can You Get 5/5 Pokemon Types?',
-  () => 'Guess the Type Before the Reveal',
+  () => 'Guess the typing!',
 ]);
 
 function hashSeed(input) {

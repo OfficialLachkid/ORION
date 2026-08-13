@@ -82,9 +82,7 @@ const expectedFindTheShinySeededTitles = new Set([
 ]);
 
 const expectedTypeQuizSeededTitles = new Set([
-  'Guess the Pokemon Types',
-  'Can You Get 5/5 Pokemon Types?',
-  'Guess the Type Before the Reveal',
+  'Guess the typing!',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -199,7 +197,7 @@ test('seeded find-the-shiny fallback metadata uses the supported generic title v
 test('fallback publication metadata frames type-quiz as a rapid-fire challenge', () => {
   const metadata = buildPokeQuizzFallbackPublicationMetadata(typeQuizPlan);
 
-  assert.equal(metadata.title, 'Guess the Pokemon Types');
+  assert.equal(metadata.title, 'Guess the typing!');
   assert.equal(
     metadata.description,
     'Can you get 5/5? Watch each Pokemon, beat the timer, and lock in its type before the reveal.',
@@ -225,4 +223,6 @@ test('seeded type-quiz fallback metadata uses the supported generic title varian
 
   assert.ok(expectedTypeQuizSeededTitles.has(firstSeeded.title));
   assert.ok(expectedTypeQuizSeededTitles.has(secondSeeded.title));
+  assert.equal(firstSeeded.title, 'Guess the typing!');
+  assert.equal(secondSeeded.title, 'Guess the typing!');
 });

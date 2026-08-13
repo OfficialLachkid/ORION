@@ -48,6 +48,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     .map((choice) => choice.value)
     .sort();
   assert.deepEqual(generateChannelChoiceValues, [
+    'dexguess-youtube',
     'poke-guess-youtube',
     'poke-quizz-youtube',
     'trivamon-youtube',
@@ -58,6 +59,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     .sort();
   assert.deepEqual(analyticsChannelChoiceValues, [
     'all',
+    'dexguess-youtube',
     'poke-guess-youtube',
     'poke-quizz-youtube',
     'trivamon-youtube',
@@ -410,6 +412,34 @@ test('normalizeSupportedSlashCommandInteraction converts a Poke Guess type-speed
   });
 
   assert.equal(message?.content, 'generate video template: type-speed-quiz channel: poke-guess-youtube');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts a DexGuess dual-type-reveal slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-4',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-10',
+    data: {
+      name: 'generate-video',
+      options: [
+        { name: 'template', value: 'dual-type-reveal' },
+        { name: 'channel', value: 'dexguess-youtube' },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'generate video template: dual-type-reveal channel: dexguess-youtube');
   assert.equal(message?.channelKey, 'commands');
 });
 

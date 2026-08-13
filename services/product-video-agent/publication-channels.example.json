@@ -160,6 +160,60 @@
       }
     },
     {
+      "id": "video-channel-dexguess-youtube",
+      "name": "DexGuess",
+      "niche": "pokemon_quiz",
+      "content_lane": "poke-quizz",
+      "platform": "youtube_shorts",
+      "account_key": "dexguess-youtube",
+      "language": "en-US",
+      "timezone": "Europe/Amsterdam",
+      "status": "active",
+      "schedule_slots": [
+        {
+          "hour": 8,
+          "minute": 0
+        },
+        {
+          "hour": 12,
+          "minute": 0
+        },
+        {
+          "hour": 14,
+          "minute": 0
+        }
+      ],
+      "workflow": {
+        "preview_visibility": "unlisted",
+        "publish_visibility": "public",
+        "require_preview_approval": true,
+        "require_publish_approval": true,
+        "delete_preview_on_reject": true
+      },
+      "youtube": {
+        "channel_id": "UCO8tff62WlcgHNdF2KeqQGw",
+        "default_category_id": "24",
+        "oauth_client_secret_path": "config/youtube/client-secret.json",
+        "oauth_refresh_token_env": "YOUTUBE_DEXGUESS_REFRESH_TOKEN"
+      },
+      "metadata": {
+        "channel_url": "https://www.youtube.com/channel/UCO8tff62WlcgHNdF2KeqQGw",
+        "youtube_handle": "@DexGuess",
+        "title_generation_model": "local_ollama",
+        "description_generation_model": "local_ollama",
+        "review_channel": "orion-review",
+        "render_channel": "orion-renders",
+        "review_thread_id": "1537438092338798684",
+        "related_video": {
+          "enabled": true,
+          "provider": "youtube_studio",
+          "browser": "chrome",
+          "profile_dir": "~/.orion/playwright-profile-dexguess",
+          "session_name": "yt-related-dexguess"
+        }
+      }
+    },
+    {
       "id": "video-channel-techy-gadgets-youtube",
       "name": "Techy Gadgets",
       "niche": "gadgets",

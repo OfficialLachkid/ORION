@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildChannelPublicationQueue,
   buildPublicationQueuePlan,
   selectRelatedPublicationCandidate,
 } from '../src/publication-queue.mjs';
@@ -71,6 +72,20 @@ const previewApproved = {
   },
   created_at: '2026-07-30T05:10:00.000Z',
 };
+
+function createPreviewApprovedPublication(id, createdAt) {
+  return {
+    ...previewApproved,
+    id,
+    title: `Preview Approved ${id}`,
+    external_id: `yt-${id}`,
+    created_at: createdAt,
+    metadata: {
+      ...previewApproved.metadata,
+      seed: id,
+    },
+  };
+}
 
 const alreadyScheduled = {
   id: 'pub-already-scheduled',
@@ -234,6 +249,35 @@ test('queue planning skips slots that are too close for a new YouTube schedule u
       schedule_update_required: true,
     },
   ]);
+});
+
+test('channel queue planning respects a max scheduled-days horizon', () => {
+  const scheduledQueue = buildChannelPublicationQueue(
+    [
+      createPreviewApprovedPublication('pub-approved-1', '2026-07-30T05:00:00.000Z'),
+      createPreviewApprovedPublication('pub-approved-2', '2026-07-30T05:10:00.000Z'),
+      createPreviewApprovedPublication('pub-approved-3', '2026-07-30T05:20:00.000Z'),
+      createPreviewApprovedPublication('pub-approved-4', '2026-07-30T05:30:00.000Z'),
+    ],
+    channelProfile,
+    '2026-07-30T06:30:00.000Z',
+    {
+      maxScheduledDays: 1,
+    },
+  );
+
+  assert.deepEqual(
+    scheduledQueue.map((publication) => publication.id),
+    ['pub-approved-1', 'pub-approved-2', 'pub-approved-3'],
+  );
+  assert.deepEqual(
+    scheduledQueue.map((publication) => publication.scheduled_for),
+    [
+      '2026-07-30T10:00:00.000Z',
+      '2026-07-30T12:00:00.000Z',
+      '2026-07-31T06:00:00.000Z',
+    ],
+  );
 });
 
 test('related publication selection skips exact same type-pair published shorts for Poke Quizz', () => {
