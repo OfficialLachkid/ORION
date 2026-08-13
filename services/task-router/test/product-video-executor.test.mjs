@@ -174,6 +174,58 @@ test('manual review generation supports the type-speed-quiz channel config for P
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1536721345440780339');
 });
 
+test('manual review generation supports the dual-type channel config for DexGuess', async () => {
+  const runCalls = [];
+  const normalizePath = (value) => String(value || '').replaceAll('\\', '/');
+
+  await executeProductVideoAction(
+    'poke_quizz_generate_review',
+    {
+      task_id: 'TASK-ORION-PQ-GENERATE-TEST-4',
+      submitted_at: '2026-08-13T15:10:00.000Z',
+      poke_quizz_generate_review: {
+        templateKey: 'dual-type-reveal',
+        templateLabel: 'Type Combination',
+        channelSelector: 'dexguess-youtube',
+        channelLabel: 'DexGuess',
+        channelConfigPath: 'services/product-video-agent/config/channels/dexguess-youtube.json',
+      },
+    },
+    { env: {} },
+    {
+      ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+      loadPublicationChannelProfiles: async () => ([{
+        platform: 'youtube_shorts',
+        account_key: 'dexguess-youtube',
+        metadata: {
+          review_thread_id: '1537438092338798684',
+        },
+      }]),
+      findPublicationChannelProfile: (profiles) => profiles[0],
+      runProcess: async (options) => {
+        runCalls.push(options);
+        return {
+          stdout: JSON.stringify({
+            publication_id: 'publication-dexguess-dual-type-1',
+            preview_url: 'https://youtube.com/shorts/manual-preview-dexguess',
+            task_id: 'TASK-ORION-PQ-PUBLISH-MANUAL-4',
+            message_id: '1537438092338798685',
+            render_path: 'data/runtime/product-video-agent/poke-quizz/manual-preview-dexguess.mp4',
+          }, null, 2),
+        };
+      },
+    },
+  );
+
+  assert.equal(runCalls.length, 1);
+  assert.equal(
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/dexguess-youtube.json'),
+    true,
+  );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'dexguess-youtube');
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1537438092338798684');
+});
+
 test('publish approval triggers an immediate scheduling pass and returns the scheduled slot', async () => {
   const initialPublication = {
     id: 'publication-bug-ground',

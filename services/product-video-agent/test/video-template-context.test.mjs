@@ -121,3 +121,17 @@ test('loadVideoTemplateContext resolves the Poke Guess Type Quiz ownership stack
   assert.equal(context.publicationChannelSelector, 'poke-guess-youtube');
   assert.equal(context.genreLabel, 'Type Quiz');
 });
+
+test('loadVideoTemplateContext resolves the DexGuess dual-type ownership stack', async () => {
+  const context = await loadVideoTemplateContext({
+    projectRoot,
+    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-youtube.json',
+  });
+
+  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/dexguess-youtube.json');
+  assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
+  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json');
+  assert.equal(context.templateId, 'pokemon.dual-type-reveal.v1');
+  assert.equal(context.publicationChannelSelector, 'dexguess-youtube');
+  assert.equal(context.genreLabel, 'Type Combination');
+});

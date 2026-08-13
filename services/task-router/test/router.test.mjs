@@ -207,6 +207,25 @@ test('normalizeTaskMessage recognizes Poke Guess type-speed-quiz generation comm
   );
 });
 
+test('normalizeTaskMessage recognizes DexGuess dual-type generation commands as explicit runtime actions', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    channelKey: 'commands',
+    submittedAt: '2026-08-13T14:00:00.000Z',
+    content: 'generate video template: dual-type-reveal channel: dexguess-youtube',
+    author: { id: 'operator-1', displayName: 'VBJ Services' },
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
+  assert.equal(result.task.summary, 'Generate Type Combination review for DexGuess');
+  assert.equal(result.task.poke_quizz_generate_review.templateKey, 'dual-type-reveal');
+  assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'dexguess-youtube');
+  assert.equal(
+    result.task.poke_quizz_generate_review.channelConfigPath,
+    'services/product-video-agent/config/channels/dexguess-youtube.json'
+  );
+});
+
 test('normalizeTaskMessage recognizes analytics digest commands as explicit runtime actions', () => {
   const config = loadRuntimeConfig();
   const result = normalizeTaskMessage({
