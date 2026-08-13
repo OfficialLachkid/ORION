@@ -302,10 +302,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     0,
     1.08,
     1,
-    buildScaleFilterTimeExpression({
-      fps,
-      streamStartSeconds: countdownStart,
-    }),
   );
 
   if (useHpBarCountdown) {
@@ -325,7 +321,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
     }
     filters.push(
-      `[timerhpbarbase]scale=w='max(2,${renderPlan.timer_layout.width}*(${hpBarIntroScaleExpression}))':h='max(2,${renderPlan.timer_layout.height}*(${hpBarIntroScaleExpression}))':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[timerhpbar]`,
+      `[timerhpbarbase]scale=w='max(2,iw*(${hpBarIntroScaleExpression}))':h='max(2,ih*(${hpBarIntroScaleExpression}))':eval=frame,format=rgba,setsar=1[timerhpbar]`,
     );
     const timerVideoLabel = `${currentVideoLabel}hb`;
     filters.push(
