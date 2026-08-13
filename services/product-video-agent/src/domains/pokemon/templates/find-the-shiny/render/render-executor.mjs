@@ -70,7 +70,7 @@ export async function renderPokeQuizzVideo({
   const [
     narrationDurations,
     pokeballDurationSeconds,
-    timerCountdownDurationSeconds,
+    timerVisualDurationSeconds,
     timerAlarmDurationSeconds,
     countdownDurationSeconds,
     shinySparkleDurationSeconds,
@@ -89,7 +89,9 @@ export async function renderPokeQuizzVideo({
     }),
     probeMediaDurationSeconds({
       ffmpegExecutable,
-      mediaPath: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
+      mediaPath: plan.assets.overlays.selected_timer_hp_bar_path
+        || plan.assets.overlays.selected_timer_countdown_path
+        || plan.assets.overlays.selected_timer_path,
       cwd: projectRoot,
     }),
     plan.assets.overlays.selected_timer_alarm_path
@@ -117,9 +119,13 @@ export async function renderPokeQuizzVideo({
   renderPlan = applyNarrationDurationsToRenderPlan(renderPlan, {
     prompt_seconds: narrationDurations[1],
   });
-  if (timerCountdownDurationSeconds) {
-    plan.assets.overlays.selected_timer_duration_seconds = timerCountdownDurationSeconds;
-    plan.assets.overlays.selected_timer_countdown_duration_seconds = timerCountdownDurationSeconds;
+  if (timerVisualDurationSeconds) {
+    plan.assets.overlays.selected_timer_duration_seconds = timerVisualDurationSeconds;
+    if (plan.assets.overlays.selected_timer_hp_bar_path) {
+      plan.assets.overlays.selected_timer_hp_bar_duration_seconds = timerVisualDurationSeconds;
+    } else {
+      plan.assets.overlays.selected_timer_countdown_duration_seconds = timerVisualDurationSeconds;
+    }
   }
   if (pokeballDurationSeconds) {
     plan.assets.overlays.selected_primary_pokeball_duration_seconds = pokeballDurationSeconds;
@@ -176,6 +182,7 @@ export async function renderPokeQuizzVideo({
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
   const inputRefs = {
     background: inputRoleIndex.get('background'),
+    timerHpBar: inputRoleIndex.has('timer-hp-bar') ? inputRoleIndex.get('timer-hp-bar') : null,
     timerCountdown: inputRoleIndex.get('timer-countdown'),
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
     pokeball: inputRoleIndex.get('pokeball-grid'),

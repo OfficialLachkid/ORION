@@ -160,7 +160,8 @@
       "countdown_from": 3,
       "countdown_to": 0,
       "position": "upper_middle",
-      "display_mode": "numeric_with_small_ring",
+      "display_mode": "hp_bar_depletion",
+      "hp_bar_max_height_px": 192,
       "tick_interval_seconds": 1
     }
   },

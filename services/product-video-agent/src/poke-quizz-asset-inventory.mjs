@@ -154,6 +154,13 @@ export function selectOverlayPresets(overlays) {
   const timerAlarm = matchOverlay(overlays, ['timer', 'alarm'])
     || matchOverlay(overlays, ['timer-alarm'])
     || matchOverlay(overlays, ['timer_alarm']);
+  const longHpBar = matchOverlay(overlays, ['long', 'hp', 'bar'])
+    || matchOverlay(overlays, ['long-hp-bar'])
+    || matchOverlay(overlays, ['long_hp_bar']);
+  const hpBar = longHpBar
+    || matchOverlay(overlays, ['hp', 'bar'])
+    || matchOverlay(overlays, ['hp-bar'])
+    || matchOverlay(overlays, ['hp_bar']);
   const shinySparkle = matchOverlay(overlays, ['shiny', 'sparkle'])
     || matchOverlay(overlays, ['shiny-sparkle'])
     || matchOverlay(overlays, ['shiny_sparkle']);
@@ -165,6 +172,8 @@ export function selectOverlayPresets(overlays) {
     timer,
     timer_countdown: timerCountdown || timer,
     timer_alarm: timerAlarm,
+    hp_bar: hpBar,
+    long_hp_bar: longHpBar,
     shiny_sparkle: shinySparkle,
     type_placeholder: typePlaceholder,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])

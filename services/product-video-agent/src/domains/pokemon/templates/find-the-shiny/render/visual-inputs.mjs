@@ -14,21 +14,34 @@ export function buildVisualInputs(plan, renderPlan) {
       ? ['-stream_loop', '-1', '-t', String(totalDuration), '-i', backgroundPath]
       : backgroundIsGif
         ? ['-ignore_loop', '0', '-t', String(totalDuration), '-i', backgroundPath]
-        : ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(totalDuration), '-i', backgroundPath],
+      : ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(totalDuration), '-i', backgroundPath],
   });
 
-  inputs.push({
-    role: 'timer-countdown',
-    path: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
-    args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path],
-  });
-
-  if (plan.assets.overlays.selected_timer_alarm_path) {
+  const hpBarTimerPath = plan.assets.overlays.selected_timer_hp_bar_path || null;
+  if (hpBarTimerPath) {
+    const hpBarExt = extname(hpBarTimerPath).toLowerCase();
+    const hpBarIsVideo = ['.mp4', '.mov', '.webm'].includes(hpBarExt);
     inputs.push({
-      role: 'timer-alarm',
-      path: plan.assets.overlays.selected_timer_alarm_path,
-      args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_alarm_path],
+      role: 'timer-hp-bar',
+      path: hpBarTimerPath,
+      args: hpBarIsVideo
+        ? ['-stream_loop', '-1', '-t', String(totalDuration), '-i', hpBarTimerPath]
+        : ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(totalDuration), '-i', hpBarTimerPath],
     });
+  } else {
+    inputs.push({
+      role: 'timer-countdown',
+      path: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
+      args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path],
+    });
+
+    if (plan.assets.overlays.selected_timer_alarm_path) {
+      inputs.push({
+        role: 'timer-alarm',
+        path: plan.assets.overlays.selected_timer_alarm_path,
+        args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_alarm_path],
+      });
+    }
   }
 
   inputs.push({

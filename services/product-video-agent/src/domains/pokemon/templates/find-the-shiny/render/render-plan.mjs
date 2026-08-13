@@ -9,18 +9,40 @@ import {
   buildPhaseSchedule,
 } from '../../dual-type-reveal/render/phase-schedule.mjs';
 
-function buildTimerLayout(template, gridLayout = null) {
+const HP_BAR_TIMER_DISPLAY_MODE = 'hp_bar_depletion';
+
+function buildTimerLayout(template, gridLayout = null, timerDisplayMode = '') {
   const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
   const safeTop = ensureNumber(template?.canvas?.safe_zone?.top, 160);
+  const safeLeft = ensureNumber(template?.canvas?.safe_zone?.left, 140);
+  const safeRight = ensureNumber(template?.canvas?.safe_zone?.right, 140);
   const gridTop = ensureNumber(gridLayout?.stage_bounds_px?.top, 680);
+  const gridWidth = ensureNumber(gridLayout?.stage_bounds_px?.width, canvasWidth - safeLeft - safeRight);
   const promptY = ensureNumber(template?.layout?.text?.prompt_y, 290);
   const timerZoneTop = Math.max(safeTop + 180, promptY + 110);
-  const timerZoneBottom = Math.max(timerZoneTop + 180, gridTop - 32);
-  const timerZoneHeight = Math.max(180, timerZoneBottom - timerZoneTop);
+  const timerZoneBottom = Math.max(timerZoneTop + 160, gridTop - 32);
+  const timerZoneHeight = Math.max(160, timerZoneBottom - timerZoneTop);
+  if (String(timerDisplayMode || '').trim().toLowerCase() === HP_BAR_TIMER_DISPLAY_MODE) {
+    const maxHeight = ensureNumber(template?.layout?.timer?.hp_bar_max_height_px, 192);
+    const width = Math.min(canvasWidth - 48, Math.max(680, Math.min(gridWidth + 32, canvasWidth - 48)));
+    const height = Math.min(timerZoneHeight, maxHeight);
+    const left = Math.max(24, Math.floor((canvasWidth - width) / 2));
+    const top = timerZoneTop + Math.max(0, Math.floor((timerZoneHeight - height) / 2));
+    return {
+      mode: HP_BAR_TIMER_DISPLAY_MODE,
+      x: left,
+      y: top,
+      width,
+      height,
+      number_center_x: null,
+      number_center_y: null,
+    };
+  }
   const size = Math.min(DEFAULT_TIMER_SIZE, timerZoneHeight);
   const left = Math.max(24, Math.floor((canvasWidth - size) / 2));
   const top = timerZoneTop + Math.max(0, Math.floor((timerZoneHeight - size) / 2));
   return {
+    mode: 'numeric_with_small_ring',
     x: left,
     y: top,
     width: size,
@@ -33,7 +55,11 @@ function buildTimerLayout(template, gridLayout = null) {
 export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const schedule = buildPhaseSchedule(plan.timeline);
   const gridLayout = plan.assets.overlays?.sprite_grid || { cells: [] };
-  const timerLayout = buildTimerLayout(template, gridLayout);
+  const timerLayout = buildTimerLayout(
+    template,
+    gridLayout,
+    plan.assets.overlays?.timer_display_mode,
+  );
   const countdownPhase = schedule.phases.countdown || { start_seconds: 0, end_seconds: 0 };
   const revealPhase = schedule.phases.reveal || { start_seconds: schedule.total_duration_seconds, end_seconds: schedule.total_duration_seconds };
   const configuredBattleMusicStartSeconds = roundTime(
