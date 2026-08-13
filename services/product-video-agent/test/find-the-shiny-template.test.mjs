@@ -405,6 +405,47 @@ test('visual inputs and audio cues use one normal sprite source plus one shiny r
   assert.match(script, /\[n0\]\[n1\]\[n2\]\[pokeballintro\]\[shiny\]amix/u);
 });
 
+test('find-the-shiny planner prefers the greenscreen hp-bar overlay and skips the png frame mask', async () => {
+  const greenscreenInventory = structuredClone(assetInventory);
+  greenscreenInventory.overlay_presets.long_hp_bar = '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4';
+  greenscreenInventory.overlay_presets.hp_bar = '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4';
+  greenscreenInventory.overlays = [
+    '/tmp/pokeball.gif',
+    '/tmp/timer-countdown.gif',
+    '/tmp/timer-alarm.gif',
+    '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4',
+    '/tmp/long-hp-bar.png',
+    '/tmp/shiny-sparkle.gif',
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'find-the-shiny-greenscreen-hp-bar',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory: greenscreenInventory,
+  });
+
+  assert.equal(plan.assets.overlays.selected_timer_hp_bar_path, '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4');
+  assert.equal(plan.assets.overlays.selected_timer_hp_bar_frame_path, null);
+
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/find-the-shiny-greenscreen.mp4',
+  });
+  const inputs = buildVisualInputs(plan, renderPlan);
+
+  assert.deepEqual(inputs.map((input) => input.role), [
+    'background',
+    'timer-hp-bar',
+    'pokeball-grid',
+    'normal-sprite',
+    'shiny-sprite',
+    'shiny-sparkle',
+  ]);
+});
+
 test('visual filter starts with pokeballs, then reveals the grid with exactly one shiny cell and sparkle', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
@@ -483,4 +524,57 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
   assert.match(visualFilter.script, /\[pbisrc0\]trim=start=[0-9.]+:duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=w='/u);
   assert.match(visualFilter.script, /\[pbrsrc0\]trim=start=[0-9.]+:duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=/u);
   assert.match(visualFilter.script, /\[v0\]\[pbi0\]overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,[0-9.]+\)'/u);
+});
+
+test('visual filter keys out green when the hp-bar countdown uses the greenscreen overlay', async () => {
+  const greenscreenInventory = structuredClone(assetInventory);
+  greenscreenInventory.overlay_presets.long_hp_bar = '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4';
+  greenscreenInventory.overlay_presets.hp_bar = '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4';
+  greenscreenInventory.overlays = [
+    '/tmp/pokeball.gif',
+    '/tmp/timer-countdown.gif',
+    '/tmp/timer-alarm.gif',
+    '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4',
+    '/tmp/long-hp-bar.png',
+    '/tmp/shiny-sparkle.gif',
+  ];
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'find-the-shiny-greenscreen-visual-filter',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory: greenscreenInventory,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/find-the-shiny-greenscreen.mp4',
+  });
+  plan.assets.overlays.selected_timer_hp_bar_duration_seconds = 1;
+
+  const visualFilter = buildVisualFilterScript(
+    plan,
+    template,
+    renderPlan,
+    {
+      background: 0,
+      timerHpBar: 1,
+      timerHpBarFrame: null,
+      timerCountdown: null,
+      timerAlarm: null,
+      pokeball: 2,
+      normalSprite: 3,
+      shinySprite: 4,
+      shinySparkle: 5,
+    },
+    null,
+    {
+      hook: { segments: [] },
+      prompt: { segments: [] },
+      reveal: { segments: [] },
+    },
+  );
+
+  assert.match(visualFilter.script, /colorkey=0x00FF00:0\.22:0\.08/u);
+  assert.doesNotMatch(visualFilter.script, /timerhpbarmaskcount/u);
 });

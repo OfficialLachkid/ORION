@@ -156,10 +156,16 @@ export function selectOverlayPresets(overlays) {
   const timerAlarm = matchOverlay(overlays, ['timer', 'alarm'])
     || matchOverlay(overlays, ['timer-alarm'])
     || matchOverlay(overlays, ['timer_alarm']);
-  const longHpBar = matchOverlay(overlayVideos, ['long', 'hp', 'bar'])
+  const longHpBar = matchOverlay(overlayVideos, ['long', 'hp', 'bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['long-hp-bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['long_hp_bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['long', 'hp', 'bar'])
     || matchOverlay(overlayVideos, ['long-hp-bar'])
     || matchOverlay(overlayVideos, ['long_hp_bar']);
   const hpBar = longHpBar
+    || matchOverlay(overlayVideos, ['hp', 'bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['hp-bar', 'greenscreen'])
+    || matchOverlay(overlayVideos, ['hp_bar', 'greenscreen'])
     || matchOverlay(overlayVideos, ['hp', 'bar'])
     || matchOverlay(overlayVideos, ['hp-bar'])
     || matchOverlay(overlayVideos, ['hp_bar']);

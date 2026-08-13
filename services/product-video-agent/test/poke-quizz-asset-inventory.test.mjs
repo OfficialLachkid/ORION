@@ -101,6 +101,18 @@ test('overlay preset selection prefers split timer gifs and the 3D pokeball over
   assert.match(presets.pokeball_primary || '', /3D Pokeball Wiggle\.gif$/u);
 });
 
+test('overlay preset selection prefers greenscreen hp-bar videos when present', () => {
+  const presets = selectOverlayPresets([
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar-countdown-1s.mp4',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar-countdown-1s-greenscreen.mp4',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar.png',
+  ]);
+
+  assert.match(presets.long_hp_bar || '', /long-hp-bar-countdown-1s-greenscreen\.mp4$/u);
+  assert.match(presets.hp_bar || '', /long-hp-bar-countdown-1s-greenscreen\.mp4$/u);
+  assert.match(presets.long_hp_bar_frame || '', /long-hp-bar\.png$/u);
+});
+
 test('timer_finished stays the shared timer-end default when a ding file is also present', async () => {
   const matchSoundEffectKeywordGroups = (files, keywordGroups) => (
     files.find((filePath) => {

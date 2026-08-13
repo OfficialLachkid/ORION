@@ -179,6 +179,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
   const useHpBarCountdown = String(renderPlan?.timer_layout?.mode || '').trim().toLowerCase() === 'hp_bar_depletion'
     && inputRefs.timerHpBar != null;
+  const hpBarUsesGreenscreen = String(plan.assets.overlays?.selected_timer_hp_bar_path || '').toLowerCase().includes('greenscreen');
 
   filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
 
@@ -309,7 +310,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
     } else {
       filters.push(
-        `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,setsar=1[timerhpbar]`,
+        `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba${hpBarUsesGreenscreen ? ',colorkey=0x00FF00:0.22:0.08' : ''},setsar=1[timerhpbar]`,
       );
     }
     const timerVideoLabel = `${currentVideoLabel}hb`;
