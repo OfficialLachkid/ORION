@@ -91,14 +91,14 @@ function buildOverviewEmbed(overview, channelDigests = []) {
   const fields = channelDigests.slice(0, 25).map((digest) => ({
     name: `${digest.channel_name} (${digest.account_key})`,
     value: [
-      `New videos: ${digest.new_videos_count}`,
-      `Views (7D): ${formatNumber(digest.total_views)}`,
-      `Views (all time): ${formatNumber(digest.all_time_views)}`,
-      `Median views: ${formatNumber(digest.median_views)}`,
-      `Median AVD: ${formatMetric(digest.median_avg_view_duration_sec)}s`,
-      `Median AVP: ${formatMetric(digest.median_avg_view_percentage)}%`,
-      digest.insufficient_data ? 'Signal: insufficient data' : 'Signal: usable',
-    ].join(' | '),
+      `- New videos: ${digest.new_videos_count}`,
+      `- Views (7D): ${formatNumber(digest.total_views)}`,
+      `- Views (all time): ${formatNumber(digest.all_time_views)}`,
+      `- Median views: ${formatNumber(digest.median_views)}`,
+      `- Median AVD: ${formatMetric(digest.median_avg_view_duration_sec)}s`,
+      `- Median AVP: ${formatMetric(digest.median_avg_view_percentage)}%`,
+      `- Signal: ${digest.insufficient_data ? 'insufficient data' : 'usable'}`,
+    ].join('\n'),
     inline: false,
   }));
 
@@ -108,9 +108,9 @@ function buildOverviewEmbed(overview, channelDigests = []) {
         title: `Weekly YouTube Analytics Digest (${overview.window_days}d)`,
         description: [
           `Channels: **${overview.channel_count}**`,
-          `New videos: **${formatNumber(overview.total_new_videos_count)}**`,
-          `Videos with snapshots: **${formatNumber(overview.total_videos_with_snapshots_count)}**`,
-          `Crossed 10k views: **${formatNumber(overview.total_crossed_10k_views_count)}**`,
+          `New videos (7D): **${formatNumber(overview.total_new_videos_count)}**`,
+          `Videos with snapshots (7D): **${formatNumber(overview.total_videos_with_snapshots_count)}**`,
+          `Crossed 10k views (7D): **${formatNumber(overview.total_crossed_10k_views_count)}**`,
           `Combined views (7D): **${formatNumber(overview.total_views)}**`,
           `Total views (all time): **${formatNumber(overview.total_all_time_views)}**`,
         ].join('\n'),
