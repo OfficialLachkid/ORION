@@ -6,7 +6,10 @@ import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import { loadRuntimeConfig } from '../../../lib/runtime-config.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
-import { loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
+import {
+  loadPublicationChannelProfiles,
+  resolvePublicationChannelUrl,
+} from '../../src/publication-channels.mjs';
 import { loadYoutubeClientCredentials } from '../../src/youtube-publication-executor.mjs';
 import {
   buildChannelVideoAnalyticsDigest,
@@ -76,6 +79,36 @@ function formatMetric(value, digits = 1) {
   }).format(number);
 }
 
+function formatDigestDate(value) {
+  const parsed = toDateOrNull(value);
+  if (!parsed) {
+    return 'unknown-date';
+  }
+  return parsed.toISOString().slice(0, 10);
+}
+
+function buildYoutubeVideoUrl(externalId) {
+  const normalized = String(externalId || '').trim();
+  if (!normalized) {
+    return '';
+  }
+  return `https://www.youtube.com/watch?v=${encodeURIComponent(normalized)}`;
+}
+
+function formatBestPerformerLine(bestPerformer) {
+  if (!bestPerformer) {
+    return '- Best performer (7D): n/a';
+  }
+
+  const performerTitle = String(bestPerformer.title || '').trim() || bestPerformer.type_pair || 'Untitled video';
+  const performerUrl = buildYoutubeVideoUrl(bestPerformer.external_id);
+  const performerLabel = performerUrl
+    ? `[${performerTitle}](${performerUrl})`
+    : performerTitle;
+
+  return `- Best performer (7D): ${performerLabel} (${formatNumber(bestPerformer.views)} views)`;
+}
+
 function normalizeChannelProfiles(profiles, channelSelector = '') {
   const activeProfiles = profiles.filter((profile) => profile.status === 'active' && profile.platform === 'youtube_shorts');
   const normalizedSelector = String(channelSelector || '').trim();
@@ -91,9 +124,13 @@ function buildOverviewEmbed(overview, channelDigests = []) {
   const fields = channelDigests.slice(0, 25).map((digest) => ({
     name: `${digest.channel_name} (${digest.account_key})`,
     value: [
+      digest.channel_url
+        ? `- Channel: [${digest.channel_name}](${digest.channel_url})`
+        : `- Channel: ${digest.channel_name}`,
       `- New videos: ${digest.new_videos_count}`,
       `- Views (7D): ${formatNumber(digest.total_views)}`,
       `- Views (all time): ${formatNumber(digest.all_time_views)}`,
+      formatBestPerformerLine(digest.best_performer),
       `- Median views: ${formatNumber(digest.median_views)}`,
       `- Median AVD: ${formatMetric(digest.median_avg_view_duration_sec)}s`,
       `- Median AVP: ${formatMetric(digest.median_avg_view_percentage)}%`,
@@ -105,7 +142,7 @@ function buildOverviewEmbed(overview, channelDigests = []) {
   return {
     embeds: [
       {
-        title: `Weekly YouTube Analytics Digest (${overview.window_days}d)`,
+        title: `Weekly YouTube Analytics Digest (${overview.window_days}d) | ${formatDigestDate(overview.as_of)}`,
         description: [
           `Channels: **${overview.channel_count}**`,
           `New videos (7D): **${formatNumber(overview.total_new_videos_count)}**`,
@@ -116,8 +153,6 @@ function buildOverviewEmbed(overview, channelDigests = []) {
         ].join('\n'),
         color: 0x1f7a3a,
         fields,
-        footer: { text: 'ORION analytics overview' },
-        timestamp: overview.as_of,
       },
     ],
   };
@@ -520,12 +555,15 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
     digestHour,
   });
   if (digestDue) {
-    const channelDigests = profiles.map((channelProfile) => buildChannelVideoAnalyticsDigest({
-      channelProfile,
-      publications: publicationsByChannelId.get(channelProfile.id) || [],
-      latestSnapshotsByPublicationId,
-      asOf,
-      windowDays,
+    const channelDigests = profiles.map((channelProfile) => ({
+      ...buildChannelVideoAnalyticsDigest({
+        channelProfile,
+        publications: publicationsByChannelId.get(channelProfile.id) || [],
+        latestSnapshotsByPublicationId,
+        asOf,
+        windowDays,
+      }),
+      channel_url: resolvePublicationChannelUrl(channelProfile),
     }));
     await postWeeklyDigest({
       runtimeConfig,

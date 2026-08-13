@@ -55,6 +55,7 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
     {
       id: 'pub-1',
       status: 'published',
+      external_id: 'yt-pub-1',
       title: 'Water Bug #shorts',
       published_at: '2026-08-08T08:00:00.000Z',
       metadata: { type_pair: ['water', 'bug'], render_path: '/tmp/water-bug.mp4' },
@@ -62,6 +63,7 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
     {
       id: 'pub-2',
       status: 'published',
+      external_id: 'yt-pub-2',
       title: 'Electric Grass #shorts',
       published_at: '2026-08-09T08:00:00.000Z',
       metadata: { type_pair: ['electric', 'grass'], render_path: '/tmp/electric-grass.mp4' },
@@ -69,6 +71,7 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
     {
       id: 'pub-3',
       status: 'published',
+      external_id: 'yt-pub-3',
       title: 'Ghost Ground #shorts',
       published_at: '2026-08-10T08:00:00.000Z',
       metadata: { type_pair: ['ghost', 'ground'], render_path: '/tmp/ghost-ground.mp4' },
@@ -76,6 +79,7 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
     {
       id: 'pub-0',
       status: 'published',
+      external_id: 'yt-pub-0',
       title: 'Legacy Water #shorts',
       published_at: '2026-07-20T08:00:00.000Z',
       metadata: { type_pair: ['water'], render_path: '/tmp/legacy-water.mp4' },
@@ -108,7 +112,9 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
   assert.equal(digest.all_time_publications_count, 4);
   assert.equal(digest.all_time_views, 26700);
   assert.equal(digest.best_performer.publication_id, 'pub-3');
+  assert.equal(digest.best_performer.external_id, 'yt-pub-3');
   assert.equal(digest.worst_performer.publication_id, 'pub-1');
+  assert.equal(digest.worst_performer.external_id, 'yt-pub-1');
   assert.equal(digest.thread_key, 'poke-quizz-poke-quizz-youtube');
   assert.equal(buildVideoAnalyticsThreadName(channelProfile), 'Poke Quizz - Analytics');
   assert.equal(overview.total_new_videos_count, 3);

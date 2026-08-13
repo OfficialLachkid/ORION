@@ -227,6 +227,7 @@ export function buildChannelVideoAnalyticsDigest({
     best_performer: bestPerformer
       ? {
           publication_id: bestPerformer.publication.id,
+          external_id: String(bestPerformer.publication?.external_id || '').trim(),
           title: String(bestPerformer.publication?.title || '').trim(),
           views: bestPerformer.views,
           type_pair: formatTypePair(bestPerformer.publication?.metadata?.type_pair),
@@ -236,6 +237,7 @@ export function buildChannelVideoAnalyticsDigest({
     worst_performer: worstPerformer
       ? {
           publication_id: worstPerformer.publication.id,
+          external_id: String(worstPerformer.publication?.external_id || '').trim(),
           title: String(worstPerformer.publication?.title || '').trim(),
           views: worstPerformer.views,
           type_pair: formatTypePair(worstPerformer.publication?.metadata?.type_pair),
