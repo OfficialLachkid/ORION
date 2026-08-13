@@ -1,5 +1,3 @@
-import { readdir, readFile } from 'node:fs/promises';
-import { relative, resolve } from 'node:path';
 import {
   findPublicationChannelProfile,
   loadPublicationChannelProfiles,
@@ -21,6 +19,7 @@ import { SupabasePublicationStore } from '../../../services/product-video-agent/
 import { resolveVideoTemplateRuntime } from '../../../services/product-video-agent/src/video-template-context.mjs';
 import { executeProductVideoAction } from '../../../services/task-router/src/product-video-executor.mjs';
 import { projectRoot } from '../../../services/lib/runtime-config.mjs';
+import { discoverNightShiftChannelRuntimes } from './pokemon-maintenance-runtime.mjs';
 import {
   collectChildError,
   parseLastJsonObject,
@@ -30,107 +29,12 @@ import {
 
 export const DEFAULT_PUBLICATION_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 export const REVIEW_READY_TARGET_COUNT = POKE_QUIZZ_REVIEW_TARGET_COUNT;
-const CHANNEL_CONFIGS_DIR = resolve(projectRoot, 'services', 'product-video-agent', 'config', 'channels');
 
 function createPublicationStore(config) {
   return new SupabasePublicationStore({
     supabaseUrl: config.env.SUPABASE_URL,
     apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY,
   });
-}
-
-function normalizeProjectRelativePath(absolutePath) {
-  return relative(projectRoot, absolutePath).replaceAll('\\', '/');
-}
-
-function parsePositiveInteger(value, fallbackValue) {
-  const parsed = Number.parseInt(String(value || ''), 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackValue;
-}
-
-function normalizeStringArray(value) {
-  return Array.isArray(value)
-    ? value
-      .map((entry) => String(entry || '').trim())
-      .filter(Boolean)
-    : [];
-}
-
-function normalizeNightShiftSettings(channelConfig = {}) {
-  const nightShift = channelConfig?.night_shift && typeof channelConfig.night_shift === 'object'
-    ? channelConfig.night_shift
-    : {};
-  const reviewBacklog = nightShift.review_backlog && typeof nightShift.review_backlog === 'object'
-    ? nightShift.review_backlog
-    : {};
-  const reviewRefresh = nightShift.review_refresh && typeof nightShift.review_refresh === 'object'
-    ? nightShift.review_refresh
-    : {};
-  const publicationAutomation = nightShift.publication_automation && typeof nightShift.publication_automation === 'object'
-    ? nightShift.publication_automation
-    : {};
-  const rawPublicationAutomationMode = String(publicationAutomation.mode || '').trim().toLowerCase();
-  const publicationAutomationEnabled = publicationAutomation.enabled === true
-    || (
-      publicationAutomation.enabled !== false
-      && rawPublicationAutomationMode === 'auto'
-    );
-  return {
-    reviewBacklogEnabled: reviewBacklog.enabled === true,
-    targetReviewReadyCount: parsePositiveInteger(
-      reviewBacklog.target_review_ready_count,
-      REVIEW_READY_TARGET_COUNT,
-    ),
-    reviewBacklogMixChannelConfigPaths: normalizeStringArray(
-      reviewBacklog.mix_channel_config_paths,
-    ),
-    reviewRefreshEnabled: reviewRefresh.enabled === true,
-    reviewRefreshPendingOnly: reviewRefresh.pending_only !== false,
-    publicationAutomationEnabled,
-    publicationAutomationMode: publicationAutomationEnabled ? 'auto' : 'manual',
-    publicationAutomationMaxScheduledDays: parsePositiveInteger(
-      publicationAutomation.max_scheduled_days,
-      3,
-    ),
-  };
-}
-
-async function discoverNightShiftChannelRuntimes() {
-  const entries = await readdir(CHANNEL_CONFIGS_DIR, { withFileTypes: true });
-  const runtimes = [];
-
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.json')) {
-      continue;
-    }
-
-    const absolutePath = resolve(CHANNEL_CONFIGS_DIR, entry.name);
-    const rawChannelConfig = JSON.parse(await readFile(absolutePath, 'utf8'));
-    const nightShift = normalizeNightShiftSettings(rawChannelConfig);
-    if (
-      !nightShift.reviewBacklogEnabled
-      && !nightShift.reviewRefreshEnabled
-      && !nightShift.publicationAutomationEnabled
-    ) {
-      continue;
-    }
-
-    const channelConfigPath = normalizeProjectRelativePath(absolutePath);
-    const templateRuntime = await resolveVideoTemplateRuntime({
-      projectRoot,
-      channelConfigPath,
-    });
-    runtimes.push({
-      ...templateRuntime,
-      nightShift,
-    });
-  }
-
-  return runtimes.sort((left, right) => (
-    `${left.channelSelector}:${left.channelConfigPath}`.localeCompare(
-      `${right.channelSelector}:${right.channelConfigPath}`,
-    )
-  ));
 }
 
 function summarizeVideoQueueMaintenance(profiles, runs) {
