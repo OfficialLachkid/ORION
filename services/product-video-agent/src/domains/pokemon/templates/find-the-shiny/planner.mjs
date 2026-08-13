@@ -135,6 +135,12 @@ function selectHpBarTimerOverlay(inventory) {
     || null;
 }
 
+function selectHpBarTimerFrame(inventory) {
+  return inventory?.overlay_presets?.long_hp_bar_frame
+    || inventory?.overlay_presets?.hp_bar_frame
+    || null;
+}
+
 function ensurePositiveInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -744,6 +750,7 @@ export async function planFindTheShinyChallenge({
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
   const preferredTimerDisplayMode = resolveTimerDisplayMode(template);
   const hpBarTimerOverlayPath = selectHpBarTimerOverlay(inventory);
+  const hpBarTimerFramePath = selectHpBarTimerFrame(inventory);
   const useHpBarTimer = preferredTimerDisplayMode === HP_BAR_TIMER_DISPLAY_MODE && Boolean(hpBarTimerOverlayPath);
   const resolvedTimerDisplayMode = useHpBarTimer
     ? HP_BAR_TIMER_DISPLAY_MODE
@@ -894,6 +901,7 @@ export async function planFindTheShinyChallenge({
         selected_timer_countdown_path: useHpBarTimer ? null : fallbackTimerPath,
         selected_timer_alarm_path: useHpBarTimer ? null : inventory.overlay_presets?.timer_alarm || null,
         selected_timer_hp_bar_path: useHpBarTimer ? hpBarTimerOverlayPath : null,
+        selected_timer_hp_bar_frame_path: useHpBarTimer ? hpBarTimerFramePath : null,
         selected_shiny_sparkle_path: inventory.overlay_presets?.shiny_sparkle || null,
         sprite_grid: spriteGridLayout,
         available_paths: inventory.overlays,

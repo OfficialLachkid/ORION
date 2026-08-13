@@ -28,6 +28,22 @@ export function buildVisualInputs(plan, renderPlan) {
         ? ['-stream_loop', '-1', '-t', String(totalDuration), '-i', hpBarTimerPath]
         : ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', String(totalDuration), '-i', hpBarTimerPath],
     });
+    if (plan.assets.overlays.selected_timer_hp_bar_frame_path) {
+      inputs.push({
+        role: 'timer-hp-bar-frame',
+        path: plan.assets.overlays.selected_timer_hp_bar_frame_path,
+        args: [
+          '-loop',
+          '1',
+          '-framerate',
+          String(renderPlan.canvas.fps),
+          '-t',
+          String(totalDuration),
+          '-i',
+          plan.assets.overlays.selected_timer_hp_bar_frame_path,
+        ],
+      });
+    }
   } else {
     inputs.push({
       role: 'timer-countdown',

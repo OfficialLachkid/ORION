@@ -183,6 +183,7 @@ export async function renderPokeQuizzVideo({
   const inputRefs = {
     background: inputRoleIndex.get('background'),
     timerHpBar: inputRoleIndex.has('timer-hp-bar') ? inputRoleIndex.get('timer-hp-bar') : null,
+    timerHpBarFrame: inputRoleIndex.has('timer-hp-bar-frame') ? inputRoleIndex.get('timer-hp-bar-frame') : null,
     timerCountdown: inputRoleIndex.get('timer-countdown'),
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
     pokeball: inputRoleIndex.get('pokeball-grid'),

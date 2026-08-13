@@ -181,6 +181,8 @@ const assetInventory = {
     timer_alarm: '/tmp/timer-alarm.gif',
     long_hp_bar: '/tmp/long-hp-bar-countdown-1s.mp4',
     hp_bar: '/tmp/hp-bar-countdown-1s.mp4',
+    long_hp_bar_frame: '/tmp/long-hp-bar.png',
+    hp_bar_frame: '/tmp/hp-bar.png',
     shiny_sparkle: '/tmp/shiny-sparkle.gif',
   },
   overlays: [
@@ -188,6 +190,7 @@ const assetInventory = {
     '/tmp/timer-countdown.gif',
     '/tmp/timer-alarm.gif',
     '/tmp/long-hp-bar-countdown-1s.mp4',
+    '/tmp/long-hp-bar.png',
     '/tmp/shiny-sparkle.gif',
   ],
   transitions: [],
@@ -214,6 +217,7 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.assets.overlays.selected_primary_pokeball_overlay_path, '/tmp/pokeball.gif');
   assert.equal(plan.assets.overlays.timer_display_mode, 'hp_bar_depletion');
   assert.equal(plan.assets.overlays.selected_timer_hp_bar_path, '/tmp/long-hp-bar-countdown-1s.mp4');
+  assert.equal(plan.assets.overlays.selected_timer_hp_bar_frame_path, '/tmp/long-hp-bar.png');
   assert.equal(plan.assets.overlays.selected_timer_path, null);
   assert.equal(plan.assets.overlays.selected_timer_alarm_path, null);
   assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, '/tmp/pokeball-intro.mp3');
@@ -374,15 +378,17 @@ test('visual inputs and audio cues use one normal sprite source plus one shiny r
   assert.deepEqual(inputs.map((input) => input.role), [
     'background',
     'timer-hp-bar',
+    'timer-hp-bar-frame',
     'pokeball-grid',
     'normal-sprite',
     'shiny-sprite',
     'shiny-sparkle',
   ]);
   assert.deepEqual(inputs[1].args, ['-stream_loop', '-1', '-t', '8', '-i', '/tmp/long-hp-bar-countdown-1s.mp4']);
-  assert.deepEqual(inputs[2].args, ['-stream_loop', '-1', '-ignore_loop', '0', '-t', '8', '-i', '/tmp/pokeball.gif']);
-  assert.deepEqual(inputs[3].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno.png']);
-  assert.deepEqual(inputs[4].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno-shiny.png']);
+  assert.deepEqual(inputs[2].args, ['-loop', '1', '-framerate', '30', '-t', '8', '-i', '/tmp/long-hp-bar.png']);
+  assert.deepEqual(inputs[3].args, ['-stream_loop', '-1', '-ignore_loop', '0', '-t', '8', '-i', '/tmp/pokeball.gif']);
+  assert.deepEqual(inputs[4].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno.png']);
+  assert.deepEqual(inputs[5].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno-shiny.png']);
 
   const script = buildAudioFilterScript({
     narrationPaths: ['/tmp/hook.wav', '/tmp/prompt.wav', '/tmp/reveal.wav'],
@@ -428,12 +434,13 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
     {
       background: 0,
       timerHpBar: 1,
+      timerHpBarFrame: 2,
       timerCountdown: null,
       timerAlarm: null,
-      pokeball: 2,
-      normalSprite: 3,
-      shinySprite: 4,
-      shinySparkle: 5,
+      pokeball: 3,
+      normalSprite: 4,
+      shinySprite: 5,
+      shinySparkle: 6,
     },
     null,
     {
@@ -452,10 +459,15 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
     },
   );
 
-  assert.match(visualFilter.script, /\[2:v\]fps=30,format=rgba,scale=/u);
+  assert.match(visualFilter.script, /\[3:v\]fps=30,format=rgba,scale=/u);
   assert.match(visualFilter.script, /fontsize=108/u);
-  assert.match(visualFilter.script, /\[1:v\]fps=30,trim=duration=1,setpts=\(PTS-STARTPTS\)\*3\+2\.6\/TB,scale=/u);
-  assert.match(visualFilter.script, /\[4:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+5\.68\/TB/u);
+  assert.match(visualFilter.script, /\[2:v\]fps=30,scale=968:188:force_original_aspect_ratio=decrease,format=rgba,alphaextract,split=2\[timerhpbarmaskintro\]\[timerhpbarmaskcount\]/u);
+  assert.match(visualFilter.script, /\[1:v\]fps=30,trim=duration=0\.(04|12),tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=968:188:force_original_aspect_ratio=decrease,format=rgba\[timerhpbarintrovideo\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarintrovideo\]\[timerhpbarmaskintro\]alphamerge,scale=w='968\*\(/u);
+  assert.match(visualFilter.script, /\[1:v\]fps=30,trim=duration=1,setpts=\(PTS-STARTPTS\)\*3\+2\.6\/TB,scale=968:188:force_original_aspect_ratio=decrease,format=rgba\[timerhpbarcountvideo\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarcountvideo\]\[timerhpbarmaskcount\]alphamerge,scale=w='968\*\(/u);
+  assert.match(visualFilter.script, /overlay=x='56\+\(\(968-w\)\/2\)':y='400\+\(\(188-h\)\/2\)':enable='gte\(t,[0-9.]+\)\*lt\(t,2\.6\)'/u);
+  assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+5\.68\/TB/u);
   assert.doesNotMatch(visualFilter.script, /pokeballstaticsource/u);
   assert.doesNotMatch(visualFilter.script, /timercountdown/u);
   assert.doesNotMatch(visualFilter.script, /timeralarm/u);
@@ -466,7 +478,7 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
   assert.match(visualFilter.script, /\[pbr0\]split=2\[pbo0\]\[pbt0\]/u);
   assert.match(visualFilter.script, /\[vg0\]\[pbo0\]overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,5\.68\)'/u);
   assert.match(visualFilter.script, new RegExp(`overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2`, 'u'));
-  assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+5\.68\/TB/u);
+  assert.match(visualFilter.script, /\[6:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+5\.68\/TB/u);
   assert.match(visualFilter.script, /pokeballpop/u);
   assert.match(visualFilter.script, /normaltransition/u);
   assert.match(visualFilter.script, /\[pbisrc0\]trim=start=[0-9.]+:duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=w='/u);

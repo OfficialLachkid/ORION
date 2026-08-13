@@ -83,6 +83,7 @@ test('overlay preset selection prefers split timer gifs and the 3D pokeball over
   const presets = selectOverlayPresets([
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/3D Pokeball Wiggle.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar-countdown-1s.mp4',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar.png',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/shiny_sparkle.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Timer Countdown.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Timer Alarm.gif',
@@ -94,6 +95,8 @@ test('overlay preset selection prefers split timer gifs and the 3D pokeball over
   assert.match(presets.timer_alarm || '', /Timer Alarm\.gif$/u);
   assert.match(presets.long_hp_bar || '', /long-hp-bar-countdown-1s\.mp4$/u);
   assert.match(presets.hp_bar || '', /long-hp-bar-countdown-1s\.mp4$/u);
+  assert.match(presets.long_hp_bar_frame || '', /long-hp-bar\.png$/u);
+  assert.match(presets.hp_bar_frame || '', /long-hp-bar\.png$/u);
   assert.match(presets.shiny_sparkle || '', /shiny_sparkle\.gif$/u);
   assert.match(presets.pokeball_primary || '', /3D Pokeball Wiggle\.gif$/u);
 });
