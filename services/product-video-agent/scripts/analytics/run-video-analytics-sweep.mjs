@@ -107,6 +107,79 @@ function buildYoutubeVideoUrl(externalId) {
   return `https://www.youtube.com/watch?v=${encodeURIComponent(normalized)}`;
 }
 
+function formatDigestDateTime(value) {
+  const parsed = toDateOrNull(value);
+  if (!parsed) {
+    return 'unknown';
+  }
+  return parsed.toISOString().slice(0, 16).replace('T', ' ');
+}
+
+function formatVideoLink(video = {}) {
+  const title = String(video?.title || '').trim() || video?.type_pair || 'Untitled video';
+  const url = buildYoutubeVideoUrl(video?.external_id);
+  return url ? `[${title}](${url})` : title;
+}
+
+function formatVideoMetricLine(video = {}, options = {}) {
+  const segments = [
+    formatVideoLink(video),
+    `${formatNumber(video?.views)} views`,
+  ];
+  if (Number.isFinite(Number(video?.avg_view_duration_sec))) {
+    segments.push(`AVD ${formatMetric(video.avg_view_duration_sec)}s`);
+  }
+  if (Number.isFinite(Number(video?.avg_view_percentage))) {
+    segments.push(`AVP ${formatMetric(video.avg_view_percentage)}%`);
+  }
+  if (options.includeTemplate && video?.template_label && video.template_label !== 'Unknown') {
+    segments.push(video.template_label);
+  }
+  if (options.includeTypePair && video?.type_pair && video.type_pair !== 'Unknown') {
+    segments.push(video.type_pair);
+  }
+  if (options.includeBackground && video?.background_style && video.background_style !== 'Unknown') {
+    segments.push(video.background_style);
+  }
+  if (options.includePublishedAt && video?.published_at) {
+    segments.push(formatDigestDate(video.published_at));
+  }
+  return `- ${segments.join(' | ')}`;
+}
+
+function formatLeaderboardField(videos = [], options = {}) {
+  if (!Array.isArray(videos) || videos.length === 0) {
+    return 'n/a';
+  }
+  return videos.map((video) => formatVideoMetricLine(video, options)).join('\n');
+}
+
+function formatInsightGroupLine(group = {}) {
+  const segments = [
+    `${group.label} (n=${formatNumber(group.video_count)})`,
+    `avg ${formatNumber(group.average_views)} views`,
+  ];
+  if (Number.isFinite(Number(group.median_avg_view_percentage))) {
+    segments.push(`AVP ${formatMetric(group.median_avg_view_percentage)}%`);
+  }
+  return `- ${segments.join(' | ')}`;
+}
+
+function formatInsightField(groupSummary = {}, options = {}) {
+  const strongest = Array.isArray(groupSummary?.strongest) ? groupSummary.strongest : [];
+  const weakest = Array.isArray(groupSummary?.weakest) ? groupSummary.weakest : [];
+  if (strongest.length === 0) {
+    return 'Need more data in this window.';
+  }
+
+  const lines = strongest.slice(0, options.limit || 2).map((group) => formatInsightGroupLine(group));
+  const weakestCandidate = weakest.find((group) => !strongest.some((strong) => strong.key === group.key));
+  if (weakestCandidate) {
+    lines.push(`Watch: ${formatInsightGroupLine(weakestCandidate).replace(/^- /u, '')}`);
+  }
+  return lines.join('\n');
+}
+
 function formatBestPerformerLine(bestPerformer, windowDays = 7) {
   const normalizedWindowDays = Number.isFinite(Number(windowDays)) ? Number(windowDays) : 7;
   if (!bestPerformer) {
@@ -179,49 +252,52 @@ function buildOverviewEmbed(overview, channelDigests = [], options = {}) {
 function buildChannelDigestEmbed(digest) {
   const windowLabel = `${digest.window_days}D`;
   const bestLabel = digest.best_performer
-    ? `${digest.best_performer.title || digest.best_performer.type_pair} (${formatNumber(digest.best_performer.views)} views)`
+    ? formatVideoMetricLine(digest.best_performer, { includeTemplate: true, includeTypePair: true })
     : 'n/a';
   const worstLabel = digest.worst_performer
-    ? `${digest.worst_performer.title || digest.worst_performer.type_pair} (${formatNumber(digest.worst_performer.views)} views)`
+    ? formatVideoMetricLine(digest.worst_performer, { includeTemplate: true, includeTypePair: true })
     : 'n/a';
 
   return {
     embeds: [
       {
-        title: `${digest.channel_name} - YouTube Analytics`,
+        title: `${digest.channel_name} Drilldown (${digest.window_days}d) | ${formatDigestDate(digest.window_end)}`,
         description: digest.new_videos_count > 0
           ? [
-              `Window: last **${digest.window_days}** days`,
-              `New videos: **${formatNumber(digest.new_videos_count)}**`,
-              `Videos with snapshots: **${formatNumber(digest.videos_with_snapshots_count)}**`,
-              `Crossed 10k views: **${formatNumber(digest.crossed_10k_views_count)}**`,
+              `Recommendation-only readout for the last **${digest.window_days}** days.`,
+              `Window: **${formatDigestDate(digest.window_start)}** to **${formatDigestDate(digest.window_end)}**`,
             ].join('\n')
           : `No published videos landed in the last ${digest.window_days} days.`,
         color: digest.insufficient_data ? 0xd4a017 : 0x1f7a3a,
         fields: [
           {
-            name: 'Medians',
+            name: 'Window Snapshot',
             value: [
-              `Views: ${formatNumber(digest.median_views)}`,
-              `AVD: ${formatMetric(digest.median_avg_view_duration_sec)}s`,
-              `AVP: ${formatMetric(digest.median_avg_view_percentage)}%`,
-            ].join(' | '),
+              `- New videos (${windowLabel}): ${formatNumber(digest.new_videos_count)}`,
+              `- Videos with snapshots: ${formatNumber(digest.videos_with_snapshots_count)}`,
+              `- Crossed 10k views: ${formatNumber(digest.crossed_10k_views_count)}`,
+              `- Combined views (${windowLabel}): ${formatNumber(digest.total_views)}`,
+              `- Total views (all time): ${formatNumber(digest.all_time_views)}`,
+            ].join('\n'),
             inline: false,
           },
           {
-            name: 'Totals',
+            name: 'Median Performance',
             value: [
-              `Views (${windowLabel}): ${formatNumber(digest.total_views)}`,
-              `Views (all time): ${formatNumber(digest.all_time_views)}`,
-              `Likes: ${formatNumber(digest.total_likes)}`,
-              `Comments: ${formatNumber(digest.total_comments)}`,
-              `Shares: ${formatNumber(digest.total_shares)}`,
-            ].join(' | '),
+              `- Median views: ${formatNumber(digest.median_views)}`,
+              `- Median AVD: ${formatMetric(digest.median_avg_view_duration_sec)}s`,
+              `- Median AVP: ${formatMetric(digest.median_avg_view_percentage)}%`,
+            ].join('\n'),
             inline: false,
           },
           {
-            name: 'Subscribers',
-            value: `Gained: ${formatNumber(digest.total_subscribers_gained)} | Lost: ${formatNumber(digest.total_subscribers_lost)}`,
+            name: 'Engagement Totals',
+            value: [
+              `- Likes: ${formatNumber(digest.total_likes)}`,
+              `- Comments: ${formatNumber(digest.total_comments)}`,
+              `- Shares: ${formatNumber(digest.total_shares)}`,
+              `- Subs gained/lost: ${formatNumber(digest.total_subscribers_gained)} / ${formatNumber(digest.total_subscribers_lost)}`,
+            ].join('\n'),
             inline: false,
           },
           {
@@ -237,13 +313,78 @@ function buildChannelDigestEmbed(digest) {
           {
             name: 'Signal Quality',
             value: digest.insufficient_data
-              ? 'Insufficient data. Keep observing before changing strategy.'
-              : 'Enough weekly volume to compare performance without auto-adjusting strategy yet.',
+              ? 'Insufficient data. Treat the thread insights as directional only.'
+              : 'Usable signal. Keep this recommendation-only until more windows confirm the pattern.',
             inline: false,
           },
         ],
         footer: { text: `${digest.account_key} | ${digest.platform}` },
         timestamp: digest.window_end,
+      },
+      {
+        title: `${digest.channel_name} Winners, Losers, and Recent Uploads`,
+        color: 0x3562c8,
+        fields: [
+          {
+            name: 'Recent Winners',
+            value: formatLeaderboardField(digest.recent_winners, {
+              includeTemplate: true,
+              includeTypePair: true,
+            }),
+            inline: false,
+          },
+          {
+            name: 'Needs Attention',
+            value: formatLeaderboardField(digest.recent_losers, {
+              includeTemplate: true,
+              includeTypePair: true,
+            }),
+            inline: false,
+          },
+          {
+            name: 'Recent Upload Breakdown',
+            value: formatLeaderboardField(digest.publications.slice().sort((left, right) => (
+              (new Date(right.published_at || 0)).valueOf() - (new Date(left.published_at || 0)).valueOf()
+            )).slice(0, 5), {
+              includeTemplate: true,
+              includeTypePair: true,
+              includeBackground: true,
+              includePublishedAt: true,
+            }),
+            inline: false,
+          },
+        ],
+      },
+      {
+        title: `${digest.channel_name} Content Insights`,
+        description: [
+          'Grouped by production choices already tracked in the publication data.',
+          'This is recommendation-only and does not change scheduling or selection weights automatically.',
+        ].join('\n'),
+        color: 0x7a4cc8,
+        fields: [
+          {
+            name: 'Templates',
+            value: formatInsightField(digest.content_insights?.templates, { limit: 2 }),
+            inline: false,
+          },
+          {
+            name: 'Type Pairs',
+            value: formatInsightField(digest.content_insights?.type_pairs, { limit: 2 }),
+            inline: false,
+          },
+          {
+            name: 'Hooks',
+            value: formatInsightField(digest.content_insights?.hooks, { limit: 2 }),
+            inline: false,
+          },
+          {
+            name: 'Background Styles',
+            value: formatInsightField(digest.content_insights?.background_styles, { limit: 2 }),
+            inline: false,
+          },
+        ],
+        footer: { text: `Updated ${formatDigestDateTime(digest.window_end)} UTC` },
       },
     ],
   };
@@ -371,6 +512,36 @@ async function ensureAnalyticsThread({
   return state.analytics_threads[channelProfile.id].thread_id;
 }
 
+async function fetchVideoRowsById(store, publications = []) {
+  const videoIds = [...new Set(
+    (Array.isArray(publications) ? publications : [])
+      .map((publication) => String(publication?.video_id || '').trim())
+      .filter(Boolean),
+  )];
+  if (videoIds.length === 0) {
+    return new Map();
+  }
+
+  let videoRows = [];
+  if (typeof store.fetchVideosByIds === 'function') {
+    videoRows = await store.fetchVideosByIds(videoIds);
+  } else if (typeof store.fetchVideoById === 'function') {
+    videoRows = await Promise.all(videoIds.map(async (videoId) => {
+      try {
+        return await store.fetchVideoById(videoId);
+      } catch {
+        return null;
+      }
+    }));
+  }
+
+  return new Map(
+    (Array.isArray(videoRows) ? videoRows : [])
+      .filter(Boolean)
+      .map((row) => [String(row?.id || '').trim(), row]),
+  );
+}
+
 async function postWeeklyDigest({
   runtimeConfig,
   analyticsChannelId,
@@ -468,12 +639,16 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
     || String(runtimeConfig?.channelIds?.orionAnalytics || '').trim();
   const windowDays = getNumberOption(options, 'digest-window-days', DEFAULT_DIGEST_WINDOW_DAYS);
   const postDiscord = getBooleanOption(options, 'post-discord', false);
-  const postChannelThreads = getBooleanOption(options, 'post-channel-threads', false);
   const forceDigest = getBooleanOption(options, 'force-digest', false);
   const digestWeekday = getNumberOption(options, 'digest-weekday', DEFAULT_DIGEST_WEEKDAY);
   const digestHour = getNumberOption(options, 'digest-hour', DEFAULT_DIGEST_HOUR);
   const digestMode = normalizeDigestMode(getStringOption(options, 'digest-mode', DEFAULT_DIGEST_MODE));
   const postTarget = normalizePostTarget(getStringOption(options, 'post-target', DEFAULT_POST_TARGET));
+  const postChannelThreads = getBooleanOption(
+    options,
+    'post-channel-threads',
+    digestMode === 'weekly' || postTarget === 'corresponding',
+  );
   const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
   const profiles = normalizeChannelProfiles(
     await loadProfiles(channelsPath, { projectRoot }),
@@ -490,6 +665,7 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
   state.analytics_threads = state.analytics_threads || {};
   const sweepResults = [];
   const publicationsByChannelId = new Map();
+  const videoRowsByChannelId = new Map();
   const latestSnapshotsByPublicationId = new Map();
 
   for (const channelProfile of profiles) {
@@ -511,6 +687,10 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
       accountKey: channelProfile.account_key,
     });
     publicationsByChannelId.set(channelProfile.id, publications || []);
+    videoRowsByChannelId.set(
+      channelProfile.id,
+      await fetchVideoRowsById(store, publications || []),
+    );
 
     const latestSnapshots = await Promise.all((publications || []).map((publication) => (
       store.fetchLatestAnalyticsSnapshot(publication.id)
@@ -613,6 +793,7 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
         channelProfile,
         publications: publicationsByChannelId.get(channelProfile.id) || [],
         latestSnapshotsByPublicationId,
+        videoRowsById: videoRowsByChannelId.get(channelProfile.id) || new Map(),
         asOf,
         windowDays,
       }),
@@ -664,7 +845,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --channel <id>               Optional channel id or account_key filter.',
       '  --as-of <ISO>                Deterministic capture timestamp. Default: now.',
       '  --post-discord               Post the weekly digest when due.',
-      '  --post-channel-threads       Also post per-channel detail messages into dedicated threads.',
+      '  --post-channel-threads       Also post per-channel detail messages into dedicated threads. Default: weekly and corresponding-target digests.',
       '  --force-digest               Post the weekly digest immediately, ignoring the due check.',
       `  --digest-mode <mode>         Digest mode: weekly or on_demand. Default: ${DEFAULT_DIGEST_MODE}`,
       `  --digest-window-days <n>     Window size for the weekly digest. Default: ${DEFAULT_DIGEST_WINDOW_DAYS}`,

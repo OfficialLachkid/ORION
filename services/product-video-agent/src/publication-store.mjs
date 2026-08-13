@@ -85,6 +85,24 @@ export class SupabasePublicationStore {
     return rows?.[0] || null;
   }
 
+  async fetchVideosByIds(ids = []) {
+    const normalizedIds = [...new Set(
+      (Array.isArray(ids) ? ids : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    )];
+    if (normalizedIds.length === 0) {
+      return [];
+    }
+
+    return this.request('videos', {
+      params: {
+        select: '*',
+        id: `in.(${normalizedIds.map((value) => `"${value}"`).join(',')})`,
+      },
+    });
+  }
+
   async fetchPublicationById(id) {
     const rows = await this.request('video_publications', {
       params: {

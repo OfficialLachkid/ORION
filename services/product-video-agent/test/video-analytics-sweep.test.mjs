@@ -41,6 +41,7 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
       return [
         {
           id: 'pub-123',
+          video_id: 'video-123',
           platform: 'youtube_shorts',
           account_key: 'poke-quizz-youtube',
           status: 'published',
@@ -49,7 +50,19 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
           published_at: '2026-08-09T12:00:00.000Z',
           metadata: {
             type_pair: ['electric', 'grass'],
+            background_path: '/tmp/type-quiz-backgrounds/checkers.gif',
+            template_id: 'pokemon.type-quiz.v1',
             render_path: '/tmp/electric-grass.mp4',
+          },
+        },
+      ];
+    },
+    async fetchVideosByIds() {
+      return [
+        {
+          id: 'video-123',
+          selected_script: {
+            hook: 'Can you guess the typing?',
           },
         },
       ];
@@ -129,8 +142,16 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
           channelId,
         };
       },
-      fetchImpl: async () => {
-        throw new Error('No direct Discord thread API call should occur when post-channel-threads is disabled.');
+      fetchImpl: async (url) => {
+        if (String(url).includes('/threads')) {
+          return {
+            ok: true,
+            json: async () => ({
+              id: 'analytics-thread-poke-quizz',
+            }),
+          };
+        }
+        throw new Error(`Unexpected fetch call: ${url}`);
       },
     });
 
@@ -159,7 +180,7 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     ]);
     assert.equal(result.results.length, 1);
     assert.equal(result.results[0].action, 'captured');
-    assert.equal(sendCalls.length, 1);
+    assert.equal(sendCalls.length, 3);
     assert.equal(sendCalls[0].channelId, '1528783542195323061');
     assert.equal(sendCalls[0].payload.embeds[0].title, 'Weekly YouTube Analytics Digest (7d) | 2026-08-10');
     assert.match(sendCalls[0].payload.embeds[0].description, /New videos \(7D\): \*\*1\*\*/u);
@@ -175,8 +196,23 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     assert.match(sendCalls[0].payload.embeds[0].fields[0].value, /- Signal: insufficient data/u);
     assert.equal('footer' in sendCalls[0].payload.embeds[0], false);
     assert.equal('timestamp' in sendCalls[0].payload.embeds[0], false);
+    assert.equal(sendCalls[1].channelId, '1528783542195323061');
+    assert.equal(sendCalls[1].payload.content, 'Analytics thread for **Poke Quizz** (poke-quizz-youtube).');
+    assert.equal(sendCalls[2].channelId, 'analytics-thread-poke-quizz');
+    assert.equal(sendCalls[2].payload.embeds.length, 3);
+    assert.equal(sendCalls[2].payload.embeds[0].title, 'Poke Quizz Drilldown (7d) | 2026-08-10');
+    assert.match(sendCalls[2].payload.embeds[1].fields[0].value, /\[Electric Grass #shorts\]\(https:\/\/www\.youtube\.com\/watch\?v=yt-123\)/u);
+    assert.match(sendCalls[2].payload.embeds[2].fields[2].value, /Can you guess the typing\?/u);
     assert.equal(state.last_weekly_digest_at, '2026-08-10T09:00:00.000Z');
-    assert.deepEqual(state.analytics_threads, {});
+    assert.deepEqual(state.analytics_threads, {
+      'video-channel-poke-quizz-youtube': {
+        thread_id: 'analytics-thread-poke-quizz',
+        anchor_message_id: 'message-2',
+        channel_name: 'Poke Quizz',
+        account_key: 'poke-quizz-youtube',
+        created_at: state.analytics_threads['video-channel-poke-quizz-youtube'].created_at,
+      },
+    });
   } finally {
     await rm(statePath, { force: true });
   }
@@ -192,6 +228,7 @@ test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the c
       return [
         {
           id: 'pub-ondemand-123',
+          video_id: 'video-ondemand-123',
           platform: 'youtube_shorts',
           account_key: 'poke-quizz-youtube',
           status: 'published',
@@ -200,7 +237,19 @@ test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the c
           published_at: '2026-08-09T12:00:00.000Z',
           metadata: {
             type_pair: ['ghost', 'ground'],
+            background_path: '/tmp/fire-backgrounds/lava.png',
+            template_id: 'pokemon.dual-type-reveal.v1',
             render_path: '/tmp/ghost-ground.mp4',
+          },
+        },
+      ];
+    },
+    async fetchVideosByIds() {
+      return [
+        {
+          id: 'video-ondemand-123',
+          selected_script: {
+            hook: 'Which typing fits this monster?',
           },
         },
       ];
@@ -302,7 +351,7 @@ test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the c
     assert.equal(result.posted_channel_id, 'analytics-thread-poke-quizz');
     assert.equal(result.digest_mode, 'on_demand');
     assert.equal(result.post_target, 'corresponding');
-    assert.equal(sendCalls.length, 2);
+    assert.equal(sendCalls.length, 3);
     assert.equal(sendCalls[0].channelId, '1528783542195323061');
     assert.equal(sendCalls[0].payload.content, 'Analytics thread for **Poke Quizz** (poke-quizz-youtube).');
     assert.equal(sendCalls[1].channelId, 'analytics-thread-poke-quizz');
@@ -313,6 +362,11 @@ test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the c
     assert.match(sendCalls[1].payload.embeds[0].fields[0].value, /- New videos \(3D\): 1/u);
     assert.match(sendCalls[1].payload.embeds[0].fields[0].value, /- Views \(3D\): 2,400/u);
     assert.match(sendCalls[1].payload.embeds[0].fields[0].value, /- Best performer \(3D\): \[Ghost Ground #shorts\]\(https:\/\/www\.youtube\.com\/watch\?v=yt-ondemand-123\) \(2,400 views\)/u);
+    assert.equal(sendCalls[2].channelId, 'analytics-thread-poke-quizz');
+    assert.equal(sendCalls[2].payload.embeds.length, 3);
+    assert.equal(sendCalls[2].payload.embeds[0].title, 'Poke Quizz Drilldown (3d) | 2026-08-10');
+    assert.match(sendCalls[2].payload.embeds[1].fields[0].value, /\[Ghost Ground #shorts\]\(https:\/\/www\.youtube\.com\/watch\?v=yt-ondemand-123\)/u);
+    assert.match(sendCalls[2].payload.embeds[2].fields[2].value, /Which typing fits this monster\?/u);
     assert.equal(state.last_weekly_digest_at, '');
     assert.deepEqual(state.analytics_threads, {
       'video-channel-poke-quizz-youtube': {

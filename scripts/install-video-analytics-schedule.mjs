@@ -122,7 +122,7 @@ function main() {
       'Usage: node scripts/install-video-analytics-schedule.mjs [--hours 1,5,9,13,17,21 --minute 15] [--no-discord] [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.video-analytics-scheduler.plist and loads it by default.',
-      'The scheduled worker captures YouTube analytics snapshots and posts the weekly Discord digest when due.',
+      'The scheduled worker captures YouTube analytics snapshots and posts the weekly shared digest plus per-channel thread drilldowns when due.',
     ].join('\n'));
     return;
   }
