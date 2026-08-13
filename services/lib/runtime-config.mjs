@@ -210,7 +210,7 @@ export function loadRuntimeConfig(options = {}) {
   if (!Object.prototype.hasOwnProperty.call(channelIds, 'publishQueueAllChannels')) {
     channelIds.publishQueueAllChannels =
       env.DISCORD_PUBLISH_QUEUE_ALL_CHANNELS_THREAD_ID
-      || '1537491255192453160';
+      || '';
   }
 
   const resolvedTmpDir = env.RUNTIME_TMP_DIR || resolve(projectRoot, 'data', 'runtime', 'tmp');

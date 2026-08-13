@@ -11,8 +11,6 @@ import {
   sendDiscordChannelMessage,
 } from '../../../scripts/lib/discord-post.mjs';
 
-const DEFAULT_PUBLISH_QUEUE_THREAD_ID = '1537491255192453160';
-
 function normalizeWorkflowState(publication = {}) {
   return String(publication?.metadata?.workflow_state || publication?.status || '')
     .trim()
@@ -38,7 +36,7 @@ export function resolvePublishQueueThreadId(runtimeConfig) {
   return String(
     runtimeConfig?.channelIds?.publishQueueAllChannels
       || runtimeConfig?.env?.DISCORD_PUBLISH_QUEUE_ALL_CHANNELS_THREAD_ID
-      || DEFAULT_PUBLISH_QUEUE_THREAD_ID,
+      || '',
   ).trim();
 }
 
