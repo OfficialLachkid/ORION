@@ -505,12 +505,10 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
   assert.match(visualFilter.script, /\[2:v\]fps=30,scale=968:188:force_original_aspect_ratio=decrease,format=rgba,alphaextract\[timerhpbarmaskcount\]/u);
   assert.match(visualFilter.script, /\[1:v\]fps=30,trim=duration=1,setpts=\(PTS-STARTPTS\)\*3\+2\.6\/TB,scale=968:188:force_original_aspect_ratio=decrease,format=rgba\[timerhpbarcountvideo\]/u);
   assert.match(visualFilter.script, /\[timerhpbarcountvideo\]\[timerhpbarmaskcount\]alphamerge,setsar=1\[timerhpbarbase\]/u);
-  assert.match(visualFilter.script, /\[timerhpbarbase\]split=2\[timerhpbarintrosrc\]\[timerhpbarhold\]/u);
-  assert.match(visualFilter.script, /\[timerhpbarintrosrc\]scale=w='max\(2,968\*\(if\(lt\(\(\(n\/30\)\),0\),0,/u);
-  assert.match(visualFilter.script, /:h='max\(2,188\*\(if\(lt\(\(\(n\/30\)\),0\),0,/u);
-  assert.match(visualFilter.script, /:eval=frame,format=rgba,setsar=1\[timerhpbarintro\]/u);
-  assert.match(visualFilter.script, /\[vgr2\]\[timerhpbarintro\]overlay=.*enable='gte\(t,2\.6\)\*lt\(t,2\.9\)'/u);
-  assert.match(visualFilter.script, /\[vgr2hbi\]\[timerhpbarhold\]overlay=.*enable='gte\(t,2\.9\)\*lt\(t,5\.6\)'/u);
+  assert.match(visualFilter.script, /\[timerhpbarbase\]split=2\[timerhpbarprecountsrc\]\[timerhpbarcountdown\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarprecountsrc\]trim=duration=0\.033,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,fade=t=in:st=[0-9.]+:d=0\.3:alpha=1,format=rgba,setsar=1\[timerhpbarprecount\]/u);
+  assert.match(visualFilter.script, /\[vgr2\]\[timerhpbarprecount\]overlay=.*y='400\+if\(lt\(\(t\),[0-9.]+\),\(1-\(\(\(t\)-[0-9.]+\)\/0\.32\)\)\*18\*sin\(\(\(t\)-[0-9.]+\)\*20\),0\)'.*enable='gte\(t,[0-9.]+\)\*lt\(t,2\.6\)'/u);
+  assert.match(visualFilter.script, /\[vgr2hbp\]\[timerhpbarcountdown\]overlay=.*enable='between\(t,2\.6,5\.6\)'/u);
   assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+5\.68\/TB/u);
   assert.doesNotMatch(visualFilter.script, /pokeballstaticsource/u);
   assert.doesNotMatch(visualFilter.script, /timercountdown/u);
@@ -581,10 +579,9 @@ test('visual filter keys out green when the hp-bar countdown uses the greenscree
 
   assert.match(visualFilter.script, /colorkey=0x00FF00:0\.22:0\.08/u);
   assert.doesNotMatch(visualFilter.script, /timerhpbarmaskcount/u);
-  assert.match(visualFilter.script, /\[timerhpbarbase\]split=2\[timerhpbarintrosrc\]\[timerhpbarhold\]/u);
-  assert.match(visualFilter.script, /\[timerhpbarintrosrc\]scale=w='max\(2,968\*\(if\(lt\(\(\(n\/30\)\),0\),0,/u);
-  assert.match(visualFilter.script, /:h='max\(2,188\*\(if\(lt\(\(\(n\/30\)\),0\),0,/u);
-  assert.match(visualFilter.script, /:eval=frame,format=rgba,setsar=1\[timerhpbarintro\]/u);
-  assert.match(visualFilter.script, /overlay=.*enable='gte\(t,2\.6\)\*lt\(t,2\.9\)'/u);
-  assert.match(visualFilter.script, /overlay=.*enable='gte\(t,2\.9\)\*lt\(t,5\.6\)'/u);
+  assert.match(visualFilter.script, /\[timerhpbarbase\]split=2\[timerhpbarprecountsrc\]\[timerhpbarcountdown\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarprecountsrc\]trim=duration=0\.033,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,fade=t=in:st=[0-9.]+:d=0\.3:alpha=1,format=rgba,setsar=1\[timerhpbarprecount\]/u);
+  assert.match(visualFilter.script, /overlay=.*y='400\+if\(lt\(\(t\),[0-9.]+\),\(1-\(\(\(t\)-[0-9.]+\)\/0\.32\)\)\*18\*sin\(\(\(t\)-[0-9.]+\)\*20\),0\)'/u);
+  assert.match(visualFilter.script, /overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,2\.6\)'/u);
+  assert.match(visualFilter.script, /overlay=.*enable='between\(t,2\.6,5\.6\)'/u);
 });

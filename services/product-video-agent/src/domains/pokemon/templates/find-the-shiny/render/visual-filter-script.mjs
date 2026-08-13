@@ -1,5 +1,4 @@
 import {
-  buildAnimatedLerpExpression,
   buildAnimatedPopSettleExpression,
   buildAnimatedTextSegmentAlphaExpression,
   buildAnimatedTextYExpression,
@@ -173,6 +172,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     ensureNumber(template?.layout?.text?.prompt_font_size, DEFAULT_PROMPT_FONT_SIZE),
   );
   const pokeballIntroStart = resolvePokeballIntroStartSeconds(renderPlan);
+  const firstPokeballIntroStart = gridLayout.cells.length > 0
+    ? roundTime(Math.min(...gridLayout.cells.map((cell) => (
+      resolveCellPokeballIntroStartSeconds({
+        cell,
+        gridLayout,
+        pokeballIntroStart,
+        revealVisualStart,
+      })
+    ))))
+    : pokeballIntroStart;
   const pokeballIntroDuration = resolveFindTheShinyPokeballIntroDurationSeconds(gridLayout);
   const pokeballSourceDuration = Math.max(
     0.12,
@@ -301,19 +310,15 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     0.12,
     Math.min(0.3, countdownDuration),
   ));
-  const hpBarIntroEnd = roundTime(
-    Math.min(renderPlan.phases.reveal.start_seconds, countdownStart + hpBarIntroDuration),
-  );
-  const hpBarIntroScaleExpression = buildAnimatedLerpExpression({
-    fromValue: 0,
-    toValue: 1,
-    holdUntilSeconds: 0,
-    transitionDurationSeconds: hpBarIntroDuration,
-    timeExpression: buildScaleFilterTimeExpression({
-      fps,
-      streamStartSeconds: 0,
-    }),
-  });
+  const hpBarAppearStart = roundTime(Math.min(firstPokeballIntroStart, countdownStart));
+  const hpBarIntroFrameDuration = roundTime(Math.max(
+    1 / Math.max(1, fps),
+    0.02,
+  ));
+  const hpBarIntroCloneDuration = roundTime(Math.max(
+    0,
+    countdownStart - hpBarAppearStart - hpBarIntroFrameDuration,
+  ));
 
   if (useHpBarCountdown) {
     if (inputRefs.timerHpBarFrame != null) {
@@ -332,18 +337,18 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
     }
     filters.push(
-      `[timerhpbarbase]split=2[timerhpbarintrosrc][timerhpbarhold]`,
+      `[timerhpbarbase]split=2[timerhpbarprecountsrc][timerhpbarcountdown]`,
     );
     filters.push(
-      `[timerhpbarintrosrc]scale=w='max(2,${renderPlan.timer_layout.width}*(${hpBarIntroScaleExpression}))':h='max(2,${renderPlan.timer_layout.height}*(${hpBarIntroScaleExpression}))':eval=frame,format=rgba,setsar=1[timerhpbarintro]`,
+      `[timerhpbarprecountsrc]trim=duration=${hpBarIntroFrameDuration},tpad=stop_mode=clone:stop_duration=${hpBarIntroCloneDuration},setpts=PTS-STARTPTS+${hpBarAppearStart}/TB,fade=t=in:st=${hpBarAppearStart}:d=${hpBarIntroDuration}:alpha=1,format=rgba,setsar=1[timerhpbarprecount]`,
     );
-    const timerIntroVideoLabel = `${currentVideoLabel}hbi`;
+    const timerPrecountVideoLabel = `${currentVideoLabel}hbp`;
     filters.push(
-      `[${currentVideoLabel}][timerhpbarintro]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${renderPlan.timer_layout.y}+((${renderPlan.timer_layout.height}-h)/2)':enable='${buildHalfOpenEnableExpression(countdownStart, hpBarIntroEnd)}'[${timerIntroVideoLabel}]`,
+      `[${currentVideoLabel}][timerhpbarprecount]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${buildAnimatedTextYExpression(renderPlan.timer_layout.y, hpBarAppearStart)}':enable='${buildHalfOpenEnableExpression(hpBarAppearStart, countdownStart)}'[${timerPrecountVideoLabel}]`,
     );
-    const timerVideoLabel = `${timerIntroVideoLabel}hb`;
+    const timerVideoLabel = `${timerPrecountVideoLabel}hb`;
     filters.push(
-      `[${timerIntroVideoLabel}][timerhpbarhold]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${renderPlan.timer_layout.y}+((${renderPlan.timer_layout.height}-h)/2)':enable='${buildHalfOpenEnableExpression(hpBarIntroEnd, renderPlan.phases.reveal.start_seconds)}'[${timerVideoLabel}]`,
+      `[${timerPrecountVideoLabel}][timerhpbarcountdown]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${renderPlan.timer_layout.y}+((${renderPlan.timer_layout.height}-h)/2)':enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${timerVideoLabel}]`,
     );
     currentVideoLabel = timerVideoLabel;
   } else {
