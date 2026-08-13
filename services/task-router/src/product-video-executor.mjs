@@ -164,6 +164,14 @@ function assertGenerateReviewTask(task) {
   return generation;
 }
 
+function assertAnalyticsDigestTask(task) {
+  const request = task?.video_analytics_request;
+  if (!request?.channelSelector || !request?.windowDays) {
+    throw new Error('Analytics digest task is missing channel or day-window metadata.');
+  }
+  return request;
+}
+
 function resolveTaskPublicationId(task) {
   return String(
     task?.poke_quizz_publication_review?.publicationId
@@ -829,6 +837,54 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
   };
 }
 
+async function executeAnalyticsDigestTask(task, _config, dependencies = {}) {
+  const request = assertAnalyticsDigestTask(task);
+  const runProcess = dependencies.runProcess || runLocalProcess;
+  const analyticsScriptPath = dependencies.analyticsScriptPath
+    || resolve(projectRoot, 'services/product-video-agent/scripts/run-video-analytics-sweep.mjs');
+  const normalizedChannelSelector = String(request.channelSelector || '').trim().toLowerCase();
+  const shouldPostToCorrespondingChannel = normalizedChannelSelector && normalizedChannelSelector !== 'all';
+  const analyticsResult = await runProcess({
+    executable: process.execPath,
+    args: [
+      analyticsScriptPath,
+      '--post-discord',
+      '--digest-mode',
+      'on_demand',
+      '--digest-window-days',
+      String(request.windowDays),
+      '--post-target',
+      shouldPostToCorrespondingChannel ? 'corresponding' : 'shared',
+      ...(shouldPostToCorrespondingChannel ? ['--channel', request.channelSelector] : []),
+    ],
+    cwd: projectRoot,
+    timeoutMs: 1_200_000,
+  });
+
+  const analyticsPayload = parseLastJsonObject(analyticsResult.stdout) || {};
+  if (analyticsPayload?.digest_posted !== true) {
+    throw new Error('Video analytics digest did not post successfully.');
+  }
+
+  return {
+    rawStdout: analyticsResult.stdout || '',
+    report: {
+      state: 'analytics_posted',
+      severity: 'success',
+      summary: shouldPostToCorrespondingChannel
+        ? `Posted a ${request.windowDays}-day YouTube analytics digest for ${request.channelLabel || request.channelSelector} into its corresponding analytics thread.`
+        : `Posted a ${request.windowDays}-day YouTube analytics digest for all configured channels into the shared analytics channel.`,
+      channelSelector: request.channelSelector,
+      channelLabel: request.channelLabel || request.channelSelector,
+      windowDays: Number(request.windowDays),
+      analyticsChannelId: analyticsPayload.analytics_channel_id || '',
+      postedChannelId: analyticsPayload.posted_channel_id || '',
+      digestMode: analyticsPayload.digest_mode || 'on_demand',
+      postTarget: analyticsPayload.post_target || (shouldPostToCorrespondingChannel ? 'corresponding' : 'shared'),
+    },
+  };
+}
+
 export function describeExplicitProductVideoAction(task) {
   const action = String(task?.runtime_action || '').trim();
   if (action === 'poke_quizz_generate_review') {
@@ -859,6 +915,13 @@ export function describeExplicitProductVideoAction(task) {
     };
   }
 
+  if (action === 'video_analytics_post_digest') {
+    return {
+      action,
+      description: 'Post an on-demand YouTube analytics digest into the shared analytics channel or the selected channel thread.',
+    };
+  }
+
   return null;
 }
 
@@ -880,9 +943,17 @@ export async function executeProductVideoAction(action, task, config, dependenci
       return executeDeletePreviewTask(task, config, dependencies);
     }
 
+    if (action === 'video_analytics_post_digest') {
+      return executeAnalyticsDigestTask(task, config, dependencies);
+    }
+
     throw new Error(`Unsupported product-video action '${action}'.`);
   } catch (error) {
-    if (action === 'poke_quizz_publish_preview' || action === 'poke_quizz_feedback_regenerate' || action === 'poke_quizz_delete_preview') {
+    if (
+      action === 'poke_quizz_publish_preview'
+      || action === 'poke_quizz_feedback_regenerate'
+      || action === 'poke_quizz_delete_preview'
+    ) {
       await restorePublicationReviewMessageOnFailure(task, config, dependencies);
     }
     throw error;

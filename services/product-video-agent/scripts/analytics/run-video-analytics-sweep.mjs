@@ -40,6 +40,8 @@ const DEFAULT_CHANNELS_PATH = 'services/product-video-agent/publication-channels
 const DEFAULT_DIGEST_WINDOW_DAYS = 7;
 const DEFAULT_DIGEST_WEEKDAY = 1;
 const DEFAULT_DIGEST_HOUR = 9;
+const DEFAULT_DIGEST_MODE = 'weekly';
+const DEFAULT_POST_TARGET = 'shared';
 const THREAD_AUTO_ARCHIVE_DURATION_MINUTES = 10080;
 
 function getNumberOption(options, key, fallbackValue) {
@@ -87,6 +89,16 @@ function formatDigestDate(value) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function normalizeDigestMode(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'on_demand' ? 'on_demand' : DEFAULT_DIGEST_MODE;
+}
+
+function normalizePostTarget(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'corresponding' ? 'corresponding' : DEFAULT_POST_TARGET;
+}
+
 function buildYoutubeVideoUrl(externalId) {
   const normalized = String(externalId || '').trim();
   if (!normalized) {
@@ -95,9 +107,10 @@ function buildYoutubeVideoUrl(externalId) {
   return `https://www.youtube.com/watch?v=${encodeURIComponent(normalized)}`;
 }
 
-function formatBestPerformerLine(bestPerformer) {
+function formatBestPerformerLine(bestPerformer, windowDays = 7) {
+  const normalizedWindowDays = Number.isFinite(Number(windowDays)) ? Number(windowDays) : 7;
   if (!bestPerformer) {
-    return '- Best performer (7D): n/a';
+    return `- Best performer (${normalizedWindowDays}D): n/a`;
   }
 
   const performerTitle = String(bestPerformer.title || '').trim() || bestPerformer.type_pair || 'Untitled video';
@@ -106,7 +119,7 @@ function formatBestPerformerLine(bestPerformer) {
     ? `[${performerTitle}](${performerUrl})`
     : performerTitle;
 
-  return `- Best performer (7D): ${performerLabel} (${formatNumber(bestPerformer.views)} views)`;
+  return `- Best performer (${normalizedWindowDays}D): ${performerLabel} (${formatNumber(bestPerformer.views)} views)`;
 }
 
 function normalizeChannelProfiles(profiles, channelSelector = '') {
@@ -120,17 +133,22 @@ function normalizeChannelProfiles(profiles, channelSelector = '') {
   ));
 }
 
-function buildOverviewEmbed(overview, channelDigests = []) {
+function buildOverviewEmbed(overview, channelDigests = [], options = {}) {
+  const digestMode = normalizeDigestMode(options.digestMode);
+  const windowLabel = `${overview.window_days}D`;
+  const titlePrefix = digestMode === 'weekly'
+    ? 'Weekly YouTube Analytics Digest'
+    : 'YouTube Analytics Digest';
   const fields = channelDigests.slice(0, 25).map((digest) => ({
     name: `${digest.channel_name} (${digest.account_key})`,
     value: [
       digest.channel_url
         ? `- Channel: [${digest.channel_name}](${digest.channel_url})`
         : `- Channel: ${digest.channel_name}`,
-      `- New videos: ${digest.new_videos_count}`,
-      `- Views (7D): ${formatNumber(digest.total_views)}`,
+      `- New videos (${windowLabel}): ${digest.new_videos_count}`,
+      `- Views (${windowLabel}): ${formatNumber(digest.total_views)}`,
       `- Views (all time): ${formatNumber(digest.all_time_views)}`,
-      formatBestPerformerLine(digest.best_performer),
+      formatBestPerformerLine(digest.best_performer, overview.window_days),
       `- Median views: ${formatNumber(digest.median_views)}`,
       `- Median AVD: ${formatMetric(digest.median_avg_view_duration_sec)}s`,
       `- Median AVP: ${formatMetric(digest.median_avg_view_percentage)}%`,
@@ -142,13 +160,13 @@ function buildOverviewEmbed(overview, channelDigests = []) {
   return {
     embeds: [
       {
-        title: `Weekly YouTube Analytics Digest (${overview.window_days}d) | ${formatDigestDate(overview.as_of)}`,
+        title: `${titlePrefix} (${overview.window_days}d) | ${formatDigestDate(overview.as_of)}`,
         description: [
           `Channels: **${overview.channel_count}**`,
-          `New videos (7D): **${formatNumber(overview.total_new_videos_count)}**`,
-          `Videos with snapshots (7D): **${formatNumber(overview.total_videos_with_snapshots_count)}**`,
-          `Crossed 10k views (7D): **${formatNumber(overview.total_crossed_10k_views_count)}**`,
-          `Combined views (7D): **${formatNumber(overview.total_views)}**`,
+          `New videos (${windowLabel}): **${formatNumber(overview.total_new_videos_count)}**`,
+          `Videos with snapshots (${windowLabel}): **${formatNumber(overview.total_videos_with_snapshots_count)}**`,
+          `Crossed 10k views (${windowLabel}): **${formatNumber(overview.total_crossed_10k_views_count)}**`,
+          `Combined views (${windowLabel}): **${formatNumber(overview.total_views)}**`,
           `Total views (all time): **${formatNumber(overview.total_all_time_views)}**`,
         ].join('\n'),
         color: 0x1f7a3a,
@@ -159,6 +177,7 @@ function buildOverviewEmbed(overview, channelDigests = []) {
 }
 
 function buildChannelDigestEmbed(digest) {
+  const windowLabel = `${digest.window_days}D`;
   const bestLabel = digest.best_performer
     ? `${digest.best_performer.title || digest.best_performer.type_pair} (${formatNumber(digest.best_performer.views)} views)`
     : 'n/a';
@@ -192,7 +211,7 @@ function buildChannelDigestEmbed(digest) {
           {
             name: 'Totals',
             value: [
-              `Views (7D): ${formatNumber(digest.total_views)}`,
+              `Views (${windowLabel}): ${formatNumber(digest.total_views)}`,
               `Views (all time): ${formatNumber(digest.all_time_views)}`,
               `Likes: ${formatNumber(digest.total_likes)}`,
               `Comments: ${formatNumber(digest.total_comments)}`,
@@ -362,6 +381,8 @@ async function postWeeklyDigest({
   postChannelThreads = false,
   sendDiscordMessage,
   fetchImpl = globalThis.fetch,
+  digestMode = DEFAULT_DIGEST_MODE,
+  postTarget = DEFAULT_POST_TARGET,
 }) {
   const overview = buildVideoAnalyticsOverviewDigest({
     channelDigests,
@@ -369,16 +390,37 @@ async function postWeeklyDigest({
     windowDays,
   });
 
+  let postedChannelId = analyticsChannelId;
+  if (normalizePostTarget(postTarget) === 'corresponding' && channelDigests.length === 1) {
+    const digest = channelDigests[0];
+    postedChannelId = await ensureAnalyticsThread({
+      runtimeConfig,
+      analyticsChannelId,
+      channelProfile: {
+        id: digest.channel_id,
+        name: digest.channel_name,
+        account_key: digest.account_key,
+      },
+      state,
+      sendDiscordMessage,
+      fetchImpl,
+    });
+  }
+
   await sendDiscordMessage(
     runtimeConfig,
-    analyticsChannelId,
-    buildOverviewEmbed(overview, channelDigests),
+    postedChannelId,
+    buildOverviewEmbed(overview, channelDigests, { digestMode }),
     { fetch: fetchImpl },
   );
 
   if (!postChannelThreads) {
-    state.last_weekly_digest_at = asOf;
-    return;
+    if (normalizeDigestMode(digestMode) === 'weekly') {
+      state.last_weekly_digest_at = asOf;
+    }
+    return {
+      postedChannelId,
+    };
   }
 
   for (const digest of channelDigests) {
@@ -402,7 +444,12 @@ async function postWeeklyDigest({
     );
   }
 
-  state.last_weekly_digest_at = asOf;
+  if (normalizeDigestMode(digestMode) === 'weekly') {
+    state.last_weekly_digest_at = asOf;
+  }
+  return {
+    postedChannelId,
+  };
 }
 
 export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
@@ -425,6 +472,8 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
   const forceDigest = getBooleanOption(options, 'force-digest', false);
   const digestWeekday = getNumberOption(options, 'digest-weekday', DEFAULT_DIGEST_WEEKDAY);
   const digestHour = getNumberOption(options, 'digest-hour', DEFAULT_DIGEST_HOUR);
+  const digestMode = normalizeDigestMode(getStringOption(options, 'digest-mode', DEFAULT_DIGEST_MODE));
+  const postTarget = normalizePostTarget(getStringOption(options, 'post-target', DEFAULT_POST_TARGET));
   const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
   const profiles = normalizeChannelProfiles(
     await loadProfiles(channelsPath, { projectRoot }),
@@ -546,14 +595,18 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
   }
 
   let digestPosted = false;
+  let postedChannelId = '';
   const hasDiscordToken = Boolean(runtimeConfig?.env?.DISCORD_BOT_TOKEN);
-  const digestDue = postDiscord && analyticsChannelId && hasDiscordToken && shouldPostWeeklyDigest({
-    asOf,
-    state,
-    forceDigest,
-    digestWeekday,
-    digestHour,
-  });
+  const digestDue = postDiscord && analyticsChannelId && hasDiscordToken && (
+    digestMode === 'on_demand'
+      || shouldPostWeeklyDigest({
+        asOf,
+        state,
+        forceDigest,
+        digestWeekday,
+        digestHour,
+      })
+  );
   if (digestDue) {
     const channelDigests = profiles.map((channelProfile) => ({
       ...buildChannelVideoAnalyticsDigest({
@@ -565,7 +618,7 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
       }),
       channel_url: resolvePublicationChannelUrl(channelProfile),
     }));
-    await postWeeklyDigest({
+    const postResult = await postWeeklyDigest({
       runtimeConfig,
       analyticsChannelId,
       channelDigests,
@@ -575,20 +628,26 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
       postChannelThreads,
       sendDiscordMessage,
       fetchImpl,
+      digestMode,
+      postTarget,
     });
+    postedChannelId = postResult?.postedChannelId || '';
     await saveState(statePath, state);
     digestPosted = true;
   } else if (postDiscord && !analyticsChannelId) {
-    printWarn('Weekly analytics digest was requested, but no analytics Discord channel is configured.');
+    printWarn('An analytics digest was requested, but no analytics Discord channel is configured.');
   } else if (postDiscord && analyticsChannelId && !hasDiscordToken) {
-    printWarn('Weekly analytics digest was requested, but DISCORD_BOT_TOKEN is not configured.');
+    printWarn('An analytics digest was requested, but DISCORD_BOT_TOKEN is not configured.');
   }
 
   return {
     as_of: asOf,
     channel_count: profiles.length,
     analytics_channel_id: analyticsChannelId || null,
+    posted_channel_id: postedChannelId || null,
     digest_posted: digestPosted,
+    digest_mode: digestMode,
+    post_target: postTarget,
     state_path: statePath,
     results: sweepResults,
   };
@@ -607,9 +666,11 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --post-discord               Post the weekly digest when due.',
       '  --post-channel-threads       Also post per-channel detail messages into dedicated threads.',
       '  --force-digest               Post the weekly digest immediately, ignoring the due check.',
+      `  --digest-mode <mode>         Digest mode: weekly or on_demand. Default: ${DEFAULT_DIGEST_MODE}`,
       `  --digest-window-days <n>     Window size for the weekly digest. Default: ${DEFAULT_DIGEST_WINDOW_DAYS}`,
       `  --digest-weekday <0-6>       Local weekday for the digest. Default: ${DEFAULT_DIGEST_WEEKDAY} (Monday=1)`,
       `  --digest-hour <0-23>         Local hour gate for digest posting. Default: ${DEFAULT_DIGEST_HOUR}`,
+      `  --post-target <target>       Digest post target: shared or corresponding. Default: ${DEFAULT_POST_TARGET}`,
       '  --analytics-channel-id <id>  Override the Discord analytics channel id.',
       `  --state-path <path>          Digest thread/state file. Default: ${DEFAULT_STATE_PATH}`,
     ]);
@@ -619,7 +680,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   runVideoAnalyticsSweep(options).then((result) => {
     printInfo(`Analytics sweep processed ${result.results.length} publication result(s).`);
     if (result.digest_posted) {
-      printInfo(`Posted the weekly analytics digest to ${result.analytics_channel_id}.`);
+      printInfo(`Posted the analytics digest to ${result.posted_channel_id || result.analytics_channel_id}.`);
     }
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   }).catch((error) => {

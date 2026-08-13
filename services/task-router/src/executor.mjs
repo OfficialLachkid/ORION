@@ -45,6 +45,7 @@ function isPokeQuizzPublicationWorkflowAction(action) {
     || action === 'poke_quizz_publish_preview'
     || action === 'poke_quizz_feedback_regenerate'
     || action === 'poke_quizz_delete_preview'
+    || action === 'video_analytics_post_digest'
   );
 }
 

@@ -214,6 +214,21 @@ test('buildExecutionPlan recognizes explicit Poke Quizz generation requests', ()
   });
 });
 
+test('buildExecutionPlan recognizes explicit analytics digest requests', () => {
+  const plan = buildExecutionPlan({
+    runtime_action: 'video_analytics_post_digest',
+    video_analytics_request: {
+      channelSelector: 'trivamon-youtube',
+      windowDays: 3,
+    },
+  });
+
+  assert.deepEqual(plan, {
+    action: 'video_analytics_post_digest',
+    description: 'Post an on-demand YouTube analytics digest into the shared analytics channel or the selected channel thread.',
+  });
+});
+
 test('parseLaunchctlReport extracts daemon state fields', () => {
   const report = parseLaunchctlReport(`
 gui/502/io.vbj.orion.daemon = {
@@ -999,6 +1014,38 @@ test('executeTask suppresses extra agent-results cards for manual Poke Quizz gen
   });
 
   assert.equal(result.executionPlan.action, 'poke_quizz_generate_review');
+  assert.equal(result.outboundEvents.length, 2);
+  assert.deepEqual(
+    result.outboundEvents.map((event) => event.channelKey),
+    ['taskQueue', 'systemLogs'],
+  );
+});
+
+test('executeTask suppresses extra agent-results cards for analytics digest posting', async () => {
+  const result = await executeTask({
+    task_id: 'TASK-ORION-ANALYTICS-TEST',
+    runtime_action: 'video_analytics_post_digest',
+    summary: 'Post 3-day analytics digest for TrivaMon',
+    target_agent: 'product-video-agent',
+    domain: 'content',
+    priority: 'normal',
+    video_analytics_request: {
+      channelSelector: 'trivamon-youtube',
+      channelLabel: 'TrivaMon',
+      windowDays: 3,
+    },
+  }, loadRuntimeConfig(), {
+    productVideoActionRunner: async () => ({
+      report: {
+        state: 'analytics_posted',
+        severity: 'success',
+        summary: 'Posted a 3-day YouTube analytics digest for TrivaMon into its corresponding analytics thread.',
+        postedChannelId: 'thread-analytics-trivamon',
+      },
+    }),
+  });
+
+  assert.equal(result.executionPlan.action, 'video_analytics_post_digest');
   assert.equal(result.outboundEvents.length, 2);
   assert.deepEqual(
     result.outboundEvents.map((event) => event.channelKey),

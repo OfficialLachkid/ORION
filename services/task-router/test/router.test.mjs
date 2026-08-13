@@ -206,3 +206,23 @@ test('normalizeTaskMessage recognizes Poke Guess type-speed-quiz generation comm
     'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json'
   );
 });
+
+test('normalizeTaskMessage recognizes analytics digest commands as explicit runtime actions', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    channelKey: 'commands',
+    submittedAt: '2026-08-13T10:00:00.000Z',
+    content: 'post analytics channel: trivamon-youtube days: 3',
+    author: { id: 'operator-1', displayName: 'VBJ Services' },
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'video_analytics_post_digest');
+  assert.equal(result.task.automation_type, 'video_analytics_post_digest');
+  assert.equal(result.task.target_agent, 'product-video-agent');
+  assert.equal(result.task.domain, 'content');
+  assert.equal(result.task.approval_required, false);
+  assert.equal(result.task.status, 'queued');
+  assert.equal(result.task.summary, 'Post 3-day analytics digest for TrivaMon');
+  assert.equal(result.task.video_analytics_request.channelSelector, 'trivamon-youtube');
+  assert.equal(result.task.video_analytics_request.windowDays, 3);
+});
