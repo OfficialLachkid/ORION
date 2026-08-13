@@ -113,6 +113,45 @@ test('Poke Quizz queue status payload honors presentation overrides', () => {
   assert.equal(payload.embeds?.[0]?.color, 0x99AAB5);
 });
 
+test('queue status payload defaults the embed title to the active channel name', () => {
+  const payload = buildPokeQuizzQueueStatusPayload({
+    channelProfile: {
+      ...channelProfile,
+      name: 'Poke Guess',
+    },
+    queueStatus: {
+      reviewReadyCount: 6,
+      publishQueueCount: 3,
+      nextScheduledFor: '2026-08-13T10:00:00.000Z',
+    },
+    reviewThreadId: '1536721345440780339',
+    reviewTargetCount: 10,
+  });
+
+  assert.equal(payload.embeds?.[0]?.title, 'Poke Guess Queue Status');
+});
+
+test('queue status payload supports channel-aware title overrides', () => {
+  const payload = buildPokeQuizzQueueStatusPayload({
+    channelProfile: {
+      ...channelProfile,
+      name: 'DexGuess',
+    },
+    queueStatus: {
+      reviewReadyCount: 10,
+      publishQueueCount: 1,
+      nextScheduledFor: '2026-08-14T06:00:00.000Z',
+    },
+    reviewThreadId: '1537438092338798684',
+    reviewTargetCount: 10,
+    presentation: {
+      title: '{channel} Video Queue',
+    },
+  });
+
+  assert.equal(payload.embeds?.[0]?.title, 'DexGuess Video Queue');
+});
+
 test('publication channel helpers support per-channel handle URLs and review threads', () => {
   const trivamonProfile = normalizePublicationChannelProfile({
     id: 'video-channel-trivamon-youtube',
