@@ -161,6 +161,10 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     assert.equal(result.results[0].action, 'captured');
     assert.equal(sendCalls.length, 1);
     assert.equal(sendCalls[0].channelId, '1528783542195323061');
+    assert.match(sendCalls[0].payload.embeds[0].description, /Combined views \(7D\): \*\*1,200\*\*/u);
+    assert.match(sendCalls[0].payload.embeds[0].description, /Total views \(all time\): \*\*1,200\*\*/u);
+    assert.match(sendCalls[0].payload.embeds[0].fields[0].value, /Views \(7D\): 1,200/u);
+    assert.match(sendCalls[0].payload.embeds[0].fields[0].value, /Views \(all time\): 1,200/u);
     assert.equal(state.last_weekly_digest_at, '2026-08-10T09:00:00.000Z');
     assert.deepEqual(state.analytics_threads, {});
   } finally {

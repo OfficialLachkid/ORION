@@ -73,11 +73,19 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
       published_at: '2026-08-10T08:00:00.000Z',
       metadata: { type_pair: ['ghost', 'ground'], render_path: '/tmp/ghost-ground.mp4' },
     },
+    {
+      id: 'pub-0',
+      status: 'published',
+      title: 'Legacy Water #shorts',
+      published_at: '2026-07-20T08:00:00.000Z',
+      metadata: { type_pair: ['water'], render_path: '/tmp/legacy-water.mp4' },
+    },
   ];
   const latestSnapshotsByPublicationId = new Map([
     ['pub-1', { publication_id: 'pub-1', captured_at: '2026-08-10T09:00:00.000Z', metrics: { views: 1000, likes: 25, comments: 3, shares: 1, avg_view_duration_sec: 14, avg_view_percentage: 58, subs_gained: 2, subs_lost: 0 } }],
     ['pub-2', { publication_id: 'pub-2', captured_at: '2026-08-10T09:00:00.000Z', metrics: { views: 5000, likes: 80, comments: 8, shares: 5, avg_view_duration_sec: 18, avg_view_percentage: 65, subs_gained: 5, subs_lost: 1 } }],
     ['pub-3', { publication_id: 'pub-3', captured_at: '2026-08-10T09:00:00.000Z', metrics: { views: 20000, likes: 300, comments: 22, shares: 15, avg_view_duration_sec: 26, avg_view_percentage: 79, subs_gained: 18, subs_lost: 2 } }],
+    ['pub-0', { publication_id: 'pub-0', captured_at: '2026-08-10T09:00:00.000Z', metrics: { views: 700, likes: 10, comments: 1, shares: 0, avg_view_duration_sec: 12, avg_view_percentage: 52, subs_gained: 1, subs_lost: 0 } }],
   ]);
 
   const digest = buildChannelVideoAnalyticsDigest({
@@ -97,10 +105,13 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
   assert.equal(digest.crossed_10k_views_count, 1);
   assert.equal(digest.median_views, 5000);
   assert.equal(digest.total_views, 26000);
+  assert.equal(digest.all_time_publications_count, 4);
+  assert.equal(digest.all_time_views, 26700);
   assert.equal(digest.best_performer.publication_id, 'pub-3');
   assert.equal(digest.worst_performer.publication_id, 'pub-1');
   assert.equal(digest.thread_key, 'poke-quizz-poke-quizz-youtube');
   assert.equal(buildVideoAnalyticsThreadName(channelProfile), 'Poke Quizz - Analytics');
   assert.equal(overview.total_new_videos_count, 3);
   assert.equal(overview.total_views, 26000);
+  assert.equal(overview.total_all_time_views, 26700);
 });

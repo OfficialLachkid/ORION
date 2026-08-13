@@ -92,7 +92,8 @@ function buildOverviewEmbed(overview, channelDigests = []) {
     name: `${digest.channel_name} (${digest.account_key})`,
     value: [
       `New videos: ${digest.new_videos_count}`,
-      `Views: ${formatNumber(digest.total_views)}`,
+      `Views (7D): ${formatNumber(digest.total_views)}`,
+      `Views (all time): ${formatNumber(digest.all_time_views)}`,
       `Median views: ${formatNumber(digest.median_views)}`,
       `Median AVD: ${formatMetric(digest.median_avg_view_duration_sec)}s`,
       `Median AVP: ${formatMetric(digest.median_avg_view_percentage)}%`,
@@ -110,7 +111,8 @@ function buildOverviewEmbed(overview, channelDigests = []) {
           `New videos: **${formatNumber(overview.total_new_videos_count)}**`,
           `Videos with snapshots: **${formatNumber(overview.total_videos_with_snapshots_count)}**`,
           `Crossed 10k views: **${formatNumber(overview.total_crossed_10k_views_count)}**`,
-          `Combined views: **${formatNumber(overview.total_views)}**`,
+          `Combined views (7D): **${formatNumber(overview.total_views)}**`,
+          `Total views (all time): **${formatNumber(overview.total_all_time_views)}**`,
         ].join('\n'),
         color: 0x1f7a3a,
         fields,
@@ -155,7 +157,8 @@ function buildChannelDigestEmbed(digest) {
           {
             name: 'Totals',
             value: [
-              `Views: ${formatNumber(digest.total_views)}`,
+              `Views (7D): ${formatNumber(digest.total_views)}`,
+              `Views (all time): ${formatNumber(digest.all_time_views)}`,
               `Likes: ${formatNumber(digest.total_likes)}`,
               `Comments: ${formatNumber(digest.total_comments)}`,
               `Shares: ${formatNumber(digest.total_shares)}`,

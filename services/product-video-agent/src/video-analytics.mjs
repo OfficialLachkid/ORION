@@ -155,10 +155,23 @@ export function buildChannelVideoAnalyticsDigest({
 } = {}) {
   const endDate = toDateOrNull(asOf) || new Date();
   const windowStart = startOfWindow(endDate, windowDays);
-  const windowPublications = toArray(publications).filter((publication) => (
+  const publishedPublications = toArray(publications).filter((publication) => (
+    String(publication?.status || '').trim().toLowerCase() === 'published'
+  ));
+  const windowPublications = publishedPublications.filter((publication) => (
     String(publication?.status || '').trim().toLowerCase() === 'published'
       && isWithinWindow(publication?.published_at || publication?.uploaded_at || publication?.created_at, windowStart, endDate)
   ));
+  const allTimeEntries = publishedPublications.map((publication) => {
+    const snapshot = latestSnapshotsByPublicationId.get(String(publication?.id || '').trim()) || null;
+    const metrics = snapshot?.metrics || {};
+    return {
+      publication,
+      snapshot,
+      metrics,
+      views: pickMetric(metrics, ['views']),
+    };
+  });
 
   const entries = windowPublications.map((publication) => {
     const snapshot = latestSnapshotsByPublicationId.get(String(publication?.id || '').trim()) || null;
@@ -197,11 +210,14 @@ export function buildChannelVideoAnalyticsDigest({
     window_end: endDate.toISOString(),
     new_videos_count: windowPublications.length,
     videos_with_snapshots_count: entries.filter((entry) => entry.snapshot).length,
+    all_time_publications_count: publishedPublications.length,
+    all_time_videos_with_snapshots_count: allTimeEntries.filter((entry) => entry.snapshot).length,
     crossed_10k_views_count: entries.filter((entry) => (entry.views || 0) >= 10_000).length,
     median_views: calculateMedian(entries.map((entry) => entry.views)),
     median_avg_view_duration_sec: calculateMedian(entries.map((entry) => entry.avgViewDurationSec)),
     median_avg_view_percentage: calculateMedian(entries.map((entry) => entry.avgViewPercentage)),
     total_views: sumNumbers(entries.map((entry) => entry.views)),
+    all_time_views: sumNumbers(allTimeEntries.map((entry) => entry.views)),
     total_likes: sumNumbers(entries.map((entry) => entry.likes)),
     total_comments: sumNumbers(entries.map((entry) => entry.comments)),
     total_shares: sumNumbers(entries.map((entry) => entry.shares)),
@@ -261,13 +277,16 @@ export function buildVideoAnalyticsOverviewDigest({
     channel_count: digests.length,
     total_new_videos_count: sumNumbers(digests.map((digest) => digest.new_videos_count)),
     total_videos_with_snapshots_count: sumNumbers(digests.map((digest) => digest.videos_with_snapshots_count)),
+    total_all_time_videos_with_snapshots_count: sumNumbers(digests.map((digest) => digest.all_time_videos_with_snapshots_count)),
     total_crossed_10k_views_count: sumNumbers(digests.map((digest) => digest.crossed_10k_views_count)),
     total_views: sumNumbers(digests.map((digest) => digest.total_views)),
+    total_all_time_views: sumNumbers(digests.map((digest) => digest.all_time_views)),
     channels: digests.map((digest) => ({
       channel_name: digest.channel_name,
       account_key: digest.account_key,
       new_videos_count: digest.new_videos_count,
       total_views: digest.total_views,
+      all_time_views: digest.all_time_views,
       median_views: digest.median_views,
       median_avg_view_duration_sec: digest.median_avg_view_duration_sec,
       median_avg_view_percentage: digest.median_avg_view_percentage,
