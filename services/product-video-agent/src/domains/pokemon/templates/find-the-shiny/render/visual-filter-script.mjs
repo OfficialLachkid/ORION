@@ -296,6 +296,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const timerSetpts = timerSourceDuration > 0
     ? `(PTS-STARTPTS)*${roundTime(countdownDuration / timerSourceDuration)}+${countdownStart}/TB`
     : `PTS-STARTPTS+${countdownStart}/TB`;
+  const hpBarIntroScaleExpression = buildAnimatedPopSettleExpression(
+    countdownStart,
+    pokeballIntroDuration,
+    0,
+    1.08,
+    1,
+    buildScaleFilterTimeExpression({
+      fps,
+      streamStartSeconds: countdownStart,
+    }),
+  );
 
   if (useHpBarCountdown) {
     if (inputRefs.timerHpBarFrame != null) {
@@ -306,13 +317,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba[timerhpbarcountvideo]`,
       );
       filters.push(
-        `[timerhpbarcountvideo][timerhpbarmaskcount]alphamerge,setsar=1[timerhpbar]`,
+        `[timerhpbarcountvideo][timerhpbarmaskcount]alphamerge,setsar=1[timerhpbarbase]`,
       );
     } else {
       filters.push(
-        `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba${hpBarUsesGreenscreen ? ',colorkey=0x00FF00:0.22:0.08' : ''},setsar=1[timerhpbar]`,
+        `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba${hpBarUsesGreenscreen ? ',colorkey=0x00FF00:0.22:0.08' : ''},setsar=1[timerhpbarbase]`,
       );
     }
+    filters.push(
+      `[timerhpbarbase]scale=w='max(2,${renderPlan.timer_layout.width}*(${hpBarIntroScaleExpression}))':h='max(2,${renderPlan.timer_layout.height}*(${hpBarIntroScaleExpression}))':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[timerhpbar]`,
+    );
     const timerVideoLabel = `${currentVideoLabel}hb`;
     filters.push(
       `[${currentVideoLabel}][timerhpbar]overlay=x='${renderPlan.timer_layout.x}+((${renderPlan.timer_layout.width}-w)/2)':y='${renderPlan.timer_layout.y}+((${renderPlan.timer_layout.height}-h)/2)':enable='${formatEnableBetween(renderPlan.phases.countdown.start_seconds, renderPlan.phases.reveal.start_seconds)}'[${timerVideoLabel}]`,

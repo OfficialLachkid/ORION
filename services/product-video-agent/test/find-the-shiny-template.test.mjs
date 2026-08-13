@@ -504,7 +504,10 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
   assert.match(visualFilter.script, /fontsize=108/u);
   assert.match(visualFilter.script, /\[2:v\]fps=30,scale=968:188:force_original_aspect_ratio=decrease,format=rgba,alphaextract\[timerhpbarmaskcount\]/u);
   assert.match(visualFilter.script, /\[1:v\]fps=30,trim=duration=1,setpts=\(PTS-STARTPTS\)\*3\+2\.6\/TB,scale=968:188:force_original_aspect_ratio=decrease,format=rgba\[timerhpbarcountvideo\]/u);
-  assert.match(visualFilter.script, /\[timerhpbarcountvideo\]\[timerhpbarmaskcount\]alphamerge,setsar=1\[timerhpbar\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarcountvideo\]\[timerhpbarmaskcount\]alphamerge,setsar=1\[timerhpbarbase\]/u);
+  assert.match(visualFilter.script, /\[timerhpbarbase\]scale=w='max\(2,968\*\(if\(lt\(/u);
+  assert.match(visualFilter.script, /:h='max\(2,188\*\(if\(lt\(/u);
+  assert.match(visualFilter.script, /:eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1\[timerhpbar\]/u);
   assert.doesNotMatch(visualFilter.script, /timerhpbarintrovideo/u);
   assert.doesNotMatch(visualFilter.script, /timerhpbarintro/u);
   assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+5\.68\/TB/u);
@@ -577,4 +580,7 @@ test('visual filter keys out green when the hp-bar countdown uses the greenscree
 
   assert.match(visualFilter.script, /colorkey=0x00FF00:0\.22:0\.08/u);
   assert.doesNotMatch(visualFilter.script, /timerhpbarmaskcount/u);
+  assert.match(visualFilter.script, /\[timerhpbarbase\]scale=w='max\(2,968\*\(if\(lt\(/u);
+  assert.match(visualFilter.script, /:h='max\(2,188\*\(if\(lt\(/u);
+  assert.match(visualFilter.script, /:eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1\[timerhpbar\]/u);
 });
