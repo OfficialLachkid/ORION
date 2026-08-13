@@ -90,6 +90,15 @@ function buildReviewThreadMention(reviewThreadId) {
   return normalized ? `<#${normalized}>` : 'the review queue';
 }
 
+function resolveQueueStatusTitle(channelProfile, presentation = DEFAULT_QUEUE_STATUS_PRESENTATION) {
+  const configuredTitle = String(presentation?.title || '').trim();
+  const channelName = String(channelProfile?.name || '').trim() || 'Poke Quizz';
+  if (!configuredTitle || configuredTitle === DEFAULT_QUEUE_STATUS_PRESENTATION.title) {
+    return `${channelName} Queue Status`;
+  }
+  return configuredTitle.replaceAll('{channel}', channelName);
+}
+
 async function readQueueStatusState() {
   try {
     return JSON.parse(await readFile(POKE_QUIZZ_QUEUE_STATUS_STATE_PATH, 'utf8'));
@@ -143,7 +152,7 @@ export function buildPokeQuizzQueueStatusPayload({
       : POKE_QUIZZ_QUEUE_STATUS_COLORS.idle;
 
   return buildNoticeDiscordPayload({
-    title: effectivePresentation.title,
+    title: resolveQueueStatusTitle(channelProfile, effectivePresentation),
     description: [
       `${channelLabel || 'Poke Quizz'} has **${queueCount}** video(s) in publish queue.`,
       `Next video will be published **${nextScheduledLabel}**.`,
