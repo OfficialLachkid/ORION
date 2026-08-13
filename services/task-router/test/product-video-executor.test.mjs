@@ -236,6 +236,8 @@ test('publish approval triggers an immediate scheduling pass and returns the sch
     preview_url: 'https://youtube.com/shorts/TeDQp0JgAdg',
     metadata: {
       workflow_state: 'preview_uploaded',
+      review_thread_id: 'review-thread-1',
+      review_message_id: 'review-message-1',
     },
   };
   const scheduledPublication = {
@@ -252,6 +254,7 @@ test('publish approval triggers an immediate scheduling pass and returns the sch
   const updateCalls = [];
   const runCalls = [];
   const queueSyncCalls = [];
+  const reviewSyncCalls = [];
   const publicationStore = {
     async fetchPublicationById(id) {
       assert.equal(id, 'publication-bug-ground');
@@ -313,6 +316,15 @@ test('publish approval triggers an immediate scheduling pass and returns the sch
         queueSyncCalls.push(options);
         return { posted: true };
       },
+      syncPublicationReviewMessage: async (options) => {
+        reviewSyncCalls.push(options);
+        return {
+          updated: true,
+          moved: true,
+          routeAction: 'to_publish_queue',
+          publication: options.publication,
+        };
+      },
       queueStatusChannelProfile: {
         platform: 'youtube_shorts',
         account_key: 'poke-quizz-youtube',
@@ -337,6 +349,8 @@ test('publish approval triggers an immediate scheduling pass and returns the sch
   assert.equal(result.report.scheduledFor, '2026-08-03T06:00:00.000Z');
   assert.equal(queueSyncCalls.length, 1);
   assert.equal(queueSyncCalls[0].channelSelector, 'poke-quizz-youtube');
+  assert.equal(reviewSyncCalls.length, 1);
+  assert.equal(reviewSyncCalls[0].publication.id, 'publication-bug-ground');
 });
 
 test('publish approval forwards an optional max-scheduled-days cap to the scheduler', async () => {

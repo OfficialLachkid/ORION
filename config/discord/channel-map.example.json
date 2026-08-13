@@ -30,6 +30,7 @@
     "orionRenders": "DISCORD_ORION_RENDERS_CHANNEL_ID",
     "orionLab": "DISCORD_ORION_LAB_CHANNEL_ID",
     "orionOps": "DISCORD_ORION_OPS_CHANNEL_ID",
-    "orionAnalytics": "DISCORD_ORION_ANALYTICS_CHANNEL_ID"
+    "orionAnalytics": "DISCORD_ORION_ANALYTICS_CHANNEL_ID",
+    "publishQueueAllChannels": "DISCORD_PUBLISH_QUEUE_ALL_CHANNELS_THREAD_ID"
   }
 }

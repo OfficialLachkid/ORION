@@ -11,7 +11,6 @@ import {
 } from '../../product-video-agent/src/publication-channels.mjs';
 import {
   ensurePreferredPokeQuizzCatalogJsonPath,
-  resolvePokeQuizzReviewTaskPaths,
 } from '../../product-video-agent/src/poke-quizz-review-paths.mjs';
 import { syncPokeQuizzQueueStatusMessage } from '../../product-video-agent/src/poke-quizz-queue-status.mjs';
 import { isManagedPokeQuizzPreviewPath as isManagedPokeQuizzPreviewStoragePath } from '../../product-video-agent/src/poke-quizz-preview-storage.mjs';
@@ -21,8 +20,6 @@ import {
   DEFAULT_CONFIG_PATH,
   DEFAULT_TEMPLATE_PATH,
   buildPokeQuizzDeleteTask,
-  buildPokeQuizzPublicationMessagePayload,
-  buildPokeQuizzPublicationReviewTask,
   deriveFeedbackRevisionSeed,
   formatTypePairLabel,
 } from '../../product-video-agent/src/poke-quizz-publication-review.mjs';
@@ -30,7 +27,7 @@ import {
   deleteYoutubeVideo,
   loadYoutubeClientCredentials,
 } from '../../product-video-agent/src/youtube-publication-executor.mjs';
-import { editDiscordChannelMessage } from '../../../scripts/lib/discord-post.mjs';
+import { syncPublicationReviewMessage } from '../../product-video-agent/src/publication-review-message-sync.mjs';
 
 function slugify(value) {
   return String(value || '')
@@ -191,11 +188,6 @@ function resolveTaskChannelSelector(task) {
   ).trim() || DEFAULT_CHANNEL_SELECTOR;
 }
 
-function isActionableReviewWorkflowState(workflowState) {
-  const normalizedState = String(workflowState || '').trim().toLowerCase();
-  return normalizedState === 'preview_uploaded' || normalizedState === 'delete_failed';
-}
-
 async function resolveChannelProfileForSelector(channelSelector, dependencies = {}) {
   const profilesLoader = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
   const channelFinder = dependencies.findPublicationChannelProfile || findPublicationChannelProfile;
@@ -208,40 +200,26 @@ async function resolveChannelProfileForSelector(channelSelector, dependencies = 
 
 async function refreshPublicationReviewMessage({
   config,
+  store = null,
   publication,
   videoRow,
   channelSelector = DEFAULT_CHANNEL_SELECTOR,
+  dependencies = {},
 }) {
-  const reviewThreadId = String(publication?.metadata?.review_thread_id || '').trim();
-  const reviewMessageId = String(publication?.metadata?.review_message_id || '').trim();
-  if (!reviewThreadId || !reviewMessageId || !videoRow) {
-    return null;
-  }
-  const reviewPaths = await resolvePokeQuizzReviewTaskPaths(publication);
-
+  const reviewSync = dependencies.syncPublicationReviewMessage || syncPublicationReviewMessage;
   const profiles = await loadPublicationChannelProfiles(
     'services/product-video-agent/publication-channels.example.json',
     { projectRoot },
   );
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
-  const reviewTask = buildPokeQuizzPublicationReviewTask({
+  return reviewSync({
+    runtimeConfig: config,
+    store,
     publication,
-    video: videoRow,
+    videoRow,
     channelProfile,
-    reviewThreadId,
-    planPath: reviewPaths.planPath,
-    renderPath: publication?.metadata?.render_path || videoRow?.render?.output_path || '',
-    catalogJsonPath: reviewPaths.catalogJsonPath,
-    templatePath: reviewPaths.templatePath,
-    configPath: reviewPaths.configPath,
     channelSelector,
-    submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
   });
-  const payload = buildPokeQuizzPublicationMessagePayload(reviewTask);
-  if (!isActionableReviewWorkflowState(publication?.metadata?.workflow_state)) {
-    payload.components = [];
-  }
-  return editDiscordChannelMessage(config, reviewThreadId, reviewMessageId, payload);
 }
 
 async function restorePublicationReviewMessageOnFailure(task, config, dependencies = {}) {
@@ -262,9 +240,11 @@ async function restorePublicationReviewMessageOnFailure(task, config, dependenci
     }
     return await refreshPublicationReviewMessage({
       config,
+      store,
       publication,
       videoRow,
       channelSelector: resolveTaskChannelSelector(task),
+      dependencies,
     });
   } catch (error) {
     process.stderr.write(
@@ -382,9 +362,11 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
     try {
       await refreshPublicationReviewMessage({
         config,
+        store,
         publication: refreshedPublication,
         videoRow,
         channelSelector,
+        dependencies,
       });
     } catch (error) {
       process.stderr.write(`Could not refresh scheduled review card ${publication.id}: ${error.message}\n`);
@@ -432,9 +414,11 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
   try {
     await refreshPublicationReviewMessage({
       config,
+      store,
       publication: revertedPublication,
       videoRow,
       channelSelector,
+      dependencies,
     });
   } catch (error) {
     process.stderr.write(`Could not restore review card ${publication.id} after failed publish: ${error.message}\n`);
@@ -579,9 +563,11 @@ async function updatePriorPublicationForRevision(feedback, config, dependencies 
   });
   await refreshPublicationReviewMessage({
     config,
+    store,
     publication: updatedPublication || publication,
     videoRow,
     channelSelector: feedback.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+    dependencies,
   });
   await syncPokeQuizzQueueStatus({
     config,
@@ -754,9 +740,11 @@ async function executeDeletePreviewTask(task, config, dependencies = {}) {
   });
   await refreshPublicationReviewMessage({
     config,
+    store,
     publication: updatedPublication || publication,
     videoRow,
     channelSelector: deletion.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+    dependencies,
   });
   await syncPokeQuizzQueueStatus({
     config,

@@ -14,14 +14,9 @@ import {
   selectScheduleCandidates,
 } from '../../src/publication-queue.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
-import {
-  buildPokeQuizzPublicationMessagePayload,
-  buildPokeQuizzPublicationReviewTask,
-  isActionableReviewPublication,
-} from '../../src/poke-quizz-publication-review.mjs';
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
-import { resolvePokeQuizzReviewTaskPaths } from '../../src/poke-quizz-review-paths.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
+import { syncPublicationReviewMessage } from '../../src/publication-review-message-sync.mjs';
 import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs';
 import { applyYoutubeRelatedVideoSelection } from '../../src/related-video/youtube-studio-automation.mjs';
 import {
@@ -31,7 +26,6 @@ import {
   scheduleYoutubePublication,
   uploadYoutubePreviewVideo,
 } from '../../src/youtube-publication-executor.mjs';
-import { editDiscordChannelMessage } from '../../../../scripts/lib/discord-post.mjs';
 import {
   getBooleanOption,
   getStringOption,
@@ -86,43 +80,23 @@ function isWithinScheduledPublishGrace(
 
 async function updatePublicationReviewMessage({
   runtimeConfig,
+  store,
   publication,
   videoRow,
   channelProfile,
   channelSelector,
 }) {
-  const reviewThreadId = String(publication?.metadata?.review_thread_id || '').trim();
-  const reviewMessageId = String(publication?.metadata?.review_message_id || '').trim();
-  if (!reviewThreadId || !reviewMessageId || !videoRow) {
+  if (!videoRow) {
     return null;
   }
-  const reviewPaths = await resolvePokeQuizzReviewTaskPaths(publication);
-
-  const reviewTask = buildPokeQuizzPublicationReviewTask({
+  return syncPublicationReviewMessage({
+    runtimeConfig,
+    store,
     publication,
-    video: videoRow,
+    videoRow,
     channelProfile,
-    reviewThreadId,
-    planPath: reviewPaths.planPath,
-    renderPath: publication?.metadata?.render_path || videoRow?.render?.output_path || '',
-    catalogJsonPath: reviewPaths.catalogJsonPath,
-    templatePath: reviewPaths.templatePath,
-    configPath: reviewPaths.configPath,
     channelSelector,
-    generationDurationMinutes: null,
-    submittedAt: publication?.metadata?.review_requested_at || publication?.created_at || new Date().toISOString(),
   });
-  const payload = buildPokeQuizzPublicationMessagePayload(reviewTask);
-  // Only strip the approval buttons when the review is past its decision
-  // point (e.g., already scheduled, published, deleted). For actionable
-  // states (preview_uploaded, delete_failed) the payload's own buttons must
-  // survive — otherwise a publication reconcile silently locks the operator
-  // out of Approve / Give Feedback / Delete on the review card (see the
-  // comment on isActionableReviewPublication for the 2026-08-05 incident).
-  if (!isActionableReviewPublication(publication)) {
-    payload.components = [];
-  }
-  return editDiscordChannelMessage(runtimeConfig, reviewThreadId, reviewMessageId, payload);
 }
 
 function mergePublicationPatch(publication, patch) {
@@ -157,6 +131,7 @@ async function persistPublicationState({
     : null;
   await updatePublicationReviewMessage({
     runtimeConfig,
+    store,
     publication: updatedPublication,
     videoRow,
     channelProfile,
@@ -315,6 +290,7 @@ export async function refreshRelatedVideoAssignments({
     if (!dryRun && videoRow) {
       await updatePublicationReviewMessage({
         runtimeConfig,
+        store,
         publication: updatedPublication,
         videoRow,
         channelProfile,
@@ -1162,6 +1138,7 @@ async function main() {
       });
       await updatePublicationReviewMessage({
         runtimeConfig,
+        store,
         publication: updatedPublication || {
           ...publication,
           status: 'published',
@@ -1243,6 +1220,7 @@ async function main() {
     };
     await updatePublicationReviewMessage({
       runtimeConfig,
+      store,
       publication: updatedPublication,
       videoRow,
       channelProfile,
