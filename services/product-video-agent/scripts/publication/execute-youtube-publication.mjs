@@ -942,6 +942,7 @@ async function main() {
       '  --limit <n>                Maximum publications to process in this run.',
       '  --refresh-related-videos   Re-plan related-video metadata for existing preview/scheduled rows.',
       '  --schedule-approved        Apply schedule updates instead of preview uploads.',
+      '  --max-scheduled-days <n>   Limit schedule assignment to the next N days from --as-of.',
       '  --dry-run                  Print the planned work without calling YouTube.',
       '  --as-of <ISO>              Deterministic schedule planning timestamp. Default: now.',
     ]);
@@ -959,6 +960,9 @@ async function main() {
   const dryRun = getBooleanOption(options, 'dry-run', false);
   const refreshRelatedVideosOnly = getBooleanOption(options, 'refresh-related-videos', false);
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
+  const maxScheduledDays = Number.parseFloat(
+    getStringOption(options, 'max-scheduled-days', ''),
+  );
 
   const runtimeConfig = loadRuntimeConfig();
   const profiles = await loadPublicationChannelProfiles(channelsPath, { projectRoot });
@@ -1055,6 +1059,9 @@ async function main() {
       channelProfile,
       asOf,
       listCommittedScheduledPublications(effectivePublications, channelProfile, asOf),
+      {
+        maxScheduledDays,
+      },
     );
   const workItems = withLimit(candidates, getStringOption(options, 'limit', ''));
 

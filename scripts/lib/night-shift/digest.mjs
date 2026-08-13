@@ -114,6 +114,7 @@ function buildVideoQueueMaintenanceLine(summary) {
   }
   const parts = [];
   if (summary.scheduled > 0) parts.push(`**${summary.scheduled}** scheduled item(s) checked`);
+  if (summary.autoApproved > 0) parts.push(`**${summary.autoApproved}** auto-approved for publish`);
   if (summary.published > 0) parts.push(`**${summary.published}** marked live`);
   if (summary.withdrawn > 0) parts.push(`**${summary.withdrawn}** withdrawn`);
   if (summary.returnedToApproval > 0) parts.push(`**${summary.returnedToApproval}** returned to approval`);

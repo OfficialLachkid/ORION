@@ -313,6 +313,9 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
   const videoRow = publication.video_id ? await store.fetchVideoById(publication.video_id) : null;
 
   const approvedAt = new Date().toISOString();
+  const scheduleMaxDays = Number(
+    review.scheduleMaxDays ?? dependencies.scheduleMaxDays ?? 0,
+  );
   const channelSelector = review.channelSelector || DEFAULT_CHANNEL_SELECTOR;
   const channelProfile = await resolveChannelProfileForSelector(channelSelector, dependencies);
   const updated = await store.updatePublication(publication.id, {
@@ -343,6 +346,11 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
         '--schedule-approved',
         '--as-of',
         approvedAt,
+        ...(
+          Number.isFinite(scheduleMaxDays) && scheduleMaxDays > 0
+            ? ['--max-scheduled-days', String(scheduleMaxDays)]
+            : []
+        ),
       ],
       cwd: projectRoot,
       timeoutMs: 1_200_000,

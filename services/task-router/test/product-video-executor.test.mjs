@@ -339,6 +339,99 @@ test('publish approval triggers an immediate scheduling pass and returns the sch
   assert.equal(queueSyncCalls[0].channelSelector, 'poke-quizz-youtube');
 });
 
+test('publish approval forwards an optional max-scheduled-days cap to the scheduler', async () => {
+  const initialPublication = {
+    id: 'publication-auto-publish-window',
+    video_id: 'video-auto-publish-window',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'pending',
+    preview_url: 'https://youtube.com/shorts/window-preview',
+    metadata: {
+      workflow_state: 'preview_uploaded',
+    },
+  };
+  const scheduledPublication = {
+    ...initialPublication,
+    status: 'scheduled',
+    scheduled_for: '2026-08-13T08:00:00.000Z',
+    metadata: {
+      ...initialPublication.metadata,
+      workflow_state: 'scheduled',
+    },
+  };
+
+  const runCalls = [];
+  let fetchCount = 0;
+  const publicationStore = {
+    async fetchPublicationById() {
+      fetchCount += 1;
+      return fetchCount === 1 ? initialPublication : scheduledPublication;
+    },
+    async fetchVideoById(id) {
+      return {
+        id,
+        render: {
+          output_path: 'data/runtime/product-video-agent/poke-quizz/window-preview.mp4',
+        },
+      };
+    },
+    async updatePublication(_id, patch) {
+      return {
+        ...initialPublication,
+        status: patch.status || initialPublication.status,
+        metadata: {
+          ...initialPublication.metadata,
+          ...(patch.metadata || {}),
+        },
+      };
+    },
+  };
+
+  await executeProductVideoAction(
+    'poke_quizz_publish_preview',
+    {
+      task_id: 'TASK-ORION-PQ-PUBLISH-AUTO-WINDOW',
+      approved_by: 'Night Shift Auto',
+      approved_by_id: 'night-shift-auto',
+      poke_quizz_publication_review: {
+        publicationId: 'publication-auto-publish-window',
+        channelSelector: 'poke-quizz-youtube',
+        scheduleMaxDays: 3,
+      },
+    },
+    { env: {} },
+    {
+      publicationStore,
+      runProcess: async (options) => {
+        runCalls.push(options);
+        return {
+          stdout: JSON.stringify([
+            {
+              publication_id: 'publication-auto-publish-window',
+              action: 'schedule_update',
+              scheduled_for: '2026-08-13T08:00:00.000Z',
+            },
+          ], null, 2),
+        };
+      },
+      syncQueueStatusMessage: async () => ({ posted: true }),
+      queueStatusChannelProfile: {
+        platform: 'youtube_shorts',
+        account_key: 'poke-quizz-youtube',
+      },
+      executePublicationScriptPath: '/tmp/execute-youtube-publication.mjs',
+    },
+  );
+
+  assert.equal(runCalls.length, 1);
+  assert.equal(runCalls[0].args.includes('--max-scheduled-days'), true);
+  assert.equal(
+    runCalls[0].args[runCalls[0].args.indexOf('--max-scheduled-days') + 1],
+    '3',
+  );
+});
+
 test('publish approval restores the actionable state when scheduling fails before a slot is assigned', async () => {
   const initialPublication = {
     id: 'publication-trivamon-review-2',
