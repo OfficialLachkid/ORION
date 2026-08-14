@@ -68,6 +68,25 @@ const typeQuizPlan = {
   },
 };
 
+const memoryPlan = {
+  template_id: 'pokemon.memory.v1',
+  selection: {
+    type_pair: ['fire', 'ice'],
+    display_subject_count: 6,
+    selected_subjects: [
+      { name: 'Vulpix' },
+      { name: 'Growlithe' },
+      { name: 'Ponyta' },
+      { name: 'Magmar' },
+      { name: 'Flareon' },
+      { name: 'Articuno' },
+    ],
+  },
+  question: {
+    question_text: 'Which Pokemon was NOT on screen?',
+  },
+};
+
 const expectedSeededTitles = new Set([
   'Psychic/Water Type Quiz - Can You Guess?',
   'Can You Guess This Psychic/Water Pokemon?',
@@ -83,6 +102,11 @@ const expectedFindTheShinySeededTitles = new Set([
 
 const expectedTypeQuizSeededTitles = new Set([
   'Guess the typing!',
+]);
+
+const expectedMemorySeededTitles = new Set([
+  'Pokemon Memory Challenge',
+  'Can You Remember These Pokemon?',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -225,4 +249,36 @@ test('seeded type-quiz fallback metadata uses the supported generic title varian
   assert.ok(expectedTypeQuizSeededTitles.has(secondSeeded.title));
   assert.equal(firstSeeded.title, 'Guess the typing!');
   assert.equal(secondSeeded.title, 'Guess the typing!');
+});
+
+test('fallback publication metadata frames memory as a rapid recall challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(memoryPlan);
+
+  assert.equal(metadata.title, 'Pokemon Memory Challenge');
+  assert.equal(
+    metadata.description,
+    'Memorize 6 Pokemon, hide the board, and pick the one that never appeared before the timer ends.',
+  );
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#pokemonmemory',
+    '#memorychallenge',
+    '#firetype',
+    '#icetype',
+    '#shorts',
+  ]);
+});
+
+test('seeded memory fallback metadata uses the supported generic title variants', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...memoryPlan,
+    seed: 'memory-seed-1',
+  });
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...memoryPlan,
+    seed: 'memory-seed-2',
+  });
+
+  assert.ok(expectedMemorySeededTitles.has(firstSeeded.title));
+  assert.ok(expectedMemorySeededTitles.has(secondSeeded.title));
 });

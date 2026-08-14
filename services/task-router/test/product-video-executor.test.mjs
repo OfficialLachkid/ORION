@@ -226,6 +226,58 @@ test('manual review generation supports the dual-type channel config for DexGues
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1537438092338798684');
 });
 
+test('manual review generation supports the memory channel config for Poke Quizz', async () => {
+  const runCalls = [];
+  const normalizePath = (value) => String(value || '').replaceAll('\\', '/');
+
+  await executeProductVideoAction(
+    'poke_quizz_generate_review',
+    {
+      task_id: 'TASK-ORION-PQ-GENERATE-TEST-MEMORY',
+      submitted_at: '2026-08-14T10:10:00.000Z',
+      poke_quizz_generate_review: {
+        templateKey: 'memory',
+        templateLabel: 'Memory',
+        channelSelector: 'poke-quizz-youtube',
+        channelLabel: 'Poke Quizz',
+        channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-memory-youtube.json',
+      },
+    },
+    { env: {} },
+    {
+      ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+      loadPublicationChannelProfiles: async () => ([{
+        platform: 'youtube_shorts',
+        account_key: 'poke-quizz-youtube',
+        metadata: {
+          review_thread_id: '1532709429902839810',
+        },
+      }]),
+      findPublicationChannelProfile: (profiles) => profiles[0],
+      runProcess: async (options) => {
+        runCalls.push(options);
+        return {
+          stdout: JSON.stringify({
+            publication_id: 'publication-poke-quizz-memory-1',
+            preview_url: 'https://youtube.com/shorts/manual-preview-memory',
+            task_id: 'TASK-ORION-PQ-PUBLISH-MANUAL-MEMORY',
+            message_id: '1537500000000000001',
+            render_path: 'data/runtime/product-video-agent/poke-quizz/manual-preview-memory.mp4',
+          }, null, 2),
+        };
+      },
+    },
+  );
+
+  assert.equal(runCalls.length, 1);
+  assert.equal(
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-quizz-memory-youtube.json'),
+    true,
+  );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'poke-quizz-youtube');
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1532709429902839810');
+});
+
 test('publish approval triggers an immediate scheduling pass and returns the scheduled slot', async () => {
   const initialPublication = {
     id: 'publication-bug-ground',
