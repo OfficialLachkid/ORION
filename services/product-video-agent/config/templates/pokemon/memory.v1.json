@@ -103,7 +103,8 @@
     "background": {
       "source_policy": "local_t7_backgrounds",
       "media_type": "looping_image_gif_or_video",
-      "fit": "cover"
+      "fit": "cover",
+      "blur_sigma": 1.8
     },
     "text": {
       "hook_y": 210,
@@ -223,6 +224,12 @@
     "audio_codec": "aac",
     "audio_bitrate": "192k",
     "crf": 20,
-    "faststart": true
+    "faststart": true,
+    "intro_sprite_initial_delay_seconds": 0.08,
+    "intro_sprite_stagger_seconds": 0.18,
+    "intro_sprite_fade_duration_seconds": 0.22,
+    "intro_sprite_y_offset_px": 54,
+    "reveal_visual_delay_seconds": 0.3,
+    "reveal_move_duration_seconds": 0.35
   }
 }

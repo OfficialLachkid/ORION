@@ -17,6 +17,36 @@ function overlayRange(startSeconds, endSeconds) {
   return formatEnableBetween(startSeconds, endSeconds);
 }
 
+function hashSeed(input) {
+  let hash = 2166136261;
+  for (const character of String(input || 'memory-render')) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createPrng(seedInput) {
+  let seed = hashSeed(seedInput) || 1;
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6D2B79F5) | 0;
+    let result = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    result ^= result + Math.imul(result ^ (result >>> 7), 61 | result);
+    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function buildShuffledIndices(count, seedInput) {
+  const random = createPrng(seedInput);
+  const indices = Array.from({ length: Math.max(0, count) }, (_, index) => index);
+  for (let index = indices.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [indices[index], indices[swapIndex]] = [indices[swapIndex], indices[index]];
+  }
+  return indices;
+}
+
 function buildHoldThenLerpExpression(startValue, endValue, startSeconds, endSeconds) {
   const from = Number(ensureNumber(startValue, 0).toFixed(3));
   const to = Number(ensureNumber(endValue, from).toFixed(3));
@@ -27,6 +57,15 @@ function buildHoldThenLerpExpression(startValue, endValue, startSeconds, endSeco
     return `${to}`;
   }
   return `if(lt(t,${start}),${from},if(lt(t,${end}),${from}+(${to}-${from})*((t-${start})/${duration}),${to}))`;
+}
+
+function buildFadeFilter(type, startSeconds, durationSeconds) {
+  const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
+  const duration = Number(Math.max(0, ensureNumber(durationSeconds, 0)).toFixed(3));
+  if (duration <= 0) {
+    return null;
+  }
+  return `fade=t=${type}:st=${start}:d=${duration}:alpha=1`;
 }
 
 function resolvePlatformLayout(template, variant) {
@@ -59,6 +98,8 @@ function appendPlatformAndSprite({
   centerY,
   enableExpression,
   fps,
+  spriteStreamFilters = [],
+  platformStreamFilters = [],
   template,
 }) {
   let baseVideoLabel = currentVideoLabel;
@@ -68,8 +109,15 @@ function appendPlatformAndSprite({
     const platformCenterY = Number((centerY + (spriteSize * platformLayout.center_y_offset_multiplier)).toFixed(3));
     const platformLabel = `${platformLabelPrefix}platform`;
     const platformVideoLabel = `${platformLabelPrefix}platformv`;
+    const platformFilterParts = [
+      `fps=${fps}`,
+      `scale=${platformWidth}:-1`,
+      'format=rgba',
+      'setsar=1',
+      ...platformStreamFilters.filter(Boolean),
+    ];
     filters.push(
-      `[${inputRefs.grassPlatform}:v]fps=${fps},scale=${platformWidth}:-1,format=rgba,setsar=1[${platformLabel}]`,
+      `[${inputRefs.grassPlatform}:v]${platformFilterParts.join(',')}[${platformLabel}]`,
     );
     filters.push(
       `[${baseVideoLabel}][${platformLabel}]overlay=x='${centerX}-w/2':y='${platformCenterY}-h/2':enable='${enableExpression}'[${platformVideoLabel}]`,
@@ -77,8 +125,15 @@ function appendPlatformAndSprite({
     baseVideoLabel = platformVideoLabel;
   }
 
+  const spriteFilterParts = [
+    `fps=${fps}`,
+    `scale=${spriteSize}:${spriteSize}:force_original_aspect_ratio=decrease`,
+    'format=rgba',
+    'setsar=1',
+    ...spriteStreamFilters.filter(Boolean),
+  ];
   filters.push(
-    `[${spriteInputIndex}:v]fps=${fps},scale=${spriteSize}:${spriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteLabel}]`,
+    `[${spriteInputIndex}:v]${spriteFilterParts.join(',')}[${spriteLabel}]`,
   );
   filters.push(
     `[${baseVideoLabel}][${spriteLabel}]overlay=x='${centerX}-w/2':y='${centerY}-h/2':enable='${enableExpression}'[${outputLabel}]`,
@@ -93,6 +148,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const countdownStart = ensureNumber(renderPlan.phases.countdown?.start_seconds, questionStart);
   const revealStart = ensureNumber(renderPlan.phases.reveal?.start_seconds, countdownStart);
   const revealVisualStart = ensureNumber(renderPlan.audio_cues?.reveal_visual_start_seconds, revealStart);
+  const revealMoveDuration = Math.max(0.2, ensureNumber(template?.renderer?.reveal_move_duration_seconds, 0.35));
+  const revealMoveEnd = Math.min(
+    renderPlan.total_duration_seconds,
+    Number((revealVisualStart + revealMoveDuration).toFixed(3)),
+  );
+  const revealFadeDuration = Math.max(0, Number((revealVisualStart - revealStart).toFixed(3)));
   const hookStart = ensureNumber(renderPlan.phases.hook?.start_seconds, 0);
   const memorizeVisibleEnd = questionStart;
   const gridLayout = renderPlan.grid || { cells: [] };
@@ -108,22 +169,35 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const revealCenterXExpression = buildHoldThenLerpExpression(
     revealStartCenterX,
     revealTargetCenterX,
-    revealStart,
     revealVisualStart,
+    revealMoveEnd,
   );
   const revealCenterYExpression = buildHoldThenLerpExpression(
     revealStartCenterY,
     revealTargetCenterY,
-    revealStart,
     revealVisualStart,
+    revealMoveEnd,
   );
+  const introInitialDelay = Math.max(0, ensureNumber(template?.renderer?.intro_sprite_initial_delay_seconds, 0.08));
+  const introStaggerSeconds = Math.max(0.05, ensureNumber(template?.renderer?.intro_sprite_stagger_seconds, 0.18));
+  const introFadeDuration = Math.max(0.12, ensureNumber(template?.renderer?.intro_sprite_fade_duration_seconds, 0.22));
+  const introYOffset = ensureNumber(template?.renderer?.intro_sprite_y_offset_px, 54);
+  const introOrder = buildShuffledIndices(Math.min((inputRefs.sprites || []).length, gridLayout.cells.length), `${plan.seed}:memory-intro`);
+  const introSequenceByIndex = new Map(introOrder.map((spriteIndex, orderIndex) => [spriteIndex, orderIndex]));
+  const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
+  const backgroundBlurPart = backgroundBlurSigma > 0
+    ? `,gblur=sigma=${Number(backgroundBlurSigma.toFixed(3))}:steps=1`
+    : '';
 
-  filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
+  filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${backgroundBlurPart},fps=${fps},setsar=1[v0]`);
   let currentVideoLabel = 'v0';
 
   for (let index = 0; index < (inputRefs.sprites || []).length && index < gridLayout.cells.length; index += 1) {
     const pokemon = plan.assets.pokemon[index] || {};
     const cell = gridLayout.cells[index];
+    const introOrderIndex = introSequenceByIndex.get(index) ?? index;
+    const introStart = Number((hookStart + introInitialDelay + (introOrderIndex * introStaggerSeconds)).toFixed(3));
+    const introEnd = Number((introStart + introFadeDuration).toFixed(3));
     const spriteSize = Number((
       ensureNumber(gridLayout.item_size_px, 220)
       * ensureNumber(gridLayout.sprite_scale_multiplier, 1.18)
@@ -142,9 +216,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       platformVariant: 'study',
       spriteSize,
       centerX: cell.center_x,
-      centerY: cell.center_y,
-      enableExpression: overlayRange(hookStart, memorizeVisibleEnd),
+      centerY: buildHoldThenLerpExpression(
+        cell.center_y + introYOffset,
+        cell.center_y,
+        introStart,
+        introEnd,
+      ),
+      enableExpression: overlayRange(introStart, memorizeVisibleEnd),
       fps,
+      spriteStreamFilters: [
+        buildFadeFilter('in', introStart, introFadeDuration),
+      ],
       template,
     });
   }
@@ -158,6 +240,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         * ensureNumber(optionGridLayout.sprite_scale_multiplier, 1)
         * ensureNumber(option.sprite_display_scale_multiplier, 1)
       ).toFixed(3));
+      const wrongOptionFadeOut = !option.is_correct
+        ? buildFadeFilter('out', revealStart, revealFadeDuration)
+        : null;
       const optionSpriteLabel = `memoption${index}`;
       const optionVideoLabel = `memoptionv${index}`;
       currentVideoLabel = appendPlatformAndSprite({
@@ -172,19 +257,30 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       spriteSize,
       centerX: cell.center_x,
       centerY: cell.center_y,
-        enableExpression: overlayRange(questionStart, revealStart),
+        enableExpression: overlayRange(questionStart, revealVisualStart),
         fps,
+        spriteStreamFilters: wrongOptionFadeOut ? [wrongOptionFadeOut] : [],
+        platformStreamFilters: wrongOptionFadeOut ? [wrongOptionFadeOut] : [],
         template,
       });
     }
   }
 
   if (inputRefs.revealSprite != null) {
-    const spriteSize = Number((
+    const correctOption = correctOptionIndex >= 0 ? plan.question?.options?.[correctOptionIndex] : null;
+    const revealOptionSpriteSize = Number((
+      ensureNumber(optionGridLayout.item_size_px, 196)
+      * ensureNumber(optionGridLayout.sprite_scale_multiplier, 1)
+      * ensureNumber(correctOption?.sprite_display_scale_multiplier, 1)
+    ).toFixed(3));
+    const configuredRevealSpriteSize = Number((
       ensureNumber(renderPlan.reveal_sprite?.item_size_px, 320)
       * ensureNumber(renderPlan.reveal_sprite?.sprite_scale_multiplier, 1)
       * ensureNumber(plan.assets.reveal_pokemon?.sprite_display_scale_multiplier, 1)
     ).toFixed(3));
+    const spriteSize = revealOptionSpriteSize > 0
+      ? revealOptionSpriteSize
+      : configuredRevealSpriteSize;
     const revealSpriteLabel = 'memrevealsprite';
     const revealVideoLabel = 'memrevealvideo';
     currentVideoLabel = appendPlatformAndSprite({
@@ -199,7 +295,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       spriteSize,
       centerX: revealCenterXExpression,
       centerY: revealCenterYExpression,
-      enableExpression: overlayRange(revealStart, renderPlan.total_duration_seconds),
+      enableExpression: overlayRange(revealVisualStart, renderPlan.total_duration_seconds),
       fps,
       template,
     });

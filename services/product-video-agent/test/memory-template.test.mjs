@@ -37,6 +37,12 @@ const template = {
     reveal_text_variants: ['The answer was {answer_name}.'],
   },
   layout: {
+    background: {
+      source_policy: 'local_t7_backgrounds',
+      media_type: 'looping_image_gif_or_video',
+      fit: 'cover',
+      blur_sigma: 1.8,
+    },
     text: {
       hook_y: 210,
       hook_font_size: 124,
@@ -119,6 +125,14 @@ const template = {
     battle_intro_music: {
       start_seconds: 0,
     },
+  },
+  renderer: {
+    intro_sprite_initial_delay_seconds: 0.08,
+    intro_sprite_stagger_seconds: 0.18,
+    intro_sprite_fade_duration_seconds: 0.22,
+    intro_sprite_y_offset_px: 54,
+    reveal_visual_delay_seconds: 0.3,
+    reveal_move_duration_seconds: 0.35,
   },
 };
 
@@ -388,15 +402,17 @@ test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden a
     },
   );
 
-  assert.match(visualFilter.script, /\[3:v\]fps=30,scale=.*:-1,format=rgba/u);
-  assert.match(visualFilter.script, /\[4:v\]fps=30,scale=/u);
-  assert.match(visualFilter.script, /\[10:v\]fps=30,scale=/u);
+  assert.match(visualFilter.script, /\[0:v\]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=1\.8:steps=1,fps=30,setsar=1\[v0\]/u);
+  assert.match(visualFilter.script, /\[3:v\]fps=30,scale=.*:-1,format=rgba,setsar=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
+  assert.match(visualFilter.script, /\[4:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=/u);
+  assert.match(visualFilter.script, /\[10:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
   assert.match(visualFilter.script, /\[14:v\]fps=30,scale=/u);
   assert.match(visualFilter.script, /memoption0platform/u);
   assert.doesNotMatch(visualFilter.script, /memstudy0platform/u);
   assert.doesNotMatch(visualFilter.script, /memrevealplatform/u);
-  assert.match(visualFilter.script, /overlay=.*enable='between\(t,2\.9,6\.35\)'/u);
-  assert.match(visualFilter.script, /overlay=.*enable='between\(t,6\.[0-9]+,8\.45\)'/u);
+  assert.match(visualFilter.script, /overlay=.*enable='between\(t,2\.9,6\.65\)'/u);
+  assert.match(visualFilter.script, /overlay=.*enable='between\(t,6\.65,8\.45\)'/u);
+  assert.match(visualFilter.script, /if\(lt\(t,6\.65\),/u);
   assert.match(visualFilter.script, /drawtext=textfile='\/tmp\/option-0\.txt'/u);
   assert.match(visualFilter.script, /drawtext=text='3'/u);
   assert.match(visualFilter.script, /drawtext=text='1'/u);
