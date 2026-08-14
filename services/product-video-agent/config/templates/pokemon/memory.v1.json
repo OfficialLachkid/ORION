@@ -141,7 +141,7 @@
       "placeholder_scale_multiplier": 0.92,
       "stage_bounds_px": {
         "left": 96,
-        "top": 350,
+        "top": 450,
         "width": 888,
         "height": 680
       }
@@ -175,7 +175,7 @@
       "option_width_multiplier": 0.9,
       "reveal_width_multiplier": 0.92,
       "center_y_offset_multiplier": 0.34,
-      "option_center_y_offset_px": 30
+      "option_center_y_offset_px": 80
     },
     "timer": {
       "countdown_from": 3,
@@ -228,7 +228,7 @@
     "faststart": true,
     "hook_text_reveal_duration_seconds": 0.72,
     "intro_sprite_initial_delay_seconds": 0.08,
-    "intro_sprite_stagger_seconds": 0.18,
+    "intro_sprite_stagger_seconds": 0.24,
     "intro_sprite_fade_duration_seconds": 0.22,
     "intro_sprite_y_offset_px": 54,
     "option_sprite_initial_delay_seconds": 0.04,
