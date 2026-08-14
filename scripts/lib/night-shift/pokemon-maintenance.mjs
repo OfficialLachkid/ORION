@@ -9,6 +9,7 @@ import {
   selectReviewApprovalCandidates,
 } from '../../../services/product-video-agent/src/publication-queue.mjs';
 import { reconcilePokeQuizzPreviewFallbackStorage } from '../../../services/product-video-agent/src/poke-quizz-preview-storage.mjs';
+import { resolvePokeQuizzSelectionStateScope } from '../../../services/product-video-agent/src/poke-quizz-selection-state.mjs';
 import {
   computePokeQuizzQueueStatus,
   ensurePreferredPokeQuizzCatalogJsonPath,
@@ -18,7 +19,7 @@ import {
 import { SupabasePublicationStore } from '../../../services/product-video-agent/src/publication-store.mjs';
 import { resolveVideoTemplateRuntime } from '../../../services/product-video-agent/src/video-template-context.mjs';
 import { executeProductVideoAction } from '../../../services/task-router/src/product-video-executor.mjs';
-import { projectRoot } from '../../../services/lib/runtime-config.mjs';
+import { loadRuntimeConfig, projectRoot } from '../../../services/lib/runtime-config.mjs';
 import { discoverNightShiftChannelRuntimes } from './pokemon-maintenance-runtime.mjs';
 import {
   collectChildError,
@@ -251,6 +252,7 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
   const loadProfiles = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
   const discoverRuntimes = dependencies.discoverNightShiftChannelRuntimes || discoverNightShiftChannelRuntimes;
   const runNodeScript = dependencies.runProjectNodeScript || runProjectNodeScript;
+  const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
   const profiles = await loadProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
   const activeProfiles = profiles.filter((profile) => profile.status === 'active');
   const channelRuntimes = await discoverRuntimes();
@@ -305,12 +307,12 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
       && templateRuntime?.nightShift?.publicationAutomationEnabled
     ) {
       const autoRun = await runNightShiftAutoPublicationAutomation(
-        dependencies.runtimeConfig || config,
+        runtimeConfig,
         templateRuntime,
         profile,
         asOf,
         {
-          publicationStore: dependencies.publicationStore || createPublicationStore(config),
+          publicationStore: dependencies.publicationStore || createPublicationStore(runtimeConfig),
           executeProductVideoAction: dependencies.executeProductVideoAction,
           publicationProfiles: profiles,
         },
@@ -378,13 +380,13 @@ function normalizePublicationWorkflowState(publication = {}) {
   ).trim().toLowerCase();
 }
 
-function countActiveTemplateQueueItems(publications = [], templateId = '') {
-  const normalizedTemplateId = String(templateId || '').trim();
-  if (!normalizedTemplateId) {
+export function countActiveTemplateQueueItems(publications = [], templateId = '') {
+  const normalizedTemplateScope = resolvePokeQuizzSelectionStateScope(templateId, '');
+  if (!normalizedTemplateScope) {
     return 0;
   }
   return publications.filter((publication) => (
-    String(publication?.metadata?.template_id || '').trim() === normalizedTemplateId
+    resolvePokeQuizzSelectionStateScope(publication?.metadata?.template_id || '', '') === normalizedTemplateScope
     && ['preview_upload_pending', 'preview_uploaded', 'preview_approved', 'scheduled'].includes(
       normalizePublicationWorkflowState(publication),
     )
@@ -414,19 +416,31 @@ async function resolveReviewBacklogGenerationRuntimes(templateRuntime) {
   return runtimes;
 }
 
-function selectNextReviewBacklogRuntime(generationRuntimes, publications = []) {
-  let selectedRuntime = generationRuntimes[0] || null;
+export function selectNextReviewBacklogRuntime(generationRuntimes, publications = [], random = Math.random) {
+  const candidateRuntimes = [];
   let selectedCount = Number.POSITIVE_INFINITY;
 
   for (const runtime of generationRuntimes) {
     const activeCount = countActiveTemplateQueueItems(publications, runtime.templateId);
     if (activeCount < selectedCount) {
       selectedCount = activeCount;
-      selectedRuntime = runtime;
+      candidateRuntimes.length = 0;
+      candidateRuntimes.push(runtime);
+      continue;
+    }
+    if (activeCount === selectedCount) {
+      candidateRuntimes.push(runtime);
     }
   }
 
-  return selectedRuntime;
+  if (candidateRuntimes.length === 0) {
+    return generationRuntimes[0] || null;
+  }
+
+  const rawRandom = Number(random?.());
+  const normalizedRandom = Math.min(Math.max(Number.isFinite(rawRandom) ? rawRandom : 0, 0), 0.999999999);
+  const selectedIndex = Math.floor(normalizedRandom * candidateRuntimes.length);
+  return candidateRuntimes[selectedIndex] || candidateRuntimes[0];
 }
 
 async function replenishReviewBacklogForRuntime(config, templateRuntime, asOf) {

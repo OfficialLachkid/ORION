@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePublicationChannelProfile } from '../../../services/product-video-agent/src/publication-channels.mjs';
 import {
+  countActiveTemplateQueueItems,
   planNightShiftAutoPublicationAutomation,
   runVideoQueueMaintenance,
+  selectNextReviewBacklogRuntime,
 } from './pokemon-maintenance.mjs';
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -172,4 +174,93 @@ test('night shift queue maintenance auto-approves DexGuess previews within the c
   );
   assert.equal(summary.autoApproved, 1);
   assert.equal(summary.autoScheduled, 1);
+});
+
+test('night shift queue maintenance no longer requires an injected runtimeConfig for auto mode', async () => {
+  const summary = await runVideoQueueMaintenance(
+    '2026-08-13T06:00:00.000Z',
+    {
+      loadPublicationChannelProfiles: async () => [channelProfile],
+      discoverNightShiftChannelRuntimes: async () => [{
+        channelSelector: 'dexguess-youtube',
+        nightShift: {
+          publicationAutomationEnabled: true,
+          publicationAutomationMode: 'auto',
+          publicationAutomationMaxScheduledDays: 3,
+        },
+      }],
+      runProjectNodeScript: () => ({
+        status: 0,
+        stdout: '[]',
+        stderr: '',
+      }),
+      publicationStore: {
+        async fetchPublicationsByChannel() {
+          return [];
+        },
+      },
+      executeProductVideoAction: async () => ({
+        report: {
+          workflowState: 'scheduled',
+          scheduledFor: '2026-08-14T08:00:00.000Z',
+        },
+      }),
+    },
+  );
+
+  assert.equal(summary.failedChannels, 0);
+  assert.equal(summary.errors.length, 0);
+});
+
+test('countActiveTemplateQueueItems treats legacy dual-type template ids as the same template scope', () => {
+  const publications = [
+    {
+      metadata: {
+        template_id: 'pokemon.dual-type-reveal-v1',
+        workflow_state: 'preview_uploaded',
+      },
+    },
+    {
+      metadata: {
+        template_id: 'pokemon.dual-type-reveal.v1',
+        workflow_state: 'scheduled',
+      },
+    },
+    {
+      metadata: {
+        template_id: 'pokemon.find-the-shiny.v1',
+        workflow_state: 'preview_uploaded',
+      },
+    },
+  ];
+
+  assert.equal(
+    countActiveTemplateQueueItems(publications, 'pokemon.dual-type-reveal.v1'),
+    2,
+  );
+});
+
+test('selectNextReviewBacklogRuntime prefers the least-represented template scope and randomizes ties', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny' },
+    { templateId: 'pokemon.type-quiz.v1', channelConfigPath: 'quiz' },
+  ];
+  const publications = [
+    {
+      metadata: {
+        template_id: 'pokemon.dual-type-reveal-v1',
+        workflow_state: 'preview_uploaded',
+      },
+    },
+  ];
+
+  assert.equal(
+    selectNextReviewBacklogRuntime(runtimes, publications, () => 0).channelConfigPath,
+    'shiny',
+  );
+  assert.equal(
+    selectNextReviewBacklogRuntime(runtimes, publications, () => 0.99).channelConfigPath,
+    'quiz',
+  );
 });
