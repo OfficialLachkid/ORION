@@ -146,7 +146,7 @@ const template = {
     intro_disappear_duration_seconds: 0.42,
     intro_pokeball_closed_frame_number: 10,
     intro_pokeball_open_frame_number: 2,
-    intro_pokeball_open_lead_seconds: 0.12,
+    intro_pokeball_open_lead_seconds: 0.3,
     intro_pokeball_open_hold_seconds: 0.16,
     intro_pokeball_scale_multiplier: 1.02,
     option_sprite_initial_delay_seconds: 0.04,
@@ -156,7 +156,7 @@ const template = {
     option_sprite_float_start_delay_seconds: 0.04,
     option_sprite_float_speed_multiplier: 1,
     option_sprite_float_amplitude_px: 18,
-    option_sprite_float_frequency_hz: 1.5,
+    option_sprite_float_frequency_hz: 1.1,
     reveal_visual_delay_seconds: 0.3,
     reveal_move_duration_seconds: 0.35,
   },
@@ -520,8 +520,8 @@ test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden a
   assert.match(visualFilter.script, /memoption0platform/u);
   assert.match(visualFilter.script, /mempokeballclosed0/u);
   assert.match(visualFilter.script, /mempokeballopen0/u);
-  assert.match(visualFilter.script, /mempokeballclosed0\]overlay=.*enable='between\(t,0,0\.5\)'/u);
-  assert.match(visualFilter.script, /mempokeballopen0\]overlay=.*enable='between\(t,0\.5,0\.78\)'/u);
+  assert.match(visualFilter.script, /mempokeballclosed0\]overlay=.*enable='between\(t,0,0\.32\)'/u);
+  assert.match(visualFilter.script, /mempokeballopen0\]overlay=.*enable='between\(t,0\.32,0\.78\)'/u);
   assert.match(visualFilter.script, /memdisappear0/u);
   assert.doesNotMatch(visualFilter.script, /memstudy0platform/u);
   assert.doesNotMatch(visualFilter.script, /memrevealplatform/u);
@@ -533,7 +533,7 @@ test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden a
   assert.match(visualFilter.script, /timerhpbar/u);
   assert.match(visualFilter.script, /fade=t=in:st=3\.35:d=0\.18:alpha=1/u);
   assert.match(visualFilter.script, /enable='between\(t,3\.35,6\.35\)'/u);
-  assert.match(visualFilter.script, /sin\(\(t-[0-9.]+\)\*9\.425\)\*18/u);
+  assert.match(visualFilter.script, /sin\(\(t-[0-9.]+\)\*6\.912\)\*18/u);
   assert.match(visualFilter.script, /drawtext=textfile='\/tmp\/option-0\.txt'/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='3'/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='1'/u);

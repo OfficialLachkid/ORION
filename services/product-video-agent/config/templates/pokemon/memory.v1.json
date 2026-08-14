@@ -254,7 +254,7 @@
     "intro_disappear_duration_seconds": 0.42,
     "intro_pokeball_closed_frame_number": 10,
     "intro_pokeball_open_frame_number": 2,
-    "intro_pokeball_open_lead_seconds": 0.12,
+    "intro_pokeball_open_lead_seconds": 0.3,
     "intro_pokeball_open_hold_seconds": 0.16,
     "intro_pokeball_scale_multiplier": 1.02,
     "option_sprite_initial_delay_seconds": 0.04,
@@ -264,7 +264,7 @@
     "option_sprite_float_start_delay_seconds": 0.04,
     "option_sprite_float_speed_multiplier": 1,
     "option_sprite_float_amplitude_px": 18,
-    "option_sprite_float_frequency_hz": 1.5,
+    "option_sprite_float_frequency_hz": 1.1,
     "reveal_visual_delay_seconds": 0.3,
     "reveal_move_duration_seconds": 0.35
   }
