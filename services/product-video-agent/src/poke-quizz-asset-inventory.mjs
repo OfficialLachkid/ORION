@@ -179,9 +179,17 @@ export function selectOverlayPresets(overlays) {
   const shinySparkle = matchOverlay(overlays, ['shiny', 'sparkle'])
     || matchOverlay(overlays, ['shiny-sparkle'])
     || matchOverlay(overlays, ['shiny_sparkle']);
+  const grassPlateau = matchOverlay(overlayImages, ['grass', 'plateau'])
+    || matchOverlay(overlayImages, ['grass-plateau'])
+    || matchOverlay(overlayImages, ['grass_plateau'])
+    || matchOverlay(overlayImages, ['plateau']);
   const typePlaceholder = matchOverlay(overlays, ['question', 'mark'])
     || matchOverlay(overlays, ['question-mark'])
     || matchOverlay(overlays, ['question_mark']);
+  const disappear = matchOverlay(overlays, ['disappear'])
+    || matchOverlay(overlays, ['vanish'])
+    || matchOverlay(overlays, ['poof']);
+  const pokeballOpenClose = matchOverlay(overlays, ['open', 'close', 'pokeball']);
   const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
     timer,
@@ -192,10 +200,13 @@ export function selectOverlayPresets(overlays) {
     hp_bar_frame: hpBarFrame,
     long_hp_bar_frame: longHpBarFrame,
     shiny_sparkle: shinySparkle,
+    grass_plateau: grassPlateau,
     type_placeholder: typePlaceholder,
+    disappear,
+    pokeball_open_close: pokeballOpenClose,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
-      || matchOverlay(overlays, ['open', 'close', 'pokeball']),
+      || pokeballOpenClose,
   };
 }
 
@@ -228,6 +239,11 @@ export async function scanPokeQuizzAssetInventory() {
   );
   const reveal = matchSoundEffect(soundEffects, ['reveal', 'who', 'answer']) || timerEnd;
   const shiny = matchSoundEffect(soundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
+  const disappear = matchSoundEffectKeywordGroups(soundEffects, [
+    ['disappear'],
+    ['vanish'],
+    ['poof'],
+  ]);
   const pokeballIntro = matchSoundEffectKeywordGroups(soundEffects, [
     ['enlarge', 'pokeball'],
     ['pokeball', 'intro'],
@@ -254,6 +270,7 @@ export async function scanPokeQuizzAssetInventory() {
       timer_end: timerEnd,
       reveal,
       shiny,
+      disappear,
       pokeball_intro: pokeballIntro,
       pokeball_wiggle: pokeballWiggle,
     },

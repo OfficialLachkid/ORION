@@ -226,6 +226,25 @@ test('normalizeTaskMessage recognizes DexGuess dual-type generation commands as 
   );
 });
 
+test('normalizeTaskMessage recognizes memory generation commands as explicit runtime actions', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    channelKey: 'commands',
+    submittedAt: '2026-08-14T10:00:00.000Z',
+    content: 'generate video template: memory channel: poke-quizz-youtube',
+    author: { id: 'operator-1', displayName: 'VBJ Services' },
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
+  assert.equal(result.task.summary, 'Generate Memory review for Poke Quizz');
+  assert.equal(result.task.poke_quizz_generate_review.templateKey, 'memory');
+  assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'poke-quizz-youtube');
+  assert.equal(
+    result.task.poke_quizz_generate_review.channelConfigPath,
+    'services/product-video-agent/config/channels/poke-quizz-memory-youtube.json'
+  );
+});
+
 test('normalizeTaskMessage recognizes analytics digest commands as explicit runtime actions', () => {
   const config = loadRuntimeConfig();
   const result = normalizeTaskMessage({

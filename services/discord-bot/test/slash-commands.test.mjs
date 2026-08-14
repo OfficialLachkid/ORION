@@ -42,6 +42,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
   assert.deepEqual(generateTemplateChoiceValues, [
     'dual-type-reveal',
     'find-the-shiny',
+    'memory',
     'type-speed-quiz',
   ]);
   const generateChannelChoiceValues = (generateVideoCommand?.options?.find((option) => option.name === 'channel')?.choices || [])
@@ -328,6 +329,34 @@ test('normalizeSupportedSlashCommandInteraction converts a manual video generati
   });
 
   assert.equal(message?.content, 'generate video template: find-the-shiny channel: trivamon-youtube');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts a memory slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-memory-1',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-memory-1',
+    data: {
+      name: 'generate-video',
+      options: [
+        { name: 'template', value: 'memory' },
+        { name: 'channel', value: 'poke-quizz-youtube' },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'generate video template: memory channel: poke-quizz-youtube');
   assert.equal(message?.channelKey, 'commands');
 });
 

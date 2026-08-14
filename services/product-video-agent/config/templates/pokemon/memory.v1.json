@@ -1,0 +1,269 @@
+{
+  "template_id": "pokemon.memory.v1",
+  "template_key": "memory",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "memorize",
+    "hide",
+    "countdown",
+    "multiple_choice",
+    "reveal"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 120,
+      "bottom": 260,
+      "left": 120
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "require_truth_fields": [
+      "national_dex_number",
+      "name",
+      "types",
+      "sprite_path"
+    ],
+    "preferred_asset_fields": [
+      "sprite_path"
+    ],
+    "skip_subject_when_missing": [
+      "national_dex_number",
+      "name",
+      "types",
+      "sprite_path"
+    ],
+    "type_pair_policy": {
+      "mode": "random_dual_type_pair",
+      "selection_basis": "observed_pairs_in_catalog_only",
+      "exclude_zero_match_pairs": true,
+      "min_catalog_matches": 5,
+      "disallowed_type_pairs": [
+        [
+          "normal",
+          "ice"
+        ],
+        [
+          "normal",
+          "bug"
+        ],
+        [
+          "normal",
+          "rock"
+        ],
+        [
+          "normal",
+          "steel"
+        ],
+        [
+          "fire",
+          "fairy"
+        ],
+        [
+          "ice",
+          "poison"
+        ],
+        [
+          "ground",
+          "fairy"
+        ],
+        [
+          "bug",
+          "dragon"
+        ],
+        [
+          "rock",
+          "ghost"
+        ]
+      ]
+    }
+  },
+  "question_contract": {
+    "hook_text": "How good is your memory?",
+    "hook_text_variants": [
+      "How good is your memory?"
+    ],
+    "question_text": "Which Pokemon was NOT on screen?",
+    "question_text_variants": [
+      "Which Pokemon was NOT on screen?"
+    ],
+    "reveal_text": "The answer was {answer_name}.",
+    "reveal_text_variants": [
+      "The answer was {answer_name}."
+    ]
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_backgrounds",
+      "media_type": "looping_image_gif_or_video",
+      "fit": "cover",
+      "blur_sigma": 4
+    },
+    "text": {
+      "hook_y": 210,
+      "hook_font_size": 124,
+      "question_y": 190,
+      "question_font_size": 88,
+      "option_label_gap_px": 16,
+      "option_label_font_size": 78,
+      "reveal_y": 220,
+      "reveal_font_size": 110
+    },
+    "sprite_grid": {
+      "difficulty_weights": {
+        "medium": 3,
+        "easy": 1,
+        "hard": 1
+      },
+      "difficulty_levels": {
+        "medium": {
+          "sprite_count": 6,
+          "rows": 2,
+          "columns": 3
+        },
+        "easy": {
+          "sprite_count": 4,
+          "rows": 2,
+          "columns": 2
+        },
+        "hard": {
+          "sprite_count": 9,
+          "rows": 3,
+          "columns": 3,
+          "stage_bounds_px": {
+            "left": 96,
+            "top": 450,
+            "width": 888,
+            "height": 980
+          }
+        }
+      },
+      "item_size_px": 236,
+      "min_item_size_px": 176,
+      "column_gap_px": 82,
+      "row_gap_px": 150,
+      "sprite_scale_multiplier": 1.58,
+      "placeholder_scale_multiplier": 0.92,
+      "stage_bounds_px": {
+        "left": 96,
+        "top": 450,
+        "width": 888,
+        "height": 680
+      }
+    },
+    "option_grid": {
+      "rows": 2,
+      "columns": 2,
+      "item_size_px": 320,
+      "min_item_size_px": 250,
+      "column_gap_px": 150,
+      "row_gap_px": 220,
+      "sprite_scale_multiplier": 1.72,
+      "stage_bounds_px": {
+        "left": 100,
+        "top": 280,
+        "width": 880,
+        "height": 860
+      }
+    },
+    "reveal_sprite": {
+      "center_x": 540,
+      "center_y": 820,
+      "item_size_px": 320,
+      "sprite_scale_multiplier": 1.08
+    },
+    "sprite_platform": {
+      "study_enabled": false,
+      "option_enabled": true,
+      "reveal_enabled": false,
+      "study_width_multiplier": 0.9,
+      "option_width_multiplier": 0.9,
+      "reveal_width_multiplier": 0.92,
+      "center_y_offset_multiplier": 0.34,
+      "option_center_y_offset_px": 80
+    },
+    "timer": {
+      "display_mode": "hp_bar_depletion",
+      "countdown_from": 3,
+      "countdown_to": 0,
+      "size_px": 268,
+      "center_x": 540,
+      "center_y": 930,
+      "hp_bar_max_height_px": 170,
+      "hp_bar_width_px": 860,
+      "hp_bar_top_gap_px": 234
+    },
+    "rounds": {
+      "hook_hold_seconds": 0.9,
+      "memorize_hold_seconds": 2,
+      "question_lead_seconds": 0.45,
+      "reveal_hold_seconds": 1.1
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "sound_effects": {
+      "countdown_tick": {
+        "enabled": true,
+        "trigger": "each_second"
+      },
+      "timer_end": {
+        "enabled": true,
+        "trigger": "countdown_complete",
+        "preferred_keywords": [
+          "ding-sound"
+        ]
+      }
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true,
+    "hook_text_reveal_duration_seconds": 1.72,
+    "intro_sprite_initial_delay_seconds": 0.08,
+    "intro_sprite_stagger_seconds": 0.24,
+    "intro_sprite_fade_duration_seconds": 0.22,
+    "intro_sprite_shrink_duration_seconds": 0.14,
+    "intro_sprite_y_offset_px": 54,
+    "intro_disappear_duration_seconds": 0.42,
+    "intro_pokeball_lead_seconds": 0.3,
+    "intro_pokeball_hold_seconds": 0.16,
+    "intro_pokeball_scale_multiplier": 1.02,
+    "option_sprite_initial_delay_seconds": 0.04,
+    "option_sprite_stagger_seconds": 0.09,
+    "option_sprite_fade_duration_seconds": 0.2,
+    "option_sprite_y_offset_px": 42,
+    "option_sprite_float_start_delay_seconds": 0.04,
+    "option_sprite_float_speed_multiplier": 1,
+    "option_sprite_float_amplitude_px": 18,
+    "option_sprite_float_frequency_hz": 1.1,
+    "reveal_visual_delay_seconds": 0.3,
+    "reveal_move_duration_seconds": 0.35
+  }
+}
