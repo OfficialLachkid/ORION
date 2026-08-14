@@ -84,6 +84,18 @@ export function buildVisualInputs(plan, renderPlan) {
     });
   }
 
+  if (plan.assets.overlays.selected_intro_pokeball_path) {
+    inputs.push({
+      role: 'intro-pokeball',
+      path: plan.assets.overlays.selected_intro_pokeball_path,
+      args: buildLoopingInputArgs({
+        mediaPath: plan.assets.overlays.selected_intro_pokeball_path,
+        totalDuration,
+        fps,
+      }),
+    });
+  }
+
   for (let index = 0; index < (plan.assets.pokemon || []).length; index += 1) {
     const pokemon = plan.assets.pokemon[index];
     const spritePath = pokemon.render_sprite_path || pokemon.sprite_path;

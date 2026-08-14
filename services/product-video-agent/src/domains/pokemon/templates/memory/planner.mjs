@@ -961,6 +961,7 @@ export async function planPokemonMemoryChallenge({
         selected_timer_hp_bar_path: useHpBarTimer ? hpBarTimerOverlayPath : null,
         selected_timer_hp_bar_frame_path: useHpBarTimer ? hpBarTimerFramePath : null,
         selected_intro_disappear_path: inventory.overlay_presets?.disappear || null,
+        selected_intro_pokeball_path: inventory.overlay_presets?.pokeball_primary || null,
         selected_grass_plateau_path: inventory.overlay_presets?.grass_plateau || null,
         sprite_grid: gridLayout,
         available_paths: inventory.overlays,

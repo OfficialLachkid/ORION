@@ -141,8 +141,13 @@ const template = {
     intro_sprite_initial_delay_seconds: 0.08,
     intro_sprite_stagger_seconds: 0.18,
     intro_sprite_fade_duration_seconds: 0.22,
+    intro_sprite_shrink_duration_seconds: 0.14,
     intro_sprite_y_offset_px: 54,
     intro_disappear_duration_seconds: 0.42,
+    intro_pokeball_closed_frame_number: 10,
+    intro_pokeball_open_frame_number: 2,
+    intro_pokeball_open_hold_seconds: 0.16,
+    intro_pokeball_scale_multiplier: 1.02,
     option_sprite_initial_delay_seconds: 0.04,
     option_sprite_stagger_seconds: 0.09,
     option_sprite_fade_duration_seconds: 0.2,
@@ -186,6 +191,7 @@ const assetInventory = {
     timer_alarm: '/tmp/timer-alarm.gif',
     grass_plateau: '/tmp/grass-plateau.png',
     disappear: '/tmp/disappear.gif',
+    pokeball_primary: '/tmp/Open and Close Pokeball.gif',
     type_placeholder: '/tmp/question-mark.png',
   },
   overlays: [
@@ -195,6 +201,7 @@ const assetInventory = {
     '/tmp/timer-alarm.gif',
     '/tmp/grass-plateau.png',
     '/tmp/disappear.gif',
+    '/tmp/Open and Close Pokeball.gif',
     '/tmp/question-mark.png',
   ],
   transitions: [],
@@ -232,6 +239,7 @@ test('generic planner dispatch builds a memory round with one off-screen answer 
   assert.equal(plan.assets.overlays.timer_display_mode, 'hp_bar_depletion');
   assert.equal(plan.assets.overlays.selected_timer_hp_bar_path, '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4');
   assert.equal(plan.assets.overlays.selected_intro_disappear_path, '/tmp/disappear.gif');
+  assert.equal(plan.assets.overlays.selected_intro_pokeball_path, '/tmp/Open and Close Pokeball.gif');
   assert.equal(plan.assets.audio.selected_sound_effects.timer_end, '/tmp/ding-sound.mp3');
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Memory$/u);
   assert.deepEqual(plan.required_asset_gaps, []);
@@ -377,11 +385,12 @@ test('memory visual inputs include study sprites, question-option sprites, and t
   });
 
   const inputs = buildVisualInputs(plan, renderPlan);
-  assert.deepEqual(inputs.slice(0, 4).map((input) => input.role), [
+  assert.deepEqual(inputs.slice(0, 5).map((input) => input.role), [
     'background',
     'timer-hp-bar',
     'grass-platform',
     'intro-disappear',
+    'intro-pokeball',
   ]);
   assert.equal(inputs.filter((input) => input.role.startsWith('display-sprite-')).length, 6);
   assert.equal(inputs.filter((input) => input.role.startsWith('option-sprite-')).length, 4);
@@ -475,9 +484,10 @@ test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden a
       timerAlarm: null,
       grassPlatform: 2,
       introDisappear: 3,
-      sprites: [4, 5, 6, 7, 8, 9],
-      optionSprites: [10, 11, 12, 13],
-      revealSprite: 14,
+      introPokeball: 4,
+      sprites: [5, 6, 7, 8, 9, 10],
+      optionSprites: [11, 12, 13, 14],
+      revealSprite: 15,
     },
     '/tmp/font.ttf',
     {
@@ -500,14 +510,19 @@ test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden a
   assert.match(visualFilter.script, /\[0:v\]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=3:steps=1,fps=30,setsar=1\[v0\]/u);
   assert.match(visualFilter.script, /\[2:v\]fps=30,scale=.*:-1,format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1/u);
   assert.match(visualFilter.script, /\[2:v\]fps=30,scale=.*:-1,format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
-  assert.match(visualFilter.script, /\[4:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=/u);
-  assert.match(visualFilter.script, /\[10:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1/u);
-  assert.match(visualFilter.script, /\[(10|12|13):v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
-  assert.match(visualFilter.script, /\[14:v\]fps=30,scale=/u);
+  assert.match(visualFilter.script, /select='eq\(n,9\)'/u);
+  assert.match(visualFilter.script, /select='eq\(n,1\)'/u);
+  assert.match(visualFilter.script, /\[5:v\]fps=30,scale=w='.*0\.08/u);
+  assert.match(visualFilter.script, /\[11:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1/u);
+  assert.match(visualFilter.script, /\[(11|13|14):v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
+  assert.match(visualFilter.script, /\[15:v\]fps=30,scale=/u);
   assert.match(visualFilter.script, /memoption0platform/u);
+  assert.match(visualFilter.script, /mempokeballclosed0/u);
+  assert.match(visualFilter.script, /mempokeballopen0/u);
   assert.match(visualFilter.script, /memdisappear0/u);
   assert.doesNotMatch(visualFilter.script, /memstudy0platform/u);
   assert.doesNotMatch(visualFilter.script, /memrevealplatform/u);
+  assert.match(visualFilter.script, /\[memoption0platform\]overlay=x='[0-9.]+-w\/2':y='[0-9.]+-h\/2':enable='between\(t,2\.9,6\.65\)'/u);
   assert.match(visualFilter.script, /overlay=.*enable='between\(t,2\.9,6\.65\)'/u);
   assert.match(visualFilter.script, /overlay=.*enable='between\(t,6\.65,7\.45\)'/u);
   assert.match(visualFilter.script, /if\(lt\(t,6\.65\),/u);

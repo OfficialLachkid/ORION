@@ -165,6 +165,7 @@ export async function renderPokeQuizzVideo({
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     introDisappear: inputRoleIndex.has('intro-disappear') ? inputRoleIndex.get('intro-disappear') : null,
+    introPokeball: inputRoleIndex.has('intro-pokeball') ? inputRoleIndex.get('intro-pokeball') : null,
     sprites: (plan.assets.pokemon || []).map((_, index) => inputRoleIndex.get(`display-sprite-${index}`)),
     optionSprites: (plan.question?.options || []).map((_, index) => inputRoleIndex.get(`option-sprite-${index}`)),
     revealSprite: inputRoleIndex.has('reveal-sprite') ? inputRoleIndex.get('reveal-sprite') : null,

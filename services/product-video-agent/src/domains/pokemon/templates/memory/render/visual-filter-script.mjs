@@ -125,8 +125,10 @@ function appendPlatformAndSprite({
   spriteSize,
   centerX,
   centerY,
+  platformCenterY = null,
   enableExpression,
   fps,
+  spriteScaleFilter = null,
   spriteStreamFilters = [],
   platformStreamFilters = [],
   template,
@@ -135,8 +137,8 @@ function appendPlatformAndSprite({
   const platformLayout = resolvePlatformLayout(template, platformVariant);
   if (inputRefs.grassPlatform != null && platformLayout.enabled) {
     const platformWidth = Number((spriteSize * platformLayout.width_multiplier).toFixed(3));
-    const platformCenterY = buildOffsetExpression(
-      centerY,
+    const platformOverlayCenterY = buildOffsetExpression(
+      platformCenterY ?? centerY,
       (spriteSize * platformLayout.center_y_offset_multiplier) + platformLayout.center_y_offset_px,
     );
     const platformLabel = `${platformLabelPrefix}platform`;
@@ -152,14 +154,14 @@ function appendPlatformAndSprite({
       `[${inputRefs.grassPlatform}:v]${platformFilterParts.join(',')}[${platformLabel}]`,
     );
     filters.push(
-      `[${baseVideoLabel}][${platformLabel}]overlay=x='${centerX}-w/2':y='${platformCenterY}-h/2':enable='${enableExpression}'[${platformVideoLabel}]`,
+      `[${baseVideoLabel}][${platformLabel}]overlay=x='${centerX}-w/2':y='${platformOverlayCenterY}-h/2':enable='${enableExpression}'[${platformVideoLabel}]`,
     );
     baseVideoLabel = platformVideoLabel;
   }
 
   const spriteFilterParts = [
     `fps=${fps}`,
-    `scale=${spriteSize}:${spriteSize}:force_original_aspect_ratio=decrease`,
+    spriteScaleFilter || `scale=${spriteSize}:${spriteSize}:force_original_aspect_ratio=decrease`,
     'format=rgba',
     'setsar=1',
     ...spriteStreamFilters.filter(Boolean),
@@ -228,6 +230,23 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       * Math.max(0.1, ensureNumber(template?.renderer?.option_sprite_float_speed_multiplier, 1)),
   );
   const introDisappearDuration = Math.max(0.12, ensureNumber(template?.renderer?.intro_disappear_duration_seconds, 0.42));
+  const introSpriteShrinkDuration = Math.max(0.06, ensureNumber(template?.renderer?.intro_sprite_shrink_duration_seconds, 0.14));
+  const introPokeballClosedFrameIndex = Math.max(
+    0,
+    Math.trunc(ensureNumber(template?.renderer?.intro_pokeball_closed_frame_number, 10)) - 1,
+  );
+  const introPokeballOpenFrameIndex = Math.max(
+    0,
+    Math.trunc(ensureNumber(template?.renderer?.intro_pokeball_open_frame_number, 2)) - 1,
+  );
+  const introPokeballOpenHoldSeconds = Math.max(
+    0.06,
+    ensureNumber(template?.renderer?.intro_pokeball_open_hold_seconds, 0.16),
+  );
+  const introPokeballScaleMultiplier = Math.max(
+    0.1,
+    ensureNumber(template?.renderer?.intro_pokeball_scale_multiplier, 1.02),
+  );
   const optionOrder = buildShuffledIndices(Math.min((inputRefs.optionSprites || []).length, optionGridLayout.cells.length), `${plan.seed}:memory-options`);
   const optionSequenceByIndex = new Map(optionOrder.map((spriteIndex, orderIndex) => [spriteIndex, orderIndex]));
   const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
@@ -241,12 +260,47 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${backgroundBlurPart},fps=${fps},setsar=1[v0]`);
   let currentVideoLabel = 'v0';
 
+  if (inputRefs.introPokeball != null && gridLayout.cells.length > 0) {
+    const introPokeballCount = Math.min((inputRefs.sprites || []).length, gridLayout.cells.length);
+    const pokeballSize = Number((
+      ensureNumber(gridLayout.item_size_px, 220)
+      * ensureNumber(gridLayout.placeholder_scale_multiplier, 0.92)
+      * introPokeballScaleMultiplier
+    ).toFixed(3));
+    for (let index = 0; index < introPokeballCount; index += 1) {
+      const cell = gridLayout.cells[index];
+      const introOrderIndex = introSequenceByIndex.get(index) ?? index;
+      const introStart = Number((hookStart + introInitialDelay + (introOrderIndex * introStaggerSeconds)).toFixed(3));
+      const introEnd = Number((introStart + introFadeDuration).toFixed(3));
+      const openEnd = Number(Math.min(introEnd, introStart + introPokeballOpenHoldSeconds).toFixed(3));
+      const closedLabel = `mempokeballclosed${index}`;
+      const openLabel = `mempokeballopen${index}`;
+      const withClosedLabel = `mempokeballclosedv${index}`;
+      const withOpenLabel = `mempokeballopenv${index}`;
+      filters.push(
+        `[${inputRefs.introPokeball}:v]fps=${fps},select='eq(n,${introPokeballClosedFrameIndex})',setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${renderPlan.total_duration_seconds},scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${closedLabel}]`,
+      );
+      filters.push(
+        `[${inputRefs.introPokeball}:v]fps=${fps},select='eq(n,${introPokeballOpenFrameIndex})',setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${renderPlan.total_duration_seconds},scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${openLabel}]`,
+      );
+      filters.push(
+        `[${currentVideoLabel}][${closedLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(hookStart, introStart)}'[${withClosedLabel}]`,
+      );
+      filters.push(
+        `[${withClosedLabel}][${openLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(introStart, openEnd)}'[${withOpenLabel}]`,
+      );
+      currentVideoLabel = withOpenLabel;
+    }
+  }
+
   for (let index = 0; index < (inputRefs.sprites || []).length && index < gridLayout.cells.length; index += 1) {
     const pokemon = plan.assets.pokemon[index] || {};
     const cell = gridLayout.cells[index];
     const introOrderIndex = introSequenceByIndex.get(index) ?? index;
     const introStart = Number((hookStart + introInitialDelay + (introOrderIndex * introStaggerSeconds)).toFixed(3));
     const introEnd = Number((introStart + introFadeDuration).toFixed(3));
+    const disappearStart = Number(Math.max(introEnd, memorizeVisibleEnd - introDisappearDuration).toFixed(3));
+    const shrinkStart = Number(Math.max(introEnd, disappearStart - introSpriteShrinkDuration).toFixed(3));
     const spriteSize = Number((
       ensureNumber(gridLayout.item_size_px, 220)
       * ensureNumber(gridLayout.sprite_scale_multiplier, 1.18)
@@ -271,8 +325,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         introStart,
         introEnd,
       ),
-      enableExpression: overlayRange(introStart, memorizeVisibleEnd),
+      enableExpression: overlayRange(introStart, disappearStart),
       fps,
+      spriteScaleFilter: `scale=w='${spriteSize}*(${buildHoldThenLerpExpression(1, 0.08, shrinkStart, disappearStart)})':h='${spriteSize}*(${buildHoldThenLerpExpression(1, 0.08, shrinkStart, disappearStart)})':eval=frame:force_original_aspect_ratio=decrease`,
       spriteStreamFilters: [
         buildFadeFilter('in', introStart, introFadeDuration),
       ],
@@ -362,6 +417,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           amplitudePx: optionFloatAmplitude,
           frequencyHz: optionFloatFrequency,
         }),
+        platformCenterY: cell.center_y,
         enableExpression: overlayRange(questionStart, revealVisualStart),
         fps,
         spriteStreamFilters: optionSpriteFadeFilters,
