@@ -289,6 +289,22 @@ async function main() {
       }
     }
 
+    // Mirror the email-recovery path for phone: if the initial extraction
+    // missed a number that Claude found in the footer / tel: link / contact
+    // page, backfill it. Never overwrite an existing number. Loose validation
+    // (Dutch numbers span many formats: +31, 0031, 06-, "020 ...", spaces,
+    // dashes) — accept anything with at least 8 digits total.
+    const discoveredPhone = String(qualification.contact_phone || '').trim();
+    const phoneDigits = discoveredPhone.replace(/\D/gu, '');
+    const phoneLooksValid = phoneDigits.length >= 8 && phoneDigits.length <= 15;
+    if (!lead.contact_phone && phoneLooksValid) {
+      lead.contact_phone = discoveredPhone;
+      qualification.contact_phone_recovered = true;
+      if (!dryRun) {
+        await updateLead(lead.id, { contact_phone: discoveredPhone }).catch(() => {});
+      }
+    }
+
     let finalStatus;
     let approvalTaskId = null;
     let draftError = '';

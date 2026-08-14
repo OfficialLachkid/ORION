@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createGmailDraft, getGmailDraft, listGmailDraftsSummary, sendGmailMessage } from '../src/send.mjs';
+import { countGmailDrafts, createGmailDraft, getGmailDraft, listGmailDraftsSummary, sendGmailMessage } from '../src/send.mjs';
 
 function baseConfig(overrides = {}) {
   return {
@@ -178,6 +178,85 @@ test('listGmailDraftsSummary lists ids then fetches metadata per draft, normalis
     { id: 'd-alpha', to: 'foo@example.com', subject: 'hello', internalDate: 1000 },
     { id: 'd-beta',  to: 'bar@example.com', subject: 'world', internalDate: 2000 },
   ]);
+});
+
+test('countGmailDrafts returns the count on a single page when no nextPageToken is returned', async () => {
+  const stubFetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      drafts: Array.from({ length: 42 }, (_, index) => ({ id: `d-${index}` })),
+    }),
+  });
+  const total = await countGmailDrafts(
+    baseConfig(),
+    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() }
+  );
+  assert.equal(total, 42);
+});
+
+test('countGmailDrafts paginates via nextPageToken until Gmail stops returning one', async () => {
+  // Regression case for the operator's 2026-08-14 report: digest said 50,
+  // Gmail showed 100+. The old Discord-based count was capped at 50; this
+  // helper must aggregate ALL pages that Gmail returns.
+  const pages = [
+    {
+      drafts: Array.from({ length: 500 }, (_, index) => ({ id: `p1-${index}` })),
+      nextPageToken: 'tok-2',
+    },
+    {
+      drafts: Array.from({ length: 500 }, (_, index) => ({ id: `p2-${index}` })),
+      nextPageToken: 'tok-3',
+    },
+    {
+      drafts: Array.from({ length: 137 }, (_, index) => ({ id: `p3-${index}` })),
+      // no nextPageToken: end of list
+    },
+  ];
+  const calls = [];
+  const stubFetch = async (url) => {
+    calls.push(url);
+    return { ok: true, status: 200, json: async () => pages[calls.length - 1] };
+  };
+  const total = await countGmailDrafts(
+    baseConfig(),
+    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() }
+  );
+  assert.equal(total, 500 + 500 + 137);
+  assert.equal(calls.length, 3);
+  // Second and third calls MUST carry the pageToken forward.
+  assert.ok(calls[1].includes('pageToken=tok-2'));
+  assert.ok(calls[2].includes('pageToken=tok-3'));
+});
+
+test('countGmailDrafts stops at maxPages so a runaway paging loop cannot spin forever', async () => {
+  // If Gmail hypothetically keeps returning nextPageToken forever, we cap
+  // at the configured maxPages rather than silent-inflate to infinity.
+  const stubFetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      drafts: [{ id: 'x' }, { id: 'y' }],
+      nextPageToken: 'always-more',
+    }),
+  });
+  const total = await countGmailDrafts(
+    baseConfig(),
+    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn(), maxPages: 3, pageSize: 2 }
+  );
+  assert.equal(total, 6);
+});
+
+test('countGmailDrafts surfaces Gmail API errors so the caller can decide how to fall back', async () => {
+  const stubFetch = async () => ({
+    ok: false,
+    status: 500,
+    text: async () => '{"error":"boom"}',
+  });
+  await assert.rejects(
+    countGmailDrafts(baseConfig(), { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() }),
+    /Gmail draft count failed \(500\)/u,
+  );
 });
 
 test('sendGmailMessage attaches configured bccAudit when the draft has no explicit bcc', async () => {

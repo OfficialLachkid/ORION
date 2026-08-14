@@ -183,7 +183,17 @@ ${JSON.stringify({
 ${pageSpeedNote}${feedbackNote}
 TASK:
 1. Fetch ${lead.source_url} with WebFetch and judge the actual website: does the business look like a fit for one of the offers, and is there something concrete and real to personalize outreach with? Also sanity-check the extraction: if the page is actually a directory/platform/association rather than this business's own site, reject with decision "extraction_error".
-${screenshotStep}3. FIND A PUBLIC CONTACT EMAIL${lead.contact_email ? ` (we already have "${lead.contact_email}" — only correct it if the site clearly shows a better/more official one, otherwise return it unchanged)` : ' — IMPORTANT: our extraction found NONE, but it is often simply missed'}. Look at the page you fetched AND the screenshot; if no email is visible on the homepage, try the contact/over-ons page (e.g. WebFetch ${String(lead.source_url || '').replace(/[/]+$/u, '')}/contact). Return it in "contact_email". Rules: it must be an address actually shown on THEIR site (never invent one, never guess "info@<domain>" without seeing it); prefer a general business address (info@/contact@) over a personal one; if a contact FORM is the only option and no address is shown anywhere, return null. Getting this right matters: a qualified lead with no email is dropped from outreach entirely.
+${screenshotStep}3. FIND A PUBLIC CONTACT EMAIL AND PHONE. Small businesses hide contact info in unexpected places — check ALL of these before returning null (our extraction misses these routinely, especially footers and mailto/tel links; operator has repeatedly found visible contact info on leads we marked as "no email"):
+   a. FOOTER of the fetched page — WebFetch's markdown shows the whole page in reading order, so scroll to the very bottom. Small businesses very often only put their contact info in a tiny footer block that's easy to miss on a quick skim.
+   b. \`mailto:\` and \`tel:\` LINKS — these render in WebFetch markdown as \`[label](mailto:foo@bar.com)\` and \`[label](tel:+31201234567)\` respectively. They can appear anywhere on the page (nav, floating button, footer) and are often the ONLY machine-readable contact even when nothing looks like an address in the visible text.
+   c. DEDICATED CONTACT PAGE if nothing on the homepage — try these URLs in order and stop at the first one that surfaces contact info: ${String(lead.source_url || '').replace(/[/]+$/u, '')}/contact, .../contact-us, .../kontakt, .../over-ons, .../about, .../colofon, .../impressum. Don't attempt more than 3.
+   d. SCREENSHOT — some sites render the email as an image (font-icon obfuscation, decorative styling) that WebFetch can't parse but a rendered view can.
+
+   Return both:
+   - "contact_email"${lead.contact_email ? ` (we already have "${lead.contact_email}" — only correct it if the site clearly shows a better/more official one, otherwise return it unchanged)` : ''}: an address ACTUALLY shown on THEIR site (never invent one, never guess "info@<domain>" without seeing it); prefer a general business address (info@/contact@) over a personal one; only return null if you genuinely couldn't find one after all four checks above.
+   - "contact_phone"${lead.contact_phone ? ` (we already have "${lead.contact_phone}" — only correct it if the site shows a different official one, otherwise return it unchanged)` : ''}: a phone number ACTUALLY shown on their site (Dutch numbers preferred in international format like "+31 20 123 4567" or "+31612345678"); null only if genuinely none is displayed.
+
+   Why this matters: a qualified lead with no email is dropped from EMAIL outreach entirely and only surfaces in the phone-only #qualified-call-leads thread — so missing an email that's actually there costs us the highest-value outreach channel for that lead.
 4. Decide: "qualified", "rejected", "extraction_error", or "unverifiable".
    Use "unverifiable" when you could not fetch the site at all (403/blocked/timeout) — do NOT reject a possibly-good lead just because our fetch was blocked; that's a retry case, not a verdict on the business.
 5. If qualified, pick ONE primary offer angle and write the Dutch outreach email.
@@ -197,6 +207,7 @@ Respond with ONLY a JSON object, no markdown fences, no commentary:
   "reasoning": "2-4 sentences: why this decision, referencing what you saw on the site",
   "personalization_hook": "the concrete observed detail the draft is built around, or null",
   "contact_email": "a public email actually shown on their site, or null if genuinely none is displayed",
+  "contact_phone": "a public phone actually shown on their site (Dutch preferred in international format), or null if genuinely none is displayed",
   "ai_site_signals": "short note on AI-generated/template-slop tells you observed (2+ corroborating), or null if none/not applicable",
   "draft_subject": "Dutch subject line, or null",
   "draft_body": "Dutch email body, or null"${screenshotSessionName ? ',\n  "screenshot_reviewed": true | false' : ''}
