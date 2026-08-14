@@ -243,6 +243,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     0.06,
     ensureNumber(template?.renderer?.intro_pokeball_open_hold_seconds, 0.16),
   );
+  const introPokeballOpenLeadSeconds = Math.max(
+    0,
+    ensureNumber(template?.renderer?.intro_pokeball_open_lead_seconds, 0.12),
+  );
   const introPokeballScaleMultiplier = Math.max(
     0.1,
     ensureNumber(template?.renderer?.intro_pokeball_scale_multiplier, 1.02),
@@ -272,6 +276,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const introOrderIndex = introSequenceByIndex.get(index) ?? index;
       const introStart = Number((hookStart + introInitialDelay + (introOrderIndex * introStaggerSeconds)).toFixed(3));
       const introEnd = Number((introStart + introFadeDuration).toFixed(3));
+      const openStart = Number(Math.max(hookStart, introStart - introPokeballOpenLeadSeconds).toFixed(3));
       const openEnd = Number(Math.min(introEnd, introStart + introPokeballOpenHoldSeconds).toFixed(3));
       const closedLabel = `mempokeballclosed${index}`;
       const openLabel = `mempokeballopen${index}`;
@@ -284,10 +289,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `[${inputRefs.introPokeball}:v]fps=${fps},select='eq(n,${introPokeballOpenFrameIndex})',setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${renderPlan.total_duration_seconds},scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${openLabel}]`,
       );
       filters.push(
-        `[${currentVideoLabel}][${closedLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(hookStart, introStart)}'[${withClosedLabel}]`,
+        `[${currentVideoLabel}][${closedLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(hookStart, openStart)}'[${withClosedLabel}]`,
       );
       filters.push(
-        `[${withClosedLabel}][${openLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(introStart, openEnd)}'[${withOpenLabel}]`,
+        `[${withClosedLabel}][${openLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(openStart, openEnd)}'[${withOpenLabel}]`,
       );
       currentVideoLabel = withOpenLabel;
     }
