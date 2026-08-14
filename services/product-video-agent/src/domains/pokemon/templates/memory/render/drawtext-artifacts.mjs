@@ -13,23 +13,39 @@ function resolveTextPosition(template, key, fallbackY) {
   return ensureNumber(template?.layout?.text?.[key], fallbackY);
 }
 
-function buildOptionTextArtifacts(options, { template, startSeconds, endSeconds }) {
-  const fontSize = ensureNumber(template?.layout?.text?.option_font_size, 82);
-  const baseX = ensureNumber(template?.layout?.text?.options_x, 136);
-  const startY = ensureNumber(template?.layout?.text?.options_start_y, 1220);
-  const lineGap = ensureNumber(template?.layout?.text?.option_line_gap_px, 116);
+function buildOptionTextArtifacts(options, {
+  optionGrid,
+  template,
+  startSeconds,
+  endSeconds,
+}) {
+  const fontSize = ensureNumber(template?.layout?.text?.option_label_font_size, 78);
+  const labelGap = ensureNumber(template?.layout?.text?.option_label_gap_px, 10);
   const optionLines = Array.isArray(options) ? options : [];
+  const gridCells = optionGrid?.cells || [];
   return {
     font_size: fontSize,
-    lines: optionLines.map((option, index) => ({
-      text: `${option.label}. ${option.name}`,
-      font_size: fontSize,
-      x: baseX,
-      y: startY + (index * lineGap),
-      start_seconds: startSeconds,
-      end_seconds: endSeconds,
-    })),
+    lines: optionLines.map((option, index) => {
+      const cell = gridCells[index] || { center_x: 540, center_y: 1220, item_size_px: 196 };
+      const spriteSize = roundSpriteSize(
+        ensureNumber(optionGrid?.item_size_px, 196)
+          * ensureNumber(optionGrid?.sprite_scale_multiplier, 1)
+          * ensureNumber(option?.sprite_display_scale_multiplier, 1),
+      );
+      return {
+        text: `${option.label}`,
+        font_size: fontSize,
+        x_expression: `${ensureNumber(cell.center_x, 540)}-text_w/2`,
+        y: ensureNumber(cell.center_y, 1220) + Math.round(spriteSize / 2) + labelGap,
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+      };
+    }),
   };
+}
+
+function roundSpriteSize(value) {
+  return Number(Number(value || 0).toFixed(3));
 }
 
 export function buildTextArtifacts({ renderPlan, template }) {
@@ -62,9 +78,10 @@ export function buildTextArtifacts({ renderPlan, template }) {
       endSeconds: renderPlan.phases.reveal.start_seconds,
     }),
     options: buildOptionTextArtifacts(renderPlan.question?.options || [], {
+      optionGrid: renderPlan.option_grid,
       template,
       startSeconds: renderPlan.phases.question.start_seconds,
-      endSeconds: renderPlan.total_duration_seconds,
+      endSeconds: renderPlan.phases.reveal.start_seconds,
     }),
     reveal: buildProgressiveTextArtifacts(renderPlan.text.reveal, {
       template,

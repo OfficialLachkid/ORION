@@ -29,8 +29,8 @@ const template = {
     },
   },
   question_contract: {
-    hook_text: 'Memorize these Pokemon',
-    hook_text_variants: ['Memorize these Pokemon'],
+    hook_text: 'How good is your memory?',
+    hook_text_variants: ['How good is your memory?'],
     question_text: 'Which Pokemon was NOT on screen?',
     question_text_variants: ['Which Pokemon was NOT on screen?'],
     reveal_text: 'The answer was {answer_name}.',
@@ -38,15 +38,13 @@ const template = {
   },
   layout: {
     text: {
-      hook_y: 250,
-      hook_font_size: 132,
-      question_y: 1020,
+      hook_y: 210,
+      hook_font_size: 124,
+      question_y: 560,
       question_font_size: 88,
-      options_x: 136,
-      options_start_y: 1220,
-      option_line_gap_px: 116,
-      option_font_size: 82,
-      reveal_y: 1690,
+      option_label_gap_px: 10,
+      option_label_font_size: 78,
+      reveal_y: 1520,
       reveal_font_size: 110,
     },
     sprite_grid: {
@@ -62,16 +60,46 @@ const template = {
       },
       item_size_px: 236,
       min_item_size_px: 176,
-      column_gap_px: 42,
-      row_gap_px: 54,
-      sprite_scale_multiplier: 1.18,
+      column_gap_px: 62,
+      row_gap_px: 112,
+      sprite_scale_multiplier: 1.58,
       placeholder_scale_multiplier: 0.92,
       stage_bounds_px: {
         left: 96,
-        top: 420,
+        top: 360,
         width: 888,
+        height: 620,
+      },
+    },
+    option_grid: {
+      rows: 2,
+      columns: 2,
+      item_size_px: 196,
+      min_item_size_px: 168,
+      column_gap_px: 120,
+      row_gap_px: 96,
+      sprite_scale_multiplier: 1.12,
+      stage_bounds_px: {
+        left: 160,
+        top: 680,
+        width: 760,
         height: 500,
       },
+    },
+    reveal_sprite: {
+      center_x: 540,
+      center_y: 920,
+      item_size_px: 320,
+      sprite_scale_multiplier: 1.08,
+    },
+    sprite_platform: {
+      study_enabled: false,
+      option_enabled: true,
+      reveal_enabled: false,
+      study_width_multiplier: 0.9,
+      option_width_multiplier: 0.9,
+      reveal_width_multiplier: 0.92,
+      center_y_offset_multiplier: 0.34,
     },
     timer: {
       countdown_from: 3,
@@ -121,12 +149,14 @@ const assetInventory = {
     timer: '/tmp/timer.gif',
     timer_countdown: '/tmp/timer-countdown.gif',
     timer_alarm: '/tmp/timer-alarm.gif',
+    grass_plateau: '/tmp/grass-plateau.png',
     type_placeholder: '/tmp/question-mark.png',
   },
   overlays: [
     '/tmp/timer.gif',
     '/tmp/timer-countdown.gif',
     '/tmp/timer-alarm.gif',
+    '/tmp/grass-plateau.png',
     '/tmp/question-mark.png',
   ],
   transitions: [],
@@ -158,8 +188,9 @@ test('generic planner dispatch builds a memory round with one off-screen answer 
     plan.question.options.filter((option) => option.appeared_on_screen).length,
     3,
   );
+  assert.equal(plan.question.options.every((option) => option.render_sprite_path), true);
+  assert.equal(plan.assets.reveal_pokemon.name, plan.question.hidden_subject.name);
   assert.equal(plan.assets.background.selected_path, '/tmp/ice-backgrounds/glacier.png');
-  assert.equal(plan.assets.overlays.selected_hidden_placeholder_path, '/tmp/question-mark.png');
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Memory$/u);
   assert.deepEqual(plan.required_asset_gaps, []);
 });
@@ -234,7 +265,7 @@ test('memory render plan keeps memorize, question, countdown, and reveal timing 
   assert.equal(renderPlan.output_path, '/tmp/memory.mp4');
 });
 
-test('memory visual inputs include one shared placeholder overlay and all displayed sprites', async () => {
+test('memory visual inputs include study sprites, question-option sprites, and the reveal sprite', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -253,12 +284,14 @@ test('memory visual inputs include one shared placeholder overlay and all displa
     'background',
     'timer-countdown',
     'timer-alarm',
-    'hidden-placeholder',
+    'grass-platform',
   ]);
   assert.equal(inputs.filter((input) => input.role.startsWith('display-sprite-')).length, 6);
+  assert.equal(inputs.filter((input) => input.role.startsWith('option-sprite-')).length, 4);
+  assert.equal(inputs.some((input) => input.role === 'reveal-sprite'), true);
 });
 
-test('memory drawtext artifacts place the multiple-choice answers in a vertical list', async () => {
+test('memory drawtext artifacts place the multiple-choice labels under a 2x2 sprite grid', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -274,8 +307,9 @@ test('memory drawtext artifacts place the multiple-choice answers in a vertical 
 
   const artifacts = buildTextArtifacts({ renderPlan, template });
   assert.equal(artifacts.options.lines.length, 4);
-  assert.equal(artifacts.options.lines[0].text.startsWith('A. '), true);
-  assert.equal(artifacts.options.lines[1].y - artifacts.options.lines[0].y, 116);
+  assert.equal(artifacts.options.lines[0].text, 'A');
+  assert.match(artifacts.options.lines[0].x_expression, /-text_w\/2$/u);
+  assert.notEqual(artifacts.options.lines[1].y - artifacts.options.lines[0].y, 116);
 });
 
 test('memory audio filter schedules hook, question, countdown ticks, and reveal cue in order', async () => {
@@ -309,7 +343,7 @@ test('memory audio filter schedules hook, question, countdown ticks, and reveal 
   assert.match(script, /\[5:a\]adelay=6350\|6350,volume=0\.9\[timerend\]/u);
 });
 
-test('memory visual filter shows sprites, swaps to hidden placeholders, and never draws a zero countdown', async () => {
+test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden answer reveal, and never draws a zero countdown', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -331,8 +365,10 @@ test('memory visual filter shows sprites, swaps to hidden placeholders, and neve
       background: 0,
       timerCountdown: 1,
       timerAlarm: 2,
-      hiddenPlaceholder: 3,
+      grassPlatform: 3,
       sprites: [4, 5, 6, 7, 8, 9],
+      optionSprites: [10, 11, 12, 13],
+      revealSprite: 14,
     },
     '/tmp/font.ttf',
     {
@@ -341,20 +377,26 @@ test('memory visual filter shows sprites, swaps to hidden placeholders, and neve
       options: {
         segments: plan.question.options.map((option, index) => ({
           file_path: `/tmp/option-${index}.txt`,
-          x: 136,
-          y: 1220 + (index * 116),
-          font_size: 82,
+          x_expression: `${300 + (index * 10)}-text_w/2`,
+          y: 1220 + (index * 40),
+          font_size: 78,
           start_seconds: 2.9,
-          end_seconds: 8.45,
+          end_seconds: 6.35,
         })),
       },
       reveal: { segments: [{ file_path: '/tmp/reveal.txt', y: 1690, font_size: 110, start_seconds: 6.51, end_seconds: 8.45 }] },
     },
   );
 
+  assert.match(visualFilter.script, /\[3:v\]fps=30,scale=.*:-1,format=rgba/u);
   assert.match(visualFilter.script, /\[4:v\]fps=30,scale=/u);
-  assert.match(visualFilter.script, /\[3:v\]fps=30,scale=/u);
+  assert.match(visualFilter.script, /\[10:v\]fps=30,scale=/u);
+  assert.match(visualFilter.script, /\[14:v\]fps=30,scale=/u);
+  assert.match(visualFilter.script, /memoption0platform/u);
+  assert.doesNotMatch(visualFilter.script, /memstudy0platform/u);
+  assert.doesNotMatch(visualFilter.script, /memrevealplatform/u);
   assert.match(visualFilter.script, /overlay=.*enable='between\(t,2\.9,6\.35\)'/u);
+  assert.match(visualFilter.script, /overlay=.*enable='between\(t,6\.[0-9]+,8\.45\)'/u);
   assert.match(visualFilter.script, /drawtext=textfile='\/tmp\/option-0\.txt'/u);
   assert.match(visualFilter.script, /drawtext=text='3'/u);
   assert.match(visualFilter.script, /drawtext=text='1'/u);

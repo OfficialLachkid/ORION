@@ -17,23 +17,109 @@ function overlayRange(startSeconds, endSeconds) {
   return formatEnableBetween(startSeconds, endSeconds);
 }
 
+function buildHoldThenLerpExpression(startValue, endValue, startSeconds, endSeconds) {
+  const from = Number(ensureNumber(startValue, 0).toFixed(3));
+  const to = Number(ensureNumber(endValue, from).toFixed(3));
+  const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
+  const end = Number(ensureNumber(endSeconds, start).toFixed(3));
+  const duration = Number(Math.max(0, end - start).toFixed(3));
+  if (duration <= 0 || from === to) {
+    return `${to}`;
+  }
+  return `if(lt(t,${start}),${from},if(lt(t,${end}),${from}+(${to}-${from})*((t-${start})/${duration}),${to}))`;
+}
+
+function resolvePlatformLayout(template, variant) {
+  const config = template?.layout?.sprite_platform || {};
+  const defaultEnabled = config.enabled !== false;
+  const defaultWidthMultiplier = ensureNumber(config.width_multiplier, 0.9);
+  return {
+    enabled: config[`${variant}_enabled`] !== undefined
+      ? config[`${variant}_enabled`] !== false
+      : defaultEnabled,
+    width_multiplier: ensureNumber(
+      config[`${variant}_width_multiplier`],
+      defaultWidthMultiplier,
+    ),
+    center_y_offset_multiplier: ensureNumber(config.center_y_offset_multiplier, 0.34),
+  };
+}
+
+function appendPlatformAndSprite({
+  filters,
+  currentVideoLabel,
+  inputRefs,
+  spriteInputIndex,
+  spriteLabel,
+  outputLabel,
+  platformLabelPrefix,
+  platformVariant,
+  spriteSize,
+  centerX,
+  centerY,
+  enableExpression,
+  fps,
+  template,
+}) {
+  let baseVideoLabel = currentVideoLabel;
+  const platformLayout = resolvePlatformLayout(template, platformVariant);
+  if (inputRefs.grassPlatform != null && platformLayout.enabled) {
+    const platformWidth = Number((spriteSize * platformLayout.width_multiplier).toFixed(3));
+    const platformCenterY = Number((centerY + (spriteSize * platformLayout.center_y_offset_multiplier)).toFixed(3));
+    const platformLabel = `${platformLabelPrefix}platform`;
+    const platformVideoLabel = `${platformLabelPrefix}platformv`;
+    filters.push(
+      `[${inputRefs.grassPlatform}:v]fps=${fps},scale=${platformWidth}:-1,format=rgba,setsar=1[${platformLabel}]`,
+    );
+    filters.push(
+      `[${baseVideoLabel}][${platformLabel}]overlay=x='${centerX}-w/2':y='${platformCenterY}-h/2':enable='${enableExpression}'[${platformVideoLabel}]`,
+    );
+    baseVideoLabel = platformVideoLabel;
+  }
+
+  filters.push(
+    `[${spriteInputIndex}:v]fps=${fps},scale=${spriteSize}:${spriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteLabel}]`,
+  );
+  filters.push(
+    `[${baseVideoLabel}][${spriteLabel}]overlay=x='${centerX}-w/2':y='${centerY}-h/2':enable='${enableExpression}'[${outputLabel}]`,
+  );
+  return outputLabel;
+}
+
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts) {
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
   const questionStart = ensureNumber(renderPlan.phases.question?.start_seconds, 0);
   const countdownStart = ensureNumber(renderPlan.phases.countdown?.start_seconds, questionStart);
   const revealStart = ensureNumber(renderPlan.phases.reveal?.start_seconds, countdownStart);
+  const revealVisualStart = ensureNumber(renderPlan.audio_cues?.reveal_visual_start_seconds, revealStart);
   const hookStart = ensureNumber(renderPlan.phases.hook?.start_seconds, 0);
   const memorizeVisibleEnd = questionStart;
   const gridLayout = renderPlan.grid || { cells: [] };
+  const optionGridLayout = renderPlan.option_grid || { cells: [] };
+  const revealTargetCenterX = ensureNumber(renderPlan.reveal_sprite?.center_x, width / 2);
+  const revealTargetCenterY = ensureNumber(renderPlan.reveal_sprite?.center_y, 920);
+  const correctOptionIndex = Number.isInteger(plan.question?.correct_option_index)
+    ? plan.question.correct_option_index
+    : -1;
+  const correctOptionCell = optionGridLayout.cells[correctOptionIndex] || null;
+  const revealStartCenterX = ensureNumber(correctOptionCell?.center_x, revealTargetCenterX);
+  const revealStartCenterY = ensureNumber(correctOptionCell?.center_y, revealTargetCenterY);
+  const revealCenterXExpression = buildHoldThenLerpExpression(
+    revealStartCenterX,
+    revealTargetCenterX,
+    revealStart,
+    revealVisualStart,
+  );
+  const revealCenterYExpression = buildHoldThenLerpExpression(
+    revealStartCenterY,
+    revealTargetCenterY,
+    revealStart,
+    revealVisualStart,
+  );
 
   filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
   let currentVideoLabel = 'v0';
-
-  const placeholderSize = Number((
-    ensureNumber(gridLayout.item_size_px, 220)
-    * ensureNumber(gridLayout.placeholder_scale_multiplier, 0.92)
-  ).toFixed(3));
 
   for (let index = 0; index < (inputRefs.sprites || []).length && index < gridLayout.cells.length; index += 1) {
     const pokemon = plan.assets.pokemon[index] || {};
@@ -45,32 +131,78 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     ).toFixed(3));
     const spriteLabel = `memsprite${index}`;
     const memorizeLabel = `memshow${index}`;
-    const revealLabel = `memreveal${index}`;
-    filters.push(
-      `[${inputRefs.sprites[index]}:v]fps=${fps},scale=${spriteSize}:${spriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteLabel}]`,
-    );
-    filters.push(
-      `[${currentVideoLabel}][${spriteLabel}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${overlayRange(hookStart, memorizeVisibleEnd)}'[${memorizeLabel}]`,
-    );
-    filters.push(
-      `[${memorizeLabel}][${spriteLabel}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${overlayRange(revealStart, renderPlan.total_duration_seconds)}'[${revealLabel}]`,
-    );
-    currentVideoLabel = revealLabel;
+    currentVideoLabel = appendPlatformAndSprite({
+      filters,
+      currentVideoLabel,
+      inputRefs,
+      spriteInputIndex: inputRefs.sprites[index],
+      spriteLabel,
+      outputLabel: memorizeLabel,
+      platformLabelPrefix: `memstudy${index}`,
+      platformVariant: 'study',
+      spriteSize,
+      centerX: cell.center_x,
+      centerY: cell.center_y,
+      enableExpression: overlayRange(hookStart, memorizeVisibleEnd),
+      fps,
+      template,
+    });
   }
 
-  if (inputRefs.hiddenPlaceholder != null) {
-    for (let index = 0; index < gridLayout.cells.length; index += 1) {
-      const cell = gridLayout.cells[index];
-      const placeholderLabel = `hiddenph${index}`;
-      const hiddenVideoLabel = `hiddenv${index}`;
-      filters.push(
-        `[${inputRefs.hiddenPlaceholder}:v]fps=${fps},scale=${placeholderSize}:${placeholderSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${placeholderLabel}]`,
-      );
-      filters.push(
-        `[${currentVideoLabel}][${placeholderLabel}]overlay=${cell.center_x}-w/2:${cell.center_y}-h/2:enable='${overlayRange(questionStart, revealStart)}'[${hiddenVideoLabel}]`,
-      );
-      currentVideoLabel = hiddenVideoLabel;
+  if ((inputRefs.optionSprites || []).length > 0) {
+    for (let index = 0; index < inputRefs.optionSprites.length && index < optionGridLayout.cells.length; index += 1) {
+      const option = plan.question?.options?.[index] || {};
+      const cell = optionGridLayout.cells[index];
+      const spriteSize = Number((
+        ensureNumber(optionGridLayout.item_size_px, 196)
+        * ensureNumber(optionGridLayout.sprite_scale_multiplier, 1)
+        * ensureNumber(option.sprite_display_scale_multiplier, 1)
+      ).toFixed(3));
+      const optionSpriteLabel = `memoption${index}`;
+      const optionVideoLabel = `memoptionv${index}`;
+      currentVideoLabel = appendPlatformAndSprite({
+        filters,
+        currentVideoLabel,
+        inputRefs,
+        spriteInputIndex: inputRefs.optionSprites[index],
+        spriteLabel: optionSpriteLabel,
+        outputLabel: optionVideoLabel,
+      platformLabelPrefix: `memoption${index}`,
+      platformVariant: 'option',
+      spriteSize,
+      centerX: cell.center_x,
+      centerY: cell.center_y,
+        enableExpression: overlayRange(questionStart, revealStart),
+        fps,
+        template,
+      });
     }
+  }
+
+  if (inputRefs.revealSprite != null) {
+    const spriteSize = Number((
+      ensureNumber(renderPlan.reveal_sprite?.item_size_px, 320)
+      * ensureNumber(renderPlan.reveal_sprite?.sprite_scale_multiplier, 1)
+      * ensureNumber(plan.assets.reveal_pokemon?.sprite_display_scale_multiplier, 1)
+    ).toFixed(3));
+    const revealSpriteLabel = 'memrevealsprite';
+    const revealVideoLabel = 'memrevealvideo';
+    currentVideoLabel = appendPlatformAndSprite({
+      filters,
+      currentVideoLabel,
+      inputRefs,
+      spriteInputIndex: inputRefs.revealSprite,
+      spriteLabel: revealSpriteLabel,
+      outputLabel: revealVideoLabel,
+      platformLabelPrefix: 'memreveal',
+      platformVariant: 'reveal',
+      spriteSize,
+      centerX: revealCenterXExpression,
+      centerY: revealCenterYExpression,
+      enableExpression: overlayRange(revealStart, renderPlan.total_duration_seconds),
+      fps,
+      template,
+    });
   }
 
   if (inputRefs.timerCountdown != null) {
@@ -106,7 +238,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   }
   for (const line of optionSegments) {
     drawtextParts.push(
-      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${ensureNumber(line.font_size, 82)}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${ensureNumber(line.x, 136)}:y=${ensureNumber(line.y, 1220)}:enable='${overlayRange(line.start_seconds, line.end_seconds)}'`,
+      `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${ensureNumber(line.font_size, 78)}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${line.x_expression || ensureNumber(line.x, 136)}:y=${ensureNumber(line.y, 1220)}:enable='${overlayRange(line.start_seconds, line.end_seconds)}'`,
     );
   }
   for (const line of revealSegments) {

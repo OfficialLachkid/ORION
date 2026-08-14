@@ -86,10 +86,9 @@
     }
   },
   "question_contract": {
-    "hook_text": "Memorize these Pokemon",
+    "hook_text": "How good is your memory?",
     "hook_text_variants": [
-      "Memorize these Pokemon",
-      "Study these Pokemon"
+      "How good is your memory?"
     ],
     "question_text": "Which Pokemon was NOT on screen?",
     "question_text_variants": [
@@ -107,15 +106,13 @@
       "fit": "cover"
     },
     "text": {
-      "hook_y": 250,
-      "hook_font_size": 132,
-      "question_y": 1020,
+      "hook_y": 210,
+      "hook_font_size": 124,
+      "question_y": 190,
       "question_font_size": 88,
-      "options_x": 136,
-      "options_start_y": 1220,
-      "option_line_gap_px": 116,
-      "option_font_size": 82,
-      "reveal_y": 1690,
+      "option_label_gap_px": 16,
+      "option_label_font_size": 78,
+      "reveal_y": 1000,
       "reveal_font_size": 110
     },
     "sprite_grid": {
@@ -137,16 +134,46 @@
       },
       "item_size_px": 236,
       "min_item_size_px": 176,
-      "column_gap_px": 42,
-      "row_gap_px": 54,
-      "sprite_scale_multiplier": 1.18,
+      "column_gap_px": 82,
+      "row_gap_px": 150,
+      "sprite_scale_multiplier": 1.58,
       "placeholder_scale_multiplier": 0.92,
       "stage_bounds_px": {
         "left": 96,
-        "top": 420,
+        "top": 350,
         "width": 888,
-        "height": 500
+        "height": 680
       }
+    },
+    "option_grid": {
+      "rows": 2,
+      "columns": 2,
+      "item_size_px": 320,
+      "min_item_size_px": 250,
+      "column_gap_px": 150,
+      "row_gap_px": 150,
+      "sprite_scale_multiplier": 1.72,
+      "stage_bounds_px": {
+        "left": 100,
+        "top": 280,
+        "width": 880,
+        "height": 860
+      }
+    },
+    "reveal_sprite": {
+      "center_x": 540,
+      "center_y": 920,
+      "item_size_px": 320,
+      "sprite_scale_multiplier": 1.08
+    },
+    "sprite_platform": {
+      "study_enabled": false,
+      "option_enabled": true,
+      "reveal_enabled": false,
+      "study_width_multiplier": 0.9,
+      "option_width_multiplier": 0.9,
+      "reveal_width_multiplier": 0.92,
+      "center_y_offset_multiplier": 0.34
     },
     "timer": {
       "countdown_from": 3,

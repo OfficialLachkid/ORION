@@ -153,8 +153,10 @@ export async function renderPokeQuizzVideo({
     background: inputRoleIndex.get('background'),
     timerCountdown: inputRoleIndex.has('timer-countdown') ? inputRoleIndex.get('timer-countdown') : null,
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
-    hiddenPlaceholder: inputRoleIndex.has('hidden-placeholder') ? inputRoleIndex.get('hidden-placeholder') : null,
+    grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     sprites: (plan.assets.pokemon || []).map((_, index) => inputRoleIndex.get(`display-sprite-${index}`)),
+    optionSprites: (plan.question?.options || []).map((_, index) => inputRoleIndex.get(`option-sprite-${index}`)),
+    revealSprite: inputRoleIndex.has('reveal-sprite') ? inputRoleIndex.get('reveal-sprite') : null,
   };
   const fontPath = await resolveFontPath(fontCandidates);
   const textArtifacts = await writeDrawtextArtifacts({

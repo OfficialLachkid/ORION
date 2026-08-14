@@ -630,16 +630,25 @@ function buildQuestionTextBundle(template, random, answerName) {
   };
 }
 
-function buildQuestionState({ displayedSubjects, hiddenSubject, questionText, random }) {
+function buildQuestionState({
+  displayedSubjects,
+  hiddenSubject,
+  displayedSubjectAssetsById,
+  hiddenSubjectAsset,
+  questionText,
+  random,
+}) {
   const distractors = sampleArray(displayedSubjects, 3, random);
   const optionEntries = shuffle([
     ...distractors.map((subject) => ({
       subject,
+      asset: displayedSubjectAssetsById.get(subject.id),
       is_correct: false,
       appeared_on_screen: true,
     })),
     {
       subject: hiddenSubject,
+      asset: hiddenSubjectAsset,
       is_correct: true,
       appeared_on_screen: false,
     },
@@ -652,6 +661,9 @@ function buildQuestionState({ displayedSubjects, hiddenSubject, questionText, ra
     pokedex_id: entry.subject.id,
     is_correct: entry.is_correct,
     appeared_on_screen: entry.appeared_on_screen,
+    sprite_path: entry.asset?.sprite_path || entry.subject.sprite_path,
+    render_sprite_path: entry.asset?.render_sprite_path || entry.subject.sprite_path,
+    sprite_display_scale_multiplier: Number(entry.asset?.sprite_display_scale_multiplier ?? 1),
   }));
   const correctOption = options.find((option) => option.is_correct) || options[0];
 
@@ -665,6 +677,8 @@ function buildQuestionState({ displayedSubjects, hiddenSubject, questionText, ra
       generation: hiddenSubject.generation,
       region: hiddenSubject.region,
       types: hiddenSubject.types,
+      sprite_path: hiddenSubjectAsset?.sprite_path || hiddenSubject.sprite_path,
+      render_sprite_path: hiddenSubjectAsset?.render_sprite_path || hiddenSubject.sprite_path,
     },
     option_count: options.length,
     correct_option_label: correctOption.label,
@@ -716,12 +730,6 @@ export async function planPokemonMemoryChallenge({
 
   const gridLayout = buildMemoryGridLayout(template, selectedDifficulty);
   const questionTextBundle = buildQuestionTextBundle(template, random, hiddenSubject.name);
-  const question = buildQuestionState({
-    displayedSubjects: displaySubjects,
-    hiddenSubject,
-    questionText: questionTextBundle.question,
-    random,
-  });
   const renderedPokemon = await Promise.all(displaySubjects.map(async (subject) => (
     buildSubjectAssetRecord(
       subject,
@@ -729,6 +737,20 @@ export async function planPokemonMemoryChallenge({
       1,
     )
   )));
+  const hiddenSubjectAsset = buildSubjectAssetRecord(
+    hiddenSubject,
+    await resolveMemorySpritePath(hiddenSubject.sprite_path),
+    1,
+  );
+  const displayedSubjectAssetsById = new Map(renderedPokemon.map((subject) => [subject.pokedex_id, subject]));
+  const question = buildQuestionState({
+    displayedSubjects: displaySubjects,
+    hiddenSubject,
+    displayedSubjectAssetsById,
+    hiddenSubjectAsset,
+    questionText: questionTextBundle.question,
+    random,
+  });
   const selectedBackgroundPath = selectBackgroundForTypePair(
     inventory.backgrounds,
     selectedPair.pair,
@@ -756,9 +778,6 @@ export async function planPokemonMemoryChallenge({
   const memorizeHoldSeconds = Number(template?.layout?.rounds?.memorize_hold_seconds ?? 2);
   const questionLeadSeconds = Number(template?.layout?.rounds?.question_lead_seconds ?? 0.45);
   const revealHoldSeconds = Number(template?.layout?.rounds?.reveal_hold_seconds ?? 2.1);
-  const selectedHiddenPlaceholderPath = inventory.overlay_presets?.type_placeholder
-    || inventory.overlay_presets?.pokeball_primary
-    || null;
 
   const requiredAssetGaps = [];
   if (!selectedBackgroundPath) requiredAssetGaps.push('background_missing');
@@ -768,9 +787,14 @@ export async function planPokemonMemoryChallenge({
   if (!inventory.overlay_presets?.timer_countdown && !inventory.overlay_presets?.timer) {
     requiredAssetGaps.push('timer_overlay_missing');
   }
-  if (!selectedHiddenPlaceholderPath) requiredAssetGaps.push('hidden_placeholder_overlay_missing');
+  if (!inventory.overlay_presets?.grass_plateau) {
+    requiredAssetGaps.push('grass_plateau_overlay_missing');
+  }
   if (!renderedPokemon.every((subject) => subject.render_sprite_path || subject.sprite_path)) {
     requiredAssetGaps.push('pokemon_sprite_local_assets_missing');
+  }
+  if (!(hiddenSubjectAsset.render_sprite_path || hiddenSubjectAsset.sprite_path)) {
+    requiredAssetGaps.push('hidden_answer_sprite_missing');
   }
 
   return {
@@ -853,15 +877,13 @@ export async function planPokemonMemoryChallenge({
       },
       type_icons: [],
       pokemon: renderedPokemon,
+      reveal_pokemon: hiddenSubjectAsset,
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
         selected_timer_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
         selected_timer_countdown_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
         selected_timer_alarm_path: inventory.overlay_presets?.timer_alarm || null,
-        selected_hidden_placeholder_path: selectedHiddenPlaceholderPath,
-        selected_hidden_placeholder_kind: selectedHiddenPlaceholderPath === inventory.overlay_presets?.type_placeholder
-          ? 'question-mark'
-          : 'pokeball',
+        selected_grass_plateau_path: inventory.overlay_presets?.grass_plateau || null,
         sprite_grid: gridLayout,
         available_paths: inventory.overlays,
       },
