@@ -504,6 +504,7 @@ function getTemplateSelectionConfig(template) {
       .map((value) => Number.parseInt(String(value), 10))
       .filter((value) => Number.isFinite(value) && value > 0)
     : [];
+  const difficultyCatalog = buildDifficultyCatalog(template);
   return {
     generationScope: configuredGenerationScope.length > 0 ? configuredGenerationScope : null,
     disallowedPairs: new Set(
@@ -511,7 +512,10 @@ function getTemplateSelectionConfig(template) {
         .map((pair) => createTypePairKey(pair)),
     ),
     minCatalogMatches: Number(typePairPolicy.min_catalog_matches || 5),
-    difficultyCatalog: buildDifficultyCatalog(template),
+    difficultyCatalog,
+    minimumSelectableCount: difficultyCatalog.reduce((minimum, entry) => (
+      Math.min(minimum, entry.sprite_count + 1)
+    ), Number.POSITIVE_INFINITY),
   };
 }
 
@@ -529,13 +533,29 @@ function buildPairCatalog(rows, config) {
       continue;
     }
 
-    const existing = pairCatalog.get(pairKey) || { pair, matches: [] };
+    const existing = pairCatalog.get(pairKey) || {
+      pair,
+      matches: [],
+      selectable_matches: [],
+      selectable_count: 0,
+    };
     existing.matches.push(row);
     pairCatalog.set(pairKey, existing);
   }
 
   return [...pairCatalog.values()]
-    .filter((entry) => entry.matches.length >= config.minCatalogMatches)
+    .map((entry) => {
+      const selectableMatches = collapseSubjectVariants(entry.matches.filter((subject) => subject.sprite_path));
+      return {
+        ...entry,
+        selectable_matches: selectableMatches,
+        selectable_count: selectableMatches.length,
+      };
+    })
+    .filter((entry) => (
+      entry.matches.length >= config.minCatalogMatches
+      && entry.selectable_count >= config.minimumSelectableCount
+    ))
     .sort((left, right) => left.pair.join('|').localeCompare(right.pair.join('|')));
 }
 
@@ -683,7 +703,7 @@ export async function planPokemonMemoryChallenge({
   const selectedPair = pickPair(pairCatalog, forcedTypePair, random, normalizedSelectionState);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
   const selectableSubjects = prioritizeSelectableSubjects(
-    collapseSubjectVariants(selectedPair.matches.filter((subject) => subject.sprite_path)),
+    selectedPair.selectable_matches,
     random,
   );
   const selectedDifficulty = chooseDifficulty(config.difficultyCatalog, selectableSubjects.length, random);

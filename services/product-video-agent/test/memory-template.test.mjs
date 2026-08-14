@@ -164,6 +164,52 @@ test('generic planner dispatch builds a memory round with one off-screen answer 
   assert.deepEqual(plan.required_asset_gaps, []);
 });
 
+test('memory planner rejects a forced pair when form-collapsing leaves too few unique Pokemon for any grid', async () => {
+  const constrainedTemplate = {
+    ...template,
+    layout: {
+      ...template.layout,
+      sprite_grid: {
+        ...template.layout.sprite_grid,
+        difficulty_levels: {
+          easy: {
+            sprite_count: 4,
+            rows: 2,
+            columns: 2,
+          },
+          medium: {
+            sprite_count: 6,
+            rows: 2,
+            columns: 3,
+          },
+        },
+        difficulty_weights: {
+          easy: 1,
+          medium: 1,
+        },
+      },
+    },
+  };
+  const constrainedRows = [
+    { id: 'pokedex-0150', national_dex_number: 150, name: 'Mewtwo', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/mewtwo-base.png', metadata: { pokemon_api: { is_default_form: true, order: 1 } } },
+    { id: 'pokedex-0150-mega-x', national_dex_number: 150, name: 'Mewtwo Mega X', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/mewtwo-mega-x.png', metadata: { pokemon_api: { is_mega: true, order: 2 } } },
+    { id: 'pokedex-0059', national_dex_number: 59, name: 'Arcanine', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/arcanine.png', metadata: { pokemon_api: { is_default_form: true } } },
+    { id: 'pokedex-0078', national_dex_number: 78, name: 'Rapidash', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/rapidash.png', metadata: { pokemon_api: { is_default_form: true } } },
+    { id: 'pokedex-0136', national_dex_number: 136, name: 'Flareon', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/flareon.png', metadata: { pokemon_api: { is_default_form: true } } },
+  ];
+
+  await assert.rejects(
+    planPokemonTypeChallenge({
+      template: constrainedTemplate,
+      pokedexRows: constrainedRows,
+      seed: 'memory-invalid-collapsed-pair',
+      forcedTypePair: ['fire', 'ice'],
+      assetInventory,
+    }),
+    /No eligible Pokemon match the requested type pair/u,
+  );
+});
+
 test('memory render plan keeps memorize, question, countdown, and reveal timing deterministic', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
