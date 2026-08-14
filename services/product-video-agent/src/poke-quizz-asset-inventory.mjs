@@ -186,6 +186,9 @@ export function selectOverlayPresets(overlays) {
   const typePlaceholder = matchOverlay(overlays, ['question', 'mark'])
     || matchOverlay(overlays, ['question-mark'])
     || matchOverlay(overlays, ['question_mark']);
+  const disappear = matchOverlay(overlays, ['disappear'])
+    || matchOverlay(overlays, ['vanish'])
+    || matchOverlay(overlays, ['poof']);
   const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
     timer,
@@ -198,6 +201,7 @@ export function selectOverlayPresets(overlays) {
     shiny_sparkle: shinySparkle,
     grass_plateau: grassPlateau,
     type_placeholder: typePlaceholder,
+    disappear,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
       || matchOverlay(overlays, ['open', 'close', 'pokeball']),

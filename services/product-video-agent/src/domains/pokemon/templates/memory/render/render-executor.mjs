@@ -76,10 +76,14 @@ export async function renderPokeQuizzVideo({
         cwd: projectRoot,
       })
     ))),
-    plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path
+    plan.assets.overlays.selected_timer_hp_bar_path
+      || plan.assets.overlays.selected_timer_countdown_path
+      || plan.assets.overlays.selected_timer_path
       ? probeMediaDurationSeconds({
         ffmpegExecutable,
-        mediaPath: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
+        mediaPath: plan.assets.overlays.selected_timer_hp_bar_path
+          || plan.assets.overlays.selected_timer_countdown_path
+          || plan.assets.overlays.selected_timer_path,
         cwd: projectRoot,
       })
       : Promise.resolve(null),
@@ -103,7 +107,11 @@ export async function renderPokeQuizzVideo({
   });
   if (timerVisualDurationSeconds) {
     plan.assets.overlays.selected_timer_duration_seconds = timerVisualDurationSeconds;
-    plan.assets.overlays.selected_timer_countdown_duration_seconds = timerVisualDurationSeconds;
+    if (plan.assets.overlays.selected_timer_hp_bar_path) {
+      plan.assets.overlays.selected_timer_hp_bar_duration_seconds = timerVisualDurationSeconds;
+    } else {
+      plan.assets.overlays.selected_timer_countdown_duration_seconds = timerVisualDurationSeconds;
+    }
   }
   if (timerAlarmDurationSeconds) {
     plan.assets.overlays.selected_timer_alarm_duration_seconds = timerAlarmDurationSeconds;
@@ -151,9 +159,12 @@ export async function renderPokeQuizzVideo({
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
   const inputRefs = {
     background: inputRoleIndex.get('background'),
+    timerHpBar: inputRoleIndex.has('timer-hp-bar') ? inputRoleIndex.get('timer-hp-bar') : null,
+    timerHpBarFrame: inputRoleIndex.has('timer-hp-bar-frame') ? inputRoleIndex.get('timer-hp-bar-frame') : null,
     timerCountdown: inputRoleIndex.has('timer-countdown') ? inputRoleIndex.get('timer-countdown') : null,
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
+    introDisappear: inputRoleIndex.has('intro-disappear') ? inputRoleIndex.get('intro-disappear') : null,
     sprites: (plan.assets.pokemon || []).map((_, index) => inputRoleIndex.get(`display-sprite-${index}`)),
     optionSprites: (plan.question?.options || []).map((_, index) => inputRoleIndex.get(`option-sprite-${index}`)),
     revealSprite: inputRoleIndex.has('reveal-sprite') ? inputRoleIndex.get('reveal-sprite') : null,

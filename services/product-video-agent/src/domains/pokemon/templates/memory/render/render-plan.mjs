@@ -9,11 +9,44 @@ import {
   buildPhaseSchedule,
 } from '../../dual-type-reveal/render/phase-schedule.mjs';
 
-function buildTimerLayout(template) {
+const HP_BAR_TIMER_DISPLAY_MODE = 'hp_bar_depletion';
+
+function buildTimerLayout(template, optionGridLayout = null, timerDisplayMode = '') {
+  if (String(timerDisplayMode || '').trim().toLowerCase() === HP_BAR_TIMER_DISPLAY_MODE) {
+    const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
+    const canvasHeight = ensureNumber(template?.canvas?.height, 1920);
+    const safeBottom = ensureNumber(template?.canvas?.safe_zone?.bottom, 260);
+    const stageBounds = optionGridLayout?.stage_bounds_px || {};
+    const stageLeft = ensureNumber(stageBounds.left, 100);
+    const stageWidth = ensureNumber(stageBounds.width, canvasWidth - (stageLeft * 2));
+    const stageBottom = ensureNumber(stageBounds.top, 280) + ensureNumber(stageBounds.height, 860);
+    const gapTop = ensureNumber(template?.layout?.timer?.hp_bar_top_gap_px, 34);
+    const maxHeight = ensureNumber(template?.layout?.timer?.hp_bar_max_height_px, 170);
+    const configuredWidth = ensureNumber(
+      template?.layout?.timer?.hp_bar_width_px,
+      Math.max(720, stageWidth - 20),
+    );
+    const width = Math.min(canvasWidth - 60, Math.max(640, configuredWidth));
+    const height = Math.min(maxHeight, canvasHeight - safeBottom - stageBottom - gapTop);
+    const stageCenterX = stageLeft + Math.floor(stageWidth / 2);
+    const x = roundTime(Math.max(30, Math.floor(stageCenterX - (width / 2))));
+    const y = roundTime(stageBottom + gapTop);
+    return {
+      mode: HP_BAR_TIMER_DISPLAY_MODE,
+      x,
+      y,
+      width: roundTime(width),
+      height: roundTime(Math.max(96, height)),
+      number_center_x: null,
+      number_center_y: null,
+    };
+  }
+
   const size = ensureNumber(template?.layout?.timer?.size_px, DEFAULT_TIMER_SIZE);
   const centerX = ensureNumber(template?.layout?.timer?.center_x, 540);
   const centerY = ensureNumber(template?.layout?.timer?.center_y, 930);
   return {
+    mode: 'numeric_with_small_ring',
     x: roundTime(centerX - (size / 2)),
     y: roundTime(centerY - (size / 2)),
     width: roundTime(size),
@@ -132,6 +165,12 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const revealPhase = schedule.phases.reveal || { start_seconds: schedule.total_duration_seconds, end_seconds: schedule.total_duration_seconds };
   const questionPhase = schedule.phases.question || { start_seconds: 0, end_seconds: 0 };
   const countdownPhase = schedule.phases.countdown || { start_seconds: questionPhase.end_seconds, end_seconds: questionPhase.end_seconds };
+  const optionGridLayout = buildOptionGridLayout(template, plan.question?.options?.length || 4);
+  const timerLayout = buildTimerLayout(
+    template,
+    optionGridLayout,
+    plan.assets.overlays?.timer_display_mode,
+  );
   const configuredBattleMusicStartSeconds = roundTime(
     Math.max(0, ensureNumber(template?.audio?.battle_intro_music?.start_seconds, 0)),
   );
@@ -150,14 +189,16 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     },
     phases: schedule.phases,
     total_duration_seconds: schedule.total_duration_seconds,
-    timer_layout: buildTimerLayout(template),
-    countdown_numbers: buildCountdownMoments(
-      schedule,
-      template?.layout?.timer?.countdown_from,
-      template?.layout?.timer?.countdown_to,
-    ),
+    timer_layout: timerLayout,
+    countdown_numbers: timerLayout.mode === HP_BAR_TIMER_DISPLAY_MODE
+      ? []
+      : buildCountdownMoments(
+        schedule,
+        template?.layout?.timer?.countdown_from,
+        template?.layout?.timer?.countdown_to,
+      ),
     grid: plan.assets.overlays?.sprite_grid || { cells: [] },
-    option_grid: buildOptionGridLayout(template, plan.question?.options?.length || 4),
+    option_grid: optionGridLayout,
     reveal_sprite: buildRevealSpriteLayout(template),
     audio_cues: {
       hook_start_seconds: schedule.phases.hook?.start_seconds ?? 0,
@@ -219,18 +260,21 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
   };
   const countdownFrom = Number.parseInt(renderPlan.countdown_numbers?.[0]?.value ?? '3', 10);
   const countdownTo = Number.parseInt(renderPlan.countdown_numbers?.at(-1)?.value ?? '0', 10);
-  return {
-    ...renderPlan,
-    phases: updatedPhases,
-    total_duration_seconds: revealEnd,
-    countdown_numbers: buildCountdownMoments(
+  const countdownNumbers = String(renderPlan?.timer_layout?.mode || '').trim().toLowerCase() === HP_BAR_TIMER_DISPLAY_MODE
+    ? []
+    : buildCountdownMoments(
       {
         phases: updatedPhases,
         total_duration_seconds: revealEnd,
       },
       Number.isFinite(countdownFrom) ? countdownFrom : 3,
       Number.isFinite(countdownTo) ? countdownTo : 0,
-    ),
+    );
+  return {
+    ...renderPlan,
+    phases: updatedPhases,
+    total_duration_seconds: revealEnd,
+    countdown_numbers: countdownNumbers,
     audio_cues: {
       ...renderPlan.audio_cues,
       question_start_seconds: updatedPhases.question.start_seconds,

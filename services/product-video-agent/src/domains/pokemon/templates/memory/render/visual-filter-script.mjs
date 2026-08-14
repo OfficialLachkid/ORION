@@ -76,6 +76,23 @@ function buildOffsetExpression(baseValue, offsetValue) {
   return `(${baseValue})+${offset}`;
 }
 
+function buildBobbingYOffsetExpression({
+  baseExpression,
+  startSeconds,
+  endSeconds,
+  amplitudePx,
+  frequencyHz,
+}) {
+  const amplitude = Number(Math.max(0, ensureNumber(amplitudePx, 0)).toFixed(3));
+  if (amplitude <= 0) {
+    return baseExpression;
+  }
+  const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
+  const end = Number(Math.max(start, ensureNumber(endSeconds, start)).toFixed(3));
+  const radians = Number((Math.max(0.4, ensureNumber(frequencyHz, 2.1)) * 6.283185307).toFixed(3));
+  return `(${baseExpression})-if(lt(t,${start}),0,if(lt(t,${end}),sin((t-${start})*${radians})*${amplitude},0))`;
+}
+
 function resolvePlatformLayout(template, variant) {
   const config = template?.layout?.sprite_platform || {};
   const defaultEnabled = config.enabled !== false;
@@ -203,12 +220,23 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const optionStaggerSeconds = Math.max(0, ensureNumber(template?.renderer?.option_sprite_stagger_seconds, 0.09));
   const optionFadeDuration = Math.max(0.12, ensureNumber(template?.renderer?.option_sprite_fade_duration_seconds, 0.2));
   const optionYOffset = ensureNumber(template?.renderer?.option_sprite_y_offset_px, 42);
+  const optionFloatStartDelay = Math.max(0, ensureNumber(template?.renderer?.option_sprite_float_start_delay_seconds, 0.04));
+  const optionFloatAmplitude = ensureNumber(template?.renderer?.option_sprite_float_amplitude_px, 18);
+  const optionFloatFrequency = Math.max(
+    0.4,
+    ensureNumber(template?.renderer?.option_sprite_float_frequency_hz, 2.1)
+      * Math.max(0.1, ensureNumber(template?.renderer?.option_sprite_float_speed_multiplier, 1)),
+  );
+  const introDisappearDuration = Math.max(0.12, ensureNumber(template?.renderer?.intro_disappear_duration_seconds, 0.42));
   const optionOrder = buildShuffledIndices(Math.min((inputRefs.optionSprites || []).length, optionGridLayout.cells.length), `${plan.seed}:memory-options`);
   const optionSequenceByIndex = new Map(optionOrder.map((spriteIndex, orderIndex) => [spriteIndex, orderIndex]));
   const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
   const backgroundBlurPart = backgroundBlurSigma > 0
     ? `,gblur=sigma=${Number(backgroundBlurSigma.toFixed(3))}:steps=1`
     : '';
+  const useHpBarCountdown = String(renderPlan?.timer_layout?.mode || '').trim().toLowerCase() === 'hp_bar_depletion'
+    && inputRefs.timerHpBar != null;
+  const hpBarUsesGreenscreen = String(plan.assets.overlays?.selected_timer_hp_bar_path || '').toLowerCase().includes('greenscreen');
 
   filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${backgroundBlurPart},fps=${fps},setsar=1[v0]`);
   let currentVideoLabel = 'v0';
@@ -252,6 +280,37 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     });
   }
 
+  if (inputRefs.introDisappear != null && gridLayout.cells.length > 0) {
+    const introDisappearCount = Math.min((inputRefs.sprites || []).length, gridLayout.cells.length);
+    const disappearLabels = Array.from({ length: introDisappearCount }, (_, index) => `memdisappearsrc${index}`);
+    filters.push(
+      `[${inputRefs.introDisappear}:v]split=${introDisappearCount}${disappearLabels.map((label) => `[${label}]`).join('')}`,
+    );
+    for (let index = 0; index < introDisappearCount; index += 1) {
+      const pokemon = plan.assets.pokemon[index] || {};
+      const cell = gridLayout.cells[index];
+      const introOrderIndex = introSequenceByIndex.get(index) ?? index;
+      const introStart = Number((hookStart + introInitialDelay + (introOrderIndex * introStaggerSeconds)).toFixed(3));
+      const introEnd = Number((introStart + introFadeDuration).toFixed(3));
+      const disappearStart = Number(Math.max(introEnd, memorizeVisibleEnd - introDisappearDuration).toFixed(3));
+      const spriteSize = Number((
+        ensureNumber(gridLayout.item_size_px, 220)
+        * ensureNumber(gridLayout.sprite_scale_multiplier, 1.18)
+        * ensureNumber(pokemon.sprite_display_scale_multiplier, 1)
+        * 1.08
+      ).toFixed(3));
+      const disappearLabel = `memdisappear${index}`;
+      const disappearVideoLabel = `memdisappearv${index}`;
+      filters.push(
+        `[${disappearLabels[index]}]fps=${fps},trim=duration=${introDisappearDuration},setpts=PTS-STARTPTS+${disappearStart}/TB,scale=${spriteSize}:${spriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${disappearLabel}]`,
+      );
+      filters.push(
+        `[${currentVideoLabel}][${disappearLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(disappearStart, memorizeVisibleEnd)}'[${disappearVideoLabel}]`,
+      );
+      currentVideoLabel = disappearVideoLabel;
+    }
+  }
+
   if ((inputRefs.optionSprites || []).length > 0) {
     for (let index = 0; index < inputRefs.optionSprites.length && index < optionGridLayout.cells.length; index += 1) {
       const option = plan.question?.options?.[index] || {};
@@ -264,14 +323,27 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         * ensureNumber(optionGridLayout.sprite_scale_multiplier, 1)
         * ensureNumber(option.sprite_display_scale_multiplier, 1)
       ).toFixed(3));
-      const optionFadeFilters = [
+      const optionSpriteFadeFilters = [
+        buildFadeFilter('in', optionAppearStart, optionFadeDuration),
+      ];
+      const optionPlatformFadeFilters = [
         buildFadeFilter('in', optionAppearStart, optionFadeDuration),
       ];
       if (!option.is_correct) {
-        optionFadeFilters.push(buildFadeFilter('out', revealStart, revealFadeDuration));
+        optionSpriteFadeFilters.push(buildFadeFilter('out', revealStart, revealFadeDuration));
+        optionPlatformFadeFilters.push(buildFadeFilter('out', revealStart, revealFadeDuration));
+      } else {
+        optionPlatformFadeFilters.push(buildFadeFilter('out', revealStart, revealFadeDuration));
       }
       const optionSpriteLabel = `memoption${index}`;
       const optionVideoLabel = `memoptionv${index}`;
+      const optionCenterY = buildHoldThenLerpExpression(
+        cell.center_y + optionYOffset,
+        cell.center_y,
+        optionAppearStart,
+        optionAppearEnd,
+      );
+      const optionWobbleStart = Number(Math.max(optionAppearEnd, countdownStart + optionFloatStartDelay).toFixed(3));
       currentVideoLabel = appendPlatformAndSprite({
         filters,
         currentVideoLabel,
@@ -283,16 +355,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         platformVariant: 'option',
         spriteSize,
         centerX: cell.center_x,
-        centerY: buildHoldThenLerpExpression(
-          cell.center_y + optionYOffset,
-          cell.center_y,
-          optionAppearStart,
-          optionAppearEnd,
-        ),
+        centerY: buildBobbingYOffsetExpression({
+          baseExpression: optionCenterY,
+          startSeconds: optionWobbleStart,
+          endSeconds: revealStart,
+          amplitudePx: optionFloatAmplitude,
+          frequencyHz: optionFloatFrequency,
+        }),
         enableExpression: overlayRange(questionStart, revealVisualStart),
         fps,
-        spriteStreamFilters: optionFadeFilters,
-        platformStreamFilters: optionFadeFilters,
+        spriteStreamFilters: optionSpriteFadeFilters,
+        platformStreamFilters: optionPlatformFadeFilters,
         template,
       });
     }
@@ -333,7 +406,46 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     });
   }
 
-  if (inputRefs.timerCountdown != null) {
+  const timerSourceDuration = Math.max(
+    0.12,
+    ensureNumber(
+      useHpBarCountdown
+        ? plan.assets.overlays?.selected_timer_hp_bar_duration_seconds
+        : plan.assets.overlays?.selected_timer_countdown_duration_seconds,
+      plan.assets.overlays?.selected_timer_duration_seconds ?? (renderPlan.phases.countdown?.duration_seconds || 0),
+    ),
+  );
+  const timerSetpts = timerSourceDuration > 0
+    ? `(PTS-STARTPTS)*${Number(((renderPlan.phases.countdown?.duration_seconds || 0) / timerSourceDuration).toFixed(3))}+${countdownStart}/TB`
+    : `PTS-STARTPTS+${countdownStart}/TB`;
+
+  if (useHpBarCountdown) {
+    if (inputRefs.timerHpBarFrame != null) {
+      filters.push(
+        `[${inputRefs.timerHpBarFrame}:v]fps=${fps},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba,alphaextract[timerhpbarmask]`,
+      );
+      filters.push(
+        `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba[timerhpbarvideo]`,
+      );
+      filters.push(
+        `[timerhpbarvideo][timerhpbarmask]alphamerge,setsar=1[timerhpbar]`,
+      );
+    } else {
+      filters.push(
+        `[${inputRefs.timerHpBar}:v]fps=${fps},trim=duration=${timerSourceDuration},setpts=${timerSetpts},scale=${renderPlan.timer_layout.width}:${renderPlan.timer_layout.height}:force_original_aspect_ratio=decrease,format=rgba${hpBarUsesGreenscreen ? ',colorkey=0x00FF00:0.22:0.08' : ''},fade=t=in:st=${countdownStart}:d=0.18:alpha=1,setsar=1[timerhpbar]`,
+      );
+    }
+    const timerVideoLabel = `${currentVideoLabel}hb`;
+    filters.push(
+      `[${currentVideoLabel}][timerhpbar]overlay=x='${renderPlan.timer_layout.x}+((` +
+      `${renderPlan.timer_layout.width}-w)/2)':y='${buildAnimatedTextYExpression(
+        `${renderPlan.timer_layout.y}+((` +
+        `${renderPlan.timer_layout.height}-h)/2)`,
+        countdownStart,
+      )}':enable='${overlayRange(countdownStart, revealStart)}'[${timerVideoLabel}]`,
+    );
+    currentVideoLabel = timerVideoLabel;
+  } else if (inputRefs.timerCountdown != null) {
     const timerWidth = ensureNumber(renderPlan.timer_layout.width, 268);
     const timerHeight = ensureNumber(renderPlan.timer_layout.height, 268);
     const timerLabel = 'timercountdown';
@@ -374,10 +486,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       `drawtext=textfile='${escapeFilterPath(line.file_path)}'${fontPart}:fontcolor=white:fontsize=${ensureNumber(line.font_size, 110)}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, line.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(line.start_seconds, line.end_seconds)}':enable='${overlayRange(line.start_seconds, line.end_seconds)}'`,
     );
   }
-  for (const countdown of renderPlan.countdown_numbers || []) {
-    drawtextParts.push(
-      `drawtext=text='${escapeDrawtextText(countdown.value)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_TIMER_NUMBER_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=${renderPlan.timer_layout.number_center_x}-text_w/2:y='${buildCountdownNumberYExpression(renderPlan.timer_layout.number_center_y, countdown.start_seconds, countdown.end_seconds)}-text_h/2':alpha='${buildCountdownNumberAlphaExpression(countdown.start_seconds, countdown.end_seconds)}':enable='${overlayRange(countdown.start_seconds, countdown.end_seconds)}'`,
-    );
+  if (!useHpBarCountdown) {
+    for (const countdown of renderPlan.countdown_numbers || []) {
+      drawtextParts.push(
+        `drawtext=text='${escapeDrawtextText(countdown.value)}'${fontPart}:fontcolor=white:fontsize=${DEFAULT_TIMER_NUMBER_SIZE}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=${renderPlan.timer_layout.number_center_x}-text_w/2:y='${buildCountdownNumberYExpression(renderPlan.timer_layout.number_center_y, countdown.start_seconds, countdown.end_seconds)}-text_h/2':alpha='${buildCountdownNumberAlphaExpression(countdown.start_seconds, countdown.end_seconds)}':enable='${overlayRange(countdown.start_seconds, countdown.end_seconds)}'`,
+      );
+    }
   }
 
   filters.push(`[${currentVideoLabel}]${drawtextParts.join(',')},trim=duration=${renderPlan.total_duration_seconds}[vout]`);

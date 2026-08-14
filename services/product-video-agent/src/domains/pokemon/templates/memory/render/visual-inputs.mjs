@@ -28,20 +28,40 @@ export function buildVisualInputs(plan, renderPlan) {
     }),
   });
 
-  if (plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path) {
+  if (plan.assets.overlays.selected_timer_hp_bar_path) {
+    inputs.push({
+      role: 'timer-hp-bar',
+      path: plan.assets.overlays.selected_timer_hp_bar_path,
+      args: buildLoopingInputArgs({
+        mediaPath: plan.assets.overlays.selected_timer_hp_bar_path,
+        totalDuration,
+        fps,
+      }),
+    });
+    if (plan.assets.overlays.selected_timer_hp_bar_frame_path) {
+      inputs.push({
+        role: 'timer-hp-bar-frame',
+        path: plan.assets.overlays.selected_timer_hp_bar_frame_path,
+        args: buildLoopingInputArgs({
+          mediaPath: plan.assets.overlays.selected_timer_hp_bar_frame_path,
+          totalDuration,
+          fps,
+        }),
+      });
+    }
+  } else if (plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path) {
     inputs.push({
       role: 'timer-countdown',
       path: plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path,
       args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path],
     });
-  }
-
-  if (plan.assets.overlays.selected_timer_alarm_path) {
-    inputs.push({
-      role: 'timer-alarm',
-      path: plan.assets.overlays.selected_timer_alarm_path,
-      args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_alarm_path],
-    });
+    if (plan.assets.overlays.selected_timer_alarm_path) {
+      inputs.push({
+        role: 'timer-alarm',
+        path: plan.assets.overlays.selected_timer_alarm_path,
+        args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_alarm_path],
+      });
+    }
   }
 
   if (plan.assets.overlays.selected_grass_plateau_path) {
@@ -49,6 +69,18 @@ export function buildVisualInputs(plan, renderPlan) {
       role: 'grass-platform',
       path: plan.assets.overlays.selected_grass_plateau_path,
       args: ['-loop', '1', '-framerate', String(fps), '-t', String(totalDuration), '-i', plan.assets.overlays.selected_grass_plateau_path],
+    });
+  }
+
+  if (plan.assets.overlays.selected_intro_disappear_path) {
+    inputs.push({
+      role: 'intro-disappear',
+      path: plan.assets.overlays.selected_intro_disappear_path,
+      args: buildLoopingInputArgs({
+        mediaPath: plan.assets.overlays.selected_intro_disappear_path,
+        totalDuration,
+        fps,
+      }),
     });
   }
 

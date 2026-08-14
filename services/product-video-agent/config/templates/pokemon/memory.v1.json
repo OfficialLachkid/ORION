@@ -104,7 +104,7 @@
       "source_policy": "local_t7_backgrounds",
       "media_type": "looping_image_gif_or_video",
       "fit": "cover",
-      "blur_sigma": 3
+      "blur_sigma": 4
     },
     "text": {
       "hook_y": 210,
@@ -119,7 +119,8 @@
     "sprite_grid": {
       "difficulty_weights": {
         "medium": 3,
-        "easy": 1
+        "easy": 1,
+        "hard": 1
       },
       "difficulty_levels": {
         "medium": {
@@ -131,6 +132,17 @@
           "sprite_count": 4,
           "rows": 2,
           "columns": 2
+        },
+        "hard": {
+          "sprite_count": 9,
+          "rows": 3,
+          "columns": 3,
+          "stage_bounds_px": {
+            "left": 96,
+            "top": 450,
+            "width": 888,
+            "height": 980
+          }
         }
       },
       "item_size_px": 236,
@@ -178,17 +190,21 @@
       "option_center_y_offset_px": 80
     },
     "timer": {
+      "display_mode": "hp_bar_depletion",
       "countdown_from": 3,
       "countdown_to": 0,
       "size_px": 268,
       "center_x": 540,
-      "center_y": 930
+      "center_y": 930,
+      "hp_bar_max_height_px": 170,
+      "hp_bar_width_px": 860,
+      "hp_bar_top_gap_px": 234
     },
     "rounds": {
       "hook_hold_seconds": 0.9,
       "memorize_hold_seconds": 2,
       "question_lead_seconds": 0.45,
-      "reveal_hold_seconds": 2.1
+      "reveal_hold_seconds": 1.1
     }
   },
   "audio": {
@@ -214,7 +230,10 @@
       },
       "timer_end": {
         "enabled": true,
-        "trigger": "countdown_complete"
+        "trigger": "countdown_complete",
+        "preferred_keywords": [
+          "ding-sound"
+        ]
       }
     }
   },
@@ -226,15 +245,20 @@
     "audio_bitrate": "192k",
     "crf": 20,
     "faststart": true,
-    "hook_text_reveal_duration_seconds": 0.72,
+    "hook_text_reveal_duration_seconds": 1.72,
     "intro_sprite_initial_delay_seconds": 0.08,
     "intro_sprite_stagger_seconds": 0.24,
     "intro_sprite_fade_duration_seconds": 0.22,
     "intro_sprite_y_offset_px": 54,
+    "intro_disappear_duration_seconds": 0.42,
     "option_sprite_initial_delay_seconds": 0.04,
     "option_sprite_stagger_seconds": 0.09,
     "option_sprite_fade_duration_seconds": 0.2,
     "option_sprite_y_offset_px": 42,
+    "option_sprite_float_start_delay_seconds": 0.04,
+    "option_sprite_float_speed_multiplier": 1,
+    "option_sprite_float_amplitude_px": 18,
+    "option_sprite_float_frequency_hz": 2.1,
     "reveal_visual_delay_seconds": 0.3,
     "reveal_move_duration_seconds": 0.35
   }

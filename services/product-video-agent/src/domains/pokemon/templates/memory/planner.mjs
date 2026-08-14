@@ -29,6 +29,8 @@ const TYPE_THEMED_BACKGROUND_PRIORITY = Object.freeze([
   'water',
 ]);
 const ANSWER_LABELS = Object.freeze(['A', 'B', 'C', 'D']);
+const HP_BAR_TIMER_DISPLAY_MODE = 'hp_bar_depletion';
+const NUMERIC_TIMER_DISPLAY_MODE = 'numeric_with_small_ring';
 const mirroredSpriteAvailabilityCache = new Map();
 
 function hashSeed(input) {
@@ -62,6 +64,54 @@ function ensurePositiveInteger(value, fallback) {
 
 function normalizeAssetPath(assetPath) {
   return String(assetPath || '').trim().replaceAll('\\', '/').toLowerCase();
+}
+
+function normalizeSoundKeywords(values) {
+  return (Array.isArray(values) ? values : [])
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function selectTemplateScopedTimerEndSound(template, inventory) {
+  const soundEffects = inventory?.sound_effects || {};
+  const fallbackPath = soundEffects.timer_end || null;
+  const preferredKeywords = normalizeSoundKeywords(
+    template?.audio?.sound_effects?.timer_end?.preferred_keywords,
+  );
+  if (preferredKeywords.length === 0) {
+    return fallbackPath;
+  }
+
+  const preferredMatch = (Array.isArray(soundEffects.all) ? soundEffects.all : [])
+    .find((filePath) => {
+      const normalizedPath = String(filePath || '').trim().toLowerCase();
+      return preferredKeywords.every((keyword) => normalizedPath.includes(keyword));
+    });
+  return preferredMatch || fallbackPath;
+}
+
+function resolveTimerDisplayMode(template) {
+  const normalizedMode = String(template?.layout?.timer?.display_mode || '')
+    .trim()
+    .toLowerCase();
+  return normalizedMode === HP_BAR_TIMER_DISPLAY_MODE
+    ? HP_BAR_TIMER_DISPLAY_MODE
+    : NUMERIC_TIMER_DISPLAY_MODE;
+}
+
+function selectHpBarTimerOverlay(inventory) {
+  return inventory?.overlay_presets?.long_hp_bar
+    || inventory?.overlay_presets?.hp_bar
+    || null;
+}
+
+function selectHpBarTimerFrame(inventory, overlayPath) {
+  if (String(overlayPath || '').toLowerCase().includes('greenscreen')) {
+    return null;
+  }
+  return inventory?.overlay_presets?.long_hp_bar_frame
+    || inventory?.overlay_presets?.hp_bar_frame
+    || null;
 }
 
 function normalizeQuestionTextOptions(primaryText, variants = []) {
@@ -421,6 +471,9 @@ function buildDifficultyCatalog(template) {
         columns,
         sprite_count: spriteCount,
         weight: Math.max(1, ensurePositiveInteger(difficultyWeights[difficultyId], 1)),
+        stage_bounds_px: entry?.stage_bounds_px && typeof entry.stage_bounds_px === 'object'
+          ? { ...entry.stage_bounds_px }
+          : null,
       };
     })
     .filter((entry) => entry.rows > 0 && entry.columns > 0 && entry.sprite_count >= 4);
@@ -441,7 +494,7 @@ function buildMemoryGridLayout(template, difficulty) {
   const safeZone = template?.canvas?.safe_zone || {};
   const canvasWidth = Number(template?.canvas?.width || 1080);
   const canvasHeight = Number(template?.canvas?.height || 1920);
-  const stageBounds = gridConfig.stage_bounds_px || {};
+  const stageBounds = difficulty?.stage_bounds_px || gridConfig.stage_bounds_px || {};
   const stageLeft = Number(stageBounds.left ?? safeZone.left ?? 100);
   const stageTop = Number(stageBounds.top ?? 420);
   const stageWidth = Number(stageBounds.width ?? (canvasWidth - stageLeft - Number(safeZone.right ?? 100)));
@@ -716,6 +769,13 @@ export async function planPokemonMemoryChallenge({
   const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
   const selectedPair = pickPair(pairCatalog, forcedTypePair, random, normalizedSelectionState);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
+  const preferredTimerDisplayMode = resolveTimerDisplayMode(template);
+  const hpBarTimerOverlayPath = selectHpBarTimerOverlay(inventory);
+  const hpBarTimerFramePath = selectHpBarTimerFrame(inventory, hpBarTimerOverlayPath);
+  const useHpBarTimer = preferredTimerDisplayMode === HP_BAR_TIMER_DISPLAY_MODE && Boolean(hpBarTimerOverlayPath);
+  const resolvedTimerDisplayMode = useHpBarTimer
+    ? HP_BAR_TIMER_DISPLAY_MODE
+    : NUMERIC_TIMER_DISPLAY_MODE;
   const selectableSubjects = prioritizeSelectableSubjects(
     selectedPair.selectable_matches,
     random,
@@ -778,13 +838,21 @@ export async function planPokemonMemoryChallenge({
   const memorizeHoldSeconds = Number(template?.layout?.rounds?.memorize_hold_seconds ?? 2);
   const questionLeadSeconds = Number(template?.layout?.rounds?.question_lead_seconds ?? 0.45);
   const revealHoldSeconds = Number(template?.layout?.rounds?.reveal_hold_seconds ?? 2.1);
+  const selectedTimerEndSoundPath = selectTemplateScopedTimerEndSound(template, inventory);
 
   const requiredAssetGaps = [];
   if (!selectedBackgroundPath) requiredAssetGaps.push('background_missing');
   if (!inventory.music.length) requiredAssetGaps.push('battle_intro_music_missing');
   if (!inventory.sound_effects?.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
-  if (!inventory.sound_effects?.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
-  if (!inventory.overlay_presets?.timer_countdown && !inventory.overlay_presets?.timer) {
+  if (!selectedTimerEndSoundPath) requiredAssetGaps.push('timer_end_sfx_missing');
+  if (preferredTimerDisplayMode === HP_BAR_TIMER_DISPLAY_MODE && !hpBarTimerOverlayPath) {
+    requiredAssetGaps.push('hp_bar_timer_overlay_missing');
+  }
+  if (
+    resolvedTimerDisplayMode !== HP_BAR_TIMER_DISPLAY_MODE
+    && !inventory.overlay_presets?.timer_countdown
+    && !inventory.overlay_presets?.timer
+  ) {
     requiredAssetGaps.push('timer_overlay_missing');
   }
   if (!inventory.overlay_presets?.grass_plateau) {
@@ -880,9 +948,19 @@ export async function planPokemonMemoryChallenge({
       reveal_pokemon: hiddenSubjectAsset,
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
-        selected_timer_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
-        selected_timer_countdown_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,
-        selected_timer_alarm_path: inventory.overlay_presets?.timer_alarm || null,
+        timer_display_mode: resolvedTimerDisplayMode,
+        selected_timer_path: resolvedTimerDisplayMode === HP_BAR_TIMER_DISPLAY_MODE
+          ? null
+          : (inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null),
+        selected_timer_countdown_path: resolvedTimerDisplayMode === HP_BAR_TIMER_DISPLAY_MODE
+          ? null
+          : (inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null),
+        selected_timer_alarm_path: resolvedTimerDisplayMode === HP_BAR_TIMER_DISPLAY_MODE
+          ? null
+          : (inventory.overlay_presets?.timer_alarm || null),
+        selected_timer_hp_bar_path: useHpBarTimer ? hpBarTimerOverlayPath : null,
+        selected_timer_hp_bar_frame_path: useHpBarTimer ? hpBarTimerFramePath : null,
+        selected_intro_disappear_path: inventory.overlay_presets?.disappear || null,
         selected_grass_plateau_path: inventory.overlay_presets?.grass_plateau || null,
         sprite_grid: gridLayout,
         available_paths: inventory.overlays,
@@ -898,7 +976,7 @@ export async function planPokemonMemoryChallenge({
         selected_sound_effects: {
           ...(inventory.sound_effects || {}),
           countdown_tick: inventory.sound_effects?.countdown_tick || null,
-          timer_end: inventory.sound_effects?.timer_end || null,
+          timer_end: selectedTimerEndSoundPath,
         },
       },
       outputs: {
