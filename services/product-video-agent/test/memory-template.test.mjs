@@ -144,10 +144,8 @@ const template = {
     intro_sprite_shrink_duration_seconds: 0.14,
     intro_sprite_y_offset_px: 54,
     intro_disappear_duration_seconds: 0.42,
-    intro_pokeball_closed_frame_number: 10,
-    intro_pokeball_open_frame_number: 2,
-    intro_pokeball_open_lead_seconds: 0.3,
-    intro_pokeball_open_hold_seconds: 0.16,
+    intro_pokeball_lead_seconds: 0.3,
+    intro_pokeball_hold_seconds: 0.16,
     intro_pokeball_scale_multiplier: 1.02,
     option_sprite_initial_delay_seconds: 0.04,
     option_sprite_stagger_seconds: 0.09,
@@ -181,9 +179,10 @@ const assetInventory = {
   ],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/ding-sound.mp3'],
+    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/ding-sound.mp3', '/tmp/disappear-sound.mp3'],
     countdown_tick: '/tmp/countdown.mp3',
     timer_end: '/tmp/timer-end.mp3',
+    disappear: '/tmp/disappear-sound.mp3',
   },
   overlay_presets: {
     pokeball_open_close: '/tmp/Open and Close Pokeball.gif',
@@ -242,8 +241,9 @@ test('generic planner dispatch builds a memory round with one off-screen answer 
   assert.equal(plan.assets.overlays.timer_display_mode, 'hp_bar_depletion');
   assert.equal(plan.assets.overlays.selected_timer_hp_bar_path, '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4');
   assert.equal(plan.assets.overlays.selected_intro_disappear_path, '/tmp/disappear.gif');
-  assert.equal(plan.assets.overlays.selected_intro_pokeball_path, '/tmp/Open and Close Pokeball.gif');
+  assert.equal(plan.assets.overlays.selected_intro_pokeball_path, '/tmp/3D Pokeball Wiggle.gif');
   assert.equal(plan.assets.audio.selected_sound_effects.timer_end, '/tmp/ding-sound.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.disappear, '/tmp/disappear-sound.mp3');
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Memory$/u);
   assert.deepEqual(plan.required_asset_gaps, []);
 });
@@ -366,6 +366,7 @@ test('memory render plan keeps memorize, question, countdown, and reveal timing 
   assert.equal(renderPlan.phases.countdown.start_seconds, 3.35);
   assert.equal(renderPlan.phases.reveal.start_seconds, 6.35);
   assert.equal(renderPlan.total_duration_seconds, 7.45);
+  assert.equal(renderPlan.audio_cues.intro_disappear_start_seconds, 2.48);
   assert.equal(renderPlan.timer_layout.mode, 'hp_bar_depletion');
   assert.deepEqual(renderPlan.countdown_numbers, []);
   assert.equal(renderPlan.grid.cells.length, 6);
@@ -449,6 +450,7 @@ test('memory audio filter schedules hook, question, countdown ticks, and reveal 
     musicPath: '/tmp/music.mp3',
     countdownPath: '/tmp/countdown.mp3',
     timerEndPath: '/tmp/ding-sound.mp3',
+    disappearPath: '/tmp/disappear-sound.mp3',
     renderPlan,
     mediaDurations: {
       countdown_audio_duration_seconds: 0.7,
@@ -459,6 +461,7 @@ test('memory audio filter schedules hook, question, countdown ticks, and reveal 
   assert.match(script, /\[1:a\]adelay=2900\|2900,volume=1\[n1\]/u);
   assert.match(script, /\[4:a\]asplit=3/u);
   assert.match(script, /\[5:a\]adelay=6350\|6350,volume=0\.9\[timerend\]/u);
+  assert.match(script, /\[6:a\]adelay=2480\|2480,volume=0\.5\[disappear\]/u);
 });
 
 test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden answer reveal, and uses a greenscreen HP bar countdown', async () => {
@@ -513,18 +516,17 @@ test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden a
   assert.match(visualFilter.script, /\[0:v\]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=3:steps=1,fps=30,setsar=1\[v0\]/u);
   assert.match(visualFilter.script, /\[2:v\]fps=30,scale=.*:-1,format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1/u);
   assert.match(visualFilter.script, /\[2:v\]fps=30,scale=.*:-1,format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
-  assert.match(visualFilter.script, /select='eq\(n,9\)'/u);
-  assert.match(visualFilter.script, /select='eq\(n,1\)'/u);
+  assert.match(visualFilter.script, /\[4:v\]fps=30,trim=duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=/u);
   assert.match(visualFilter.script, /\[5:v\]fps=30,scale=w='.*0\.08/u);
   assert.match(visualFilter.script, /\[11:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1/u);
   assert.match(visualFilter.script, /\[(11|13|14):v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
   assert.match(visualFilter.script, /\[15:v\]fps=30,scale=/u);
   assert.match(visualFilter.script, /memoption0platform/u);
-  assert.match(visualFilter.script, /mempokeballclosed0/u);
-  assert.match(visualFilter.script, /mempokeballopen0/u);
-  assert.match(visualFilter.script, /mempokeballclosed0\]overlay=.*enable='between\(t,0,0\.32\)'/u);
-  assert.match(visualFilter.script, /mempokeballopen0\]overlay=.*enable='between\(t,0\.32,0\.78\)'/u);
+  assert.match(visualFilter.script, /mempokeball0/u);
   assert.match(visualFilter.script, /memdisappear0/u);
+  assert.doesNotMatch(visualFilter.script, /mempokeballclosed0/u);
+  assert.doesNotMatch(visualFilter.script, /mempokeballopen0/u);
+  assert.doesNotMatch(visualFilter.script, /select='eq\(n,/u);
   assert.doesNotMatch(visualFilter.script, /memstudy0platform/u);
   assert.doesNotMatch(visualFilter.script, /memrevealplatform/u);
   assert.match(visualFilter.script, /\[memoption0platform\]overlay=x='[0-9.]+-w\/2':y='[0-9.]+-h\/2':enable='between\(t,2\.9,6\.65\)'/u);

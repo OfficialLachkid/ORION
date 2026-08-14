@@ -239,6 +239,11 @@ export async function scanPokeQuizzAssetInventory() {
   );
   const reveal = matchSoundEffect(soundEffects, ['reveal', 'who', 'answer']) || timerEnd;
   const shiny = matchSoundEffect(soundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
+  const disappear = matchSoundEffectKeywordGroups(soundEffects, [
+    ['disappear'],
+    ['vanish'],
+    ['poof'],
+  ]);
   const pokeballIntro = matchSoundEffectKeywordGroups(soundEffects, [
     ['enlarge', 'pokeball'],
     ['pokeball', 'intro'],
@@ -265,6 +270,7 @@ export async function scanPokeQuizzAssetInventory() {
       timer_end: timerEnd,
       reveal,
       shiny,
+      disappear,
       pokeball_intro: pokeballIntro,
       pokeball_wiggle: pokeballWiggle,
     },

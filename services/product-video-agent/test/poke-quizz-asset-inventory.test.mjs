@@ -140,6 +140,11 @@ test('timer_finished stays the shared timer-end default when a ding file is also
   );
   const reveal = soundEffects.find((filePath) => ['reveal', 'who', 'answer'].some((keyword) => filePath.toLowerCase().includes(keyword))) || timerEnd;
   const shiny = matchSoundEffect(soundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
+  const disappear = matchSoundEffectKeywordGroups(soundEffects, [
+    ['disappear'],
+    ['vanish'],
+    ['poof'],
+  ]);
   const pokeballIntro = matchSoundEffectKeywordGroups(soundEffects, [
     ['enlarge', 'pokeball'],
     ['pokeball', 'intro'],
@@ -158,6 +163,27 @@ test('timer_finished stays the shared timer-end default when a ding file is also
   assert.match(timerEnd || '', /timer_finished\.mp3$/u);
   assert.match(reveal || '', /timer_finished\.mp3$/u);
   assert.match(shiny || '', /shiny-sound\.mp3$/u);
+  assert.equal(disappear, null);
   assert.match(pokeballIntro || '', /enlarge-pokeball\.mp3$/u);
   assert.match(pokeballWiggle || '', /pokeball_wiggle\.mp3$/u);
+});
+
+test('disappear-sound files are detected as the disappear cue', async () => {
+  const matchSoundEffectKeywordGroups = (files, keywordGroups) => (
+    files.find((filePath) => {
+      const normalizedPath = filePath.toLowerCase();
+      return keywordGroups.some((keywords) => keywords.every((keyword) => normalizedPath.includes(keyword)));
+    }) || null
+  );
+  const soundEffects = [
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/countdown.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/disappear-sound.mp3',
+  ];
+  const disappear = matchSoundEffectKeywordGroups(soundEffects, [
+    ['disappear'],
+    ['vanish'],
+    ['poof'],
+  ]);
+
+  assert.match(disappear || '', /disappear-sound\.mp3$/u);
 });

@@ -11,6 +11,51 @@ import {
 
 const HP_BAR_TIMER_DISPLAY_MODE = 'hp_bar_depletion';
 
+function buildIntroDisappearStartSeconds(template, questionStartSeconds, spriteCount) {
+  const hookStart = 0;
+  const introInitialDelay = Math.max(
+    0,
+    ensureNumber(template?.renderer?.intro_sprite_initial_delay_seconds, 0.08),
+  );
+  const introStaggerSeconds = Math.max(
+    0.05,
+    ensureNumber(template?.renderer?.intro_sprite_stagger_seconds, 0.18),
+  );
+  const introFadeDuration = Math.max(
+    0.12,
+    ensureNumber(template?.renderer?.intro_sprite_fade_duration_seconds, 0.22),
+  );
+  const introDisappearDuration = Math.max(
+    0.12,
+    ensureNumber(template?.renderer?.intro_disappear_duration_seconds, 0.42),
+  );
+  const lastIntroOrderIndex = Math.max(0, Number(spriteCount || 0) - 1);
+  const latestIntroEnd = roundTime(
+    hookStart + introInitialDelay + (lastIntroOrderIndex * introStaggerSeconds) + introFadeDuration,
+  );
+  return roundTime(Math.max(latestIntroEnd, questionStartSeconds - introDisappearDuration));
+}
+
+function buildIntroLatestEndSeconds(template, spriteCount) {
+  const hookStart = 0;
+  const introInitialDelay = Math.max(
+    0,
+    ensureNumber(template?.renderer?.intro_sprite_initial_delay_seconds, 0.08),
+  );
+  const introStaggerSeconds = Math.max(
+    0.05,
+    ensureNumber(template?.renderer?.intro_sprite_stagger_seconds, 0.18),
+  );
+  const introFadeDuration = Math.max(
+    0.12,
+    ensureNumber(template?.renderer?.intro_sprite_fade_duration_seconds, 0.22),
+  );
+  const lastIntroOrderIndex = Math.max(0, Number(spriteCount || 0) - 1);
+  return roundTime(
+    hookStart + introInitialDelay + (lastIntroOrderIndex * introStaggerSeconds) + introFadeDuration,
+  );
+}
+
 function buildTimerLayout(template, optionGridLayout = null, timerDisplayMode = '') {
   if (String(timerDisplayMode || '').trim().toLowerCase() === HP_BAR_TIMER_DISPLAY_MODE) {
     const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
@@ -180,6 +225,15 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const revealVisualStart = roundTime(
     Math.min(schedule.total_duration_seconds, revealPhase.start_seconds + revealVisualDelay),
   );
+  const introLatestEnd = buildIntroLatestEndSeconds(
+    template,
+    plan.assets.overlays?.sprite_grid?.cells?.length || 0,
+  );
+  const introDisappearStart = buildIntroDisappearStartSeconds(
+    template,
+    questionPhase.start_seconds,
+    plan.assets.overlays?.sprite_grid?.cells?.length || 0,
+  );
 
   return {
     canvas: {
@@ -207,6 +261,12 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       timer_end_seconds: revealPhase.start_seconds,
       reveal_start_seconds: revealPhase.start_seconds,
       reveal_visual_start_seconds: revealVisualStart,
+      intro_latest_end_seconds: introLatestEnd,
+      intro_disappear_duration_seconds: Math.max(
+        0.12,
+        ensureNumber(template?.renderer?.intro_disappear_duration_seconds, 0.42),
+      ),
+      intro_disappear_start_seconds: introDisappearStart,
       battle_music_start_seconds: roundTime(
         Math.min(schedule.total_duration_seconds, configuredBattleMusicStartSeconds),
       ),
@@ -282,6 +342,12 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
       timer_end_seconds: revealStart,
       reveal_start_seconds: revealStart,
       reveal_visual_start_seconds: roundTime(Math.min(revealEnd, revealStart + revealVisualDelay)),
+      intro_disappear_start_seconds: roundTime(
+        Math.max(
+          ensureNumber(renderPlan.audio_cues?.intro_latest_end_seconds, 0),
+          updatedPhases.question.start_seconds - ensureNumber(renderPlan.audio_cues?.intro_disappear_duration_seconds, 0.42),
+        ),
+      ),
     },
   };
 }

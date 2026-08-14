@@ -1,5 +1,6 @@
 import {
   DEFAULT_COUNTDOWN_VOLUME,
+  DEFAULT_DISAPPEAR_SFX_VOLUME,
   DEFAULT_MUSIC_VOLUME,
   DEFAULT_TIMER_END_VOLUME,
   DEFAULT_VOICE_VOLUME,
@@ -13,6 +14,7 @@ export function buildAudioFilterScript({
   musicPath,
   countdownPath,
   timerEndPath,
+  disappearPath,
   renderPlan,
   mediaDurations = {},
 }) {
@@ -74,6 +76,13 @@ export function buildAudioFilterScript({
     const delayMs = Math.max(0, Math.round(renderPlan.audio_cues.timer_end_seconds * 1000));
     filters.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=${DEFAULT_TIMER_END_VOLUME}[timerend]`);
     mixLabels.push('timerend');
+    inputIndex += 1;
+  }
+
+  if (disappearPath) {
+    const delayMs = Math.max(0, Math.round((renderPlan.audio_cues.intro_disappear_start_seconds || 0) * 1000));
+    filters.push(`[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=${DEFAULT_DISAPPEAR_SFX_VOLUME}[disappear]`);
+    mixLabels.push('disappear');
   }
 
   filters.push(`${mixLabels.map((label) => `[${label}]`).join('')}amix=inputs=${mixLabels.length}:normalize=0,alimiter=limit=0.95[aout]`);

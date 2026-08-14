@@ -231,21 +231,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
   const introDisappearDuration = Math.max(0.12, ensureNumber(template?.renderer?.intro_disappear_duration_seconds, 0.42));
   const introSpriteShrinkDuration = Math.max(0.06, ensureNumber(template?.renderer?.intro_sprite_shrink_duration_seconds, 0.14));
-  const introPokeballClosedFrameIndex = Math.max(
-    0,
-    Math.trunc(ensureNumber(template?.renderer?.intro_pokeball_closed_frame_number, 10)) - 1,
-  );
-  const introPokeballOpenFrameIndex = Math.max(
-    0,
-    Math.trunc(ensureNumber(template?.renderer?.intro_pokeball_open_frame_number, 2)) - 1,
-  );
-  const introPokeballOpenHoldSeconds = Math.max(
+  const introPokeballHoldSeconds = Math.max(
     0.06,
-    ensureNumber(template?.renderer?.intro_pokeball_open_hold_seconds, 0.16),
+    ensureNumber(template?.renderer?.intro_pokeball_hold_seconds, 0.16),
   );
-  const introPokeballOpenLeadSeconds = Math.max(
+  const introPokeballLeadSeconds = Math.max(
     0,
-    ensureNumber(template?.renderer?.intro_pokeball_open_lead_seconds, 0.12),
+    ensureNumber(template?.renderer?.intro_pokeball_lead_seconds, 0.12),
   );
   const introPokeballScaleMultiplier = Math.max(
     0.1,
@@ -276,25 +268,21 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const introOrderIndex = introSequenceByIndex.get(index) ?? index;
       const introStart = Number((hookStart + introInitialDelay + (introOrderIndex * introStaggerSeconds)).toFixed(3));
       const introEnd = Number((introStart + introFadeDuration).toFixed(3));
-      const openStart = Number(Math.max(hookStart, introStart - introPokeballOpenLeadSeconds).toFixed(3));
-      const openEnd = Number(Math.min(introEnd, introStart + introPokeballOpenHoldSeconds).toFixed(3));
-      const closedLabel = `mempokeballclosed${index}`;
-      const openLabel = `mempokeballopen${index}`;
-      const withClosedLabel = `mempokeballclosedv${index}`;
-      const withOpenLabel = `mempokeballopenv${index}`;
+      const pokeballStart = Number(Math.max(hookStart, introStart - introPokeballLeadSeconds).toFixed(3));
+      const pokeballEnd = Number(Math.max(
+        pokeballStart + 0.08,
+        Math.min(introEnd, introStart + introPokeballHoldSeconds),
+      ).toFixed(3));
+      const pokeballDuration = Number(Math.max(0.08, pokeballEnd - pokeballStart).toFixed(3));
+      const pokeballLabel = `mempokeball${index}`;
+      const withPokeballLabel = `mempokeballv${index}`;
       filters.push(
-        `[${inputRefs.introPokeball}:v]fps=${fps},select='eq(n,${introPokeballClosedFrameIndex})',setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${renderPlan.total_duration_seconds},scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${closedLabel}]`,
+        `[${inputRefs.introPokeball}:v]fps=${fps},trim=duration=${pokeballDuration},setpts=PTS-STARTPTS+${pokeballStart}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${pokeballLabel}]`,
       );
       filters.push(
-        `[${inputRefs.introPokeball}:v]fps=${fps},select='eq(n,${introPokeballOpenFrameIndex})',setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${renderPlan.total_duration_seconds},scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${openLabel}]`,
+        `[${currentVideoLabel}][${pokeballLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(pokeballStart, pokeballEnd)}'[${withPokeballLabel}]`,
       );
-      filters.push(
-        `[${currentVideoLabel}][${closedLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(hookStart, openStart)}'[${withClosedLabel}]`,
-      );
-      filters.push(
-        `[${withClosedLabel}][${openLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${overlayRange(openStart, openEnd)}'[${withOpenLabel}]`,
-      );
-      currentVideoLabel = withOpenLabel;
+      currentVideoLabel = withPokeballLabel;
     }
   }
 
