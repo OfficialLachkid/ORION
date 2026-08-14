@@ -68,6 +68,14 @@ function buildFadeFilter(type, startSeconds, durationSeconds) {
   return `fade=t=${type}:st=${start}:d=${duration}:alpha=1`;
 }
 
+function buildOffsetExpression(baseValue, offsetValue) {
+  const offset = Number(ensureNumber(offsetValue, 0).toFixed(3));
+  if (typeof baseValue === 'number') {
+    return Number((baseValue + offset).toFixed(3));
+  }
+  return `(${baseValue})+${offset}`;
+}
+
 function resolvePlatformLayout(template, variant) {
   const config = template?.layout?.sprite_platform || {};
   const defaultEnabled = config.enabled !== false;
@@ -81,6 +89,10 @@ function resolvePlatformLayout(template, variant) {
       defaultWidthMultiplier,
     ),
     center_y_offset_multiplier: ensureNumber(config.center_y_offset_multiplier, 0.34),
+    center_y_offset_px: ensureNumber(
+      config[`${variant}_center_y_offset_px`],
+      ensureNumber(config.center_y_offset_px, 0),
+    ),
   };
 }
 
@@ -106,7 +118,10 @@ function appendPlatformAndSprite({
   const platformLayout = resolvePlatformLayout(template, platformVariant);
   if (inputRefs.grassPlatform != null && platformLayout.enabled) {
     const platformWidth = Number((spriteSize * platformLayout.width_multiplier).toFixed(3));
-    const platformCenterY = Number((centerY + (spriteSize * platformLayout.center_y_offset_multiplier)).toFixed(3));
+    const platformCenterY = buildOffsetExpression(
+      centerY,
+      (spriteSize * platformLayout.center_y_offset_multiplier) + platformLayout.center_y_offset_px,
+    );
     const platformLabel = `${platformLabelPrefix}platform`;
     const platformVideoLabel = `${platformLabelPrefix}platformv`;
     const platformFilterParts = [
@@ -184,6 +199,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const introYOffset = ensureNumber(template?.renderer?.intro_sprite_y_offset_px, 54);
   const introOrder = buildShuffledIndices(Math.min((inputRefs.sprites || []).length, gridLayout.cells.length), `${plan.seed}:memory-intro`);
   const introSequenceByIndex = new Map(introOrder.map((spriteIndex, orderIndex) => [spriteIndex, orderIndex]));
+  const optionInitialDelay = Math.max(0, ensureNumber(template?.renderer?.option_sprite_initial_delay_seconds, 0.04));
+  const optionStaggerSeconds = Math.max(0, ensureNumber(template?.renderer?.option_sprite_stagger_seconds, 0.09));
+  const optionFadeDuration = Math.max(0.12, ensureNumber(template?.renderer?.option_sprite_fade_duration_seconds, 0.2));
+  const optionYOffset = ensureNumber(template?.renderer?.option_sprite_y_offset_px, 42);
+  const optionOrder = buildShuffledIndices(Math.min((inputRefs.optionSprites || []).length, optionGridLayout.cells.length), `${plan.seed}:memory-options`);
+  const optionSequenceByIndex = new Map(optionOrder.map((spriteIndex, orderIndex) => [spriteIndex, orderIndex]));
   const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
   const backgroundBlurPart = backgroundBlurSigma > 0
     ? `,gblur=sigma=${Number(backgroundBlurSigma.toFixed(3))}:steps=1`
@@ -235,14 +256,20 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     for (let index = 0; index < inputRefs.optionSprites.length && index < optionGridLayout.cells.length; index += 1) {
       const option = plan.question?.options?.[index] || {};
       const cell = optionGridLayout.cells[index];
+      const optionOrderIndex = optionSequenceByIndex.get(index) ?? index;
+      const optionAppearStart = Number((questionStart + optionInitialDelay + (optionOrderIndex * optionStaggerSeconds)).toFixed(3));
+      const optionAppearEnd = Number((optionAppearStart + optionFadeDuration).toFixed(3));
       const spriteSize = Number((
         ensureNumber(optionGridLayout.item_size_px, 196)
         * ensureNumber(optionGridLayout.sprite_scale_multiplier, 1)
         * ensureNumber(option.sprite_display_scale_multiplier, 1)
       ).toFixed(3));
-      const wrongOptionFadeOut = !option.is_correct
-        ? buildFadeFilter('out', revealStart, revealFadeDuration)
-        : null;
+      const optionFadeFilters = [
+        buildFadeFilter('in', optionAppearStart, optionFadeDuration),
+      ];
+      if (!option.is_correct) {
+        optionFadeFilters.push(buildFadeFilter('out', revealStart, revealFadeDuration));
+      }
       const optionSpriteLabel = `memoption${index}`;
       const optionVideoLabel = `memoptionv${index}`;
       currentVideoLabel = appendPlatformAndSprite({
@@ -252,15 +279,20 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         spriteInputIndex: inputRefs.optionSprites[index],
         spriteLabel: optionSpriteLabel,
         outputLabel: optionVideoLabel,
-      platformLabelPrefix: `memoption${index}`,
-      platformVariant: 'option',
-      spriteSize,
-      centerX: cell.center_x,
-      centerY: cell.center_y,
+        platformLabelPrefix: `memoption${index}`,
+        platformVariant: 'option',
+        spriteSize,
+        centerX: cell.center_x,
+        centerY: buildHoldThenLerpExpression(
+          cell.center_y + optionYOffset,
+          cell.center_y,
+          optionAppearStart,
+          optionAppearEnd,
+        ),
         enableExpression: overlayRange(questionStart, revealVisualStart),
         fps,
-        spriteStreamFilters: wrongOptionFadeOut ? [wrongOptionFadeOut] : [],
-        platformStreamFilters: wrongOptionFadeOut ? [wrongOptionFadeOut] : [],
+        spriteStreamFilters: optionFadeFilters,
+        platformStreamFilters: optionFadeFilters,
         template,
       });
     }

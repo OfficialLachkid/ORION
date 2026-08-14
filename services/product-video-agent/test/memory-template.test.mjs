@@ -41,7 +41,7 @@ const template = {
       source_policy: 'local_t7_backgrounds',
       media_type: 'looping_image_gif_or_video',
       fit: 'cover',
-      blur_sigma: 1.8,
+      blur_sigma: 3,
     },
     text: {
       hook_y: 210,
@@ -50,7 +50,7 @@ const template = {
       question_font_size: 88,
       option_label_gap_px: 10,
       option_label_font_size: 78,
-      reveal_y: 1520,
+      reveal_y: 220,
       reveal_font_size: 110,
     },
     sprite_grid: {
@@ -83,18 +83,18 @@ const template = {
       item_size_px: 196,
       min_item_size_px: 168,
       column_gap_px: 120,
-      row_gap_px: 96,
+      row_gap_px: 220,
       sprite_scale_multiplier: 1.12,
       stage_bounds_px: {
         left: 160,
-        top: 680,
+        top: 280,
         width: 760,
-        height: 500,
+        height: 860,
       },
     },
     reveal_sprite: {
       center_x: 540,
-      center_y: 920,
+      center_y: 820,
       item_size_px: 320,
       sprite_scale_multiplier: 1.08,
     },
@@ -106,6 +106,7 @@ const template = {
       option_width_multiplier: 0.9,
       reveal_width_multiplier: 0.92,
       center_y_offset_multiplier: 0.34,
+      option_center_y_offset_px: 30,
     },
     timer: {
       countdown_from: 3,
@@ -127,10 +128,15 @@ const template = {
     },
   },
   renderer: {
+    hook_text_reveal_duration_seconds: 0.72,
     intro_sprite_initial_delay_seconds: 0.08,
     intro_sprite_stagger_seconds: 0.18,
     intro_sprite_fade_duration_seconds: 0.22,
     intro_sprite_y_offset_px: 54,
+    option_sprite_initial_delay_seconds: 0.04,
+    option_sprite_stagger_seconds: 0.09,
+    option_sprite_fade_duration_seconds: 0.2,
+    option_sprite_y_offset_px: 42,
     reveal_visual_delay_seconds: 0.3,
     reveal_move_duration_seconds: 0.35,
   },
@@ -324,6 +330,7 @@ test('memory drawtext artifacts place the multiple-choice labels under a 2x2 spr
   assert.equal(artifacts.options.lines[0].text, 'A');
   assert.match(artifacts.options.lines[0].x_expression, /-text_w\/2$/u);
   assert.notEqual(artifacts.options.lines[1].y - artifacts.options.lines[0].y, 116);
+  assert.ok(artifacts.hook.segments.at(-1).start_seconds <= 0.72);
 });
 
 test('memory audio filter schedules hook, question, countdown ticks, and reveal cue in order', async () => {
@@ -402,10 +409,12 @@ test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden a
     },
   );
 
-  assert.match(visualFilter.script, /\[0:v\]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=1\.8:steps=1,fps=30,setsar=1\[v0\]/u);
-  assert.match(visualFilter.script, /\[3:v\]fps=30,scale=.*:-1,format=rgba,setsar=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
+  assert.match(visualFilter.script, /\[0:v\]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=3:steps=1,fps=30,setsar=1\[v0\]/u);
+  assert.match(visualFilter.script, /\[3:v\]fps=30,scale=.*:-1,format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1/u);
+  assert.match(visualFilter.script, /\[3:v\]fps=30,scale=.*:-1,format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
   assert.match(visualFilter.script, /\[4:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=/u);
-  assert.match(visualFilter.script, /\[10:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
+  assert.match(visualFilter.script, /\[10:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1/u);
+  assert.match(visualFilter.script, /\[(10|12|13):v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
   assert.match(visualFilter.script, /\[14:v\]fps=30,scale=/u);
   assert.match(visualFilter.script, /memoption0platform/u);
   assert.doesNotMatch(visualFilter.script, /memstudy0platform/u);

@@ -53,6 +53,11 @@ export function buildTextArtifacts({ renderPlan, template }) {
     renderPlan.phases?.memorize?.end_seconds,
     renderPlan.phases?.hook?.end_seconds,
   );
+  const hookProgressiveEndSeconds = Math.min(
+    hookEndSeconds,
+    renderPlan.phases.hook.start_seconds
+      + ensureNumber(template?.renderer?.hook_text_reveal_duration_seconds, 0.72),
+  );
   const revealTextStartSeconds = Math.min(
     Math.max(0, renderPlan.total_duration_seconds - 0.12),
     ensureNumber(
@@ -68,6 +73,7 @@ export function buildTextArtifacts({ renderPlan, template }) {
       baseY: resolveTextPosition(template, 'hook_y', 250),
       startSeconds: renderPlan.phases.hook.start_seconds,
       endSeconds: hookEndSeconds,
+      progressiveEndSeconds: hookProgressiveEndSeconds,
     }),
     question: buildProgressiveTextArtifacts(renderPlan.text.question, {
       template,
