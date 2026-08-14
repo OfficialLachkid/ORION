@@ -189,6 +189,7 @@ export function selectOverlayPresets(overlays) {
   const disappear = matchOverlay(overlays, ['disappear'])
     || matchOverlay(overlays, ['vanish'])
     || matchOverlay(overlays, ['poof']);
+  const pokeballOpenClose = matchOverlay(overlays, ['open', 'close', 'pokeball']);
   const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
     timer,
@@ -202,9 +203,10 @@ export function selectOverlayPresets(overlays) {
     grass_plateau: grassPlateau,
     type_placeholder: typePlaceholder,
     disappear,
+    pokeball_open_close: pokeballOpenClose,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
-      || matchOverlay(overlays, ['open', 'close', 'pokeball']),
+      || pokeballOpenClose,
   };
 }
 

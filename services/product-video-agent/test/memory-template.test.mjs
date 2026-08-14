@@ -186,13 +186,14 @@ const assetInventory = {
     timer_end: '/tmp/timer-end.mp3',
   },
   overlay_presets: {
+    pokeball_open_close: '/tmp/Open and Close Pokeball.gif',
     long_hp_bar: '/tmp/long-hp-bar-countdown-1s-greenscreen.mp4',
     timer: '/tmp/timer.gif',
     timer_countdown: '/tmp/timer-countdown.gif',
     timer_alarm: '/tmp/timer-alarm.gif',
     grass_plateau: '/tmp/grass-plateau.png',
     disappear: '/tmp/disappear.gif',
-    pokeball_primary: '/tmp/Open and Close Pokeball.gif',
+    pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
     type_placeholder: '/tmp/question-mark.png',
   },
   overlays: [
@@ -202,6 +203,7 @@ const assetInventory = {
     '/tmp/timer-alarm.gif',
     '/tmp/grass-plateau.png',
     '/tmp/disappear.gif',
+    '/tmp/3D Pokeball Wiggle.gif',
     '/tmp/Open and Close Pokeball.gif',
     '/tmp/question-mark.png',
   ],

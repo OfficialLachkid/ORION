@@ -79,9 +79,10 @@ test('type icon selection falls back to pixel assets when no single 3D style cov
   });
 });
 
-test('overlay preset selection prefers split timer gifs and the 3D pokeball overlay by filename', () => {
+test('overlay preset selection exposes open-close pokeball separately while keeping 3D as the primary generic pokeball', () => {
   const presets = selectOverlayPresets([
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/3D Pokeball Wiggle.gif',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Open and Close Pokeball.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar-countdown-1s.mp4',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar.png',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/shiny_sparkle.gif',
@@ -98,6 +99,7 @@ test('overlay preset selection prefers split timer gifs and the 3D pokeball over
   assert.match(presets.long_hp_bar_frame || '', /long-hp-bar\.png$/u);
   assert.match(presets.hp_bar_frame || '', /long-hp-bar\.png$/u);
   assert.match(presets.shiny_sparkle || '', /shiny_sparkle\.gif$/u);
+  assert.match(presets.pokeball_open_close || '', /Open and Close Pokeball\.gif$/u);
   assert.match(presets.pokeball_primary || '', /3D Pokeball Wiggle\.gif$/u);
 });
 
