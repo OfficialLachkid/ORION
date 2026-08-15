@@ -5,10 +5,16 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
 const DEFAULT_HOUR = 7;
 const DEFAULT_MINUTE = 0;
+// Default 1 = current behavior preserved. Operator can pass --times 2 to
+// chain a second sweep back-to-back inside the 07:00-09:00 quiet-machine
+// window (before their own workday sessions start using Ollama).
+const DEFAULT_TIMES = 1;
+const MAX_TIMES = 10;
 const PLIST_LABEL = 'io.vbj.orion.leadgen-schedule';
 
 function getArgValue(flag) {
@@ -44,7 +50,15 @@ function ensureDirectory(directoryPath) {
   }
 }
 
-function buildPlistContent({ nodePath, scriptPath, workingDirectory, stdoutPath, stderrPath, hour, minute }) {
+export function buildLeadgenPlistContent({ nodePath, scriptPath, workingDirectory, stdoutPath, stderrPath, hour, minute, times = 1 }) {
+  // Only emit --times when it differs from the current default of 1. Keeps
+  // the plist minimal for existing single-sweep installs and makes it
+  // obvious in the plist which installs are running chained sweeps.
+  const argLines = [
+    `    <string>${nodePath}</string>`,
+    `    <string>${scriptPath}</string>`,
+    ...(times > 1 ? [`    <string>--times</string>`, `    <string>${times}</string>`] : []),
+  ].join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -55,8 +69,7 @@ function buildPlistContent({ nodePath, scriptPath, workingDirectory, stdoutPath,
   <string>${workingDirectory}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${nodePath}</string>
-    <string>${scriptPath}</string>
+${argLines}
   </array>
   <key>StartCalendarInterval</key>
   <dict>
@@ -87,12 +100,17 @@ function loadLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--no-load]',
+      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--times 1] [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.leadgen-schedule.plist and loads it by default.',
       'Each run rotates to the next niche in scripts/run-scheduled-leadgen.mjs and searches',
       'the Dutch market for candidate leads, saving results to the Supabase leads table.',
       'Schedule uses macOS local time.',
+      '',
+      '--times N chains N sequential sweeps in one launchd fire. Sweep 2 re-reads',
+      'rotation-state.json so it lands on the NEXT set of cities (not the same ones).',
+      'Use 2 to double leadgen throughput inside the 07:00-09:00 quiet-machine window',
+      'before workday sessions start using Ollama.',
     ].join('\n'));
     return;
   }
@@ -104,6 +122,7 @@ function main() {
   const config = loadRuntimeConfig();
   const hour = getNumberArgValue('--hour', DEFAULT_HOUR, 23);
   const minute = getNumberArgValue('--minute', DEFAULT_MINUTE, 59);
+  const times = getNumberArgValue('--times', DEFAULT_TIMES, MAX_TIMES);
   const shouldLoad = !hasFlag('--no-load');
 
   const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
@@ -116,7 +135,7 @@ function main() {
   ensureDirectory(launchAgentsDir);
   ensureDirectory(dirname(stdoutPath));
 
-  const plistContent = buildPlistContent({
+  const plistContent = buildLeadgenPlistContent({
     nodePath,
     scriptPath,
     workingDirectory: projectRoot,
@@ -124,6 +143,7 @@ function main() {
     stderrPath,
     hour,
     minute,
+    times,
   });
 
   writeFileSync(plistPath, plistContent, 'utf8');
@@ -134,7 +154,7 @@ function main() {
 
   process.stdout.write([
     `Installed ${basename(plistPath)}.`,
-    `Schedule: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} local time, once daily.`,
+    `Schedule: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} local time, ${times === 1 ? 'once' : `${times} sweeps back-to-back`} per day.`,
     `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
     `Plist: ${plistPath}`,
     `Stdout: ${stdoutPath}`,
@@ -142,4 +162,10 @@ function main() {
   ].join('\n'));
 }
 
-main();
+const IS_MAIN_MODULE = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (IS_MAIN_MODULE) {
+  main();
+}
