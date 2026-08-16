@@ -172,6 +172,36 @@ BLOCKED_DOMAINS = {
     "newberrywolves.com",
 }
 
+# Well-known Dutch national chains — centrally operated, huge in-house
+# teams, not the local small-business VBJ sells to. Kept as a separate set
+# from BLOCKED_DOMAINS purely for editorial clarity (both feed into the
+# same is_blocked_domain check). Add cautiously: only when the domain is
+# clearly the corporate parent, not a local franchisee's own site. A
+# franchisee at a different domain (e.g., "randstad-<city>.nl") stays
+# visible — that IS the local small business.
+#
+# Curated 2026-08-16 from a review of the newest 500 leads + Claude's
+# already-rejected reasoning across the last month.
+NATIONAL_CHAINS = {
+    # Recruitment giants
+    "randstad.nl", "randstad.com",  # #1 NL staffing agency, ~4700 employees
+    "adecco.nl",  # global staffing, NL branch
+    "manpower.nl",  # global staffing, NL branch
+    "tempo-team.nl",  # subsidiary of Randstad
+    "olympia.nl",  # national temp agency
+    "unique.nl",  # national temp agency
+    "startpeople.nl",  # RGF/Recruit Holdings NL branch, Claude flagged as national
+    # Supermarket / grocery chains (national, in-house IT/marketing teams)
+    "ah.nl", "albertheijn.nl",  # Albert Heijn
+    "jumbo.com",  # Jumbo
+    "aldi.nl",
+    "lidl.nl",
+    "plus.nl",
+    # Home-services / installations chains (added 2026-08-16 batch to
+    # BLOCKED_DOMAINS already: feenstra.com, guidion.com, hoogvliet.com,
+    # valksolarsystems.com — not duplicated here).
+}
+
 # Marketing language Dutch/English directory and comparison sites consistently
 # use to describe themselves — checked against the model's own business_type
 # and services fields after extraction. Catches directory sites the domain
@@ -188,7 +218,7 @@ DIRECTORY_LANGUAGE_MARKERS = (
 
 def is_blocked_domain(url: str, extra_blocked: set[str] | None = None) -> bool:
     host = (urlparse(url).hostname or "").lower()
-    blocked = BLOCKED_DOMAINS | (extra_blocked or set())
+    blocked = BLOCKED_DOMAINS | NATIONAL_CHAINS | (extra_blocked or set())
     return any(host == domain or host.endswith(f".{domain}") for domain in blocked)
 
 
@@ -237,6 +267,34 @@ def build_negative_site_prefix(recent_blocked: list[str]) -> str:
     return (" ".join(parts) + " ") if parts else ""
 
 
+# Tokens that, if already present in an incoming query, mean the caller has
+# spelled out country context themselves — don't double-append. Case-
+# insensitive substring match; the check runs on a lowercased copy of the
+# query so "Nederland", "NEDERLAND", " nederland " all suppress the append.
+COUNTRY_CONTEXT_TOKENS = ("nederland", "netherlands", "site:.nl")
+
+
+def apply_country_context(query: str) -> str:
+    """Append "Nederland" so search results bias hard toward Dutch pages.
+
+    Root cause captured 2026-08-16: `klinieken Heemskerk` (a Dutch clinic
+    query for the town of Heemskerk) matched US college sports rosters
+    where "Heemskerk" is a common Dutch surname (Kees Heemskerk plays for
+    College of Charleston, etc.). 19% of a 500-lead sample had non-.nl/.be
+    domains, most from this class of leak.
+
+    "Nederland" as an extra keyword biases DuckDuckGo's ranking without
+    hard-filtering out legitimate Dutch businesses on .com domains (which
+    `site:.nl` would have). Softer is safer.
+
+    Skips the append when the incoming query already has country context.
+    """
+    lowered = query.lower()
+    if any(token in lowered for token in COUNTRY_CONTEXT_TOKENS):
+        return query
+    return f"{query} Nederland"
+
+
 def search_leads(
     query: str,
     max_results: int,
@@ -250,7 +308,7 @@ def search_leads(
     # search `is_blocked_domain` check below still runs as a safety net for
     # anything beyond the budget-capped prefix (or if DDG ever quietly stops
     # honouring a `-site:` operator).
-    effective_query = build_negative_site_prefix(prefilter_domains or []) + query
+    effective_query = build_negative_site_prefix(prefilter_domains or []) + apply_country_context(query)
     urls = search_on_web_with_retry(query=effective_query, search_engine="duckduckgo", max_results=max_results)
 
     records = []
