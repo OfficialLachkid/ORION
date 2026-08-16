@@ -135,6 +135,41 @@ BLOCKED_DOMAINS = {
     "detelefoongids.nl",
     "goudengids.nl",
     "cylex.nl",
+    # 2026-08-16 batch — Claude qualifier flagged these across recent rejections;
+    # cross-referenced with a direct review of the newest 500 `new`-status leads.
+    # National chains — huge multi-region operators with in-house teams, not the
+    # local small-business VBJ sells to; every one of these takes an outreach
+    # slot away from a real candidate.
+    "feenstra.com",  # national installations chain (heating/plumbing/insulation), ~2000+ employees
+    "guidion.com",  # national installer/technician dispatch platform
+    "hoogvliet.com",  # national supermarket chain (parent org — not a liquor store)
+    "valksolarsystems.com",  # Van der Valk hotel chain's solar arm — not a plumber
+    "chimay.com",  # Belgian brewery brand site (not a Dutch liquor store)
+    # Corporate career / info portals — not businesses to sell to, just recruit-me pages
+    "careers.chevron.com",  # Chevron global careers page
+    "jobs.vinci.com",  # Vinci (French construction giant) careers portal
+    "creditsafe.com",  # credit-check service, not a business type we sell to
+    # Directory / comparison / marketplace additions
+    "bylder.com",  # plumber comparison platform ("Bylder is een platform...")
+    "makelaarsgids.nl",  # makelaar directory ("16 makelaars in Breda", etc.)
+    "nubreda.nl",  # local Breda business directory
+    "explorebreda.com",  # Breda tourism site with "top X" listicle blogs
+    "bredasdagblad.nl",  # local Breda news + Bedrijvengids directory hybrid
+    "deburchtbreda.nl",  # Winkelcentrum de Burcht shopping-center portal (32 stores)
+    "stappen-shoppen.nl",  # Breda City App business directory
+    "thuiswinkel.org",  # Dutch webshop association member-profile pages
+    # City-initiative portals — municipal/community sites, not businesses
+    "castricum.info",  # Castricum info portal ("Werken in Castricum" pages)
+    "sterk.amsterdam",  # Amsterdam city initiative site
+    "vva.amsterdam",  # Amsterdam city site
+    # US college athletics — leaked in via Dutch surnames matching Dutch town
+    # names (e.g., "klinieken Heemskerk" hit US college rosters featuring
+    # players surnamed Heemskerk). Blocking these specific domains stops the
+    # exact leaks observed; the deeper fix is a country-context tweak on the
+    # search query itself (see the operator report from 2026-08-16).
+    "cofcsports.com",
+    "godrakebulldogs.com",
+    "newberrywolves.com",
 }
 
 # Marketing language Dutch/English directory and comparison sites consistently
