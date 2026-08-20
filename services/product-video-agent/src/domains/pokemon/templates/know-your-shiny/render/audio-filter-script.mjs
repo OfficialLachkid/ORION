@@ -18,6 +18,7 @@ export function buildAudioFilterScript({
   countdownPath,
   timerEndPath,
   shinyPath,
+  shinyVolumeMultiplier = 1,
   renderPlan,
   mediaDurations = {},
 }) {
@@ -85,11 +86,14 @@ export function buildAudioFilterScript({
 
   if (shinyPath) {
     const splitCount = Math.max(1, renderPlan.rounds.length);
+    const shinyVolume = Number((
+      DEFAULT_SHINY_SFX_VOLUME * Math.max(0, ensureNumber(shinyVolumeMultiplier, 1))
+    ).toFixed(3));
     filters.push(`[${inputIndex}:a]asplit=${splitCount}${Array.from({ length: splitCount }, (_, index) => `[ssrc${index}]`).join('')}`);
     renderPlan.rounds.forEach((round, roundIndex) => {
       const delayMs = Math.max(0, Math.round(round.reveal_visual_start_seconds * 1000));
       const label = `shiny${roundIndex}`;
-      filters.push(`[ssrc${roundIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_SHINY_SFX_VOLUME}[${label}]`);
+      filters.push(`[ssrc${roundIndex}]adelay=${delayMs}|${delayMs},volume=${shinyVolume}[${label}]`);
       mixLabels.push(label);
     });
   }

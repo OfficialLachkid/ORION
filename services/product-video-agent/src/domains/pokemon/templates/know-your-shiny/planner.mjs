@@ -16,13 +16,14 @@ const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
 const DEFAULT_FINAL_HOLD_SECONDS = 1.0;
 const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
+const DEFAULT_SHINY_SOUND_VOLUME_MULTIPLIER = 1;
 const DECOY_COLOR_PROFILES = Object.freeze([
-  Object.freeze({ id: 'blue_shift', color_mix: 'rr=0.56:rg=0.12:rb=0.12:gr=0.24:gg=0.82:gb=0.18:br=0.32:bg=0.44:bb=1.72', saturation: 1.48, brightness: -0.03, contrast: 1.22 }),
-  Object.freeze({ id: 'red_shift', color_mix: 'rr=1.48:rg=0.18:rb=0.10:gr=0.24:gg=0.62:gb=0.12:br=0.22:bg=0.18:bb=0.58', saturation: 1.4, brightness: 0.04, contrast: 1.22 }),
-  Object.freeze({ id: 'purple_shift', color_mix: 'rr=1.18:rg=0.22:rb=0.28:gr=0.24:gg=0.58:gb=0.24:br=0.54:bg=0.24:bb=1.44', saturation: 1.52, brightness: 0.02, contrast: 1.24 }),
-  Object.freeze({ id: 'teal_shift', color_mix: 'rr=0.44:rg=0.16:rb=0.12:gr=0.24:gg=0.96:gb=0.22:br=0.18:bg=0.46:bb=1.18', saturation: 1.38, brightness: 0.02, contrast: 1.2 }),
-  Object.freeze({ id: 'pink_shift', color_mix: 'rr=1.26:rg=0.24:rb=0.22:gr=0.32:gg=0.62:gb=0.24:br=0.42:bg=0.20:bb=0.92', saturation: 1.46, brightness: 0.05, contrast: 1.22 }),
-  Object.freeze({ id: 'amber_shift', color_mix: 'rr=1.26:rg=0.24:rb=0.10:gr=0.46:gg=0.88:gb=0.16:br=0.12:bg=0.18:bb=0.42', saturation: 1.34, brightness: 0.08, contrast: 1.18 }),
+  Object.freeze({ id: 'blue_shift', color_mix: 'rr=0.84:rg=0.08:rb=0.06:gr=0.08:gg=0.94:gb=0.08:br=0.16:bg=0.22:bb=1.24', saturation: 1.14, brightness: -0.01, contrast: 1.08 }),
+  Object.freeze({ id: 'red_shift', color_mix: 'rr=1.2:rg=0.1:rb=0.06:gr=0.1:gg=0.86:gb=0.08:br=0.08:bg=0.1:bb=0.82', saturation: 1.12, brightness: 0.01, contrast: 1.08 }),
+  Object.freeze({ id: 'purple_shift', color_mix: 'rr=1.06:rg=0.12:rb=0.14:gr=0.12:gg=0.84:gb=0.12:br=0.22:bg=0.12:bb=1.16', saturation: 1.15, brightness: 0.01, contrast: 1.08 }),
+  Object.freeze({ id: 'teal_shift', color_mix: 'rr=0.76:rg=0.08:rb=0.06:gr=0.08:gg=1.02:gb=0.1:br=0.1:bg=0.22:bb=1.02', saturation: 1.1, brightness: 0, contrast: 1.06 }),
+  Object.freeze({ id: 'pink_shift', color_mix: 'rr=1.12:rg=0.12:rb=0.12:gr=0.14:gg=0.86:gb=0.12:br=0.18:bg=0.1:bb=0.96', saturation: 1.12, brightness: 0.02, contrast: 1.08 }),
+  Object.freeze({ id: 'amber_shift', color_mix: 'rr=1.12:rg=0.14:rb=0.06:gr=0.18:gg=0.96:gb=0.08:br=0.06:bg=0.08:bb=0.82', saturation: 1.08, brightness: 0.03, contrast: 1.05 }),
 ]);
 
 function hashSeed(input) {
@@ -174,6 +175,9 @@ function resolveShinyRevealState(template, inventory) {
     ),
     sparkle_scale_multiplier: Number(
       configured.sparkle_scale_multiplier ?? DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
+    ),
+    sound_volume_multiplier: Number(
+      configured.sound_volume_multiplier ?? DEFAULT_SHINY_SOUND_VOLUME_MULTIPLIER,
     ),
     activation_blockers: activationBlockers,
   };

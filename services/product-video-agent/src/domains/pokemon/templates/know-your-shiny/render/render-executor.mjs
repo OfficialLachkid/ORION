@@ -70,6 +70,7 @@ export async function renderPokeQuizzVideo({
     countdownPath,
     timerEndPath,
     shinyPath,
+    shinyVolumeMultiplier: plan.shiny_reveal?.sound_volume_multiplier ?? 1,
     renderPlan,
     mediaDurations: {
       countdown_audio_duration_seconds: countdownDurationSeconds,

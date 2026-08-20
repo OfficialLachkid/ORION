@@ -26,10 +26,10 @@ const template = {
     generation_scope: [1],
   },
   question_contract: {
-    hook_text: 'Know your shiny?',
-    hook_text_variants: ['Know your shiny?'],
-    prompt_text: "Which one’s shiny?",
-    prompt_text_variants: ["Which one’s shiny?"],
+    hook_text: 'Do you know your shiny?',
+    hook_text_variants: ['Do you know your shiny?'],
+    prompt_text: 'Which one\u2019s shiny?',
+    prompt_text_variants: ['Which one\u2019s shiny?'],
     reveal_text: '',
     reveal_text_variants: [],
   },
@@ -58,7 +58,7 @@ const template = {
       sprite_scale_multiplier: 1.56,
       stage_bounds_px: {
         left: 120,
-        top: 620,
+        top: 470,
         width: 840,
         height: 760,
       },
@@ -80,6 +80,7 @@ const template = {
       countdown_to: 0,
       bar_height_px: 34,
       bar_horizontal_inset_px: 56,
+      center_y: 1000,
       bar_y_offset_px: 0,
     },
     rounds: {
@@ -91,11 +92,12 @@ const template = {
     },
   },
   reveal: {
-    visual_delay_seconds: 0.3,
+    visual_delay_seconds: 0,
     shiny: {
       enabled: true,
       sparkle_duration_seconds: 0.9,
       sparkle_scale_multiplier: 1.35,
+      sound_volume_multiplier: 0.7,
     },
   },
   audio: {
@@ -167,6 +169,7 @@ test('generic planner dispatch builds a know-your-shiny plan with three rounds a
   assert.equal(plan.shiny_reveal.active, true);
   assert.equal(plan.assets.audio.selected_sound_effects.shiny, '/tmp/shiny.mp3');
   assert.equal(plan.assets.overlays.selected_grass_plateau_path, '/tmp/grass-plateau.png');
+  assert.equal(plan.shiny_reveal.sound_volume_multiplier, 0.7);
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Know Your Shiny$/u);
   for (const round of plan.rounds) {
     assert.equal(round.candidates.length, 4);
@@ -192,6 +195,9 @@ test('know-your-shiny render plan and input builders stay deterministic for slid
   assert.equal(renderPlan.rounds.length, 3);
   assert.equal(renderPlan.output_path, '/tmp/know-your-shiny.mp4');
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
+  assert.equal(renderPlan.rounds[0].reveal_visual_start_seconds, renderPlan.rounds[0].reveal_start_seconds);
+  assert.equal(renderPlan.timer_layout.center_y, 1000);
+  assert.equal(renderPlan.grid_layout.cells[0].center_y, 611);
   assert.equal(visualInputs.length, 6);
   assert.equal(visualInputs[0].role, 'background');
   assert.equal(visualInputs.at(-1).role, 'shiny-sparkle');
@@ -231,6 +237,7 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
     countdownPath: '/tmp/countdown.mp3',
     timerEndPath: null,
     shinyPath: '/tmp/shiny.mp3',
+    shinyVolumeMultiplier: 0.7,
     renderPlan,
     mediaDurations: {
       countdown_audio_duration_seconds: 0.8,
@@ -247,6 +254,7 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);
   assert.doesNotMatch(audioFilter, /timerend0/u);
   assert.doesNotMatch(audioFilter, /timerend2/u);
+  assert.match(audioFilter, /volume=0\.35\[shiny0\]/u);
   assert.match(audioFilter, /shiny0/u);
   assert.match(audioFilter, /shiny2/u);
 });

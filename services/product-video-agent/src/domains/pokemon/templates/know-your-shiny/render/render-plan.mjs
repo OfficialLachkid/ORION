@@ -116,8 +116,10 @@ function buildTimerBarLayout(template, gridLayout = { cells: [] }) {
   const configuredInset = ensureNumber(template?.layout?.timer?.bar_horizontal_inset_px, 56);
   const configuredHeight = ensureNumber(template?.layout?.timer?.bar_height_px, 34);
   const yOffset = ensureNumber(template?.layout?.timer?.bar_y_offset_px, 0);
+  const explicitCenterY = Number(template?.layout?.timer?.center_y);
+  const hasExplicitCenterY = Number.isFinite(explicitCenterY);
   let centerX = canvasWidth / 2;
-  let centerY = ensureNumber(template?.layout?.timer?.center_y, 1040) + yOffset;
+  let centerY = (hasExplicitCenterY ? explicitCenterY : 1040) + yOffset;
   let width = canvasWidth - safeLeft - safeRight - (configuredInset * 2);
 
   if (cells.length > 0) {
@@ -129,7 +131,7 @@ function buildTimerBarLayout(template, gridLayout = { cells: [] }) {
     width = Math.max(280, (right - left) - (configuredInset * 2));
 
     const rows = Array.from(new Set(cells.map((cell) => ensureNumber(cell.row, 0)))).sort((leftRow, rightRow) => leftRow - rightRow);
-    if (rows.length >= 2) {
+    if (!hasExplicitCenterY && rows.length >= 2) {
       const topRowCells = cells.filter((cell) => ensureNumber(cell.row, 0) === rows[0]);
       const bottomRowCells = cells.filter((cell) => ensureNumber(cell.row, 0) === rows[1]);
       const topRowBottom = Math.max(...topRowCells.map((cell) => ensureNumber(cell.y, 0) + ensureNumber(cell.height, 0)));

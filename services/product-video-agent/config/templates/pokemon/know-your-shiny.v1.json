@@ -45,13 +45,13 @@
     "mode": "random"
   },
   "question_contract": {
-    "hook_text": "Know your shiny?",
+    "hook_text": "Do you know your shiny?",
     "hook_text_variants": [
-      "Know your shiny?"
+      "Do you know your shiny?"
     ],
-    "prompt_text": "Which one’s shiny?",
+    "prompt_text": "Which one\u2019s shiny?",
     "prompt_text_variants": [
-      "Which one’s shiny?"
+      "Which one\u2019s shiny?"
     ],
     "reveal_text": "",
     "reveal_text_variants": []
@@ -84,7 +84,7 @@
       "sprite_scale_multiplier": 1.56,
       "stage_bounds_px": {
         "left": 120,
-        "top": 620,
+        "top": 470,
         "width": 840,
         "height": 760
       }
@@ -106,6 +106,7 @@
       "countdown_to": 0,
       "bar_height_px": 34,
       "bar_horizontal_inset_px": 56,
+      "center_y": 1000,
       "bar_y_offset_px": 0
     },
     "rounds": {
@@ -117,11 +118,12 @@
     }
   },
   "reveal": {
-    "visual_delay_seconds": 0.3,
+    "visual_delay_seconds": 0,
     "shiny": {
       "enabled": true,
       "sparkle_duration_seconds": 0.9,
-      "sparkle_scale_multiplier": 1.35
+      "sparkle_scale_multiplier": 1.35,
+      "sound_volume_multiplier": 0.7
     }
   },
   "audio": {
