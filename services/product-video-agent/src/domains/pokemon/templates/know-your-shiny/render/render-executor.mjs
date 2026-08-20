@@ -85,6 +85,7 @@ export async function renderPokeQuizzVideo({
         ...(musicPath ? [musicPath] : []),
         ...(countdownPath ? [countdownPath] : []),
         ...(timerEndPath ? [timerEndPath] : []),
+        ...(shinyPath ? [shinyPath] : []),
       ]),
       '-/filter_complex',
       audioFilterScriptPath,
