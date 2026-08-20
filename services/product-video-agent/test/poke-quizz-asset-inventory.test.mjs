@@ -5,6 +5,7 @@ import {
   buildThreeDTypeStyleCatalog,
   isAssetCandidateFileName,
   selectOverlayPresets,
+  selectSoundEffectPresets,
   selectTypeIconSet,
 } from '../src/poke-quizz-asset-inventory.mjs';
 
@@ -82,6 +83,7 @@ test('type icon selection falls back to pixel assets when no single 3D style cov
 test('overlay preset selection prefers split timer gifs and the 3D pokeball overlay by filename', () => {
   const presets = selectOverlayPresets([
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/3D Pokeball Wiggle.gif',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/disappear.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar-countdown-1s.mp4',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar.png',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/shiny_sparkle.gif',
@@ -98,6 +100,7 @@ test('overlay preset selection prefers split timer gifs and the 3D pokeball over
   assert.match(presets.long_hp_bar_frame || '', /long-hp-bar\.png$/u);
   assert.match(presets.hp_bar_frame || '', /long-hp-bar\.png$/u);
   assert.match(presets.shiny_sparkle || '', /shiny_sparkle\.gif$/u);
+  assert.match(presets.disappear || '', /disappear\.gif$/u);
   assert.match(presets.pokeball_primary || '', /3D Pokeball Wiggle\.gif$/u);
 });
 
@@ -114,48 +117,21 @@ test('overlay preset selection prefers greenscreen hp-bar videos when present', 
 });
 
 test('timer_finished stays the shared timer-end default when a ding file is also present', async () => {
-  const matchSoundEffectKeywordGroups = (files, keywordGroups) => (
-    files.find((filePath) => {
-      const normalizedPath = filePath.toLowerCase();
-      return keywordGroups.some((keywords) => keywords.every((keyword) => normalizedPath.includes(keyword)));
-    }) || null
-  );
-  const matchSoundEffect = (files, keywords) => (
-    files.find((filePath) => keywords.some((keyword) => filePath.toLowerCase().includes(keyword))) || null
-  );
-  const soundEffects = [
+  const soundEffectPresets = selectSoundEffectPresets([
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/countdown.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/ding-sound.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/disappear-sound.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/enlarge-pokeball.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/shiny-sound.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/timer_finished.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/pokeball_wiggle.mp3',
-  ];
-  const countdownTick = matchSoundEffect(soundEffects, ['countdown', 'tick', 'beep']);
-  const timerEnd = (
-    matchSoundEffect(soundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'reveal-hit'])
-    || matchSoundEffect(soundEffects, ['ding'])
-  );
-  const reveal = soundEffects.find((filePath) => ['reveal', 'who', 'answer'].some((keyword) => filePath.toLowerCase().includes(keyword))) || timerEnd;
-  const shiny = matchSoundEffect(soundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
-  const pokeballIntro = matchSoundEffectKeywordGroups(soundEffects, [
-    ['enlarge', 'pokeball'],
-    ['pokeball', 'intro'],
-    ['pokeball', 'appear'],
-    ['pokeball', 'spawn'],
-    ['pokeball', 'scale'],
-    ['pokeball', 'grow'],
-  ]);
-  const pokeballWiggle = matchSoundEffectKeywordGroups(soundEffects, [
-    ['pokeball', 'wiggle'],
-    ['pokeball', 'wobble'],
-    ['pokeball', 'shake'],
   ]);
 
-  assert.match(countdownTick || '', /countdown\.mp3$/u);
-  assert.match(timerEnd || '', /timer_finished\.mp3$/u);
-  assert.match(reveal || '', /timer_finished\.mp3$/u);
-  assert.match(shiny || '', /shiny-sound\.mp3$/u);
-  assert.match(pokeballIntro || '', /enlarge-pokeball\.mp3$/u);
-  assert.match(pokeballWiggle || '', /pokeball_wiggle\.mp3$/u);
+  assert.match(soundEffectPresets.countdown_tick || '', /countdown\.mp3$/u);
+  assert.match(soundEffectPresets.timer_end || '', /timer_finished\.mp3$/u);
+  assert.match(soundEffectPresets.reveal || '', /timer_finished\.mp3$/u);
+  assert.match(soundEffectPresets.shiny || '', /shiny-sound\.mp3$/u);
+  assert.match(soundEffectPresets.disappear || '', /disappear-sound\.mp3$/u);
+  assert.match(soundEffectPresets.pokeball_intro || '', /enlarge-pokeball\.mp3$/u);
+  assert.match(soundEffectPresets.pokeball_wiggle || '', /pokeball_wiggle\.mp3$/u);
 });

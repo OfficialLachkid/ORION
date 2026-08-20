@@ -120,6 +120,52 @@ function buildTimerBarScaleExpression(startSeconds, endSeconds, fullWidth) {
   return `max(2,if(lt(t,${start}),${width},if(lt(t,${end}),${width}*(1-((t-${start})/${Number((end - start).toFixed(3))})),0)))`;
 }
 
+function appendTimerBarPhase(filters, currentLabel, {
+  labelPrefix,
+  fps,
+  sceneDurationSeconds,
+  timerLayout,
+  timerBarScaleExpression,
+  enableStartSeconds,
+  enableEndSeconds,
+  baseColor,
+}) {
+  const enableExpression = formatEnableBetween(enableStartSeconds, enableEndSeconds);
+  const highlightHeight = Math.max(4, roundTime(timerLayout.height * 0.34));
+  const highlightY = roundTime(timerLayout.y + 2);
+  const shadowHeight = Math.max(3, roundTime(timerLayout.height * 0.18));
+  const shadowY = roundTime(timerLayout.y + timerLayout.height - shadowHeight - 2);
+
+  const baseSourceLabel = `${labelPrefix}src`;
+  filters.push(
+    `color=c=${baseColor}@0.98:s=${timerLayout.width}x${timerLayout.height}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerLayout.height}:eval=frame[${baseSourceLabel}]`,
+  );
+  const baseOverlayLabel = `${labelPrefix}base`;
+  filters.push(
+    `[${currentLabel}][${baseSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${enableExpression}'[${baseOverlayLabel}]`,
+  );
+
+  const highlightSourceLabel = `${labelPrefix}hlsrc`;
+  filters.push(
+    `color=c=white@0.18:s=${timerLayout.width}x${highlightHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${highlightHeight}:eval=frame[${highlightSourceLabel}]`,
+  );
+  const highlightOverlayLabel = `${labelPrefix}hl`;
+  filters.push(
+    `[${baseOverlayLabel}][${highlightSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${highlightY}:enable='${enableExpression}'[${highlightOverlayLabel}]`,
+  );
+
+  const shadowSourceLabel = `${labelPrefix}shsrc`;
+  filters.push(
+    `color=c=black@0.14:s=${timerLayout.width}x${shadowHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${shadowHeight}:eval=frame[${shadowSourceLabel}]`,
+  );
+  const shadowOverlayLabel = `${labelPrefix}sh`;
+  filters.push(
+    `[${highlightOverlayLabel}][${shadowSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${shadowY}:enable='${enableExpression}'[${shadowOverlayLabel}]`,
+  );
+
+  return shadowOverlayLabel;
+}
+
 function buildTextSegments(text, {
   template,
   fontSize,
@@ -377,35 +423,38 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
     currentLabel = timerRailLabel;
 
-    const timerGreenSourceLabel = `scene${roundIndex}tb1src`;
-    filters.push(
-      `color=c=0x32D74B@0.98:s=${timerLayout.width}x${timerLayout.height}:r=${fps}:d=${round.scene_duration_seconds},format=rgba,trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerLayout.height}:eval=frame[${timerGreenSourceLabel}]`,
-    );
-    const timerGreenLabel = `scene${roundIndex}tb1`;
-    filters.push(
-      `[${currentLabel}][${timerGreenSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${formatEnableBetween(round.local.countdown_start_seconds, greenEnd)}'[${timerGreenLabel}]`,
-    );
-    currentLabel = timerGreenLabel;
+    currentLabel = appendTimerBarPhase(filters, currentLabel, {
+      labelPrefix: `scene${roundIndex}tb1`,
+      fps,
+      sceneDurationSeconds: round.scene_duration_seconds,
+      timerLayout,
+      timerBarScaleExpression,
+      enableStartSeconds: round.local.countdown_start_seconds,
+      enableEndSeconds: greenEnd,
+      baseColor: '0x32D74B',
+    });
 
-    const timerYellowSourceLabel = `scene${roundIndex}tb2src`;
-    filters.push(
-      `color=c=0xFFD60A@0.98:s=${timerLayout.width}x${timerLayout.height}:r=${fps}:d=${round.scene_duration_seconds},format=rgba,trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerLayout.height}:eval=frame[${timerYellowSourceLabel}]`,
-    );
-    const timerYellowLabel = `scene${roundIndex}tb2`;
-    filters.push(
-      `[${currentLabel}][${timerYellowSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${formatEnableBetween(greenEnd, yellowEnd)}'[${timerYellowLabel}]`,
-    );
-    currentLabel = timerYellowLabel;
+    currentLabel = appendTimerBarPhase(filters, currentLabel, {
+      labelPrefix: `scene${roundIndex}tb2`,
+      fps,
+      sceneDurationSeconds: round.scene_duration_seconds,
+      timerLayout,
+      timerBarScaleExpression,
+      enableStartSeconds: greenEnd,
+      enableEndSeconds: yellowEnd,
+      baseColor: '0xFFD60A',
+    });
 
-    const timerRedSourceLabel = `scene${roundIndex}tb3src`;
-    filters.push(
-      `color=c=0xFF453A@0.98:s=${timerLayout.width}x${timerLayout.height}:r=${fps}:d=${round.scene_duration_seconds},format=rgba,trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerLayout.height}:eval=frame[${timerRedSourceLabel}]`,
-    );
-    const timerRedLabel = `scene${roundIndex}tb3`;
-    filters.push(
-      `[${currentLabel}][${timerRedSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${formatEnableBetween(yellowEnd, round.local.reveal_start_seconds)}'[${timerRedLabel}]`,
-    );
-    currentLabel = timerRedLabel;
+    currentLabel = appendTimerBarPhase(filters, currentLabel, {
+      labelPrefix: `scene${roundIndex}tb3`,
+      fps,
+      sceneDurationSeconds: round.scene_duration_seconds,
+      timerLayout,
+      timerBarScaleExpression,
+      enableStartSeconds: yellowEnd,
+      enableEndSeconds: round.local.reveal_start_seconds,
+      baseColor: '0xFF453A',
+    });
 
     const timerBorderLabel = `scene${roundIndex}tb4`;
     filters.push(
