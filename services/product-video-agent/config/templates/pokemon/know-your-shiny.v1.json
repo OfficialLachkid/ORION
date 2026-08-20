@@ -45,21 +45,16 @@
     "mode": "random"
   },
   "question_contract": {
-    "hook_text": "Know your shiny!",
+    "hook_text": "Know your shiny?",
     "hook_text_variants": [
-      "Know your shiny!",
-      "Can you spot the real shiny?"
+      "Know your shiny?"
     ],
-    "prompt_text": "Which is the shiny?",
+    "prompt_text": "Which one's shiny?",
     "prompt_text_variants": [
-      "Which is the shiny?",
-      "Pick the real shiny."
+      "Which one's shiny?"
     ],
-    "reveal_text": "That was the shiny!",
-    "reveal_text_variants": [
-      "That was the shiny!",
-      "There was the shiny!"
-    ]
+    "reveal_text": "",
+    "reveal_text_variants": []
   },
   "layout": {
     "background": {
@@ -99,6 +94,12 @@
       "center_y": 1010,
       "item_size_px": 320,
       "sprite_scale_multiplier": 1.72
+    },
+    "sprite_platform": {
+      "option_enabled": true,
+      "option_width_multiplier": 0.9,
+      "center_y_offset_multiplier": 0.34,
+      "option_center_y_offset_px": 80
     },
     "timer": {
       "countdown_from": 3,
@@ -145,7 +146,7 @@
         "trigger": "each_second"
       },
       "timer_end": {
-        "enabled": true,
+        "enabled": false,
         "trigger": "countdown_complete"
       }
     }

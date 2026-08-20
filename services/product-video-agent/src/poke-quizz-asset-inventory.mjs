@@ -179,6 +179,9 @@ export function selectOverlayPresets(overlays) {
   const shinySparkle = matchOverlay(overlays, ['shiny', 'sparkle'])
     || matchOverlay(overlays, ['shiny-sparkle'])
     || matchOverlay(overlays, ['shiny_sparkle']);
+  const grassPlateau = matchOverlay(overlayImages, ['grass', 'plateau'])
+    || matchOverlay(overlayImages, ['grass-plateau'])
+    || matchOverlay(overlayImages, ['grass_plateau']);
   const typePlaceholder = matchOverlay(overlays, ['question', 'mark'])
     || matchOverlay(overlays, ['question-mark'])
     || matchOverlay(overlays, ['question_mark']);
@@ -192,6 +195,7 @@ export function selectOverlayPresets(overlays) {
     hp_bar_frame: hpBarFrame,
     long_hp_bar_frame: longHpBarFrame,
     shiny_sparkle: shinySparkle,
+    grass_plateau: grassPlateau,
     type_placeholder: typePlaceholder,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])

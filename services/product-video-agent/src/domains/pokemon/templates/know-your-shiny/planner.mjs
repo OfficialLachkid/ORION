@@ -17,12 +17,12 @@ const DEFAULT_FINAL_HOLD_SECONDS = 1.0;
 const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
 const DECOY_COLOR_PROFILES = Object.freeze([
-  Object.freeze({ id: 'blue_shift', hue_degrees: 146, saturation: 2.18, brightness: -0.02, contrast: 1.26 }),
-  Object.freeze({ id: 'red_shift', hue_degrees: -122, saturation: 2.12, brightness: 0.05, contrast: 1.25 }),
-  Object.freeze({ id: 'purple_shift', hue_degrees: -86, saturation: 2.24, brightness: 0.02, contrast: 1.27 }),
-  Object.freeze({ id: 'teal_shift', hue_degrees: 94, saturation: 2.04, brightness: 0.01, contrast: 1.22 }),
-  Object.freeze({ id: 'pink_shift', hue_degrees: -156, saturation: 2.2, brightness: 0.04, contrast: 1.24 }),
-  Object.freeze({ id: 'amber_shift', hue_degrees: 42, saturation: 1.9, brightness: 0.13, contrast: 1.2 }),
+  Object.freeze({ id: 'blue_shift', color_mix: 'rr=0.56:rg=0.12:rb=0.12:gr=0.24:gg=0.82:gb=0.18:br=0.32:bg=0.44:bb=1.72', saturation: 1.48, brightness: -0.03, contrast: 1.22 }),
+  Object.freeze({ id: 'red_shift', color_mix: 'rr=1.48:rg=0.18:rb=0.10:gr=0.24:gg=0.62:gb=0.12:br=0.22:bg=0.18:bb=0.58', saturation: 1.4, brightness: 0.04, contrast: 1.22 }),
+  Object.freeze({ id: 'purple_shift', color_mix: 'rr=1.18:rg=0.22:rb=0.28:gr=0.24:gg=0.58:gb=0.24:br=0.54:bg=0.24:bb=1.44', saturation: 1.52, brightness: 0.02, contrast: 1.24 }),
+  Object.freeze({ id: 'teal_shift', color_mix: 'rr=0.44:rg=0.16:rb=0.12:gr=0.24:gg=0.96:gb=0.22:br=0.18:bg=0.46:bb=1.18', saturation: 1.38, brightness: 0.02, contrast: 1.2 }),
+  Object.freeze({ id: 'pink_shift', color_mix: 'rr=1.26:rg=0.24:rb=0.22:gr=0.32:gg=0.62:gb=0.24:br=0.42:bg=0.20:bb=0.92', saturation: 1.46, brightness: 0.05, contrast: 1.22 }),
+  Object.freeze({ id: 'amber_shift', color_mix: 'rr=1.26:rg=0.24:rb=0.10:gr=0.46:gg=0.88:gb=0.16:br=0.12:bg=0.18:bb=0.42', saturation: 1.34, brightness: 0.08, contrast: 1.18 }),
 ]);
 
 function hashSeed(input) {
@@ -134,6 +134,9 @@ function selectBackground(backgrounds = [], random, selectionState = {}) {
 }
 
 function selectTemplateScopedTimerEndSound(template, inventory) {
+  if (template?.audio?.sound_effects?.timer_end?.enabled === false) {
+    return null;
+  }
   const soundEffects = inventory?.sound_effects || {};
   const fallbackPath = soundEffects.timer_end || null;
   const preferredKeywords = (Array.isArray(template?.audio?.sound_effects?.timer_end?.preferred_keywords)
@@ -188,7 +191,7 @@ function buildCandidateSet(random) {
         role: 'correct',
         label: String.fromCharCode(65 + index),
         is_correct: true,
-        hue_degrees: 0,
+        color_mix: null,
         saturation: 1,
         brightness: 0,
         contrast: 1,
@@ -201,7 +204,7 @@ function buildCandidateSet(random) {
       role: decoy.id,
       label: String.fromCharCode(65 + index),
       is_correct: false,
-      hue_degrees: decoy.hue_degrees,
+      color_mix: decoy.color_mix,
       saturation: decoy.saturation,
       brightness: decoy.brightness,
       contrast: decoy.contrast,
@@ -336,7 +339,10 @@ export async function planKnowYourShinyChallenge({
   const requiredAssetGaps = [];
   if (!selectedBackgroundPath) requiredAssetGaps.push('background_missing');
   if (!inventory?.sound_effects?.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
-  if (!selectedTimerEndSoundPath) requiredAssetGaps.push('timer_end_sfx_missing');
+  if (template?.audio?.sound_effects?.timer_end?.enabled !== false && !selectedTimerEndSoundPath) {
+    requiredAssetGaps.push('timer_end_sfx_missing');
+  }
+  if (!inventory?.overlay_presets?.grass_plateau) requiredAssetGaps.push('grass_plateau_overlay_missing');
   requiredAssetGaps.push(...shinyReveal.activation_blockers);
 
   return {
@@ -380,6 +386,7 @@ export async function planKnowYourShinyChallenge({
         selected_timer_countdown_path: selectedTimerPath,
         selected_timer_alarm_path: inventory?.overlay_presets?.timer_alarm || null,
         selected_shiny_sparkle_path: shinyReveal.sparkle_overlay_path,
+        selected_grass_plateau_path: inventory?.overlay_presets?.grass_plateau || null,
         available_paths: inventory?.overlays || [],
       },
       audio: {

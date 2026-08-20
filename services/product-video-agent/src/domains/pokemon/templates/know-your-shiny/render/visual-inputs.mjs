@@ -36,6 +36,18 @@ export function buildVisualInputs(plan, renderPlan) {
     });
   });
 
+  if (plan.assets.overlays?.selected_grass_plateau_path) {
+    inputs.push({
+      role: 'grass-platform',
+      path: plan.assets.overlays.selected_grass_plateau_path,
+      args: buildLoopingVisualInput(
+        plan.assets.overlays.selected_grass_plateau_path,
+        renderPlan.total_duration_seconds,
+        renderPlan.canvas.fps,
+      ),
+    });
+  }
+
   if (plan.shiny_reveal?.active && plan.assets.overlays?.selected_shiny_sparkle_path) {
     inputs.push({
       role: 'shiny-sparkle',

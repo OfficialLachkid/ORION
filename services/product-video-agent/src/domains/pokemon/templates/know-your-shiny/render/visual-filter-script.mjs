@@ -32,14 +32,16 @@ function resolveIncomingTransitionSeconds(renderPlan, roundIndex) {
 }
 
 function buildColorFilterChain(candidate) {
-  const hueDegrees = Number(ensureNumber(candidate?.hue_degrees, 0).toFixed(3));
+  const colorMix = String(candidate?.color_mix || '').trim();
   const saturation = Number(Math.max(0, ensureNumber(candidate?.saturation, 1)).toFixed(3));
   const brightness = Number(ensureNumber(candidate?.brightness, 0).toFixed(3));
   const contrast = Number(Math.max(0.1, ensureNumber(candidate?.contrast, 1)).toFixed(3));
-  return [
-    `hue=h=${hueDegrees}*PI/180:s=${saturation}`,
-    `eq=brightness=${brightness}:contrast=${contrast}`,
-  ].join(',');
+  const filters = [];
+  if (colorMix) {
+    filters.push(`colorchannelmixer=${colorMix}`);
+  }
+  filters.push(`eq=saturation=${saturation}:brightness=${brightness}:contrast=${contrast}`);
+  return filters.join(',');
 }
 
 function buildTimerBarScaleExpression(startSeconds, endSeconds, fullWidth) {
@@ -70,6 +72,16 @@ function buildTextSegments(text, {
   }).segments || [];
 }
 
+function resolvePlatformLayout(template) {
+  const config = template?.layout?.sprite_platform || {};
+  return {
+    enabled: config.option_enabled !== false,
+    width_multiplier: ensureNumber(config.option_width_multiplier, 0.9),
+    center_y_offset_multiplier: ensureNumber(config.center_y_offset_multiplier, 0.34),
+    center_y_offset_px: ensureNumber(config.option_center_y_offset_px, ensureNumber(config.center_y_offset_px, 0)),
+  };
+}
+
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = null) {
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
@@ -84,6 +96,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     center_x: 540,
   };
   const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
+  const platformLayout = resolvePlatformLayout(template);
 
   const backgroundLabels = Array.from({ length: roundCount }, (_, index) => `bg${index}`);
   const backgroundFilter = backgroundBlurSigma > 0
@@ -170,6 +183,23 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const baseLabel = `r${roundIndex}c${candidate.index}`;
       const baseChain = `${buildColorFilterChain(candidate)},scale=${baseSpriteSize}:${baseSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1`;
       filters.push(`[${splitLabels[candidate.index]}]fps=${fps},${baseChain}[${baseLabel}]`);
+      if (inputRefs.grassPlatform != null && platformLayout.enabled) {
+        const platformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
+        const platformLabel = `r${roundIndex}platform${candidate.index}`;
+        const platformSceneLabel = `scene${roundIndex}platform${candidate.index}`;
+        const platformCenterY = Number((
+          cell.center_y
+          + (baseSpriteSize * platformLayout.center_y_offset_multiplier)
+          + platformLayout.center_y_offset_px
+        ).toFixed(3));
+        filters.push(
+          `[${inputRefs.grassPlatform}:v]fps=${fps},scale=${platformWidth}:-1,format=rgba,setsar=1[${platformLabel}]`,
+        );
+        filters.push(
+          `[${currentLabel}][${platformLabel}]overlay=x='${cell.center_x}-w/2':y='${platformCenterY}-h/2':enable='${formatEnableBetween(introStart, round.local.scene_duration_seconds)}'[${platformSceneLabel}]`,
+        );
+        currentLabel = platformSceneLabel;
+      }
       const baseSceneLabel = `scene${roundIndex}cand${candidate.index}`;
       filters.push(
         `[${currentLabel}][${baseLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${formatEnableBetween(introStart, round.local.scene_duration_seconds)}'[${baseSceneLabel}]`,

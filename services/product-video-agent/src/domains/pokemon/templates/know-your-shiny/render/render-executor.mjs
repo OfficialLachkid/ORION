@@ -111,6 +111,7 @@ export async function renderPokeQuizzVideo({
     rounds: renderPlan.rounds.map((round) => ({
       sprite: inputRoleIndex.get(`round-${round.round_number}-sprite`),
     })),
+    grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
   };
   const fontPath = await resolveFontPath(fontCandidates);

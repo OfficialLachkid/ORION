@@ -26,12 +26,12 @@ const template = {
     generation_scope: [1],
   },
   question_contract: {
-    hook_text: 'Know your shiny!',
-    hook_text_variants: ['Know your shiny!'],
-    prompt_text: 'Which is the shiny?',
-    prompt_text_variants: ['Which is the shiny?'],
-    reveal_text: 'That was the shiny!',
-    reveal_text_variants: ['That was the shiny!'],
+    hook_text: 'Know your shiny?',
+    hook_text_variants: ['Know your shiny?'],
+    prompt_text: "Which one's shiny?",
+    prompt_text_variants: ["Which one's shiny?"],
+    reveal_text: '',
+    reveal_text_variants: [],
   },
   layout: {
     background: {
@@ -69,6 +69,12 @@ const template = {
       item_size_px: 320,
       sprite_scale_multiplier: 1.72,
     },
+    sprite_platform: {
+      option_enabled: true,
+      option_width_multiplier: 0.9,
+      center_y_offset_multiplier: 0.34,
+      option_center_y_offset_px: 80,
+    },
     timer: {
       countdown_from: 3,
       countdown_to: 0,
@@ -98,6 +104,7 @@ const template = {
     },
     sound_effects: {
       timer_end: {
+        enabled: false,
         preferred_keywords: ['ding-sound'],
       },
     },
@@ -137,9 +144,10 @@ const assetInventory = {
     timer: '/tmp/timer.gif',
     timer_countdown: '/tmp/timer-countdown.gif',
     timer_alarm: '/tmp/timer-alarm.gif',
+    grass_plateau: '/tmp/grass-plateau.png',
     shiny_sparkle: '/tmp/shiny-sparkle.gif',
   },
-  overlays: ['/tmp/timer.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/shiny-sparkle.gif'],
+  overlays: ['/tmp/timer.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/grass-plateau.png', '/tmp/shiny-sparkle.gif'],
   transitions: [],
 };
 
@@ -155,9 +163,10 @@ test('generic planner dispatch builds a know-your-shiny plan with three rounds a
   assert.equal(plan.template_key, 'know-your-shiny');
   assert.equal(plan.rounds.length, 3);
   assert.equal(plan.selection.selected_subject_count, 3);
-  assert.equal(plan.assets.audio.selected_sound_effects.timer_end, '/tmp/ding-sound.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.timer_end, null);
   assert.equal(plan.shiny_reveal.active, true);
   assert.equal(plan.assets.audio.selected_sound_effects.shiny, '/tmp/shiny.mp3');
+  assert.equal(plan.assets.overlays.selected_grass_plateau_path, '/tmp/grass-plateau.png');
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Know Your Shiny$/u);
   for (const round of plan.rounds) {
     assert.equal(round.candidates.length, 4);
@@ -183,7 +192,7 @@ test('know-your-shiny render plan and input builders stay deterministic for slid
   assert.equal(renderPlan.rounds.length, 3);
   assert.equal(renderPlan.output_path, '/tmp/know-your-shiny.mp4');
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
-  assert.equal(visualInputs.length, 5);
+  assert.equal(visualInputs.length, 6);
   assert.equal(visualInputs[0].role, 'background');
   assert.equal(visualInputs.at(-1).role, 'shiny-sparkle');
 });
@@ -211,7 +220,8 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
         { sprite: 2 },
         { sprite: 3 },
       ],
-      shinySparkle: 4,
+      grassPlatform: 4,
+      shinySparkle: 5,
     },
     null,
   );
@@ -219,7 +229,7 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
     narrationPaths: [],
     musicPath: '/tmp/music.mp3',
     countdownPath: '/tmp/countdown.mp3',
-    timerEndPath: '/tmp/ding-sound.mp3',
+    timerEndPath: null,
     shinyPath: '/tmp/shiny.mp3',
     renderPlan,
     mediaDurations: {
@@ -229,14 +239,14 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
 
   assert.match(visualFilter.script, /xfade=transition=slideleft/u);
   assert.match(visualFilter.script, /hue=s=0/u);
-  assert.match(visualFilter.script, /That was the/u);
-  assert.match(visualFilter.script, /shiny!/u);
+  assert.match(visualFilter.script, /grass-plateau|r0platform0|scene0platform0/u);
   assert.match(visualFilter.script, /color=c=0x32D74B@0\.98/u);
   assert.match(visualFilter.script, /scale=w='max\(2,/u);
   assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
+  assert.match(visualFilter.script, /colorchannelmixer=/u);
   assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);
-  assert.match(audioFilter, /timerend0/u);
-  assert.match(audioFilter, /timerend2/u);
+  assert.doesNotMatch(audioFilter, /timerend0/u);
+  assert.doesNotMatch(audioFilter, /timerend2/u);
   assert.match(audioFilter, /shiny0/u);
   assert.match(audioFilter, /shiny2/u);
 });
