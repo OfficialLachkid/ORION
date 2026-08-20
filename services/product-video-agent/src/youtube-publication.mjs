@@ -44,3 +44,21 @@ export function buildYoutubeScheduleUpdatePlan(publication, scheduledFor) {
     },
   };
 }
+
+export function buildYoutubeCommentInsertPlan(videoId, textOriginal) {
+  return {
+    action: 'commentThreads.insert',
+    scopes: ['https://www.googleapis.com/auth/youtube.force-ssl'],
+    part: ['snippet'],
+    body: {
+      snippet: {
+        videoId,
+        topLevelComment: {
+          snippet: {
+            textOriginal: String(textOriginal || '').trim(),
+          },
+        },
+      },
+    },
+  };
+}

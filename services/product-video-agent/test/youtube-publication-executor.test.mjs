@@ -7,8 +7,10 @@ import {
   deleteYoutubeVideo,
   fetchYoutubeVideoStatus,
   fetchYoutubeVideoStatuses,
+  postYoutubeTopLevelComment,
   scheduleYoutubePublication,
   uploadYoutubePreviewVideo,
+  YoutubeCommentPostError,
 } from '../src/youtube-publication-executor.mjs';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
 
@@ -229,4 +231,120 @@ test('fetchYoutubeVideoStatuses resolves found and missing ids in one batch', as
     },
   ]);
   assert.ok(calls.some((call) => call.url.includes('/youtube/v3/videos?part=status%2Csnippet&id=yt-123%2Cyt-missing')));
+});
+
+test('postYoutubeTopLevelComment sends commentThreads.insert with snippet payload', async () => {
+  const requests = [];
+  const result = await postYoutubeTopLevelComment({
+    externalId: 'yt-video-123',
+    textOriginal: 'Did you get it before the reveal?',
+    clientConfig: {
+      clientId: 'desktop-client-id',
+      clientSecret: 'desktop-secret',
+    },
+    refreshToken: 'refresh-token-123',
+    fetchImpl: async (requestUrl, requestOptions) => {
+      requests.push({
+        requestUrl: String(requestUrl),
+        requestOptions: {
+          ...requestOptions,
+          body: requestOptions?.body || '',
+        },
+      });
+
+      if (requests.length === 1) {
+        assert.equal(requestUrl, 'https://oauth2.googleapis.com/token');
+        return {
+          ok: true,
+          status: 200,
+          async text() {
+            return JSON.stringify({
+              access_token: 'access-token-123',
+              expires_in: 3600,
+              token_type: 'Bearer',
+              scope: 'https://www.googleapis.com/auth/youtube.force-ssl',
+            });
+          },
+        };
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return JSON.stringify({
+            id: 'comment-thread-123',
+          });
+        },
+      };
+    },
+  });
+
+  assert.equal(result.externalId, 'yt-video-123');
+  assert.equal(result.commentId, 'comment-thread-123');
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].requestUrl, 'https://www.googleapis.com/youtube/v3/commentThreads?part=snippet');
+  assert.equal(requests[1].requestOptions.method, 'POST');
+  assert.equal(requests[1].requestOptions.headers.Authorization, 'Bearer access-token-123');
+  assert.deepEqual(JSON.parse(requests[1].requestOptions.body), {
+    snippet: {
+      videoId: 'yt-video-123',
+      topLevelComment: {
+        snippet: {
+          textOriginal: 'Did you get it before the reveal?',
+        },
+      },
+    },
+  });
+});
+
+test('postYoutubeTopLevelComment throws YoutubeCommentPostError when the API rejects the comment', async () => {
+  await assert.rejects(
+    () => postYoutubeTopLevelComment({
+      externalId: 'yt-video-123',
+      textOriginal: 'Did you get it before the reveal?',
+      clientConfig: {
+        clientId: 'desktop-client-id',
+        clientSecret: 'desktop-secret',
+      },
+      refreshToken: 'refresh-token-123',
+      fetchImpl: async (requestUrl) => {
+        if (String(requestUrl) === 'https://oauth2.googleapis.com/token') {
+          return {
+            ok: true,
+            status: 200,
+            async text() {
+              return JSON.stringify({
+                access_token: 'access-token-123',
+                expires_in: 3600,
+                token_type: 'Bearer',
+              });
+            },
+          };
+        }
+
+        return {
+          ok: false,
+          status: 403,
+          async text() {
+            return JSON.stringify({
+              error: {
+                errors: [
+                  {
+                    reason: 'commentsDisabled',
+                  },
+                ],
+              },
+            });
+          },
+        };
+      },
+    }),
+    (error) => {
+      assert.ok(error instanceof YoutubeCommentPostError);
+      assert.equal(error.status, 403);
+      assert.equal(error.reason, 'commentsDisabled');
+      return true;
+    },
+  );
 });

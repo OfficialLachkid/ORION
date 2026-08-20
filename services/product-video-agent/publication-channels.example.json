@@ -42,6 +42,67 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
+        "youtube_auto_comment": {
+          "enabled": true,
+          "max_attempts": 3,
+          "recent_history_limit": 3,
+          "default_variants": [
+            {
+              "id": "score",
+              "text": "How many did you get right?"
+            },
+            {
+              "id": "reveal",
+              "text": "Did you get it before the reveal?"
+            },
+            {
+              "id": "comments",
+              "text": "Tell me your score in the comments."
+            }
+          ],
+          "template_variants": {
+            "pokemon.dual-type-reveal.v1": [
+              {
+                "id": "type-combo",
+                "text": "Which type combo got you this time?"
+              },
+              {
+                "id": "combo-score",
+                "text": "How many type combinations have you guessed in a row?"
+              }
+            ],
+            "pokemon.find-the-shiny.v1": [
+              {
+                "id": "spot-the-shiny",
+                "text": "Did you spot the shiny before the reveal?"
+              },
+              {
+                "id": "shiny-fast",
+                "text": "How fast did you find the shiny?"
+              }
+            ],
+            "pokemon.type-quiz.v1": [
+              {
+                "id": "guess-the-typing",
+                "text": "Did you guess the typing in time?"
+              },
+              {
+                "id": "typing-score",
+                "text": "How many typings did you get right today?"
+              }
+            ],
+            "pokemon.memory.v1": [
+              {
+                "id": "memory-check",
+                "text": "Did your memory beat this round?"
+              },
+              {
+                "id": "memory-score",
+                "text": "How many memory rounds have you cleared so far?"
+              }
+            ]
+          }
+        },
         "related_video": {
           "enabled": true,
           "provider": "youtube_studio",
