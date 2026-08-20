@@ -86,8 +86,8 @@
       "counter_y": 144,
       "counter_font_size": 96,
       "highlight_color": "0xFFD60A",
-      "highlight_x_offset_px": 10,
-      "highlight_y_offset_px": -8,
+      "highlight_x_offset_px": 20,
+      "highlight_y_offset_px": -12,
       "highlight_keywords": [
         "shiny"
       ]
@@ -123,7 +123,7 @@
       "countdown_from": 3,
       "countdown_to": 0,
       "bar_height_px": 39,
-      "bar_horizontal_inset_px": -30,
+      "bar_horizontal_inset_px": -80,
       "center_y": 1000,
       "bar_y_offset_px": 0
     },

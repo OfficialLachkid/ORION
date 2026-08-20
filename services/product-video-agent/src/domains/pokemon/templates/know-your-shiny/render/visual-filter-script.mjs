@@ -245,7 +245,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
     let currentLabel = sceneBaseLabel;
     const counterSceneLabel = `scene${roundIndex}c`;
-    const counterStartSeconds = roundTime(incomingTransitionSeconds + 0.03);
+    const counterStartSeconds = roundIndex === 0 && renderPlan.hook_text
+      ? roundTime(round.local.countdown_start_seconds + 0.03)
+      : roundTime(incomingTransitionSeconds + 0.03);
     const counterScaleExpression = buildAnimatedPopSettleExpression(
       counterStartSeconds,
       0.24,
