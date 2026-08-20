@@ -4,5 +4,20 @@
   "publication_channel_selector": "trivamon-youtube",
   "program_path": "../programs/pokemon-quiz-core.json",
   "style_pack_path": "../style-packs/poke-quizz.json",
-  "template_id": "pokemon.dual-type-reveal.v1"
+  "template_id": "pokemon.dual-type-reveal.v1",
+  "night_shift": {
+    "review_backlog": {
+      "enabled": true,
+      "target_review_ready_count": 10,
+      "mix_channel_config_paths": [
+        "services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json",
+        "services/product-video-agent/config/channels/trivamon-memory-youtube.json",
+        "services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json"
+      ]
+    },
+    "review_refresh": {
+      "enabled": true,
+      "pending_only": true
+    }
+  }
 }

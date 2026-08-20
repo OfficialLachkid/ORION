@@ -8,7 +8,11 @@
   "night_shift": {
     "review_backlog": {
       "enabled": true,
-      "target_review_ready_count": 10
+      "target_review_ready_count": 10,
+      "mix_channel_config_paths": [
+        "services/product-video-agent/config/channels/poke-quizz-memory-youtube.json",
+        "services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json"
+      ]
     },
     "review_refresh": {
       "enabled": true,

@@ -23,6 +23,8 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
 const POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES = Object.freeze({
   'dual-type-reveal': 'Dual Type Reveal',
   'find-the-shiny': 'Find the Shiny',
+  'know-your-shiny': 'Know Your Shiny',
+  memory: 'Memory',
   'type-quiz': 'Type Quiz',
 });
 
@@ -63,6 +65,12 @@ export function resolvePokeQuizzPreviewTemplateKey(templateRef) {
 
   if (candidates.some((value) => value.includes('find-the-shiny'))) {
     return 'find-the-shiny';
+  }
+  if (candidates.some((value) => value.includes('know-your-shiny'))) {
+    return 'know-your-shiny';
+  }
+  if (candidates.some((value) => value.includes('memory'))) {
+    return 'memory';
   }
   if (candidates.some((value) => value.includes('dual-type-reveal'))) {
     return 'dual-type-reveal';

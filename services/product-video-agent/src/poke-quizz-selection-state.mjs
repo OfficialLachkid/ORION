@@ -80,6 +80,12 @@ function normalizeTemplateScopeValue(value) {
   if (normalized.includes('find-the-shiny')) {
     return 'find-the-shiny';
   }
+  if (normalized.includes('know-your-shiny')) {
+    return 'know-your-shiny';
+  }
+  if (normalized.includes('memory')) {
+    return 'memory';
+  }
   if (normalized.includes('type-quiz') || normalized.includes('type-speed-quiz')) {
     return 'type-quiz';
   }

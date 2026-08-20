@@ -12,6 +12,14 @@
       "path": "../templates/pokemon/find-the-shiny.v1.json"
     },
     {
+      "template_id": "pokemon.know-your-shiny.v1",
+      "path": "../templates/pokemon/know-your-shiny.v1.json"
+    },
+    {
+      "template_id": "pokemon.memory.v1",
+      "path": "../templates/pokemon/memory.v1.json"
+    },
+    {
       "template_id": "pokemon.type-quiz.v1",
       "path": "../templates/pokemon/type-quiz.v1.json"
     }

@@ -64,6 +64,12 @@ function resolveTemplateFlavor(plan = {}) {
   if (templateKey.includes('find-the-shiny') || templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
   }
+  if (templateKey.includes('know-your-shiny') || templateId.includes('know-your-shiny')) {
+    return 'know-your-shiny';
+  }
+  if (templateKey.includes('memory') || templateId.includes('memory')) {
+    return 'memory';
+  }
   if (
     templateKey.includes('type-quiz')
     || templateId.includes('type-quiz')
@@ -86,6 +92,17 @@ const DEFAULT_QUIZ_TITLE_BUILDERS = Object.freeze([
 const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
   () => 'Find the Shiny Pokemon',
   () => 'Find the Shiny \u2728',
+]);
+
+const DEFAULT_KNOW_YOUR_SHINY_TITLE_BUILDERS = Object.freeze([
+  () => 'Know your shiny!',
+  () => 'Which one is the shiny?',
+  () => 'Spot the real shiny Pokemon',
+]);
+
+const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([
+  () => 'How good is your Pokemon memory?',
+  () => 'Pokemon memory test',
 ]);
 
 const DEFAULT_TYPE_QUIZ_TITLE_BUILDERS = Object.freeze([
@@ -151,6 +168,20 @@ function buildTemplateAwareDefaultTitle(plan) {
       : 0;
     return DEFAULT_TYPE_QUIZ_TITLE_BUILDERS[templateIndex]();
   }
+  if (flavor === 'memory') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|memory`) % DEFAULT_MEMORY_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_MEMORY_TITLE_BUILDERS[templateIndex]();
+  }
+  if (flavor === 'know-your-shiny') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|know-your-shiny`) % DEFAULT_KNOW_YOUR_SHINY_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_KNOW_YOUR_SHINY_TITLE_BUILDERS[templateIndex]();
+  }
   if (flavor !== 'find-the-shiny') {
     return buildDefaultTitle(plan);
   }
@@ -167,6 +198,12 @@ function buildTemplateAwareDefaultDescription(plan) {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     const subjectCount = selectedSubjects.length || Number(plan?.selection?.round_count || 0) || 5;
     return `Can you get ${subjectCount}/${subjectCount}? Watch each Pokemon, beat the timer, and lock in its type before the reveal.`;
+  }
+  if (flavor === 'memory') {
+    return 'Memorize the Pokemon, then pick the one that was missing before the reveal.';
+  }
+  if (flavor === 'know-your-shiny') {
+    return 'Four versions appear, but only one is the true shiny. Lock in your guess before the reveal.';
   }
   if (flavor !== 'find-the-shiny') {
     return buildDefaultDescription(plan);
@@ -191,6 +228,40 @@ function buildTemplateAwareMetadataPrompt(plan) {
       '- Do not spoil every exact answer in the title.',
       '- The description should frame the video as a rapid-fire Pokemon type challenge.',
       '- Mention that each Pokemon reveals its type after the timer runs out.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
+  if (flavor === 'memory') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon memory challenge video.',
+      `Displayed Pokemon count: ${selectedSubjects.length}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil the hidden answer in the title.',
+      '- The description should frame the video as a quick memory challenge.',
+      '- Mention that viewers have to remember the shown Pokemon before choosing the missing one.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
+  if (flavor === 'know-your-shiny') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon shiny-identification challenge video.',
+      `Round count: ${selectedSubjects.length || Number(plan?.selection?.round_count || 0) || 3}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil the exact answer positions in the title.',
+      '- The description should frame the video as a shiny-spotting challenge.',
+      '- Mention that only one version is the real shiny and the others are decoys.',
       '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
       '- Keep the tone playful and sharp, not childish and not corporate.',
       'Return JSON only.',
@@ -228,6 +299,24 @@ function buildTemplateAwareHashtags(plan) {
       'pokemon',
       'pokemontypes',
       'typequiz',
+      'pokemonquiz',
+      'shorts',
+    ]);
+  }
+  if (flavor === 'memory') {
+    return normalizeHashtags([
+      'pokemon',
+      'memorychallenge',
+      'pokemonquiz',
+      'pokemongame',
+      'shorts',
+    ]);
+  }
+  if (flavor === 'know-your-shiny') {
+    return normalizeHashtags([
+      'pokemon',
+      'shinypokemon',
+      'shinyhunt',
       'pokemonquiz',
       'shorts',
     ]);

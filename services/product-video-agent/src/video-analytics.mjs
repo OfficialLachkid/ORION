@@ -146,6 +146,12 @@ function resolveTemplateLabelFromId(templateId) {
   if (normalizedTemplateId.includes('find-the-shiny')) {
     return 'Find the Shiny';
   }
+  if (normalizedTemplateId.includes('know-your-shiny')) {
+    return 'Know Your Shiny';
+  }
+  if (normalizedTemplateId.includes('memory')) {
+    return 'Memory';
+  }
   if (normalizedTemplateId.includes('type-quiz') || normalizedTemplateId.includes('type-speed-quiz')) {
     return 'Type Quiz';
   }
