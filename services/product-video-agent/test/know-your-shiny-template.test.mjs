@@ -41,21 +41,23 @@ const template = {
       hook_y: 300,
       hook_font_size: 136,
       prompt_y: 300,
-      prompt_font_size: 122,
+      prompt_font_size: 98,
       reveal_y: 300,
       reveal_font_size: 110,
       counter_x: 72,
       counter_y: 144,
       counter_font_size: 96,
+      highlight_color: '0xFFD60A',
+      highlight_keywords: ['shiny'],
     },
     sprite_grid: {
       rows: 2,
       columns: 2,
       item_size_px: 258,
       min_item_size_px: 220,
-      column_gap_px: 170,
-      row_gap_px: 220,
-      sprite_scale_multiplier: 1.56,
+      column_gap_px: 190,
+      row_gap_px: 250,
+      sprite_scale_multiplier: 1.87,
       stage_bounds_px: {
         left: 120,
         top: 470,
@@ -71,15 +73,15 @@ const template = {
     },
     sprite_platform: {
       option_enabled: true,
-      option_width_multiplier: 0.9,
+      option_width_multiplier: 0.85,
       center_y_offset_multiplier: 0.34,
       option_center_y_offset_px: 80,
     },
     timer: {
       countdown_from: 3,
       countdown_to: 0,
-      bar_height_px: 34,
-      bar_horizontal_inset_px: 56,
+      bar_height_px: 39,
+      bar_horizontal_inset_px: 20,
       center_y: 1000,
       bar_y_offset_px: 0,
     },
@@ -178,6 +180,31 @@ test('generic planner dispatch builds a know-your-shiny plan with three rounds a
   }
 });
 
+test('know-your-shiny can build a hard five-round variant when configured', async () => {
+  const hardTemplate = JSON.parse(JSON.stringify(template));
+  hardTemplate.selection_rules.generation_scope = [];
+  hardTemplate.selection_rules.round_count_weights = {
+    hard: 1,
+  };
+  hardTemplate.selection_rules.round_count_levels = {
+    hard: {
+      round_count: 5,
+    },
+  };
+  const plan = await planPokemonTypeChallenge({
+    template: hardTemplate,
+    pokedexRows,
+    seed: 'know-your-shiny-hard-rounds',
+    assetInventory,
+  });
+
+  assert.equal(plan.selection.difficulty_id, 'hard');
+  assert.equal(plan.selection.round_count, 5);
+  assert.equal(plan.rounds.length, 5);
+  assert.equal(plan.rounds[0].round_label, '1/5');
+  assert.equal(plan.rounds.at(-1)?.round_label, '5/5');
+});
+
 test('know-your-shiny render plan and input builders stay deterministic for slide rounds', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
@@ -197,7 +224,9 @@ test('know-your-shiny render plan and input builders stay deterministic for slid
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
   assert.equal(renderPlan.rounds[0].reveal_visual_start_seconds, renderPlan.rounds[0].reveal_start_seconds);
   assert.equal(renderPlan.timer_layout.center_y, 1000);
-  assert.equal(renderPlan.grid_layout.cells[0].center_y, 611);
+  assert.equal(renderPlan.timer_layout.width, 660);
+  assert.equal(renderPlan.timer_layout.height, 39);
+  assert.equal(renderPlan.grid_layout.cells[0].center_y, 597);
   assert.equal(visualInputs.length, 6);
   assert.equal(visualInputs[0].role, 'background');
   assert.equal(visualInputs.at(-1).role, 'shiny-sparkle');
@@ -251,6 +280,7 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(visualFilter.script, /scale=w='max\(2,/u);
   assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
   assert.match(visualFilter.script, /colorchannelmixer=/u);
+  assert.match(visualFilter.script, /fontcolor=0xFFD60A/u);
   assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);
   assert.doesNotMatch(audioFilter, /timerend0/u);
   assert.doesNotMatch(audioFilter, /timerend2/u);

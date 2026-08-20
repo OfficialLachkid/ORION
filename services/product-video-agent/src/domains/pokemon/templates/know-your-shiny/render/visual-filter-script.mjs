@@ -18,6 +18,39 @@ function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
 }
 
+function escapeRegExp(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+}
+
+function normalizeHighlightKeywords(template) {
+  return (Array.isArray(template?.layout?.text?.highlight_keywords)
+    ? template.layout.text.highlight_keywords
+    : []
+  )
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function resolveTextHighlightMatch(text, keywords = []) {
+  const sourceText = String(text || '');
+  for (const keyword of keywords) {
+    const pattern = new RegExp(`\\b(${escapeRegExp(keyword)}[!?.,:;'\\u2019-]*)`, 'iu');
+    const match = pattern.exec(sourceText);
+    if (match) {
+      return {
+        before: sourceText.slice(0, match.index),
+        highlighted_text: match[1],
+      };
+    }
+  }
+  return null;
+}
+
+function estimateSegmentTextWidth(text, fontSize) {
+  const normalizedText = String(text || '');
+  return roundTime(normalizedText.length * ensureNumber(fontSize, 60) * 0.56);
+}
+
 function formatCounterText(round) {
   return String(round.round_label || `${round.round_number}/${round.total_rounds || 3}`);
 }
@@ -72,6 +105,26 @@ function buildTextSegments(text, {
   }).segments || [];
 }
 
+function appendHighlightedSegmentOverlay(filters, currentLabel, {
+  labelPrefix,
+  segment,
+  fontPart,
+  highlightColor,
+  highlightKeywords,
+}) {
+  const match = resolveTextHighlightMatch(segment.text, highlightKeywords);
+  if (!match) {
+    return currentLabel;
+  }
+  const fullWidth = estimateSegmentTextWidth(segment.text, segment.font_size);
+  const beforeWidth = estimateSegmentTextWidth(match.before, segment.font_size);
+  const highlightLabel = `${labelPrefix}hl`;
+  filters.push(
+    `[${currentLabel}]drawtext=text='${escapeDrawtextText(match.highlighted_text)}'${fontPart}:fontcolor=${highlightColor}:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='(w-${fullWidth})/2+${beforeWidth}':y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${highlightLabel}]`,
+  );
+  return highlightLabel;
+}
+
 function resolvePlatformLayout(template) {
   const config = template?.layout?.sprite_platform || {};
   return {
@@ -97,6 +150,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   };
   const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
   const platformLayout = resolvePlatformLayout(template);
+  const highlightKeywords = normalizeHighlightKeywords(template);
+  const highlightColor = String(template?.layout?.text?.highlight_color || '0xFFD60A').trim() || '0xFFD60A';
 
   const backgroundLabels = Array.from({ length: roundCount }, (_, index) => `bg${index}`);
   const backgroundFilter = backgroundBlurSigma > 0
@@ -143,6 +198,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${hookSceneLabel}]`,
         );
         currentLabel = hookSceneLabel;
+        currentLabel = appendHighlightedSegmentOverlay(filters, currentLabel, {
+          labelPrefix: `scene${roundIndex}h${segmentIndex}`,
+          segment,
+          fontPart,
+          highlightColor,
+          highlightKeywords,
+        });
       });
     }
 
@@ -161,6 +223,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${promptSceneLabel}]`,
       );
       currentLabel = promptSceneLabel;
+      currentLabel = appendHighlightedSegmentOverlay(filters, currentLabel, {
+        labelPrefix: `scene${roundIndex}p${segmentIndex}`,
+        segment,
+        fontPart,
+        highlightColor,
+        highlightKeywords,
+      });
     });
 
     const roundSpriteInput = inputRefs.rounds[roundIndex].sprite;

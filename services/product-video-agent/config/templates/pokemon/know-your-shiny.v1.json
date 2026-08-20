@@ -42,6 +42,18 @@
       "shiny_sprite_path"
     ],
     "round_count": 3,
+    "round_count_weights": {
+      "medium": 1,
+      "hard": 1
+    },
+    "round_count_levels": {
+      "medium": {
+        "round_count": 3
+      },
+      "hard": {
+        "round_count": 5
+      }
+    },
     "mode": "random"
   },
   "question_contract": {
@@ -61,27 +73,31 @@
       "source_policy": "local_t7_backgrounds",
       "media_type": "looping_image_gif_or_video",
       "fit": "cover",
-      "blur_sigma": 2
+      "blur_sigma": 4
     },
     "text": {
       "hook_y": 300,
       "hook_font_size": 136,
       "prompt_y": 300,
-      "prompt_font_size": 122,
+      "prompt_font_size": 98,
       "reveal_y": 300,
       "reveal_font_size": 110,
       "counter_x": 72,
       "counter_y": 144,
-      "counter_font_size": 96
+      "counter_font_size": 96,
+      "highlight_color": "0xFFD60A",
+      "highlight_keywords": [
+        "shiny"
+      ]
     },
     "sprite_grid": {
       "rows": 2,
       "columns": 2,
       "item_size_px": 258,
       "min_item_size_px": 220,
-      "column_gap_px": 170,
-      "row_gap_px": 220,
-      "sprite_scale_multiplier": 1.56,
+      "column_gap_px": 190,
+      "row_gap_px": 250,
+      "sprite_scale_multiplier": 1.87,
       "stage_bounds_px": {
         "left": 120,
         "top": 470,
@@ -97,15 +113,15 @@
     },
     "sprite_platform": {
       "option_enabled": true,
-      "option_width_multiplier": 0.9,
+      "option_width_multiplier": 0.85,
       "center_y_offset_multiplier": 0.34,
       "option_center_y_offset_px": 80
     },
     "timer": {
       "countdown_from": 3,
       "countdown_to": 0,
-      "bar_height_px": 34,
-      "bar_horizontal_inset_px": 56,
+      "bar_height_px": 39,
+      "bar_horizontal_inset_px": 20,
       "center_y": 1000,
       "bar_y_offset_px": 0
     },

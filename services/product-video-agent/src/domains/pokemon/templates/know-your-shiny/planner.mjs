@@ -51,6 +51,28 @@ function ensurePositiveInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function buildRoundCountDifficultyCatalog(template) {
+  const configuredLevels = template?.selection_rules?.round_count_levels || {};
+  const difficultyWeights = template?.selection_rules?.round_count_weights || {};
+  return Object.entries(configuredLevels)
+    .map(([difficultyId, entry]) => ({
+      id: String(difficultyId || '').trim(),
+      round_count: ensurePositiveInteger(entry?.round_count, 0),
+      weight: Math.max(1, ensurePositiveInteger(difficultyWeights[difficultyId], 1)),
+    }))
+    .filter((entry) => entry.id && entry.round_count > 0);
+}
+
+function chooseRoundCountDifficulty(difficultyCatalog, random) {
+  if (!Array.isArray(difficultyCatalog) || difficultyCatalog.length === 0) {
+    return null;
+  }
+  const weightedPool = difficultyCatalog.flatMap((entry) => (
+    Array.from({ length: entry.weight }, () => entry)
+  ));
+  return weightedPool[Math.floor(random() * weightedPool.length)] || difficultyCatalog[0];
+}
+
 function normalizeQuestionTextOptions(primaryText, variants = []) {
   const options = [];
   const normalizedPrimaryText = String(primaryText || '').trim();
@@ -264,7 +286,10 @@ export async function planKnowYourShinyChallenge({
   const random = createPrng(seed);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
   const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
-  const roundCount = ensurePositiveInteger(template?.selection_rules?.round_count, DEFAULT_ROUND_COUNT);
+  const roundCountDifficultyCatalog = buildRoundCountDifficultyCatalog(template);
+  const selectedRoundCountDifficulty = chooseRoundCountDifficulty(roundCountDifficultyCatalog, random);
+  const roundCount = selectedRoundCountDifficulty?.round_count
+    ?? ensurePositiveInteger(template?.selection_rules?.round_count, DEFAULT_ROUND_COUNT);
   const countdownFrom = ensurePositiveInteger(template?.layout?.timer?.countdown_from, 3);
   const countdownTo = Number.parseInt(String(template?.layout?.timer?.countdown_to ?? 0), 10);
   const eligibleSubjects = collapseDuplicateSubjects(
@@ -362,6 +387,7 @@ export async function planKnowYourShinyChallenge({
     seed: String(seed),
     selection: {
       mode: String(template?.selection_rules?.mode || 'random').trim().toLowerCase() || 'random',
+      difficulty_id: selectedRoundCountDifficulty?.id || null,
       round_count: roundCount,
       type_pair: [],
       selected_subject_count: selectedSubjects.length,
