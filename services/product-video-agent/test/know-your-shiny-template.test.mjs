@@ -53,14 +53,14 @@ const template = {
       columns: 2,
       item_size_px: 258,
       min_item_size_px: 220,
-      column_gap_px: 130,
-      row_gap_px: 170,
+      column_gap_px: 170,
+      row_gap_px: 220,
       sprite_scale_multiplier: 1.56,
       stage_bounds_px: {
         left: 120,
-        top: 690,
+        top: 620,
         width: 840,
-        height: 920,
+        height: 760,
       },
     },
     reveal_sprite: {
@@ -231,7 +231,9 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(visualFilter.script, /hue=s=0/u);
   assert.match(visualFilter.script, /That was the/u);
   assert.match(visualFilter.script, /shiny!/u);
-  assert.match(visualFilter.script, /drawbox=.*0x32D74B/u);
+  assert.match(visualFilter.script, /color=c=0x32D74B@0\.98/u);
+  assert.match(visualFilter.script, /scale=w='max\(2,/u);
+  assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
   assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);
   assert.match(audioFilter, /timerend0/u);
   assert.match(audioFilter, /timerend2/u);

@@ -84,14 +84,14 @@
       "columns": 2,
       "item_size_px": 258,
       "min_item_size_px": 220,
-      "column_gap_px": 130,
-      "row_gap_px": 170,
+      "column_gap_px": 170,
+      "row_gap_px": 220,
       "sprite_scale_multiplier": 1.56,
       "stage_bounds_px": {
         "left": 120,
-        "top": 690,
+        "top": 620,
         "width": 840,
-        "height": 920
+        "height": 760
       }
     },
     "reveal_sprite": {

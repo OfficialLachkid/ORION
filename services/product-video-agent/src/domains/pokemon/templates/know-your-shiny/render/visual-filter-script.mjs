@@ -42,18 +42,14 @@ function buildColorFilterChain(candidate) {
   ].join(',');
 }
 
-function buildTimerBarWidthExpression(startSeconds, endSeconds, fullWidth) {
+function buildTimerBarScaleExpression(startSeconds, endSeconds, fullWidth) {
   const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
   const end = Number(Math.max(start, ensureNumber(endSeconds, start)).toFixed(3));
   const width = Number(Math.max(0, ensureNumber(fullWidth, 0)).toFixed(3));
   if (end <= start || width <= 0) {
-    return '0';
+    return '2';
   }
-  return `if(lt(t,${start}),${width},if(lt(t,${end}),${width}*(1-((t-${start})/${Number((end - start).toFixed(3))})),0))`;
-}
-
-function buildTimerBarXExpression(centerX, widthExpression) {
-  return `${Number(ensureNumber(centerX, 540).toFixed(3))}-(${widthExpression})/2`;
+  return `max(2,if(lt(t,${start}),${width},if(lt(t,${end}),${width}*(1-((t-${start})/${Number((end - start).toFixed(3))})),0)))`;
 }
 
 function buildTextSegments(text, {
@@ -195,14 +191,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     }
 
     const timerRailLabel = `scene${roundIndex}tb0`;
-    const timerBarWidthExpression = buildTimerBarWidthExpression(
+    const timerBarScaleExpression = buildTimerBarScaleExpression(
       round.local.countdown_start_seconds,
       round.local.reveal_start_seconds,
       timerLayout.width,
-    );
-    const timerBarXExpression = buildTimerBarXExpression(
-      timerLayout.center_x,
-      timerBarWidthExpression,
     );
     const greenEnd = roundTime(
       round.local.countdown_start_seconds
@@ -217,21 +209,33 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
     currentLabel = timerRailLabel;
 
+    const timerGreenSourceLabel = `scene${roundIndex}tb1src`;
+    filters.push(
+      `color=c=0x32D74B@0.98:s=${timerLayout.width}x${timerLayout.height}:r=${fps}:d=${round.scene_duration_seconds},format=rgba,trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerLayout.height}:eval=frame[${timerGreenSourceLabel}]`,
+    );
     const timerGreenLabel = `scene${roundIndex}tb1`;
     filters.push(
-      `[${currentLabel}]drawbox=x='${timerBarXExpression}':y=${timerLayout.y}:w='${timerBarWidthExpression}':h=${timerLayout.height}:color=0x32D74B@0.98:t=fill:enable='${formatEnableBetween(round.local.countdown_start_seconds, greenEnd)}'[${timerGreenLabel}]`,
+      `[${currentLabel}][${timerGreenSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${formatEnableBetween(round.local.countdown_start_seconds, greenEnd)}'[${timerGreenLabel}]`,
     );
     currentLabel = timerGreenLabel;
 
+    const timerYellowSourceLabel = `scene${roundIndex}tb2src`;
+    filters.push(
+      `color=c=0xFFD60A@0.98:s=${timerLayout.width}x${timerLayout.height}:r=${fps}:d=${round.scene_duration_seconds},format=rgba,trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerLayout.height}:eval=frame[${timerYellowSourceLabel}]`,
+    );
     const timerYellowLabel = `scene${roundIndex}tb2`;
     filters.push(
-      `[${currentLabel}]drawbox=x='${timerBarXExpression}':y=${timerLayout.y}:w='${timerBarWidthExpression}':h=${timerLayout.height}:color=0xFFD60A@0.98:t=fill:enable='${formatEnableBetween(greenEnd, yellowEnd)}'[${timerYellowLabel}]`,
+      `[${currentLabel}][${timerYellowSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${formatEnableBetween(greenEnd, yellowEnd)}'[${timerYellowLabel}]`,
     );
     currentLabel = timerYellowLabel;
 
+    const timerRedSourceLabel = `scene${roundIndex}tb3src`;
+    filters.push(
+      `color=c=0xFF453A@0.98:s=${timerLayout.width}x${timerLayout.height}:r=${fps}:d=${round.scene_duration_seconds},format=rgba,trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerLayout.height}:eval=frame[${timerRedSourceLabel}]`,
+    );
     const timerRedLabel = `scene${roundIndex}tb3`;
     filters.push(
-      `[${currentLabel}]drawbox=x='${timerBarXExpression}':y=${timerLayout.y}:w='${timerBarWidthExpression}':h=${timerLayout.height}:color=0xFF453A@0.98:t=fill:enable='${formatEnableBetween(yellowEnd, round.local.reveal_start_seconds)}'[${timerRedLabel}]`,
+      `[${currentLabel}][${timerRedSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${formatEnableBetween(yellowEnd, round.local.reveal_start_seconds)}'[${timerRedLabel}]`,
     );
     currentLabel = timerRedLabel;
 

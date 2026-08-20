@@ -17,12 +17,12 @@ const DEFAULT_FINAL_HOLD_SECONDS = 1.0;
 const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
 const DECOY_COLOR_PROFILES = Object.freeze([
-  Object.freeze({ id: 'warm_shift', hue_degrees: 32, saturation: 1.32, brightness: 0.09, contrast: 1.14 }),
-  Object.freeze({ id: 'cool_shift', hue_degrees: -38, saturation: 1.4, brightness: -0.06, contrast: 1.16 }),
-  Object.freeze({ id: 'mint_shift', hue_degrees: 82, saturation: 1.28, brightness: 0.08, contrast: 1.12 }),
-  Object.freeze({ id: 'violet_shift', hue_degrees: -104, saturation: 1.42, brightness: 0.03, contrast: 1.18 }),
-  Object.freeze({ id: 'amber_shift', hue_degrees: 132, saturation: 1.22, brightness: 0.11, contrast: 1.15 }),
-  Object.freeze({ id: 'rose_shift', hue_degrees: -148, saturation: 1.48, brightness: -0.05, contrast: 1.19 }),
+  Object.freeze({ id: 'blue_shift', hue_degrees: 146, saturation: 2.18, brightness: -0.02, contrast: 1.26 }),
+  Object.freeze({ id: 'red_shift', hue_degrees: -122, saturation: 2.12, brightness: 0.05, contrast: 1.25 }),
+  Object.freeze({ id: 'purple_shift', hue_degrees: -86, saturation: 2.24, brightness: 0.02, contrast: 1.27 }),
+  Object.freeze({ id: 'teal_shift', hue_degrees: 94, saturation: 2.04, brightness: 0.01, contrast: 1.22 }),
+  Object.freeze({ id: 'pink_shift', hue_degrees: -156, saturation: 2.2, brightness: 0.04, contrast: 1.24 }),
+  Object.freeze({ id: 'amber_shift', hue_degrees: 42, saturation: 1.9, brightness: 0.13, contrast: 1.2 }),
 ]);
 
 function hashSeed(input) {
