@@ -78,7 +78,7 @@
     "text": {
       "hook_y": 150,
       "hook_font_size": 136,
-      "prompt_y": 300,
+      "prompt_y": 150,
       "prompt_font_size": 98,
       "reveal_y": 300,
       "reveal_font_size": 110,
@@ -121,7 +121,7 @@
       "countdown_from": 3,
       "countdown_to": 0,
       "bar_height_px": 39,
-      "bar_horizontal_inset_px": 20,
+      "bar_horizontal_inset_px": -30,
       "center_y": 1000,
       "bar_y_offset_px": 0
     },
