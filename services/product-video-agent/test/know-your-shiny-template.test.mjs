@@ -28,8 +28,8 @@ const template = {
   question_contract: {
     hook_text: 'Know your shiny?',
     hook_text_variants: ['Know your shiny?'],
-    prompt_text: "Which one's shiny?",
-    prompt_text_variants: ["Which one's shiny?"],
+    prompt_text: "Which one’s shiny?",
+    prompt_text_variants: ["Which one’s shiny?"],
     reveal_text: '',
     reveal_text_variants: [],
   },
