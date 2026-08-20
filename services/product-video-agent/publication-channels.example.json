@@ -42,6 +42,119 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
+        "youtube_auto_comment": {
+          "enabled": true,
+          "max_attempts": 3,
+          "recent_history_limit": 3,
+          "default_variants": [
+            {
+              "id": "subscribe",
+              "text": "Subscribe for more videos!"
+            }
+          ],
+          "template_variants": {
+            "pokemon.dual-type-reveal.v1": [
+              {
+                "id": "dual-right",
+                "text": "How many Pokemon did you get right?"
+              },
+              {
+                "id": "dual-all",
+                "text": "Thought of them all?"
+              },
+              {
+                "id": "dual-forget",
+                "text": "Which Pokemon did you forget?"
+              },
+              {
+                "id": "dual-instant",
+                "text": "How many did you know instantly?"
+              },
+              {
+                "id": "dual-surprise",
+                "text": "Which reveal surprised you most?"
+              },
+              {
+                "id": "dual-obvious",
+                "text": "Did you miss any obvious ones?"
+              }
+            ],
+            "pokemon.find-the-shiny.v1": [
+              {
+                "id": "shiny-correct",
+                "text": "Did you guess correctly?"
+              },
+              {
+                "id": "shiny-was-correct",
+                "text": "Was your guess correct?"
+              },
+              {
+                "id": "shiny-catch",
+                "text": "Did you catch the shiny?"
+              },
+              {
+                "id": "shiny-subscribe",
+                "text": "Subscribe for more videos!"
+              },
+              {
+                "id": "shiny-pick",
+                "text": "Which one did you pick?"
+              }
+            ],
+            "pokemon.type-quiz.v1": [
+              {
+                "id": "typing-right",
+                "text": "How many typings did you get right?"
+              },
+              {
+                "id": "typing-tricky",
+                "text": "Which typing was most tricky for you?"
+              },
+              {
+                "id": "typing-cards",
+                "text": "How many cards did you get right?"
+              },
+              {
+                "id": "typing-hardest",
+                "text": "Which card was hardest for you?"
+              },
+              {
+                "id": "typing-surprise",
+                "text": "Did any typing surprise you?"
+              },
+              {
+                "id": "typing-all",
+                "text": "Did you know them all?"
+              }
+            ],
+            "pokemon.memory.v1": [
+              {
+                "id": "memory-check",
+                "text": "Did your memory beat this round?"
+              },
+              {
+                "id": "memory-favorite",
+                "text": "What's your favorite Pokemon?"
+              },
+              {
+                "id": "memory-forget",
+                "text": "Which Pokemon did you forget?"
+              },
+              {
+                "id": "memory-remember",
+                "text": "How many did you remember correctly?"
+              },
+              {
+                "id": "memory-odd-one",
+                "text": "Did you spot the odd one out?"
+              },
+              {
+                "id": "memory-fooled",
+                "text": "Which choice almost fooled you?"
+              }
+            ]
+          }
+        },
         "related_video": {
           "enabled": true,
           "provider": "youtube_studio",
@@ -95,6 +208,119 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
+        "youtube_auto_comment": {
+          "enabled": true,
+          "max_attempts": 3,
+          "recent_history_limit": 3,
+          "default_variants": [
+            {
+              "id": "subscribe",
+              "text": "Subscribe for more videos!"
+            }
+          ],
+          "template_variants": {
+            "pokemon.dual-type-reveal.v1": [
+              {
+                "id": "dual-right",
+                "text": "How many Pokemon did you get right?"
+              },
+              {
+                "id": "dual-all",
+                "text": "Thought of them all?"
+              },
+              {
+                "id": "dual-forget",
+                "text": "Which Pokemon did you forget?"
+              },
+              {
+                "id": "dual-instant",
+                "text": "How many did you know instantly?"
+              },
+              {
+                "id": "dual-surprise",
+                "text": "Which reveal surprised you most?"
+              },
+              {
+                "id": "dual-obvious",
+                "text": "Did you miss any obvious ones?"
+              }
+            ],
+            "pokemon.find-the-shiny.v1": [
+              {
+                "id": "shiny-correct",
+                "text": "Did you guess correctly?"
+              },
+              {
+                "id": "shiny-was-correct",
+                "text": "Was your guess correct?"
+              },
+              {
+                "id": "shiny-catch",
+                "text": "Did you catch the shiny?"
+              },
+              {
+                "id": "shiny-subscribe",
+                "text": "Subscribe for more videos!"
+              },
+              {
+                "id": "shiny-pick",
+                "text": "Which one did you pick?"
+              }
+            ],
+            "pokemon.type-quiz.v1": [
+              {
+                "id": "typing-right",
+                "text": "How many typings did you get right?"
+              },
+              {
+                "id": "typing-tricky",
+                "text": "Which typing was most tricky for you?"
+              },
+              {
+                "id": "typing-cards",
+                "text": "How many cards did you get right?"
+              },
+              {
+                "id": "typing-hardest",
+                "text": "Which card was hardest for you?"
+              },
+              {
+                "id": "typing-surprise",
+                "text": "Did any typing surprise you?"
+              },
+              {
+                "id": "typing-all",
+                "text": "Did you know them all?"
+              }
+            ],
+            "pokemon.memory.v1": [
+              {
+                "id": "memory-check",
+                "text": "Did your memory beat this round?"
+              },
+              {
+                "id": "memory-favorite",
+                "text": "What's your favorite Pokemon?"
+              },
+              {
+                "id": "memory-forget",
+                "text": "Which Pokemon did you forget?"
+              },
+              {
+                "id": "memory-remember",
+                "text": "How many did you remember correctly?"
+              },
+              {
+                "id": "memory-odd-one",
+                "text": "Did you spot the odd one out?"
+              },
+              {
+                "id": "memory-fooled",
+                "text": "Which choice almost fooled you?"
+              }
+            ]
+          }
+        },
         "review_thread_id": "1536146358749233222",
         "related_video": {
           "enabled": true,
@@ -149,6 +375,119 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
+        "youtube_auto_comment": {
+          "enabled": true,
+          "max_attempts": 3,
+          "recent_history_limit": 3,
+          "default_variants": [
+            {
+              "id": "subscribe",
+              "text": "Subscribe for more videos!"
+            }
+          ],
+          "template_variants": {
+            "pokemon.dual-type-reveal.v1": [
+              {
+                "id": "dual-right",
+                "text": "How many Pokemon did you get right?"
+              },
+              {
+                "id": "dual-all",
+                "text": "Thought of them all?"
+              },
+              {
+                "id": "dual-forget",
+                "text": "Which Pokemon did you forget?"
+              },
+              {
+                "id": "dual-instant",
+                "text": "How many did you know instantly?"
+              },
+              {
+                "id": "dual-surprise",
+                "text": "Which reveal surprised you most?"
+              },
+              {
+                "id": "dual-obvious",
+                "text": "Did you miss any obvious ones?"
+              }
+            ],
+            "pokemon.find-the-shiny.v1": [
+              {
+                "id": "shiny-correct",
+                "text": "Did you guess correctly?"
+              },
+              {
+                "id": "shiny-was-correct",
+                "text": "Was your guess correct?"
+              },
+              {
+                "id": "shiny-catch",
+                "text": "Did you catch the shiny?"
+              },
+              {
+                "id": "shiny-subscribe",
+                "text": "Subscribe for more videos!"
+              },
+              {
+                "id": "shiny-pick",
+                "text": "Which one did you pick?"
+              }
+            ],
+            "pokemon.type-quiz.v1": [
+              {
+                "id": "typing-right",
+                "text": "How many typings did you get right?"
+              },
+              {
+                "id": "typing-tricky",
+                "text": "Which typing was most tricky for you?"
+              },
+              {
+                "id": "typing-cards",
+                "text": "How many cards did you get right?"
+              },
+              {
+                "id": "typing-hardest",
+                "text": "Which card was hardest for you?"
+              },
+              {
+                "id": "typing-surprise",
+                "text": "Did any typing surprise you?"
+              },
+              {
+                "id": "typing-all",
+                "text": "Did you know them all?"
+              }
+            ],
+            "pokemon.memory.v1": [
+              {
+                "id": "memory-check",
+                "text": "Did your memory beat this round?"
+              },
+              {
+                "id": "memory-favorite",
+                "text": "What's your favorite Pokemon?"
+              },
+              {
+                "id": "memory-forget",
+                "text": "Which Pokemon did you forget?"
+              },
+              {
+                "id": "memory-remember",
+                "text": "How many did you remember correctly?"
+              },
+              {
+                "id": "memory-odd-one",
+                "text": "Did you spot the odd one out?"
+              },
+              {
+                "id": "memory-fooled",
+                "text": "Which choice almost fooled you?"
+              }
+            ]
+          }
+        },
         "review_thread_id": "1536721345440780339",
         "related_video": {
           "enabled": true,
@@ -203,6 +542,119 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
+        "youtube_auto_comment": {
+          "enabled": true,
+          "max_attempts": 3,
+          "recent_history_limit": 3,
+          "default_variants": [
+            {
+              "id": "subscribe",
+              "text": "Subscribe for more videos!"
+            }
+          ],
+          "template_variants": {
+            "pokemon.dual-type-reveal.v1": [
+              {
+                "id": "dual-right",
+                "text": "How many Pokemon did you get right?"
+              },
+              {
+                "id": "dual-all",
+                "text": "Thought of them all?"
+              },
+              {
+                "id": "dual-forget",
+                "text": "Which Pokemon did you forget?"
+              },
+              {
+                "id": "dual-instant",
+                "text": "How many did you know instantly?"
+              },
+              {
+                "id": "dual-surprise",
+                "text": "Which reveal surprised you most?"
+              },
+              {
+                "id": "dual-obvious",
+                "text": "Did you miss any obvious ones?"
+              }
+            ],
+            "pokemon.find-the-shiny.v1": [
+              {
+                "id": "shiny-correct",
+                "text": "Did you guess correctly?"
+              },
+              {
+                "id": "shiny-was-correct",
+                "text": "Was your guess correct?"
+              },
+              {
+                "id": "shiny-catch",
+                "text": "Did you catch the shiny?"
+              },
+              {
+                "id": "shiny-subscribe",
+                "text": "Subscribe for more videos!"
+              },
+              {
+                "id": "shiny-pick",
+                "text": "Which one did you pick?"
+              }
+            ],
+            "pokemon.type-quiz.v1": [
+              {
+                "id": "typing-right",
+                "text": "How many typings did you get right?"
+              },
+              {
+                "id": "typing-tricky",
+                "text": "Which typing was most tricky for you?"
+              },
+              {
+                "id": "typing-cards",
+                "text": "How many cards did you get right?"
+              },
+              {
+                "id": "typing-hardest",
+                "text": "Which card was hardest for you?"
+              },
+              {
+                "id": "typing-surprise",
+                "text": "Did any typing surprise you?"
+              },
+              {
+                "id": "typing-all",
+                "text": "Did you know them all?"
+              }
+            ],
+            "pokemon.memory.v1": [
+              {
+                "id": "memory-check",
+                "text": "Did your memory beat this round?"
+              },
+              {
+                "id": "memory-favorite",
+                "text": "What's your favorite Pokemon?"
+              },
+              {
+                "id": "memory-forget",
+                "text": "Which Pokemon did you forget?"
+              },
+              {
+                "id": "memory-remember",
+                "text": "How many did you remember correctly?"
+              },
+              {
+                "id": "memory-odd-one",
+                "text": "Did you spot the odd one out?"
+              },
+              {
+                "id": "memory-fooled",
+                "text": "Which choice almost fooled you?"
+              }
+            ]
+          }
+        },
         "review_thread_id": "1537438092338798684",
         "related_video": {
           "enabled": true,
@@ -254,7 +706,18 @@
         "title_generation_model": "local_ollama",
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
-        "render_channel": "orion-renders"
+        "render_channel": "orion-renders",
+        "youtube_auto_comment": {
+          "enabled": false,
+          "max_attempts": 3,
+          "recent_history_limit": 3,
+          "default_variants": [
+            {
+              "id": "subscribe",
+              "text": "Subscribe for more videos!"
+            }
+          ]
+        }
       }
     }
   ]

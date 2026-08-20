@@ -1,10 +1,15 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { buildYoutubePreviewUploadPlan, buildYoutubeScheduleUpdatePlan } from './youtube-publication.mjs';
+import {
+  buildYoutubeCommentInsertPlan,
+  buildYoutubePreviewUploadPlan,
+  buildYoutubeScheduleUpdatePlan,
+} from './youtube-publication.mjs';
 import { extractYoutubeOAuthClientCredentials, refreshYoutubeAccessToken } from './youtube-oauth.mjs';
 
 const YOUTUBE_UPLOAD_ENDPOINT = 'https://www.googleapis.com/upload/youtube/v3/videos';
 const YOUTUBE_VIDEOS_ENDPOINT = 'https://www.googleapis.com/youtube/v3/videos';
+const YOUTUBE_COMMENT_THREADS_ENDPOINT = 'https://www.googleapis.com/youtube/v3/commentThreads';
 const YOUTUBE_VIDEO_STATUS_BATCH_SIZE = 25;
 
 async function readJsonResponse(response) {
@@ -280,5 +285,84 @@ export async function deleteYoutubeVideo({
   return {
     externalId: videoId,
     deletedAt: new Date().toISOString(),
+  };
+}
+
+export class YoutubeCommentPostError extends Error {
+  constructor(message, options = {}) {
+    super(message);
+    this.name = 'YoutubeCommentPostError';
+    this.status = Number(options.status || 0);
+    this.reason = String(options.reason || '').trim();
+    this.bodyText = String(options.bodyText || '').trim();
+    this.payload = options.payload || {};
+  }
+}
+
+function extractYoutubeErrorReason(payload = {}) {
+  const nestedReason = payload?.error?.errors?.[0]?.reason;
+  if (nestedReason) {
+    return String(nestedReason).trim();
+  }
+  return String(payload?.error?.status || '').trim();
+}
+
+export async function postYoutubeTopLevelComment({
+  externalId,
+  textOriginal,
+  clientConfig,
+  refreshToken,
+  fetchImpl = globalThis.fetch,
+}) {
+  const videoId = String(externalId || '').trim();
+  if (!videoId) {
+    throw new Error('YouTube comment post requires a video id.');
+  }
+
+  const commentText = String(textOriginal || '').trim();
+  if (!commentText) {
+    throw new Error('YouTube comment post requires comment text.');
+  }
+
+  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, { fetch: fetchImpl });
+  const requestPlan = buildYoutubeCommentInsertPlan(videoId, commentText);
+  const response = await fetchImpl(`${YOUTUBE_COMMENT_THREADS_ENDPOINT}?part=${requestPlan.part.join(',')}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken.accessToken}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(requestPlan.body),
+  });
+  const { bodyText, payload } = await readJsonResponse(response);
+  if (!response.ok) {
+    throw new YoutubeCommentPostError(
+      `YouTube comment post failed (${response.status}): ${bodyText || 'no body'}`,
+      {
+        status: response.status,
+        reason: extractYoutubeErrorReason(payload),
+        bodyText,
+        payload,
+      },
+    );
+  }
+
+  const commentId = String(payload?.id || '').trim()
+    || String(payload?.snippet?.topLevelComment?.id || '').trim();
+  if (!commentId) {
+    throw new YoutubeCommentPostError('YouTube comment post succeeded but returned no comment id.', {
+      status: response.status,
+      reason: 'missing_comment_id',
+      bodyText,
+      payload,
+    });
+  }
+
+  return {
+    externalId: videoId,
+    commentId,
+    postedAt: new Date().toISOString(),
+    payload,
   };
 }
