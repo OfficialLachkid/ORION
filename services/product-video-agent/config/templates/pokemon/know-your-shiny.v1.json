@@ -86,6 +86,8 @@
       "counter_y": 144,
       "counter_font_size": 96,
       "highlight_color": "0xFFD60A",
+      "highlight_x_offset_px": 10,
+      "highlight_y_offset_px": -8,
       "highlight_keywords": [
         "shiny"
       ]

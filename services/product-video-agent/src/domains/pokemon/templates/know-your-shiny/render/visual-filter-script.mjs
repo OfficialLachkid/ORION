@@ -31,6 +31,13 @@ function normalizeHighlightKeywords(template) {
     .filter(Boolean);
 }
 
+function resolveHighlightOffsets(template) {
+  return {
+    x: ensureNumber(template?.layout?.text?.highlight_x_offset_px, 0),
+    y: ensureNumber(template?.layout?.text?.highlight_y_offset_px, 0),
+  };
+}
+
 function resolveTextHighlightMatch(text, keywords = []) {
   const sourceText = String(text || '');
   for (const keyword of keywords) {
@@ -137,6 +144,7 @@ function appendSegmentTextDraws(filters, currentLabel, {
   fontPart,
   highlightColor,
   highlightKeywords,
+  highlightOffsets,
   defaultColor = 'white',
 }) {
   const match = resolveTextHighlightMatch(segment.text, highlightKeywords);
@@ -153,16 +161,22 @@ function appendSegmentTextDraws(filters, currentLabel, {
       suffix: 'pre',
       text: match.before,
       color: defaultColor,
+      x_offset: 0,
+      y_offset: 0,
     },
     {
       suffix: 'hl',
       text: match.highlighted_text,
       color: highlightColor,
+      x_offset: ensureNumber(highlightOffsets?.x, 0),
+      y_offset: ensureNumber(highlightOffsets?.y, 0),
     },
     {
       suffix: 'post',
       text: match.after,
       color: defaultColor,
+      x_offset: 0,
+      y_offset: 0,
     },
   ].filter((piece) => String(piece.text || '').length > 0);
 
@@ -176,7 +190,7 @@ function appendSegmentTextDraws(filters, currentLabel, {
   for (const piece of pieces) {
     const pieceLabel = `${labelPrefix}${piece.suffix}`;
     filters.push(
-      `[${activeLabel}]drawtext=text='${escapeDrawtextText(piece.text)}'${fontPart}:fontcolor=${piece.color}:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='(w-${totalWidth})/2+${Number(offset.toFixed(3))}':y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${pieceLabel}]`,
+      `[${activeLabel}]drawtext=text='${escapeDrawtextText(piece.text)}'${fontPart}:fontcolor=${piece.color}:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='(w-${totalWidth})/2+${Number((offset + ensureNumber(piece.x_offset, 0)).toFixed(3))}':y='${buildAnimatedTextYExpression(segment.y + ensureNumber(piece.y_offset, 0), segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${pieceLabel}]`,
     );
     activeLabel = pieceLabel;
     offset += estimateSegmentTextWidth(piece.text, segment.font_size);
@@ -212,6 +226,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const platformLayout = resolvePlatformLayout(template);
   const highlightKeywords = normalizeHighlightKeywords(template);
   const highlightColor = String(template?.layout?.text?.highlight_color || '0xFFD60A').trim() || '0xFFD60A';
+  const highlightOffsets = resolveHighlightOffsets(template);
 
   const backgroundLabels = Array.from({ length: roundCount }, (_, index) => `bg${index}`);
   const backgroundFilter = backgroundBlurSigma > 0
@@ -259,6 +274,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           fontPart,
           highlightColor,
           highlightKeywords,
+          highlightOffsets,
         });
       });
     }
@@ -279,6 +295,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         fontPart,
         highlightColor,
         highlightKeywords,
+        highlightOffsets,
       });
     });
 
