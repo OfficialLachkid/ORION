@@ -14,13 +14,15 @@ const DEFAULT_PRE_COUNTDOWN_HOLD_SECONDS = 0.24;
 const DEFAULT_HOOK_HOLD_SECONDS = 1.1;
 const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
 const DEFAULT_FINAL_HOLD_SECONDS = 1.0;
+const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
+const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
 const DECOY_COLOR_PROFILES = Object.freeze([
-  Object.freeze({ id: 'warm_shift', hue_degrees: 18, saturation: 0.88, brightness: 0.05, contrast: 1.04 }),
-  Object.freeze({ id: 'cool_shift', hue_degrees: -22, saturation: 1.08, brightness: -0.02, contrast: 1.06 }),
-  Object.freeze({ id: 'mint_shift', hue_degrees: 56, saturation: 0.92, brightness: 0.04, contrast: 1.02 }),
-  Object.freeze({ id: 'violet_shift', hue_degrees: -68, saturation: 1.04, brightness: 0.01, contrast: 1.08 }),
-  Object.freeze({ id: 'amber_shift', hue_degrees: 104, saturation: 0.84, brightness: 0.06, contrast: 1.03 }),
-  Object.freeze({ id: 'rose_shift', hue_degrees: -118, saturation: 1.12, brightness: -0.03, contrast: 1.07 }),
+  Object.freeze({ id: 'warm_shift', hue_degrees: 32, saturation: 1.32, brightness: 0.09, contrast: 1.14 }),
+  Object.freeze({ id: 'cool_shift', hue_degrees: -38, saturation: 1.4, brightness: -0.06, contrast: 1.16 }),
+  Object.freeze({ id: 'mint_shift', hue_degrees: 82, saturation: 1.28, brightness: 0.08, contrast: 1.12 }),
+  Object.freeze({ id: 'violet_shift', hue_degrees: -104, saturation: 1.42, brightness: 0.03, contrast: 1.18 }),
+  Object.freeze({ id: 'amber_shift', hue_degrees: 132, saturation: 1.22, brightness: 0.11, contrast: 1.15 }),
+  Object.freeze({ id: 'rose_shift', hue_degrees: -148, saturation: 1.48, brightness: -0.05, contrast: 1.19 }),
 ]);
 
 function hashSeed(input) {
@@ -149,6 +151,31 @@ function selectTemplateScopedTimerEndSound(template, inventory) {
     }) || fallbackPath;
 }
 
+function resolveShinyRevealState(template, inventory) {
+  const configured = template?.reveal?.shiny && typeof template.reveal.shiny === 'object'
+    ? template.reveal.shiny
+    : {};
+  const sparkleOverlayPath = inventory?.overlay_presets?.shiny_sparkle || null;
+  const shinySoundPath = inventory?.sound_effects?.shiny || null;
+  const enabled = configured.enabled !== false;
+  const activationBlockers = [];
+  if (!sparkleOverlayPath) activationBlockers.push('shiny_sparkle_overlay_missing');
+  if (!shinySoundPath) activationBlockers.push('shiny_sound_effect_missing');
+  return {
+    enabled,
+    active: enabled && activationBlockers.length === 0,
+    sparkle_overlay_path: sparkleOverlayPath,
+    sound_effect_path: shinySoundPath,
+    sparkle_duration_seconds: Number(
+      configured.sparkle_duration_seconds ?? DEFAULT_SHINY_SPARKLE_DURATION_SECONDS,
+    ),
+    sparkle_scale_multiplier: Number(
+      configured.sparkle_scale_multiplier ?? DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
+    ),
+    activation_blockers: activationBlockers,
+  };
+}
+
 function buildCandidateSet(random) {
   const correctIndex = Math.floor(random() * 4);
   const decoyProfiles = shuffle(DECOY_COLOR_PROFILES, random).slice(0, 3);
@@ -248,6 +275,7 @@ export async function planKnowYourShinyChallenge({
   );
   const selectedTimerPath = inventory?.overlay_presets?.timer_countdown || inventory?.overlay_presets?.timer || null;
   const selectedTimerEndSoundPath = selectTemplateScopedTimerEndSound(template, inventory);
+  const shinyReveal = resolveShinyRevealState(template, inventory);
   const hookText = pickSeededQuestionText(
     template?.question_contract?.hook_text,
     template?.question_contract?.hook_text_variants,
@@ -307,9 +335,9 @@ export async function planKnowYourShinyChallenge({
 
   const requiredAssetGaps = [];
   if (!selectedBackgroundPath) requiredAssetGaps.push('background_missing');
-  if (!selectedTimerPath) requiredAssetGaps.push('timer_overlay_missing');
   if (!inventory?.sound_effects?.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
   if (!selectedTimerEndSoundPath) requiredAssetGaps.push('timer_end_sfx_missing');
+  requiredAssetGaps.push(...shinyReveal.activation_blockers);
 
   return {
     schema_version: 'poke-quizz-know-your-shiny-plan-v1',
@@ -340,6 +368,7 @@ export async function planKnowYourShinyChallenge({
     },
     timeline: buildTimeline({ hookText, rounds }),
     rounds,
+    shiny_reveal: shinyReveal,
     assets: {
       background: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
@@ -350,6 +379,7 @@ export async function planKnowYourShinyChallenge({
         selected_timer_path: selectedTimerPath,
         selected_timer_countdown_path: selectedTimerPath,
         selected_timer_alarm_path: inventory?.overlay_presets?.timer_alarm || null,
+        selected_shiny_sparkle_path: shinyReveal.sparkle_overlay_path,
         available_paths: inventory?.overlays || [],
       },
       audio: {
@@ -360,6 +390,7 @@ export async function planKnowYourShinyChallenge({
           ...(inventory?.sound_effects || {}),
           countdown_tick: inventory?.sound_effects?.countdown_tick || null,
           timer_end: selectedTimerEndSoundPath,
+          shiny: shinyReveal.sound_effect_path,
         },
       },
       outputs: {

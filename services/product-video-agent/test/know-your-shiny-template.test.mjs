@@ -72,9 +72,9 @@ const template = {
     timer: {
       countdown_from: 3,
       countdown_to: 0,
-      size_px: 268,
-      center_x: 540,
-      center_y: 500,
+      bar_height_px: 34,
+      bar_horizontal_inset_px: 56,
+      bar_y_offset_px: 0,
     },
     rounds: {
       hook_hold_seconds: 1.1,
@@ -82,6 +82,14 @@ const template = {
       reveal_hold_seconds: 1.05,
       transition_duration_seconds: 0.42,
       final_hold_seconds: 1,
+    },
+  },
+  reveal: {
+    visual_delay_seconds: 0.3,
+    shiny: {
+      enabled: true,
+      sparkle_duration_seconds: 0.9,
+      sparkle_scale_multiplier: 1.35,
     },
   },
   audio: {
@@ -120,16 +128,18 @@ const assetInventory = {
   ],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/ding-sound.mp3'],
+    all: ['/tmp/countdown.mp3', '/tmp/timer-end.mp3', '/tmp/ding-sound.mp3', '/tmp/shiny.mp3'],
     countdown_tick: '/tmp/countdown.mp3',
     timer_end: '/tmp/timer-end.mp3',
+    shiny: '/tmp/shiny.mp3',
   },
   overlay_presets: {
     timer: '/tmp/timer.gif',
     timer_countdown: '/tmp/timer-countdown.gif',
     timer_alarm: '/tmp/timer-alarm.gif',
+    shiny_sparkle: '/tmp/shiny-sparkle.gif',
   },
-  overlays: ['/tmp/timer.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif'],
+  overlays: ['/tmp/timer.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/shiny-sparkle.gif'],
   transitions: [],
 };
 
@@ -146,6 +156,8 @@ test('generic planner dispatch builds a know-your-shiny plan with three rounds a
   assert.equal(plan.rounds.length, 3);
   assert.equal(plan.selection.selected_subject_count, 3);
   assert.equal(plan.assets.audio.selected_sound_effects.timer_end, '/tmp/ding-sound.mp3');
+  assert.equal(plan.shiny_reveal.active, true);
+  assert.equal(plan.assets.audio.selected_sound_effects.shiny, '/tmp/shiny.mp3');
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Know Your Shiny$/u);
   for (const round of plan.rounds) {
     assert.equal(round.candidates.length, 4);
@@ -171,9 +183,9 @@ test('know-your-shiny render plan and input builders stay deterministic for slid
   assert.equal(renderPlan.rounds.length, 3);
   assert.equal(renderPlan.output_path, '/tmp/know-your-shiny.mp4');
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
-  assert.equal(visualInputs.length, 6);
+  assert.equal(visualInputs.length, 5);
   assert.equal(visualInputs[0].role, 'background');
-  assert.equal(visualInputs.at(-1).role, 'round-3-sprite');
+  assert.equal(visualInputs.at(-1).role, 'shiny-sparkle');
 });
 
 test('know-your-shiny audio and visual filters include countdowns, grayscale decoys, and slide transitions', async () => {
@@ -194,13 +206,12 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
     renderPlan,
     {
       background: 0,
-      timerCountdown: 1,
-      timerAlarm: 2,
       rounds: [
+        { sprite: 1 },
+        { sprite: 2 },
         { sprite: 3 },
-        { sprite: 4 },
-        { sprite: 5 },
       ],
+      shinySparkle: 4,
     },
     null,
   );
@@ -209,7 +220,7 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
     musicPath: '/tmp/music.mp3',
     countdownPath: '/tmp/countdown.mp3',
     timerEndPath: '/tmp/ding-sound.mp3',
-    shinyPath: null,
+    shinyPath: '/tmp/shiny.mp3',
     renderPlan,
     mediaDurations: {
       countdown_audio_duration_seconds: 0.8,
@@ -218,7 +229,12 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
 
   assert.match(visualFilter.script, /xfade=transition=slideleft/u);
   assert.match(visualFilter.script, /hue=s=0/u);
-  assert.match(visualFilter.script, /That was the shiny!/u);
+  assert.match(visualFilter.script, /That was the/u);
+  assert.match(visualFilter.script, /shiny!/u);
+  assert.match(visualFilter.script, /drawbox=.*0x32D74B/u);
+  assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);
   assert.match(audioFilter, /timerend0/u);
   assert.match(audioFilter, /timerend2/u);
+  assert.match(audioFilter, /shiny0/u);
+  assert.match(audioFilter, /shiny2/u);
 });

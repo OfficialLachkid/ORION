@@ -45,11 +45,15 @@ export async function renderPokeQuizzVideo({
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
   const countdownPath = plan.assets.audio.selected_sound_effects?.countdown_tick || null;
   const timerEndPath = plan.assets.audio.selected_sound_effects?.timer_end || null;
+  const shinyPath = plan.shiny_reveal?.active
+    ? plan.assets.audio.selected_sound_effects?.shiny || null
+    : null;
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
     ...(countdownPath ? [countdownPath] : []),
     ...(timerEndPath ? [timerEndPath] : []),
+    ...(shinyPath ? [shinyPath] : []),
   ]);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
@@ -65,7 +69,7 @@ export async function renderPokeQuizzVideo({
     musicPath,
     countdownPath,
     timerEndPath,
-    shinyPath: null,
+    shinyPath,
     renderPlan,
     mediaDurations: {
       countdown_audio_duration_seconds: countdownDurationSeconds,
@@ -103,11 +107,10 @@ export async function renderPokeQuizzVideo({
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
   const inputRefs = {
     background: inputRoleIndex.get('background'),
-    timerCountdown: inputRoleIndex.has('timer-countdown') ? inputRoleIndex.get('timer-countdown') : null,
-    timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
     rounds: renderPlan.rounds.map((round) => ({
       sprite: inputRoleIndex.get(`round-${round.round_number}-sprite`),
     })),
+    shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
   };
   const fontPath = await resolveFontPath(fontCandidates);
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);

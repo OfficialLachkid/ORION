@@ -103,9 +103,9 @@
     "timer": {
       "countdown_from": 3,
       "countdown_to": 0,
-      "size_px": 268,
-      "center_x": 540,
-      "center_y": 500
+      "bar_height_px": 34,
+      "bar_horizontal_inset_px": 56,
+      "bar_y_offset_px": 0
     },
     "rounds": {
       "hook_hold_seconds": 1.1,
@@ -113,6 +113,14 @@
       "reveal_hold_seconds": 1.05,
       "transition_duration_seconds": 0.42,
       "final_hold_seconds": 1
+    }
+  },
+  "reveal": {
+    "visual_delay_seconds": 0.3,
+    "shiny": {
+      "enabled": true,
+      "sparkle_duration_seconds": 0.9,
+      "sparkle_scale_multiplier": 1.35
     }
   },
   "audio": {

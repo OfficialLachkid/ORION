@@ -2,20 +2,17 @@ import {
   buildAnimatedPopSettleExpression,
   buildAnimatedTextSegmentAlphaExpression,
   buildAnimatedTextYExpression,
-  buildCountdownNumberAlphaExpression,
-  buildCountdownNumberScaleMultiplierExpression,
-  buildCountdownNumberYExpression,
   formatEnableBetween,
 } from '../../dual-type-reveal/render/animation-expressions.mjs';
 import {
+  DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
   DEFAULT_TEXT_BORDER,
-  DEFAULT_TIMER_NUMBER_SIZE,
-  DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER,
   escapeDrawtextText,
   escapeFilterPath,
   ensureNumber,
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
+import { buildProgressiveTextArtifacts } from '../../dual-type-reveal/render/text-layout.mjs';
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -45,15 +42,36 @@ function buildColorFilterChain(candidate) {
   ].join(',');
 }
 
-function buildRevealCenterExpression(startValue, endValue, startSeconds, endSeconds) {
+function buildTimerBarWidthExpression(startSeconds, endSeconds, fullWidth) {
   const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
   const end = Number(Math.max(start, ensureNumber(endSeconds, start)).toFixed(3));
-  const from = Number(ensureNumber(startValue, 0).toFixed(3));
-  const to = Number(ensureNumber(endValue, from).toFixed(3));
-  if (end <= start || from === to) {
-    return `${to}`;
+  const width = Number(Math.max(0, ensureNumber(fullWidth, 0)).toFixed(3));
+  if (end <= start || width <= 0) {
+    return '0';
   }
-  return `if(lt(t,${start}),${from},if(lt(t,${end}),${from}+(${to}-${from})*((t-${start})/${Number((end - start).toFixed(3))}),${to}))`;
+  return `if(lt(t,${start}),${width},if(lt(t,${end}),${width}*(1-((t-${start})/${Number((end - start).toFixed(3))})),0))`;
+}
+
+function buildTimerBarXExpression(centerX, widthExpression) {
+  return `${Number(ensureNumber(centerX, 540).toFixed(3))}-(${widthExpression})/2`;
+}
+
+function buildTextSegments(text, {
+  template,
+  fontSize,
+  baseY,
+  startSeconds,
+  endSeconds,
+  maxLines = 2,
+}) {
+  return buildProgressiveTextArtifacts(text, {
+    template,
+    fontSize,
+    maxLines,
+    baseY,
+    startSeconds,
+    endSeconds,
+  }).segments || [];
 }
 
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = null) {
@@ -61,10 +79,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const { width, height, fps } = renderPlan.canvas;
   const fontPart = buildFontPart(fontPath);
   const roundCount = renderPlan.rounds.length;
-  const timerVisualWidth = roundTime(renderPlan.timer_layout.width * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
-  const timerVisualHeight = roundTime(renderPlan.timer_layout.height * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
   const gridLayout = renderPlan.grid_layout || { cells: [] };
-  const revealLayout = renderPlan.reveal_sprite || { center_x: 540, center_y: 980 };
+  const timerLayout = renderPlan.timer_layout || {
+    x: 210,
+    y: 1030,
+    width: 660,
+    height: 34,
+    center_x: 540,
+  };
   const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
 
   const backgroundLabels = Array.from({ length: roundCount }, (_, index) => `bg${index}`);
@@ -75,14 +97,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,split=${roundCount}${backgroundLabels.map((label) => `[${label}]`).join('')}`,
   );
 
-  let timerLabels = [];
-  if (inputRefs.timerCountdown != null) {
-    timerLabels = Array.from({ length: roundCount }, (_, index) => `timer${index}`);
-    filters.push(
-      `[${inputRefs.timerCountdown}:v]split=${roundCount}${timerLabels.map((label) => `[${label}]`).join('')}`,
-    );
-  }
-
   renderPlan.rounds.forEach((round, roundIndex) => {
     const incomingTransitionSeconds = resolveIncomingTransitionSeconds(renderPlan, roundIndex);
     const sceneBaseLabel = `scene${roundIndex}b`;
@@ -91,17 +105,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
 
     let currentLabel = sceneBaseLabel;
-    if (timerLabels[roundIndex]) {
-      const timerSceneLabel = `scene${roundIndex}t`;
-      filters.push(
-        `[${timerLabels[roundIndex]}]fps=${fps},trim=duration=${round.countdown_duration_seconds},setpts=PTS-STARTPTS+${round.local.countdown_start_seconds}/TB,crop=iw*0.72:ih*0.72:(iw-ow)/2:(ih-oh)/2-20,scale=${timerVisualWidth}:${timerVisualHeight}:force_original_aspect_ratio=decrease,format=rgba,colorkey=0xFFFFFF:0.22:0.1,setsar=1[tmr${roundIndex}]`,
-      );
-      filters.push(
-        `[${currentLabel}][tmr${roundIndex}]overlay=x='${renderPlan.timer_layout.number_center_x}-w/2':y='${renderPlan.timer_layout.number_center_y}-h/2':enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerSceneLabel}]`,
-      );
-      currentLabel = timerSceneLabel;
-    }
-
     const counterSceneLabel = `scene${roundIndex}c`;
     const counterStartSeconds = roundTime(incomingTransitionSeconds + 0.03);
     const counterScaleExpression = buildAnimatedPopSettleExpression(
@@ -117,40 +120,54 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     currentLabel = counterSceneLabel;
 
     if (roundIndex === 0 && renderPlan.hook_text) {
-      const hookSceneLabel = `scene${roundIndex}h`;
-      filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(renderPlan.hook_text)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.hook_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(renderPlan.text_layout.hook_y, 0.04)}':alpha='${buildAnimatedTextSegmentAlphaExpression(0.04, round.local.countdown_start_seconds)}':enable='${formatEnableBetween(0.04, round.local.countdown_start_seconds)}'[${hookSceneLabel}]`,
-      );
-      currentLabel = hookSceneLabel;
+      const hookSegments = buildTextSegments(renderPlan.hook_text, {
+        template,
+        fontSize: renderPlan.text_layout.hook_font_size,
+        baseY: renderPlan.text_layout.hook_y,
+        startSeconds: 0.04,
+        endSeconds: round.local.countdown_start_seconds,
+        maxLines: 2,
+      });
+      hookSegments.forEach((segment, segmentIndex) => {
+        const hookSceneLabel = `scene${roundIndex}h${segmentIndex}`;
+        filters.push(
+          `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${hookSceneLabel}]`,
+        );
+        currentLabel = hookSceneLabel;
+      });
     }
 
-    const promptSceneLabel = `scene${roundIndex}p`;
-    filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.prompt_text || '')}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.prompt_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(renderPlan.text_layout.prompt_y, incomingTransitionSeconds + 0.08)}':alpha='${buildAnimatedTextSegmentAlphaExpression(incomingTransitionSeconds + 0.08, round.local.reveal_start_seconds)}':enable='${formatEnableBetween(incomingTransitionSeconds + 0.08, round.local.reveal_start_seconds)}'[${promptSceneLabel}]`,
-    );
-    currentLabel = promptSceneLabel;
+    const promptStartSeconds = roundTime(round.local.countdown_start_seconds + 0.02);
+    const promptSegments = buildTextSegments(round.prompt_text || '', {
+      template,
+      fontSize: renderPlan.text_layout.prompt_font_size,
+      baseY: renderPlan.text_layout.prompt_y,
+      startSeconds: promptStartSeconds,
+      endSeconds: round.local.reveal_start_seconds,
+      maxLines: 2,
+    });
+    promptSegments.forEach((segment, segmentIndex) => {
+      const promptSceneLabel = `scene${roundIndex}p${segmentIndex}`;
+      filters.push(
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${promptSceneLabel}]`,
+      );
+      currentLabel = promptSceneLabel;
+    });
 
     const roundSpriteInput = inputRefs.rounds[roundIndex].sprite;
     const splitLabels = round.candidates.map((candidate) => `r${roundIndex}cand${candidate.index}`);
     const graySplitLabels = round.candidates.filter((candidate) => !candidate.is_correct).map((candidate) => `r${roundIndex}gray${candidate.index}`);
     filters.push(
-      `[${roundSpriteInput}:v]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,split=${splitLabels.length + graySplitLabels.length + 1}${splitLabels.map((label) => `[${label}]`).join('')}${graySplitLabels.map((label) => `[${label}]`).join('')}[r${roundIndex}movebase]`,
+      `[${roundSpriteInput}:v]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,split=${splitLabels.length + graySplitLabels.length}${splitLabels.map((label) => `[${label}]`).join('')}${graySplitLabels.map((label) => `[${label}]`).join('')}`,
     );
 
     const baseSpriteSize = roundTime(
       ensureNumber(gridLayout.item_size_px, 220) * ensureNumber(gridLayout.sprite_scale_multiplier, 1),
     );
-    const revealSpriteSize = roundTime(
-      ensureNumber(revealLayout.item_size_px, 320) * ensureNumber(revealLayout.sprite_scale_multiplier, 1),
-    );
-    const revealMoveDuration = Math.max(0.18, ensureNumber(template?.renderer?.correct_move_duration_seconds, 0.36));
-    const revealMoveEnd = roundTime(round.local.reveal_visual_start_seconds + revealMoveDuration);
-    const correctScaleMultiplier = Math.max(0.2, ensureNumber(template?.renderer?.correct_scale_multiplier, 1.08));
     const introDuration = Math.max(0.08, ensureNumber(template?.renderer?.candidate_intro_duration_seconds, 0.18));
     const grayFadeDuration = Math.max(0.08, ensureNumber(template?.renderer?.decoy_grayscale_fade_duration_seconds, 0.22));
-    const correctCellFadeDuration = Math.max(0.06, ensureNumber(template?.renderer?.correct_cell_fade_duration_seconds, 0.16));
-
     let grayLabelCursor = 0;
+
     for (const candidate of round.candidates) {
       const cell = gridLayout.cells[candidate.index];
       const introStart = roundTime(incomingTransitionSeconds + 0.08 + (candidate.index * 0.03));
@@ -158,11 +175,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const baseChain = `${buildColorFilterChain(candidate)},scale=${baseSpriteSize}:${baseSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1`;
       filters.push(`[${splitLabels[candidate.index]}]fps=${fps},${baseChain}[${baseLabel}]`);
       const baseSceneLabel = `scene${roundIndex}cand${candidate.index}`;
-      const baseEnd = candidate.is_correct
-        ? roundTime(round.local.reveal_visual_start_seconds + correctCellFadeDuration)
-        : round.local.scene_duration_seconds;
       filters.push(
-        `[${currentLabel}][${baseLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${formatEnableBetween(introStart, baseEnd)}'[${baseSceneLabel}]`,
+        `[${currentLabel}][${baseLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${formatEnableBetween(introStart, round.local.scene_duration_seconds)}'[${baseSceneLabel}]`,
       );
       currentLabel = baseSceneLabel;
 
@@ -180,38 +194,102 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       }
     }
 
-    const correctCandidate = round.candidates.find((candidate) => candidate.is_correct) || round.candidates[round.correct_candidate_index] || round.candidates[0];
-    const correctCell = gridLayout.cells[correctCandidate.index];
-    const movingLabel = `r${roundIndex}move`;
-    const movingSceneLabel = `scene${roundIndex}move`;
-    const movingSize = roundTime(revealSpriteSize * correctScaleMultiplier);
-    filters.push(
-      `[r${roundIndex}movebase]fps=${fps},${buildColorFilterChain(correctCandidate)},scale=${movingSize}:${movingSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${movingLabel}]`,
+    const timerRailLabel = `scene${roundIndex}tb0`;
+    const timerBarWidthExpression = buildTimerBarWidthExpression(
+      round.local.countdown_start_seconds,
+      round.local.reveal_start_seconds,
+      timerLayout.width,
+    );
+    const timerBarXExpression = buildTimerBarXExpression(
+      timerLayout.center_x,
+      timerBarWidthExpression,
+    );
+    const greenEnd = roundTime(
+      round.local.countdown_start_seconds
+      + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.5),
+    );
+    const yellowEnd = roundTime(
+      round.local.countdown_start_seconds
+      + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.8),
     );
     filters.push(
-      `[${currentLabel}][${movingLabel}]overlay=x='${buildRevealCenterExpression(correctCell.center_x, revealLayout.center_x, round.local.reveal_visual_start_seconds, revealMoveEnd)}-w/2':y='${buildRevealCenterExpression(correctCell.center_y, revealLayout.center_y, round.local.reveal_visual_start_seconds, revealMoveEnd)}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${movingSceneLabel}]`,
+      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=black@0.28:t=fill:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerRailLabel}]`,
     );
-    currentLabel = movingSceneLabel;
+    currentLabel = timerRailLabel;
 
-    const revealSceneLabel = `scene${roundIndex}r`;
+    const timerGreenLabel = `scene${roundIndex}tb1`;
     filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.reveal_text || '')}'${fontPart}:fontcolor=white:fontsize=${renderPlan.text_layout.reveal_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${renderPlan.text_layout.reveal_y}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${revealSceneLabel}]`,
+      `[${currentLabel}]drawbox=x='${timerBarXExpression}':y=${timerLayout.y}:w='${timerBarWidthExpression}':h=${timerLayout.height}:color=0x32D74B@0.98:t=fill:enable='${formatEnableBetween(round.local.countdown_start_seconds, greenEnd)}'[${timerGreenLabel}]`,
     );
-    currentLabel = revealSceneLabel;
+    currentLabel = timerGreenLabel;
 
-    round.countdown_numbers.forEach((countdown, countdownIndex) => {
-      if (String(countdown.value) === '0') {
-        return;
-      }
-      const scaleMultiplierExpression = buildCountdownNumberScaleMultiplierExpression(
-        countdown.start_seconds - round.scene_start_seconds,
-        countdown.end_seconds - round.scene_start_seconds,
+    const timerYellowLabel = `scene${roundIndex}tb2`;
+    filters.push(
+      `[${currentLabel}]drawbox=x='${timerBarXExpression}':y=${timerLayout.y}:w='${timerBarWidthExpression}':h=${timerLayout.height}:color=0xFFD60A@0.98:t=fill:enable='${formatEnableBetween(greenEnd, yellowEnd)}'[${timerYellowLabel}]`,
+    );
+    currentLabel = timerYellowLabel;
+
+    const timerRedLabel = `scene${roundIndex}tb3`;
+    filters.push(
+      `[${currentLabel}]drawbox=x='${timerBarXExpression}':y=${timerLayout.y}:w='${timerBarWidthExpression}':h=${timerLayout.height}:color=0xFF453A@0.98:t=fill:enable='${formatEnableBetween(yellowEnd, round.local.reveal_start_seconds)}'[${timerRedLabel}]`,
+    );
+    currentLabel = timerRedLabel;
+
+    const timerBorderLabel = `scene${roundIndex}tb4`;
+    filters.push(
+      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=white@0.16:t=2:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerBorderLabel}]`,
+    );
+    currentLabel = timerBorderLabel;
+
+    if (plan.shiny_reveal?.active && plan.assets.overlays?.selected_shiny_sparkle_path && inputRefs.shinySparkle != null) {
+      const correctCandidate = round.candidates.find((candidate) => candidate.is_correct)
+        || round.candidates[round.correct_candidate_index]
+        || round.candidates[0];
+      const correctCell = gridLayout.cells[correctCandidate.index];
+      const sparkleLabel = `scene${roundIndex}sparkle`;
+      const sparkleDuration = Math.max(
+        0.12,
+        ensureNumber(
+          plan.assets.overlays?.selected_shiny_sparkle_duration_seconds,
+          ensureNumber(plan.shiny_reveal?.sparkle_duration_seconds, 0.9),
+        ),
       );
-      const countdownSceneLabel = `scene${roundIndex}cd${countdownIndex}`;
+      const sparkleEnd = roundTime(
+        Math.min(round.local.scene_duration_seconds, round.local.reveal_visual_start_seconds + sparkleDuration),
+      );
+      const sparkleSize = roundTime(
+        baseSpriteSize * Math.max(
+          1,
+          ensureNumber(
+            plan.shiny_reveal?.sparkle_scale_multiplier,
+            DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
+          ),
+        ),
+      );
       filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(countdown.value)}'${fontPart}:fontcolor=white:fontsize='${DEFAULT_TIMER_NUMBER_SIZE}*(${scaleMultiplierExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=${renderPlan.timer_layout.number_center_x}-text_w/2:y='${buildCountdownNumberYExpression(renderPlan.timer_layout.number_center_y, countdown.start_seconds - round.scene_start_seconds, countdown.end_seconds - round.scene_start_seconds)}-text_h/2':alpha='${buildCountdownNumberAlphaExpression(countdown.start_seconds - round.scene_start_seconds, countdown.end_seconds - round.scene_start_seconds)}':enable='${formatEnableBetween(countdown.start_seconds - round.scene_start_seconds, countdown.end_seconds - round.scene_start_seconds)}'[${countdownSceneLabel}]`,
+        `[${inputRefs.shinySparkle}:v]fps=${fps},trim=duration=${sparkleDuration},setpts=PTS-STARTPTS+${round.local.reveal_visual_start_seconds}/TB,scale=${sparkleSize}:${sparkleSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${sparkleLabel}]`,
       );
-      currentLabel = countdownSceneLabel;
+      const sparkleSceneLabel = `scene${roundIndex}ss`;
+      filters.push(
+        `[${currentLabel}][${sparkleLabel}]overlay=${correctCell.center_x}-w/2:${correctCell.center_y}-h/2:enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, sparkleEnd)}'[${sparkleSceneLabel}]`,
+      );
+      currentLabel = sparkleSceneLabel;
+    }
+
+    const revealSegments = buildTextSegments(round.reveal_text || '', {
+      template,
+      fontSize: renderPlan.text_layout.reveal_font_size,
+      baseY: renderPlan.text_layout.reveal_y,
+      startSeconds: round.local.reveal_visual_start_seconds,
+      endSeconds: round.local.scene_duration_seconds,
+      maxLines: 2,
+    });
+    revealSegments.forEach((segment, segmentIndex) => {
+      const revealSceneLabel = `scene${roundIndex}r${segmentIndex}`;
+      filters.push(
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${revealSceneLabel}]`,
+      );
+      currentLabel = revealSceneLabel;
     });
 
     filters.push(`[${currentLabel}]format=rgba[scene${roundIndex}]`);

@@ -1,6 +1,5 @@
 import {
   DEFAULT_REVEAL_VISUAL_DELAY_SECONDS,
-  DEFAULT_TIMER_SIZE,
   ensureNumber,
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
@@ -109,17 +108,46 @@ function buildRevealSpriteLayout(template) {
   };
 }
 
-function buildTimerLayout(template) {
-  const size = ensureNumber(template?.layout?.timer?.size_px, DEFAULT_TIMER_SIZE);
-  const centerX = ensureNumber(template?.layout?.timer?.center_x, 540);
-  const centerY = ensureNumber(template?.layout?.timer?.center_y, 470);
+function buildTimerBarLayout(template, gridLayout = { cells: [] }) {
+  const cells = Array.isArray(gridLayout?.cells) ? gridLayout.cells : [];
+  const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
+  const safeLeft = ensureNumber(template?.canvas?.safe_zone?.left, 120);
+  const safeRight = ensureNumber(template?.canvas?.safe_zone?.right, 120);
+  const configuredInset = ensureNumber(template?.layout?.timer?.bar_horizontal_inset_px, 56);
+  const configuredHeight = ensureNumber(template?.layout?.timer?.bar_height_px, 34);
+  const yOffset = ensureNumber(template?.layout?.timer?.bar_y_offset_px, 0);
+  let centerX = canvasWidth / 2;
+  let centerY = ensureNumber(template?.layout?.timer?.center_y, 1040) + yOffset;
+  let width = canvasWidth - safeLeft - safeRight - (configuredInset * 2);
+
+  if (cells.length > 0) {
+    const left = Math.min(...cells.map((cell) => ensureNumber(cell.x, 0)));
+    const right = Math.max(...cells.map((cell) => (
+      ensureNumber(cell.x, 0) + ensureNumber(cell.width, 0)
+    )));
+    centerX = left + ((right - left) / 2);
+    width = Math.max(280, (right - left) - (configuredInset * 2));
+
+    const rows = Array.from(new Set(cells.map((cell) => ensureNumber(cell.row, 0)))).sort((leftRow, rightRow) => leftRow - rightRow);
+    if (rows.length >= 2) {
+      const topRowCells = cells.filter((cell) => ensureNumber(cell.row, 0) === rows[0]);
+      const bottomRowCells = cells.filter((cell) => ensureNumber(cell.row, 0) === rows[1]);
+      const topRowBottom = Math.max(...topRowCells.map((cell) => ensureNumber(cell.y, 0) + ensureNumber(cell.height, 0)));
+      const bottomRowTop = Math.min(...bottomRowCells.map((cell) => ensureNumber(cell.y, 0)));
+      centerY = topRowBottom + ((bottomRowTop - topRowBottom) / 2) + yOffset;
+    }
+  }
+
   return {
-    x: roundTime(centerX - (size / 2)),
-    y: roundTime(centerY - (size / 2)),
-    width: roundTime(size),
-    height: roundTime(size),
-    number_center_x: roundTime(centerX),
-    number_center_y: roundTime(centerY),
+    mode: 'center_shrink_bar',
+    x: roundTime(centerX - (width / 2)),
+    y: roundTime(centerY - (configuredHeight / 2)),
+    width: roundTime(width),
+    height: roundTime(configuredHeight),
+    center_x: roundTime(centerX),
+    center_y: roundTime(centerY),
+    number_center_x: null,
+    number_center_y: null,
   };
 }
 
@@ -161,9 +189,9 @@ function buildCountdownMoments(round, countdownFrom, countdownTo) {
 
 export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const rounds = Array.isArray(plan?.rounds) ? plan.rounds : [];
-  const timerLayout = buildTimerLayout(template);
   const textLayout = buildTextLayout(template);
   const gridLayout = buildGridLayout(template, 4);
+  const timerLayout = buildTimerBarLayout(template, gridLayout);
   const revealSprite = buildRevealSpriteLayout(template);
   const transitionDurationSeconds = ensureNumber(
     template?.layout?.rounds?.transition_duration_seconds,
@@ -234,8 +262,12 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     reveal_sprite: revealSprite,
     audio_cues: {
       hook_start_seconds: 0,
+      prompt_start_seconds: renderedRounds[0]?.countdown_start_seconds ?? 0,
+      countdown_start_seconds: renderedRounds[0]?.countdown_start_seconds ?? 0,
+      timer_end_seconds: renderedRounds[0]?.reveal_start_seconds ?? 0,
+      reveal_start_seconds: renderedRounds[0]?.reveal_start_seconds ?? 0,
+      reveal_visual_start_seconds: renderedRounds[0]?.reveal_visual_start_seconds ?? 0,
       battle_music_start_seconds: roundTime(Math.max(0, ensureNumber(template?.audio?.battle_intro_music?.start_seconds, 0))),
-      shiny_reveal_start_seconds: null,
     },
     hook_text: plan?.narration?.lines?.[0]?.text || '',
     rounds: renderedRounds,

@@ -23,23 +23,6 @@ export function buildVisualInputs(plan, renderPlan) {
     ),
   });
 
-  if (plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path) {
-    const timerPath = plan.assets.overlays.selected_timer_countdown_path || plan.assets.overlays.selected_timer_path;
-    inputs.push({
-      role: 'timer-countdown',
-      path: timerPath,
-      args: ['-ignore_loop', '1', '-i', timerPath],
-    });
-  }
-
-  if (plan.assets.overlays.selected_timer_alarm_path) {
-    inputs.push({
-      role: 'timer-alarm',
-      path: plan.assets.overlays.selected_timer_alarm_path,
-      args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_timer_alarm_path],
-    });
-  }
-
   renderPlan.rounds.forEach((round) => {
     const spritePath = round.subject.render_sprite_path || round.subject.shiny_sprite_path || round.subject.sprite_path;
     inputs.push({
@@ -52,6 +35,14 @@ export function buildVisualInputs(plan, renderPlan) {
       ),
     });
   });
+
+  if (plan.shiny_reveal?.active && plan.assets.overlays?.selected_shiny_sparkle_path) {
+    inputs.push({
+      role: 'shiny-sparkle',
+      path: plan.assets.overlays.selected_shiny_sparkle_path,
+      args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_shiny_sparkle_path],
+    });
+  }
 
   return inputs;
 }
