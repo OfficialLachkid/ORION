@@ -49,7 +49,32 @@ function resolveTextHighlightMatch(text, keywords = []) {
 
 function estimateSegmentTextWidth(text, fontSize) {
   const normalizedText = String(text || '');
-  return roundTime(normalizedText.length * ensureNumber(fontSize, 60) * 0.56);
+  const size = ensureNumber(fontSize, 60);
+  let units = 0;
+  for (const character of normalizedText) {
+    if (/\s/u.test(character)) {
+      units += 0.28;
+      continue;
+    }
+    if (/[.,!?;:'"\u2019-]/u.test(character)) {
+      units += 0.3;
+      continue;
+    }
+    if (/[ijlIt1|]/u.test(character)) {
+      units += 0.24;
+      continue;
+    }
+    if (/[mwMW@#%&]/u.test(character)) {
+      units += 0.62;
+      continue;
+    }
+    if (/[A-Z]/u.test(character)) {
+      units += 0.54;
+      continue;
+    }
+    units += 0.47;
+  }
+  return roundTime(units * size);
 }
 
 function formatCounterText(round) {
