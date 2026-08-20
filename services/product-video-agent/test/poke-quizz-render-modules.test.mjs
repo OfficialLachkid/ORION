@@ -108,6 +108,41 @@ test('visual inputs prefer resolved reveal sprite paths and append the shiny spa
   assert.deepEqual(inputs.at(-1).args, ['-ignore_loop', '1', '-i', '/tmp/shiny_sparkle.gif']);
 });
 
+test('visual inputs prefer resolved render sprite paths when no explicit reveal sprite is stored', () => {
+  const renderPlan = {
+    total_duration_seconds: 10.2,
+    canvas: {
+      fps: 30,
+    },
+    phases: {
+      reveal: {
+        duration_seconds: 2.4,
+      },
+    },
+  };
+
+  const inputs = buildVisualInputs({
+    assets: {
+      background: { selected_path: '/tmp/beach.png' },
+      type_icons: [],
+      overlays: {
+        selected_timer_path: '/tmp/timer.gif',
+        selected_primary_pokeball_overlay_path: '/tmp/pokeballs.gif',
+      },
+      pokemon: [
+        {
+          national_dex_number: 6,
+          sprite_path: '/tmp/charizard-old.png',
+          render_sprite_path: '/tmp/charizard-new.png',
+        },
+      ],
+    },
+  }, renderPlan);
+
+  assert.equal(inputs.at(-1).path, '/tmp/charizard-new.png');
+  assert.deepEqual(inputs.at(-1).args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/charizard-new.png']);
+});
+
 test('drawtext artifacts expose progressive word-by-word segments per phase', () => {
   const renderPlan = {
     text: {

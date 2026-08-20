@@ -1,6 +1,8 @@
+import { access } from 'node:fs/promises';
 import { createTypePairKey, DISALLOWED_TYPE_PAIR_KEYS, normalizeTypePair } from '../../../../pokemon-type-pairs.mjs';
 import {
   buildPokeQuizzPreviewDirectory,
+  buildPokeQuizzMirroredSpritePath,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
 import {
@@ -52,6 +54,35 @@ const DEFAULT_SHINY_ODDS_NUMERATOR = 1;
 const DEFAULT_SHINY_ODDS_DENOMINATOR = 7;
 const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
+const mirroredSpriteAvailabilityCache = new Map();
+
+async function canAccessPath(filePath) {
+  const normalizedPath = String(filePath || '').trim();
+  if (!normalizedPath) {
+    return false;
+  }
+  if (!mirroredSpriteAvailabilityCache.has(normalizedPath)) {
+    mirroredSpriteAvailabilityCache.set(
+      normalizedPath,
+      access(normalizedPath)
+        .then(() => true)
+        .catch(() => false),
+    );
+  }
+  return mirroredSpriteAvailabilityCache.get(normalizedPath);
+}
+
+async function resolveDualTypeRevealSpritePath(spritePath) {
+  const normalizedPath = String(spritePath || '').trim();
+  if (!normalizedPath) {
+    return normalizedPath;
+  }
+  const mirrorPath = buildPokeQuizzMirroredSpritePath(normalizedPath);
+  if (!mirrorPath) {
+    return normalizedPath;
+  }
+  return (await canAccessPath(mirrorPath)) ? mirrorPath : normalizedPath;
+}
 
 function isThemedBackgroundPath(backgroundPath) {
   return isBeachBackgroundPath(backgroundPath)
@@ -456,15 +487,19 @@ function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
   };
 }
 
-function buildSubjectAssetRecord(subject, shinyRevealState = null) {
+function buildSubjectAssetRecord(subject, {
+  shinyRevealState = null,
+  renderSpritePath = '',
+} = {}) {
   const isShinyReveal = Boolean(
     shinyRevealState?.active
     && shinyRevealState.selected_pokedex_id
     && shinyRevealState.selected_pokedex_id === subject.id,
   );
+  const preferredNormalSpritePath = renderSpritePath || subject.sprite_path;
   const revealSpritePath = isShinyReveal
-    ? subject.shiny_sprite_path || subject.sprite_path
-    : subject.sprite_path;
+    ? subject.shiny_sprite_path || preferredNormalSpritePath
+    : preferredNormalSpritePath;
   const revealSpriteSourceUrl = isShinyReveal
     ? subject.shiny_sprite_source_url || subject.sprite_source_url
     : subject.sprite_source_url;
@@ -473,6 +508,7 @@ function buildSubjectAssetRecord(subject, shinyRevealState = null) {
     national_dex_number: subject.national_dex_number,
     name: subject.name,
     sprite_path: subject.sprite_path,
+    render_sprite_path: preferredNormalSpritePath,
     shiny_sprite_path: subject.shiny_sprite_path,
     silhouette_path: subject.silhouette_path,
     cry_path: subject.cry_path,
@@ -694,6 +730,14 @@ export async function planPokemonTypeChallenge({
     selectedSubjects,
     random,
   });
+  const selectedSubjectAssets = await Promise.all(
+    selectedSubjects.map(async (subject) => (
+      buildSubjectAssetRecord(subject, {
+        shinyRevealState: shinyReveal,
+        renderSpritePath: await resolveDualTypeRevealSpritePath(subject.sprite_path),
+      })
+    )),
+  );
   const compatibleDisplayCount = Math.min(selectableSubjects.length, config.selectedSubjectsMax);
   const pokeballGridLayout = buildCenteredGridLayout(template, compatibleDisplayCount);
 
@@ -823,7 +867,7 @@ export async function planPokemonTypeChallenge({
         selected_path: selectedBackgroundPath,
       },
       type_icons: typeIcons,
-      pokemon: selectedSubjects.map((subject) => buildSubjectAssetRecord(subject, shinyReveal)),
+      pokemon: selectedSubjectAssets,
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
         selected_timer_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,

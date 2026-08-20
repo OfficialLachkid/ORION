@@ -46,7 +46,7 @@ export function buildVisualInputs(plan, renderPlan) {
   });
 
   for (const pokemon of plan.assets.pokemon) {
-    const revealSpritePath = pokemon.reveal_sprite_path || pokemon.sprite_path;
+    const revealSpritePath = pokemon.reveal_sprite_path || pokemon.render_sprite_path || pokemon.sprite_path;
     inputs.push({
       role: `pokemon-${pokemon.pokedex_id || pokemon.national_dex_number}`,
       path: revealSpritePath,
