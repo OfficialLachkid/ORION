@@ -40,6 +40,7 @@ function resolveTextHighlightMatch(text, keywords = []) {
       return {
         before: sourceText.slice(0, match.index),
         highlighted_text: match[1],
+        after: sourceText.slice(match.index + match[1].length),
       };
     }
   }
@@ -105,24 +106,58 @@ function buildTextSegments(text, {
   }).segments || [];
 }
 
-function appendHighlightedSegmentOverlay(filters, currentLabel, {
+function appendSegmentTextDraws(filters, currentLabel, {
   labelPrefix,
   segment,
   fontPart,
   highlightColor,
   highlightKeywords,
+  defaultColor = 'white',
 }) {
   const match = resolveTextHighlightMatch(segment.text, highlightKeywords);
   if (!match) {
+    const singleLabel = `${labelPrefix}txt`;
+    filters.push(
+      `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=${defaultColor}:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${singleLabel}]`,
+    );
+    return singleLabel;
+  }
+
+  const pieces = [
+    {
+      suffix: 'pre',
+      text: match.before,
+      color: defaultColor,
+    },
+    {
+      suffix: 'hl',
+      text: match.highlighted_text,
+      color: highlightColor,
+    },
+    {
+      suffix: 'post',
+      text: match.after,
+      color: defaultColor,
+    },
+  ].filter((piece) => String(piece.text || '').length > 0);
+
+  if (pieces.length === 0) {
     return currentLabel;
   }
-  const fullWidth = estimateSegmentTextWidth(segment.text, segment.font_size);
-  const beforeWidth = estimateSegmentTextWidth(match.before, segment.font_size);
-  const highlightLabel = `${labelPrefix}hl`;
-  filters.push(
-    `[${currentLabel}]drawtext=text='${escapeDrawtextText(match.highlighted_text)}'${fontPart}:fontcolor=${highlightColor}:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='(w-${fullWidth})/2+${beforeWidth}':y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${highlightLabel}]`,
-  );
-  return highlightLabel;
+
+  const totalWidth = estimateSegmentTextWidth(segment.text, segment.font_size);
+  let offset = 0;
+  let activeLabel = currentLabel;
+  for (const piece of pieces) {
+    const pieceLabel = `${labelPrefix}${piece.suffix}`;
+    filters.push(
+      `[${activeLabel}]drawtext=text='${escapeDrawtextText(piece.text)}'${fontPart}:fontcolor=${piece.color}:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='(w-${totalWidth})/2+${Number(offset.toFixed(3))}':y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${pieceLabel}]`,
+    );
+    activeLabel = pieceLabel;
+    offset += estimateSegmentTextWidth(piece.text, segment.font_size);
+  }
+
+  return activeLabel;
 }
 
 function resolvePlatformLayout(template) {
@@ -193,12 +228,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         maxLines: 2,
       });
       hookSegments.forEach((segment, segmentIndex) => {
-        const hookSceneLabel = `scene${roundIndex}h${segmentIndex}`;
-        filters.push(
-          `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${hookSceneLabel}]`,
-        );
-        currentLabel = hookSceneLabel;
-        currentLabel = appendHighlightedSegmentOverlay(filters, currentLabel, {
+        currentLabel = appendSegmentTextDraws(filters, currentLabel, {
           labelPrefix: `scene${roundIndex}h${segmentIndex}`,
           segment,
           fontPart,
@@ -218,12 +248,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       maxLines: 2,
     });
     promptSegments.forEach((segment, segmentIndex) => {
-      const promptSceneLabel = `scene${roundIndex}p${segmentIndex}`;
-      filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${promptSceneLabel}]`,
-      );
-      currentLabel = promptSceneLabel;
-      currentLabel = appendHighlightedSegmentOverlay(filters, currentLabel, {
+      currentLabel = appendSegmentTextDraws(filters, currentLabel, {
         labelPrefix: `scene${roundIndex}p${segmentIndex}`,
         segment,
         fontPart,
