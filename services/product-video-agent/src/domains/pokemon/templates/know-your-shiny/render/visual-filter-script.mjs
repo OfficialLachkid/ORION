@@ -113,7 +113,7 @@ function buildColorFilterChain(candidate) {
 function buildTimerBarScaleExpression(startSeconds, endSeconds, fullWidth) {
   const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
   const end = Number(Math.max(start, ensureNumber(endSeconds, start)).toFixed(3));
-  const width = Number(Math.max(0, ensureNumber(fullWidth, 0)).toFixed(3));
+  const width = Math.max(2, Math.round(ensureNumber(fullWidth, 0)));
   if (end <= start || width <= 0) {
     return '2';
   }
@@ -131,14 +131,16 @@ function appendTimerBarPhase(filters, currentLabel, {
   baseColor,
 }) {
   const enableExpression = formatEnableBetween(enableStartSeconds, enableEndSeconds);
-  const highlightHeight = Math.max(4, roundTime(timerLayout.height * 0.34));
+  const timerWidth = Math.max(2, Math.round(ensureNumber(timerLayout.width, 0)));
+  const timerHeight = Math.max(2, Math.round(ensureNumber(timerLayout.height, 0)));
+  const highlightHeight = Math.max(4, Math.round(timerHeight * 0.34));
   const highlightY = roundTime(timerLayout.y + 2);
-  const shadowHeight = Math.max(3, roundTime(timerLayout.height * 0.18));
-  const shadowY = roundTime(timerLayout.y + timerLayout.height - shadowHeight - 2);
+  const shadowHeight = Math.max(3, Math.round(timerHeight * 0.18));
+  const shadowY = roundTime(timerLayout.y + timerHeight - shadowHeight - 2);
 
   const baseSourceLabel = `${labelPrefix}src`;
   filters.push(
-    `color=c=${baseColor}@0.98:s=${timerLayout.width}x${timerLayout.height}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerLayout.height}:eval=frame[${baseSourceLabel}]`,
+    `color=c=${baseColor}@0.98:s=${timerWidth}x${timerHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerHeight}:eval=frame[${baseSourceLabel}]`,
   );
   const baseOverlayLabel = `${labelPrefix}base`;
   filters.push(
@@ -147,7 +149,7 @@ function appendTimerBarPhase(filters, currentLabel, {
 
   const highlightSourceLabel = `${labelPrefix}hlsrc`;
   filters.push(
-    `color=c=white@0.18:s=${timerLayout.width}x${highlightHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${highlightHeight}:eval=frame[${highlightSourceLabel}]`,
+    `color=c=white@0.18:s=${timerWidth}x${highlightHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${highlightHeight}:eval=frame[${highlightSourceLabel}]`,
   );
   const highlightOverlayLabel = `${labelPrefix}hl`;
   filters.push(
@@ -156,7 +158,7 @@ function appendTimerBarPhase(filters, currentLabel, {
 
   const shadowSourceLabel = `${labelPrefix}shsrc`;
   filters.push(
-    `color=c=black@0.14:s=${timerLayout.width}x${shadowHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${shadowHeight}:eval=frame[${shadowSourceLabel}]`,
+    `color=c=black@0.14:s=${timerWidth}x${shadowHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${shadowHeight}:eval=frame[${shadowSourceLabel}]`,
   );
   const shadowOverlayLabel = `${labelPrefix}sh`;
   filters.push(

@@ -18,7 +18,7 @@ import {
 import { SupabasePublicationStore } from '../../../services/product-video-agent/src/publication-store.mjs';
 import { resolveVideoTemplateRuntime } from '../../../services/product-video-agent/src/video-template-context.mjs';
 import { executeProductVideoAction } from '../../../services/task-router/src/product-video-executor.mjs';
-import { projectRoot } from '../../../services/lib/runtime-config.mjs';
+import { loadRuntimeConfig, projectRoot } from '../../../services/lib/runtime-config.mjs';
 import { discoverNightShiftChannelRuntimes } from './pokemon-maintenance-runtime.mjs';
 import {
   collectChildError,
@@ -251,6 +251,7 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
   const loadProfiles = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
   const discoverRuntimes = dependencies.discoverNightShiftChannelRuntimes || discoverNightShiftChannelRuntimes;
   const runNodeScript = dependencies.runProjectNodeScript || runProjectNodeScript;
+  const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
   const profiles = await loadProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
   const activeProfiles = profiles.filter((profile) => profile.status === 'active');
   const channelRuntimes = await discoverRuntimes();
@@ -305,12 +306,12 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
       && templateRuntime?.nightShift?.publicationAutomationEnabled
     ) {
       const autoRun = await runNightShiftAutoPublicationAutomation(
-        dependencies.runtimeConfig || config,
+        runtimeConfig,
         templateRuntime,
         profile,
         asOf,
         {
-          publicationStore: dependencies.publicationStore || createPublicationStore(config),
+          publicationStore: dependencies.publicationStore || createPublicationStore(runtimeConfig),
           executeProductVideoAction: dependencies.executeProductVideoAction,
           publicationProfiles: profiles,
         },
@@ -378,17 +379,61 @@ function normalizePublicationWorkflowState(publication = {}) {
   ).trim().toLowerCase();
 }
 
-function countActiveTemplateQueueItems(publications = [], templateId = '') {
-  const normalizedTemplateId = String(templateId || '').trim();
+function normalizeTemplateIdForQueue(value = '') {
+  const normalizedTemplateId = String(value || '').trim().toLowerCase();
   if (!normalizedTemplateId) {
-    return 0;
+    return '';
   }
-  return publications.filter((publication) => (
-    String(publication?.metadata?.template_id || '').trim() === normalizedTemplateId
-    && ['preview_upload_pending', 'preview_uploaded', 'preview_approved', 'scheduled'].includes(
-      normalizePublicationWorkflowState(publication),
-    )
-  )).length;
+  if (normalizedTemplateId.includes('find-the-shiny')) {
+    return 'pokemon.find-the-shiny.v1';
+  }
+  if (normalizedTemplateId.includes('know-your-shiny')) {
+    return 'pokemon.know-your-shiny.v1';
+  }
+  if (normalizedTemplateId.includes('memory')) {
+    return 'pokemon.memory.v1';
+  }
+  if (normalizedTemplateId.includes('type-quiz') || normalizedTemplateId.includes('type-speed-quiz')) {
+    return 'pokemon.type-quiz.v1';
+  }
+  if (normalizedTemplateId.includes('dual-type-reveal') || normalizedTemplateId.includes('type-challenge')) {
+    return 'pokemon.dual-type-reveal.v1';
+  }
+  return normalizedTemplateId;
+}
+
+function summarizeActiveTemplateQueue(publications = [], templateId = '') {
+  const normalizedTemplateId = normalizeTemplateIdForQueue(templateId);
+  if (!normalizedTemplateId) {
+    return {
+      count: 0,
+      latestCreatedAtMs: Number.NEGATIVE_INFINITY,
+    };
+  }
+
+  let count = 0;
+  let latestCreatedAtMs = Number.NEGATIVE_INFINITY;
+  for (const publication of publications) {
+    if (
+      normalizeTemplateIdForQueue(publication?.metadata?.template_id || '') !== normalizedTemplateId
+      || !['preview_upload_pending', 'preview_uploaded', 'preview_approved', 'scheduled'].includes(
+        normalizePublicationWorkflowState(publication),
+      )
+    ) {
+      continue;
+    }
+
+    count += 1;
+    const createdAtMs = Date.parse(String(publication?.created_at || publication?.submitted_at || ''));
+    if (Number.isFinite(createdAtMs) && createdAtMs > latestCreatedAtMs) {
+      latestCreatedAtMs = createdAtMs;
+    }
+  }
+
+  return {
+    count,
+    latestCreatedAtMs,
+  };
 }
 
 async function resolveReviewBacklogGenerationRuntimes(templateRuntime) {
@@ -414,14 +459,26 @@ async function resolveReviewBacklogGenerationRuntimes(templateRuntime) {
   return runtimes;
 }
 
-function selectNextReviewBacklogRuntime(generationRuntimes, publications = []) {
+export function selectNextReviewBacklogRuntime(generationRuntimes, publications = []) {
   let selectedRuntime = generationRuntimes[0] || null;
   let selectedCount = Number.POSITIVE_INFINITY;
+  let selectedLatestCreatedAtMs = Number.POSITIVE_INFINITY;
 
   for (const runtime of generationRuntimes) {
-    const activeCount = countActiveTemplateQueueItems(publications, runtime.templateId);
-    if (activeCount < selectedCount) {
+    const queueSummary = summarizeActiveTemplateQueue(publications, runtime.templateId);
+    const activeCount = queueSummary.count;
+    const latestCreatedAtMs = Number.isFinite(queueSummary.latestCreatedAtMs)
+      ? queueSummary.latestCreatedAtMs
+      : Number.NEGATIVE_INFINITY;
+    if (
+      activeCount < selectedCount
+      || (
+        activeCount === selectedCount
+        && latestCreatedAtMs < selectedLatestCreatedAtMs
+      )
+    ) {
       selectedCount = activeCount;
+      selectedLatestCreatedAtMs = latestCreatedAtMs;
       selectedRuntime = runtime;
     }
   }

@@ -4,6 +4,7 @@ import { normalizePublicationChannelProfile } from '../../../services/product-vi
 import {
   planNightShiftAutoPublicationAutomation,
   runVideoQueueMaintenance,
+  selectNextReviewBacklogRuntime,
 } from './pokemon-maintenance.mjs';
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -172,4 +173,61 @@ test('night shift queue maintenance auto-approves DexGuess previews within the c
   );
   assert.equal(summary.autoApproved, 1);
   assert.equal(summary.autoScheduled, 1);
+});
+
+test('review backlog runtime selection breaks equal-count ties away from the most recently generated template', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+    { templateId: 'pokemon.memory.v1', channelConfigPath: 'memory.json' },
+  ];
+  const publications = [
+    {
+      id: 'dual-recent',
+      created_at: '2026-08-21T00:34:37.173973+00:00',
+      metadata: {
+        workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.dual-type-reveal.v1',
+      },
+    },
+    {
+      id: 'shiny-older',
+      created_at: '2026-08-20T19:54:59.775074+00:00',
+      metadata: {
+        workflow_state: 'scheduled',
+        template_id: 'pokemon.find-the-shiny.v1',
+      },
+    },
+    {
+      id: 'memory-oldest',
+      created_at: '2026-08-20T19:43:00.664472+00:00',
+      metadata: {
+        workflow_state: 'scheduled',
+        template_id: 'pokemon.memory.v1',
+      },
+    },
+  ];
+
+  const selectedRuntime = selectNextReviewBacklogRuntime(runtimes, publications);
+  assert.equal(selectedRuntime?.templateId, 'pokemon.memory.v1');
+});
+
+test('review backlog runtime selection counts legacy dual-type template ids against the current runtime id', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+  ];
+  const publications = [
+    {
+      id: 'dual-legacy',
+      created_at: '2026-08-21T00:34:37.173973+00:00',
+      metadata: {
+        workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.dual-type-reveal-v1',
+      },
+    },
+  ];
+
+  const selectedRuntime = selectNextReviewBacklogRuntime(runtimes, publications);
+  assert.equal(selectedRuntime?.templateId, 'pokemon.find-the-shiny.v1');
 });

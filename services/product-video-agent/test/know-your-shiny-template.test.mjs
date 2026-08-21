@@ -282,6 +282,8 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(visualFilter.script, /colorchannelmixer=/u);
   assert.match(visualFilter.script, /fontcolor=0xFFD60A/u);
   assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);
+  assert.doesNotMatch(visualFilter.script, /color=c=[^:]+:s=\d+x\d+\.\d+/u);
+  assert.doesNotMatch(visualFilter.script, /color=c=[^:]+:s=\d+\.\d+x\d+/u);
   assert.doesNotMatch(audioFilter, /timerend0/u);
   assert.doesNotMatch(audioFilter, /timerend2/u);
   assert.match(audioFilter, /volume=0\.35\[shiny0\]/u);
