@@ -436,6 +436,32 @@ function summarizeActiveTemplateQueue(publications = [], templateId = '') {
   };
 }
 
+function findMostRecentActiveTemplateId(publications = []) {
+  let selectedTemplateId = '';
+  let selectedCreatedAtMs = Number.NEGATIVE_INFINITY;
+
+  for (const publication of publications) {
+    if (!['preview_upload_pending', 'preview_uploaded', 'preview_approved', 'scheduled'].includes(
+      normalizePublicationWorkflowState(publication),
+    )) {
+      continue;
+    }
+
+    const normalizedTemplateId = normalizeTemplateIdForQueue(publication?.metadata?.template_id || '');
+    if (!normalizedTemplateId) {
+      continue;
+    }
+
+    const createdAtMs = Date.parse(String(publication?.created_at || publication?.submitted_at || ''));
+    if (Number.isFinite(createdAtMs) && createdAtMs > selectedCreatedAtMs) {
+      selectedCreatedAtMs = createdAtMs;
+      selectedTemplateId = normalizedTemplateId;
+    }
+  }
+
+  return selectedTemplateId;
+}
+
 async function resolveReviewBacklogGenerationRuntimes(templateRuntime) {
   const configuredPaths = templateRuntime?.nightShift?.reviewBacklogMixChannelConfigPaths || [];
   const uniquePaths = new Set([
@@ -460,30 +486,46 @@ async function resolveReviewBacklogGenerationRuntimes(templateRuntime) {
 }
 
 export function selectNextReviewBacklogRuntime(generationRuntimes, publications = []) {
-  let selectedRuntime = generationRuntimes[0] || null;
-  let selectedCount = Number.POSITIVE_INFINITY;
-  let selectedLatestCreatedAtMs = Number.POSITIVE_INFINITY;
+  const rankedRuntimes = generationRuntimes
+    .map((runtime) => {
+      const queueSummary = summarizeActiveTemplateQueue(publications, runtime.templateId);
+      return {
+        runtime,
+        activeCount: queueSummary.count,
+        latestCreatedAtMs: Number.isFinite(queueSummary.latestCreatedAtMs)
+          ? queueSummary.latestCreatedAtMs
+          : Number.NEGATIVE_INFINITY,
+        normalizedTemplateId: normalizeTemplateIdForQueue(runtime.templateId),
+      };
+    })
+    .sort((left, right) => {
+      if (left.activeCount !== right.activeCount) {
+        return left.activeCount - right.activeCount;
+      }
+      if (left.latestCreatedAtMs !== right.latestCreatedAtMs) {
+        return left.latestCreatedAtMs - right.latestCreatedAtMs;
+      }
+      return String(left.runtime?.channelConfigPath || '').localeCompare(
+        String(right.runtime?.channelConfigPath || ''),
+      );
+    });
 
-  for (const runtime of generationRuntimes) {
-    const queueSummary = summarizeActiveTemplateQueue(publications, runtime.templateId);
-    const activeCount = queueSummary.count;
-    const latestCreatedAtMs = Number.isFinite(queueSummary.latestCreatedAtMs)
-      ? queueSummary.latestCreatedAtMs
-      : Number.NEGATIVE_INFINITY;
-    if (
-      activeCount < selectedCount
-      || (
-        activeCount === selectedCount
-        && latestCreatedAtMs < selectedLatestCreatedAtMs
-      )
-    ) {
-      selectedCount = activeCount;
-      selectedLatestCreatedAtMs = latestCreatedAtMs;
-      selectedRuntime = runtime;
-    }
+  const selectedRuntime = rankedRuntimes[0]?.runtime || null;
+  const mostRecentActiveTemplateId = findMostRecentActiveTemplateId(publications);
+  if (!selectedRuntime || rankedRuntimes.length <= 1 || !mostRecentActiveTemplateId) {
+    return selectedRuntime;
   }
 
-  return selectedRuntime;
+  if (rankedRuntimes[0].normalizedTemplateId !== mostRecentActiveTemplateId) {
+    return selectedRuntime;
+  }
+
+  const alternativeRuntime = rankedRuntimes.find((candidate) => (
+    candidate.normalizedTemplateId
+    && candidate.normalizedTemplateId !== mostRecentActiveTemplateId
+  ));
+
+  return alternativeRuntime?.runtime || selectedRuntime;
 }
 
 async function replenishReviewBacklogForRuntime(config, templateRuntime, asOf) {

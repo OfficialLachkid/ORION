@@ -231,3 +231,56 @@ test('review backlog runtime selection counts legacy dual-type template ids agai
   const selectedRuntime = selectNextReviewBacklogRuntime(runtimes, publications);
   assert.equal(selectedRuntime?.templateId, 'pokemon.find-the-shiny.v1');
 });
+
+test('review backlog runtime selection avoids repeating the most recently generated template when an alternative exists', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+    { templateId: 'pokemon.memory.v1', channelConfigPath: 'memory.json' },
+  ];
+  const publications = [
+    {
+      id: 'dual-most-recent',
+      created_at: '2026-08-21T09:00:00.000Z',
+      metadata: {
+        workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.dual-type-reveal-v1',
+      },
+    },
+    {
+      id: 'memory-older',
+      created_at: '2026-08-21T08:00:00.000Z',
+      metadata: {
+        workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.memory.v1',
+      },
+    },
+    {
+      id: 'shiny-oldest',
+      created_at: '2026-08-21T07:00:00.000Z',
+      metadata: {
+        workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.find-the-shiny.v1',
+      },
+    },
+    {
+      id: 'memory-second',
+      created_at: '2026-08-20T07:00:00.000Z',
+      metadata: {
+        workflow_state: 'scheduled',
+        template_id: 'pokemon.memory.v1',
+      },
+    },
+    {
+      id: 'shiny-second',
+      created_at: '2026-08-20T06:00:00.000Z',
+      metadata: {
+        workflow_state: 'scheduled',
+        template_id: 'pokemon.find-the-shiny.v1',
+      },
+    },
+  ];
+
+  const selectedRuntime = selectNextReviewBacklogRuntime(runtimes, publications);
+  assert.equal(selectedRuntime?.templateId, 'pokemon.find-the-shiny.v1');
+});
