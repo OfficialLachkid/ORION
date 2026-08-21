@@ -1092,8 +1092,12 @@ test('executeTask reports manual leadgen sweep results through the explicit acti
         },
         {
           niche: 'plumbing',
-          result: null,
-          runError: new Error('No results found'),
+          result: {
+            leadCount: 0,
+            insertedCount: 0,
+            searchedCount: 0,
+          },
+          runError: null,
         },
       ],
       failures: [],
@@ -1104,7 +1108,8 @@ test('executeTask reports manual leadgen sweep results through the explicit acti
   assert.equal(result.executionPlan.action, 'leadgen_sweep');
   assert.equal(result.executionResult.report.rounds, 2);
   assert.equal(result.executionResult.report.nicheRunCount, 4);
-  assert.equal(result.executionResult.report.failedNicheRunCount, 2);
+  assert.equal(result.executionResult.report.failedNicheRunCount, 0);
+  assert.equal(result.executionResult.report.completedNicheRunCount, 4);
   assert.equal(result.executionResult.report.leadCount, 6);
   assert.equal(result.executionResult.report.insertedCount, 4);
   assert.equal(result.outboundEvents[1].channelKey, 'agentResults');

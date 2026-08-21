@@ -22,6 +22,11 @@ function resolveSearchScriptPath() {
   return resolve(projectRoot, 'services', 'leadgen-scraper', 'search_leads.py');
 }
 
+export function isNoResultsLeadgenError(error) {
+  const message = String(error?.message || error || '').trim().toLowerCase();
+  return message.includes('duckduckgo search failed') && message.includes('no results found');
+}
+
 function runPythonSearch(query, max, config, skipDomainsFile, blockedDomainsFile) {
   return new Promise((resolvePromise, rejectPromise) => {
     const pythonBin = resolvePythonBin(config);
@@ -217,7 +222,18 @@ export async function runLeadgenSearch(query, max, config, options = {}) {
 
   let records;
   try {
-    records = await runPythonSearch(query, boundedMax, config, skipDomainsFile, blockedDomainsFile);
+    try {
+      records = await runPythonSearch(query, boundedMax, config, skipDomainsFile, blockedDomainsFile);
+    } catch (error) {
+      // "No results found" is a valid search outcome, not an operational
+      // failure. The scheduled rotation should move on to the next city
+      // immediately and let the query surface again on the next full loop.
+      if (isNoResultsLeadgenError(error)) {
+        records = [];
+      } else {
+        throw error;
+      }
+    }
   } finally {
     if (tempDir) {
       rmSync(tempDir, { recursive: true, force: true });
