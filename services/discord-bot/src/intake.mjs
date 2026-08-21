@@ -268,7 +268,10 @@ export function processDiscordEvent(message, config) {
       ];
 
       if (item.writeBackCandidates.length > 0) {
-        taskEvents.push(buildMemoryWriteBackCandidateEvent(task, item.writeBackCandidates));
+        const writeBackEvent = buildMemoryWriteBackCandidateEvent(task, item.writeBackCandidates);
+        if (writeBackEvent) {
+          taskEvents.push(writeBackEvent);
+        }
       }
 
       if (task.approval_required) {

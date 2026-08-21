@@ -184,6 +184,10 @@ test('planner selects an observed dual-type pair and emits asset gap guidance', 
   assert.equal(plan.assets.overlays.pokeball_grid.item_count, 2);
   assert.equal(plan.assets.overlays.pokeball_grid.centered_from_middle, true);
   assert.equal(plan.assets.overlays.pokeball_grid.columns, 2);
+  assert.equal(
+    plan.assets.pokemon.every((subject) => !subject.sprite_path || Boolean(subject.render_sprite_path)),
+    true,
+  );
   assert.ok(plan.required_asset_gaps.includes('pokemon_reveal_sprite_local_assets_missing'));
   assert.equal(plan.required_asset_gaps.includes('type_icons_missing'), false);
 });
@@ -1883,6 +1887,7 @@ test('planner prefers pairs with localized reveal sprites during random selectio
 
   assert.deepEqual(plan.selection.type_pair, ['ground', 'psychic']);
   assert.equal(plan.assets.pokemon.every((subject) => Boolean(subject.sprite_path)), true);
+  assert.equal(plan.assets.pokemon.every((subject) => Boolean(subject.render_sprite_path)), true);
 });
 
 test('planner selects at most one shiny reveal per video and records the deterministic roll', async () => {

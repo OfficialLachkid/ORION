@@ -727,6 +727,9 @@ async function postChannelMessage(token, channelId, payloadOrContent) {
 
 async function fanOutOutboundEvents(token, config, outboundEvents = [], trackedMessages = new Map()) {
   for (const outboundEvent of outboundEvents) {
+    if (!outboundEvent) {
+      continue;
+    }
     const targetChannelId = config.channelIds[outboundEvent.channelKey];
     if (!targetChannelId) {
       process.stderr.write(`No Discord channel mapped for outbound key '${outboundEvent.channelKey}'.\n`);

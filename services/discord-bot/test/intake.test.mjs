@@ -43,6 +43,24 @@ test('processDiscordEvent routes commands into parsed task, queue, and approval 
   assert.equal(result.outboundEvents.some((item) => item.channelKey === 'memoryUpdates'), true);
 });
 
+test('processDiscordEvent does not emit null outbound events for sales leadgen sweep commands', () => {
+  const config = loadRuntimeConfig();
+  const result = processDiscordEvent({
+    guildId: config.guildId || 'DISCORD_GUILD_ID',
+    channelKey: 'commands',
+    channelId: config.channelIds.commands || 'DISCORD_COMMANDS_CHANNEL_ID',
+    content: 'run leadgen sweep rounds: 2',
+    author: buildAuthorizedOperator(config),
+  }, config);
+
+  assert.equal(result.accepted, true);
+  assert.equal(result.route, 'command');
+  assert.equal(result.outboundEvents.every(Boolean), true);
+  assert.equal(result.outboundEvents.some((item) => item.channelKey === 'memoryUpdates'), false);
+  assert.equal(result.outboundEvents.some((item) => item.channelKey === 'parsedTasks'), true);
+  assert.equal(result.outboundEvents.some((item) => item.channelKey === 'taskQueue'), true);
+});
+
 test('processDiscordEvent rejects unauthorized senders', () => {
   const config = loadRuntimeConfig();
   const result = processDiscordEvent({
