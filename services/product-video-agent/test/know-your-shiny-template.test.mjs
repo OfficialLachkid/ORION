@@ -123,11 +123,11 @@ const template = {
 };
 
 const pokedexRows = [
-  { id: 'pokedex-0006', national_dex_number: 6, name: 'Charizard', generation: 1, region: 'kanto', types: ['fire', 'flying'], sprite_path: '/tmp/charizard.png', shiny_sprite_path: '/tmp/charizard-shiny.png' },
-  { id: 'pokedex-0094', national_dex_number: 94, name: 'Gengar', generation: 1, region: 'kanto', types: ['ghost', 'poison'], sprite_path: '/tmp/gengar.png', shiny_sprite_path: '/tmp/gengar-shiny.png' },
-  { id: 'pokedex-0130', national_dex_number: 130, name: 'Gyarados', generation: 1, region: 'kanto', types: ['water', 'flying'], sprite_path: '/tmp/gyarados.png', shiny_sprite_path: '/tmp/gyarados-shiny.png' },
-  { id: 'pokedex-0197', national_dex_number: 197, name: 'Umbreon', generation: 2, region: 'johto', types: ['dark'], sprite_path: '/tmp/umbreon.png', shiny_sprite_path: '/tmp/umbreon-shiny.png' },
-  { id: 'pokedex-0038', national_dex_number: 38, name: 'Ninetales', generation: 1, region: 'kanto', types: ['fire'], sprite_path: '/tmp/ninetales.png', shiny_sprite_path: '/tmp/ninetales-shiny.png' },
+  { id: 'pokedex-0006', national_dex_number: 6, name: 'Charizard', generation: 1, region: 'kanto', types: ['fire', 'flying'], sprite_path: '/tmp/charizard.png', shiny_sprite_path: '/tmp/charizard-shiny.png', shiny_animated_sprite_path: '/tmp/charizard-shiny.gif' },
+  { id: 'pokedex-0094', national_dex_number: 94, name: 'Gengar', generation: 1, region: 'kanto', types: ['ghost', 'poison'], sprite_path: '/tmp/gengar.png', shiny_sprite_path: '/tmp/gengar-shiny.png', shiny_animated_sprite_path: '/tmp/gengar-shiny.gif' },
+  { id: 'pokedex-0130', national_dex_number: 130, name: 'Gyarados', generation: 1, region: 'kanto', types: ['water', 'flying'], sprite_path: '/tmp/gyarados.png', shiny_sprite_path: '/tmp/gyarados-shiny.png', shiny_animated_sprite_path: '/tmp/gyarados-shiny.gif' },
+  { id: 'pokedex-0197', national_dex_number: 197, name: 'Umbreon', generation: 2, region: 'johto', types: ['dark'], sprite_path: '/tmp/umbreon.png', shiny_sprite_path: '/tmp/umbreon-shiny.png', shiny_animated_sprite_path: '/tmp/umbreon-shiny.gif' },
+  { id: 'pokedex-0038', national_dex_number: 38, name: 'Ninetales', generation: 1, region: 'kanto', types: ['fire'], sprite_path: '/tmp/ninetales.png', shiny_sprite_path: '/tmp/ninetales-shiny.png', shiny_animated_sprite_path: '/tmp/ninetales-shiny.gif' },
 ];
 
 const assetInventory = {
@@ -176,7 +176,7 @@ test('generic planner dispatch builds a know-your-shiny plan with three rounds a
   for (const round of plan.rounds) {
     assert.equal(round.candidates.length, 4);
     assert.equal(round.candidates.filter((candidate) => candidate.is_correct).length, 1);
-    assert.equal(round.subject.render_sprite_path.endsWith('-shiny.png'), true);
+    assert.equal(round.subject.render_sprite_path.endsWith('-shiny.gif'), true);
   }
 });
 

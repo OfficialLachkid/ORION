@@ -10,7 +10,7 @@ import {
 test('buildGuildSlashCommands returns the supported slash commands', () => {
   const commands = buildGuildSlashCommands();
 
-  assert.equal(commands.length, 11);
+  assert.equal(commands.length, 12);
   assert.deepEqual(commands.map((command) => command.name), [
     'commands',
     'help',
@@ -21,6 +21,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'generate-video',
     'analytics',
     'leadgen',
+    'leadgen-sweep',
     'create-developer-issue',
     'email-draft',
   ]);
@@ -302,6 +303,33 @@ test('normalizeSupportedSlashCommandInteraction converts a leadgen slash command
   });
 
   assert.equal(message?.content, 'find leads for electricians in Rotterdam max: 8');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts a leadgen sweep slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-5b',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-5b',
+    data: {
+      name: 'leadgen-sweep',
+      options: [
+        { name: 'rounds', value: 2 },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'run leadgen sweep rounds: 2');
   assert.equal(message?.channelKey, 'commands');
 });
 

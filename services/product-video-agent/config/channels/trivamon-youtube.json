@@ -18,6 +18,11 @@
     "review_refresh": {
       "enabled": true,
       "pending_only": true
+    },
+    "publication_automation": {
+      "enabled": true,
+      "mode": "auto",
+      "max_scheduled_days": 3
     }
   }
 }

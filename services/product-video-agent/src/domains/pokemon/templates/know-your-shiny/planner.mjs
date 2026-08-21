@@ -1,4 +1,6 @@
+import { access } from 'node:fs/promises';
 import {
+  buildPokeQuizzAnimatedShinySpritePath,
   buildPokeQuizzPreviewDirectory,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
@@ -17,6 +19,7 @@ const DEFAULT_FINAL_HOLD_SECONDS = 1.0;
 const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
 const DEFAULT_SHINY_SOUND_VOLUME_MULTIPLIER = 1;
+const animatedSpriteAvailabilityCache = new Map();
 const DECOY_COLOR_PROFILES = Object.freeze([
   Object.freeze({ id: 'blue_shift', color_mix: 'rr=0.84:rg=0.08:rb=0.06:gr=0.08:gg=0.94:gb=0.08:br=0.16:bg=0.22:bb=1.24', saturation: 1.14, brightness: -0.01, contrast: 1.08 }),
   Object.freeze({ id: 'red_shift', color_mix: 'rr=1.2:rg=0.1:rb=0.06:gr=0.1:gg=0.86:gb=0.08:br=0.08:bg=0.1:bb=0.82', saturation: 1.12, brightness: 0.01, contrast: 1.08 }),
@@ -33,6 +36,22 @@ function hashSeed(input) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+async function canAccessPath(filePath) {
+  const normalizedPath = String(filePath || '').trim();
+  if (!normalizedPath) {
+    return false;
+  }
+  if (!animatedSpriteAvailabilityCache.has(normalizedPath)) {
+    animatedSpriteAvailabilityCache.set(
+      normalizedPath,
+      access(normalizedPath)
+        .then(() => true)
+        .catch(() => false),
+    );
+  }
+  return animatedSpriteAvailabilityCache.get(normalizedPath);
 }
 
 function createPrng(seedInput) {
@@ -140,6 +159,20 @@ function collapseDuplicateSubjects(subjects = []) {
     unique.push(subject);
   }
   return unique;
+}
+
+async function resolveKnowYourShinySpritePath(subject) {
+  const explicitAnimatedPath = String(subject?.shiny_animated_sprite_path || '').trim();
+  if (explicitAnimatedPath) {
+    return explicitAnimatedPath;
+  }
+
+  const animatedPath = buildPokeQuizzAnimatedShinySpritePath(subject);
+  if (await canAccessPath(animatedPath)) {
+    return animatedPath;
+  }
+
+  return String(subject?.shiny_sprite_path || subject?.sprite_path || '').trim();
 }
 
 function selectBackground(backgrounds = [], random, selectionState = {}) {
@@ -330,7 +363,12 @@ export async function planKnowYourShinyChallenge({
   const transitionDurationSeconds = Number(template?.layout?.rounds?.transition_duration_seconds ?? DEFAULT_TRANSITION_DURATION_SECONDS);
   const finalHoldSeconds = Number(template?.layout?.rounds?.final_hold_seconds ?? DEFAULT_FINAL_HOLD_SECONDS);
 
-  const rounds = selectedSubjects.map((subject, index) => {
+  const resolvedSubjects = await Promise.all(selectedSubjects.map(async (subject) => ({
+    subject,
+    renderSpritePath: await resolveKnowYourShinySpritePath(subject),
+  })));
+
+  const rounds = resolvedSubjects.map(({ subject, renderSpritePath }, index) => {
     const candidateSet = buildCandidateSet(random);
     const sceneLeadSeconds = index === 0
       ? hookHoldSeconds + preCountdownHoldSeconds
@@ -346,7 +384,7 @@ export async function planKnowYourShinyChallenge({
         region: subject.region,
         sprite_path: subject.sprite_path,
         shiny_sprite_path: subject.shiny_sprite_path,
-        render_sprite_path: subject.shiny_sprite_path,
+        render_sprite_path: renderSpritePath,
         sprite_source_url: subject.sprite_source_url || null,
         shiny_sprite_source_url: subject.shiny_sprite_source_url || null,
         types: subject.types,

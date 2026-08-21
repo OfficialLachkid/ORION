@@ -21,12 +21,12 @@ import {
 const ROTATION_STATE_PATH = resolve(projectRoot, 'data', 'leadgen', 'rotation-state.json');
 // DuckDuckGo returns ~30-40 results per query in practice, so 50 is
 // effectively "everything the search engine will give us".
-const MAX_RESULTS_PER_NICHE = 50;
+export const MAX_RESULTS_PER_NICHE = 50;
 
 // Dutch search terms — this targets the Dutch market, so the query itself is
 // in Dutch to get relevant local results (matches the "loodgieter Rotterdam"
 // test that worked well during development).
-const NICHE_ROTATION = [
+export const NICHE_ROTATION = [
   { key: 'electricians', term: 'elektriciens' },
   { key: 'plumbing', term: 'loodgieters' },
   { key: 'real_estate', term: 'makelaars' },
@@ -301,8 +301,11 @@ async function runNiche(config, niche, location, queuedMessage) {
   return { niche: niche.key, query, result, runError, durationMinutes };
 }
 
-async function main() {
-  const config = loadRuntimeConfig();
+export async function runLeadgenSweepRound({
+  config = loadRuntimeConfig(),
+  title = 'Scheduled Leadgen',
+  overviewTitle = 'Daily Leadgen Sweep',
+} = {}) {
   let rotationState = loadRotationState();
 
   // Each niche independently picks up wherever IT left off — they can be
@@ -317,12 +320,15 @@ async function main() {
   // turn comes and is edited in place with results. Each line carries its
   // own city since niches are no longer guaranteed to share one.
   const statuses = plans.map(({ niche, location, nextLocation }) => ({ niche: niche.key, location, nextLocation, state: 'queued' }));
-  const overviewMessage = await postSweepOverview(config, { statuses });
+  const overviewMessage = await postSweepOverview(config, {
+    statuses,
+    title: overviewTitle,
+  });
 
   const queuedMessages = [];
   for (const { niche, location } of plans) {
     queuedMessages.push(await postLeadgenQueued(config, {
-      title: 'Scheduled Leadgen',
+      title,
       niche: niche.key,
       query: `${niche.term} ${location}`,
     }));
@@ -341,7 +347,10 @@ async function main() {
   for (let i = 0; i < plans.length; i += 1) {
     const { niche, cityIndex, location } = plans[i];
     statuses[i].state = 'running';
-    await updateSweepOverview(config, overviewMessage, { statuses });
+    await updateSweepOverview(config, overviewMessage, {
+      statuses,
+      title: overviewTitle,
+    });
 
     let outcome;
     try {
@@ -355,7 +364,10 @@ async function main() {
     statuses[i].state = outcome.runError ? 'failed' : 'completed';
     statuses[i].leadCount = outcome.result?.leadCount ?? 0;
     statuses[i].durationMinutes = outcome.durationMinutes;
-    await updateSweepOverview(config, overviewMessage, { statuses });
+    await updateSweepOverview(config, overviewMessage, {
+      statuses,
+      title: overviewTitle,
+    });
 
     // Advance ONLY this niche's city, and only on its own success — a
     // different niche failing must not hold this one back, and this one
@@ -378,26 +390,41 @@ async function main() {
   } catch {
     // count is a nicety, never worth failing the sweep over
   }
-  await updateSweepOverview(config, overviewMessage, { statuses, totalLeads });
+  await updateSweepOverview(config, overviewMessage, {
+    statuses,
+    totalLeads,
+    title: overviewTitle,
+  });
 
-  const failures = outcomes.filter((outcome) => outcome.runError);
+  return {
+    title,
+    overviewTitle,
+    outcomes,
+    statuses,
+    totalLeads,
+    failures: outcomes.filter((outcome) => outcome.runError),
+  };
+}
+
+async function main() {
+  const result = await runLeadgenSweepRound();
 
   process.stdout.write(`${JSON.stringify(
-    outcomes.map(({ niche, query, result, runError }) => ({
+    result.outcomes.map(({ niche, query, result: outcomeResult, runError }) => ({
       niche,
       query,
-      leadCount: result?.leadCount ?? 0,
-      insertedCount: result?.insertedCount ?? 0,
-      alreadyKnownCount: result?.alreadyKnownCount ?? 0,
-      searchedCount: result?.searchedCount ?? 0,
+      leadCount: outcomeResult?.leadCount ?? 0,
+      insertedCount: outcomeResult?.insertedCount ?? 0,
+      alreadyKnownCount: outcomeResult?.alreadyKnownCount ?? 0,
+      searchedCount: outcomeResult?.searchedCount ?? 0,
       error: runError?.message || undefined,
     })),
     null,
     2,
   )}\n`);
 
-  if (failures.length > 0) {
-    process.stderr.write(`${failures.length} niche run(s) failed.\n`);
+  if (result.failures.length > 0) {
+    process.stderr.write(`${result.failures.length} niche run(s) failed.\n`);
     process.exitCode = 1;
   }
 }

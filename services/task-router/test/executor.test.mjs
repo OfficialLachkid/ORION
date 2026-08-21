@@ -229,6 +229,21 @@ test('buildExecutionPlan recognizes explicit analytics digest requests', () => {
   });
 });
 
+test('buildExecutionPlan recognizes explicit leadgen sweep requests', () => {
+  const plan = buildExecutionPlan({
+    runtime_action: 'leadgen_sweep',
+    leadgen_request: {
+      mode: 'sweep',
+      rounds: 2,
+    },
+  });
+
+  assert.deepEqual(plan, {
+    action: 'leadgen_sweep',
+    description: 'Run the rotating leadgen sweep across all configured niches.',
+  });
+});
+
 test('parseLaunchctlReport extracts daemon state fields', () => {
   const report = parseLaunchctlReport(`
 gui/502/io.vbj.orion.daemon = {
@@ -1051,6 +1066,49 @@ test('executeTask suppresses extra agent-results cards for analytics digest post
     result.outboundEvents.map((event) => event.channelKey),
     ['taskQueue', 'systemLogs'],
   );
+});
+
+test('executeTask reports manual leadgen sweep results through the explicit action path', async () => {
+  const result = await executeTask({
+    task_id: 'TASK-LEADGEN-SWEEP',
+    runtime_action: 'leadgen_sweep',
+    leadgen_request: {
+      mode: 'sweep',
+      rounds: 2,
+    },
+  }, loadRuntimeConfig(), {
+    runLeadgenSweepRound: async ({ title, overviewTitle }) => ({
+      title,
+      overviewTitle,
+      outcomes: [
+        {
+          niche: 'electricians',
+          result: {
+            leadCount: 3,
+            insertedCount: 2,
+            searchedCount: 8,
+          },
+          runError: null,
+        },
+        {
+          niche: 'plumbing',
+          result: null,
+          runError: new Error('No results found'),
+        },
+      ],
+      failures: [],
+    }),
+  });
+
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.executionPlan.action, 'leadgen_sweep');
+  assert.equal(result.executionResult.report.rounds, 2);
+  assert.equal(result.executionResult.report.nicheRunCount, 4);
+  assert.equal(result.executionResult.report.failedNicheRunCount, 2);
+  assert.equal(result.executionResult.report.leadCount, 6);
+  assert.equal(result.executionResult.report.insertedCount, 4);
+  assert.equal(result.outboundEvents[1].channelKey, 'agentResults');
+  assert.equal(result.outboundEvents[1].metadata.action, 'leadgen_sweep');
 });
 
 test('executeTask returns completed events for session checkpoint health checks', async () => {

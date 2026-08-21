@@ -180,7 +180,7 @@ function buildSweepOverviewDescription({ statuses, totalLeads = null }) {
 // One pinned-style overview message per sweep: posted before the first
 // niche starts, edited in place at every niche transition so the channel
 // always shows how far the day's sweep is at a glance.
-export async function postSweepOverview(config, { statuses, totalLeads = null }) {
+export async function postSweepOverview(config, { statuses, totalLeads = null, title = 'Daily Leadgen Sweep' }) {
   const channelId = resolveChannelId(config);
   if (!channelId || !config.env.DISCORD_BOT_TOKEN) {
     return null;
@@ -192,7 +192,7 @@ export async function postSweepOverview(config, { statuses, totalLeads = null })
       `/channels/${channelId}/messages`,
       {
         body: buildNoticeDiscordPayload({
-          title: 'Daily Leadgen Sweep',
+          title,
           description: buildSweepOverviewDescription({ statuses, totalLeads }),
           color: 0x5865F2,
           footerText: 'ORION leadgen sweep',
@@ -205,7 +205,7 @@ export async function postSweepOverview(config, { statuses, totalLeads = null })
   }
 }
 
-export async function updateSweepOverview(config, message, { statuses, totalLeads = null }) {
+export async function updateSweepOverview(config, message, { statuses, totalLeads = null, title = 'Daily Leadgen Sweep' }) {
   if (!message?.messageId || !config.env.DISCORD_BOT_TOKEN) {
     return null;
   }
@@ -217,7 +217,7 @@ export async function updateSweepOverview(config, message, { statuses, totalLead
       {
         method: 'PATCH',
         body: buildNoticeDiscordPayload({
-          title: 'Daily Leadgen Sweep',
+          title,
           description: consumeRecoveryNote() + buildSweepOverviewDescription({ statuses, totalLeads }),
           color: statuses.every((s) => s.state === 'completed') ? 0x57F287 : 0x5865F2,
           footerText: 'ORION leadgen sweep',

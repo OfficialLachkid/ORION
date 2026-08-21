@@ -1793,19 +1793,25 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
     );
   }
 
-  if (executionPlan.action === 'leadgen_search') {
+  if (executionPlan.action === 'leadgen_search' || executionPlan.action === 'leadgen_sweep') {
     return buildCompletedResultEvents(
       'agentResults',
-      `Execution result for ${task.task_id}: ${report.summary || 'Leadgen search completed.'}`,
+      `Execution result for ${task.task_id}: ${report.summary || 'Leadgen completed.'}`,
       {
         taskId: task.task_id,
         action: executionPlan.action,
         state: report.state || 'unknown',
         severity: report.severity || '',
         query: report.query || '',
+        mode: report.mode || '',
+        rounds: report.rounds || 0,
+        nicheRunCount: report.nicheRunCount || 0,
+        completedNicheRunCount: report.completedNicheRunCount || 0,
+        failedNicheRunCount: report.failedNicheRunCount || 0,
         leadCount: report.leadCount || 0,
         skippedCount: report.skippedCount || 0,
         insertedCount: report.insertedCount || 0,
+        searchedCount: report.searchedCount || 0,
         leadsPreview: report.leadsPreview || [],
       }
     );
@@ -2023,7 +2029,7 @@ export async function executeTask(task, config, options = {}) {
           // Lead-row sync is reconcilable later from ops metrics.
         }
       }
-    } else if (executionPlan.action === 'leadgen_search') {
+    } else if (executionPlan.action === 'leadgen_search' || executionPlan.action === 'leadgen_sweep') {
       executionState = {
         outcome: 'completed',
         executionResult: await executeLeadgenAction(task, config, options),

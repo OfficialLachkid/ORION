@@ -41,7 +41,7 @@ export function buildCommandHelpDescriptor(config = {}) {
         name: 'How To Ask',
         value: [
           `- Send one request or multiple requests on separate lines in ${commandsChannel}.`,
-          '- Or use the slash picker with `/commands`, `/health`, `/status`, `/sync`, or `/generate-video`.',
+          '- Or use the slash picker with `/commands`, `/health`, `/status`, `/sync`, `/generate-video`, `/leadgen`, or `/leadgen-sweep`.',
           `- Current parser is still keyword-based, so if something fails, use one of the example phrasings below.`,
           `- Parsed tasks appear in ${parsedTasksChannel} and queue state appears in ${taskQueueChannel}.`,
         ].join('\n'),
@@ -88,6 +88,17 @@ export function buildCommandHelpDescriptor(config = {}) {
           '`draft email to vbjtechservices@gmail.com subject: Smoke test body: Hello from O.R.I.O.N.`',
           '`/email-draft to:vbjtechservices@gmail.com subject:Smoke test body:Hello from O.R.I.O.N.`',
           '- Draft creation is safe and immediate; sending still requires approval.',
+        ].join('\n'),
+        inline: false,
+      },
+      {
+        name: 'Leadgen',
+        value: [
+          '`find leads for electricians in Rotterdam max: 8`',
+          '`run leadgen sweep rounds: 1`',
+          '`/leadgen query:electricians in Rotterdam max:8`',
+          '`/leadgen-sweep rounds:2`',
+          '- Sweep rounds run all configured niches sequentially and rotate each niche location forward on success.',
         ].join('\n'),
         inline: false,
       },
