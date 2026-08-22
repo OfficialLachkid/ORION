@@ -115,7 +115,16 @@ export async function renderPokeQuizzVideo({
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
   };
-  const fontPath = await resolveFontPath(fontCandidates);
+  const templateFontCandidates = (Array.isArray(template?.layout?.text?.font_candidates)
+    ? template.layout.text.font_candidates
+    : []
+  )
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  const effectiveFontCandidates = templateFontCandidates.length > 0
+    ? templateFontCandidates
+    : fontCandidates;
+  const fontPath = await resolveFontPath(effectiveFontCandidates);
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);
   await writeFile(filterScriptPath, visualFilter.script, 'utf8');
 

@@ -102,6 +102,20 @@ function findTemplateEntry(programConfig = {}, templateId = '') {
     .find((entry) => String(entry?.template_id || '').trim() === normalizedTemplateId) || null;
 }
 
+function normalizeTemplateGenreLabelFromRef(templateRef = {}, fallbackLabel = DEFAULT_GENRE_LABEL) {
+  const templateId = String(templateRef?.template_id || '').trim().toLowerCase();
+  const templateKey = String(templateRef?.template_key || '').trim().toLowerCase();
+  const pathHint = String(templateRef?.template_path || '').trim().toLowerCase();
+  const selector = `${templateKey}|${templateId}|${pathHint}`;
+
+  if (selector.includes('know-your-shiny')) return 'Know Your Shiny';
+  if (selector.includes('find-the-shiny')) return 'Find the Shiny';
+  if (selector.includes('memory')) return 'Memory';
+  if (selector.includes('type-quiz') || selector.includes('type-speed-quiz')) return 'Type Quiz';
+  if (selector.includes('dual-type-reveal')) return 'Type Combination';
+  return String(fallbackLabel || DEFAULT_GENRE_LABEL).trim() || DEFAULT_GENRE_LABEL;
+}
+
 function mergePresentation(defaults, styleValue, channelValue) {
   const merged = {
     ...defaults,
@@ -231,11 +245,23 @@ export async function resolveVideoTemplateRuntime({
     projectRoot,
     channelConfigPath,
   });
+  const effectiveTemplatePath = String(templatePath || context.templatePath || DEFAULT_TEMPLATE_PATH).trim();
+  let genreLabel = context.genreLabel;
+  if (effectiveTemplatePath && effectiveTemplatePath !== context.templatePath) {
+    const overrideTemplateAbsolutePath = resolve(projectRoot, effectiveTemplatePath);
+    const overrideTemplate = await loadJsonFile(overrideTemplateAbsolutePath);
+    genreLabel = normalizeTemplateGenreLabelFromRef({
+      template_id: overrideTemplate?.template_id,
+      template_key: overrideTemplate?.template_key,
+      template_path: effectiveTemplatePath,
+    }, context.genreLabel);
+  }
 
   return {
     ...context,
-    templatePath: String(templatePath || context.templatePath || DEFAULT_TEMPLATE_PATH).trim(),
+    templatePath: effectiveTemplatePath,
     configPath: String(configPath || DEFAULT_CONFIG_PATH).trim(),
     channelSelector: String(channelSelector || context.publicationChannelSelector || DEFAULT_CHANNEL_SELECTOR).trim(),
+    genreLabel,
   };
 }

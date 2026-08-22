@@ -57,7 +57,7 @@ const template = {
       min_item_size_px: 220,
       column_gap_px: 190,
       row_gap_px: 250,
-      sprite_scale_multiplier: 1.87,
+      sprite_scale_multiplier: 1.5,
       stage_bounds_px: {
         left: 120,
         top: 470,
@@ -69,7 +69,7 @@ const template = {
       center_x: 540,
       center_y: 1010,
       item_size_px: 320,
-      sprite_scale_multiplier: 1.72,
+      sprite_scale_multiplier: 1.38,
     },
     sprite_platform: {
       option_enabled: true,
@@ -78,7 +78,7 @@ const template = {
       option_center_y_offset_px: 80,
     },
     timer: {
-      countdown_from: 3,
+      countdown_from: 4,
       countdown_to: 0,
       bar_height_px: 39,
       bar_horizontal_inset_px: 20,
@@ -172,6 +172,8 @@ test('generic planner dispatch builds a know-your-shiny plan with three rounds a
   assert.equal(plan.assets.audio.selected_sound_effects.shiny, '/tmp/shiny.mp3');
   assert.equal(plan.assets.overlays.selected_grass_plateau_path, '/tmp/grass-plateau.png');
   assert.equal(plan.shiny_reveal.sound_volume_multiplier, 0.7);
+  assert.equal(plan.rounds[0].countdown_from, 4);
+  assert.equal(plan.rounds[0].countdown_duration_seconds, 4);
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Know Your Shiny$/u);
   for (const round of plan.rounds) {
     assert.equal(round.candidates.length, 4);
@@ -226,6 +228,8 @@ test('know-your-shiny render plan and input builders stay deterministic for slid
   assert.equal(renderPlan.timer_layout.center_y, 1000);
   assert.equal(renderPlan.timer_layout.width, 660);
   assert.equal(renderPlan.timer_layout.height, 39);
+  assert.equal(renderPlan.grid_layout.sprite_scale_multiplier, 1.5);
+  assert.equal(renderPlan.reveal_sprite.sprite_scale_multiplier, 1.38);
   assert.equal(renderPlan.grid_layout.cells[0].center_y, 597);
   assert.equal(visualInputs.length, 6);
   assert.equal(visualInputs[0].role, 'background');

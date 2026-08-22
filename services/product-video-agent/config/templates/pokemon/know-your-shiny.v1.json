@@ -82,6 +82,12 @@
       "prompt_font_size": 98,
       "reveal_y": 300,
       "reveal_font_size": 110,
+      "font_candidates": [
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Impact.ttf",
+        "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
+      ],
       "counter_x": 72,
       "counter_y": 144,
       "counter_font_size": 96,
@@ -99,7 +105,7 @@
       "min_item_size_px": 220,
       "column_gap_px": 190,
       "row_gap_px": 400,
-      "sprite_scale_multiplier": 1.87,
+      "sprite_scale_multiplier": 1.5,
       "stage_bounds_px": {
         "left": 120,
         "top": 470,
@@ -111,7 +117,7 @@
       "center_x": 540,
       "center_y": 1010,
       "item_size_px": 320,
-      "sprite_scale_multiplier": 1.72
+      "sprite_scale_multiplier": 1.38
     },
     "sprite_platform": {
       "option_enabled": true,
@@ -120,7 +126,7 @@
       "option_center_y_offset_px": 80
     },
     "timer": {
-      "countdown_from": 3,
+      "countdown_from": 4,
       "countdown_to": 0,
       "bar_height_px": 39,
       "bar_horizontal_inset_px": -80,
