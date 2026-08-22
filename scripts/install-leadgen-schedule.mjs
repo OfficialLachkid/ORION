@@ -9,6 +9,7 @@ import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.m
 
 const DEFAULT_HOUR = 7;
 const DEFAULT_MINUTE = 0;
+const DEFAULT_ROUNDS = 2;
 const PLIST_LABEL = 'io.vbj.orion.leadgen-schedule';
 
 function getArgValue(flag) {
@@ -44,7 +45,16 @@ function ensureDirectory(directoryPath) {
   }
 }
 
-function buildPlistContent({ nodePath, scriptPath, workingDirectory, stdoutPath, stderrPath, hour, minute }) {
+function buildPlistContent({
+  nodePath,
+  scriptPath,
+  workingDirectory,
+  stdoutPath,
+  stderrPath,
+  hour,
+  minute,
+  rounds,
+}) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -57,6 +67,8 @@ function buildPlistContent({ nodePath, scriptPath, workingDirectory, stdoutPath,
   <array>
     <string>${nodePath}</string>
     <string>${scriptPath}</string>
+    <string>--rounds</string>
+    <string>${rounds}</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict>
@@ -87,7 +99,7 @@ function loadLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--no-load]',
+      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--rounds 2] [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.leadgen-schedule.plist and loads it by default.',
       'Each run rotates to the next niche in scripts/run-scheduled-leadgen.mjs and searches',
@@ -104,6 +116,7 @@ function main() {
   const config = loadRuntimeConfig();
   const hour = getNumberArgValue('--hour', DEFAULT_HOUR, 23);
   const minute = getNumberArgValue('--minute', DEFAULT_MINUTE, 59);
+  const rounds = getNumberArgValue('--rounds', DEFAULT_ROUNDS, 10);
   const shouldLoad = !hasFlag('--no-load');
 
   const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
@@ -124,6 +137,7 @@ function main() {
     stderrPath,
     hour,
     minute,
+    rounds,
   });
 
   writeFileSync(plistPath, plistContent, 'utf8');
@@ -134,7 +148,7 @@ function main() {
 
   process.stdout.write([
     `Installed ${basename(plistPath)}.`,
-    `Schedule: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} local time, once daily.`,
+    `Schedule: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} local time, once daily, ${rounds} sweep round(s) per run.`,
     `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
     `Plist: ${plistPath}`,
     `Stdout: ${stdoutPath}`,

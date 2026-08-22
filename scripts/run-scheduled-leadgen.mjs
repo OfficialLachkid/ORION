@@ -22,6 +22,8 @@ const ROTATION_STATE_PATH = resolve(projectRoot, 'data', 'leadgen', 'rotation-st
 // DuckDuckGo returns ~30-40 results per query in practice, so 50 is
 // effectively "everything the search engine will give us".
 export const MAX_RESULTS_PER_NICHE = 50;
+export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 2;
+const MAX_SCHEDULED_SWEEP_ROUNDS = 10;
 
 // Dutch search terms — this targets the Dutch market, so the query itself is
 // in Dutch to get relevant local results (matches the "loodgieter Rotterdam"
@@ -255,6 +257,14 @@ function commitNicheAdvance(state, nicheKey, cityIndex) {
   return nextState;
 }
 
+export function resolveScheduledSweepRounds(value = DEFAULT_SCHEDULED_SWEEP_ROUNDS) {
+  const parsed = Number.parseInt(String(value ?? DEFAULT_SCHEDULED_SWEEP_ROUNDS), 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_SCHEDULED_SWEEP_ROUNDS;
+  }
+  return Math.min(parsed, MAX_SCHEDULED_SWEEP_ROUNDS);
+}
+
 async function runNiche(config, niche, location, queuedMessage) {
   const query = `${niche.term} ${location}`;
   const startedAtMs = Date.now();
@@ -406,8 +416,52 @@ export async function runLeadgenSweepRound({
   };
 }
 
+export async function runScheduledLeadgen({
+  config = loadRuntimeConfig(),
+  rounds = DEFAULT_SCHEDULED_SWEEP_ROUNDS,
+  title = 'Scheduled Leadgen',
+  overviewTitle = 'Daily Leadgen Sweep',
+} = {}) {
+  const normalizedRounds = resolveScheduledSweepRounds(rounds);
+  const roundReports = [];
+
+  for (let index = 0; index < normalizedRounds; index += 1) {
+    const roundLabel = normalizedRounds > 1 ? ` (${index + 1}/${normalizedRounds})` : '';
+    roundReports.push(await runLeadgenSweepRound({
+      config,
+      title: `${title}${roundLabel}`,
+      overviewTitle: `${overviewTitle}${roundLabel}`,
+    }));
+  }
+
+  const outcomes = roundReports.flatMap((entry) => entry?.outcomes || []);
+  const statuses = roundReports.flatMap((entry) => entry?.statuses || []);
+  const failures = outcomes.filter((outcome) => outcome?.runError);
+  const totalLeads = roundReports.at(-1)?.totalLeads ?? null;
+
+  return {
+    title,
+    overviewTitle,
+    rounds: normalizedRounds,
+    roundReports,
+    outcomes,
+    statuses,
+    totalLeads,
+    failures,
+  };
+}
+
+function getCliFlagValue(flag, argv = process.argv.slice(2)) {
+  const index = argv.indexOf(flag);
+  if (index === -1) {
+    return '';
+  }
+  return argv[index + 1] || '';
+}
+
 async function main() {
-  const result = await runLeadgenSweepRound();
+  const rounds = resolveScheduledSweepRounds(getCliFlagValue('--rounds'));
+  const result = await runScheduledLeadgen({ rounds });
 
   process.stdout.write(`${JSON.stringify(
     result.outcomes.map(({ niche, query, result: outcomeResult, runError }) => ({
