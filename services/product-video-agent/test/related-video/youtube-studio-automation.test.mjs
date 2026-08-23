@@ -214,6 +214,76 @@ test('applyYoutubeRelatedVideoSelection falls back to flat payload shape (older 
   assert.equal(result.applyStatus, 'applied');
 });
 
+test('run-code scopes search-input lookup to the picker dialog with the actual Studio placeholder', () => {
+  // Regression guard: earlier lookups by /search/i matched Studio's global
+  // channel search box, which does not filter picker candidates. Confirmed
+  // 2026-08-23 during playwright-cli instrumentation on video AJ2ucVUkz7w.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /ytcp-video-pick-dialog input\[placeholder\*="Search your videos" i\]/u);
+  assert.match(code, /waitFor\(\{ state: 'visible', timeout: 8000 \}\)/u);
+});
+
+test('run-code drives the search input via trusted keyboard events instead of dispatched fill', () => {
+  // fill() sets the value and dispatches synthetic input events; Studio's
+  // Polymer input pipeline sometimes rejects those and never fires the
+  // debounced filter. keyboard.type sends real CDP key events.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /page\.keyboard\.type\(target\.title/u);
+});
+
+test('run-code attempts keyboard selection before falling back to a programmatic click', () => {
+  // Mouse-based selection was observed to no-op silently on the picker cards;
+  // Polymer's synthetic-click filter appears more permissive with keyboard
+  // events. Keep the keyboard path first, click fallback after.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /page\.keyboard\.press\('Tab'\)/u);
+  assert.match(code, /page\.keyboard\.press\('Enter'\)/u);
+  assert.match(code, /page\.keyboard\.press\('Space'\)/u);
+  assert.match(code, /page\.keyboard\.press\('ArrowDown'\)/u);
+});
+
+test('run-code verifies selection via aria-label and reports selection_not_confirmed on failure', () => {
+  // Never claim "applied" without proof. Reading aria-label suffix
+  // ("Selected"/"Not selected") is the only reliable signal that the card
+  // actually toggled — clicks can succeed at the Playwright layer while
+  // Studio silently rejects the event.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /aria-label/u);
+  assert.match(code, /selection_not_confirmed/u);
+});
+
+test('applyYoutubeRelatedVideoSelection maps selection_not_confirmed to manual_action_required', async () => {
+  const stub = stubCliRunner({
+    open: { status: 0, stdout: '{}' },
+    runCode: {
+      status: 0,
+      stdout: JSON.stringify({
+        result: JSON.stringify({
+          status: 'selection_not_confirmed',
+          aria: 'Dark/Rock Challenge, Not selected',
+          url: 'https://studio.youtube.com/video/yt-current/edit',
+        }),
+      }),
+    },
+    close: { status: 0, stdout: '' },
+  });
+
+  const result = await applyYoutubeRelatedVideoSelection({
+    channelProfile,
+    publication: applyPublication,
+    relatedVideo: applyRelatedVideo,
+    fsExists: () => true,
+    cliRunner: stub.runner,
+  });
+
+  assert.equal(result.applyStatus, 'manual_action_required');
+  assert.equal(result.appliedAt, '');
+});
+
 test('applyYoutubeRelatedVideoSelection propagates feature_unavailable through the wrapper', async () => {
   const stub = stubCliRunner({
     open: { status: 0, stdout: '{}' },

@@ -290,12 +290,34 @@ async (page) => {
     };
   }
 
-  await page.waitForTimeout(800);
+  // Wait for the picker dialog itself to render. Without this the search-input
+  // lookup below can race against Studio's picker-open animation and settle on
+  // a stale search box elsewhere on the page (observed 2026-08-23: card
+  // selection silently no-ops because clicks landed on the wrong pane).
+  const pickerVisible = await page
+    .locator('ytcp-video-pick-dialog')
+    .first()
+    .waitFor({ state: 'visible', timeout: 8000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!pickerVisible) {
+    return {
+      status: 'feature_unavailable',
+      url: page.url(),
+      body: (await bodyText()).slice(0, 800),
+    };
+  }
+  await page.waitForTimeout(600);
 
+  // Scope search-input lookup to the picker dialog. The picker's own search
+  // input is <input placeholder="Search your videos"> — earlier lookups by
+  // /search/i also matched Studio's global channel search box, which does not
+  // filter picker candidates. Confirmed 2026-08-23 during playwright-cli
+  // instrumentation on video AJ2ucVUkz7w.
   const searchBox = await firstVisible([
-    page.getByRole('textbox', { name: /search/i }),
-    page.locator('input[placeholder*="Search" i], input[aria-label*="Search" i], textarea[placeholder*="Search" i]'),
-    page.locator('input[type="text"], textarea'),
+    page.locator('ytcp-video-pick-dialog input[placeholder*="Search your videos" i]'),
+    page.locator('ytcp-video-pick-dialog input[placeholder*="Search" i], ytcp-video-pick-dialog input[aria-label*="Search" i]'),
+    page.locator('ytcp-video-pick-dialog input[type="text"], ytcp-video-pick-dialog textarea'),
   ]);
 
   if (!searchBox) {
@@ -305,18 +327,39 @@ async (page) => {
     };
   }
 
-  await searchBox.fill(target.title || target.externalId || target.url);
-  await page.waitForTimeout(1200);
+  // Use trusted keyboard events (click-to-focus + keyboard.type) instead of
+  // input.fill(). fill() sets the value and dispatches synthetic input events;
+  // Studio's Polymer input pipeline sometimes rejects those as untrusted and
+  // does not fire the debounced filter. keyboard.type sends real key events
+  // via the CDP Input.dispatchKeyEvent path.
+  await searchBox.click({ timeout: 3000 }).catch(() => {});
+  await searchBox.fill('').catch(() => {});
+  await page.keyboard.type(target.title || target.externalId || target.url, { delay: 25 });
+  await page.waitForTimeout(1500);
 
-  const escapedTitle = (target.title || '').replace(/[.*+?^$()|[\\]\\\\]/g, '\\\\$&');
-  const titleRegex = escapedTitle ? new RegExp(escapedTitle, 'i') : null;
-  const resultClicked = await clickFirstVisible([
-    titleRegex ? page.getByText(titleRegex, { exact: true }) : page.locator('__never__'),
-    titleRegex ? page.getByText(titleRegex) : page.locator('__never__'),
-    titleRegex ? page.locator('[role="option"], ytcp-video-row, ytcp-entity-card, tp-yt-paper-item').filter({ hasText: titleRegex }) : page.locator('__never__'),
-  ]);
+  // Look up the target card by aria-label prefix inside the picker dialog.
+  // Cards render with aria-label "<title>, Not selected" or "<title>, Selected"
+  // — we key selection state off that suffix so we know for certain whether an
+  // interaction actually toggled the card.
+  const readTargetState = async () => {
+    return page.evaluate((titlePrefix) => {
+      const cards = Array.from(document.querySelectorAll('ytcp-video-pick-dialog ytcp-entity-card'));
+      const match = cards.find((card) => {
+        const label = card.getAttribute('aria-label') || '';
+        return label.trim().toLowerCase().startsWith(String(titlePrefix || '').trim().toLowerCase());
+      });
+      if (!match) {
+        return { found: false, aria: null, selected: false };
+      }
+      const aria = match.getAttribute('aria-label') || '';
+      const suffix = aria.split(',').map((part) => part.trim()).pop() || '';
+      const selected = /^selected$/i.test(suffix);
+      return { found: true, aria, selected };
+    }, target.title || target.externalId || '');
+  };
 
-  if (!resultClicked) {
+  let state = await readTargetState();
+  if (!state.found) {
     return {
       status: 'target_not_found',
       query: target.title || target.externalId || target.url,
@@ -324,12 +367,81 @@ async (page) => {
     };
   }
 
-  await page.waitForTimeout(500);
+  // Attempt keyboard selection first: Tab out of the search input into the
+  // results grid, then Enter/Space to select. Studio's grid honors keyboard
+  // navigation via arrow keys once focus is inside it. Mouse-based selection
+  // has been observed to no-op silently — Polymer's synthetic-click filter
+  // appears more permissive with keyboard events (2026-08-23 investigation).
+  const attemptedInteractions = [];
+  const maxKeyboardAttempts = 4;
+  for (let attempt = 0; attempt < maxKeyboardAttempts && !state.selected; attempt += 1) {
+    if (attempt === 0) {
+      await page.keyboard.press('Tab').catch(() => {});
+      await page.waitForTimeout(200);
+    } else {
+      await page.keyboard.press('ArrowDown').catch(() => {});
+      await page.waitForTimeout(150);
+    }
+    await page.keyboard.press('Enter').catch(() => {});
+    await page.waitForTimeout(400);
+    state = await readTargetState();
+    attemptedInteractions.push({ attempt, key: attempt === 0 ? 'Tab+Enter' : 'ArrowDown+Enter', selected: state.selected });
+    if (state.selected) break;
+    await page.keyboard.press('Space').catch(() => {});
+    await page.waitForTimeout(400);
+    state = await readTargetState();
+    attemptedInteractions.push({ attempt, key: 'Space', selected: state.selected });
+  }
 
+  // Fallback: direct programmatic click on the card element. After search has
+  // filtered the grid down to a small candidate set, the target card is much
+  // more likely to be laid out with real dimensions, so a scroll + click has a
+  // reasonable chance of landing.
+  if (!state.selected) {
+    await page.evaluate((titlePrefix) => {
+      const cards = Array.from(document.querySelectorAll('ytcp-video-pick-dialog ytcp-entity-card'));
+      const match = cards.find((card) => {
+        const label = card.getAttribute('aria-label') || '';
+        return label.trim().toLowerCase().startsWith(String(titlePrefix || '').trim().toLowerCase());
+      });
+      if (match) {
+        try { match.scrollIntoView({ block: 'center' }); } catch { /* ignore */ }
+      }
+    }, target.title || target.externalId || '');
+    await page.waitForTimeout(400);
+
+    const clicked = await page.evaluate((titlePrefix) => {
+      const cards = Array.from(document.querySelectorAll('ytcp-video-pick-dialog ytcp-entity-card'));
+      const match = cards.find((card) => {
+        const label = card.getAttribute('aria-label') || '';
+        return label.trim().toLowerCase().startsWith(String(titlePrefix || '').trim().toLowerCase());
+      });
+      if (!match) return false;
+      try { match.click(); return true; } catch { return false; }
+    }, target.title || target.externalId || '');
+    attemptedInteractions.push({ attempt: 'fallback', key: 'programmatic_click', clicked });
+    await page.waitForTimeout(700);
+    state = await readTargetState();
+  }
+
+  if (!state.selected) {
+    return {
+      status: 'selection_not_confirmed',
+      aria: state.aria,
+      attempts: attemptedInteractions,
+      url: page.url(),
+    };
+  }
+
+  await page.waitForTimeout(400);
+
+  // Confirm the picker (Done/Select button inside the dialog). Scope to the
+  // dialog so we don't accidentally click a same-named button elsewhere.
   await clickFirstVisible([
-    page.getByRole('button', { name: /done|select/i }),
-    page.locator('button, [role="button"]').filter({ hasText: /done|select/i }),
+    page.locator('ytcp-video-pick-dialog').getByRole('button', { name: /^(done|select)$/i }),
+    page.locator('ytcp-video-pick-dialog').locator('button, [role="button"]').filter({ hasText: /^(done|select)$/i }),
   ]);
+  await page.waitForTimeout(600);
 
   const saveButton = await firstVisible([
     page.getByRole('button', { name: /^save$/i }),
@@ -499,7 +611,10 @@ export async function applyYoutubeRelatedVideoSelection({
         ? 'manual_action_required'
         : scriptStatus === 'feature_unavailable'
           ? 'feature_unavailable'
-          : scriptStatus === 'search_not_found' || scriptStatus === 'target_not_found' || scriptStatus === 'save_not_found'
+          : scriptStatus === 'search_not_found'
+              || scriptStatus === 'target_not_found'
+              || scriptStatus === 'save_not_found'
+              || scriptStatus === 'selection_not_confirmed'
             ? 'manual_action_required'
             : scriptStatus || 'failed';
 
