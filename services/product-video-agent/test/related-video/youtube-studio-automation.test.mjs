@@ -233,16 +233,37 @@ test('run-code drives the search input via trusted keyboard events instead of di
   assert.match(code, /page\.keyboard\.type\(target\.title/u);
 });
 
-test('run-code attempts keyboard selection before falling back to a programmatic click', () => {
-  // Mouse-based selection was observed to no-op silently on the picker cards;
-  // Polymer's synthetic-click filter appears more permissive with keyboard
-  // events. Keep the keyboard path first, click fallback after.
+test('run-code clicks the filtered card via role=option (no Tab keyboard nav)', () => {
+  // Regression guard: earlier iterations used Tab+Enter/Space keyboard nav
+  // to select the card, but Tab moved focus out of the search input onto the
+  // search-clear "×" button; Enter then reset the search and Space escaped
+  // focus to the underlying page (confirmed 2026-08-23 via diagnostic
+  // capture showing 50 cards + focus on YTCP-DROPDOWN-TRIGGER after the
+  // keyboard sequence). Direct role=option click is more reliable.
   const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
 
-  assert.match(code, /page\.keyboard\.press\('Tab'\)/u);
-  assert.match(code, /page\.keyboard\.press\('Enter'\)/u);
-  assert.match(code, /page\.keyboard\.press\('Space'\)/u);
-  assert.match(code, /page\.keyboard\.press\('ArrowDown'\)/u);
+  assert.match(code, /getByRole\('option'\)/u);
+  assert.doesNotMatch(code, /page\.keyboard\.press\('Tab'\)/u);
+});
+
+test('run-code verifies selection by main-page trigger as fallback when picker closes', () => {
+  // Studio's checkbox-style picker sometimes auto-closes after selection,
+  // removing the card from the DOM before we can read its aria-label. The
+  // main-page "Related video" trigger updates with the selected title and
+  // survives picker close — use it as a fallback signal.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /ytcp-dropdown-trigger/u);
+  assert.match(code, /mainPageConfirmedTitle/u);
+});
+
+test('run-code captures diagnostic snapshots at each interaction checkpoint', () => {
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /pre_search/u);
+  assert.match(code, /post_search/u);
+  assert.match(code, /post_select/u);
+  assert.match(code, /page\.screenshot/u);
 });
 
 test('run-code verifies selection via aria-label and reports selection_not_confirmed on failure', () => {
