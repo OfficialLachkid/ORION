@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../lib/runtime-config.mjs';
@@ -286,6 +287,7 @@ function isRelatedVideoRefreshCandidate(publication) {
 
 export async function refreshRelatedVideoAssignments({
   publications,
+  focusPublicationIds = null,
   store,
   runtimeConfig,
   channelProfile,
@@ -297,7 +299,14 @@ export async function refreshRelatedVideoAssignments({
 } = {}) {
   let refreshedPublications = [...publications];
   const results = [];
-  const candidates = refreshedPublications.filter((publication) => isRelatedVideoRefreshCandidate(publication));
+  const focusSet = Array.isArray(focusPublicationIds) && focusPublicationIds.length > 0
+    ? new Set(focusPublicationIds.map((id) => String(id || '').trim()).filter(Boolean))
+    : null;
+  const candidates = refreshedPublications.filter((publication) => {
+    if (!isRelatedVideoRefreshCandidate(publication)) return false;
+    if (focusSet && !focusSet.has(String(publication.id || '').trim())) return false;
+    return true;
+  });
 
   for (const publication of candidates) {
     const videoRow = publication.video_id
@@ -330,6 +339,7 @@ export async function refreshRelatedVideoAssignments({
 
     let applyStatus = '';
     let capabilityStatus = '';
+    let applyResult = null;
     // Apply during preview_uploaded / preview_approved too, not just scheduled
     // — the operator preferred private previews to already carry the related
     // video so it's set from the moment the video first appears in Studio,
@@ -343,7 +353,7 @@ export async function refreshRelatedVideoAssignments({
       && applyableStates.includes(normalizeWorkflowState(updatedPublication))
       && String(updatedPublication?.external_id || '').trim()
     ) {
-      const applyResult = dryRun
+      applyResult = dryRun
         ? {
           capability: { status: 'dry_run' },
           applyStatus: 'dry_run',
@@ -391,6 +401,26 @@ export async function refreshRelatedVideoAssignments({
       });
     }
 
+    // Surface picker diagnostics to CLI output when the automation actually
+    // ran. Full details (dom enumeration, keyboard attempts) get written to a
+    // JSON file to keep stdout compact; screenshot paths and the raw script
+    // status stay inline so operators can see at a glance which step failed.
+    let diagnosticPayload = null;
+    const applyDetails = (typeof applyResult === 'object' && applyResult && 'details' in applyResult) ? applyResult.details : null;
+    if (applyDetails && (Array.isArray(applyDetails.diagnostics) || applyDetails.attempts || applyDetails.aria)) {
+      const detailsPath = `/tmp/orion-related-video-${publication.id}-${Date.now()}.json`;
+      try {
+        writeFileSync(detailsPath, JSON.stringify(applyDetails, null, 2));
+      } catch { /* ignore */ }
+      diagnosticPayload = {
+        script_status: applyDetails.status || '',
+        screenshots: Array.isArray(applyDetails.diagnostics)
+          ? applyDetails.diagnostics.map((d) => ({ label: d.label, path: d.screenshotPath })).filter((d) => d.path)
+          : [],
+        details_json_path: detailsPath,
+      };
+    }
+
     refreshedPublications = replacePublication(refreshedPublications, updatedPublication);
     results.push({
       publication_id: publication.id,
@@ -400,6 +430,7 @@ export async function refreshRelatedVideoAssignments({
       related_video_target_publication_id: updatedPublication?.metadata?.related_video?.target_publication_id || '',
       related_video_capability_status: capabilityStatus || updatedPublication?.metadata?.related_video?.capability_status || '',
       related_video_apply_status: applyStatus || updatedPublication?.metadata?.related_video?.apply_status || '',
+      ...(diagnosticPayload ? { diagnostics: diagnosticPayload } : {}),
     });
   }
 
@@ -1129,8 +1160,15 @@ async function main() {
     : publications;
 
   if (refreshRelatedVideosOnly) {
+    // Refresh needs the full publications set so the planner has candidates
+    // to score against — filtering to just --publication-id before planning
+    // strips the pool to a single row and the planner returns
+    // selection_status: 'none' with nothing to apply (observed 2026-08-23).
+    // Use focusPublicationIds to scope which rows get processed while
+    // planRelatedVideoSelection still sees the whole universe.
     const refreshed = await refreshRelatedVideoAssignments({
-      publications: scopedPublications,
+      publications,
+      focusPublicationIds: publicationId ? [publicationId] : null,
       store,
       runtimeConfig,
       channelProfile,
