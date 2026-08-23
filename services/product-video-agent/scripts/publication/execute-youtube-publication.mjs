@@ -286,6 +286,7 @@ function isRelatedVideoRefreshCandidate(publication) {
 
 export async function refreshRelatedVideoAssignments({
   publications,
+  focusPublicationIds = null,
   store,
   runtimeConfig,
   channelProfile,
@@ -297,7 +298,14 @@ export async function refreshRelatedVideoAssignments({
 } = {}) {
   let refreshedPublications = [...publications];
   const results = [];
-  const candidates = refreshedPublications.filter((publication) => isRelatedVideoRefreshCandidate(publication));
+  const focusSet = Array.isArray(focusPublicationIds) && focusPublicationIds.length > 0
+    ? new Set(focusPublicationIds.map((id) => String(id || '').trim()).filter(Boolean))
+    : null;
+  const candidates = refreshedPublications.filter((publication) => {
+    if (!isRelatedVideoRefreshCandidate(publication)) return false;
+    if (focusSet && !focusSet.has(String(publication.id || '').trim())) return false;
+    return true;
+  });
 
   for (const publication of candidates) {
     const videoRow = publication.video_id
@@ -1129,8 +1137,15 @@ async function main() {
     : publications;
 
   if (refreshRelatedVideosOnly) {
+    // Refresh needs the full publications set so the planner has candidates
+    // to score against — filtering to just --publication-id before planning
+    // strips the pool to a single row and the planner returns
+    // selection_status: 'none' with nothing to apply (observed 2026-08-23).
+    // Use focusPublicationIds to scope which rows get processed while
+    // planRelatedVideoSelection still sees the whole universe.
     const refreshed = await refreshRelatedVideoAssignments({
-      publications: scopedPublications,
+      publications,
+      focusPublicationIds: publicationId ? [publicationId] : null,
       store,
       runtimeConfig,
       channelProfile,
