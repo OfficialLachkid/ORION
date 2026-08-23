@@ -75,6 +75,18 @@ def main() -> int:
     for d in new_2026_08_16:
         assert d in domains, f"2026-08-16 blocklist addition missing: {d!r}"
 
+    # 2026-08-23 batch — second week-over-week quality review; only 4 new
+    # patterns worth permanently blocking after the R1 + R3 improvements
+    # dropped overall leak rates by ~50%.
+    new_2026_08_23 = [
+        "findhealthclinics.com",
+        "nephrocare.com",
+        "kendew-agency.com",
+        "ns.nl",
+    ]
+    for d in new_2026_08_23:
+        assert d in domains, f"2026-08-23 blocklist addition missing: {d!r}"
+
     # No accidental duplicates (a set literal would silently dedupe but the
     # rationale-comment style makes visual review harder — this asserts each
     # domain appears exactly once as source-code text).

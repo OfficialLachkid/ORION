@@ -170,6 +170,16 @@ BLOCKED_DOMAINS = {
     "cofcsports.com",
     "godrakebulldogs.com",
     "newberrywolves.com",
+    # 2026-08-23 batch — second week-over-week quality review. R1 country
+    # context + R3 chains + 22-domain expansion from 2026-08-16 dropped the
+    # non-.nl leak rate from 16.6% -> 7.9% (~half) and the no-contact rate
+    # from 62.5% -> 45.5% (~a quarter improvement). Only 8 non-.nl leaks in
+    # the last 7 days; 4 of those were unambiguous new patterns worth
+    # permanently blocking.
+    "findhealthclinics.com",  # healthcare directory (surfaces individual clinics as its own listings)
+    "nephrocare.com",  # Fresenius Medical Care global dialysis chain (~50+ NL clinics under the brand)
+    "kendew-agency.com",  # SEO/marketing agency client-showcase page (client is not the site itself)
+    "ns.nl",  # Dutch national railways — station pages leaked in via city queries; not a business
 }
 
 # Well-known Dutch national chains — centrally operated, huge in-house
