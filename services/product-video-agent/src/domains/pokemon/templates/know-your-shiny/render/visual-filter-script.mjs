@@ -257,6 +257,13 @@ function resolvePlatformLayout(template) {
   };
 }
 
+function resolveGridSpriteLayout(template) {
+  const config = template?.layout?.sprite_grid || {};
+  return {
+    center_y_offset_px: ensureNumber(config.sprite_center_y_offset_px, 0),
+  };
+}
+
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = null) {
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
@@ -272,6 +279,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   };
   const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
   const platformLayout = resolvePlatformLayout(template);
+  const gridSpriteLayout = resolveGridSpriteLayout(template);
   const highlightKeywords = normalizeHighlightKeywords(template);
   const highlightColor = String(template?.layout?.text?.highlight_color || '0xFFD60A').trim() || '0xFFD60A';
   const highlightOffsets = resolveHighlightOffsets(template);
@@ -366,6 +374,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     for (const candidate of round.candidates) {
       const cell = gridLayout.cells[candidate.index];
       const introStart = roundTime(incomingTransitionSeconds + 0.08 + (candidate.index * 0.03));
+      const candidateCenterY = Number((
+        cell.center_y + gridSpriteLayout.center_y_offset_px
+      ).toFixed(3));
       const baseLabel = `r${roundIndex}c${candidate.index}`;
       const baseChain = `${buildColorFilterChain(candidate)},scale=${baseSpriteSize}:${baseSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1`;
       filters.push(`[${splitLabels[candidate.index]}]fps=${fps},${baseChain}[${baseLabel}]`);
@@ -388,7 +399,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       }
       const baseSceneLabel = `scene${roundIndex}cand${candidate.index}`;
       filters.push(
-        `[${currentLabel}][${baseLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${formatEnableBetween(introStart, round.local.scene_duration_seconds)}'[${baseSceneLabel}]`,
+        `[${currentLabel}][${baseLabel}]overlay=x='${cell.center_x}-w/2':y='${candidateCenterY}-h/2':enable='${formatEnableBetween(introStart, round.local.scene_duration_seconds)}'[${baseSceneLabel}]`,
       );
       currentLabel = baseSceneLabel;
 
@@ -400,7 +411,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           `[${grayLabel}]fps=${fps},${baseChain},hue=s=0,fade=t=in:st=${round.local.reveal_visual_start_seconds}:d=${grayFadeDuration}:alpha=1[${grayLabel}v]`,
         );
         filters.push(
-          `[${currentLabel}][${grayLabel}v]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${graySceneLabel}]`,
+          `[${currentLabel}][${grayLabel}v]overlay=x='${cell.center_x}-w/2':y='${candidateCenterY}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${graySceneLabel}]`,
         );
         currentLabel = graySceneLabel;
       }
@@ -494,7 +505,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       const sparkleSceneLabel = `scene${roundIndex}ss`;
       filters.push(
-        `[${currentLabel}][${sparkleLabel}]overlay=${correctCell.center_x}-w/2:${correctCell.center_y}-h/2:enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, sparkleEnd)}'[${sparkleSceneLabel}]`,
+        `[${currentLabel}][${sparkleLabel}]overlay=${correctCell.center_x}-w/2:${Number((correctCell.center_y + gridSpriteLayout.center_y_offset_px).toFixed(3))}-h/2:enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, sparkleEnd)}'[${sparkleSceneLabel}]`,
       );
       currentLabel = sparkleSceneLabel;
     }

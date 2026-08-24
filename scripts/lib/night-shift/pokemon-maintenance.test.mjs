@@ -284,3 +284,48 @@ test('review backlog runtime selection avoids repeating the most recently genera
   const selectedRuntime = selectNextReviewBacklogRuntime(runtimes, publications);
   assert.equal(selectedRuntime?.templateId, 'pokemon.find-the-shiny.v1');
 });
+
+test('review backlog runtime selection prefers higher-weight non-dual templates when loads are equal', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+    { templateId: 'pokemon.memory.v1', channelConfigPath: 'memory.json' },
+  ];
+
+  const selectedRuntime = selectNextReviewBacklogRuntime(
+    runtimes,
+    [],
+    {
+      templateWeights: {
+        'pokemon.dual-type-reveal.v1': 1,
+        'pokemon.find-the-shiny.v1': 2,
+        'pokemon.memory.v1': 2,
+      },
+    },
+  );
+
+  assert.equal(selectedRuntime?.templateId, 'pokemon.memory.v1');
+});
+
+test('review backlog runtime selection avoids an in-run repeat even before publications refresh', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+    { templateId: 'pokemon.memory.v1', channelConfigPath: 'memory.json' },
+  ];
+
+  const selectedRuntime = selectNextReviewBacklogRuntime(
+    runtimes,
+    [],
+    {
+      templateWeights: {
+        'pokemon.dual-type-reveal.v1': 1,
+        'pokemon.find-the-shiny.v1': 2,
+        'pokemon.memory.v1': 2,
+      },
+      recentTemplateIds: ['pokemon.memory.v1'],
+    },
+  );
+
+  assert.equal(selectedRuntime?.templateId, 'pokemon.find-the-shiny.v1');
+});

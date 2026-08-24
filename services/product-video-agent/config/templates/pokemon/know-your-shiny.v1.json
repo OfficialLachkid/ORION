@@ -106,6 +106,7 @@
       "column_gap_px": 190,
       "row_gap_px": 400,
       "sprite_scale_multiplier": 1.5,
+      "sprite_center_y_offset_px": 50,
       "stage_bounds_px": {
         "left": 120,
         "top": 470,

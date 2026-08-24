@@ -402,6 +402,40 @@ function normalizeTemplateIdForQueue(value = '') {
   return normalizedTemplateId;
 }
 
+function normalizeTemplateWeightsForQueue(templateWeights = {}) {
+  return Object.fromEntries(
+    Object.entries(
+      templateWeights && typeof templateWeights === 'object' && !Array.isArray(templateWeights)
+        ? templateWeights
+        : {},
+    )
+      .map(([templateId, weight]) => {
+        const normalizedTemplateId = normalizeTemplateIdForQueue(templateId);
+        const parsedWeight = Number.parseFloat(String(weight || ''));
+        return [
+          normalizedTemplateId,
+          Number.isFinite(parsedWeight) && parsedWeight > 0 ? parsedWeight : 1,
+        ];
+      })
+      .filter(([templateId]) => Boolean(templateId)),
+  );
+}
+
+function summarizeRecentGeneratedTemplates(templateIds = []) {
+  const normalizedTemplateIds = (Array.isArray(templateIds) ? templateIds : [])
+    .map((templateId) => normalizeTemplateIdForQueue(templateId))
+    .filter(Boolean);
+  const counts = normalizedTemplateIds.reduce((summary, templateId) => {
+    summary[templateId] = Number(summary[templateId] || 0) + 1;
+    return summary;
+  }, {});
+
+  return {
+    mostRecentTemplateId: normalizedTemplateIds.at(-1) || '',
+    counts,
+  };
+}
+
 function summarizeActiveTemplateQueue(publications = [], templateId = '') {
   const normalizedTemplateId = normalizeTemplateIdForQueue(templateId);
   if (!normalizedTemplateId) {
@@ -485,22 +519,41 @@ async function resolveReviewBacklogGenerationRuntimes(templateRuntime) {
   return runtimes;
 }
 
-export function selectNextReviewBacklogRuntime(generationRuntimes, publications = []) {
+export function selectNextReviewBacklogRuntime(generationRuntimes, publications = [], options = {}) {
+  const normalizedTemplateWeights = normalizeTemplateWeightsForQueue(options.templateWeights);
+  const recentGenerationSummary = summarizeRecentGeneratedTemplates(options.recentTemplateIds);
   const rankedRuntimes = generationRuntimes
     .map((runtime) => {
       const queueSummary = summarizeActiveTemplateQueue(publications, runtime.templateId);
+      const normalizedTemplateId = normalizeTemplateIdForQueue(runtime.templateId);
+      const inRunGeneratedCount = Number(recentGenerationSummary.counts[normalizedTemplateId] || 0);
+      const activeCount = queueSummary.count + inRunGeneratedCount;
+      const weight = Number(normalizedTemplateWeights[normalizedTemplateId] || 1);
       return {
         runtime,
-        activeCount: queueSummary.count,
+        activeCount,
+        persistedActiveCount: queueSummary.count,
+        inRunGeneratedCount,
+        weight,
+        weightedLoad: activeCount / weight,
         latestCreatedAtMs: Number.isFinite(queueSummary.latestCreatedAtMs)
           ? queueSummary.latestCreatedAtMs
           : Number.NEGATIVE_INFINITY,
-        normalizedTemplateId: normalizeTemplateIdForQueue(runtime.templateId),
+        normalizedTemplateId,
       };
     })
     .sort((left, right) => {
+      if (left.weightedLoad !== right.weightedLoad) {
+        return left.weightedLoad - right.weightedLoad;
+      }
+      if (left.weight !== right.weight) {
+        return right.weight - left.weight;
+      }
       if (left.activeCount !== right.activeCount) {
         return left.activeCount - right.activeCount;
+      }
+      if (left.inRunGeneratedCount !== right.inRunGeneratedCount) {
+        return left.inRunGeneratedCount - right.inRunGeneratedCount;
       }
       if (left.latestCreatedAtMs !== right.latestCreatedAtMs) {
         return left.latestCreatedAtMs - right.latestCreatedAtMs;
@@ -511,7 +564,8 @@ export function selectNextReviewBacklogRuntime(generationRuntimes, publications 
     });
 
   const selectedRuntime = rankedRuntimes[0]?.runtime || null;
-  const mostRecentActiveTemplateId = findMostRecentActiveTemplateId(publications);
+  const mostRecentActiveTemplateId = recentGenerationSummary.mostRecentTemplateId
+    || findMostRecentActiveTemplateId(publications);
   if (!selectedRuntime || rankedRuntimes.length <= 1 || !mostRecentActiveTemplateId) {
     return selectedRuntime;
   }
@@ -584,6 +638,7 @@ async function replenishReviewBacklogForRuntime(config, templateRuntime, asOf) {
   const initialQueueStatus = await fetchQueueStatus();
   const generated = [];
   const errors = [];
+  const recentGeneratedTemplateIds = [];
   let reviewReadyCount = initialQueueStatus.reviewReadyCount;
   let consecutiveFailures = 0;
 
@@ -592,6 +647,10 @@ async function replenishReviewBacklogForRuntime(config, templateRuntime, asOf) {
     const generationRuntime = selectNextReviewBacklogRuntime(
       generationRuntimes,
       currentPublications,
+      {
+        templateWeights: templateRuntime.nightShift.reviewBacklogTemplateWeights,
+        recentTemplateIds: recentGeneratedTemplateIds,
+      },
     );
     const child = runProjectNodeScript(
       'services/product-video-agent/scripts/generate-poke-quizz-review.mjs',
@@ -623,6 +682,7 @@ async function replenishReviewBacklogForRuntime(config, templateRuntime, asOf) {
     }
 
     consecutiveFailures = 0;
+    recentGeneratedTemplateIds.push(generationRuntime?.templateId || templateRuntime.templateId);
     generated.push({
       publicationId: payload.publication_id,
       previewUrl: payload.preview_url || '',

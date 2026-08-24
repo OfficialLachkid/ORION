@@ -58,6 +58,7 @@ const template = {
       column_gap_px: 190,
       row_gap_px: 250,
       sprite_scale_multiplier: 1.5,
+      sprite_center_y_offset_px: 50,
       stage_bounds_px: {
         left: 120,
         top: 470,
@@ -283,6 +284,7 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(visualFilter.script, /color=c=0x32D74B@0\.98/u);
   assert.match(visualFilter.script, /scale=w='max\(2,/u);
   assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
+  assert.match(visualFilter.script, /647-h\/2/u);
   assert.match(visualFilter.script, /colorchannelmixer=/u);
   assert.match(visualFilter.script, /fontcolor=0xFFD60A/u);
   assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);
