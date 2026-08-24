@@ -39,6 +39,15 @@ const channelProfile = normalizePublicationChannelProfile({
     oauth_client_secret_path: 'config/youtube/client-secret.json',
     oauth_refresh_token_env: 'YOUTUBE_POKE_QUIZZ_REFRESH_TOKEN',
   },
+  metadata: {
+    related_video: {
+      enabled: true,
+      provider: 'youtube_studio',
+      browser: 'chrome',
+      profile_dir: '/tmp/test-playwright-profile',
+      session_name: 'yt-related-poke-quizz-test',
+    },
+  },
 });
 
 function createStore(initialPublication, videoRow = null) {
@@ -688,4 +697,178 @@ test('related-video refresh reapplies scheduled rows through the automation hook
       related_video_apply_status: 'applied',
     },
   ]);
+});
+
+test('related-video refresh is a no-op when the channel does not have related_video enabled', async () => {
+  const disabledChannelProfile = {
+    ...channelProfile,
+    metadata: {
+      ...(channelProfile.metadata || {}),
+      related_video: { ...(channelProfile.metadata?.related_video || {}), enabled: false },
+    },
+  };
+  const publication = {
+    id: 'pub-disabled',
+    video_id: 'video-disabled',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'preview_uploaded',
+    external_id: 'yt-disabled',
+    metadata: {
+      workflow_state: 'preview_uploaded',
+      type_pair: ['ice', 'flying'],
+    },
+  };
+  const store = createStore(publication);
+  let applyImplCalled = false;
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [publication],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile: disabledChannelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-08-24T10:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async () => {
+      applyImplCalled = true;
+      return { capability: { status: 'disabled' }, applyStatus: 'skipped', appliedAt: '', lastAttemptedAt: '', lastError: 'disabled', studioEditUrl: '' };
+    },
+  });
+
+  assert.deepEqual(refreshed.results, []);
+  assert.equal(applyImplCalled, false, 'apply should not be called for disabled channels');
+  assert.equal(store.updateCalls.length, 0, 'no metadata should be written for disabled channels');
+});
+
+test('related-video --include-published preserves the existing target on backfill', async () => {
+  // Regression guard for the operator's explicit ask: once we backfill a
+  // published video, we must NOT re-pick the target and change what viewers
+  // eventually see once we save. Use the existing plan; only apply.
+  const publication = {
+    id: 'pub-published-backfill',
+    video_id: 'video-published-backfill',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-published',
+    published_at: '2026-08-01T08:00:00.000Z',
+    public_url: 'https://youtube.com/shorts/yt-published',
+    title: 'Guess the typing!',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['grass', 'poison'],
+      related_video: {
+        selector_version: 'related-video-v1',
+        selection_status: 'planned',
+        target_publication_id: 'pub-original-pick',
+        target_external_id: 'yt-original-pick',
+        target_url: 'https://youtube.com/shorts/yt-original-pick',
+        target_title: 'Original Pick From Long Ago',
+        apply_status: 'manual_action_required',
+        capability_status: 'configured',
+      },
+    },
+  };
+  // A much fresher published candidate exists — planner WOULD pick this if
+  // we let it re-plan. But we must NOT re-plan for published backfill.
+  // Give it apply_status: 'applied' so the backfill filter skips it (we
+  // never re-touch published rows that already made it into Studio).
+  const fresherCandidate = {
+    id: 'pub-fresher',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-fresher',
+    public_url: 'https://youtube.com/shorts/yt-fresher',
+    published_at: '2026-08-20T08:00:00.000Z',
+    title: 'Much fresher video',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['fire', 'rock'],
+      template_id: 'pokemon-type-challenge-v1',
+      related_video: {
+        selection_status: 'planned',
+        target_external_id: 'yt-something-else',
+        apply_status: 'applied',
+        capability_status: 'configured',
+      },
+    },
+  };
+  const store = createStore(publication);
+  let appliedRelatedVideo = null;
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [publication, fresherCandidate],
+    includePublished: true,
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-08-24T10:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async ({ relatedVideo }) => {
+      appliedRelatedVideo = relatedVideo;
+      return {
+        capability: { status: 'configured' },
+        applyStatus: 'applied',
+        appliedAt: '2026-08-24T10:00:00.000Z',
+        lastAttemptedAt: '2026-08-24T10:00:00.000Z',
+        lastError: '',
+        studioEditUrl: 'https://studio.youtube.com/video/yt-published/edit',
+      };
+    },
+  });
+
+  assert.equal(appliedRelatedVideo?.target_external_id, 'yt-original-pick', 'must apply original planned target, not re-pick');
+  assert.equal(store.current().metadata.related_video.target_external_id, 'yt-original-pick');
+  assert.equal(store.current().metadata.related_video.apply_status, 'applied');
+  assert.equal(refreshed.results.length, 1);
+});
+
+test('related-video --include-published skips published rows whose target was already applied', async () => {
+  // Belt and braces: even if the caller passes includePublished, we must
+  // never re-touch a video whose related-video already made it into Studio.
+  const publication = {
+    id: 'pub-already-applied',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-already-applied',
+    published_at: '2026-08-01T08:00:00.000Z',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['water', 'bug'],
+      related_video: {
+        selection_status: 'planned',
+        target_external_id: 'yt-already-applied-target',
+        apply_status: 'applied',
+        capability_status: 'configured',
+      },
+    },
+  };
+  const store = createStore(publication);
+  let applyImplCalled = false;
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [publication],
+    includePublished: true,
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-08-24T10:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async () => {
+      applyImplCalled = true;
+      return { capability: { status: 'configured' }, applyStatus: 'applied', appliedAt: '', lastAttemptedAt: '', lastError: '', studioEditUrl: '' };
+    },
+  });
+
+  assert.deepEqual(refreshed.results, [], 'no work should be produced for already-applied published rows');
+  assert.equal(applyImplCalled, false);
+  assert.equal(store.updateCalls.length, 0);
 });
