@@ -330,10 +330,26 @@ export function buildPokeQuizzPublicationReviewTask({
     approvalState: String(publication?.metadata?.workflow_state || '').trim(),
     scheduledForLabel: formatScheduledForLabel(publication?.scheduled_for, channelProfile?.timezone || 'UTC'),
     previewDeletionLabel: formatPreviewDeletionLabel(publication?.metadata || {}, channelProfile?.timezone || 'UTC'),
-    relatedVideoLabel: formatRelatedVideoLabel(publication?.metadata?.related_video || {}),
-    relatedVideoUrl: String(publication?.metadata?.related_video?.target_url || '').trim(),
-    relatedVideoStatusLabel: formatRelatedVideoStatusLabel(publication?.metadata?.related_video || {}),
-    relatedVideoReason: String(publication?.metadata?.related_video?.match_reason || '').trim(),
+    // Suppress related-video display for channels that aren't set up for it
+    // (YouTube "Related video" is a per-channel eligibility; channels that
+    // don't have it yet were still getting picks planned + shown on Discord
+    // approval cards, which misleads the reviewer into thinking a related
+    // video would be attached). Reads from channel_profile.metadata.
+    ...(
+      channelProfile?.metadata?.related_video?.enabled === true
+        ? {
+          relatedVideoLabel: formatRelatedVideoLabel(publication?.metadata?.related_video || {}),
+          relatedVideoUrl: String(publication?.metadata?.related_video?.target_url || '').trim(),
+          relatedVideoStatusLabel: formatRelatedVideoStatusLabel(publication?.metadata?.related_video || {}),
+          relatedVideoReason: String(publication?.metadata?.related_video?.match_reason || '').trim(),
+        }
+        : {
+          relatedVideoLabel: '',
+          relatedVideoUrl: '',
+          relatedVideoStatusLabel: '',
+          relatedVideoReason: '',
+        }
+    ),
     autoCommentStatusLabel: formatYoutubeAutoCommentStatusLabel(publication?.metadata?.youtube_auto_comment || {}),
     autoCommentNote: formatYoutubeAutoCommentNote(publication?.metadata?.youtube_auto_comment || {}),
   };
