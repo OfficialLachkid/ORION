@@ -57,6 +57,28 @@ function ensureNonNegativeNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+function buildRoundCountDifficultyCatalog(template) {
+  const configuredLevels = template?.selection_rules?.round_count_levels || {};
+  const difficultyWeights = template?.selection_rules?.round_count_weights || {};
+  return Object.entries(configuredLevels)
+    .map(([difficultyId, entry]) => ({
+      id: String(difficultyId || '').trim(),
+      round_count: ensurePositiveInteger(entry?.round_count, 0),
+      weight: Math.max(1, ensurePositiveInteger(difficultyWeights[difficultyId], 1)),
+    }))
+    .filter((entry) => entry.id && entry.round_count > 0);
+}
+
+function chooseRoundCountDifficulty(difficultyCatalog, random) {
+  if (!Array.isArray(difficultyCatalog) || difficultyCatalog.length === 0) {
+    return null;
+  }
+  const weightedPool = difficultyCatalog.flatMap((entry) => (
+    Array.from({ length: entry.weight }, () => entry)
+  ));
+  return weightedPool[Math.floor(random() * weightedPool.length)] || difficultyCatalog[0];
+}
+
 async function loadSharp() {
   if (!sharpModulePromise) {
     sharpModulePromise = import('sharp')
@@ -216,6 +238,13 @@ function selectHookText(template) {
   return 'Guess the Type';
 }
 
+function isSingleTypeSubject(subject) {
+  const typeCount = Array.isArray(subject?.types)
+    ? subject.types.filter(Boolean).length
+    : 0;
+  return typeCount === 1;
+}
+
 function shuffle(values, random) {
   const items = [...values];
   for (let index = items.length - 1; index > 0; index -= 1) {
@@ -223,6 +252,63 @@ function shuffle(values, random) {
     [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
   return items;
+}
+
+function selectSubjectsForTypeQuiz({
+  eligibleSubjects,
+  roundCount,
+  typeCardinalityMode,
+  random,
+}) {
+  const shuffledSubjects = shuffle(eligibleSubjects, random);
+  if (typeCardinalityMode !== 'any' || roundCount <= 1) {
+    return shuffledSubjects.slice(0, roundCount);
+  }
+
+  const singleTypeSubjects = shuffledSubjects.filter((subject) => isSingleTypeSubject(subject));
+  const multiTypeSubjects = shuffledSubjects.filter((subject) => !isSingleTypeSubject(subject));
+  const minimumMultiCountForSpacing = Math.ceil((roundCount - 1) / 2);
+  const minimumSelectedMultiCount = Math.max(
+    roundCount - singleTypeSubjects.length,
+    minimumMultiCountForSpacing,
+  );
+
+  if (multiTypeSubjects.length < minimumSelectedMultiCount) {
+    throw new Error(
+      `No sufficient localized Pokemon rows are available for a mixed type quiz without consecutive single-type rounds. `
+      + `Need at least ${minimumSelectedMultiCount} dual-typing (or higher) Pokemon, found ${multiTypeSubjects.length}.`,
+    );
+  }
+
+  const maximumSelectedMultiCount = Math.min(roundCount, multiTypeSubjects.length);
+  const selectedMultiCount = minimumSelectedMultiCount
+    + Math.floor(random() * ((maximumSelectedMultiCount - minimumSelectedMultiCount) + 1));
+  const selectedSingleCount = roundCount - selectedMultiCount;
+  const selectedMultiSubjects = multiTypeSubjects.slice(0, selectedMultiCount);
+  const selectedSingleSubjects = singleTypeSubjects.slice(0, selectedSingleCount);
+
+  const chosenGapIndexes = shuffle(
+    Array.from({ length: selectedMultiSubjects.length + 1 }, (_, index) => index),
+    random,
+  )
+    .slice(0, selectedSingleSubjects.length)
+    .sort((left, right) => left - right);
+  const singlesByGap = new Map(
+    chosenGapIndexes.map((gapIndex, index) => [gapIndex, selectedSingleSubjects[index]]),
+  );
+
+  const orderedSubjects = [];
+  for (let gapIndex = 0; gapIndex <= selectedMultiSubjects.length; gapIndex += 1) {
+    const singleTypeSubject = singlesByGap.get(gapIndex);
+    if (singleTypeSubject) {
+      orderedSubjects.push(singleTypeSubject);
+    }
+    if (gapIndex < selectedMultiSubjects.length) {
+      orderedSubjects.push(selectedMultiSubjects[gapIndex]);
+    }
+  }
+
+  return orderedSubjects;
 }
 
 function selectGifBackground(gifBackgrounds, random, selectionState) {
@@ -363,7 +449,10 @@ export async function planPokemonTypeQuizChallenge({
   const random = createPrng(seed);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
   const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
-  const roundCount = ensurePositiveInteger(template?.selection_rules?.round_count, 5);
+  const roundCountDifficultyCatalog = buildRoundCountDifficultyCatalog(template);
+  const selectedRoundCountDifficulty = chooseRoundCountDifficulty(roundCountDifficultyCatalog, random);
+  const roundCount = selectedRoundCountDifficulty?.round_count
+    ?? ensurePositiveInteger(template?.selection_rules?.round_count, 5);
   const countdownFrom = ensurePositiveInteger(template?.layout?.timer?.countdown_from, 3);
   const countdownTo = Number.parseInt(String(template?.layout?.timer?.countdown_to ?? 0), 10);
   const typeCardinalityMode = normalizeTypeCardinalityMode(template);
@@ -398,8 +487,12 @@ export async function planPokemonTypeQuizChallenge({
     throw new Error(`No sufficient localized Pokemon rows are available for a ${typeCardinalityMode} type quiz. Need ${roundCount}, found ${eligibleSubjects.length}.`);
   }
 
-  const shuffledSubjects = shuffle(eligibleSubjects, random);
-  const selectedSubjects = shuffledSubjects.slice(0, roundCount);
+  const selectedSubjects = selectSubjectsForTypeQuiz({
+    eligibleSubjects,
+    roundCount,
+    typeCardinalityMode,
+    random,
+  });
   const shinyReveal = resolveShinyRevealState({
     template,
     inventory,
@@ -515,6 +608,7 @@ export async function planPokemonTypeQuizChallenge({
     seed: String(seed),
     selection: {
       mode: String(template?.selection_rules?.mode || 'random').trim().toLowerCase() || 'random',
+      difficulty_id: selectedRoundCountDifficulty?.id || null,
       type_cardinality: typeCardinalityMode,
       round_count: roundCount,
       selected_subject_count: selectedSubjects.length,

@@ -38,6 +38,18 @@
       "sprite_path"
     ],
     "round_count": 5,
+    "round_count_weights": {
+      "short": 1,
+      "full": 1
+    },
+    "round_count_levels": {
+      "short": {
+        "round_count": 3
+      },
+      "full": {
+        "round_count": 5
+      }
+    },
     "mode": "random",
     "type_cardinality": "any"
   },
