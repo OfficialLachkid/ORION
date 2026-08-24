@@ -282,7 +282,11 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(visualFilter.script, /hue=s=0/u);
   assert.match(visualFilter.script, /grass-plateau|r0platform0|scene0platform0/u);
   assert.match(visualFilter.script, /color=c=0x32D74B@0\.98/u);
+  assert.match(visualFilter.script, /color=c=0xFFD60A@0\.98/u);
+  assert.match(visualFilter.script, /color=c=0xFF453A@0\.98/u);
   assert.match(visualFilter.script, /scale=w='max\(2,/u);
+  assert.match(visualFilter.script, /enable='between\(t,2\.74,4\.34\)'/u);
+  assert.match(visualFilter.script, /enable='between\(t,4\.34,5\.34\)'/u);
   assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
   assert.match(visualFilter.script, /647-h\/2/u);
   assert.match(visualFilter.script, /colorchannelmixer=/u);

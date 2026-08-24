@@ -425,11 +425,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
     const greenEnd = roundTime(
       round.local.countdown_start_seconds
-      + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.5),
+      + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.35),
     );
     const yellowEnd = roundTime(
       round.local.countdown_start_seconds
-      + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.8),
+      + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.75),
     );
     filters.push(
       `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=black@0.28:t=fill:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerRailLabel}]`,
