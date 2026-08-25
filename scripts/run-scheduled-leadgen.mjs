@@ -459,8 +459,16 @@ function getCliFlagValue(flag, argv = process.argv.slice(2)) {
   return argv[index + 1] || '';
 }
 
+function resolveCliSweepRounds(argv = process.argv.slice(2)) {
+  const timesValue = getCliFlagValue('--times', argv);
+  if (timesValue) {
+    return resolveScheduledSweepRounds(timesValue);
+  }
+  return resolveScheduledSweepRounds(getCliFlagValue('--rounds', argv));
+}
+
 async function main() {
-  const rounds = resolveScheduledSweepRounds(getCliFlagValue('--rounds'));
+  const rounds = resolveCliSweepRounds();
   const result = await runScheduledLeadgen({ rounds });
 
   process.stdout.write(`${JSON.stringify(
@@ -478,7 +486,41 @@ async function main() {
   )}\n`);
 
   if (result.failures.length > 0) {
-    process.stderr.write(`${result.failures.length} niche run(s) failed.\n`);
+    process.stderr.write(`${result.failures.length} niche run(s) failed across ${result.rounds} sweep(s).\n`);
+    process.exitCode = 1;
+  }
+}
+
+// Chain N sequential sweeps in one launchd fire. Operator's use case
+// (2026-08-15): the 07:00 slot is the only quiet-machine window before
+// the operator starts using Ollama themselves at ~9-10am; running a
+// second sweep back-to-back inside that window doubles rotation speed
+// without contending with their workday sessions. Each sweep reloads
+// rotation-state.json fresh, so sweep 2 sees the commits from sweep 1
+// and advances to the NEXT set of cities — the two sweeps hit distinct
+// (city, niche) combinations, not the same ones twice.
+//
+// --times defaults to 1 (existing behavior preserved for callers that
+// don't pass it). Hard-capped at 10 as a runaway guard — realistically
+// 2-3 is the useful range given the qualification cap at 60/day.
+async function legacySequentialSweepMain() {
+  const config = loadRuntimeConfig();
+  const times = getIntFlag('--times', 1, 1, 10);
+  let totalFailures = 0;
+
+  for (let sweep = 1; sweep <= times; sweep += 1) {
+    if (times > 1) {
+      process.stderr.write(`Scheduled leadgen: starting sweep ${sweep}/${times}.\n`);
+    }
+    const { failures } = await runOneSweep(config);
+    totalFailures += failures.length;
+    if (times > 1) {
+      process.stderr.write(`Scheduled leadgen: sweep ${sweep}/${times} complete (${failures.length} niche failure(s)).\n`);
+    }
+  }
+
+  if (totalFailures > 0) {
+    process.stderr.write(`${totalFailures} total niche run(s) failed across ${times} sweep(s).\n`);
     process.exitCode = 1;
   }
 }

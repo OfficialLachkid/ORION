@@ -372,6 +372,51 @@ function normalizeEmail(raw) {
 // UI — or deleted). The reconciler uses this to detect drafts the operator
 // sent manually, so the Discord approval can be flipped to "sent" and the
 // lead marked, without a click. Throws only on unexpected errors (not 404).
+// Cheap total-count of Gmail drafts (id-only pagination, no per-draft
+// metadata fetch). listGmailDraftsSummary is fine for reconciliation loops
+// that need to inspect each draft, but the night-shift digest just needs
+// "how many drafts does the operator actually see" — the previous
+// implementation counted Discord approval cards with limit=50, which
+// silently capped at 50 no matter how many drafts existed in Gmail
+// (operator flagged 2026-08-14: digest said 50, Gmail showed 100+).
+//
+// Paginates via pageToken until Gmail stops returning more. Hard-caps at
+// 10 pages (5,000 drafts) to prevent an infinite loop if Gmail's paging
+// is misbehaving — realistically an outreach mailbox will never approach
+// that ceiling, and if it does we want a bug alarm, not silent inflation.
+export async function countGmailDrafts(envOrConfig, options = {}) {
+  const gmailConfig = resolveInputConfig(envOrConfig);
+  assertGmailRuntimeConfig(gmailConfig);
+  const fetchImpl = options.fetch || options.fetchImpl || fetch;
+  const fetchAccessTokenImpl = options.fetchAccessToken || fetchAccessToken;
+  const pageSize = Math.max(1, Math.min(500, options.pageSize || 500));
+  const maxPages = Math.max(1, Math.min(20, options.maxPages || 10));
+  const { accessToken } = await fetchAccessTokenImpl(gmailConfig, { fetch: fetchImpl });
+
+  let total = 0;
+  let pageToken = '';
+  for (let page = 0; page < maxPages; page += 1) {
+    const params = new URLSearchParams({ maxResults: String(pageSize) });
+    if (pageToken) params.set('pageToken', pageToken);
+    const url = `${GMAIL_DRAFTS_URL}?${params.toString()}`;
+    const response = await fetchImpl(url, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!response.ok) {
+      const errorText = typeof response.text === 'function' ? await response.text() : '';
+      throw new Error(`Gmail draft count failed (${response.status}): ${errorText || 'no body'}`);
+    }
+    const payload = await response.json();
+    total += Array.isArray(payload.drafts) ? payload.drafts.length : 0;
+    pageToken = String(payload.nextPageToken || '').trim();
+    if (!pageToken) {
+      break;
+    }
+  }
+  return total;
+}
+
 export async function gmailDraftExists(envOrConfig, draftId, options = {}) {
   const gmailConfig = resolveInputConfig(envOrConfig);
   assertGmailRuntimeConfig(gmailConfig);

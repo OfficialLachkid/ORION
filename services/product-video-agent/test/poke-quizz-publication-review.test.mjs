@@ -43,6 +43,19 @@ const channelProfile = {
   youtube: {
     channel_id: 'UCvMqBsEPDvjgNRMymQyefFg',
   },
+  metadata: {
+    related_video: { enabled: true },
+  },
+};
+
+const relatedVideoDisabledChannelProfile = {
+  name: 'Poke Guess',
+  youtube: {
+    channel_id: 'UC-POKE-GUESS',
+  },
+  metadata: {
+    related_video: { enabled: false },
+  },
 };
 
 test('buildPokeQuizzPublicationReviewTask creates an approval-gated publish task', () => {
@@ -349,4 +362,27 @@ test('deriveFeedbackRevisionSeed produces a distinct auditable revision seed', (
   );
 
   assert.match(seed, /^water-flying-random-20260731t220000z-feedback-20260731204600-[a-f0-9]{8}$/u);
+});
+
+test('review task suppresses related-video fields for channels without related-video enabled', () => {
+  // Regression guard for the operator's ask 2026-08-24: Discord approval
+  // cards were showing related-video info for Poke Guess / DexGuess even
+  // though those channels aren't wired up for Studio's Related video
+  // feature yet. Suppress the fields at the review-payload layer so the
+  // reviewer isn't misled into thinking a related video will be attached.
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    channelProfile: relatedVideoDisabledChannelProfile,
+    reviewThreadId: '1532709429902839810',
+    planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
+    renderPath: publication.metadata.render_path,
+    catalogJsonPath: 'data/runtime/product-video-agent/pokedex/gen1-serebii.json',
+    submittedAt: '2026-08-24T10:00:00.000Z',
+  });
+
+  assert.equal(task.poke_quizz_publication_review.relatedVideoLabel, '');
+  assert.equal(task.poke_quizz_publication_review.relatedVideoUrl, '');
+  assert.equal(task.poke_quizz_publication_review.relatedVideoStatusLabel, '');
+  assert.equal(task.poke_quizz_publication_review.relatedVideoReason, '');
 });

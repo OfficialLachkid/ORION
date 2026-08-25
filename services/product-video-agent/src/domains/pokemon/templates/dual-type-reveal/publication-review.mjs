@@ -1,6 +1,7 @@
 import { stableHash } from '../../../../ids.mjs';
 import { buildApprovalButtons } from '../../../../../../discord-bot/src/approval-buttons.mjs';
 import { buildOutboundEventDiscordPayload } from '../../../../../../discord-bot/src/message-formatting.mjs';
+import { formatYoutubeAutoCommentStatusLabel } from '../../../../youtube-auto-comments.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
   DEFAULT_CONFIG_PATH,
@@ -221,6 +222,22 @@ function formatRelatedVideoLabel(relatedVideo = {}) {
   return String(relatedVideo?.target_url || '').trim();
 }
 
+function formatYoutubeAutoCommentNote(autoComment = {}) {
+  const commentUrl = String(autoComment?.comment_url || '').trim();
+  if (commentUrl) {
+    return commentUrl;
+  }
+  const lastError = String(autoComment?.last_error || '').trim();
+  if (lastError) {
+    return lastError;
+  }
+  const text = String(autoComment?.text || '').trim();
+  if (text) {
+    return text;
+  }
+  return '';
+}
+
 function normalizeReviewPaths(review = {}) {
   return {
     planPath: String(review.planPath || '').trim(),
@@ -313,10 +330,28 @@ export function buildPokeQuizzPublicationReviewTask({
     approvalState: String(publication?.metadata?.workflow_state || '').trim(),
     scheduledForLabel: formatScheduledForLabel(publication?.scheduled_for, channelProfile?.timezone || 'UTC'),
     previewDeletionLabel: formatPreviewDeletionLabel(publication?.metadata || {}, channelProfile?.timezone || 'UTC'),
-    relatedVideoLabel: formatRelatedVideoLabel(publication?.metadata?.related_video || {}),
-    relatedVideoUrl: String(publication?.metadata?.related_video?.target_url || '').trim(),
-    relatedVideoStatusLabel: formatRelatedVideoStatusLabel(publication?.metadata?.related_video || {}),
-    relatedVideoReason: String(publication?.metadata?.related_video?.match_reason || '').trim(),
+    // Suppress related-video display for channels that aren't set up for it
+    // (YouTube "Related video" is a per-channel eligibility; channels that
+    // don't have it yet were still getting picks planned + shown on Discord
+    // approval cards, which misleads the reviewer into thinking a related
+    // video would be attached). Reads from channel_profile.metadata.
+    ...(
+      channelProfile?.metadata?.related_video?.enabled === true
+        ? {
+          relatedVideoLabel: formatRelatedVideoLabel(publication?.metadata?.related_video || {}),
+          relatedVideoUrl: String(publication?.metadata?.related_video?.target_url || '').trim(),
+          relatedVideoStatusLabel: formatRelatedVideoStatusLabel(publication?.metadata?.related_video || {}),
+          relatedVideoReason: String(publication?.metadata?.related_video?.match_reason || '').trim(),
+        }
+        : {
+          relatedVideoLabel: '',
+          relatedVideoUrl: '',
+          relatedVideoStatusLabel: '',
+          relatedVideoReason: '',
+        }
+    ),
+    autoCommentStatusLabel: formatYoutubeAutoCommentStatusLabel(publication?.metadata?.youtube_auto_comment || {}),
+    autoCommentNote: formatYoutubeAutoCommentNote(publication?.metadata?.youtube_auto_comment || {}),
   };
 
   return {
@@ -463,6 +498,8 @@ export function buildPokeQuizzPublicationReviewEvent(task) {
       relatedVideoUrl: review.relatedVideoUrl || '',
       relatedVideoStatusLabel: review.relatedVideoStatusLabel || '',
       relatedVideoReason: review.relatedVideoReason || '',
+      autoCommentStatusLabel: review.autoCommentStatusLabel || '',
+      autoCommentNote: review.autoCommentNote || '',
       approveLabel: reviewPresentation.approve_label,
       rejectLabel: reviewPresentation.reject_label,
       deleteLabel: reviewPresentation.delete_label,

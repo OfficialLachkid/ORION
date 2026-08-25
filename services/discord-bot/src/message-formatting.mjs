@@ -517,6 +517,16 @@ function buildApprovalRequestPayload(outboundEvent) {
       false,
     ),
     createField('Related State', metadata.relatedVideoStatusLabel || '', true),
+    createField('Auto Comment', metadata.autoCommentStatusLabel || '', true),
+    createField(
+      'Comment Detail',
+      metadata.autoCommentNote
+        ? (String(metadata.autoCommentNote).startsWith('http')
+          ? `[Open Comment](${metadata.autoCommentNote})`
+          : metadata.autoCommentNote)
+        : '',
+      false,
+    ),
     createField('Title', metadata.publicationTitle || '', false),
     createField('Description', metadata.publicationDescription || '', false),
     createField('Render', metadata.renderPath ? `\`${compactPath(metadata.renderPath)}\`` : '', false),

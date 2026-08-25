@@ -67,7 +67,7 @@ async function syncReviewMessageWithRetry({
   videoRow,
   channelProfile,
   channelSelector,
-  reviewPresentation,
+  channelConfigPath,
   delayMs,
   maxRetries,
 }) {
@@ -80,7 +80,7 @@ async function syncReviewMessageWithRetry({
       videoRow,
       channelProfile,
       channelSelector,
-      reviewPresentation,
+      channelConfigPath,
     });
     if (result.updated || result.reason !== 'discord_api_429' || retries >= maxRetries) {
       return {
@@ -166,7 +166,7 @@ async function main() {
       videoRow,
       channelProfile,
       channelSelector,
-      reviewPresentation: templateRuntime.reviewPresentation,
+      channelConfigPath: templateRuntime.channelConfigPath,
       delayMs,
       maxRetries,
     });

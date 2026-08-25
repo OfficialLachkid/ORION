@@ -138,6 +138,7 @@ export function buildProgressiveTextArtifacts(text, {
   baseY,
   startSeconds,
   endSeconds,
+  progressiveEndSeconds = endSeconds,
 }) {
   const lineArtifacts = buildTextLineArtifacts(text, {
     template,
@@ -155,10 +156,11 @@ export function buildProgressiveTextArtifacts(text, {
 
   const start = roundTime(startSeconds);
   const end = roundTime(endSeconds);
-  const finalSegmentStart = Math.max(start, roundTime(end - 0.12));
+  const progressiveEnd = Math.max(start, roundTime(Math.min(end, progressiveEndSeconds)));
+  const finalSegmentStart = Math.max(start, roundTime(progressiveEnd - 0.12));
   const wordStepSeconds = roundTime(Math.min(
     0.28,
-    Math.max(0.1, ((end - start) * 0.58) / Math.max(1, allWords.length)),
+    Math.max(0.1, ((progressiveEnd - start) * 0.58) / Math.max(1, allWords.length)),
   ));
   let globalWordIndex = 0;
   const segments = [];

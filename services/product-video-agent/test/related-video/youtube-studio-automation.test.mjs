@@ -214,6 +214,97 @@ test('applyYoutubeRelatedVideoSelection falls back to flat payload shape (older 
   assert.equal(result.applyStatus, 'applied');
 });
 
+test('run-code scopes search-input lookup to the picker dialog with the actual Studio placeholder', () => {
+  // Regression guard: earlier lookups by /search/i matched Studio's global
+  // channel search box, which does not filter picker candidates. Confirmed
+  // 2026-08-23 during playwright-cli instrumentation on video AJ2ucVUkz7w.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /ytcp-video-pick-dialog input\[placeholder\*="Search your videos" i\]/u);
+  assert.match(code, /waitFor\(\{ state: 'visible', timeout: 8000 \}\)/u);
+});
+
+test('run-code drives the search input via trusted keyboard events instead of dispatched fill', () => {
+  // fill() sets the value and dispatches synthetic input events; Studio's
+  // Polymer input pipeline sometimes rejects those and never fires the
+  // debounced filter. keyboard.type sends real CDP key events.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /page\.keyboard\.type\(target\.title/u);
+});
+
+test('run-code clicks the filtered card via role=option (no Tab keyboard nav)', () => {
+  // Regression guard: earlier iterations used Tab+Enter/Space keyboard nav
+  // to select the card, but Tab moved focus out of the search input onto the
+  // search-clear "×" button; Enter then reset the search and Space escaped
+  // focus to the underlying page (confirmed 2026-08-23 via diagnostic
+  // capture showing 50 cards + focus on YTCP-DROPDOWN-TRIGGER after the
+  // keyboard sequence). Direct role=option click is more reliable.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /getByRole\('option'\)/u);
+  assert.doesNotMatch(code, /page\.keyboard\.press\('Tab'\)/u);
+});
+
+test('run-code verifies selection by main-page trigger as fallback when picker closes', () => {
+  // Studio's checkbox-style picker sometimes auto-closes after selection,
+  // removing the card from the DOM before we can read its aria-label. The
+  // main-page "Related video" trigger updates with the selected title and
+  // survives picker close — use it as a fallback signal.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /ytcp-dropdown-trigger/u);
+  assert.match(code, /mainPageConfirmedTitle/u);
+});
+
+test('run-code captures diagnostic snapshots at each interaction checkpoint', () => {
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /pre_search/u);
+  assert.match(code, /post_search/u);
+  assert.match(code, /post_select/u);
+  assert.match(code, /page\.screenshot/u);
+});
+
+test('run-code verifies selection via aria-label and reports selection_not_confirmed on failure', () => {
+  // Never claim "applied" without proof. Reading aria-label suffix
+  // ("Selected"/"Not selected") is the only reliable signal that the card
+  // actually toggled — clicks can succeed at the Playwright layer while
+  // Studio silently rejects the event.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /aria-label/u);
+  assert.match(code, /selection_not_confirmed/u);
+});
+
+test('applyYoutubeRelatedVideoSelection maps selection_not_confirmed to manual_action_required', async () => {
+  const stub = stubCliRunner({
+    open: { status: 0, stdout: '{}' },
+    runCode: {
+      status: 0,
+      stdout: JSON.stringify({
+        result: JSON.stringify({
+          status: 'selection_not_confirmed',
+          aria: 'Dark/Rock Challenge, Not selected',
+          url: 'https://studio.youtube.com/video/yt-current/edit',
+        }),
+      }),
+    },
+    close: { status: 0, stdout: '' },
+  });
+
+  const result = await applyYoutubeRelatedVideoSelection({
+    channelProfile,
+    publication: applyPublication,
+    relatedVideo: applyRelatedVideo,
+    fsExists: () => true,
+    cliRunner: stub.runner,
+  });
+
+  assert.equal(result.applyStatus, 'manual_action_required');
+  assert.equal(result.appliedAt, '');
+});
+
 test('applyYoutubeRelatedVideoSelection propagates feature_unavailable through the wrapper', async () => {
   const stub = stubCliRunner({
     open: { status: 0, stdout: '{}' },

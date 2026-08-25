@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../lib/runtime-config.mjs';
@@ -240,6 +241,14 @@ async function refreshPlannedRelatedVideo({
   channelProfile,
   asOf,
 }) {
+  // Skip channels that aren't wired up for related-video automation — no
+  // point planning a target we'll never apply, and metadata written here
+  // leaks into Discord approval cards. Ineligible channels get `enabled:
+  // false` in their channel profile until Studio exposes the picker on that
+  // account.
+  if (channelProfile?.metadata?.related_video?.enabled !== true) {
+    return publication;
+  }
   const publications = await store.fetchPublicationsByChannel({
     platform: channelProfile.platform,
     accountKey: channelProfile.account_key,
@@ -280,12 +289,26 @@ function buildRelatedVideoRuntimePatch(publication, applyResult, asOf) {
   };
 }
 
-function isRelatedVideoRefreshCandidate(publication) {
-  return ['preview_uploaded', 'preview_approved', 'scheduled'].includes(normalizeWorkflowState(publication));
+function isRelatedVideoRefreshCandidate(publication, { includePublished = false } = {}) {
+  const state = normalizeWorkflowState(publication);
+  if (['preview_uploaded', 'preview_approved', 'scheduled'].includes(state)) return true;
+  if (includePublished && state === 'published') return true;
+  return false;
+}
+
+// Guard: only backfill a published candidate if it never actually applied
+// its related video to Studio. This keeps the "set-and-forget for published"
+// invariant — we never overwrite a working pairing, only fill empty ones.
+function isPublishedBackfillNeeded(publication) {
+  const rv = publication?.metadata?.related_video || {};
+  const applyStatus = String(rv.apply_status || '').trim().toLowerCase();
+  return applyStatus !== 'applied';
 }
 
 export async function refreshRelatedVideoAssignments({
   publications,
+  focusPublicationIds = null,
+  includePublished = false,
   store,
   runtimeConfig,
   channelProfile,
@@ -295,21 +318,58 @@ export async function refreshRelatedVideoAssignments({
   applyScheduled = true,
   applyYoutubeRelatedVideoSelectionImpl = applyYoutubeRelatedVideoSelection,
 } = {}) {
+  // Short-circuit for channels that aren't wired up for related-video
+  // automation at all. Prevents planner from writing target metadata that
+  // then leaks into Discord review cards and misleads reviewers.
+  const channelHasRelatedVideoEnabled = channelProfile?.metadata?.related_video?.enabled === true;
+  if (!channelHasRelatedVideoEnabled) {
+    return {
+      publications: [...publications],
+      results: [],
+    };
+  }
+
   let refreshedPublications = [...publications];
   const results = [];
-  const candidates = refreshedPublications.filter((publication) => isRelatedVideoRefreshCandidate(publication));
+  const focusSet = Array.isArray(focusPublicationIds) && focusPublicationIds.length > 0
+    ? new Set(focusPublicationIds.map((id) => String(id || '').trim()).filter(Boolean))
+    : null;
+  const candidates = refreshedPublications.filter((publication) => {
+    if (!isRelatedVideoRefreshCandidate(publication, { includePublished })) return false;
+    if (focusSet && !focusSet.has(String(publication.id || '').trim())) return false;
+    // For published, only backfill when the target was never actually applied
+    // to Studio — never overwrite a working pairing that viewers might already
+    // be seeing. See isPublishedBackfillNeeded().
+    if (normalizeWorkflowState(publication) === 'published' && !isPublishedBackfillNeeded(publication)) return false;
+    return true;
+  });
 
   for (const publication of candidates) {
     const videoRow = publication.video_id
       ? await store.fetchVideoById(publication.video_id)
       : null;
-    const { relatedVideo } = planRelatedVideoSelection({
-      publications: refreshedPublications,
-      targetPublication: publication,
-      targetVideo: videoRow,
-      channelProfile,
-      asOf,
-    });
+    const isPublished = normalizeWorkflowState(publication) === 'published';
+    const existingRelatedVideo = publication?.metadata?.related_video || {};
+    const hasExistingTarget = Boolean(
+      String(existingRelatedVideo.target_external_id || '').trim()
+      && String(existingRelatedVideo.selection_status || '').trim().toLowerCase() === 'planned',
+    );
+
+    // Preserve existing plan for published backfill — don't re-pick a target
+    // that would change what viewers eventually see once we save. Only plan
+    // fresh when there's no valid existing target (selection_status !==
+    // 'planned' or missing target_external_id). Non-published rows always
+    // re-plan (existing behaviour for preview/scheduled).
+    const shouldReplan = !isPublished || !hasExistingTarget;
+    const { relatedVideo } = shouldReplan
+      ? planRelatedVideoSelection({
+        publications: refreshedPublications,
+        targetPublication: publication,
+        targetVideo: videoRow,
+        channelProfile,
+        asOf,
+      })
+      : { relatedVideo: existingRelatedVideo };
 
     let updatedPublication = {
       ...publication,
@@ -319,7 +379,7 @@ export async function refreshRelatedVideoAssignments({
       },
     };
 
-    if (!dryRun) {
+    if (!dryRun && shouldReplan) {
       updatedPublication = await store.updatePublication(publication.id, {
         metadata: {
           ...(publication.metadata || {}),
@@ -330,6 +390,7 @@ export async function refreshRelatedVideoAssignments({
 
     let applyStatus = '';
     let capabilityStatus = '';
+    let applyResult = null;
     // Apply during preview_uploaded / preview_approved too, not just scheduled
     // — the operator preferred private previews to already carry the related
     // video so it's set from the moment the video first appears in Studio,
@@ -337,13 +398,15 @@ export async function refreshRelatedVideoAssignments({
     // (execute-youtube-publication.mjs:1193) re-plans and re-applies from
     // fresh channel state anyway, so a preview-time apply can only ever be
     // overwritten by a later, more-informed pick — never locked in.
-    const applyableStates = ['preview_uploaded', 'preview_approved', 'scheduled'];
+    const applyableStates = includePublished
+      ? ['preview_uploaded', 'preview_approved', 'scheduled', 'published']
+      : ['preview_uploaded', 'preview_approved', 'scheduled'];
     if (
       applyScheduled
       && applyableStates.includes(normalizeWorkflowState(updatedPublication))
       && String(updatedPublication?.external_id || '').trim()
     ) {
-      const applyResult = dryRun
+      applyResult = dryRun
         ? {
           capability: { status: 'dry_run' },
           applyStatus: 'dry_run',
@@ -391,6 +454,26 @@ export async function refreshRelatedVideoAssignments({
       });
     }
 
+    // Surface picker diagnostics to CLI output when the automation actually
+    // ran. Full details (dom enumeration, keyboard attempts) get written to a
+    // JSON file to keep stdout compact; screenshot paths and the raw script
+    // status stay inline so operators can see at a glance which step failed.
+    let diagnosticPayload = null;
+    const applyDetails = (typeof applyResult === 'object' && applyResult && 'details' in applyResult) ? applyResult.details : null;
+    if (applyDetails && (Array.isArray(applyDetails.diagnostics) || applyDetails.attempts || applyDetails.aria)) {
+      const detailsPath = `/tmp/orion-related-video-${publication.id}-${Date.now()}.json`;
+      try {
+        writeFileSync(detailsPath, JSON.stringify(applyDetails, null, 2));
+      } catch { /* ignore */ }
+      diagnosticPayload = {
+        script_status: applyDetails.status || '',
+        screenshots: Array.isArray(applyDetails.diagnostics)
+          ? applyDetails.diagnostics.map((d) => ({ label: d.label, path: d.screenshotPath })).filter((d) => d.path)
+          : [],
+        details_json_path: detailsPath,
+      };
+    }
+
     refreshedPublications = replacePublication(refreshedPublications, updatedPublication);
     results.push({
       publication_id: publication.id,
@@ -400,6 +483,7 @@ export async function refreshRelatedVideoAssignments({
       related_video_target_publication_id: updatedPublication?.metadata?.related_video?.target_publication_id || '',
       related_video_capability_status: capabilityStatus || updatedPublication?.metadata?.related_video?.capability_status || '',
       related_video_apply_status: applyStatus || updatedPublication?.metadata?.related_video?.apply_status || '',
+      ...(diagnosticPayload ? { diagnostics: diagnosticPayload } : {}),
     });
   }
 
@@ -1081,6 +1165,8 @@ async function main() {
       '  --publication-id <id>      Limit execution to one publication id.',
       '  --limit <n>                Maximum publications to process in this run.',
       '  --refresh-related-videos   Re-plan related-video metadata for existing preview/scheduled rows.',
+      '  --include-published        Also process published rows whose related video was never applied to Studio.',
+      '                             Only meaningful with --refresh-related-videos. Never re-picks existing targets.',
       '  --schedule-approved        Apply schedule updates instead of preview uploads.',
       '  --max-scheduled-days <n>   Limit schedule assignment to the next N days from --as-of.',
       '  --dry-run                  Print the planned work without calling YouTube.',
@@ -1099,6 +1185,7 @@ async function main() {
   const publicationId = getStringOption(options, 'publication-id', '');
   const dryRun = getBooleanOption(options, 'dry-run', false);
   const refreshRelatedVideosOnly = getBooleanOption(options, 'refresh-related-videos', false);
+  const includePublishedInRefresh = getBooleanOption(options, 'include-published', false);
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
   const maxScheduledDays = Number.parseFloat(
     getStringOption(options, 'max-scheduled-days', ''),
@@ -1129,8 +1216,16 @@ async function main() {
     : publications;
 
   if (refreshRelatedVideosOnly) {
+    // Refresh needs the full publications set so the planner has candidates
+    // to score against — filtering to just --publication-id before planning
+    // strips the pool to a single row and the planner returns
+    // selection_status: 'none' with nothing to apply (observed 2026-08-23).
+    // Use focusPublicationIds to scope which rows get processed while
+    // planRelatedVideoSelection still sees the whole universe.
     const refreshed = await refreshRelatedVideoAssignments({
-      publications: scopedPublications,
+      publications,
+      focusPublicationIds: publicationId ? [publicationId] : null,
+      includePublished: includePublishedInRefresh,
       store,
       runtimeConfig,
       channelProfile,

@@ -80,10 +80,11 @@ test('type icon selection falls back to pixel assets when no single 3D style cov
   });
 });
 
-test('overlay preset selection prefers split timer gifs and the 3D pokeball overlay by filename', () => {
+test('overlay preset selection exposes open-close pokeball separately while keeping 3D as the primary generic pokeball', () => {
   const presets = selectOverlayPresets([
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/3D Pokeball Wiggle.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/disappear.gif',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Open and Close Pokeball.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar-countdown-1s.mp4',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/long-hp-bar.png',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/shiny_sparkle.gif',
@@ -101,6 +102,7 @@ test('overlay preset selection prefers split timer gifs and the 3D pokeball over
   assert.match(presets.hp_bar_frame || '', /long-hp-bar\.png$/u);
   assert.match(presets.shiny_sparkle || '', /shiny_sparkle\.gif$/u);
   assert.match(presets.disappear || '', /disappear\.gif$/u);
+  assert.match(presets.pokeball_open_close || '', /Open and Close Pokeball\.gif$/u);
   assert.match(presets.pokeball_primary || '', /3D Pokeball Wiggle\.gif$/u);
 });
 
@@ -134,4 +136,13 @@ test('timer_finished stays the shared timer-end default when a ding file is also
   assert.match(soundEffectPresets.disappear || '', /disappear-sound\.mp3$/u);
   assert.match(soundEffectPresets.pokeball_intro || '', /enlarge-pokeball\.mp3$/u);
   assert.match(soundEffectPresets.pokeball_wiggle || '', /pokeball_wiggle\.mp3$/u);
+});
+
+test('disappear-sound files are detected as the disappear cue', async () => {
+  const soundEffectPresets = selectSoundEffectPresets([
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/countdown.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/disappear-sound.mp3',
+  ]);
+
+  assert.match(soundEffectPresets.disappear || '', /disappear-sound\.mp3$/u);
 });

@@ -5,11 +5,13 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
 const DEFAULT_HOUR = 7;
 const DEFAULT_MINUTE = 0;
-const DEFAULT_ROUNDS = 2;
+const DEFAULT_TIMES = 2;
+const MAX_TIMES = 10;
 const PLIST_LABEL = 'io.vbj.orion.leadgen-schedule';
 
 function getArgValue(flag) {
@@ -45,7 +47,7 @@ function ensureDirectory(directoryPath) {
   }
 }
 
-function buildPlistContent({
+export function buildLeadgenPlistContent({
   nodePath,
   scriptPath,
   workingDirectory,
@@ -53,8 +55,17 @@ function buildPlistContent({
   stderrPath,
   hour,
   minute,
-  rounds,
+  times = DEFAULT_TIMES,
 }) {
+  const normalizedTimes = Number.isInteger(times) && times > 0 ? times : DEFAULT_TIMES;
+  const argLines = [
+    `    <string>${nodePath}</string>`,
+    `    <string>${scriptPath}</string>`,
+    ...(normalizedTimes > 1
+      ? [`    <string>--times</string>`, `    <string>${normalizedTimes}</string>`]
+      : []),
+  ].join('\n');
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -65,10 +76,7 @@ function buildPlistContent({
   <string>${workingDirectory}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${nodePath}</string>
-    <string>${scriptPath}</string>
-    <string>--rounds</string>
-    <string>${rounds}</string>
+${argLines}
   </array>
   <key>StartCalendarInterval</key>
   <dict>
@@ -99,12 +107,16 @@ function loadLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--rounds 2] [--no-load]',
+      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--times 2] [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.leadgen-schedule.plist and loads it by default.',
       'Each run rotates to the next niche in scripts/run-scheduled-leadgen.mjs and searches',
       'the Dutch market for candidate leads, saving results to the Supabase leads table.',
       'Schedule uses macOS local time.',
+      '',
+      '--times N chains N sequential sweeps in one launchd fire. Sweep 2 re-reads',
+      'rotation-state.json so it lands on the NEXT set of cities (not the same ones).',
+      'Default is 2 to use the quiet-machine morning window more efficiently.',
     ].join('\n'));
     return;
   }
@@ -116,7 +128,7 @@ function main() {
   const config = loadRuntimeConfig();
   const hour = getNumberArgValue('--hour', DEFAULT_HOUR, 23);
   const minute = getNumberArgValue('--minute', DEFAULT_MINUTE, 59);
-  const rounds = getNumberArgValue('--rounds', DEFAULT_ROUNDS, 10);
+  const times = getNumberArgValue('--times', DEFAULT_TIMES, MAX_TIMES);
   const shouldLoad = !hasFlag('--no-load');
 
   const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
@@ -129,7 +141,7 @@ function main() {
   ensureDirectory(launchAgentsDir);
   ensureDirectory(dirname(stdoutPath));
 
-  const plistContent = buildPlistContent({
+  const plistContent = buildLeadgenPlistContent({
     nodePath,
     scriptPath,
     workingDirectory: projectRoot,
@@ -137,7 +149,7 @@ function main() {
     stderrPath,
     hour,
     minute,
-    rounds,
+    times,
   });
 
   writeFileSync(plistPath, plistContent, 'utf8');
@@ -148,7 +160,7 @@ function main() {
 
   process.stdout.write([
     `Installed ${basename(plistPath)}.`,
-    `Schedule: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} local time, once daily, ${rounds} sweep round(s) per run.`,
+    `Schedule: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} local time, ${times === 1 ? 'one sweep' : `${times} sweeps back-to-back`} per day.`,
     `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
     `Plist: ${plistPath}`,
     `Stdout: ${stdoutPath}`,
@@ -156,4 +168,10 @@ function main() {
   ].join('\n'));
 }
 
-main();
+const IS_MAIN_MODULE = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (IS_MAIN_MODULE) {
+  main();
+}

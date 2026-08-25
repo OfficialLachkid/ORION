@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  resolvePublicationReviewTemplateRuntime,
   resolvePublishQueueThreadId,
   syncPublicationReviewMessage,
 } from '../src/publication-review-message-sync.mjs';
@@ -37,6 +38,26 @@ function buildVideoRow() {
     },
   };
 }
+
+test('resolvePublicationReviewTemplateRuntime keeps DexGuess mixed-template cards on their own genre config', async () => {
+  const runtime = await resolvePublicationReviewTemplateRuntime({
+    publication: {
+      metadata: {
+        template_id: 'pokemon.type-quiz.v1',
+        review_template_path: 'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json',
+        review_config_path: 'services/product-video-agent/config.example.json',
+      },
+    },
+    channelSelector: 'dexguess-youtube',
+    fallbackChannelConfigPath: 'services/product-video-agent/config/channels/dexguess-youtube.json',
+  });
+
+  assert.equal(
+    runtime?.channelConfigPath,
+    'services/product-video-agent/config/channels/dexguess-type-speed-quiz-youtube.json',
+  );
+  assert.equal(runtime?.genreLabel, 'Type Quiz');
+});
 
 test('resolvePublishQueueThreadId prefers the configured shared queue thread', () => {
   assert.equal(

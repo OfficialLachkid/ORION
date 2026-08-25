@@ -378,6 +378,7 @@ export async function reviewPokeQuizzPublication({
       review_message_id: posted.messageId || '',
       publish_queue_message_id: '',
       review_requested_at: submittedAt,
+      review_channel_config_path: templateRuntime.channelConfigPath,
       ...buildPersistedPokeQuizzReviewPathPatch({
         planPath,
         catalogJsonPath,

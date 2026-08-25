@@ -71,7 +71,19 @@ const typeQuizPlan = {
 const memoryPlan = {
   template_id: 'pokemon.memory.v1',
   selection: {
-    selected_subjects: [{ name: 'Pikachu' }, { name: 'Snorlax' }, { name: 'Lapras' }, { name: 'Mew' }],
+    type_pair: ['fire', 'ice'],
+    display_subject_count: 6,
+    selected_subjects: [
+      { name: 'Vulpix' },
+      { name: 'Growlithe' },
+      { name: 'Ponyta' },
+      { name: 'Magmar' },
+      { name: 'Flareon' },
+      { name: 'Articuno' },
+    ],
+  },
+  question: {
+    question_text: 'Which Pokemon was NOT on screen?',
   },
 };
 
@@ -103,6 +115,8 @@ const expectedTypeQuizSeededTitles = new Set([
 const expectedMemorySeededTitles = new Set([
   'How good is your Pokemon memory?',
   'Pokemon memory test',
+  'Pokemon Memory Challenge',
+  'Can You Remember These Pokemon?',
 ]);
 
 const expectedKnowYourShinySeededTitles = new Set([
@@ -253,19 +267,20 @@ test('seeded type-quiz fallback metadata uses the supported generic title varian
   assert.equal(secondSeeded.title, 'Guess the typing!');
 });
 
-test('fallback publication metadata frames memory as a recall challenge', () => {
+test('fallback publication metadata frames memory as a rapid recall challenge', () => {
   const metadata = buildPokeQuizzFallbackPublicationMetadata(memoryPlan);
 
   assert.equal(metadata.title, 'How good is your Pokemon memory?');
   assert.equal(
     metadata.description,
-    'Memorize the Pokemon, then pick the one that was missing before the reveal.',
+    'Memorize 6 Pokemon, hide the board, and pick the one that never appeared before the timer ends.',
   );
   assert.deepEqual(metadata.hashtags, [
     '#pokemon',
+    '#pokemonmemory',
     '#memorychallenge',
-    '#pokemonquiz',
-    '#pokemongame',
+    '#firetype',
+    '#icetype',
     '#shorts',
   ]);
 });

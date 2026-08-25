@@ -535,19 +535,24 @@ function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
   };
 }
 
-async function buildSubjectAssetRecord(subject, shinyRevealState = null) {
+async function buildSubjectAssetRecord(subject, {
+  shinyRevealState = null,
+  renderSpritePath = '',
+  renderShinySpritePath = '',
+} = {}) {
   const isShinyReveal = Boolean(
     shinyRevealState?.active
     && shinyRevealState.selected_pokedex_id
     && shinyRevealState.selected_pokedex_id === subject.id,
   );
-  const renderSpritePath = await resolveDualTypeSpritePath(subject.sprite_path);
-  const renderShinySpritePath = subject.shiny_sprite_path
-    ? await resolveDualTypeSpritePath(subject.shiny_sprite_path)
-    : renderSpritePath;
+  const preferredNormalSpritePath = renderSpritePath || await resolveDualTypeSpritePath(subject.sprite_path);
+  const preferredShinySpritePath = renderShinySpritePath
+    || (subject.shiny_sprite_path
+      ? await resolveDualTypeSpritePath(subject.shiny_sprite_path)
+      : preferredNormalSpritePath);
   const revealSpritePath = isShinyReveal
-    ? renderShinySpritePath || renderSpritePath
-    : renderSpritePath;
+    ? preferredShinySpritePath || preferredNormalSpritePath
+    : preferredNormalSpritePath;
   const revealSpriteSourceUrl = isShinyReveal
     ? subject.shiny_sprite_source_url || subject.sprite_source_url
     : subject.sprite_source_url;
@@ -556,9 +561,9 @@ async function buildSubjectAssetRecord(subject, shinyRevealState = null) {
     national_dex_number: subject.national_dex_number,
     name: subject.name,
     sprite_path: subject.sprite_path,
-    render_sprite_path: renderSpritePath,
+    render_sprite_path: preferredNormalSpritePath,
     shiny_sprite_path: subject.shiny_sprite_path,
-    render_shiny_sprite_path: renderShinySpritePath,
+    render_shiny_sprite_path: preferredShinySpritePath,
     silhouette_path: subject.silhouette_path,
     cry_path: subject.cry_path,
     sprite_source_url: subject.sprite_source_url,
@@ -779,6 +784,17 @@ export async function planPokemonTypeChallenge({
     selectedSubjects,
     random,
   });
+  const selectedSubjectAssets = await Promise.all(
+    selectedSubjects.map(async (subject) => (
+      buildSubjectAssetRecord(subject, {
+        shinyRevealState: shinyReveal,
+        renderSpritePath: await resolveDualTypeSpritePath(subject.sprite_path),
+        renderShinySpritePath: subject.shiny_sprite_path
+          ? await resolveDualTypeSpritePath(subject.shiny_sprite_path)
+          : '',
+      })
+    )),
+  );
   const compatibleDisplayCount = Math.min(selectableSubjects.length, config.selectedSubjectsMax);
   const pokeballGridLayout = buildCenteredGridLayout(template, compatibleDisplayCount);
   const questionContractTexts = resolveQuestionContractTexts(template, random);
@@ -909,9 +925,7 @@ export async function planPokemonTypeChallenge({
         selected_path: selectedBackgroundPath,
       },
       type_icons: typeIcons,
-      pokemon: await Promise.all(
-        selectedSubjects.map((subject) => buildSubjectAssetRecord(subject, shinyReveal)),
-      ),
+      pokemon: selectedSubjectAssets,
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
         selected_timer_path: inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null,

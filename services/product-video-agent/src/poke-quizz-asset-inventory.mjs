@@ -217,13 +217,15 @@ export function selectOverlayPresets(overlays) {
     || matchOverlay(overlays, ['shiny_sparkle']);
   const grassPlateau = matchOverlay(overlayImages, ['grass', 'plateau'])
     || matchOverlay(overlayImages, ['grass-plateau'])
-    || matchOverlay(overlayImages, ['grass_plateau']);
-  const disappear = matchOverlay(overlays, ['disappear'])
-    || matchOverlay(overlays, ['vanish'])
-    || matchOverlay(overlays, ['poof']);
+    || matchOverlay(overlayImages, ['grass_plateau'])
+    || matchOverlay(overlayImages, ['plateau']);
   const typePlaceholder = matchOverlay(overlays, ['question', 'mark'])
     || matchOverlay(overlays, ['question-mark'])
     || matchOverlay(overlays, ['question_mark']);
+  const disappear = matchOverlay(overlays, ['disappear'])
+    || matchOverlay(overlays, ['vanish'])
+    || matchOverlay(overlays, ['poof']);
+  const pokeballOpenClose = matchOverlay(overlays, ['open', 'close', 'pokeball']);
   const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
     timer,
@@ -235,11 +237,12 @@ export function selectOverlayPresets(overlays) {
     long_hp_bar_frame: longHpBarFrame,
     shiny_sparkle: shinySparkle,
     grass_plateau: grassPlateau,
-    disappear,
     type_placeholder: typePlaceholder,
+    disappear,
+    pokeball_open_close: pokeballOpenClose,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
-      || matchOverlay(overlays, ['open', 'close', 'pokeball']),
+      || pokeballOpenClose,
   };
 }
 
@@ -264,7 +267,6 @@ export async function scanPokeQuizzAssetInventory() {
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.transitions, new Set(['.png', '.webp', '.gif', '.mov', '.mp4', '.webm'])),
   ]);
   const threeDTypeStyles = buildThreeDTypeStyleCatalog(threeDTypes);
-
   return {
     scanned_at: new Date().toISOString(),
     directories: { ...POKE_QUIZZ_ASSET_LAYOUT },

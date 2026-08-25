@@ -9,6 +9,7 @@ import {
   selectReviewApprovalCandidates,
 } from '../../../services/product-video-agent/src/publication-queue.mjs';
 import { reconcilePokeQuizzPreviewFallbackStorage } from '../../../services/product-video-agent/src/poke-quizz-preview-storage.mjs';
+import { resolvePokeQuizzSelectionStateScope } from '../../../services/product-video-agent/src/poke-quizz-selection-state.mjs';
 import {
   computePokeQuizzQueueStatus,
   ensurePreferredPokeQuizzCatalogJsonPath,
@@ -636,6 +637,19 @@ function normalizeTemplateWeightsForQueue(templateWeights = {}) {
       })
       .filter(([templateId]) => Boolean(templateId)),
   );
+}
+
+export function countActiveTemplateQueueItems(publications = [], templateId = '') {
+  const normalizedTemplateScope = resolvePokeQuizzSelectionStateScope(templateId, '');
+  if (!normalizedTemplateScope) {
+    return 0;
+  }
+  return publications.filter((publication) => (
+    resolvePokeQuizzSelectionStateScope(publication?.metadata?.template_id || '', '') === normalizedTemplateScope
+    && ['preview_upload_pending', 'preview_uploaded', 'preview_approved', 'scheduled'].includes(
+      normalizePublicationWorkflowState(publication),
+    )
+  )).length;
 }
 
 function summarizeRecentGeneratedTemplates(templateIds = []) {

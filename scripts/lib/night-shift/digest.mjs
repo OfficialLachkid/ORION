@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { projectRoot } from '../../../services/lib/runtime-config.mjs';
 import { buildNoticeDiscordPayload } from '../../../services/discord-bot/src/message-formatting.mjs';
+import { countGmailDrafts } from '../../../services/gmail/src/send.mjs';
 import {
   editDiscordChannelMessage,
   sendDiscordChannelMessage,
@@ -256,20 +257,23 @@ export async function postNightShiftFailure(config, { label, isFallback }) {
   }));
 }
 
+// Count the total number of open drafts in the operator's Gmail Drafts
+// folder — this is what the operator SEES when they open Gmail, and the
+// digest line "Open drafts awaiting your approval: N" is meant to match it.
+//
+// The previous implementation counted Discord approval cards via a `limit=50`
+// call, which silently capped at 50 no matter how many actually existed
+// (operator flagged 2026-08-14: digest said 50, Gmail showed 100+). Every
+// approved draft lives in Gmail until the operator clicks Send (or Reject,
+// which now deletes the draft too — 2026-08-02), so Gmail's Drafts folder
+// IS the source of truth.
+//
+// Best-effort: a Gmail API blip returns 0 rather than tanking the digest.
 export async function countOpenDrafts(config) {
-  const channelId = config.channelIds.outreachAgent;
-  if (!channelId || !config.env.DISCORD_BOT_TOKEN) {
-    return 0;
-  }
   try {
-    const response = await fetch(`${DISCORD_API_BASE_URL}/channels/${channelId}/messages?limit=50`, {
-      headers: { Authorization: `Bot ${config.env.DISCORD_BOT_TOKEN}` },
-    });
-    const messages = await response.json();
-    return Array.isArray(messages)
-      ? messages.filter((message) => message.embeds?.[0]?.title?.includes('Approval Needed')).length
-      : 0;
-  } catch {
+    return await countGmailDrafts(config.env);
+  } catch (error) {
+    process.stderr.write(`countOpenDrafts: Gmail draft count failed (non-fatal): ${error.message}\n`);
     return 0;
   }
 }

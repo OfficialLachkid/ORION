@@ -58,6 +58,7 @@ function createChannelProfile(overrides = {}) {
       oauth_client_secret_path: 'config/youtube/client-secret.json',
       oauth_refresh_token_env: 'YOUTUBE_POKE_QUIZZ_REFRESH_TOKEN',
     },
+    ...overrides,
     metadata: {
       youtube_auto_comment: {
         enabled: true,
@@ -78,7 +79,6 @@ function createChannelProfile(overrides = {}) {
       },
       ...(overrides.metadata || {}),
     },
-    ...overrides,
   };
 }
 

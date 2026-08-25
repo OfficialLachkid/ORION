@@ -61,14 +61,14 @@ function buildTypeHashtags(types = []) {
 function resolveTemplateFlavor(plan = {}) {
   const templateKey = String(plan?.template_key || '').trim().toLowerCase();
   const templateId = String(plan?.template_id || '').trim().toLowerCase();
+  if (templateKey.includes('memory') || templateId.includes('memory')) {
+    return 'memory';
+  }
   if (templateKey.includes('find-the-shiny') || templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
   }
   if (templateKey.includes('know-your-shiny') || templateId.includes('know-your-shiny')) {
     return 'know-your-shiny';
-  }
-  if (templateKey.includes('memory') || templateId.includes('memory')) {
-    return 'memory';
   }
   if (
     templateKey.includes('type-quiz')
@@ -103,6 +103,8 @@ const DEFAULT_KNOW_YOUR_SHINY_TITLE_BUILDERS = Object.freeze([
 const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([
   () => 'How good is your Pokemon memory?',
   () => 'Pokemon memory test',
+  () => 'Pokemon Memory Challenge',
+  () => 'Can You Remember These Pokemon?',
 ]);
 
 const DEFAULT_TYPE_QUIZ_TITLE_BUILDERS = Object.freeze([
@@ -161,19 +163,19 @@ function buildMetadataPrompt(plan) {
 
 function buildTemplateAwareDefaultTitle(plan) {
   const flavor = resolveTemplateFlavor(plan);
-  if (flavor === 'type-quiz') {
-    const seed = String(plan?.seed || '').trim();
-    const templateIndex = seed
-      ? hashSeed(`${seed}|type-quiz`) % DEFAULT_TYPE_QUIZ_TITLE_BUILDERS.length
-      : 0;
-    return DEFAULT_TYPE_QUIZ_TITLE_BUILDERS[templateIndex]();
-  }
   if (flavor === 'memory') {
     const seed = String(plan?.seed || '').trim();
     const templateIndex = seed
       ? hashSeed(`${seed}|memory`) % DEFAULT_MEMORY_TITLE_BUILDERS.length
       : 0;
     return DEFAULT_MEMORY_TITLE_BUILDERS[templateIndex]();
+  }
+  if (flavor === 'type-quiz') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|type-quiz`) % DEFAULT_TYPE_QUIZ_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_TYPE_QUIZ_TITLE_BUILDERS[templateIndex]();
   }
   if (flavor === 'know-your-shiny') {
     const seed = String(plan?.seed || '').trim();
@@ -194,13 +196,14 @@ function buildTemplateAwareDefaultTitle(plan) {
 
 function buildTemplateAwareDefaultDescription(plan) {
   const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'memory') {
+    const displayedCount = Number(plan?.selection?.display_subject_count || 0) || 6;
+    return `Memorize ${displayedCount} Pokemon, hide the board, and pick the one that never appeared before the timer ends.`;
+  }
   if (flavor === 'type-quiz') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     const subjectCount = selectedSubjects.length || Number(plan?.selection?.round_count || 0) || 5;
     return `Can you get ${subjectCount}/${subjectCount}? Watch each Pokemon, beat the timer, and lock in its type before the reveal.`;
-  }
-  if (flavor === 'memory') {
-    return 'Memorize the Pokemon, then pick the one that was missing before the reveal.';
   }
   if (flavor === 'know-your-shiny') {
     return 'Four versions appear, but only one is the true shiny. Lock in your guess before the reveal.';
@@ -215,6 +218,25 @@ function buildTemplateAwareDefaultDescription(plan) {
 
 function buildTemplateAwareMetadataPrompt(plan) {
   const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'memory') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    const questionText = String(plan?.question?.question_text || '').trim();
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon memory challenge video.',
+      `Displayed Pokemon count: ${selectedSubjects.length}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      `Question: ${questionText}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil the correct answer in the title.',
+      '- The description should frame the video as a fast Pokemon memory challenge.',
+      '- Mention that the board hides and the viewer must choose before the timer ends.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
   if (flavor === 'type-quiz') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     return [
@@ -228,23 +250,6 @@ function buildTemplateAwareMetadataPrompt(plan) {
       '- Do not spoil every exact answer in the title.',
       '- The description should frame the video as a rapid-fire Pokemon type challenge.',
       '- Mention that each Pokemon reveals its type after the timer runs out.',
-      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
-      '- Keep the tone playful and sharp, not childish and not corporate.',
-      'Return JSON only.',
-    ].join('\n');
-  }
-  if (flavor === 'memory') {
-    const selectedSubjects = plan?.selection?.selected_subjects || [];
-    return [
-      'Write YouTube Shorts publication metadata as JSON for a Pokemon memory challenge video.',
-      `Displayed Pokemon count: ${selectedSubjects.length}`,
-      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
-      'Return JSON with title, description, and hashtags.',
-      'Requirements:',
-      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
-      '- Do not spoil the hidden answer in the title.',
-      '- The description should frame the video as a quick memory challenge.',
-      '- Mention that viewers have to remember the shown Pokemon before choosing the missing one.',
       '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
       '- Keep the tone playful and sharp, not childish and not corporate.',
       'Return JSON only.',
@@ -294,21 +299,21 @@ function buildTemplateAwareHashtags(plan) {
   const flavor = resolveTemplateFlavor(plan);
   const typePair = plan?.selection?.type_pair || [];
   const typeHashtags = buildTypeHashtags(typePair);
+  if (flavor === 'memory') {
+    return normalizeHashtags([
+      'pokemon',
+      'pokemonmemory',
+      'memorychallenge',
+      ...typeHashtags,
+      'shorts',
+    ]);
+  }
   if (flavor === 'type-quiz') {
     return normalizeHashtags([
       'pokemon',
       'pokemontypes',
       'typequiz',
       'pokemonquiz',
-      'shorts',
-    ]);
-  }
-  if (flavor === 'memory') {
-    return normalizeHashtags([
-      'pokemon',
-      'memorychallenge',
-      'pokemonquiz',
-      'pokemongame',
       'shorts',
     ]);
   }

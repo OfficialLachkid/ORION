@@ -1,5 +1,6 @@
 import {
   DEFAULT_COUNTDOWN_VOLUME,
+  DEFAULT_DISAPPEAR_SFX_VOLUME,
   DEFAULT_MUSIC_VOLUME,
   DEFAULT_TIMER_END_VOLUME,
   DEFAULT_VOICE_VOLUME,
@@ -7,9 +8,6 @@ import {
 } from '../../dual-type-reveal/render/constants.mjs';
 
 export { buildAudioInputs } from '../../dual-type-reveal/render/audio-filter-script.mjs';
-
-const DEFAULT_DISAPPEAR_SFX_VOLUME = 0.5;
-
 export function buildAudioFilterScript({
   narrationPaths,
   musicPath,
