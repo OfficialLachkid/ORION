@@ -490,7 +490,7 @@
         },
         "review_thread_id": "1536721345440780339",
         "related_video": {
-          "enabled": false,
+          "enabled": true,
           "provider": "youtube_studio",
           "browser": "chrome",
           "profile_dir": "~/.orion/playwright-profile-poke-guess",
@@ -657,7 +657,7 @@
         },
         "review_thread_id": "1537438092338798684",
         "related_video": {
-          "enabled": false,
+          "enabled": true,
           "provider": "youtube_studio",
           "browser": "chrome",
           "profile_dir": "~/.orion/playwright-profile-dexguess",
