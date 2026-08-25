@@ -109,6 +109,7 @@ function normalizeTemplateGenreLabelFromRef(templateRef = {}, fallbackLabel = DE
   const selector = `${templateKey}|${templateId}|${pathHint}`;
 
   if (selector.includes('know-your-shiny')) return 'Know Your Shiny';
+  if (selector.includes('showdown')) return 'Showdown';
   if (selector.includes('find-the-shiny')) return 'Find the Shiny';
   if (selector.includes('memory')) return 'Memory';
   if (selector.includes('type-quiz') || selector.includes('type-speed-quiz')) return 'Type Quiz';

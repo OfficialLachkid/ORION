@@ -245,6 +245,25 @@ test('normalizeTaskMessage recognizes memory generation commands as explicit run
   );
 });
 
+test('normalizeTaskMessage recognizes showdown generation commands as explicit runtime actions', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    channelKey: 'commands',
+    submittedAt: '2026-08-25T10:00:00.000Z',
+    content: 'generate video template: showdown channel: dexguess-youtube',
+    author: { id: 'operator-1', displayName: 'VBJ Services' },
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
+  assert.equal(result.task.summary, 'Generate Showdown review for DexGuess');
+  assert.equal(result.task.poke_quizz_generate_review.templateKey, 'showdown');
+  assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'dexguess-youtube');
+  assert.equal(
+    result.task.poke_quizz_generate_review.channelConfigPath,
+    'services/product-video-agent/config/channels/dexguess-showdown-youtube.json'
+  );
+});
+
 test('normalizeTaskMessage recognizes analytics digest commands as explicit runtime actions', () => {
   const config = loadRuntimeConfig();
   const result = normalizeTaskMessage({

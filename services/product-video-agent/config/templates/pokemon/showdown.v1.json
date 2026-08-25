@@ -1,0 +1,176 @@
+{
+  "template_id": "pokemon.showdown.v1",
+  "template_key": "showdown",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "battle_scoring",
+    "bracket_progression",
+    "winner_reveal",
+    "champion_reveal"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 120,
+      "bottom": 240,
+      "left": 120
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "participant_count": 4,
+    "mode": "single_elimination_bracket",
+    "require_truth_fields": [
+      "national_dex_number",
+      "name",
+      "types",
+      "sprite_path"
+    ],
+    "preferred_asset_fields": [
+      "sprite_path"
+    ],
+    "skip_subject_when_missing": [
+      "national_dex_number",
+      "name",
+      "types",
+      "sprite_path"
+    ],
+    "battle_weights": {
+      "base_stat_total": 0.06,
+      "hp": 0.18,
+      "attack": 0.24,
+      "defense": 0.19,
+      "special_attack": 0.23,
+      "special_defense": 0.19,
+      "speed": 0.25,
+      "type_advantage": 20,
+      "speed_edge": 0.42,
+      "random_spread": 18
+    }
+  },
+  "question_contract": {
+    "hook_text": "Who wins this showdown?",
+    "hook_text_variants": [
+      "Who wins this showdown?",
+      "Who takes this Pokemon showdown?"
+    ],
+    "matchup_text": "{pokemon_a} vs {pokemon_b}",
+    "matchup_text_variants": [
+      "{pokemon_a} vs {pokemon_b}",
+      "{pokemon_a} faces {pokemon_b}"
+    ],
+    "champion_text": "Champion: {champion_name}",
+    "champion_text_variants": [
+      "Champion: {champion_name}",
+      "{champion_name} wins the bracket!"
+    ]
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_backgrounds",
+      "media_type": "looping_image_gif_or_video",
+      "fit": "cover",
+      "blur_sigma": 3.5
+    },
+    "text": {
+      "hook_y": 150,
+      "hook_font_size": 122,
+      "round_y": 305,
+      "round_font_size": 68,
+      "matchup_y": 365,
+      "matchup_font_size": 92,
+      "insight_y": 470,
+      "insight_font_size": 58,
+      "winner_y": 1450,
+      "winner_font_size": 90,
+      "champion_y": 260,
+      "champion_font_size": 104
+    },
+    "bracket": {
+      "slot_sprite_size_px": 120,
+      "slot_name_font_size": 42,
+      "slot_card_width_px": 220,
+      "slot_card_height_px": 184,
+      "connector_thickness_px": 10,
+      "slot_positions": {
+        "semi_1_a": { "x": 80, "y": 470 },
+        "semi_1_b": { "x": 80, "y": 720 },
+        "semi_1_winner": { "x": 270, "y": 595 },
+        "semi_2_a": { "x": 780, "y": 470 },
+        "semi_2_b": { "x": 780, "y": 720 },
+        "semi_2_winner": { "x": 590, "y": 595 },
+        "final_winner": { "x": 430, "y": 380 }
+      }
+    },
+    "battle_stage": {
+      "sprite_size_px": 380,
+      "left_center_x": 275,
+      "right_center_x": 805,
+      "center_y": 1150,
+      "name_y": 1430,
+      "name_font_size": 62,
+      "vs_y": 1125,
+      "vs_font_size": 100
+    },
+    "champion_stage": {
+      "sprite_size_px": 520,
+      "center_x": 540,
+      "center_y": 1120,
+      "name_y": 1510,
+      "name_font_size": 86
+    },
+    "rounds": {
+      "hook_hold_seconds": 1.1,
+      "match_intro_hold_seconds": 1.8,
+      "suspense_hold_seconds": 0.9,
+      "reveal_hold_seconds": 1.2,
+      "transition_duration_seconds": 0.4,
+      "champion_hold_seconds": 1.1
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "sound_effects": {
+      "winner_reveal": {
+        "enabled": true,
+        "preferred_keywords": [
+          "ding-sound"
+        ]
+      }
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true,
+    "winner_scale_multiplier": 1.05,
+    "loser_alpha_multiplier": 0.46,
+    "winner_banner_fade_seconds": 0.16,
+    "current_slot_highlight_alpha": 0.2,
+    "completed_slot_highlight_alpha": 0.18
+  }
+}

@@ -149,6 +149,9 @@ function resolveTemplateLabelFromId(templateId) {
   if (normalizedTemplateId.includes('know-your-shiny')) {
     return 'Know Your Shiny';
   }
+  if (normalizedTemplateId.includes('showdown')) {
+    return 'Showdown';
+  }
   if (normalizedTemplateId.includes('memory')) {
     return 'Memory';
   }
