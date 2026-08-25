@@ -504,27 +504,51 @@ async (page) => {
   diagnostics.push(await captureDiagnostic('post_select'));
 
   // Verify selection two ways: (1) the card's aria-label flipped to
-  // "Selected", or (2) the picker closed and the main-page Related video
-  // trigger now shows the target title. Studio's checkbox-style picker
-  // sometimes auto-closes after selection (removing the card from DOM), so
-  // path (2) is the fallback that catches successful selections we can't
-  // see on the card itself.
+  // "Selected", or (2) the picker closed and the SPECIFIC Related-video
+  // trigger on the main page now shows the target title.
+  //
+  // The previous check enumerated ALL ytcp-dropdown-trigger elements on the
+  // page and matched target-title substring against any of them, which was
+  // way too loose — Studio's edit page has ~a dozen dropdowns (Category,
+  // Playlist, License, Comments, Age restriction, etc.) and any one that
+  // happened to contain a substring of the target title produced a false-
+  // positive "applied" verdict. Confirmed 2026-08-25: 49/49 poke-guess
+  // publications were marked apply_status='applied' after the backfill,
+  // but headed inspection of the Aug 13 video (ghdPSbKevn4) showed the
+  // Related video trigger literally said "None" — nothing was actually
+  // set in Studio.
+  //
+  // Fix: locate the "Related video" text label, walk up to its containing
+  // dropdown-trigger element, and check ONLY that trigger's text for the
+  // target title. If it says "None" (never set) the check correctly
+  // returns null → selection_not_confirmed instead of a false applied.
   let mainPageConfirmedTitle = null;
   if (!state.selected) {
     mainPageConfirmedTitle = await page.evaluate((titleHint) => {
       const norm = (s) => String(s || '').trim().toLowerCase();
       const hint = norm(titleHint);
       if (!hint) return null;
-      // The main page's Related video trigger is a ytcp-dropdown-trigger
-      // labeled "Related video" that displays the currently-selected video
-      // title after a pick. Enumerate all triggers and find one whose
-      // combined text/aria contains the target title.
-      const triggers = Array.from(document.querySelectorAll('ytcp-dropdown-trigger, ytcp-text-dropdown-trigger'));
-      for (const t of triggers) {
-        const combined = norm((t.textContent || '') + ' ' + (t.getAttribute('aria-label') || ''));
-        if (combined.includes(hint)) return (t.textContent || '').trim().slice(0, 120);
-      }
-      return null;
+      const trigger = (() => {
+        for (const el of Array.from(document.querySelectorAll('*'))) {
+          const text = (el.textContent || '').trim();
+          if (text !== 'Related video' || el.children.length > 1) continue;
+          let cur = el;
+          for (let i = 0; i < 10 && cur; i += 1) {
+            if (cur.tagName === 'YTCP-DROPDOWN-TRIGGER' || cur.tagName === 'YTCP-TEXT-DROPDOWN-TRIGGER') {
+              return cur;
+            }
+            cur = cur.parentElement;
+          }
+        }
+        return null;
+      })();
+      if (!trigger) return null;
+      const combined = norm((trigger.textContent || '') + ' ' + (trigger.getAttribute('aria-label') || ''));
+      // Explicitly reject the "None" placeholder Studio shows before any
+      // related video has been picked — otherwise a target title of "None"
+      // or similar could ambiguously match.
+      if (/\\bnone\\b/.test(combined) && !combined.includes(hint)) return null;
+      return combined.includes(hint) ? (trigger.textContent || '').trim().slice(0, 200) : null;
     }, target.title || target.externalId || '');
   }
 

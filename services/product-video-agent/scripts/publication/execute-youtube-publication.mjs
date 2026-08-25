@@ -309,6 +309,7 @@ export async function refreshRelatedVideoAssignments({
   publications,
   focusPublicationIds = null,
   includePublished = false,
+  force = false,
   store,
   runtimeConfig,
   channelProfile,
@@ -340,7 +341,7 @@ export async function refreshRelatedVideoAssignments({
     // For published, only backfill when the target was never actually applied
     // to Studio — never overwrite a working pairing that viewers might already
     // be seeing. See isPublishedBackfillNeeded().
-    if (normalizeWorkflowState(publication) === 'published' && !isPublishedBackfillNeeded(publication)) return false;
+    if (normalizeWorkflowState(publication) === 'published' && !force && !isPublishedBackfillNeeded(publication)) return false;
     return true;
   });
 
@@ -1167,6 +1168,8 @@ async function main() {
       '  --refresh-related-videos   Re-plan related-video metadata for existing preview/scheduled rows.',
       '  --include-published        Also process published rows whose related video was never applied to Studio.',
       '                             Only meaningful with --refresh-related-videos. Never re-picks existing targets.',
+      '  --force                    Bypass the "already applied, skip" guard for published rows. Useful when',
+      '                             a previous run recorded false-positive apply_status=applied that needs a retry.',
       '  --schedule-approved        Apply schedule updates instead of preview uploads.',
       '  --max-scheduled-days <n>   Limit schedule assignment to the next N days from --as-of.',
       '  --dry-run                  Print the planned work without calling YouTube.',
@@ -1186,6 +1189,7 @@ async function main() {
   const dryRun = getBooleanOption(options, 'dry-run', false);
   const refreshRelatedVideosOnly = getBooleanOption(options, 'refresh-related-videos', false);
   const includePublishedInRefresh = getBooleanOption(options, 'include-published', false);
+  const forceRefresh = getBooleanOption(options, 'force', false);
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
   const maxScheduledDays = Number.parseFloat(
     getStringOption(options, 'max-scheduled-days', ''),
@@ -1226,6 +1230,7 @@ async function main() {
       publications,
       focusPublicationIds: publicationId ? [publicationId] : null,
       includePublished: includePublishedInRefresh,
+      force: forceRefresh,
       store,
       runtimeConfig,
       channelProfile,
