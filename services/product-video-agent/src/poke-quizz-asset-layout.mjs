@@ -6,6 +6,7 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   gifBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/type-quiz-backgrounds`,
   sprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Sprites`,
   newSprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/new pokemon sprites`,
+  animatedSpriteGifs: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/new pokemon sprite gifs`,
   shinySprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Shiny Sprites`,
   silhouettes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Silhouettes`,
   pixelTypes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Pixel Types`,
@@ -23,6 +24,7 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
 const POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES = Object.freeze({
   'dual-type-reveal': 'Dual Type Reveal',
   'find-the-shiny': 'Find the Shiny',
+  'know-your-shiny': 'Know Your Shiny',
   memory: 'Memory',
   'type-quiz': 'Type Quiz',
 });
@@ -65,6 +67,9 @@ export function resolvePokeQuizzPreviewTemplateKey(templateRef) {
   if (candidates.some((value) => value.includes('find-the-shiny'))) {
     return 'find-the-shiny';
   }
+  if (candidates.some((value) => value.includes('know-your-shiny'))) {
+    return 'know-your-shiny';
+  }
   if (candidates.some((value) => value.includes('memory'))) {
     return 'memory';
   }
@@ -104,6 +109,10 @@ export function buildPokeQuizzMirroredSpritePath(spritePath) {
 
 export function buildPokeQuizzShinySpritePath(row) {
   return `${POKE_QUIZZ_ASSET_LAYOUT.shinySprites}/${generationDirectory(row.generation)}/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug)}.png`;
+}
+
+export function buildPokeQuizzAnimatedShinySpritePath(row) {
+  return `${POKE_QUIZZ_ASSET_LAYOUT.animatedSpriteGifs}/${generationDirectory(row.generation)}/shiny/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug || row.name)}.gif`;
 }
 
 export function buildPokeQuizzSilhouettePath(row) {

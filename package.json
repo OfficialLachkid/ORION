@@ -121,6 +121,7 @@
     "product-video:execute-youtube-publication": "node services/product-video-agent/scripts/execute-youtube-publication.mjs",
     "product-video:localize-poke-quizz-assets": "node services/product-video-agent/scripts/localize-poke-quizz-assets.mjs",
     "product-video:scan-poke-quizz-assets": "node services/product-video-agent/scripts/scan-poke-quizz-assets.mjs",
+    "product-video:download-showdown-animated-sprites": "node services/product-video-agent/scripts/assets/download-showdown-animated-sprites.mjs",
     "product-video:set-source-retention": "node services/product-video-agent/index.mjs --set-source-retention",
     "product-video:install-publication-schedule": "node scripts/install-video-publication-schedule.mjs",
     "product-video:install-analytics-schedule": "node scripts/install-video-analytics-schedule.mjs",

@@ -20,6 +20,13 @@ import {
   renderPokeQuizzVideo as renderMemoryVideo,
 } from './domains/pokemon/templates/memory/renderer.mjs';
 import {
+  planKnowYourShinyChallenge,
+} from './domains/pokemon/templates/know-your-shiny/planner.mjs';
+import {
+  buildPokeQuizzRenderPlan as buildKnowYourShinyRenderPlan,
+  renderPokeQuizzVideo as renderKnowYourShinyVideo,
+} from './domains/pokemon/templates/know-your-shiny/renderer.mjs';
+import {
   planPokemonTypeQuizChallenge,
 } from './domains/pokemon/templates/type-speed-quiz/planner.mjs';
 import {
@@ -42,6 +49,11 @@ const TEMPLATE_REGISTRY = Object.freeze({
     planner: planPokemonMemoryChallenge,
     buildRenderPlan: buildMemoryRenderPlan,
     renderVideo: renderMemoryVideo,
+  }),
+  'know-your-shiny': Object.freeze({
+    planner: planKnowYourShinyChallenge,
+    buildRenderPlan: buildKnowYourShinyRenderPlan,
+    renderVideo: renderKnowYourShinyVideo,
   }),
   'type-quiz': Object.freeze({
     planner: planPokemonTypeQuizChallenge,
@@ -71,6 +83,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   if (templateKey === 'memory') {
     return 'memory';
   }
+  if (templateKey === 'know-your-shiny') {
+    return 'know-your-shiny';
+  }
   if (templateKey && TEMPLATE_REGISTRY[templateKey]) {
     return templateKey;
   }
@@ -79,6 +94,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   }
   if (templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
+  }
+  if (templateId.includes('know-your-shiny')) {
+    return 'know-your-shiny';
   }
   if (templateId.includes('memory')) {
     return 'memory';

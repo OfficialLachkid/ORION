@@ -184,8 +184,68 @@ test('planner selects an observed dual-type pair and emits asset gap guidance', 
   assert.equal(plan.assets.overlays.pokeball_grid.item_count, 2);
   assert.equal(plan.assets.overlays.pokeball_grid.centered_from_middle, true);
   assert.equal(plan.assets.overlays.pokeball_grid.columns, 2);
+  assert.equal(
+    plan.assets.pokemon.every((subject) => !subject.sprite_path || Boolean(subject.render_sprite_path)),
+    true,
+  );
   assert.ok(plan.required_asset_gaps.includes('pokemon_reveal_sprite_local_assets_missing'));
   assert.equal(plan.required_asset_gaps.includes('type_icons_missing'), false);
+});
+
+test('planner seeds the dual-type reveal line from the configured prompt variants', async () => {
+  const variantTemplate = {
+    ...template,
+    question_contract: {
+      ...template.question_contract,
+      reveal_text: 'Who did you forget?',
+      reveal_text_variants: [
+        'Who did you forget?',
+        'Which one did you miss?',
+      ],
+    },
+  };
+
+  const plan = await planPokemonTypeChallenge({
+    template: variantTemplate,
+    pokedexRows,
+    seed: 'dual-type-reveal-variant',
+    forcedTypePair: ['grass', 'poison'],
+    assetInventory: {
+      scanned_at: '2026-07-28T00:00:00.000Z',
+      directories: {},
+      backgrounds: ['/tmp/background-1.png'],
+      music: ['/tmp/battle-intro-1.mp3'],
+      sound_effects: {
+        all: ['/tmp/countdown-tick.wav', '/tmp/reveal.wav'],
+        countdown_tick: '/tmp/countdown-tick.wav',
+        timer_end: '/tmp/reveal.wav',
+        reveal: '/tmp/reveal.wav',
+      },
+      type_icons: {
+        pixel: [
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/grass.gif',
+          '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
+        ],
+        three_d: [],
+      },
+      overlay_presets: {
+        timer: '/tmp/Timer.gif',
+        timer_countdown: '/tmp/Timer Countdown.gif',
+        timer_alarm: '/tmp/Timer Alarm.gif',
+        pokeball_primary: '/tmp/3D Pokeball Wiggle.gif',
+      },
+      overlays: ['/tmp/Timer Countdown.gif', '/tmp/Timer Alarm.gif', '/tmp/3D Pokeball Wiggle.gif'],
+      transitions: [],
+    },
+  });
+
+  const revealLine = plan.narration.lines.find((line) => line.role === 'reveal')?.text || '';
+  assert.ok([
+    'Who did you forget?',
+    'Which one did you miss?',
+    'Which slipped your mind?',
+  ].includes(revealLine));
+  assert.equal(plan.timeline.at(-1)?.spoken_text, revealLine);
 });
 
 test('planner uses all localized generations when no generation scope is configured', async () => {
@@ -1883,6 +1943,7 @@ test('planner prefers pairs with localized reveal sprites during random selectio
 
   assert.deepEqual(plan.selection.type_pair, ['ground', 'psychic']);
   assert.equal(plan.assets.pokemon.every((subject) => Boolean(subject.sprite_path)), true);
+  assert.equal(plan.assets.pokemon.every((subject) => Boolean(subject.render_sprite_path)), true);
 });
 
 test('planner selects at most one shiny reveal per video and records the deterministic roll', async () => {

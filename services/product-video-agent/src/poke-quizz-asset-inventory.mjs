@@ -147,6 +147,42 @@ function matchOverlay(files, keywords) {
   return files.find((filePath) => keywords.every((keyword) => filePath.toLowerCase().includes(keyword))) || null;
 }
 
+export function selectSoundEffectPresets(soundEffects) {
+  const allSoundEffects = Array.isArray(soundEffects) ? soundEffects : [];
+  const countdownTick = matchSoundEffect(allSoundEffects, ['countdown', 'tick', 'beep']);
+  const timerEnd = (
+    matchSoundEffect(allSoundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'reveal-hit'])
+    || matchSoundEffect(allSoundEffects, ['ding'])
+  );
+  const reveal = matchSoundEffect(allSoundEffects, ['reveal', 'who', 'answer']) || timerEnd;
+  const shiny = matchSoundEffect(allSoundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
+  const disappear = matchSoundEffect(allSoundEffects, ['disappear', 'poof', 'vanish']);
+  const pokeballIntro = matchSoundEffectKeywordGroups(allSoundEffects, [
+    ['enlarge', 'pokeball'],
+    ['pokeball', 'intro'],
+    ['pokeball', 'appear'],
+    ['pokeball', 'spawn'],
+    ['pokeball', 'scale'],
+    ['pokeball', 'grow'],
+  ]);
+  const pokeballWiggle = matchSoundEffectKeywordGroups(allSoundEffects, [
+    ['pokeball', 'wiggle'],
+    ['pokeball', 'wobble'],
+    ['pokeball', 'shake'],
+  ]);
+
+  return {
+    all: allSoundEffects,
+    countdown_tick: countdownTick,
+    timer_end: timerEnd,
+    reveal,
+    shiny,
+    disappear,
+    pokeball_intro: pokeballIntro,
+    pokeball_wiggle: pokeballWiggle,
+  };
+}
+
 export function selectOverlayPresets(overlays) {
   const overlayImages = overlays.filter((filePath) => IMAGE_EXTENSIONS.has(extname(filePath).toLowerCase()));
   const overlayVideos = overlays.filter((filePath) => ['.mp4', '.mov', '.webm'].includes(extname(filePath).toLowerCase()));
@@ -231,49 +267,13 @@ export async function scanPokeQuizzAssetInventory() {
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.transitions, new Set(['.png', '.webp', '.gif', '.mov', '.mp4', '.webm'])),
   ]);
   const threeDTypeStyles = buildThreeDTypeStyleCatalog(threeDTypes);
-
-  const countdownTick = matchSoundEffect(soundEffects, ['countdown', 'tick', 'beep']);
-  const timerEnd = (
-    matchSoundEffect(soundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'reveal-hit'])
-    || matchSoundEffect(soundEffects, ['ding'])
-  );
-  const reveal = matchSoundEffect(soundEffects, ['reveal', 'who', 'answer']) || timerEnd;
-  const shiny = matchSoundEffect(soundEffects, ['shiny', 'sparkle', 'twinkle', 'glint']);
-  const disappear = matchSoundEffectKeywordGroups(soundEffects, [
-    ['disappear'],
-    ['vanish'],
-    ['poof'],
-  ]);
-  const pokeballIntro = matchSoundEffectKeywordGroups(soundEffects, [
-    ['enlarge', 'pokeball'],
-    ['pokeball', 'intro'],
-    ['pokeball', 'appear'],
-    ['pokeball', 'spawn'],
-    ['pokeball', 'scale'],
-    ['pokeball', 'grow'],
-  ]);
-  const pokeballWiggle = matchSoundEffectKeywordGroups(soundEffects, [
-    ['pokeball', 'wiggle'],
-    ['pokeball', 'wobble'],
-    ['pokeball', 'shake'],
-  ]);
-
   return {
     scanned_at: new Date().toISOString(),
     directories: { ...POKE_QUIZZ_ASSET_LAYOUT },
     backgrounds,
     gif_backgrounds: gifBackgrounds,
     music,
-    sound_effects: {
-      all: soundEffects,
-      countdown_tick: countdownTick,
-      timer_end: timerEnd,
-      reveal,
-      shiny,
-      disappear,
-      pokeball_intro: pokeballIntro,
-      pokeball_wiggle: pokeballWiggle,
-    },
+    sound_effects: selectSoundEffectPresets(soundEffects),
     type_icons: {
       pixel: pixelTypes,
       three_d: threeDTypes,

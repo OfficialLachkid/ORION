@@ -1,0 +1,195 @@
+{
+  "template_id": "pokemon.know-your-shiny.v1",
+  "template_key": "know-your-shiny",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "countdown",
+    "decoy_grid",
+    "reveal",
+    "transition"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 120,
+      "bottom": 260,
+      "left": 120
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "require_truth_fields": [
+      "national_dex_number",
+      "name",
+      "types",
+      "sprite_path",
+      "shiny_sprite_path"
+    ],
+    "preferred_asset_fields": [
+      "shiny_sprite_path"
+    ],
+    "skip_subject_when_missing": [
+      "national_dex_number",
+      "name",
+      "types",
+      "sprite_path",
+      "shiny_sprite_path"
+    ],
+    "round_count": 3,
+    "round_count_weights": {
+      "medium": 1,
+      "hard": 1
+    },
+    "round_count_levels": {
+      "medium": {
+        "round_count": 3
+      },
+      "hard": {
+        "round_count": 5
+      }
+    },
+    "mode": "random"
+  },
+  "question_contract": {
+    "hook_text": "Do you know your shiny?",
+    "hook_text_variants": [
+      "Do you know your shiny?"
+    ],
+    "prompt_text": "Which one\u2019s shiny?",
+    "prompt_text_variants": [
+      "Which one\u2019s shiny?"
+    ],
+    "reveal_text": "",
+    "reveal_text_variants": []
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_backgrounds",
+      "media_type": "looping_image_gif_or_video",
+      "fit": "cover",
+      "blur_sigma": 4
+    },
+    "text": {
+      "hook_y": 150,
+      "hook_font_size": 136,
+      "prompt_y": 150,
+      "prompt_font_size": 98,
+      "reveal_y": 300,
+      "reveal_font_size": 110,
+      "font_candidates": [
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Impact.ttf",
+        "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
+      ],
+      "counter_x": 72,
+      "counter_y": 144,
+      "counter_font_size": 96,
+      "highlight_color": "0xFFD60A",
+      "highlight_x_offset_px": 20,
+      "highlight_y_offset_px": -12,
+      "highlight_keywords": [
+        "shiny"
+      ]
+    },
+    "sprite_grid": {
+      "rows": 2,
+      "columns": 2,
+      "item_size_px": 258,
+      "min_item_size_px": 220,
+      "column_gap_px": 190,
+      "row_gap_px": 400,
+      "sprite_scale_multiplier": 1.5,
+      "sprite_center_y_offset_px": 50,
+      "stage_bounds_px": {
+        "left": 120,
+        "top": 470,
+        "width": 840,
+        "height": 760
+      }
+    },
+    "reveal_sprite": {
+      "center_x": 540,
+      "center_y": 1010,
+      "item_size_px": 320,
+      "sprite_scale_multiplier": 1.38
+    },
+    "sprite_platform": {
+      "option_enabled": true,
+      "option_width_multiplier": 0.85,
+      "center_y_offset_multiplier": 0.34,
+      "option_center_y_offset_px": 80
+    },
+    "timer": {
+      "countdown_from": 4,
+      "countdown_to": 0,
+      "bar_height_px": 39,
+      "bar_horizontal_inset_px": -80,
+      "center_y": 1000,
+      "bar_y_offset_px": 0
+    },
+    "rounds": {
+      "hook_hold_seconds": 1.1,
+      "pre_countdown_hold_seconds": 0.24,
+      "reveal_hold_seconds": 1.05,
+      "transition_duration_seconds": 0.42,
+      "final_hold_seconds": 1
+    }
+  },
+  "reveal": {
+    "visual_delay_seconds": 0,
+    "shiny": {
+      "enabled": true,
+      "sparkle_duration_seconds": 0.9,
+      "sparkle_scale_multiplier": 1.35,
+      "sound_volume_multiplier": 0.7
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "sound_effects": {
+      "countdown_tick": {
+        "enabled": true,
+        "trigger": "each_second"
+      },
+      "timer_end": {
+        "enabled": false,
+        "trigger": "countdown_complete"
+      }
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true,
+    "candidate_intro_duration_seconds": 0.18,
+    "decoy_grayscale_fade_duration_seconds": 0.22,
+    "correct_move_duration_seconds": 0.36,
+    "correct_cell_fade_duration_seconds": 0.16,
+    "correct_scale_multiplier": 1.08
+  }
+}

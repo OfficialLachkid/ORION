@@ -6,6 +6,9 @@ import {
   planNightShiftAutoPublicationAutomation,
   runVideoQueueMaintenance,
   selectNextReviewBacklogRuntime,
+  selectPrimaryNightShiftRuntimes,
+  summarizeReviewBacklogRuns,
+  summarizeReviewRefreshRuns,
 } from './pokemon-maintenance.mjs';
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -176,6 +179,146 @@ test('night shift queue maintenance auto-approves DexGuess previews within the c
   assert.equal(summary.autoScheduled, 1);
 });
 
+test('night shift queue maintenance uses the primary root runtime when child template runtimes share a channel selector', async () => {
+  const runProjectNodeScriptCalls = [];
+  const autoPublishCalls = [];
+  const rootRuntime = {
+    channelSelector: 'trivamon-youtube',
+    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-youtube.json',
+    nightShift: {
+      reviewBacklogEnabled: true,
+      reviewRefreshEnabled: true,
+      publicationAutomationEnabled: true,
+      publicationAutomationMode: 'auto',
+      publicationAutomationMaxScheduledDays: 3,
+      reviewBacklogMixChannelConfigPaths: [
+        'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      ],
+    },
+  };
+  const childRuntime = {
+    channelSelector: 'trivamon-youtube',
+    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+    nightShift: {
+      reviewBacklogEnabled: false,
+      reviewRefreshEnabled: false,
+      publicationAutomationEnabled: false,
+      publicationAutomationMode: 'manual',
+      publicationAutomationMaxScheduledDays: 0,
+      reviewBacklogMixChannelConfigPaths: [],
+    },
+  };
+  const trivamonPublications = [
+    committedScheduled,
+    previewApproved,
+    previewUploadedOldest,
+    previewUploadedNewest,
+  ].map((publication) => ({
+    ...publication,
+    account_key: 'trivamon-youtube',
+  }));
+  const publicationStore = {
+    async fetchPublicationsByChannel() {
+      return trivamonPublications;
+    },
+  };
+
+  const summary = await runVideoQueueMaintenance(
+    '2026-08-13T06:00:00.000Z',
+    {
+      runtimeConfig: { env: {} },
+      loadPublicationChannelProfiles: async () => [{
+        ...channelProfile,
+        id: 'video-channel-trivamon-youtube',
+        name: 'TrivaMon',
+        account_key: 'trivamon-youtube',
+      }],
+      discoverNightShiftChannelRuntimes: async () => [childRuntime, rootRuntime],
+      runProjectNodeScript: (scriptPath, args) => {
+        runProjectNodeScriptCalls.push({ scriptPath, args });
+        return {
+          status: 0,
+          stdout: '[]',
+          stderr: '',
+        };
+      },
+      publicationStore,
+      executeProductVideoAction: async (action, task) => {
+        autoPublishCalls.push({ action, task });
+        return {
+          report: {
+            workflowState: 'scheduled',
+            scheduledFor: '2026-08-14T08:00:00.000Z',
+          },
+        };
+      },
+    },
+  );
+
+  assert.equal(runProjectNodeScriptCalls.length, 1);
+  assert.equal(runProjectNodeScriptCalls[0].args.includes('--max-scheduled-days'), true);
+  assert.equal(autoPublishCalls.length, 1);
+  assert.equal(summary.autoApproved, 1);
+  assert.equal(summary.autoScheduled, 1);
+});
+
+test('review backlog runtime selection breaks equal-count ties away from the most recently generated template', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+    { templateId: 'pokemon.memory.v1', channelConfigPath: 'memory.json' },
+  ];
+  const publications = [
+    {
+      id: 'dual-recent',
+      created_at: '2026-08-21T00:34:37.173973+00:00',
+      metadata: {
+        workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.dual-type-reveal.v1',
+      },
+    },
+    {
+      id: 'shiny-older',
+      created_at: '2026-08-20T19:54:59.775074+00:00',
+      metadata: {
+        workflow_state: 'scheduled',
+        template_id: 'pokemon.find-the-shiny.v1',
+      },
+    },
+    {
+      id: 'memory-oldest',
+      created_at: '2026-08-20T19:43:00.664472+00:00',
+      metadata: {
+        workflow_state: 'scheduled',
+        template_id: 'pokemon.memory.v1',
+      },
+    },
+  ];
+
+  const selectedRuntime = selectNextReviewBacklogRuntime(runtimes, publications);
+  assert.equal(selectedRuntime?.templateId, 'pokemon.memory.v1');
+});
+
+test('review backlog runtime selection counts legacy dual-type template ids against the current runtime id', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+  ];
+  const publications = [
+    {
+      id: 'dual-legacy',
+      created_at: '2026-08-21T00:34:37.173973+00:00',
+      metadata: {
+        workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.dual-type-reveal-v1',
+      },
+    },
+  ];
+
+  const selectedRuntime = selectNextReviewBacklogRuntime(runtimes, publications);
+  assert.equal(selectedRuntime?.templateId, 'pokemon.find-the-shiny.v1');
+});
+
 test('night shift queue maintenance no longer requires an injected runtimeConfig for auto mode', async () => {
   const summary = await runVideoQueueMaintenance(
     '2026-08-13T06:00:00.000Z',
@@ -240,27 +383,237 @@ test('countActiveTemplateQueueItems treats legacy dual-type template ids as the 
   );
 });
 
-test('selectNextReviewBacklogRuntime prefers the least-represented template scope and randomizes ties', () => {
+test('review backlog runtime selection avoids repeating the most recently generated template when an alternative exists', () => {
   const runtimes = [
-    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual' },
-    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny' },
-    { templateId: 'pokemon.type-quiz.v1', channelConfigPath: 'quiz' },
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+    { templateId: 'pokemon.memory.v1', channelConfigPath: 'memory.json' },
   ];
   const publications = [
     {
+      id: 'dual-most-recent',
+      created_at: '2026-08-21T09:00:00.000Z',
       metadata: {
-        template_id: 'pokemon.dual-type-reveal-v1',
         workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.dual-type-reveal-v1',
+      },
+    },
+    {
+      id: 'memory-older',
+      created_at: '2026-08-21T08:00:00.000Z',
+      metadata: {
+        workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.memory.v1',
+      },
+    },
+    {
+      id: 'shiny-oldest',
+      created_at: '2026-08-21T07:00:00.000Z',
+      metadata: {
+        workflow_state: 'preview_uploaded',
+        template_id: 'pokemon.find-the-shiny.v1',
+      },
+    },
+    {
+      id: 'memory-second',
+      created_at: '2026-08-20T07:00:00.000Z',
+      metadata: {
+        workflow_state: 'scheduled',
+        template_id: 'pokemon.memory.v1',
+      },
+    },
+    {
+      id: 'shiny-second',
+      created_at: '2026-08-20T06:00:00.000Z',
+      metadata: {
+        workflow_state: 'scheduled',
+        template_id: 'pokemon.find-the-shiny.v1',
       },
     },
   ];
 
-  assert.equal(
-    selectNextReviewBacklogRuntime(runtimes, publications, () => 0).channelConfigPath,
-    'shiny',
+  const selectedRuntime = selectNextReviewBacklogRuntime(runtimes, publications);
+  assert.equal(selectedRuntime?.templateId, 'pokemon.find-the-shiny.v1');
+});
+
+test('review backlog runtime selection prefers higher-weight non-dual templates when loads are equal', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+    { templateId: 'pokemon.memory.v1', channelConfigPath: 'memory.json' },
+  ];
+
+  const selectedRuntime = selectNextReviewBacklogRuntime(
+    runtimes,
+    [],
+    {
+      templateWeights: {
+        'pokemon.dual-type-reveal.v1': 1,
+        'pokemon.find-the-shiny.v1': 2,
+        'pokemon.memory.v1': 2,
+      },
+    },
   );
-  assert.equal(
-    selectNextReviewBacklogRuntime(runtimes, publications, () => 0.99).channelConfigPath,
-    'quiz',
+
+  assert.equal(selectedRuntime?.templateId, 'pokemon.memory.v1');
+});
+
+test('review backlog runtime selection avoids an in-run repeat even before publications refresh', () => {
+  const runtimes = [
+    { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
+    { templateId: 'pokemon.find-the-shiny.v1', channelConfigPath: 'shiny.json' },
+    { templateId: 'pokemon.memory.v1', channelConfigPath: 'memory.json' },
+  ];
+
+  const selectedRuntime = selectNextReviewBacklogRuntime(
+    runtimes,
+    [],
+    {
+      templateWeights: {
+        'pokemon.dual-type-reveal.v1': 1,
+        'pokemon.find-the-shiny.v1': 2,
+        'pokemon.memory.v1': 2,
+      },
+      recentTemplateIds: ['pokemon.memory.v1'],
+    },
   );
+
+  assert.equal(selectedRuntime?.templateId, 'pokemon.find-the-shiny.v1');
+});
+
+test('night shift runtime selection prefers the root publication-channel config over child template configs', () => {
+  const runtimes = [
+    {
+      channelSelector: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      nightShift: {
+        reviewBacklogEnabled: true,
+        reviewRefreshEnabled: true,
+        publicationAutomationEnabled: false,
+        reviewBacklogMixChannelConfigPaths: [],
+      },
+    },
+    {
+      channelSelector: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-youtube.json',
+      nightShift: {
+        reviewBacklogEnabled: true,
+        reviewRefreshEnabled: true,
+        publicationAutomationEnabled: true,
+        reviewBacklogMixChannelConfigPaths: [
+          'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+        ],
+      },
+    },
+  ];
+
+  const selected = selectPrimaryNightShiftRuntimes(runtimes);
+  assert.equal(selected.length, 1);
+  assert.equal(
+    selected[0]?.channelConfigPath,
+    'services/product-video-agent/config/channels/trivamon-youtube.json',
+  );
+});
+
+test('review backlog summary collapses duplicate runtime runs into publication-channel totals', () => {
+  const summary = summarizeReviewBacklogRuns([
+    {
+      status: 'completed',
+      channel: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      generated: 2,
+      generatedItems: [{ publicationId: 'a' }, { publicationId: 'b' }],
+      initialReviewReadyCount: 8,
+      finalReviewReadyCount: 10,
+      targetReviewReadyCount: 10,
+      errors: [],
+    },
+    {
+      status: 'skipped',
+      channel: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-memory-youtube.json',
+      generated: 0,
+      generatedItems: [],
+      initialReviewReadyCount: 10,
+      finalReviewReadyCount: 10,
+      targetReviewReadyCount: 10,
+      errors: [],
+    },
+    {
+      status: 'completed',
+      channel: 'poke-quizz-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
+      generated: 1,
+      generatedItems: [{ publicationId: 'c' }],
+      initialReviewReadyCount: 9,
+      finalReviewReadyCount: 10,
+      targetReviewReadyCount: 10,
+      errors: [],
+    },
+  ]);
+
+  assert.equal(summary.configuredChannels, 2);
+  assert.equal(summary.generated, 3);
+  assert.equal(summary.initialReviewReadyCount, 17);
+  assert.equal(summary.finalReviewReadyCount, 20);
+  assert.equal(summary.targetReviewReadyCount, 20);
+  assert.equal(summary.channels.length, 2);
+});
+
+test('review refresh summary collapses duplicate runtime runs into publication-channel totals', () => {
+  const summary = summarizeReviewRefreshRuns([
+    {
+      status: 'completed',
+      channel: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      inspected: 10,
+      refreshed: 10,
+      actionable: 10,
+      retried: 7,
+      failed: 1,
+      failures: [
+        {
+          publicationId: 'pub-1',
+          messageId: 'msg-1',
+          reason: 'discord_api_404',
+        },
+      ],
+    },
+    {
+      status: 'completed',
+      channel: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-memory-youtube.json',
+      inspected: 10,
+      refreshed: 10,
+      actionable: 10,
+      retried: 10,
+      failed: 1,
+      failures: [
+        {
+          publicationId: 'pub-1',
+          messageId: 'msg-1',
+          reason: 'discord_api_404',
+        },
+      ],
+    },
+    {
+      status: 'completed',
+      channel: 'poke-quizz-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
+      inspected: 10,
+      refreshed: 10,
+      actionable: 10,
+      retried: 0,
+      failed: 0,
+      failures: [],
+    },
+  ]);
+
+  assert.equal(summary.configuredChannels, 2);
+  assert.equal(summary.inspected, 20);
+  assert.equal(summary.refreshed, 20);
+  assert.equal(summary.actionable, 20);
+  assert.equal(summary.retried, 10);
+  assert.equal(summary.failed, 1);
+  assert.equal(summary.failures.length, 1);
 });

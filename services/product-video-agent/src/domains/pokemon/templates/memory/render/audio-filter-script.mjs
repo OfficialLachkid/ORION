@@ -8,7 +8,6 @@ import {
 } from '../../dual-type-reveal/render/constants.mjs';
 
 export { buildAudioInputs } from '../../dual-type-reveal/render/audio-filter-script.mjs';
-
 export function buildAudioFilterScript({
   narrationPaths,
   musicPath,

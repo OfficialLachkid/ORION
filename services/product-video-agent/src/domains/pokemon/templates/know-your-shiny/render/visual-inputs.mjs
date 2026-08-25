@@ -1,0 +1,60 @@
+import { extname } from 'node:path';
+
+function buildLoopingVisualInput(path, durationSeconds, fps) {
+  const extension = extname(path || '').toLowerCase();
+  if (['.mp4', '.mov', '.webm'].includes(extension)) {
+    return ['-stream_loop', '-1', '-t', String(durationSeconds), '-i', path];
+  }
+  if (extension === '.gif') {
+    return ['-ignore_loop', '0', '-t', String(durationSeconds), '-i', path];
+  }
+  return ['-loop', '1', '-framerate', String(fps), '-t', String(durationSeconds), '-i', path];
+}
+
+export function buildVisualInputs(plan, renderPlan) {
+  const inputs = [];
+  inputs.push({
+    role: 'background',
+    path: plan.assets.background.selected_path,
+    args: buildLoopingVisualInput(
+      plan.assets.background.selected_path,
+      renderPlan.total_duration_seconds,
+      renderPlan.canvas.fps,
+    ),
+  });
+
+  renderPlan.rounds.forEach((round) => {
+    const spritePath = round.subject.render_sprite_path || round.subject.shiny_sprite_path || round.subject.sprite_path;
+    inputs.push({
+      role: `round-${round.round_number}-sprite`,
+      path: spritePath,
+      args: buildLoopingVisualInput(
+        spritePath,
+        round.scene_duration_seconds,
+        renderPlan.canvas.fps,
+      ),
+    });
+  });
+
+  if (plan.assets.overlays?.selected_grass_plateau_path) {
+    inputs.push({
+      role: 'grass-platform',
+      path: plan.assets.overlays.selected_grass_plateau_path,
+      args: buildLoopingVisualInput(
+        plan.assets.overlays.selected_grass_plateau_path,
+        renderPlan.total_duration_seconds,
+        renderPlan.canvas.fps,
+      ),
+    });
+  }
+
+  if (plan.shiny_reveal?.active && plan.assets.overlays?.selected_shiny_sparkle_path) {
+    inputs.push({
+      role: 'shiny-sparkle',
+      path: plan.assets.overlays.selected_shiny_sparkle_path,
+      args: ['-ignore_loop', '1', '-i', plan.assets.overlays.selected_shiny_sparkle_path],
+    });
+  }
+
+  return inputs;
+}

@@ -264,3 +264,20 @@ test('normalizeTaskMessage recognizes analytics digest commands as explicit runt
   assert.equal(result.task.video_analytics_request.channelSelector, 'trivamon-youtube');
   assert.equal(result.task.video_analytics_request.windowDays, 3);
 });
+
+test('normalizeTaskMessage recognizes leadgen sweep commands as explicit runtime actions', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    channelKey: 'commands',
+    submittedAt: '2026-08-21T12:00:00.000Z',
+    content: 'run leadgen sweep rounds: 2',
+    author: { id: 'operator-1', displayName: 'VBJ Services' },
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'leadgen_sweep');
+  assert.equal(result.task.approval_required, false);
+  assert.equal(result.task.status, 'queued');
+  assert.equal(result.task.summary, 'Run leadgen sweep: 2 round(s) across all niches');
+  assert.equal(result.task.leadgen_request.mode, 'sweep');
+  assert.equal(result.task.leadgen_request.rounds, 2);
+});

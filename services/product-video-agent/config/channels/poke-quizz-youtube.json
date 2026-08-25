@@ -8,7 +8,18 @@
   "night_shift": {
     "review_backlog": {
       "enabled": true,
-      "target_review_ready_count": 10
+      "target_review_ready_count": 10,
+      "template_weights": {
+        "pokemon.dual-type-reveal.v1": 1,
+        "pokemon.know-your-shiny.v1": 2,
+        "pokemon.memory.v1": 2,
+        "pokemon.type-quiz.v1": 2
+      },
+      "mix_channel_config_paths": [
+        "services/product-video-agent/config/channels/poke-quizz-know-your-shiny-youtube.json",
+        "services/product-video-agent/config/channels/poke-quizz-memory-youtube.json",
+        "services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json"
+      ]
     },
     "review_refresh": {
       "enabled": true,

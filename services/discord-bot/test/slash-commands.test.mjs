@@ -10,7 +10,7 @@ import {
 test('buildGuildSlashCommands returns the supported slash commands', () => {
   const commands = buildGuildSlashCommands();
 
-  assert.equal(commands.length, 11);
+  assert.equal(commands.length, 12);
   assert.deepEqual(commands.map((command) => command.name), [
     'commands',
     'help',
@@ -21,6 +21,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'generate-video',
     'analytics',
     'leadgen',
+    'leadgen-sweep',
     'create-developer-issue',
     'email-draft',
   ]);
@@ -42,6 +43,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
   assert.deepEqual(generateTemplateChoiceValues, [
     'dual-type-reveal',
     'find-the-shiny',
+    'know-your-shiny',
     'memory',
     'type-speed-quiz',
   ]);
@@ -304,6 +306,33 @@ test('normalizeSupportedSlashCommandInteraction converts a leadgen slash command
   assert.equal(message?.channelKey, 'commands');
 });
 
+test('normalizeSupportedSlashCommandInteraction converts a leadgen sweep slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-5b',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-5b',
+    data: {
+      name: 'leadgen-sweep',
+      options: [
+        { name: 'rounds', value: 2 },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'run leadgen sweep rounds: 2');
+  assert.equal(message?.channelKey, 'commands');
+});
+
 test('normalizeSupportedSlashCommandInteraction converts a manual video generation slash command into a routed message', () => {
   const message = normalizeSupportedSlashCommandInteraction({
     id: 'interaction-generate-video-1',
@@ -413,6 +442,34 @@ test('normalizeSupportedSlashCommandInteraction converts a type-speed-quiz slash
   });
 
   assert.equal(message?.content, 'generate video template: type-speed-quiz channel: trivamon-youtube');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts a know-your-shiny slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-kys-1',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-know-your-shiny-1',
+    data: {
+      name: 'generate-video',
+      options: [
+        { name: 'template', value: 'know-your-shiny' },
+        { name: 'channel', value: 'poke-quizz-youtube' },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'generate video template: know-your-shiny channel: poke-quizz-youtube');
   assert.equal(message?.channelKey, 'commands');
 });
 

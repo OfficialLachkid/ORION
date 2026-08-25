@@ -89,7 +89,12 @@
     "hook_text": "Guess the Pokemon",
     "hook_voice_required": true,
     "type_prompt_text": "Which Pokemon matches these two types?",
-    "reveal_text": "Who's that Pokemon?",
+    "reveal_text": "Who did you forget?",
+    "reveal_text_variants": [
+      "Who did you forget?",
+      "Which one did you miss?",
+      "Which slipped your mind?"
+    ],
     "answer_text_mode": "pokemon_name_after_timer"
   },
   "layout": {

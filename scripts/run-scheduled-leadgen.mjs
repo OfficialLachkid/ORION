@@ -21,12 +21,14 @@ import {
 const ROTATION_STATE_PATH = resolve(projectRoot, 'data', 'leadgen', 'rotation-state.json');
 // DuckDuckGo returns ~30-40 results per query in practice, so 50 is
 // effectively "everything the search engine will give us".
-const MAX_RESULTS_PER_NICHE = 50;
+export const MAX_RESULTS_PER_NICHE = 50;
+export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 2;
+const MAX_SCHEDULED_SWEEP_ROUNDS = 10;
 
 // Dutch search terms — this targets the Dutch market, so the query itself is
 // in Dutch to get relevant local results (matches the "loodgieter Rotterdam"
 // test that worked well during development).
-const NICHE_ROTATION = [
+export const NICHE_ROTATION = [
   { key: 'electricians', term: 'elektriciens' },
   { key: 'plumbing', term: 'loodgieters' },
   { key: 'real_estate', term: 'makelaars' },
@@ -255,6 +257,14 @@ function commitNicheAdvance(state, nicheKey, cityIndex) {
   return nextState;
 }
 
+export function resolveScheduledSweepRounds(value = DEFAULT_SCHEDULED_SWEEP_ROUNDS) {
+  const parsed = Number.parseInt(String(value ?? DEFAULT_SCHEDULED_SWEEP_ROUNDS), 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_SCHEDULED_SWEEP_ROUNDS;
+  }
+  return Math.min(parsed, MAX_SCHEDULED_SWEEP_ROUNDS);
+}
+
 async function runNiche(config, niche, location, queuedMessage) {
   const query = `${niche.term} ${location}`;
   const startedAtMs = Date.now();
@@ -301,18 +311,11 @@ async function runNiche(config, niche, location, queuedMessage) {
   return { niche: niche.key, query, result, runError, durationMinutes };
 }
 
-function getIntFlag(flag, fallbackValue, minValue, maxValue) {
-  const index = process.argv.indexOf(flag);
-  if (index === -1) return fallbackValue;
-  const raw = process.argv[index + 1];
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < minValue || parsed > maxValue) {
-    throw new Error(`Flag ${flag} expects an integer between ${minValue} and ${maxValue}, got ${raw ?? '(missing)'}.`);
-  }
-  return parsed;
-}
-
-async function runOneSweep(config) {
+export async function runLeadgenSweepRound({
+  config = loadRuntimeConfig(),
+  title = 'Scheduled Leadgen',
+  overviewTitle = 'Daily Leadgen Sweep',
+} = {}) {
   let rotationState = loadRotationState();
 
   // Each niche independently picks up wherever IT left off — they can be
@@ -327,12 +330,15 @@ async function runOneSweep(config) {
   // turn comes and is edited in place with results. Each line carries its
   // own city since niches are no longer guaranteed to share one.
   const statuses = plans.map(({ niche, location, nextLocation }) => ({ niche: niche.key, location, nextLocation, state: 'queued' }));
-  const overviewMessage = await postSweepOverview(config, { statuses });
+  const overviewMessage = await postSweepOverview(config, {
+    statuses,
+    title: overviewTitle,
+  });
 
   const queuedMessages = [];
   for (const { niche, location } of plans) {
     queuedMessages.push(await postLeadgenQueued(config, {
-      title: 'Scheduled Leadgen',
+      title,
       niche: niche.key,
       query: `${niche.term} ${location}`,
     }));
@@ -351,7 +357,10 @@ async function runOneSweep(config) {
   for (let i = 0; i < plans.length; i += 1) {
     const { niche, cityIndex, location } = plans[i];
     statuses[i].state = 'running';
-    await updateSweepOverview(config, overviewMessage, { statuses });
+    await updateSweepOverview(config, overviewMessage, {
+      statuses,
+      title: overviewTitle,
+    });
 
     let outcome;
     try {
@@ -365,7 +374,10 @@ async function runOneSweep(config) {
     statuses[i].state = outcome.runError ? 'failed' : 'completed';
     statuses[i].leadCount = outcome.result?.leadCount ?? 0;
     statuses[i].durationMinutes = outcome.durationMinutes;
-    await updateSweepOverview(config, overviewMessage, { statuses });
+    await updateSweepOverview(config, overviewMessage, {
+      statuses,
+      title: overviewTitle,
+    });
 
     // Advance ONLY this niche's city, and only on its own success — a
     // different niche failing must not hold this one back, and this one
@@ -388,25 +400,95 @@ async function runOneSweep(config) {
   } catch {
     // count is a nicety, never worth failing the sweep over
   }
-  await updateSweepOverview(config, overviewMessage, { statuses, totalLeads });
+  await updateSweepOverview(config, overviewMessage, {
+    statuses,
+    totalLeads,
+    title: overviewTitle,
+  });
 
-  const failures = outcomes.filter((outcome) => outcome.runError);
+  return {
+    title,
+    overviewTitle,
+    outcomes,
+    statuses,
+    totalLeads,
+    failures: outcomes.filter((outcome) => outcome.runError),
+  };
+}
+
+export async function runScheduledLeadgen({
+  config = loadRuntimeConfig(),
+  rounds = DEFAULT_SCHEDULED_SWEEP_ROUNDS,
+  title = 'Scheduled Leadgen',
+  overviewTitle = 'Daily Leadgen Sweep',
+} = {}) {
+  const normalizedRounds = resolveScheduledSweepRounds(rounds);
+  const roundReports = [];
+
+  for (let index = 0; index < normalizedRounds; index += 1) {
+    const roundLabel = normalizedRounds > 1 ? ` (${index + 1}/${normalizedRounds})` : '';
+    roundReports.push(await runLeadgenSweepRound({
+      config,
+      title: `${title}${roundLabel}`,
+      overviewTitle: `${overviewTitle}${roundLabel}`,
+    }));
+  }
+
+  const outcomes = roundReports.flatMap((entry) => entry?.outcomes || []);
+  const statuses = roundReports.flatMap((entry) => entry?.statuses || []);
+  const failures = outcomes.filter((outcome) => outcome?.runError);
+  const totalLeads = roundReports.at(-1)?.totalLeads ?? null;
+
+  return {
+    title,
+    overviewTitle,
+    rounds: normalizedRounds,
+    roundReports,
+    outcomes,
+    statuses,
+    totalLeads,
+    failures,
+  };
+}
+
+function getCliFlagValue(flag, argv = process.argv.slice(2)) {
+  const index = argv.indexOf(flag);
+  if (index === -1) {
+    return '';
+  }
+  return argv[index + 1] || '';
+}
+
+function resolveCliSweepRounds(argv = process.argv.slice(2)) {
+  const timesValue = getCliFlagValue('--times', argv);
+  if (timesValue) {
+    return resolveScheduledSweepRounds(timesValue);
+  }
+  return resolveScheduledSweepRounds(getCliFlagValue('--rounds', argv));
+}
+
+async function main() {
+  const rounds = resolveCliSweepRounds();
+  const result = await runScheduledLeadgen({ rounds });
 
   process.stdout.write(`${JSON.stringify(
-    outcomes.map(({ niche, query, result, runError }) => ({
+    result.outcomes.map(({ niche, query, result: outcomeResult, runError }) => ({
       niche,
       query,
-      leadCount: result?.leadCount ?? 0,
-      insertedCount: result?.insertedCount ?? 0,
-      alreadyKnownCount: result?.alreadyKnownCount ?? 0,
-      searchedCount: result?.searchedCount ?? 0,
+      leadCount: outcomeResult?.leadCount ?? 0,
+      insertedCount: outcomeResult?.insertedCount ?? 0,
+      alreadyKnownCount: outcomeResult?.alreadyKnownCount ?? 0,
+      searchedCount: outcomeResult?.searchedCount ?? 0,
       error: runError?.message || undefined,
     })),
     null,
     2,
   )}\n`);
 
-  return { outcomes, failures };
+  if (result.failures.length > 0) {
+    process.stderr.write(`${result.failures.length} niche run(s) failed across ${result.rounds} sweep(s).\n`);
+    process.exitCode = 1;
+  }
 }
 
 // Chain N sequential sweeps in one launchd fire. Operator's use case
@@ -421,7 +503,7 @@ async function runOneSweep(config) {
 // --times defaults to 1 (existing behavior preserved for callers that
 // don't pass it). Hard-capped at 10 as a runaway guard — realistically
 // 2-3 is the useful range given the qualification cap at 60/day.
-async function main() {
+async function legacySequentialSweepMain() {
   const config = loadRuntimeConfig();
   const times = getIntFlag('--times', 1, 1, 10);
   let totalFailures = 0;

@@ -17,12 +17,32 @@ function parsePositiveInteger(value, fallbackValue) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackValue;
 }
 
+function parsePositiveNumber(value, fallbackValue) {
+  const parsed = Number.parseFloat(String(value || ''));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackValue;
+}
+
 function normalizeStringArray(value) {
   return Array.isArray(value)
     ? value
       .map((entry) => String(entry || '').trim())
       .filter(Boolean)
     : [];
+}
+
+function normalizeTemplateWeights(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([templateId, weight]) => [
+        String(templateId || '').trim(),
+        parsePositiveNumber(weight, 1),
+      ])
+      .filter(([templateId]) => Boolean(templateId)),
+  );
 }
 
 function normalizeNightShiftSettings(channelConfig = {}) {
@@ -52,6 +72,9 @@ function normalizeNightShiftSettings(channelConfig = {}) {
     ),
     reviewBacklogMixChannelConfigPaths: normalizeStringArray(
       reviewBacklog.mix_channel_config_paths,
+    ),
+    reviewBacklogTemplateWeights: normalizeTemplateWeights(
+      reviewBacklog.template_weights,
     ),
     reviewRefreshEnabled: reviewRefresh.enabled === true,
     reviewRefreshPendingOnly: reviewRefresh.pending_only !== false,

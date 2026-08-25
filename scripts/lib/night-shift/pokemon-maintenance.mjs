@@ -1,7 +1,5 @@
 import {
-  findPublicationChannelProfile,
   loadPublicationChannelProfiles,
-  resolvePublicationReviewThreadId,
 } from '../../../services/product-video-agent/src/publication-channels.mjs';
 import {
   buildChannelPublicationQueue,
@@ -9,24 +7,24 @@ import {
   selectReviewApprovalCandidates,
 } from '../../../services/product-video-agent/src/publication-queue.mjs';
 import { reconcilePokeQuizzPreviewFallbackStorage } from '../../../services/product-video-agent/src/poke-quizz-preview-storage.mjs';
-import { resolvePokeQuizzSelectionStateScope } from '../../../services/product-video-agent/src/poke-quizz-selection-state.mjs';
-import {
-  computePokeQuizzQueueStatus,
-  ensurePreferredPokeQuizzCatalogJsonPath,
-  POKE_QUIZZ_REVIEW_TARGET_COUNT,
-  syncPokeQuizzQueueStatusMessage,
-} from '../../../services/product-video-agent/src/poke-quizz-queue-status.mjs';
+import { POKE_QUIZZ_REVIEW_TARGET_COUNT } from '../../../services/product-video-agent/src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../../services/product-video-agent/src/publication-store.mjs';
-import { resolveVideoTemplateRuntime } from '../../../services/product-video-agent/src/video-template-context.mjs';
 import { executeProductVideoAction } from '../../../services/task-router/src/product-video-executor.mjs';
 import { loadRuntimeConfig, projectRoot } from '../../../services/lib/runtime-config.mjs';
 import { discoverNightShiftChannelRuntimes } from './pokemon-maintenance-runtime.mjs';
 import {
+  replenishReviewBacklogForRuntime,
+} from './pokemon-maintenance-review-backlog.mjs';
+import {
   collectChildError,
-  parseLastJsonObject,
   parseTrailingJsonArray,
   runProjectNodeScript,
 } from './process-utils.mjs';
+
+export {
+  countActiveTemplateQueueItems,
+  selectNextReviewBacklogRuntime,
+} from './pokemon-maintenance-review-backlog.mjs';
 
 export const DEFAULT_PUBLICATION_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 export const REVIEW_READY_TARGET_COUNT = POKE_QUIZZ_REVIEW_TARGET_COUNT;
@@ -95,6 +93,77 @@ function summarizeVideoQueueMaintenance(profiles, runs) {
   }
 
   return summary;
+}
+
+function normalizeNightShiftChannelKey(value = '') {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeNightShiftConfigBasename(channelConfigPath = '') {
+  const normalizedPath = String(channelConfigPath || '').replaceAll('\\', '/');
+  const filename = normalizedPath.split('/').at(-1) || '';
+  return filename.replace(/\.json$/i, '').trim().toLowerCase();
+}
+
+function scoreNightShiftPrimaryRuntime(runtime = {}) {
+  const basename = normalizeNightShiftConfigBasename(runtime.channelConfigPath);
+  const channelKey = normalizeNightShiftChannelKey(runtime.channelSelector);
+  let score = 0;
+  if (basename && channelKey && basename === channelKey) {
+    score += 1000;
+  }
+  if ((runtime?.nightShift?.reviewBacklogMixChannelConfigPaths || []).length > 0) {
+    score += 100;
+  }
+  if (runtime?.nightShift?.publicationAutomationEnabled) {
+    score += 10;
+  }
+  if (runtime?.nightShift?.reviewBacklogEnabled) {
+    score += 5;
+  }
+  if (runtime?.nightShift?.reviewRefreshEnabled) {
+    score += 3;
+  }
+  return score;
+}
+
+export function selectPrimaryNightShiftRuntimes(runtimes = []) {
+  const selectedByChannel = new Map();
+
+  for (const runtime of Array.isArray(runtimes) ? runtimes : []) {
+    const channelKey = normalizeNightShiftChannelKey(runtime?.channelSelector);
+    if (!channelKey) {
+      continue;
+    }
+
+    const current = selectedByChannel.get(channelKey) || null;
+    if (!current) {
+      selectedByChannel.set(channelKey, runtime);
+      continue;
+    }
+
+    const candidateScore = scoreNightShiftPrimaryRuntime(runtime);
+    const currentScore = scoreNightShiftPrimaryRuntime(current);
+    if (candidateScore > currentScore) {
+      selectedByChannel.set(channelKey, runtime);
+      continue;
+    }
+    if (candidateScore < currentScore) {
+      continue;
+    }
+
+    const candidatePath = String(runtime?.channelConfigPath || '');
+    const currentPath = String(current?.channelConfigPath || '');
+    if (candidatePath.localeCompare(currentPath) > 0) {
+      selectedByChannel.set(channelKey, runtime);
+    }
+  }
+
+  return Array.from(selectedByChannel.values()).sort((left, right) => (
+    `${left.channelSelector}:${left.channelConfigPath}`.localeCompare(
+      `${right.channelSelector}:${right.channelConfigPath}`,
+    )
+  ));
 }
 
 function buildNightShiftAutoPublishTask(publication, channelSelector, maxScheduledDays, asOf) {
@@ -255,7 +324,7 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
   const profiles = await loadProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
   const activeProfiles = profiles.filter((profile) => profile.status === 'active');
-  const channelRuntimes = await discoverRuntimes();
+  const channelRuntimes = selectPrimaryNightShiftRuntimes(await discoverRuntimes());
   const runtimeByChannelSelector = new Map(
     channelRuntimes.map((runtime) => [runtime.channelSelector, runtime]),
   );
@@ -333,10 +402,64 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
   return summarizeVideoQueueMaintenance(activeProfiles, results);
 }
 
-function summarizeReviewBacklogRuns(runs = []) {
+function aggregateReviewBacklogRunsByChannel(runs = []) {
+  const groupedRuns = new Map();
+
+  for (const run of Array.isArray(runs) ? runs : []) {
+    const channelKey = normalizeNightShiftChannelKey(run?.channel)
+      || `__missing_channel__:${groupedRuns.size}`;
+    const existing = groupedRuns.get(channelKey);
+    if (!existing) {
+      groupedRuns.set(channelKey, {
+        status: String(run?.status || 'skipped'),
+        channel: run?.channel || '',
+        channelConfigPath: run?.channelConfigPath || '',
+        genreLabel: run?.genreLabel || '',
+        generated: Number(run?.generated || 0),
+        generatedItems: Array.isArray(run?.generatedItems) ? [...run.generatedItems] : [],
+        initialReviewReadyCount: Number(run?.initialReviewReadyCount || 0),
+        finalReviewReadyCount: Number(run?.finalReviewReadyCount || 0),
+        targetReviewReadyCount: Number(run?.targetReviewReadyCount || 0),
+        errors: Array.isArray(run?.errors) ? [...run.errors] : [],
+        runCount: 1,
+        failedRunCount: String(run?.status || '') === 'failed' ? 1 : 0,
+      });
+      continue;
+    }
+
+    existing.generated += Number(run?.generated || 0);
+    if (Array.isArray(run?.generatedItems)) {
+      existing.generatedItems.push(...run.generatedItems);
+    }
+    existing.finalReviewReadyCount = Number(run?.finalReviewReadyCount || existing.finalReviewReadyCount || 0);
+    existing.targetReviewReadyCount = Math.max(
+      Number(existing.targetReviewReadyCount || 0),
+      Number(run?.targetReviewReadyCount || 0),
+    );
+    if (Array.isArray(run?.errors)) {
+      existing.errors.push(...run.errors);
+    }
+    existing.runCount += 1;
+    if (String(run?.status || '') === 'failed') {
+      existing.failedRunCount += 1;
+    }
+  }
+
+  return Array.from(groupedRuns.values()).map((run) => ({
+    ...run,
+    status: run.failedRunCount === run.runCount && run.runCount > 0
+      ? 'failed'
+      : (run.generated > 0
+        ? 'completed'
+        : (run.finalReviewReadyCount < run.targetReviewReadyCount ? 'failed' : 'skipped')),
+  }));
+}
+
+export function summarizeReviewBacklogRuns(runs = []) {
+  const groupedRuns = aggregateReviewBacklogRunsByChannel(runs);
   const summary = {
     status: 'skipped',
-    configuredChannels: runs.length,
+    configuredChannels: groupedRuns.length,
     generated: 0,
     generatedItems: [],
     initialReviewReadyCount: 0,
@@ -344,10 +467,10 @@ function summarizeReviewBacklogRuns(runs = []) {
     targetReviewReadyCount: 0,
     failedChannels: 0,
     errors: [],
-    channels: runs,
+    channels: groupedRuns,
   };
 
-  for (const run of runs) {
+  for (const run of groupedRuns) {
     summary.generated += Number(run.generated || 0);
     summary.initialReviewReadyCount += Number(run.initialReviewReadyCount || 0);
     summary.finalReviewReadyCount += Number(run.finalReviewReadyCount || 0);
@@ -372,209 +495,103 @@ function summarizeReviewBacklogRuns(runs = []) {
   return summary;
 }
 
-function normalizePublicationWorkflowState(publication = {}) {
-  return String(
-    publication?.metadata?.workflow_state
-      || publication?.status
-      || '',
-  ).trim().toLowerCase();
-}
+function aggregateReviewRefreshRunsByChannel(runs = []) {
+  const groupedRuns = new Map();
 
-export function countActiveTemplateQueueItems(publications = [], templateId = '') {
-  const normalizedTemplateScope = resolvePokeQuizzSelectionStateScope(templateId, '');
-  if (!normalizedTemplateScope) {
-    return 0;
+  for (const run of Array.isArray(runs) ? runs : []) {
+    const channelKey = normalizeNightShiftChannelKey(run?.channel)
+      || `__missing_channel__:${groupedRuns.size}`;
+    const existing = groupedRuns.get(channelKey);
+    if (!existing) {
+      groupedRuns.set(channelKey, {
+        status: String(run?.status || 'completed'),
+        exitCode: run?.exitCode ?? 0,
+        error: run?.error || '',
+        channel: run?.channel || '',
+        channelConfigPath: run?.channelConfigPath || '',
+        inspected: Number(run?.inspected || 0),
+        refreshed: Number(run?.refreshed || 0),
+        actionable: Number(run?.actionable || 0),
+        retried: Number(run?.retried || 0),
+        failed: Number(run?.failed || 0),
+        failures: Array.isArray(run?.failures) ? [...run.failures] : [],
+        runCount: 1,
+        failedRunCount: String(run?.status || '') === 'failed' ? 1 : 0,
+      });
+      continue;
+    }
+
+    existing.inspected = Math.max(existing.inspected, Number(run?.inspected || 0));
+    existing.refreshed = Math.max(existing.refreshed, Number(run?.refreshed || 0));
+    existing.actionable = Math.max(existing.actionable, Number(run?.actionable || 0));
+    existing.retried = Math.max(existing.retried, Number(run?.retried || 0));
+    existing.failed = Math.max(existing.failed, Number(run?.failed || 0));
+    if (existing.status !== 'completed' && String(run?.status || '') === 'completed') {
+      existing.status = 'completed';
+      existing.error = '';
+      existing.exitCode = run?.exitCode ?? existing.exitCode;
+    } else if (!existing.error && run?.error) {
+      existing.error = run.error;
+    }
+    if (Array.isArray(run?.failures)) {
+      existing.failures.push(...run.failures);
+    }
+    existing.runCount += 1;
+    if (String(run?.status || '') === 'failed') {
+      existing.failedRunCount += 1;
+    }
   }
-  return publications.filter((publication) => (
-    resolvePokeQuizzSelectionStateScope(publication?.metadata?.template_id || '', '') === normalizedTemplateScope
-    && ['preview_upload_pending', 'preview_uploaded', 'preview_approved', 'scheduled'].includes(
-      normalizePublicationWorkflowState(publication),
-    )
-  )).length;
-}
 
-async function resolveReviewBacklogGenerationRuntimes(templateRuntime) {
-  const configuredPaths = templateRuntime?.nightShift?.reviewBacklogMixChannelConfigPaths || [];
-  const uniquePaths = new Set([
-    templateRuntime.channelConfigPath,
-    ...configuredPaths,
-  ]);
-  const runtimes = [];
-
-  for (const channelConfigPath of uniquePaths) {
-    const runtime = await resolveVideoTemplateRuntime({
-      projectRoot,
-      channelConfigPath,
-      channelSelector: templateRuntime.channelSelector,
+  return Array.from(groupedRuns.values()).map((run) => {
+    const seenFailures = new Set();
+    const failures = run.failures.filter((failure) => {
+      const key = JSON.stringify([
+        failure?.publicationId || '',
+        failure?.messageId || '',
+        failure?.reason || '',
+      ]);
+      if (seenFailures.has(key)) {
+        return false;
+      }
+      seenFailures.add(key);
+      return true;
     });
-    if (runtime.channelSelector !== templateRuntime.channelSelector) {
-      continue;
-    }
-    runtimes.push(runtime);
-  }
-
-  return runtimes;
-}
-
-export function selectNextReviewBacklogRuntime(generationRuntimes, publications = [], random = Math.random) {
-  const candidateRuntimes = [];
-  let selectedCount = Number.POSITIVE_INFINITY;
-
-  for (const runtime of generationRuntimes) {
-    const activeCount = countActiveTemplateQueueItems(publications, runtime.templateId);
-    if (activeCount < selectedCount) {
-      selectedCount = activeCount;
-      candidateRuntimes.length = 0;
-      candidateRuntimes.push(runtime);
-      continue;
-    }
-    if (activeCount === selectedCount) {
-      candidateRuntimes.push(runtime);
-    }
-  }
-
-  if (candidateRuntimes.length === 0) {
-    return generationRuntimes[0] || null;
-  }
-
-  const rawRandom = Number(random?.());
-  const normalizedRandom = Math.min(Math.max(Number.isFinite(rawRandom) ? rawRandom : 0, 0), 0.999999999);
-  const selectedIndex = Math.floor(normalizedRandom * candidateRuntimes.length);
-  return candidateRuntimes[selectedIndex] || candidateRuntimes[0];
-}
-
-async function replenishReviewBacklogForRuntime(config, templateRuntime, asOf) {
-  const profiles = await loadPublicationChannelProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
-  const channelProfile = findPublicationChannelProfile(profiles, templateRuntime.channelSelector);
-  const reviewThreadId = resolvePublicationReviewThreadId(config, channelProfile);
-  const targetReviewReadyCount = templateRuntime.nightShift.targetReviewReadyCount;
-
-  if (!reviewThreadId) {
     return {
-      status: 'failed',
-      channel: templateRuntime.channelSelector,
-      channelConfigPath: templateRuntime.channelConfigPath,
-      genreLabel: templateRuntime.genreLabel,
-      generated: 0,
-      generatedItems: [],
-      initialReviewReadyCount: 0,
-      finalReviewReadyCount: 0,
-      targetReviewReadyCount,
-      errors: [`Missing review thread id for ${channelProfile.account_key}.`],
+      ...run,
+      status: run.failedRunCount === run.runCount && run.runCount > 0 ? 'failed' : 'completed',
+      failed: failures.length,
+      failures,
     };
-  }
-
-  const catalogJsonPath = await ensurePreferredPokeQuizzCatalogJsonPath();
-  if (!catalogJsonPath) {
-    return {
-      status: 'failed',
-      channel: templateRuntime.channelSelector,
-      channelConfigPath: templateRuntime.channelConfigPath,
-      genreLabel: templateRuntime.genreLabel,
-      generated: 0,
-      generatedItems: [],
-      initialReviewReadyCount: 0,
-      finalReviewReadyCount: 0,
-      targetReviewReadyCount,
-      errors: ['No localized Poke Quizz catalog JSON could be found.'],
-    };
-  }
-
-  const store = createPublicationStore(config);
-  const generationRuntimes = await resolveReviewBacklogGenerationRuntimes(templateRuntime);
-  const fetchQueueStatus = async () => {
-    const publications = await store.fetchPublicationsByChannel({
-      platform: channelProfile.platform,
-      accountKey: channelProfile.account_key,
-    });
-    return computePokeQuizzQueueStatus(publications, channelProfile, asOf);
-  };
-  const fetchChannelPublications = async () => (
-    store.fetchPublicationsByChannel({
-      platform: channelProfile.platform,
-      accountKey: channelProfile.account_key,
-    })
-  );
-
-  const initialQueueStatus = await fetchQueueStatus();
-  const generated = [];
-  const errors = [];
-  let reviewReadyCount = initialQueueStatus.reviewReadyCount;
-  let consecutiveFailures = 0;
-
-  while (reviewReadyCount < targetReviewReadyCount && consecutiveFailures < 3) {
-    const currentPublications = await fetchChannelPublications();
-    const generationRuntime = selectNextReviewBacklogRuntime(
-      generationRuntimes,
-      currentPublications,
-    );
-    const child = runProjectNodeScript(
-      'services/product-video-agent/scripts/generate-poke-quizz-review.mjs',
-      [
-        '--thread-id',
-        reviewThreadId,
-        '--catalog-json',
-        catalogJsonPath,
-        '--channel-config',
-        generationRuntime?.channelConfigPath || templateRuntime.channelConfigPath,
-        '--channel',
-        templateRuntime.channelSelector,
-        '--as-of',
-        new Date().toISOString(),
-      ],
-      {
-        timeoutMs: 40 * 60 * 1000,
-      },
-    );
-    const payload = parseLastJsonObject(child.stdout);
-    if (child.error || child.status !== 0 || !payload?.publication_id) {
-      consecutiveFailures += 1;
-      errors.push(
-        child.error?.message
-          || String(child.stderr || '').trim()
-          || 'Poke Quizz review replenishment generation failed.',
-      );
-      continue;
-    }
-
-    consecutiveFailures = 0;
-    generated.push({
-      publicationId: payload.publication_id,
-      previewUrl: payload.preview_url || '',
-      messageId: payload.message_id || '',
-      templateId: generationRuntime?.templateId || templateRuntime.templateId,
-      channelConfigPath: generationRuntime?.channelConfigPath || templateRuntime.channelConfigPath,
-      genreLabel: generationRuntime?.genreLabel || templateRuntime.genreLabel,
-    });
-    reviewReadyCount = (await fetchQueueStatus()).reviewReadyCount;
-  }
-
-  const finalQueueStatus = await fetchQueueStatus();
-  await syncPokeQuizzQueueStatusMessage({
-    runtimeConfig: config,
-    store,
-    channelProfile,
-    channelSelector: templateRuntime.channelSelector,
-    asOf,
   });
+}
 
+export function summarizeReviewRefreshRuns(runs = []) {
+  const groupedRuns = aggregateReviewRefreshRunsByChannel(runs);
   return {
-    status: errors.length > 0 && generated.length === 0 ? 'failed' : generated.length > 0 ? 'completed' : 'skipped',
-    channel: templateRuntime.channelSelector,
-    channelConfigPath: templateRuntime.channelConfigPath,
-    genreLabel: templateRuntime.genreLabel,
-    generated: generated.length,
-    generatedItems: generated,
-    initialReviewReadyCount: initialQueueStatus.reviewReadyCount,
-    finalReviewReadyCount: finalQueueStatus.reviewReadyCount,
-    targetReviewReadyCount,
-    errors,
+    status: groupedRuns.every((run) => run.status === 'failed') ? 'failed' : 'completed',
+    configuredChannels: groupedRuns.length,
+    inspected: groupedRuns.reduce((sum, run) => sum + Number(run.inspected || 0), 0),
+    refreshed: groupedRuns.reduce((sum, run) => sum + Number(run.refreshed || 0), 0),
+    actionable: groupedRuns.reduce((sum, run) => sum + Number(run.actionable || 0), 0),
+    retried: groupedRuns.reduce((sum, run) => sum + Number(run.retried || 0), 0),
+    failed: groupedRuns.reduce((sum, run) => sum + Number(run.failed || 0), 0),
+    failures: groupedRuns.flatMap((run) => (
+      Array.isArray(run.failures)
+        ? run.failures.map((failure) => ({
+          channel: run.channel,
+          ...failure,
+        }))
+        : []
+    )),
+    channels: groupedRuns,
   };
 }
 
 export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().toISOString()) {
-  const channelRuntimes = (await discoverNightShiftChannelRuntimes())
-    .filter((runtime) => runtime.nightShift.reviewBacklogEnabled);
+  const channelRuntimes = selectPrimaryNightShiftRuntimes(
+    (await discoverNightShiftChannelRuntimes())
+      .filter((runtime) => runtime.nightShift.reviewBacklogEnabled),
+  );
   if (channelRuntimes.length === 0) {
     return {
       status: 'skipped',
@@ -598,8 +615,10 @@ export async function replenishPokeQuizzReviewBacklog(config, asOf = new Date().
 }
 
 export async function refreshPokeQuizzReviewMessages() {
-  const channelRuntimes = (await discoverNightShiftChannelRuntimes())
-    .filter((runtime) => runtime.nightShift.reviewRefreshEnabled);
+  const channelRuntimes = selectPrimaryNightShiftRuntimes(
+    (await discoverNightShiftChannelRuntimes())
+      .filter((runtime) => runtime.nightShift.reviewRefreshEnabled),
+  );
   if (channelRuntimes.length === 0) {
     return {
       status: 'skipped',
@@ -647,22 +666,5 @@ export async function refreshPokeQuizzReviewMessages() {
     });
   }
 
-  return {
-    status: runs.every((run) => run.status === 'failed') ? 'failed' : 'completed',
-    configuredChannels: runs.length,
-    inspected: runs.reduce((sum, run) => sum + Number(run.inspected || 0), 0),
-    refreshed: runs.reduce((sum, run) => sum + Number(run.refreshed || 0), 0),
-    actionable: runs.reduce((sum, run) => sum + Number(run.actionable || 0), 0),
-    retried: runs.reduce((sum, run) => sum + Number(run.retried || 0), 0),
-    failed: runs.reduce((sum, run) => sum + Number(run.failed || 0), 0),
-    failures: runs.flatMap((run) => (
-      Array.isArray(run.failures)
-        ? run.failures.map((failure) => ({
-          channel: run.channel,
-          ...failure,
-        }))
-        : []
-    )),
-    channels: runs,
-  };
+  return summarizeReviewRefreshRuns(runs);
 }

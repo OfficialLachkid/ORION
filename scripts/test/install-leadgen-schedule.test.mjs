@@ -17,9 +17,9 @@ test('buildLeadgenPlistContent OMITS --times when times=1 (preserves existing si
   assert.doesNotMatch(plist, /<string>--times<\/string>/u);
 });
 
-test('buildLeadgenPlistContent OMITS --times when times is unspecified (defaults to 1)', () => {
+test('buildLeadgenPlistContent EMITS --times when times is unspecified (defaults to 2)', () => {
   const plist = buildLeadgenPlistContent(baseArgs);
-  assert.doesNotMatch(plist, /<string>--times<\/string>/u);
+  assert.match(plist, /<string>--times<\/string>\s*<string>2<\/string>/u);
 });
 
 test('buildLeadgenPlistContent EMITS --times when times>1 so leadgen chains sequential sweeps', () => {

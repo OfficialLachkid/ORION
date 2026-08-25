@@ -10,10 +10,7 @@ import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.m
 
 const DEFAULT_HOUR = 7;
 const DEFAULT_MINUTE = 0;
-// Default 1 = current behavior preserved. Operator can pass --times 2 to
-// chain a second sweep back-to-back inside the 07:00-09:00 quiet-machine
-// window (before their own workday sessions start using Ollama).
-const DEFAULT_TIMES = 1;
+const DEFAULT_TIMES = 2;
 const MAX_TIMES = 10;
 const PLIST_LABEL = 'io.vbj.orion.leadgen-schedule';
 
@@ -50,15 +47,25 @@ function ensureDirectory(directoryPath) {
   }
 }
 
-export function buildLeadgenPlistContent({ nodePath, scriptPath, workingDirectory, stdoutPath, stderrPath, hour, minute, times = 1 }) {
-  // Only emit --times when it differs from the current default of 1. Keeps
-  // the plist minimal for existing single-sweep installs and makes it
-  // obvious in the plist which installs are running chained sweeps.
+export function buildLeadgenPlistContent({
+  nodePath,
+  scriptPath,
+  workingDirectory,
+  stdoutPath,
+  stderrPath,
+  hour,
+  minute,
+  times = DEFAULT_TIMES,
+}) {
+  const normalizedTimes = Number.isInteger(times) && times > 0 ? times : DEFAULT_TIMES;
   const argLines = [
     `    <string>${nodePath}</string>`,
     `    <string>${scriptPath}</string>`,
-    ...(times > 1 ? [`    <string>--times</string>`, `    <string>${times}</string>`] : []),
+    ...(normalizedTimes > 1
+      ? [`    <string>--times</string>`, `    <string>${normalizedTimes}</string>`]
+      : []),
   ].join('\n');
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -100,7 +107,7 @@ function loadLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--times 1] [--no-load]',
+      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--times 2] [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.leadgen-schedule.plist and loads it by default.',
       'Each run rotates to the next niche in scripts/run-scheduled-leadgen.mjs and searches',
@@ -109,8 +116,7 @@ function main() {
       '',
       '--times N chains N sequential sweeps in one launchd fire. Sweep 2 re-reads',
       'rotation-state.json so it lands on the NEXT set of cities (not the same ones).',
-      'Use 2 to double leadgen throughput inside the 07:00-09:00 quiet-machine window',
-      'before workday sessions start using Ollama.',
+      'Default is 2 to use the quiet-machine morning window more efficiently.',
     ].join('\n'));
     return;
   }
@@ -154,7 +160,7 @@ function main() {
 
   process.stdout.write([
     `Installed ${basename(plistPath)}.`,
-    `Schedule: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} local time, ${times === 1 ? 'once' : `${times} sweeps back-to-back`} per day.`,
+    `Schedule: ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} local time, ${times === 1 ? 'one sweep' : `${times} sweeps back-to-back`} per day.`,
     `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
     `Plist: ${plistPath}`,
     `Stdout: ${stdoutPath}`,

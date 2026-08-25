@@ -166,6 +166,10 @@ test('resolvePokeQuizzSelectionStatePath scopes runtime state by template', () =
     'data/runtime/product-video-agent/poke-quizz/selection-state-memory.json',
   );
   assert.equal(
+    resolvePokeQuizzSelectionStatePath({ template_id: 'pokemon.know-your-shiny.v1' }),
+    'data/runtime/product-video-agent/poke-quizz/selection-state-know-your-shiny.json',
+  );
+  assert.equal(
     resolvePokeQuizzSelectionStatePath({ template_id: 'pokemon.type-speed-quiz.v1' }),
     'data/runtime/product-video-agent/poke-quizz/selection-state-type-quiz.json',
   );

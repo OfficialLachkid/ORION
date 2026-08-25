@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LOCATION_ROTATION } from '../run-scheduled-leadgen.mjs';
+import {
+  DEFAULT_SCHEDULED_SWEEP_ROUNDS,
+  LOCATION_ROTATION,
+  resolveScheduledSweepRounds,
+} from '../run-scheduled-leadgen.mjs';
 
 test('LOCATION_ROTATION preserves the original 22 major cities at positions 0-21', () => {
   // Positions 0-21 must NOT be reordered. Operator explicitly asked to
@@ -81,4 +85,16 @@ test('LOCATION_ROTATION originals are not accidentally duplicated in the expansi
     dupesInPool, [],
     `Originals accidentally re-listed in the expansion pool: ${JSON.stringify(dupesInPool)}`,
   );
+});
+
+test('scheduled leadgen defaults to two sweep rounds per daily run', () => {
+  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 2);
+  assert.equal(resolveScheduledSweepRounds(undefined), 2);
+  assert.equal(resolveScheduledSweepRounds(''), 2);
+  assert.equal(resolveScheduledSweepRounds(0), 2);
+});
+
+test('scheduled leadgen rounds are clamped to a sane ceiling', () => {
+  assert.equal(resolveScheduledSweepRounds(3), 3);
+  assert.equal(resolveScheduledSweepRounds(999), 10);
 });

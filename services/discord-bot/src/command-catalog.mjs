@@ -41,7 +41,7 @@ export function buildCommandHelpDescriptor(config = {}) {
         name: 'How To Ask',
         value: [
           `- Send one request or multiple requests on separate lines in ${commandsChannel}.`,
-          '- Or use the slash picker with `/commands`, `/health`, `/status`, `/sync`, or `/generate-video`.',
+          '- Or use the slash picker with `/commands`, `/health`, `/status`, `/sync`, `/generate-video`, `/leadgen`, or `/leadgen-sweep`.',
           `- Current parser is still keyword-based, so if something fails, use one of the example phrasings below.`,
           `- Parsed tasks appear in ${parsedTasksChannel} and queue state appears in ${taskQueueChannel}.`,
         ].join('\n'),
@@ -92,6 +92,17 @@ export function buildCommandHelpDescriptor(config = {}) {
         inline: false,
       },
       {
+        name: 'Leadgen',
+        value: [
+          '`find leads for electricians in Rotterdam max: 8`',
+          '`run leadgen sweep rounds: 1`',
+          '`/leadgen query:electricians in Rotterdam max:8`',
+          '`/leadgen-sweep rounds:2`',
+          '- Sweep rounds run all configured niches sequentially and rotate each niche location forward on success.',
+        ].join('\n'),
+        inline: false,
+      },
+      {
         name: 'Developer Agent',
         value: [
           '`create issue for developer: fix the queue result card ordering bug`',
@@ -106,11 +117,13 @@ export function buildCommandHelpDescriptor(config = {}) {
         name: 'Manual Video Generation',
         value: [
           '`generate video template: find-the-shiny channel: trivamon-youtube`',
+          '`generate video template: know-your-shiny channel: poke-quizz-youtube`',
           '`generate video template: memory channel: poke-quizz-youtube`',
           '`generate video template: dual-type-reveal channel: poke-quizz-youtube`',
           '`generate video template: type-speed-quiz channel: poke-guess-youtube`',
           '`generate video template: dual-type-reveal channel: dexguess-youtube`',
           '`/generate-video template:Find the Shiny channel:TrivaMon`',
+          '`/generate-video template:Know Your Shiny channel:Poke Quizz`',
           '`/generate-video template:Memory channel:Poke Quizz`',
           '`/generate-video template:Type Speed Quiz channel:Poke Guess`',
           '`/generate-video template:Type Combination channel:DexGuess`',

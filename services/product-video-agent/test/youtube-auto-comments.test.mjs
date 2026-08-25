@@ -58,25 +58,6 @@ function createChannelProfile(overrides = {}) {
       oauth_client_secret_path: 'config/youtube/client-secret.json',
       oauth_refresh_token_env: 'YOUTUBE_POKE_QUIZZ_REFRESH_TOKEN',
     },
-    metadata: {
-      youtube_auto_comment: {
-        enabled: true,
-        max_attempts: 3,
-        recent_history_limit: 2,
-        default_variants: [
-          { id: 'score', text: 'How many did you get right?' },
-          { id: 'reveal', text: 'Did you get it before the reveal?' },
-        ],
-        template_variants: {
-          'pokemon.type-quiz.v1': [
-            { id: 'typing', text: 'Did you guess the typing before the reveal?' },
-          ],
-          'pokemon.find-the-shiny.v1': [
-            { id: 'shiny', text: 'Did you spot the shiny in time?' },
-          ],
-        },
-      },
-    },
     ...overrides,
     metadata: {
       youtube_auto_comment: {

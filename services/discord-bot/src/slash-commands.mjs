@@ -1,5 +1,8 @@
 import { serializeDraftEmailCommand } from '../../task-router/src/email-command-parser.mjs';
-import { serializeLeadgenCommand } from '../../task-router/src/leadgen-command-parser.mjs';
+import {
+  serializeLeadgenCommand,
+  serializeLeadgenSweepCommand,
+} from '../../task-router/src/leadgen-command-parser.mjs';
 import {
   PRODUCT_VIDEO_CHANNEL_OPTIONS,
   PRODUCT_VIDEO_TEMPLATE_OPTIONS,
@@ -20,6 +23,7 @@ const SYNC_COMMAND_NAMES = new Set(['sync']);
 const OPS_COMMAND_NAMES = new Set(['ops']);
 const EMAIL_DRAFT_COMMAND_NAMES = new Set(['email-draft']);
 const LEADGEN_COMMAND_NAMES = new Set(['leadgen']);
+const LEADGEN_SWEEP_COMMAND_NAMES = new Set(['leadgen-sweep']);
 const DEVELOPER_TASK_COMMAND_NAMES = new Set(['create-developer-issue']);
 const PRODUCT_VIDEO_COMMAND_NAMES = new Set(['generate-video']);
 const VIDEO_ANALYTICS_COMMAND_NAMES = new Set(['analytics']);
@@ -294,6 +298,19 @@ export function buildGuildSlashCommands() {
       ],
     },
     {
+      name: 'leadgen-sweep',
+      description: 'Run the rotating leadgen sweep across all configured niches.',
+      type: 1,
+      options: [
+        {
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_INTEGER,
+          name: 'rounds',
+          description: 'How many full all-niche sweep rounds to run.',
+          required: true,
+        },
+      ],
+    },
+    {
       name: 'create-developer-issue',
       description: 'Create an approval-gated issue for the developer agent.',
       type: 1,
@@ -344,6 +361,7 @@ export function isSupportedSlashCommandInteraction(interaction) {
       || OPS_COMMAND_NAMES.has(commandName)
       || EMAIL_DRAFT_COMMAND_NAMES.has(commandName)
       || LEADGEN_COMMAND_NAMES.has(commandName)
+      || LEADGEN_SWEEP_COMMAND_NAMES.has(commandName)
       || DEVELOPER_TASK_COMMAND_NAMES.has(commandName)
       || PRODUCT_VIDEO_COMMAND_NAMES.has(commandName)
       || VIDEO_ANALYTICS_COMMAND_NAMES.has(commandName)
@@ -429,6 +447,12 @@ function resolveSlashCommandContent(interaction) {
     return serializeLeadgenCommand({
       query: getSlashCommandOptionValue(interaction, 'query'),
       max: getSlashCommandOptionValue(interaction, 'max'),
+    });
+  }
+
+  if (LEADGEN_SWEEP_COMMAND_NAMES.has(commandName)) {
+    return serializeLeadgenSweepCommand({
+      rounds: getSlashCommandOptionValue(interaction, 'rounds'),
     });
   }
 

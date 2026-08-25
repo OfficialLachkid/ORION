@@ -7,15 +7,5 @@
   "template_id": "pokemon.memory.v1",
   "review": {
     "genre_label": "Memory"
-  },
-  "night_shift": {
-    "review_backlog": {
-      "enabled": true,
-      "target_review_ready_count": 10
-    },
-    "review_refresh": {
-      "enabled": true,
-      "pending_only": true
-    }
   }
 }

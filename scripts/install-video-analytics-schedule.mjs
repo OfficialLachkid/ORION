@@ -119,7 +119,7 @@ function loadLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-video-analytics-schedule.mjs [--hours 1,5,9,13,17,21 --minute 15] [--no-discord] [--no-load]',
+      'Usage: node scripts/install-video-analytics-schedule.mjs [--hours 1,5,9,13,17,21 --minute 0] [--no-discord] [--no-load]',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.video-analytics-scheduler.plist and loads it by default.',
       'The scheduled worker captures YouTube analytics snapshots and posts the weekly shared digest plus per-channel thread drilldowns when due.',
@@ -133,7 +133,7 @@ function main() {
 
   const config = loadRuntimeConfig();
   const scheduleHours = getHourListArgValue('--hours', [1, 5, 9, 13, 17, 21]);
-  const minute = getMinuteArgValue('--minute', 15);
+  const minute = getMinuteArgValue('--minute', 0);
   const shouldLoad = !hasFlag('--no-load');
   const postDiscord = !hasFlag('--no-discord');
 

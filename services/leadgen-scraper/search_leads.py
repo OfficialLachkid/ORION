@@ -25,6 +25,11 @@ from scrapegraphai.utils.research_web import search_on_web
 SEARCH_RETRY_DELAYS_SECONDS = [15, 30, 60, 120, 120, 120]
 
 
+def is_no_results_error(exc) -> bool:
+    message = str(exc).strip().lower()
+    return "duckduckgo search failed" in message and "no results found" in message
+
+
 def search_on_web_with_retry(**kwargs):
     last_error = None
     for attempt, delay in enumerate([0] + SEARCH_RETRY_DELAYS_SECONDS, start=1):
@@ -37,6 +42,11 @@ def search_on_web_with_retry(**kwargs):
         try:
             return search_on_web(**kwargs)
         except Exception as exc:  # network blip, rate limit, etc.
+            # "No results found" is a valid empty search result, not a transient
+            # outage worth retrying for minutes. Return an empty batch once and
+            # let the caller advance to the next city on the next rotation.
+            if is_no_results_error(exc):
+                return []
             last_error = exc
     raise last_error
 

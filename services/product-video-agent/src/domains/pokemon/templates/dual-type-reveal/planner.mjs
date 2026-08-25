@@ -1,8 +1,8 @@
 import { access } from 'node:fs/promises';
 import { createTypePairKey, DISALLOWED_TYPE_PAIR_KEYS, normalizeTypePair } from '../../../../pokemon-type-pairs.mjs';
 import {
-  buildPokeQuizzPreviewDirectory,
   buildPokeQuizzMirroredSpritePath,
+  buildPokeQuizzPreviewDirectory,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
 import {
@@ -56,34 +56,6 @@ const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
 const mirroredSpriteAvailabilityCache = new Map();
 
-async function canAccessPath(filePath) {
-  const normalizedPath = String(filePath || '').trim();
-  if (!normalizedPath) {
-    return false;
-  }
-  if (!mirroredSpriteAvailabilityCache.has(normalizedPath)) {
-    mirroredSpriteAvailabilityCache.set(
-      normalizedPath,
-      access(normalizedPath)
-        .then(() => true)
-        .catch(() => false),
-    );
-  }
-  return mirroredSpriteAvailabilityCache.get(normalizedPath);
-}
-
-async function resolveDualTypeRevealSpritePath(spritePath) {
-  const normalizedPath = String(spritePath || '').trim();
-  if (!normalizedPath) {
-    return normalizedPath;
-  }
-  const mirrorPath = buildPokeQuizzMirroredSpritePath(normalizedPath);
-  if (!mirrorPath) {
-    return normalizedPath;
-  }
-  return (await canAccessPath(mirrorPath)) ? mirrorPath : normalizedPath;
-}
-
 function isThemedBackgroundPath(backgroundPath) {
   return isBeachBackgroundPath(backgroundPath)
     || isCaveBackgroundPath(backgroundPath)
@@ -114,6 +86,34 @@ function resolveThemedBackgroundPriority(normalizedTypes = []) {
 
 function normalizeAssetPath(assetPath) {
   return String(assetPath || '').trim().replaceAll('\\', '/').toLowerCase();
+}
+
+async function canAccessPath(filePath) {
+  const normalizedPath = String(filePath || '').trim();
+  if (!normalizedPath) {
+    return false;
+  }
+  if (!mirroredSpriteAvailabilityCache.has(normalizedPath)) {
+    mirroredSpriteAvailabilityCache.set(
+      normalizedPath,
+      access(normalizedPath)
+        .then(() => true)
+        .catch(() => false),
+    );
+  }
+  return mirroredSpriteAvailabilityCache.get(normalizedPath);
+}
+
+async function resolveDualTypeSpritePath(spritePath) {
+  const normalizedPath = String(spritePath || '').trim();
+  if (!normalizedPath) {
+    return normalizedPath;
+  }
+  const mirrorPath = buildPokeQuizzMirroredSpritePath(normalizedPath);
+  if (!mirrorPath) {
+    return normalizedPath;
+  }
+  return (await canAccessPath(mirrorPath)) ? mirrorPath : normalizedPath;
 }
 
 function ensurePositiveInteger(value, fallback) {
@@ -148,6 +148,54 @@ function sampleArray(values, count, random) {
     [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
   }
   return items.slice(0, count);
+}
+
+function normalizeQuestionTextOptions(primaryText, variants = []) {
+  const options = [];
+  const normalizedPrimaryText = String(primaryText || '').trim();
+  if (normalizedPrimaryText) {
+    options.push(normalizedPrimaryText);
+  }
+
+  for (const variant of Array.isArray(variants) ? variants : []) {
+    const normalizedVariant = String(variant || '').trim();
+    if (normalizedVariant && !options.includes(normalizedVariant)) {
+      options.push(normalizedVariant);
+    }
+  }
+
+  return options;
+}
+
+function pickSeededQuestionText(primaryText, variants, random) {
+  const options = normalizeQuestionTextOptions(primaryText, variants);
+  if (!options.length) {
+    return '';
+  }
+  return options[Math.floor(random() * options.length)];
+}
+
+function resolveQuestionContractTexts(template, random) {
+  const questionContract = template?.question_contract && typeof template.question_contract === 'object'
+    ? template.question_contract
+    : {};
+  return {
+    hook: pickSeededQuestionText(
+      questionContract.hook_text,
+      questionContract.hook_text_variants,
+      random,
+    ),
+    prompt: pickSeededQuestionText(
+      questionContract.type_prompt_text,
+      questionContract.type_prompt_text_variants,
+      random,
+    ),
+    reveal: pickSeededQuestionText(
+      questionContract.reveal_text,
+      questionContract.reveal_text_variants,
+      random,
+    ),
+  };
 }
 
 function readSubjectMetadataValue(subject, keys = []) {
@@ -487,18 +535,23 @@ function buildTypeIconRecord(type, sourceUrl, localPath, style, styleVariant) {
   };
 }
 
-function buildSubjectAssetRecord(subject, {
+async function buildSubjectAssetRecord(subject, {
   shinyRevealState = null,
   renderSpritePath = '',
+  renderShinySpritePath = '',
 } = {}) {
   const isShinyReveal = Boolean(
     shinyRevealState?.active
     && shinyRevealState.selected_pokedex_id
     && shinyRevealState.selected_pokedex_id === subject.id,
   );
-  const preferredNormalSpritePath = renderSpritePath || subject.sprite_path;
+  const preferredNormalSpritePath = renderSpritePath || await resolveDualTypeSpritePath(subject.sprite_path);
+  const preferredShinySpritePath = renderShinySpritePath
+    || (subject.shiny_sprite_path
+      ? await resolveDualTypeSpritePath(subject.shiny_sprite_path)
+      : preferredNormalSpritePath);
   const revealSpritePath = isShinyReveal
-    ? subject.shiny_sprite_path || preferredNormalSpritePath
+    ? preferredShinySpritePath || preferredNormalSpritePath
     : preferredNormalSpritePath;
   const revealSpriteSourceUrl = isShinyReveal
     ? subject.shiny_sprite_source_url || subject.sprite_source_url
@@ -510,6 +563,7 @@ function buildSubjectAssetRecord(subject, {
     sprite_path: subject.sprite_path,
     render_sprite_path: preferredNormalSpritePath,
     shiny_sprite_path: subject.shiny_sprite_path,
+    render_shiny_sprite_path: preferredShinySpritePath,
     silhouette_path: subject.silhouette_path,
     cry_path: subject.cry_path,
     sprite_source_url: subject.sprite_source_url,
@@ -734,12 +788,16 @@ export async function planPokemonTypeChallenge({
     selectedSubjects.map(async (subject) => (
       buildSubjectAssetRecord(subject, {
         shinyRevealState: shinyReveal,
-        renderSpritePath: await resolveDualTypeRevealSpritePath(subject.sprite_path),
+        renderSpritePath: await resolveDualTypeSpritePath(subject.sprite_path),
+        renderShinySpritePath: subject.shiny_sprite_path
+          ? await resolveDualTypeSpritePath(subject.shiny_sprite_path)
+          : '',
       })
     )),
   );
   const compatibleDisplayCount = Math.min(selectableSubjects.length, config.selectedSubjectsMax);
   const pokeballGridLayout = buildCenteredGridLayout(template, compatibleDisplayCount);
+  const questionContractTexts = resolveQuestionContractTexts(template, random);
 
   const firstSubjectTypeIcons = selectedPair.matches[0]?.metadata?.type_icon_source_urls || [];
   const selectedTypeIconSet = selectTypeIconSet(selectedPair.pair, inventory);
@@ -830,23 +888,23 @@ export async function planPokemonTypeChallenge({
       local_model_required: false,
       tts_provider: 'kokoro',
       lines: [
-        { role: 'hook', text: template.question_contract.hook_text },
-        { role: 'prompt', text: template.question_contract.type_prompt_text },
-        { role: 'reveal', text: template.question_contract.reveal_text },
+        { role: 'hook', text: questionContractTexts.hook },
+        { role: 'prompt', text: questionContractTexts.prompt },
+        { role: 'reveal', text: questionContractTexts.reveal },
       ],
     },
     timeline: [
       {
         phase: 'hook',
         duration_seconds: 1.2,
-        spoken_text: template.question_contract.hook_text,
-        on_screen_text: template.question_contract.hook_text,
+        spoken_text: questionContractTexts.hook,
+        on_screen_text: questionContractTexts.hook,
       },
       {
         phase: 'type_prompt',
         duration_seconds: 1.6,
-        spoken_text: template.question_contract.type_prompt_text,
-        on_screen_text: template.question_contract.type_prompt_text,
+        spoken_text: questionContractTexts.prompt,
+        on_screen_text: questionContractTexts.prompt,
       },
       {
         phase: 'countdown',
@@ -857,7 +915,7 @@ export async function planPokemonTypeChallenge({
       {
         phase: 'reveal',
         duration_seconds: 2.4,
-        spoken_text: template.question_contract.reveal_text,
+        spoken_text: questionContractTexts.reveal,
         reveal_mode: 'swap_silhouette_sprites_for_colored_sprites_and_play_sound',
       },
     ],

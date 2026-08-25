@@ -10,6 +10,10 @@ export const PRODUCT_VIDEO_TEMPLATE_OPTIONS = Object.freeze([
     value: 'find-the-shiny',
   }),
   Object.freeze({
+    name: 'Know Your Shiny',
+    value: 'know-your-shiny',
+  }),
+  Object.freeze({
     name: 'Memory',
     value: 'memory',
   }),
@@ -42,24 +46,28 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
   'poke-quizz-youtube': Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/poke-quizz-find-the-shiny-youtube.json',
+    'know-your-shiny': 'services/product-video-agent/config/channels/poke-quizz-know-your-shiny-youtube.json',
     memory: 'services/product-video-agent/config/channels/poke-quizz-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json',
   }),
   'trivamon-youtube': Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/trivamon-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+    'know-your-shiny': 'services/product-video-agent/config/channels/trivamon-know-your-shiny-youtube.json',
     memory: 'services/product-video-agent/config/channels/trivamon-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json',
   }),
   'poke-guess-youtube': Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/poke-guess-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/poke-guess-find-the-shiny-youtube.json',
+    'know-your-shiny': 'services/product-video-agent/config/channels/poke-guess-know-your-shiny-youtube.json',
     memory: 'services/product-video-agent/config/channels/poke-guess-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
   }),
   'dexguess-youtube': Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/dexguess-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/dexguess-find-the-shiny-youtube.json',
+    'know-your-shiny': 'services/product-video-agent/config/channels/dexguess-know-your-shiny-youtube.json',
     memory: 'services/product-video-agent/config/channels/dexguess-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/dexguess-type-speed-quiz-youtube.json',
   }),

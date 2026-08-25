@@ -87,6 +87,14 @@ const memoryPlan = {
   },
 };
 
+const knowYourShinyPlan = {
+  template_id: 'pokemon.know-your-shiny.v1',
+  selection: {
+    round_count: 3,
+    selected_subjects: [{ name: 'Umbreon' }, { name: 'Gyarados' }, { name: 'Charizard' }],
+  },
+};
+
 const expectedSeededTitles = new Set([
   'Psychic/Water Type Quiz - Can You Guess?',
   'Can You Guess This Psychic/Water Pokemon?',
@@ -105,8 +113,16 @@ const expectedTypeQuizSeededTitles = new Set([
 ]);
 
 const expectedMemorySeededTitles = new Set([
+  'How good is your Pokemon memory?',
+  'Pokemon memory test',
   'Pokemon Memory Challenge',
   'Can You Remember These Pokemon?',
+]);
+
+const expectedKnowYourShinySeededTitles = new Set([
+  'Know your shiny!',
+  'Which one is the shiny?',
+  'Spot the real shiny Pokemon',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -254,7 +270,7 @@ test('seeded type-quiz fallback metadata uses the supported generic title varian
 test('fallback publication metadata frames memory as a rapid recall challenge', () => {
   const metadata = buildPokeQuizzFallbackPublicationMetadata(memoryPlan);
 
-  assert.equal(metadata.title, 'Pokemon Memory Challenge');
+  assert.equal(metadata.title, 'How good is your Pokemon memory?');
   assert.equal(
     metadata.description,
     'Memorize 6 Pokemon, hide the board, and pick the one that never appeared before the timer ends.',
@@ -281,4 +297,35 @@ test('seeded memory fallback metadata uses the supported generic title variants'
 
   assert.ok(expectedMemorySeededTitles.has(firstSeeded.title));
   assert.ok(expectedMemorySeededTitles.has(secondSeeded.title));
+});
+
+test('fallback publication metadata frames know-your-shiny as a decoy challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(knowYourShinyPlan);
+
+  assert.equal(metadata.title, 'Know your shiny!');
+  assert.equal(
+    metadata.description,
+    'Four versions appear, but only one is the true shiny. Lock in your guess before the reveal.',
+  );
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#shinypokemon',
+    '#shinyhunt',
+    '#pokemonquiz',
+    '#shorts',
+  ]);
+});
+
+test('seeded know-your-shiny fallback metadata uses the supported generic title variants', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...knowYourShinyPlan,
+    seed: 'know-your-shiny-seed-1',
+  });
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
+    ...knowYourShinyPlan,
+    seed: 'know-your-shiny-seed-2',
+  });
+
+  assert.ok(expectedKnowYourShinySeededTitles.has(firstSeeded.title));
+  assert.ok(expectedKnowYourShinySeededTitles.has(secondSeeded.title));
 });

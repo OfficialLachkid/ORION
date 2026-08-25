@@ -265,6 +265,14 @@ test('generic planner dispatch builds a random type quiz plan from localized row
   assert.equal(plan.rounds.length, 5);
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 1), true);
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 2), true);
+  for (let index = 1; index < plan.rounds.length; index += 1) {
+    const previousRound = plan.rounds[index - 1];
+    const currentRound = plan.rounds[index];
+    assert.notEqual(
+      previousRound.subject.types.length === 1 && currentRound.subject.types.length === 1,
+      true,
+    );
+  }
   assert.equal(plan.rounds.every((round) => round.type_icons.length === round.subject.types.length), true);
   assert.equal(plan.rounds.filter((round) => round.subject.is_shiny_reveal).length, 1);
   assert.equal(plan.shiny_reveal.active, true);
@@ -289,6 +297,31 @@ test('type quiz planner can filter to single-type only when configured', async (
 
   assert.equal(plan.selection.type_cardinality, 'single');
   assert.equal(plan.rounds.every((round) => round.subject.types.length === 1), true);
+});
+
+test('type quiz planner supports the short three-card round-count variant when configured', async () => {
+  const shortVariantTemplate = structuredClone(template);
+  shortVariantTemplate.selection_rules.round_count_weights = {
+    short: 1,
+  };
+  shortVariantTemplate.selection_rules.round_count_levels = {
+    short: {
+      round_count: 3,
+    },
+  };
+
+  const plan = await planPokemonTypeChallenge({
+    template: shortVariantTemplate,
+    pokedexRows,
+    seed: 'type-quiz-short-variant',
+    assetInventory,
+  });
+
+  assert.equal(plan.selection.difficulty_id, 'short');
+  assert.equal(plan.selection.round_count, 3);
+  assert.equal(plan.rounds.length, 3);
+  assert.equal(plan.rounds[0].round_label, '1/3');
+  assert.equal(plan.rounds.at(-1)?.round_label, '3/3');
 });
 
 test('type quiz timer-end sound falls back to the shared default when the preferred ding file is unavailable', async () => {
