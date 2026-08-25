@@ -257,6 +257,37 @@ test('run-code verifies selection by main-page trigger as fallback when picker c
   assert.match(code, /mainPageConfirmedTitle/u);
 });
 
+test('run-code disambiguates same-title cards by target external_id via thumbnail src', () => {
+  // Regression guard for 2026-08-25 second bug: channels commonly ship 50+
+  // videos with identical titles like "Guess the typing!" Studio's search
+  // filters to all of them and getByRole('option').first() picks the wrong
+  // one, so Studio's Related video trigger never updates for the intended
+  // target. Match on the thumbnail's img src, which contains the video's
+  // external_id (e.g. i.ytimg.com/vi/QeTF8Dgff8s/...), before falling back
+  // to first-title-match.
+  const code = buildYoutubeRelatedVideoRunCode({
+    ...relatedVideo,
+    target_external_id: 'QeTF8Dgff8s',
+  });
+
+  assert.match(code, /QeTF8Dgff8s/u);
+  assert.match(code, /img\.src/u);
+  assert.match(code, /thumbnail_id_click|thumbnail_match/u);
+});
+
+test('run-code polls for Save to become enabled before clicking + reports save_never_enabled otherwise', () => {
+  // Regression guard for 2026-08-25 third bug: Studio's Polymer takes a beat
+  // after picker close to acknowledge the dirty state and enable Save. Prior
+  // behaviour: check saveButton.isDisabled once, if disabled skip clicking,
+  // silently return "applied" — but nothing persisted, Undo-changes stayed
+  // pending. Must poll for Save to enable and return a distinct status if it
+  // never does so we can retry.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /saveEnableDeadlineMs/u);
+  assert.match(code, /save_never_enabled/u);
+});
+
 test('run-code scopes trigger verification to the "Related video" label specifically', () => {
   // Regression guard for 2026-08-25: the earlier fallback enumerated ALL
   // ytcp-dropdown-trigger elements on the page and matched substring
@@ -302,6 +333,33 @@ test('applyYoutubeRelatedVideoSelection maps selection_not_confirmed to manual_a
         result: JSON.stringify({
           status: 'selection_not_confirmed',
           aria: 'Dark/Rock Challenge, Not selected',
+          url: 'https://studio.youtube.com/video/yt-current/edit',
+        }),
+      }),
+    },
+    close: { status: 0, stdout: '' },
+  });
+
+  const result = await applyYoutubeRelatedVideoSelection({
+    channelProfile,
+    publication: applyPublication,
+    relatedVideo: applyRelatedVideo,
+    fsExists: () => true,
+    cliRunner: stub.runner,
+  });
+
+  assert.equal(result.applyStatus, 'manual_action_required');
+  assert.equal(result.appliedAt, '');
+});
+
+test('applyYoutubeRelatedVideoSelection maps save_never_enabled to manual_action_required', async () => {
+  const stub = stubCliRunner({
+    open: { status: 0, stdout: '{}' },
+    runCode: {
+      status: 0,
+      stdout: JSON.stringify({
+        result: JSON.stringify({
+          status: 'save_never_enabled',
           url: 'https://studio.youtube.com/video/yt-current/edit',
         }),
       }),

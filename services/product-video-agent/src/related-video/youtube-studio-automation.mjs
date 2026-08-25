@@ -487,16 +487,45 @@ async (page) => {
   // whole label).
   const attemptedInteractions = [];
   const titleQuery = target.title || target.externalId || target.url || '';
+  // Disambiguation for same-title videos: after Studio's search filters the
+  // grid, multiple cards may match the target title (channels commonly ship
+  // 50+ videos with titles like "Guess the typing!"). Each card carries a
+  // thumbnail whose src contains the video's external_id, so we can pick
+  // the right one deterministically. If we can find it by external_id, do
+  // that; otherwise fall back to the first title match. Confirmed
+  // 2026-08-25: without this, the poke-guess Aug 13 "Guess the Type Before
+  // the Reveal" run clicked the wrong same-titled card and Studio's
+  // Related video trigger never updated for the intended target.
+  const clickedByThumbnail = await page.evaluate((wantedExternalId) => {
+    if (!wantedExternalId) return { ok: false, reason: 'no-target-id' };
+    const cards = Array.from(document.querySelectorAll('ytcp-video-pick-dialog [role="option"], ytcp-video-pick-dialog ytcp-entity-card'));
+    for (const card of cards) {
+      const r = card.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      const imgs = Array.from(card.querySelectorAll('img'));
+      const matched = imgs.some((img) => String(img.src || '').includes(wantedExternalId));
+      if (matched) {
+        try { card.click(); return { ok: true, reason: 'thumbnail_match' }; } catch { /* fall through */ }
+      }
+    }
+    return { ok: false, reason: 'no-thumbnail-match' };
+  }, target.externalId || '');
+
   let clickError = null;
-  try {
-    // filter({ hasText: string }) does substring match — no regex escaping
-    // needed. role="option" is set on ytcp-entity-card, so this picks the
-    // filtered card directly regardless of Studio's component wrapping.
-    await page.getByRole('option').filter({ hasText: titleQuery }).first().click({ timeout: 5000 });
-    attemptedInteractions.push({ attempt: 0, key: 'role_option_click', clicked: true });
-  } catch (err) {
-    clickError = String(err && err.message ? err.message : err).split('\\n')[0].slice(0, 200);
-    attemptedInteractions.push({ attempt: 0, key: 'role_option_click', clicked: false, error: clickError });
+  if (clickedByThumbnail?.ok) {
+    attemptedInteractions.push({ attempt: 0, key: 'thumbnail_id_click', clicked: true });
+  } else {
+    try {
+      // Fallback: filter({ hasText: string }) does substring match — no
+      // regex escaping needed. This picks the first card with matching
+      // title text, which is right when only one video shares the title
+      // (or when the target is the newest video of that title).
+      await page.getByRole('option').filter({ hasText: titleQuery }).first().click({ timeout: 5000 });
+      attemptedInteractions.push({ attempt: 0, key: 'role_option_click', clicked: true, disambiguation: clickedByThumbnail?.reason || 'unknown' });
+    } catch (err) {
+      clickError = String(err && err.message ? err.message : err).split('\\n')[0].slice(0, 200);
+      attemptedInteractions.push({ attempt: 0, key: 'role_option_click', clicked: false, error: clickError });
+    }
   }
   await page.waitForTimeout(1200);
   state = await readTargetState();
@@ -581,14 +610,36 @@ async (page) => {
     return {
       status: 'save_not_found',
       url: page.url(),
+      diagnostics,
     };
   }
 
-  const saveDisabled = await saveButton.isDisabled().catch(() => false);
-  if (!saveDisabled) {
-    await saveButton.click({ timeout: 5000 }).catch(() => {});
-    await page.waitForTimeout(1800);
+  // Wait for Save to become enabled — Studio's Polymer takes a beat after the
+  // picker closes to acknowledge the dirty state and enable the button. Prior
+  // to this wait, we'd check-and-skip when Save was still disabled, silently
+  // return "applied" without persisting, and Studio's Undo-changes stayed
+  // pending until the operator manually clicked Save. Confirmed 2026-08-25:
+  // one poke-quizz backfill run left "Related video → Psychic/Water Type Quiz"
+  // set on the trigger with Save DISABLED, so nothing persisted despite
+  // apply_status='applied'. Poll for up to 6s.
+  let saveDisabled = true;
+  const saveEnableDeadlineMs = Date.now() + 6000;
+  while (Date.now() < saveEnableDeadlineMs) {
+    saveDisabled = await saveButton.isDisabled().catch(() => true);
+    if (!saveDisabled) break;
+    await page.waitForTimeout(300);
   }
+
+  if (saveDisabled) {
+    return {
+      status: 'save_never_enabled',
+      url: page.url(),
+      diagnostics,
+    };
+  }
+
+  await saveButton.click({ timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(2500);
 
   const confirmationText = await bodyText();
   return {
@@ -596,6 +647,7 @@ async (page) => {
     url: page.url(),
     saveDisabled,
     body: confirmationText.slice(0, 800),
+    diagnostics,
   };
 }`.trim();
 }
@@ -744,6 +796,7 @@ export async function applyYoutubeRelatedVideoSelection({
           : scriptStatus === 'search_not_found'
               || scriptStatus === 'target_not_found'
               || scriptStatus === 'save_not_found'
+              || scriptStatus === 'save_never_enabled'
               || scriptStatus === 'selection_not_confirmed'
             ? 'manual_action_required'
             : scriptStatus || 'failed';
