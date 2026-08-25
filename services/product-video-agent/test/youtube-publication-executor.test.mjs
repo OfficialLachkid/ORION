@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import {
   deleteYoutubeVideo,
+  ensureYoutubeAudienceDeclared,
   fetchYoutubeVideoStatus,
   fetchYoutubeVideoStatuses,
   postYoutubeTopLevelComment,
@@ -347,4 +348,100 @@ test('postYoutubeTopLevelComment throws YoutubeCommentPostError when the API rej
       return true;
     },
   );
+});
+
+test('ensureYoutubeAudienceDeclared writes selfDeclaredMadeForKids when currently undeclared', async () => {
+  // Regression guard for 2026-08-25: Studio's audience-question banner
+  // blocks Save on ANY change until selfDeclaredMadeForKids is set. Call
+  // BEFORE the Studio automation runs, only when undeclared.
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), method: options?.method || 'GET', body: options?.body || null });
+    if (String(url).includes('oauth2.googleapis.com/token')) {
+      return Response.json({ access_token: 't', expires_in: 3600, token_type: 'Bearer' });
+    }
+    if (String(url).includes('/youtube/v3/videos?part=status') && (options?.method === undefined || options.method === 'GET')) {
+      // Simulate an item with NO selfDeclaredMadeForKids field — Studio's
+      // "You need to answer this question" state.
+      return Response.json({ items: [{ id: 'yt-undeclared', status: { privacyStatus: 'public' } }] });
+    }
+    if (String(url).includes('/youtube/v3/videos?part=status') && options?.method === 'PUT') {
+      return Response.json({});
+    }
+    return Response.json({});
+  };
+
+  const result = await ensureYoutubeAudienceDeclared({
+    externalId: 'yt-undeclared',
+    madeForKids: false,
+    clientConfig: { clientId: 'c', clientSecret: 's' },
+    refreshToken: 'r',
+    fetchImpl,
+  });
+
+  assert.equal(result.changed, true);
+  assert.equal(result.currentValue, false);
+  const putCall = calls.find((c) => c.method === 'PUT');
+  assert.ok(putCall, 'expected a PUT videos.update call');
+  assert.match(putCall.body, /selfDeclaredMadeForKids/u);
+});
+
+test('ensureYoutubeAudienceDeclared is a no-op when the flag is already declared', async () => {
+  // Never override an existing true/false — the operator's declaration
+  // stands. Only touches videos where the field is undefined/missing.
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), method: options?.method || 'GET' });
+    if (String(url).includes('oauth2.googleapis.com/token')) {
+      return Response.json({ access_token: 't', expires_in: 3600, token_type: 'Bearer' });
+    }
+    if (String(url).includes('/youtube/v3/videos?part=status')) {
+      return Response.json({ items: [{ id: 'yt-declared', status: { privacyStatus: 'public', selfDeclaredMadeForKids: false } }] });
+    }
+    return Response.json({});
+  };
+
+  const result = await ensureYoutubeAudienceDeclared({
+    externalId: 'yt-declared',
+    madeForKids: false,
+    clientConfig: { clientId: 'c', clientSecret: 's' },
+    refreshToken: 'r',
+    fetchImpl,
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.previousValue, false);
+  const putCall = calls.find((c) => c.method === 'PUT');
+  assert.equal(putCall, undefined, 'no PUT should be issued when already declared');
+});
+
+test('ensureYoutubeAudienceDeclared never overrides an existing true declaration to false', async () => {
+  // Critical safety guard: if a video is legitimately declared "made for
+  // kids", we must not silently flip it to false. The operator's
+  // declaration is authoritative — this helper only fills the undeclared
+  // gap.
+  const calls = [];
+  const fetchImpl = async (url, options) => {
+    calls.push({ url: String(url), method: options?.method || 'GET' });
+    if (String(url).includes('oauth2.googleapis.com/token')) {
+      return Response.json({ access_token: 't', expires_in: 3600, token_type: 'Bearer' });
+    }
+    if (String(url).includes('/youtube/v3/videos?part=status')) {
+      return Response.json({ items: [{ id: 'yt-kids', status: { privacyStatus: 'public', selfDeclaredMadeForKids: true } }] });
+    }
+    return Response.json({});
+  };
+
+  const result = await ensureYoutubeAudienceDeclared({
+    externalId: 'yt-kids',
+    madeForKids: false,
+    clientConfig: { clientId: 'c', clientSecret: 's' },
+    refreshToken: 'r',
+    fetchImpl,
+  });
+
+  assert.equal(result.changed, false);
+  assert.equal(result.previousValue, true);
+  const putCall = calls.find((c) => c.method === 'PUT');
+  assert.equal(putCall, undefined, 'declared-true must NOT be flipped to false');
 });

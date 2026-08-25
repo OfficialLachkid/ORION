@@ -45,6 +45,28 @@ export function buildYoutubeScheduleUpdatePlan(publication, scheduledFor) {
   };
 }
 
+// selfDeclaredMadeForKids answers Studio's mandatory "Made for kids"
+// audience declaration question. When it's undeclared, Studio's edit
+// page shows a red "You need to answer this question" gate that keeps
+// the Save button disabled for ANY change (related-video included) —
+// so uploads that came in before ORION's pipeline started answering
+// this at upload time can't have any Studio edit applied until the
+// question is answered. This plan sets it to whatever the caller
+// declares (typically false for the Pokemon channels).
+export function buildYoutubeAudienceDeclarationUpdatePlan(externalId, madeForKids) {
+  return {
+    action: 'videos.update',
+    scopes: ['https://www.googleapis.com/auth/youtube.force-ssl'],
+    part: ['status'],
+    body: {
+      id: String(externalId || '').trim(),
+      status: {
+        selfDeclaredMadeForKids: Boolean(madeForKids),
+      },
+    },
+  };
+}
+
 export function buildYoutubeCommentInsertPlan(videoId, textOriginal) {
   return {
     action: 'commentThreads.insert',

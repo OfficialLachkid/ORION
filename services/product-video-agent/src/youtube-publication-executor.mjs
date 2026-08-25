@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import {
+  buildYoutubeAudienceDeclarationUpdatePlan,
   buildYoutubeCommentInsertPlan,
   buildYoutubePreviewUploadPlan,
   buildYoutubeScheduleUpdatePlan,
@@ -177,6 +178,57 @@ export async function scheduleYoutubePublication({
   return {
     externalId: publication.external_id,
     scheduledFor: new Date(scheduledFor).toISOString(),
+    payload,
+  };
+}
+
+// Ensure the video's selfDeclaredMadeForKids is set before the Studio
+// automation runs. Undeclared videos gate ALL saves behind Studio's red
+// "You need to answer this question" audience banner (observed 2026-08-25
+// on the poke-guess Aug 13 backfill), so any related-video change gets
+// staged but never persisted. Only writes when the flag is currently
+// undeclared — never overrides an existing true/false declaration.
+// Returns { changed, previousValue, currentValue }.
+export async function ensureYoutubeAudienceDeclared({
+  externalId,
+  madeForKids = false,
+  clientConfig,
+  refreshToken,
+  fetchImpl = globalThis.fetch,
+}) {
+  const videoId = String(externalId || '').trim();
+  if (!videoId) throw new Error('ensureYoutubeAudienceDeclared requires an external_id.');
+
+  const current = await fetchYoutubeVideoStatus({ externalId: videoId, clientConfig, refreshToken, fetchImpl });
+  // normalizeYoutubeVideoStatus doesn't project selfDeclaredMadeForKids, so
+  // read it from the raw payload.items[0].status the fetch left on the
+  // result. When YouTube omits the field entirely, existing is undefined
+  // and we should write. When it's true or false, we skip.
+  const rawItem = Array.isArray(current?.payload?.items) ? current.payload.items[0] : null;
+  const existing = rawItem?.status?.selfDeclaredMadeForKids;
+  if (existing === true || existing === false) {
+    return { changed: false, previousValue: existing, currentValue: existing };
+  }
+
+  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, { fetch: fetchImpl });
+  const requestPlan = buildYoutubeAudienceDeclarationUpdatePlan(videoId, madeForKids);
+  const response = await fetchImpl(`${YOUTUBE_VIDEOS_ENDPOINT}?part=${requestPlan.part.join(',')}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken.accessToken}`,
+      'Content-Type': 'application/json; charset=UTF-8',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(requestPlan.body),
+  });
+  const { bodyText, payload } = await readJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(`YouTube audience declaration update failed (${response.status}): ${bodyText || 'no body'}`);
+  }
+  return {
+    changed: true,
+    previousValue: existing,
+    currentValue: Boolean(madeForKids),
     payload,
   };
 }

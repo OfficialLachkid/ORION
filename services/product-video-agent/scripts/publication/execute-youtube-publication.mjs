@@ -22,6 +22,7 @@ import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs'
 import { applyYoutubeRelatedVideoSelection } from '../../src/related-video/youtube-studio-automation.mjs';
 import { syncYoutubeAutoCommentState } from '../../src/youtube-auto-comments.mjs';
 import {
+  ensureYoutubeAudienceDeclared,
   fetchYoutubeVideoStatus,
   fetchYoutubeVideoStatuses,
   loadYoutubeClientCredentials,
@@ -314,10 +315,13 @@ export async function refreshRelatedVideoAssignments({
   runtimeConfig,
   channelProfile,
   channelSelector,
+  clientConfig = null,
+  refreshToken = '',
   asOf = new Date().toISOString(),
   dryRun = false,
   applyScheduled = true,
   applyYoutubeRelatedVideoSelectionImpl = applyYoutubeRelatedVideoSelection,
+  ensureYoutubeAudienceDeclaredImpl = ensureYoutubeAudienceDeclared,
 } = {}) {
   // Short-circuit for channels that aren't wired up for related-video
   // automation at all. Prevents planner from writing target metadata that
@@ -407,6 +411,28 @@ export async function refreshRelatedVideoAssignments({
       && applyableStates.includes(normalizeWorkflowState(updatedPublication))
       && String(updatedPublication?.external_id || '').trim()
     ) {
+      // Answer Studio's "Made for kids" audience declaration via YouTube
+      // API BEFORE we drive Studio's picker. If the flag is undeclared,
+      // Studio blocks Save on ANY change until the operator picks a
+      // radio button — so our related-video change would stage but never
+      // persist (save_never_enabled). Only writes when currently
+      // undeclared; never overrides an existing true/false.
+      if (!dryRun && clientConfig && refreshToken) {
+        try {
+          await ensureYoutubeAudienceDeclaredImpl({
+            externalId: updatedPublication.external_id,
+            madeForKids: false,
+            clientConfig,
+            refreshToken,
+          });
+        } catch (error) {
+          // Best-effort: a failure here shouldn't block the Studio run —
+          // the run will just fail with save_never_enabled if the audience
+          // question is still unanswered, and the operator can retry after
+          // fixing perms.
+          process.stderr.write(`ensureYoutubeAudienceDeclared failed for ${updatedPublication.external_id}: ${error.message}\n`);
+        }
+      }
       applyResult = dryRun
         ? {
           capability: { status: 'dry_run' },
@@ -1235,6 +1261,8 @@ async function main() {
       runtimeConfig,
       channelProfile,
       channelSelector,
+      clientConfig,
+      refreshToken,
       asOf,
       dryRun,
       applyScheduled: true,
@@ -1503,6 +1531,22 @@ async function main() {
       channelProfile,
       asOf,
     });
+    // Answer Studio's "Made for kids" audience declaration BEFORE the
+    // Studio automation runs — otherwise Save stays disabled for any
+    // change we make (see refreshRelatedVideoAssignments for the same
+    // guard on the manual-refresh path).
+    if (String(updatedPublication?.external_id || '').trim()) {
+      try {
+        await ensureYoutubeAudienceDeclared({
+          externalId: updatedPublication.external_id,
+          madeForKids: false,
+          clientConfig,
+          refreshToken,
+        });
+      } catch (error) {
+        process.stderr.write(`ensureYoutubeAudienceDeclared failed for ${updatedPublication.external_id}: ${error.message}\n`);
+      }
+    }
     const relatedVideoResult = await applyYoutubeRelatedVideoSelection({
       channelProfile,
       publication: updatedPublication,
