@@ -257,6 +257,22 @@ test('run-code verifies selection by main-page trigger as fallback when picker c
   assert.match(code, /mainPageConfirmedTitle/u);
 });
 
+test('run-code scopes trigger verification to the "Related video" label specifically', () => {
+  // Regression guard for 2026-08-25: the earlier fallback enumerated ALL
+  // ytcp-dropdown-trigger elements on the page and matched substring
+  // against any of them, which produced false-positive apply_status=applied
+  // (poke-guess backfill claimed 49/49 applied but headed inspection
+  // confirmed the Related video triggers literally said "None"). The
+  // fallback must find the trigger by walking up from the "Related video"
+  // text label, and must reject the "None" placeholder.
+  const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
+
+  assert.match(code, /Related video/u);
+  assert.match(code, /\\bnone\\b/u);
+  // No unscoped querySelectorAll of triggers followed by a match loop.
+  assert.doesNotMatch(code, /querySelectorAll\('ytcp-dropdown-trigger, ytcp-text-dropdown-trigger'\)/u);
+});
+
 test('run-code captures diagnostic snapshots at each interaction checkpoint', () => {
   const code = buildYoutubeRelatedVideoRunCode(relatedVideo);
 

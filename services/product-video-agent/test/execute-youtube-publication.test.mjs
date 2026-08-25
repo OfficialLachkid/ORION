@@ -872,3 +872,55 @@ test('related-video --include-published skips published rows whose target was al
   assert.equal(applyImplCalled, false);
   assert.equal(store.updateCalls.length, 0);
 });
+
+test('related-video --force bypasses the already-applied guard on published rows', async () => {
+  // Regression guard for 2026-08-25: after the false-positive apply_status
+  // bug (verification matched substring against any dropdown-trigger), we
+  // need a way to retry published rows whose metadata says "applied" but
+  // Studio doesn't actually have the related video set. --force skips the
+  // isPublishedBackfillNeeded guard so the retry can run.
+  const publication = {
+    id: 'pub-force-retry',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-force-retry',
+    published_at: '2026-08-01T08:00:00.000Z',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['electric', 'flying'],
+      related_video: {
+        selection_status: 'planned',
+        target_external_id: 'yt-force-target',
+        target_publication_id: 'pub-force-target',
+        apply_status: 'applied',
+        capability_status: 'configured',
+      },
+    },
+  };
+  const store = createStore(publication);
+  let applyImplCalled = false;
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [publication],
+    includePublished: true,
+    force: true,
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-08-25T14:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async ({ relatedVideo }) => {
+      applyImplCalled = true;
+      // Verify the existing target is preserved on force retry — force
+      // bypasses the skip guard, but must NOT re-pick the target.
+      assert.equal(relatedVideo?.target_external_id, 'yt-force-target');
+      return { capability: { status: 'configured' }, applyStatus: 'applied', appliedAt: '2026-08-25T14:00:00.000Z', lastAttemptedAt: '2026-08-25T14:00:00.000Z', lastError: '', studioEditUrl: '' };
+    },
+  });
+
+  assert.equal(refreshed.results.length, 1);
+  assert.equal(applyImplCalled, true);
+});
