@@ -256,6 +256,7 @@ test('showdown audio and visual filters include winner sting cues and champion o
   assert.match(visualFilter.script, /\[0:v\]fps=30,scale=1080:1920/u);
   assert.match(visualFilter.script, /Champion/u);
   assert.match(visualFilter.script, /overlay=x='540-w\/2'/u);
+  assert.equal((visualFilter.script.match(/setsar=1\[p\d+champ\]/gu) || []).length, 1);
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
   assert.match(audioFilter, /amix=inputs=/u);
 });

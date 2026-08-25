@@ -127,6 +127,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const battleSpriteSize = ensureNumber(battleStage.sprite_size_px, 380);
   const championSpriteSize = ensureNumber(championStage.sprite_size_px, 520);
   const loserAlphaMultiplier = ensureNumber(template?.renderer?.loser_alpha_multiplier, 0.46);
+  const championParticipantId = plan.tournament?.champion?.id || '';
 
   filters.push(
     `[${inputRefs.background}:v]fps=${fps},scale=${renderPlan.canvas.width}:${renderPlan.canvas.height}:force_original_aspect_ratio=increase,crop=${renderPlan.canvas.width}:${renderPlan.canvas.height},boxblur=${blurSigma}:1,setsar=1[vbg]`,
@@ -134,12 +135,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
   (plan.tournament?.participants || []).forEach((participant, index) => {
     const ref = inputRefs.participants[index];
-    filters.push(
+    const participantFilters = [
       `[${ref}:v]fps=${fps},scale=${slotSpriteSize}:${slotSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[p${index}slot]`,
       `[${ref}:v]fps=${fps},scale=${battleSpriteSize}:${battleSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[p${index}stage]`,
       `[p${index}stage]hue=s=0,colorchannelmixer=aa=${loserAlphaMultiplier}[p${index}stagegray]`,
-      `[${ref}:v]fps=${fps},scale=${championSpriteSize}:${championSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[p${index}champ]`,
-    );
+    ];
+    if (participant.id === championParticipantId) {
+      participantFilters.push(
+        `[${ref}:v]fps=${fps},scale=${championSpriteSize}:${championSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[p${index}champ]`,
+      );
+    }
+    filters.push(...participantFilters);
   });
 
   let currentVideoLabel = 'vbg';
