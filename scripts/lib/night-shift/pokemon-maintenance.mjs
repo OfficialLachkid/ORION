@@ -325,7 +325,7 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
   const profiles = await loadProfiles(DEFAULT_PUBLICATION_CHANNELS_PATH, { projectRoot });
   const activeProfiles = profiles.filter((profile) => profile.status === 'active');
-  const channelRuntimes = await discoverRuntimes();
+  const channelRuntimes = selectPrimaryNightShiftRuntimes(await discoverRuntimes());
   const runtimeByChannelSelector = new Map(
     channelRuntimes.map((runtime) => [runtime.channelSelector, runtime]),
   );

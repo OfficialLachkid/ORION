@@ -178,6 +178,89 @@ test('night shift queue maintenance auto-approves DexGuess previews within the c
   assert.equal(summary.autoScheduled, 1);
 });
 
+test('night shift queue maintenance uses the primary root runtime when child template runtimes share a channel selector', async () => {
+  const runProjectNodeScriptCalls = [];
+  const autoPublishCalls = [];
+  const rootRuntime = {
+    channelSelector: 'trivamon-youtube',
+    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-youtube.json',
+    nightShift: {
+      reviewBacklogEnabled: true,
+      reviewRefreshEnabled: true,
+      publicationAutomationEnabled: true,
+      publicationAutomationMode: 'auto',
+      publicationAutomationMaxScheduledDays: 3,
+      reviewBacklogMixChannelConfigPaths: [
+        'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      ],
+    },
+  };
+  const childRuntime = {
+    channelSelector: 'trivamon-youtube',
+    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+    nightShift: {
+      reviewBacklogEnabled: false,
+      reviewRefreshEnabled: false,
+      publicationAutomationEnabled: false,
+      publicationAutomationMode: 'manual',
+      publicationAutomationMaxScheduledDays: 0,
+      reviewBacklogMixChannelConfigPaths: [],
+    },
+  };
+  const trivamonPublications = [
+    committedScheduled,
+    previewApproved,
+    previewUploadedOldest,
+    previewUploadedNewest,
+  ].map((publication) => ({
+    ...publication,
+    account_key: 'trivamon-youtube',
+  }));
+  const publicationStore = {
+    async fetchPublicationsByChannel() {
+      return trivamonPublications;
+    },
+  };
+
+  const summary = await runVideoQueueMaintenance(
+    '2026-08-13T06:00:00.000Z',
+    {
+      runtimeConfig: { env: {} },
+      loadPublicationChannelProfiles: async () => [{
+        ...channelProfile,
+        id: 'video-channel-trivamon-youtube',
+        name: 'TrivaMon',
+        account_key: 'trivamon-youtube',
+      }],
+      discoverNightShiftChannelRuntimes: async () => [childRuntime, rootRuntime],
+      runProjectNodeScript: (scriptPath, args) => {
+        runProjectNodeScriptCalls.push({ scriptPath, args });
+        return {
+          status: 0,
+          stdout: '[]',
+          stderr: '',
+        };
+      },
+      publicationStore,
+      executeProductVideoAction: async (action, task) => {
+        autoPublishCalls.push({ action, task });
+        return {
+          report: {
+            workflowState: 'scheduled',
+            scheduledFor: '2026-08-14T08:00:00.000Z',
+          },
+        };
+      },
+    },
+  );
+
+  assert.equal(runProjectNodeScriptCalls.length, 1);
+  assert.equal(runProjectNodeScriptCalls[0].args.includes('--max-scheduled-days'), true);
+  assert.equal(autoPublishCalls.length, 1);
+  assert.equal(summary.autoApproved, 1);
+  assert.equal(summary.autoScheduled, 1);
+});
+
 test('review backlog runtime selection breaks equal-count ties away from the most recently generated template', () => {
   const runtimes = [
     { templateId: 'pokemon.dual-type-reveal.v1', channelConfigPath: 'dual.json' },
