@@ -924,3 +924,74 @@ test('related-video --force bypasses the already-applied guard on published rows
   assert.equal(refreshed.results.length, 1);
   assert.equal(applyImplCalled, true);
 });
+
+test('refreshRelatedVideoAssignments bails out on YouTube quotaExceeded and skips remaining rows', async () => {
+  // Regression guard for 2026-08-25: quota exhaustion during the audience
+  // API call is a run-terminator — all subsequent audience calls will fail
+  // the same way until midnight Pacific, driving every remaining
+  // publication into save_never_enabled. Bail after the first quota error
+  // rather than churn through the queue.
+  const { YoutubeApiQuotaExceededError } = await import('../src/youtube-publication-executor.mjs');
+
+  const publishedCandidate = {
+    id: 'pub-published-target',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-target',
+    public_url: 'https://youtube.com/shorts/yt-target',
+    published_at: '2026-08-01T08:00:00.000Z',
+    title: 'Existing published pick',
+    metadata: {
+      workflow_state: 'published',
+      type_pair: ['fire', 'rock'],
+      template_id: 'pokemon-type-challenge-v1',
+    },
+  };
+  const publications = [1, 2, 3].map((n) => ({
+    id: `pub-quota-${n}`,
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'preview_uploaded',
+    external_id: `yt-quota-${n}`,
+    metadata: {
+      workflow_state: 'preview_uploaded',
+      type_pair: ['electric', 'ghost'],
+      template_id: 'pokemon-type-challenge-v1',
+    },
+  }));
+  const store = createStore(publications[0]);
+  let applyImplCalls = 0;
+  let audienceCalls = 0;
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [...publications, publishedCandidate],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    clientConfig: { clientId: 'c', clientSecret: 's' },
+    refreshToken: 'r',
+    asOf: '2026-08-25T18:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    ensureYoutubeAudienceDeclaredImpl: async () => {
+      audienceCalls += 1;
+      throw new YoutubeApiQuotaExceededError('Quota exceeded', { status: 403, bodyText: 'quotaExceeded' });
+    },
+    applyYoutubeRelatedVideoSelectionImpl: async () => {
+      applyImplCalls += 1;
+      return { capability: { status: 'configured' }, applyStatus: 'applied', appliedAt: '', lastAttemptedAt: '', lastError: '', studioEditUrl: '' };
+    },
+  });
+
+  // Only ONE audience call (the first row), then bail — remaining rows
+  // don't even attempt the audience API.
+  assert.equal(audienceCalls, 1);
+  // Studio automation must NEVER run for a row whose audience API hit quota.
+  assert.equal(applyImplCalls, 0);
+  // Exactly one row's result surfaced (the one that hit quota), rest were bailed.
+  assert.equal(refreshed.results.length, 1);
+  assert.equal(refreshed.results[0].related_video_capability_status, 'youtube_api_quota_exhausted');
+  assert.equal(refreshed.results[0].related_video_apply_status, 'skipped_quota');
+});

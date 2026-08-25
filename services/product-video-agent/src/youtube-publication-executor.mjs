@@ -26,6 +26,29 @@ async function readJsonResponse(response) {
   return { bodyText, payload };
 }
 
+// YouTube API quota is 10k units/day by default. Video updates cost 50 units
+// each, so a single all-channels backfill (~180 publications) easily blows
+// through the daily allocation. When the API returns 403 quotaExceeded, all
+// remaining calls in this run will fail the same way — bail immediately
+// rather than churn through the queue. Quota resets at midnight Pacific.
+export class YoutubeApiQuotaExceededError extends Error {
+  constructor(message, { status, bodyText } = {}) {
+    super(message || 'YouTube API quota exceeded');
+    this.name = 'YoutubeApiQuotaExceededError';
+    this.code = 'quota_exceeded';
+    this.status = status || 403;
+    this.bodyText = bodyText || '';
+  }
+}
+
+function isYoutubeQuotaExceededPayload(payload = {}) {
+  const errors = Array.isArray(payload?.error?.errors) ? payload.error.errors : [];
+  return errors.some((e) => (
+    String(e?.reason || '').trim().toLowerCase() === 'quotaexceeded'
+    || String(e?.domain || '').trim().toLowerCase() === 'youtube.quota'
+  ));
+}
+
 function buildShortsUrl(videoId) {
   return `https://youtube.com/shorts/${videoId}`;
 }
@@ -223,6 +246,12 @@ export async function ensureYoutubeAudienceDeclared({
   });
   const { bodyText, payload } = await readJsonResponse(response);
   if (!response.ok) {
+    if (isYoutubeQuotaExceededPayload(payload)) {
+      throw new YoutubeApiQuotaExceededError(
+        `YouTube API quota exceeded while updating audience declaration for ${videoId}. Resets at midnight Pacific.`,
+        { status: response.status, bodyText },
+      );
+    }
     throw new Error(`YouTube audience declaration update failed (${response.status}): ${bodyText || 'no body'}`);
   }
   return {
@@ -257,6 +286,12 @@ export async function fetchYoutubeVideoStatus({
   });
   const { bodyText, payload } = await readJsonResponse(response);
   if (!response.ok) {
+    if (isYoutubeQuotaExceededPayload(payload)) {
+      throw new YoutubeApiQuotaExceededError(
+        `YouTube API quota exceeded while fetching video status for ${videoId}. Resets at midnight Pacific.`,
+        { status: response.status, bodyText },
+      );
+    }
     throw new Error(`YouTube status lookup failed (${response.status}): ${bodyText || 'no body'}`);
   }
 
