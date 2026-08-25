@@ -5,6 +5,9 @@ import {
   planNightShiftAutoPublicationAutomation,
   runVideoQueueMaintenance,
   selectNextReviewBacklogRuntime,
+  selectPrimaryNightShiftRuntimes,
+  summarizeReviewBacklogRuns,
+  summarizeReviewRefreshRuns,
 } from './pokemon-maintenance.mjs';
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -328,4 +331,141 @@ test('review backlog runtime selection avoids an in-run repeat even before publi
   );
 
   assert.equal(selectedRuntime?.templateId, 'pokemon.find-the-shiny.v1');
+});
+
+test('night shift runtime selection prefers the root publication-channel config over child template configs', () => {
+  const runtimes = [
+    {
+      channelSelector: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      nightShift: {
+        reviewBacklogEnabled: true,
+        reviewRefreshEnabled: true,
+        publicationAutomationEnabled: false,
+        reviewBacklogMixChannelConfigPaths: [],
+      },
+    },
+    {
+      channelSelector: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-youtube.json',
+      nightShift: {
+        reviewBacklogEnabled: true,
+        reviewRefreshEnabled: true,
+        publicationAutomationEnabled: true,
+        reviewBacklogMixChannelConfigPaths: [
+          'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+        ],
+      },
+    },
+  ];
+
+  const selected = selectPrimaryNightShiftRuntimes(runtimes);
+  assert.equal(selected.length, 1);
+  assert.equal(
+    selected[0]?.channelConfigPath,
+    'services/product-video-agent/config/channels/trivamon-youtube.json',
+  );
+});
+
+test('review backlog summary collapses duplicate runtime runs into publication-channel totals', () => {
+  const summary = summarizeReviewBacklogRuns([
+    {
+      status: 'completed',
+      channel: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      generated: 2,
+      generatedItems: [{ publicationId: 'a' }, { publicationId: 'b' }],
+      initialReviewReadyCount: 8,
+      finalReviewReadyCount: 10,
+      targetReviewReadyCount: 10,
+      errors: [],
+    },
+    {
+      status: 'skipped',
+      channel: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-memory-youtube.json',
+      generated: 0,
+      generatedItems: [],
+      initialReviewReadyCount: 10,
+      finalReviewReadyCount: 10,
+      targetReviewReadyCount: 10,
+      errors: [],
+    },
+    {
+      status: 'completed',
+      channel: 'poke-quizz-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
+      generated: 1,
+      generatedItems: [{ publicationId: 'c' }],
+      initialReviewReadyCount: 9,
+      finalReviewReadyCount: 10,
+      targetReviewReadyCount: 10,
+      errors: [],
+    },
+  ]);
+
+  assert.equal(summary.configuredChannels, 2);
+  assert.equal(summary.generated, 3);
+  assert.equal(summary.initialReviewReadyCount, 17);
+  assert.equal(summary.finalReviewReadyCount, 20);
+  assert.equal(summary.targetReviewReadyCount, 20);
+  assert.equal(summary.channels.length, 2);
+});
+
+test('review refresh summary collapses duplicate runtime runs into publication-channel totals', () => {
+  const summary = summarizeReviewRefreshRuns([
+    {
+      status: 'completed',
+      channel: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      inspected: 10,
+      refreshed: 10,
+      actionable: 10,
+      retried: 7,
+      failed: 1,
+      failures: [
+        {
+          publicationId: 'pub-1',
+          messageId: 'msg-1',
+          reason: 'discord_api_404',
+        },
+      ],
+    },
+    {
+      status: 'completed',
+      channel: 'trivamon-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-memory-youtube.json',
+      inspected: 10,
+      refreshed: 10,
+      actionable: 10,
+      retried: 10,
+      failed: 1,
+      failures: [
+        {
+          publicationId: 'pub-1',
+          messageId: 'msg-1',
+          reason: 'discord_api_404',
+        },
+      ],
+    },
+    {
+      status: 'completed',
+      channel: 'poke-quizz-youtube',
+      channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
+      inspected: 10,
+      refreshed: 10,
+      actionable: 10,
+      retried: 0,
+      failed: 0,
+      failures: [],
+    },
+  ]);
+
+  assert.equal(summary.configuredChannels, 2);
+  assert.equal(summary.inspected, 20);
+  assert.equal(summary.refreshed, 20);
+  assert.equal(summary.actionable, 20);
+  assert.equal(summary.retried, 10);
+  assert.equal(summary.failed, 1);
+  assert.equal(summary.failures.length, 1);
 });
