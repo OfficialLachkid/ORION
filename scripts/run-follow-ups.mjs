@@ -24,6 +24,7 @@ import { getGmailThread, gmailReadScopeAvailable } from '../services/gmail/src/r
 import { resolveGmailConfig } from '../services/gmail/src/config.mjs';
 import { executeTask } from '../services/task-router/src/executor.mjs';
 import { upsertPersistedPendingTask } from '../services/discord-bot/src/pending-task-store.mjs';
+import { normalizeFollowUpSubject } from './lib/follow-up-subject.mjs';
 import { buildOutboundEventDiscordPayload, upgradeLegacyDiscordPayload } from '../services/discord-bot/src/message-formatting.mjs';
 import { buildApprovalButtons } from '../services/discord-bot/src/approval-buttons.mjs';
 
@@ -50,9 +51,14 @@ function headerValue(message, name) {
   return String(m?.value || '');
 }
 
-// Posts the follow-up approval into the #outreach-followups thread.
+// Posts the follow-up approval to Discord. Prefers the #waiting-approval
+// thread (added 2026-08-25) so pending outreach doesn't clutter the parent
+// channel, then falls back to #outreach-followups (the legacy follow-up
+// thread), then #outreach-agent — first configured wins.
 async function postApproval(config, outboundEvents) {
-  const channelId = config.channelIds.outreachFollowups || config.channelIds.outreachAgent;
+  const channelId = config.channelIds.outreachWaitingApproval
+    || config.channelIds.outreachFollowups
+    || config.channelIds.outreachAgent;
   for (const ev of outboundEvents) {
     if (ev.type !== 'approval_request') continue;
     ev.metadata = {
@@ -129,7 +135,10 @@ async function main() {
       continue;
     }
 
-    const subject = String(followUp.draft_subject || '').trim();
+    const subject = normalizeFollowUpSubject({
+      originalSubject: lead.qualification?.draft_subject,
+      fallbackSubject: followUp.draft_subject,
+    });
     const bodyText = String(followUp.draft_body || '').trim();
     const task = {
       task_id: buildTaskId(`${lead.id}:followup`),

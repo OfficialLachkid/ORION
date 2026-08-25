@@ -25,11 +25,16 @@ const IMAGE_CONTENT_TYPE_PREFIX = 'image/';
 // added alongside the developer-agent PR-merge-approval feature.
 // 'outreachFollowups' (the #outreach-followups thread) added 2026-07-24 for
 // the follow-up sequence — its approvals must reach the same handler.
+// 'outreachWaitingApproval' (the #waiting-approval thread inside
+// #outreach-agent) added 2026-08-25 so the outreach channel isn't infinitely
+// long; pending outreach drafts route there instead of the parent channel so
+// the operator can eyeball what's waiting at a glance.
 const APPROVAL_CHANNEL_KEYS = new Set([
   'approvals',
   'outreachAgent',
   'pullRequests',
   'outreachFollowups',
+  'outreachWaitingApproval',
   'orionReview',
   'pokeQuizzReview',
 ]);
