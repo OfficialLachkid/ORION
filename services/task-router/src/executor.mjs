@@ -1565,8 +1565,14 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
   }
 
   if (executionPlan.action === 'gmail_send_draft') {
+    // Lead-outreach sends route to #sent-outreach so the audit trail lives
+    // next to the drafts flow (waiting-approval + followups threads), not
+    // mixed into #agent-results. Any non-lead gmail send (e.g. an ops-tool
+    // notification) keeps the previous #agent-results destination.
+    const isLeadOutreach = Boolean(String(task?.lead_id || '').trim());
+    const sendResultChannelKey = isLeadOutreach ? 'outreachSent' : 'agentResults';
     return buildCompletedResultEvents(
-      'agentResults',
+      sendResultChannelKey,
       `Execution result for ${task.task_id}: Sent drafted email to ${report.emailTo || 'recipient'}.`,
       {
         taskId: task.task_id,
@@ -1580,6 +1586,9 @@ function buildCompletedEvents(task, executionPlan, executionResult) {
         gmailDraftId: report.gmailDraftId || '',
         gmailMessageId: report.gmailMessageId || '',
         gmailThreadId: report.gmailThreadId || '',
+        leadId: task?.lead_id || '',
+        leadBusinessName: task?.lead_business_name || '',
+        leadDomain: task?.lead_domain || '',
       }
     );
   }

@@ -648,6 +648,62 @@ test('executeTask sends an approved Gmail draft', async () => {
   assert.equal(result.outboundEvents[1].metadata.emailBody, 'Hello from O.R.I.O.N.');
 });
 
+test('executeTask routes lead-outreach send results to the outreachSent thread', async () => {
+  // Regression guard for the 2026-08-25 change: lead-outreach sends must
+  // land in #sent-outreach so #waiting-approval + #outreach-followups stay
+  // pending-only. Signalled by the presence of task.lead_id — any Gmail
+  // send that carries a lead_id belongs to the outreach flow.
+  const config = loadRuntimeConfig();
+  const fetchImpl = async (url) => {
+    if (String(url).includes('oauth2.googleapis.com/token')) {
+      return {
+        ok: true,
+        json: async () => ({ access_token: 'token-123', expires_in: 3600, token_type: 'Bearer' }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        id: 'sent-message-456',
+        threadId: 'thread-456',
+        labelIds: ['SENT'],
+      }),
+    };
+  };
+
+  const result = await executeTask({
+    task_id: 'TASK-MAIL-SEND-LEAD',
+    runtime_action: 'gmail_send_draft',
+    lead_id: 'lead-abc-123',
+    lead_business_name: 'Loodgieter Jansen',
+    lead_domain: 'loodgieterjansen.nl',
+    full_text: 'send the drafted outreach email',
+    summary: 'Send drafted email to lead@example.nl',
+    gmail_draft: {
+      draftId: 'draft-456',
+      to: 'lead@example.nl',
+      subject: 'Re: Uw website oogt gedateerd',
+      bodyText: 'Beste Loodgieter Jansen, ...',
+      bodyPreview: 'Beste Loodgieter Jansen, ...',
+    },
+  }, {
+    ...config,
+    env: {
+      ...config.env,
+      GMAIL_CLIENT_ID: 'client-id',
+      GMAIL_CLIENT_SECRET: 'client-secret',
+      GMAIL_REFRESH_TOKEN: 'refresh-token',
+      GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com',
+    },
+  }, { fetchImpl });
+
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.outboundEvents[1].channelKey, 'outreachSent');
+  assert.equal(result.outboundEvents[1].metadata.leadId, 'lead-abc-123');
+  assert.equal(result.outboundEvents[1].metadata.leadBusinessName, 'Loodgieter Jansen');
+  assert.equal(result.outboundEvents[1].metadata.leadDomain, 'loodgieterjansen.nl');
+});
+
 test('buildExecutionPlan recognizes explicit developer-agent workflows', () => {
   const plan = buildExecutionPlan({
     runtime_action: 'developer_agent_workflow',

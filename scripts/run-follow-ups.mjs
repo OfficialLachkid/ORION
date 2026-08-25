@@ -24,6 +24,7 @@ import { getGmailThread, gmailReadScopeAvailable } from '../services/gmail/src/r
 import { resolveGmailConfig } from '../services/gmail/src/config.mjs';
 import { executeTask } from '../services/task-router/src/executor.mjs';
 import { upsertPersistedPendingTask } from '../services/discord-bot/src/pending-task-store.mjs';
+import { normalizeFollowUpSubject } from './lib/follow-up-subject.mjs';
 import { buildOutboundEventDiscordPayload, upgradeLegacyDiscordPayload } from '../services/discord-bot/src/message-formatting.mjs';
 import { buildApprovalButtons } from '../services/discord-bot/src/approval-buttons.mjs';
 
@@ -129,7 +130,16 @@ async function main() {
       continue;
     }
 
-    const subject = String(followUp.draft_subject || '').trim();
+    // Force "Re: <original>" so Gmail's UI nests the follow-up under the
+    // original send. Gmail threads by subject + threadId together, and
+    // Claude sometimes drops the Re: prefix from what it produces — take
+    // the ORIGINAL subject as source of truth and prepend Re: to it.
+    // Routing stays untouched: postApproval below still posts to
+    // #outreach-followups.
+    const subject = normalizeFollowUpSubject({
+      originalSubject: lead.qualification?.draft_subject,
+      fallbackSubject: followUp.draft_subject,
+    });
     const bodyText = String(followUp.draft_body || '').trim();
     const task = {
       task_id: buildTaskId(`${lead.id}:followup`),

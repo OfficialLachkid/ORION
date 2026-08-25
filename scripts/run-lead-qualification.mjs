@@ -21,6 +21,7 @@ import {
 import { buildApprovalButtons } from '../services/discord-bot/src/approval-buttons.mjs';
 import { postLeadQualificationReport, renderLiveProgressBody } from './lib/lead-qualification-report.mjs';
 import { postQualifiedCallLeads } from './lib/qualified-call-leads.mjs';
+import { routeLeadOutreachEvents } from './lib/lead-outreach-routing.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 
@@ -133,15 +134,7 @@ async function dispatchOutboundEvents(config, outboundEvents = []) {
 }
 
 async function dispatchLeadOutreachEvents(config, outboundEvents = []) {
-  const hasOutreachChannel = Boolean(config.channelIds.outreachAgent);
-  const merged = outboundEvents
-    .filter((outboundEvent) => outboundEvent.channelKey !== 'agentResults')
-    .map((outboundEvent) => (
-      outboundEvent.type === 'approval_request' && hasOutreachChannel
-        ? { ...outboundEvent, channelKey: 'outreachAgent' }
-        : outboundEvent
-    ));
-
+  const merged = routeLeadOutreachEvents(config.channelIds || {}, outboundEvents);
   await dispatchOutboundEvents(config, merged);
 }
 
