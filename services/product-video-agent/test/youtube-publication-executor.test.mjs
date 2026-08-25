@@ -11,6 +11,7 @@ import {
   postYoutubeTopLevelComment,
   scheduleYoutubePublication,
   uploadYoutubePreviewVideo,
+  YoutubeApiQuotaExceededError,
   YoutubeCommentPostError,
 } from '../src/youtube-publication-executor.mjs';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
@@ -444,4 +445,51 @@ test('ensureYoutubeAudienceDeclared never overrides an existing true declaration
   assert.equal(result.previousValue, true);
   const putCall = calls.find((c) => c.method === 'PUT');
   assert.equal(putCall, undefined, 'declared-true must NOT be flipped to false');
+});
+
+test('fetchYoutubeVideoStatus throws YoutubeApiQuotaExceededError on quotaExceeded 403', async () => {
+  // Regression guard for 2026-08-25: YouTube's quotaExceeded 403 is a
+  // run-terminator (all subsequent calls fail the same way until midnight
+  // Pacific). Callers need to distinguish it from generic 403s to bail
+  // early instead of churning through the queue.
+  const fetchImpl = async (url) => {
+    if (String(url).includes('oauth2.googleapis.com/token')) {
+      return Response.json({ access_token: 't', expires_in: 3600, token_type: 'Bearer' });
+    }
+    return new Response(JSON.stringify({
+      error: {
+        code: 403,
+        errors: [{ reason: 'quotaExceeded', domain: 'youtube.quota', message: 'Quota exceeded' }],
+        message: 'The request cannot be completed because you have exceeded your quota.',
+      },
+    }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+  };
+  await assert.rejects(
+    fetchYoutubeVideoStatus({ externalId: 'yt-1', clientConfig: { clientId: 'c', clientSecret: 's' }, refreshToken: 'r', fetchImpl }),
+    (err) => err instanceof YoutubeApiQuotaExceededError && err.code === 'quota_exceeded',
+  );
+});
+
+test('ensureYoutubeAudienceDeclared throws YoutubeApiQuotaExceededError when the PUT itself hits quota', async () => {
+  // A cheap videos.list (1 unit) may succeed while the videos.update (50
+  // units) that follows blows the daily allocation. Distinguish that from
+  // a legit non-quota 403.
+  const fetchImpl = async (url, options) => {
+    if (String(url).includes('oauth2.googleapis.com/token')) {
+      return Response.json({ access_token: 't', expires_in: 3600, token_type: 'Bearer' });
+    }
+    if (String(url).includes('/youtube/v3/videos?part=status') && (options?.method === undefined || options.method === 'GET')) {
+      return Response.json({ items: [{ id: 'yt-1', status: { privacyStatus: 'public' } }] });
+    }
+    if (String(url).includes('/youtube/v3/videos?part=status') && options?.method === 'PUT') {
+      return new Response(JSON.stringify({
+        error: { code: 403, errors: [{ reason: 'quotaExceeded', domain: 'youtube.quota' }] },
+      }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+    }
+    return Response.json({});
+  };
+  await assert.rejects(
+    ensureYoutubeAudienceDeclared({ externalId: 'yt-1', madeForKids: false, clientConfig: { clientId: 'c', clientSecret: 's' }, refreshToken: 'r', fetchImpl }),
+    (err) => err instanceof YoutubeApiQuotaExceededError,
+  );
 });

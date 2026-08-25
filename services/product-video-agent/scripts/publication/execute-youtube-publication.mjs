@@ -22,6 +22,7 @@ import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs'
 import { applyYoutubeRelatedVideoSelection } from '../../src/related-video/youtube-studio-automation.mjs';
 import { syncYoutubeAutoCommentState } from '../../src/youtube-auto-comments.mjs';
 import {
+  YoutubeApiQuotaExceededError,
   ensureYoutubeAudienceDeclared,
   fetchYoutubeVideoStatus,
   fetchYoutubeVideoStatuses,
@@ -349,7 +350,16 @@ export async function refreshRelatedVideoAssignments({
     return true;
   });
 
+  // Quota-exhausted state carries across the whole run: once the YouTube API
+  // has returned quotaExceeded, every subsequent call in this run will fail
+  // the same way (quota resets at midnight Pacific), so bail early rather
+  // than churn through ~180 pointless Studio automation attempts that all
+  // hit save_never_enabled because the audience declaration API silently
+  // fails. Observed 2026-08-25: trivamon returned 0/56 applied after the
+  // poke-guess backfill exhausted the daily quota.
+  let quotaExhausted = false;
   for (const publication of candidates) {
+    if (quotaExhausted) break;
     const videoRow = publication.video_id
       ? await store.fetchVideoById(publication.video_id)
       : null;
@@ -426,10 +436,27 @@ export async function refreshRelatedVideoAssignments({
             refreshToken,
           });
         } catch (error) {
-          // Best-effort: a failure here shouldn't block the Studio run —
-          // the run will just fail with save_never_enabled if the audience
-          // question is still unanswered, and the operator can retry after
-          // fixing perms.
+          // Quota-exhausted is a run-terminator: subsequent audience calls
+          // will all fail the same way, driving every remaining publication
+          // into save_never_enabled. Skip Studio work for this row and
+          // signal the outer loop to bail on the next iteration.
+          if (error instanceof YoutubeApiQuotaExceededError || error?.code === 'quota_exceeded') {
+            quotaExhausted = true;
+            process.stderr.write(`YouTube API quota exhausted while processing ${updatedPublication.external_id}. Aborting remaining publications; quota resets at midnight Pacific.\n`);
+            results.push({
+              publication_id: publication.id,
+              action: 'related_video_refresh',
+              workflow_state: normalizeWorkflowState(updatedPublication),
+              related_video_selection_status: updatedPublication?.metadata?.related_video?.selection_status || '',
+              related_video_target_publication_id: updatedPublication?.metadata?.related_video?.target_publication_id || '',
+              related_video_capability_status: 'youtube_api_quota_exhausted',
+              related_video_apply_status: 'skipped_quota',
+            });
+            continue;
+          }
+          // Non-quota failure: best-effort — still attempt the Studio run.
+          // save_never_enabled will surface if the audience question is
+          // still unanswered when we get to Save.
           process.stderr.write(`ensureYoutubeAudienceDeclared failed for ${updatedPublication.external_id}: ${error.message}\n`);
         }
       }
@@ -1535,6 +1562,7 @@ async function main() {
     // Studio automation runs — otherwise Save stays disabled for any
     // change we make (see refreshRelatedVideoAssignments for the same
     // guard on the manual-refresh path).
+    let scheduleQuotaExhausted = false;
     if (String(updatedPublication?.external_id || '').trim()) {
       try {
         await ensureYoutubeAudienceDeclared({
@@ -1544,8 +1572,28 @@ async function main() {
           refreshToken,
         });
       } catch (error) {
-        process.stderr.write(`ensureYoutubeAudienceDeclared failed for ${updatedPublication.external_id}: ${error.message}\n`);
+        if (error instanceof YoutubeApiQuotaExceededError || error?.code === 'quota_exceeded') {
+          scheduleQuotaExhausted = true;
+          process.stderr.write(`YouTube API quota exhausted for ${updatedPublication.external_id}; skipping Studio automation. Quota resets at midnight Pacific.\n`);
+        } else {
+          process.stderr.write(`ensureYoutubeAudienceDeclared failed for ${updatedPublication.external_id}: ${error.message}\n`);
+        }
       }
+    }
+    if (scheduleQuotaExhausted) {
+      // Skip Studio automation entirely — related_video plan stays as
+      // written to metadata; a manual --refresh-related-videos after
+      // quota resets will pick it up.
+      results.push({
+        publication_id: publication.id,
+        action: 'schedule_update',
+        external_id: publication.external_id,
+        scheduled_for: scheduled.scheduledFor,
+        workflow_state: updatedPublication?.metadata?.workflow_state || 'scheduled',
+        related_video_capability_status: 'youtube_api_quota_exhausted',
+        related_video_apply_status: 'skipped_quota',
+      });
+      continue;
     }
     const relatedVideoResult = await applyYoutubeRelatedVideoSelection({
       channelProfile,
