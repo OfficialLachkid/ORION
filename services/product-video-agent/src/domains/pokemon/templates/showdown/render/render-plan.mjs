@@ -3,6 +3,36 @@ import {
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
 
+function hashSeed(input) {
+  let hash = 2166136261;
+  for (const character of String(input || 'showdown-intro')) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createPrng(seedInput) {
+  let seed = hashSeed(seedInput) || 1;
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6D2B79F5) | 0;
+    let result = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    result ^= result + Math.imul(result ^ (result >>> 7), 61 | result);
+    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function buildSeededRevealOrder(count, seedInput) {
+  const random = createPrng(seedInput);
+  const indices = Array.from({ length: Math.max(0, count) }, (_, index) => index);
+  for (let index = indices.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [indices[index], indices[swapIndex]] = [indices[swapIndex], indices[index]];
+  }
+  return indices;
+}
+
 function normalizeSlot(config = {}, width, height) {
   const x = ensureNumber(config.x, 0);
   const y = ensureNumber(config.y, 0);
@@ -84,17 +114,68 @@ function buildTextLayout(template) {
   };
 }
 
-function buildRenderedMatches(template, matches = []) {
+function buildIntroSequence({ template, seed, participantCount, firstBattleStartSeconds }) {
+  const holdSeconds = roundTime(ensureNumber(template?.layout?.rounds?.intro_participant_hold_seconds, 2));
+  const revealStaggerSeconds = roundTime(
+    Math.max(0.05, ensureNumber(template?.renderer?.intro_slot_reveal_stagger_seconds, 0.3)),
+  );
+  const revealFadeSeconds = roundTime(
+    Math.max(0.08, ensureNumber(template?.renderer?.intro_slot_reveal_fade_seconds, 0.18)),
+  );
+  const revealOrder = buildSeededRevealOrder(participantCount, `${seed}:showdown-intro-reveal`);
+  const revealWindowSeconds = participantCount > 0
+    ? roundTime(revealFadeSeconds + (Math.max(0, participantCount - 1) * revealStaggerSeconds))
+    : 0;
+  const participantRevealStartSeconds = roundTime(
+    Math.max(0, firstBattleStartSeconds - holdSeconds - revealWindowSeconds),
+  );
+  const participantRevealEndSeconds = roundTime(participantRevealStartSeconds + revealWindowSeconds);
+  const participantRevealTimes = Array.from(
+    { length: participantCount },
+    () => participantRevealStartSeconds,
+  );
+  revealOrder.forEach((participantIndex, orderIndex) => {
+    participantRevealTimes[participantIndex] = roundTime(
+      participantRevealStartSeconds + (orderIndex * revealStaggerSeconds),
+    );
+  });
+  return {
+    bracket_draw_start_seconds: 0,
+    bracket_draw_end_seconds: participantRevealStartSeconds,
+    participant_hold_end_seconds: roundTime(firstBattleStartSeconds),
+    participant_hold_start_seconds: participantRevealEndSeconds,
+    participant_reveal_end_seconds: participantRevealEndSeconds,
+    participant_reveal_fade_seconds: revealFadeSeconds,
+    participant_reveal_order: revealOrder,
+    participant_reveal_start_seconds: participantRevealStartSeconds,
+    participant_reveal_stagger_seconds: revealStaggerSeconds,
+    participant_reveal_times: participantRevealTimes,
+  };
+}
+
+function buildRenderedMatches(template, matches = [], participantCount = 0) {
   const rounds = template?.layout?.rounds || {};
   const hookHoldSeconds = roundTime(ensureNumber(rounds.hook_hold_seconds, 1.1));
+  const introParticipantHoldSeconds = roundTime(
+    ensureNumber(rounds.intro_participant_hold_seconds, 2),
+  );
+  const introParticipantRevealWindowSeconds = roundTime(
+    Math.max(0.08, ensureNumber(template?.renderer?.intro_slot_reveal_fade_seconds, 0.18))
+      + (Math.max(0, participantCount - 1)
+        * Math.max(0.05, ensureNumber(template?.renderer?.intro_slot_reveal_stagger_seconds, 0.3))),
+  );
+  const interRoundBracketHoldSeconds = roundTime(ensureNumber(rounds.inter_round_bracket_hold_seconds, 0.08));
   const matchIntroHoldSeconds = roundTime(ensureNumber(rounds.match_intro_hold_seconds, 1.8));
   const suspenseHoldSeconds = roundTime(ensureNumber(rounds.suspense_hold_seconds, 0.9));
   const revealHoldSeconds = roundTime(ensureNumber(rounds.reveal_hold_seconds, 1.2));
   const transitionDurationSeconds = roundTime(ensureNumber(rounds.transition_duration_seconds, 0.4));
+  const firstRoundLeadSeconds = roundTime(
+    hookHoldSeconds + introParticipantRevealWindowSeconds + introParticipantHoldSeconds,
+  );
   let currentStart = 0;
 
-  return matches.map((match, index) => {
-    const introDelaySeconds = index === 0 ? hookHoldSeconds : 0.08;
+  const renderedMatches = matches.map((match, index) => {
+    const introDelaySeconds = index === 0 ? firstRoundLeadSeconds : interRoundBracketHoldSeconds;
     const sceneStart = roundTime(currentStart);
     const introStart = roundTime(sceneStart + introDelaySeconds);
     const revealStart = roundTime(introStart + matchIntroHoldSeconds + suspenseHoldSeconds);
@@ -111,6 +192,14 @@ function buildRenderedMatches(template, matches = []) {
       hook_visible_until_seconds: index === 0 ? introStart : null,
     };
   });
+
+  return renderedMatches.map((match, index) => ({
+    ...match,
+    bracket_progress_start_seconds: match.scene_end_seconds,
+    bracket_progress_end_seconds: index === renderedMatches.length - 1
+      ? roundTime(match.scene_end_seconds + interRoundBracketHoldSeconds)
+      : renderedMatches[index + 1].intro_start_seconds,
+  }));
 }
 
 function buildNarrationCueSchedule(renderedMatches = [], championScene) {
@@ -125,13 +214,22 @@ function buildNarrationCueSchedule(renderedMatches = [], championScene) {
 }
 
 export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
-  const renderedMatches = buildRenderedMatches(template, plan?.tournament?.matches || []);
+  const participantCount = Array.isArray(plan?.tournament?.participants)
+    ? plan.tournament.participants.length
+    : 0;
+  const renderedMatches = buildRenderedMatches(template, plan?.tournament?.matches || [], participantCount);
   const championHoldSeconds = roundTime(ensureNumber(template?.layout?.rounds?.champion_hold_seconds, 1.1));
-  const championStart = roundTime(renderedMatches.at(-1)?.scene_end_seconds || 0);
+  const championStart = roundTime(renderedMatches.at(-1)?.bracket_progress_end_seconds || 0);
   const championScene = {
     start_seconds: championStart,
     end_seconds: roundTime(championStart + championHoldSeconds),
   };
+  const introSequence = buildIntroSequence({
+    template,
+    seed: plan?.seed || 'showdown-intro',
+    participantCount,
+    firstBattleStartSeconds: renderedMatches[0]?.intro_start_seconds || 0,
+  });
 
   return {
     canvas: {
@@ -139,11 +237,14 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       height: ensureNumber(template?.canvas?.height, 1920),
       fps: ensureNumber(template?.canvas?.fps, 30),
     },
+    seed: String(plan?.seed || ''),
+    participant_count: participantCount,
     total_duration_seconds: championScene.end_seconds,
     text_layout: buildTextLayout(template),
     bracket_layout: buildBracketLayout(template),
     battle_stage: buildBattleStageLayout(template),
     champion_stage: buildChampionStageLayout(template),
+    intro_sequence: introSequence,
     matches: renderedMatches,
     champion_scene: championScene,
     narration_cues: buildNarrationCueSchedule(renderedMatches, championScene),
@@ -198,6 +299,20 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
       hook_visible_until_seconds: index === 0 ? introStart : null,
     };
   });
+  const finalBracketHoldSeconds = roundTime(Math.max(
+    0,
+    ensureNumber(
+      matches.at(-1)?.bracket_progress_end_seconds - matches.at(-1)?.scene_end_seconds,
+      0,
+    ),
+  ));
+  const updatedMatchesWithBracketProgress = updatedMatches.map((match, index) => ({
+    ...match,
+    bracket_progress_start_seconds: match.scene_end_seconds,
+    bracket_progress_end_seconds: index === updatedMatches.length - 1
+      ? roundTime(match.scene_end_seconds + finalBracketHoldSeconds)
+      : updatedMatches[index + 1].intro_start_seconds,
+  }));
 
   const championBaseDuration = roundTime(
     renderPlan.champion_scene.end_seconds - renderPlan.champion_scene.start_seconds,
@@ -206,18 +321,36 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
     championBaseDuration,
     ensureNumber(durationsByRole.get('champion'), 0),
   ));
-  const championStart = roundTime(updatedMatches.at(-1)?.scene_end_seconds || 0);
+  const championStart = roundTime(updatedMatchesWithBracketProgress.at(-1)?.bracket_progress_end_seconds || 0);
   const championScene = {
     ...renderPlan.champion_scene,
     start_seconds: championStart,
     end_seconds: roundTime(championStart + championDuration),
   };
+  const introSequence = buildIntroSequence({
+    template: {
+      layout: {
+        rounds: {
+          intro_participant_hold_seconds: renderPlan.intro_sequence?.participant_hold_end_seconds
+            - renderPlan.intro_sequence?.participant_reveal_end_seconds,
+        },
+      },
+      renderer: {
+        intro_slot_reveal_fade_seconds: renderPlan.intro_sequence?.participant_reveal_fade_seconds,
+        intro_slot_reveal_stagger_seconds: renderPlan.intro_sequence?.participant_reveal_stagger_seconds,
+      },
+    },
+    seed: renderPlan.seed || 'showdown-intro',
+    participantCount: ensureNumber(renderPlan.participant_count, 0),
+    firstBattleStartSeconds: updatedMatchesWithBracketProgress[0]?.intro_start_seconds || 0,
+  });
 
   return {
     ...renderPlan,
-    matches: updatedMatches,
+    intro_sequence: introSequence,
+    matches: updatedMatchesWithBracketProgress,
     champion_scene: championScene,
     total_duration_seconds: championScene.end_seconds,
-    narration_cues: buildNarrationCueSchedule(updatedMatches, championScene),
+    narration_cues: buildNarrationCueSchedule(updatedMatchesWithBracketProgress, championScene),
   };
 }

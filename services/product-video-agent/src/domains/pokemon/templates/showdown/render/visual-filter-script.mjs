@@ -18,26 +18,36 @@ function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
 }
 
-function buildCardFilters(bracketLayout) {
-  return Object.values(bracketLayout.slots).flatMap((slot) => ([
-    `drawbox=x=${slot.x}:y=${slot.y}:w=${slot.width}:h=${slot.height}:color=0xFFFFFF@0.95:t=3`,
-    `drawbox=x=${slot.x + 3}:y=${slot.y + 3}:w=${slot.width - 6}:h=${slot.height - 6}:color=0x101010@0.32:t=fill`,
-  ]));
+function buildEnablePart(enableExpression = '') {
+  return enableExpression ? `:enable='${enableExpression}'` : '';
 }
 
-function buildHorizontalConnector(y, x1, x2, thickness) {
-  return `drawbox=x=${Math.min(x1, x2)}:y=${round((y - (thickness / 2)))}:w=${Math.max(1, Math.abs(x2 - x1))}:h=${thickness}:color=0xFFFFFF@0.7:t=fill`;
+function buildCardFilters(bracketLayout, revealSchedule = {}) {
+  return Object.entries(bracketLayout.slots).flatMap(([slotKey, slot]) => {
+    const enableExpression = revealSchedule[slotKey]
+      ? `gte(t,${revealSchedule[slotKey]})`
+      : '';
+    const enablePart = buildEnablePart(enableExpression);
+    return [
+      `drawbox=x=${slot.x}:y=${slot.y}:w=${slot.width}:h=${slot.height}:color=0xFFFFFF@0.95:t=3${enablePart}`,
+      `drawbox=x=${slot.x + 3}:y=${slot.y + 3}:w=${slot.width - 6}:h=${slot.height - 6}:color=0x101010@0.32:t=fill${enablePart}`,
+    ];
+  });
 }
 
-function buildVerticalConnector(x, y1, y2, thickness) {
-  return `drawbox=x=${round((x - (thickness / 2)))}:y=${Math.min(y1, y2)}:w=${thickness}:h=${Math.max(1, Math.abs(y2 - y1))}:color=0xFFFFFF@0.7:t=fill`;
+function buildHorizontalConnector(y, x1, x2, thickness, enableExpression = '') {
+  return `drawbox=x=${Math.min(x1, x2)}:y=${round((y - (thickness / 2)))}:w=${Math.max(1, Math.abs(x2 - x1))}:h=${thickness}:color=0xFFFFFF@0.7:t=fill${buildEnablePart(enableExpression)}`;
+}
+
+function buildVerticalConnector(x, y1, y2, thickness, enableExpression = '') {
+  return `drawbox=x=${round((x - (thickness / 2)))}:y=${Math.min(y1, y2)}:w=${thickness}:h=${Math.max(1, Math.abs(y2 - y1))}:color=0xFFFFFF@0.7:t=fill${buildEnablePart(enableExpression)}`;
 }
 
 function round(value) {
   return Math.round(ensureNumber(value, 0));
 }
 
-function buildConnectorSegments(bracketLayout) {
+function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   const thickness = ensureNumber(bracketLayout.connector_thickness_px, 10);
   const slots = bracketLayout.slots;
   const lines = [];
@@ -47,27 +57,123 @@ function buildConnectorSegments(bracketLayout) {
   const rightWinnerCenterX = slots.semi_2_winner.center_x;
   const finalCenterX = slots.final_winner.center_x;
   const finalMergeY = round((slots.final_winner.center_y + slots.semi_1_winner.center_y) / 2);
+  const leftEnable = revealSchedule.connector_left ? `gte(t,${revealSchedule.connector_left})` : '';
+  const rightEnable = revealSchedule.connector_right ? `gte(t,${revealSchedule.connector_right})` : '';
+  const finalEnable = revealSchedule.connector_final ? `gte(t,${revealSchedule.connector_final})` : '';
 
   lines.push(
-    buildHorizontalConnector(slots.semi_1_a.center_y, leftSourceRight, leftWinnerCenterX, thickness),
-    buildHorizontalConnector(slots.semi_1_b.center_y, leftSourceRight, leftWinnerCenterX, thickness),
-    buildVerticalConnector(leftWinnerCenterX, slots.semi_1_a.center_y, slots.semi_1_b.center_y, thickness),
+    buildHorizontalConnector(slots.semi_1_a.center_y, leftSourceRight, leftWinnerCenterX, thickness, leftEnable),
+    buildHorizontalConnector(slots.semi_1_b.center_y, leftSourceRight, leftWinnerCenterX, thickness, leftEnable),
+    buildVerticalConnector(leftWinnerCenterX, slots.semi_1_a.center_y, slots.semi_1_b.center_y, thickness, leftEnable),
   );
 
   lines.push(
-    buildHorizontalConnector(slots.semi_2_a.center_y, rightSourceLeft, rightWinnerCenterX, thickness),
-    buildHorizontalConnector(slots.semi_2_b.center_y, rightSourceLeft, rightWinnerCenterX, thickness),
-    buildVerticalConnector(rightWinnerCenterX, slots.semi_2_a.center_y, slots.semi_2_b.center_y, thickness),
+    buildHorizontalConnector(slots.semi_2_a.center_y, rightSourceLeft, rightWinnerCenterX, thickness, rightEnable),
+    buildHorizontalConnector(slots.semi_2_b.center_y, rightSourceLeft, rightWinnerCenterX, thickness, rightEnable),
+    buildVerticalConnector(rightWinnerCenterX, slots.semi_2_a.center_y, slots.semi_2_b.center_y, thickness, rightEnable),
   );
 
   lines.push(
-    buildVerticalConnector(slots.semi_1_winner.center_x, slots.semi_1_winner.center_y, finalMergeY, thickness),
-    buildVerticalConnector(slots.semi_2_winner.center_x, slots.semi_2_winner.center_y, finalMergeY, thickness),
-    buildHorizontalConnector(finalMergeY, slots.semi_1_winner.center_x, slots.semi_2_winner.center_x, thickness),
-    buildVerticalConnector(finalCenterX, slots.final_winner.center_y, finalMergeY, thickness),
+    buildVerticalConnector(slots.semi_1_winner.center_x, slots.semi_1_winner.center_y, finalMergeY, thickness, finalEnable),
+    buildVerticalConnector(slots.semi_2_winner.center_x, slots.semi_2_winner.center_y, finalMergeY, thickness, finalEnable),
+    buildHorizontalConnector(finalMergeY, slots.semi_1_winner.center_x, slots.semi_2_winner.center_x, thickness, finalEnable),
+    buildVerticalConnector(finalCenterX, slots.final_winner.center_y, finalMergeY, thickness, finalEnable),
   );
 
   return lines;
+}
+
+function buildIntroRevealSchedule(renderPlan) {
+  const introEnd = ensureNumber(
+    renderPlan?.intro_sequence?.bracket_draw_end_seconds,
+    renderPlan?.matches?.[0]?.intro_start_seconds,
+  );
+  if (introEnd <= 0) {
+    return { slots: {}, connectors: {} };
+  }
+  const sequence = [
+    ['semi_1_a', 'slot'],
+    ['semi_1_b', 'slot'],
+    ['connector_left', 'connector'],
+    ['semi_1_winner', 'slot'],
+    ['semi_2_a', 'slot'],
+    ['semi_2_b', 'slot'],
+    ['connector_right', 'connector'],
+    ['semi_2_winner', 'slot'],
+    ['connector_final', 'connector'],
+    ['final_winner', 'slot'],
+  ];
+  const stepDuration = introEnd / sequence.length;
+  const slots = {};
+  const connectors = {};
+  sequence.forEach(([key, type], index) => {
+    const startSeconds = round(index * stepDuration * 1000) / 1000;
+    if (type === 'slot') {
+      slots[key] = startSeconds;
+    } else {
+      connectors[key] = startSeconds;
+    }
+  });
+  return { slots, connectors };
+}
+
+function buildPathCoordinateExpression(points = [], axis, startSeconds, endSeconds, overlayDimensionExpression) {
+  if (points.length === 0) {
+    return '0';
+  }
+  if (points.length === 1 || endSeconds <= startSeconds) {
+    return `${points[0][axis]}-${overlayDimensionExpression}/2`;
+  }
+  const segmentDuration = (endSeconds - startSeconds) / (points.length - 1);
+  const buildSegmentExpression = (index) => {
+    const currentPoint = points[index];
+    const nextPoint = points[index + 1];
+    if (!nextPoint) {
+      return `${currentPoint[axis]}-${overlayDimensionExpression}/2`;
+    }
+    const segmentStart = round((startSeconds + (segmentDuration * index)) * 1000) / 1000;
+    const currentValue = currentPoint[axis];
+    const nextValue = nextPoint[axis];
+    const linear = `${currentValue}+(${nextValue}-${currentValue})*((t-${segmentStart})/${segmentDuration})-${overlayDimensionExpression}/2`;
+    if (index === points.length - 2) {
+      return linear;
+    }
+    const segmentEnd = round((segmentStart + segmentDuration) * 1000) / 1000;
+    return `if(lt(t,${segmentEnd}),${linear},${buildSegmentExpression(index + 1)})`;
+  };
+  return buildSegmentExpression(0);
+}
+
+function buildBracketProgressPath(slotMap, match) {
+  const finalMergeY = round((slotMap.final_winner.center_y + slotMap.semi_1_winner.center_y) / 2);
+  if (match.match_id === 'semi-final-1') {
+    const sourceSlot = match.winner_side === 'a' ? slotMap.semi_1_a : slotMap.semi_1_b;
+    const winnerSlot = slotMap.semi_1_winner;
+    return [
+      { center_x: sourceSlot.center_x, center_y: sourceSlot.center_y },
+      { center_x: sourceSlot.x + sourceSlot.width + 20, center_y: sourceSlot.center_y },
+      { center_x: winnerSlot.center_x, center_y: sourceSlot.center_y },
+      { center_x: winnerSlot.center_x, center_y: winnerSlot.center_y },
+    ];
+  }
+  if (match.match_id === 'semi-final-2') {
+    const sourceSlot = match.winner_side === 'a' ? slotMap.semi_2_a : slotMap.semi_2_b;
+    const winnerSlot = slotMap.semi_2_winner;
+    return [
+      { center_x: sourceSlot.center_x, center_y: sourceSlot.center_y },
+      { center_x: sourceSlot.x - 20, center_y: sourceSlot.center_y },
+      { center_x: winnerSlot.center_x, center_y: sourceSlot.center_y },
+      { center_x: winnerSlot.center_x, center_y: winnerSlot.center_y },
+    ];
+  }
+  const sourceSlot = match.winner_side === 'a' ? slotMap.semi_1_winner : slotMap.semi_2_winner;
+  const winnerSlot = slotMap.final_winner;
+  return [
+    { center_x: sourceSlot.center_x, center_y: sourceSlot.center_y },
+    { center_x: sourceSlot.center_x, center_y: finalMergeY },
+    { center_x: winnerSlot.center_x, center_y: finalMergeY },
+    { center_x: winnerSlot.center_x, center_y: winnerSlot.center_y },
+  ];
 }
 
 function buildHighlightFilters(renderPlan, template) {
@@ -83,7 +189,7 @@ function buildHighlightFilters(renderPlan, template) {
     const sourceSlotKeys = matchToSourceSlotKeys[match.match_id] || [];
     const filters = sourceSlotKeys.map((slotKey) => {
       const slot = slots[slotKey];
-      return `drawbox=x=${slot.x + 4}:y=${slot.y + 4}:w=${slot.width - 8}:h=${slot.height - 8}:color=0xFFD60A@${currentAlpha}:t=fill:enable='${formatEnableBetween(match.scene_start_seconds, match.scene_end_seconds)}'`;
+      return `drawbox=x=${slot.x + 4}:y=${slot.y + 4}:w=${slot.width - 8}:h=${slot.height - 8}:color=0xFFD60A@${currentAlpha}:t=fill:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`;
     });
     const winnerSlotKey = (
       match.match_id === 'semi-final-1' ? 'semi_1_winner'
@@ -92,7 +198,7 @@ function buildHighlightFilters(renderPlan, template) {
     );
     const winnerSlot = slots[winnerSlotKey];
     filters.push(
-      `drawbox=x=${winnerSlot.x + 4}:y=${winnerSlot.y + 4}:w=${winnerSlot.width - 8}:h=${winnerSlot.height - 8}:color=0x34C759@${completeAlpha}:t=fill:enable='${formatEnableBetween(match.reveal_start_seconds, match.scene_end_seconds)}'`,
+      `drawbox=x=${winnerSlot.x + 4}:y=${winnerSlot.y + 4}:w=${winnerSlot.width - 8}:h=${winnerSlot.height - 8}:color=0x34C759@${completeAlpha}:t=fill:enable='${formatEnableBetween(match.bracket_progress_end_seconds, renderPlan.total_duration_seconds)}'`,
     );
     return filters;
   });
@@ -198,10 +304,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const slotSpriteSize = ensureNumber(bracketLayout.slot_sprite_size_px, 120);
   const battleSpriteSize = ensureNumber(battleStage.sprite_size_px, 380);
   const championSpriteSize = ensureNumber(championStage.sprite_size_px, 520);
+  const introPokeballSize = round(
+    slotSpriteSize * ensureNumber(template?.renderer?.intro_pokeball_scale_multiplier, 1.04),
+  );
   const loserAlphaMultiplier = ensureNumber(template?.renderer?.loser_alpha_multiplier, 0.46);
   const championParticipantId = plan.tournament?.champion?.id || '';
   const matchBackgroundLabels = renderPlan.matches.map((_, index) => `vbgmatch${index}`);
   const championBackgroundLabel = 'vbgchamp';
+  const introSequence = renderPlan.intro_sequence || {};
+  const sourceSlotRevealTimes = Array.isArray(introSequence.participant_reveal_times)
+    ? introSequence.participant_reveal_times
+    : [];
   const loserParticipantIds = new Set(
     (renderPlan.matches || []).map((match) => match.loser?.id).filter(Boolean),
   );
@@ -209,6 +322,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const stageLabelQueues = new Map();
   const stageGrayLabels = new Map();
   const championStageLabels = new Map();
+  const introRevealSchedule = buildIntroRevealSchedule(renderPlan);
 
   filters.push(
     `[${inputRefs.background}:v]fps=${fps},scale=${renderPlan.canvas.width}:${renderPlan.canvas.height}:force_original_aspect_ratio=increase,crop=${renderPlan.canvas.width}:${renderPlan.canvas.height},boxblur=${blurSigma}:1,setsar=1,split=${1 + matchBackgroundLabels.length + 1}[vbgbase]${matchBackgroundLabels.map((label) => `[${label}]`).join('')}[${championBackgroundLabel}]`,
@@ -216,7 +330,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
   (plan.tournament?.participants || []).forEach((participant, index) => {
     const ref = inputRefs.participants[index];
-    const slotUsageCount = 1 + renderPlan.matches.filter((match) => match.winner?.id === participant.id).length;
+    const winCount = renderPlan.matches.filter((match) => match.winner?.id === participant.id).length;
+    const slotUsageCount = 1 + (winCount * 2);
     const stageUsageCount = renderPlan.matches.reduce((count, match) => {
       const appearsInMatch = match.participant_a.id === participant.id || match.participant_b.id === participant.id;
       const winsMatch = match.winner?.id === participant.id;
@@ -276,8 +391,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const bracketBaseLabel = 'vbracketbase';
   filters.push(
     `[${currentVideoLabel}]${[
-      ...buildCardFilters(bracketLayout),
-      ...buildConnectorSegments(bracketLayout),
+      ...buildCardFilters(bracketLayout, introRevealSchedule.slots),
+      ...buildConnectorSegments(bracketLayout, introRevealSchedule.connectors),
       ...buildHighlightFilters(renderPlan, template),
     ].join(',')}[${bracketBaseLabel}]`,
   );
@@ -288,6 +403,31 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
   const slotMap = bracketLayout.slots;
   const sourceSlotKeys = ['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b'];
+
+  if (inputRefs.introPokeball != null) {
+    const sourcePokeballLabels = sourceSlotKeys.map((_, index) => `vpokeball${index}`);
+    filters.push(
+      `[${inputRefs.introPokeball}:v]fps=${fps},scale=${introPokeballSize}:${introPokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${sourcePokeballLabels.length}${sourcePokeballLabels.map((label) => `[${label}]`).join('')}`,
+    );
+    sourceSlotKeys.forEach((slotKey, index) => {
+      const slot = slotMap[slotKey];
+      const slotRevealStart = ensureNumber(introRevealSchedule.slots[slotKey], 0);
+      const spriteRevealStart = ensureNumber(
+        sourceSlotRevealTimes[index],
+        renderPlan.matches[0]?.intro_start_seconds,
+      );
+      if (spriteRevealStart <= slotRevealStart) {
+        return;
+      }
+      const placement = buildSlotSpritePlacement(slot, introPokeballSize);
+      const nextLabel = `vslotpokeball${index}`;
+      filters.push(
+        `[${currentVideoLabel}][${sourcePokeballLabels[index]}]overlay=x='${placement.x}':y='${placement.y}':enable='${formatEnableBetween(slotRevealStart, spriteRevealStart)}'[${nextLabel}]`,
+      );
+      currentVideoLabel = nextLabel;
+    });
+  }
+
   const bracketVisibleWindows = [];
   if (renderPlan.matches[0]) {
     bracketVisibleWindows.push({
@@ -305,14 +445,25 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       });
     }
   }
+  const finalMatch = renderPlan.matches.at(-1);
+  if (ensureNumber(finalMatch?.bracket_progress_end_seconds, 0) > ensureNumber(finalMatch?.scene_end_seconds, 0)) {
+    bracketVisibleWindows.push({
+      start: finalMatch.scene_end_seconds,
+      end: finalMatch.bracket_progress_end_seconds,
+    });
+  }
   const bracketVisibleExpression = buildWindowExpression(bracketVisibleWindows);
   (plan.tournament?.participants || []).forEach((participant, index) => {
     const slot = slotMap[sourceSlotKeys[index]];
     const placement = buildSlotSpritePlacement(slot, slotSpriteSize);
     const nextLabel = `vslot${index}`;
     const slotLabel = slotLabelQueues.get(index)?.shift();
+    const slotRevealStart = ensureNumber(
+      sourceSlotRevealTimes[index],
+      ensureNumber(introRevealSchedule.slots[sourceSlotKeys[index]], 0),
+    );
     filters.push(
-      `[${currentVideoLabel}][${slotLabel}]overlay=x='${placement.x}':y='${placement.y}'[${nextLabel}]`,
+      `[${currentVideoLabel}][${slotLabel}]overlay=x='${placement.x}':y='${placement.y}':enable='gte(t,${slotRevealStart})'[${nextLabel}]`,
     );
     currentVideoLabel = nextLabel;
   });
@@ -329,7 +480,18 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const nextLabel = `vwinner${matchIndex}`;
     const winnerSlotLabel = slotLabelQueues.get(participantIndex)?.shift();
     filters.push(
-      `[${currentVideoLabel}][${winnerSlotLabel}]overlay=x='${placement.x}':y='${placement.y}':enable='${formatEnableBetween(match.reveal_start_seconds, renderPlan.total_duration_seconds)}'[${nextLabel}]`,
+      `[${currentVideoLabel}][${winnerSlotLabel}]overlay=x='${placement.x}':y='${placement.y}':enable='${formatEnableBetween(match.bracket_progress_end_seconds, renderPlan.total_duration_seconds)}'[${nextLabel}]`,
+    );
+    currentVideoLabel = nextLabel;
+  });
+
+  renderPlan.matches.forEach((match, matchIndex) => {
+    const participantIndex = participantById.get(match.winner.id)?.bracket_seed_index ?? 0;
+    const progressSlotLabel = slotLabelQueues.get(participantIndex)?.shift();
+    const pathPoints = buildBracketProgressPath(slotMap, match);
+    const nextLabel = `vprogress${matchIndex}`;
+    filters.push(
+      `[${currentVideoLabel}][${progressSlotLabel}]overlay=x='${buildPathCoordinateExpression(pathPoints, 'center_x', match.bracket_progress_start_seconds, match.bracket_progress_end_seconds, 'overlay_w')}':y='${buildPathCoordinateExpression(pathPoints, 'center_y', match.bracket_progress_start_seconds, match.bracket_progress_end_seconds, 'overlay_h')}':enable='${formatEnableBetween(match.bracket_progress_start_seconds, match.bracket_progress_end_seconds)}'[${nextLabel}]`,
     );
     currentVideoLabel = nextLabel;
   });
@@ -404,21 +566,52 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
   (plan.tournament?.participants || []).forEach((participant, index) => {
     const slot = slotMap[sourceSlotKeys[index]];
+    const sourceRevealStart = ensureNumber(
+      sourceSlotRevealTimes[index],
+      ensureNumber(introRevealSchedule.slots[sourceSlotKeys[index]], 0),
+    );
     drawtextParts.push(
       buildSlotNameDrawtext(
         participant.display_name,
         slot,
         fontPart,
         bracketLayout.slot_name_font_size,
-        bracketVisibleExpression,
+        buildAndEnableExpression(
+          bracketVisibleExpression,
+          `gte(t,${sourceRevealStart})`,
+        ),
       ),
     );
   });
 
   drawtextParts.push(
-    buildPlaceholderDrawtext(slotMap.semi_1_winner, fontPart, buildAndEnableExpression(bracketVisibleExpression, `lt(t,${renderPlan.matches[0]?.reveal_start_seconds || 0})`)),
-    buildPlaceholderDrawtext(slotMap.semi_2_winner, fontPart, buildAndEnableExpression(bracketVisibleExpression, `lt(t,${renderPlan.matches[1]?.reveal_start_seconds || 0})`)),
-    buildPlaceholderDrawtext(slotMap.final_winner, fontPart, buildAndEnableExpression(bracketVisibleExpression, `lt(t,${renderPlan.matches[2]?.reveal_start_seconds || 0})`)),
+    buildPlaceholderDrawtext(
+      slotMap.semi_1_winner,
+      fontPart,
+      buildAndEnableExpression(
+        bracketVisibleExpression,
+        `gte(t,${ensureNumber(introRevealSchedule.slots.semi_1_winner, 0)})`,
+        `lt(t,${renderPlan.matches[0]?.bracket_progress_end_seconds || 0})`,
+      ),
+    ),
+    buildPlaceholderDrawtext(
+      slotMap.semi_2_winner,
+      fontPart,
+      buildAndEnableExpression(
+        bracketVisibleExpression,
+        `gte(t,${ensureNumber(introRevealSchedule.slots.semi_2_winner, 0)})`,
+        `lt(t,${renderPlan.matches[1]?.bracket_progress_end_seconds || 0})`,
+      ),
+    ),
+    buildPlaceholderDrawtext(
+      slotMap.final_winner,
+      fontPart,
+      buildAndEnableExpression(
+        bracketVisibleExpression,
+        `gte(t,${ensureNumber(introRevealSchedule.slots.final_winner, 0)})`,
+        `lt(t,${renderPlan.matches[2]?.bracket_progress_end_seconds || 0})`,
+      ),
+    ),
   );
 
   renderPlan.matches.forEach((match) => {
@@ -435,7 +628,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         bracketLayout.slot_name_font_size,
         buildAndEnableExpression(
           bracketVisibleExpression,
-          `gte(t,${match.reveal_start_seconds})`,
+          `gte(t,${match.bracket_progress_end_seconds})`,
         ),
       ),
       ...buildAnimatedSceneTextBlock(

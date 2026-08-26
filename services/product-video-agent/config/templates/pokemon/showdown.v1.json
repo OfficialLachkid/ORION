@@ -76,7 +76,7 @@
       "source_policy": "local_t7_backgrounds",
       "media_type": "looping_image_gif_or_video",
       "fit": "cover",
-      "blur_sigma": 3.5
+      "blur_sigma": 4
     },
     "text": {
       "hook_y": 150,
@@ -99,34 +99,36 @@
       "slot_card_height_px": 184,
       "connector_thickness_px": 10,
       "slot_positions": {
-        "semi_1_a": { "x": 80, "y": 470 },
-        "semi_1_b": { "x": 80, "y": 720 },
-        "semi_1_winner": { "x": 270, "y": 595 },
-        "semi_2_a": { "x": 780, "y": 470 },
-        "semi_2_b": { "x": 780, "y": 720 },
-        "semi_2_winner": { "x": 590, "y": 595 },
-        "final_winner": { "x": 430, "y": 380 }
+        "semi_1_a": { "x": 80, "y": 920 },
+        "semi_1_b": { "x": 80, "y": 1360 },
+        "semi_1_winner": { "x": 270, "y": 1200 },
+        "semi_2_a": { "x": 780, "y": 920 },
+        "semi_2_b": { "x": 780, "y": 1360 },
+        "semi_2_winner": { "x": 590, "y": 1200 },
+        "final_winner": { "x": 430, "y": 800 }
       }
     },
     "battle_stage": {
-      "sprite_size_px": 340,
+      "sprite_size_px": 408,
       "left_center_x": 275,
       "right_center_x": 805,
-      "center_y": 1150,
-      "name_y": 1430,
+      "center_y": 700,
+      "name_y": 1160,
       "name_font_size": 54,
-      "vs_y": 1125,
+      "vs_y": 935,
       "vs_font_size": 88
     },
     "champion_stage": {
       "sprite_size_px": 460,
       "center_x": 540,
-      "center_y": 1120,
-      "name_y": 1510,
+      "center_y": 800,
+      "name_y": 1300,
       "name_font_size": 78
     },
     "rounds": {
       "hook_hold_seconds": 1.1,
+      "intro_participant_hold_seconds": 2,
+      "inter_round_bracket_hold_seconds": 3,
       "match_intro_hold_seconds": 1.8,
       "suspense_hold_seconds": 0.9,
       "reveal_hold_seconds": 1.2,
@@ -151,6 +153,18 @@
       "stop_at_reveal": false
     },
     "sound_effects": {
+      "intro_slot_reveal": {
+        "enabled": true,
+        "preferred_keywords": [
+          "pokeball-open-sound"
+        ]
+      },
+      "bracket_progress": {
+        "enabled": true,
+        "preferred_keywords": [
+          "select-sound"
+        ]
+      },
       "winner_reveal": {
         "enabled": true,
         "preferred_keywords": [
@@ -167,6 +181,9 @@
     "audio_bitrate": "192k",
     "crf": 20,
     "faststart": true,
+    "intro_pokeball_scale_multiplier": 1.04,
+    "intro_slot_reveal_fade_seconds": 0.18,
+    "intro_slot_reveal_stagger_seconds": 0.3,
     "winner_scale_multiplier": 1.05,
     "loser_alpha_multiplier": 0.46,
     "winner_banner_fade_seconds": 0.16,

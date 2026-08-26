@@ -49,10 +49,14 @@ export async function renderPokeQuizzVideo({
   )));
 
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
+  const introSlotRevealPath = plan.assets.audio.selected_sound_effects?.intro_slot_reveal || null;
+  const bracketProgressPath = plan.assets.audio.selected_sound_effects?.bracket_progress || null;
   const winnerRevealPath = plan.assets.audio.selected_sound_effects?.winner_reveal || null;
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
+    ...(introSlotRevealPath ? [introSlotRevealPath] : []),
+    ...(bracketProgressPath ? [bracketProgressPath] : []),
     ...(winnerRevealPath ? [winnerRevealPath] : []),
   ]);
 
@@ -70,7 +74,9 @@ export async function renderPokeQuizzVideo({
   await mkdir(dirname(audioMixPath), { recursive: true });
   const audioFilterScript = buildAudioFilterScript({
     narrationPaths,
+    introSlotRevealPath,
     musicPath,
+    bracketProgressPath,
     winnerRevealPath,
     renderPlan,
   });
@@ -82,6 +88,8 @@ export async function renderPokeQuizzVideo({
       ...buildAudioInputs([
         ...narrationPaths,
         ...(musicPath ? [musicPath] : []),
+        ...(introSlotRevealPath ? [introSlotRevealPath] : []),
+        ...(bracketProgressPath ? [bracketProgressPath] : []),
         ...(winnerRevealPath ? [winnerRevealPath] : []),
       ]),
       '-/filter_complex',
@@ -105,6 +113,7 @@ export async function renderPokeQuizzVideo({
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
   const inputRefs = {
     background: inputRoleIndex.get('background'),
+    introPokeball: inputRoleIndex.get('intro-pokeball'),
     participants: (plan.tournament?.participants || []).map((_, index) => inputRoleIndex.get(`participant-${index}`)),
   };
   const templateFontCandidates = (Array.isArray(template?.layout?.text?.font_candidates)

@@ -119,6 +119,10 @@ export function buildPokeQuizzAnimatedShinySpritePath(row) {
   return `${POKE_QUIZZ_ASSET_LAYOUT.animatedSpriteGifs}/${generationDirectory(row.generation)}/shiny/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug || row.name)}.gif`;
 }
 
+export function buildPokeQuizzAnimatedSpritePath(row) {
+  return `${POKE_QUIZZ_ASSET_LAYOUT.animatedSpriteGifs}/${generationDirectory(row.generation)}/normal/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug || row.name)}.gif`;
+}
+
 export function buildPokeQuizzSilhouettePath(row) {
   return `${POKE_QUIZZ_ASSET_LAYOUT.silhouettes}/${generationDirectory(row.generation)}/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug)}.png`;
 }

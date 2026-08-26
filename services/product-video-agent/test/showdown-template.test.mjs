@@ -63,17 +63,17 @@ const template = {
       slot_card_height_px: 184,
       connector_thickness_px: 10,
       slot_positions: {
-        semi_1_a: { x: 80, y: 470 },
-        semi_1_b: { x: 80, y: 720 },
-        semi_1_winner: { x: 270, y: 595 },
-        semi_2_a: { x: 780, y: 470 },
-        semi_2_b: { x: 780, y: 720 },
-        semi_2_winner: { x: 590, y: 595 },
-        final_winner: { x: 430, y: 380 },
+        semi_1_a: { x: 80, y: 920 },
+        semi_1_b: { x: 80, y: 1360 },
+        semi_1_winner: { x: 270, y: 1200 },
+        semi_2_a: { x: 780, y: 920 },
+        semi_2_b: { x: 780, y: 1360 },
+        semi_2_winner: { x: 590, y: 1200 },
+        final_winner: { x: 430, y: 800 },
       },
     },
     battle_stage: {
-      sprite_size_px: 380,
+      sprite_size_px: 408,
       left_center_x: 275,
       right_center_x: 805,
       center_y: 1150,
@@ -91,6 +91,8 @@ const template = {
     },
     rounds: {
       hook_hold_seconds: 1.1,
+      intro_participant_hold_seconds: 2,
+      inter_round_bracket_hold_seconds: 0.75,
       match_intro_hold_seconds: 1.8,
       suspense_hold_seconds: 0.9,
       reveal_hold_seconds: 1.2,
@@ -103,6 +105,14 @@ const template = {
       start_seconds: 0,
     },
     sound_effects: {
+      intro_slot_reveal: {
+        enabled: true,
+        preferred_keywords: ['pokeball-open-sound'],
+      },
+      bracket_progress: {
+        enabled: true,
+        preferred_keywords: ['select-sound'],
+      },
       winner_reveal: {
         enabled: true,
         preferred_keywords: ['ding-sound'],
@@ -110,6 +120,9 @@ const template = {
     },
   },
   renderer: {
+    intro_pokeball_scale_multiplier: 1.04,
+    intro_slot_reveal_fade_seconds: 0.18,
+    intro_slot_reveal_stagger_seconds: 0.3,
     loser_alpha_multiplier: 0.46,
   },
 };
@@ -124,6 +137,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['fire', 'flying'],
     sprite_path: '/tmp/charizard.png',
+    animated_sprite_path: '/tmp/charizard.gif',
     metadata: {
       base_stats: { hp: 78, attack: 84, defense: 78, special_attack: 109, special_defense: 85, speed: 100 },
     },
@@ -137,6 +151,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['water'],
     sprite_path: '/tmp/blastoise.png',
+    animated_sprite_path: '/tmp/blastoise.gif',
     metadata: {
       base_stats: { hp: 79, attack: 83, defense: 100, special_attack: 85, special_defense: 105, speed: 78 },
     },
@@ -150,6 +165,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['dragon', 'flying'],
     sprite_path: '/tmp/dragonite.png',
+    animated_sprite_path: '/tmp/dragonite.gif',
     metadata: {
       base_stats: { hp: 91, attack: 134, defense: 95, special_attack: 100, special_defense: 100, speed: 80 },
     },
@@ -163,6 +179,7 @@ const pokedexRows = [
     region: 'kanto',
     types: ['ghost', 'poison'],
     sprite_path: '/tmp/gengar.png',
+    animated_sprite_path: '/tmp/gengar.gif',
     metadata: {
       base_stats: { hp: 60, attack: 65, defense: 60, special_attack: 130, special_defense: 75, speed: 110 },
     },
@@ -175,11 +192,14 @@ const assetInventory = {
   backgrounds: ['/tmp/backgrounds/arena.png'],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/ding-sound.mp3'],
+    all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3'],
     timer_end: '/tmp/ding-sound.mp3',
+    pokeball_intro: '/tmp/pokeball-open-sound.mp3',
   },
-  overlays: [],
-  overlay_presets: {},
+  overlays: ['/tmp/open-close-pokeball.gif'],
+  overlay_presets: {
+    pokeball_primary: '/tmp/open-close-pokeball.gif',
+  },
 };
 
 test('generic planner dispatch builds a four-participant showdown bracket', async () => {
@@ -196,6 +216,10 @@ test('generic planner dispatch builds a four-participant showdown bracket', asyn
   assert.equal(plan.tournament.participants.length, 4);
   assert.equal(plan.tournament.matches.length, 3);
   assert.equal(plan.tournament.matches[0].round_label, 'Semi Final 1');
+  assert.equal(plan.tournament.participants[0].render_sprite_path.endsWith('.gif'), true);
+  assert.equal(plan.assets.overlays.selected_intro_pokeball_path, '/tmp/open-close-pokeball.gif');
+  assert.equal(plan.assets.audio.selected_sound_effects.intro_slot_reveal, '/tmp/pokeball-open-sound.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.bracket_progress, '/tmp/select-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.winner_reveal, '/tmp/ding-sound.mp3');
   assert.equal(plan.required_asset_gaps.length, 0);
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Showdown$/u);
@@ -218,11 +242,19 @@ test('showdown render plan and inputs stay deterministic for a four-Pokemon brac
   assert.equal(renderPlan.matches.length, 3);
   assert.equal(renderPlan.output_path, '/tmp/showdown.mp4');
   assert.equal(renderPlan.bracket_layout.slots.final_winner.center_x, 540);
-  assert.equal(renderPlan.matches[0].intro_start_seconds, 1.1);
+  assert.equal(renderPlan.matches[0].intro_start_seconds, 4.18);
+  assert.equal(renderPlan.matches[1].intro_start_seconds - renderPlan.matches[1].scene_start_seconds, 0.75);
+  assert.equal(renderPlan.intro_sequence.bracket_draw_end_seconds, 1.1);
+  assert.equal(renderPlan.intro_sequence.participant_reveal_stagger_seconds, 0.3);
+  assert.equal(renderPlan.intro_sequence.participant_hold_end_seconds, renderPlan.matches[0].intro_start_seconds);
+  assert.equal(renderPlan.matches[0].bracket_progress_end_seconds, renderPlan.matches[1].intro_start_seconds);
+  assert.equal(renderPlan.champion_scene.start_seconds, renderPlan.matches.at(-1)?.bracket_progress_end_seconds);
   assert.equal(renderPlan.champion_scene.end_seconds > renderPlan.matches.at(-1)?.scene_end_seconds, true);
-  assert.equal(visualInputs.length, 5);
+  assert.equal(visualInputs.length, 6);
   assert.equal(visualInputs[0].role, 'background');
+  assert.equal(visualInputs[1].role, 'intro-pokeball');
   assert.equal(visualInputs.at(-1)?.role, 'participant-3');
+  assert.deepEqual(visualInputs[2].args.slice(0, 4), ['-ignore_loop', '0', '-t', String(renderPlan.total_duration_seconds)]);
 });
 
 test('showdown audio and visual filters include winner sting cues and champion overlay logic', async () => {
@@ -243,13 +275,16 @@ test('showdown audio and visual filters include winner sting cues and champion o
     renderPlan,
     {
       background: 0,
-      participants: [1, 2, 3, 4],
+      introPokeball: 1,
+      participants: [2, 3, 4, 5],
     },
     '/tmp/font.ttf',
   );
   const audioFilter = buildAudioFilterScript({
     narrationPaths: Array.from({ length: plan.narration.lines.length }, (_, index) => `/tmp/${index}.wav`),
+    introSlotRevealPath: '/tmp/pokeball-open-sound.mp3',
     musicPath: '/tmp/music.mp3',
+    bracketProgressPath: '/tmp/select-sound.mp3',
     winnerRevealPath: '/tmp/ding-sound.mp3',
     renderPlan,
   });
@@ -263,12 +298,17 @@ test('showdown audio and visual filters include winner sting cues and champion o
   assert.match(visualFilter.script, /\[p\d+slot0\]/u);
   assert.match(visualFilter.script, /\[p\d+stage0\]/u);
   assert.match(visualFilter.script, /\[p\d+stage1\]/u);
+  assert.match(visualFilter.script, /vprogress0/u);
+  assert.match(visualFilter.script, /vpokeball0/u);
+  assert.match(visualFilter.script, /gte\(t,0\.33/u);
   assert.match(visualFilter.script, /enable='\(between\(t,0,/u);
   assert.match(
     visualFilter.script,
     new RegExp(`enable='between\\(t,${renderPlan.matches[0].intro_start_seconds},${renderPlan.matches[0].reveal_start_seconds}\\)'`, 'u'),
   );
+  assert.match(audioFilter, /asplit=4\[osrc0\]\[osrc1\]\[osrc2\]\[osrc3\]/u);
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
+  assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
   assert.match(audioFilter, /amix=inputs=/u);
 });
 
@@ -298,6 +338,7 @@ test('showdown render plan expands scene timings to measured narration durations
   assert.equal(stretchedPlan.matches[0].intro_start_seconds >= 2.4, true);
   assert.equal(stretchedPlan.matches[0].reveal_start_seconds > renderPlan.matches[0].reveal_start_seconds, true);
   assert.equal(stretchedPlan.matches[1].scene_start_seconds >= stretchedPlan.matches[0].scene_end_seconds, true);
+  assert.equal(stretchedPlan.matches.at(-1)?.bracket_progress_end_seconds >= stretchedPlan.matches.at(-1)?.scene_end_seconds, true);
   assert.equal(stretchedPlan.champion_scene.start_seconds >= stretchedPlan.matches.at(-1)?.scene_end_seconds, true);
   assert.equal(stretchedPlan.total_duration_seconds > renderPlan.total_duration_seconds, true);
 });

@@ -23,6 +23,18 @@ export function buildVisualInputs(plan, renderPlan) {
     ),
   });
 
+  if (plan.assets.overlays?.selected_intro_pokeball_path) {
+    inputs.push({
+      role: 'intro-pokeball',
+      path: plan.assets.overlays.selected_intro_pokeball_path,
+      args: buildLoopingVisualInput(
+        plan.assets.overlays.selected_intro_pokeball_path,
+        renderPlan.total_duration_seconds,
+        renderPlan.canvas.fps,
+      ),
+    });
+  }
+
   (plan.tournament?.participants || []).forEach((participant, index) => {
     const spritePath = participant.render_sprite_path || participant.sprite_path;
     inputs.push({

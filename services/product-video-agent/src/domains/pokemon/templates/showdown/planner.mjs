@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import {
+  buildPokeQuizzAnimatedSpritePath,
   buildPokeQuizzMirroredSpritePath,
   buildPokeQuizzPreviewDirectory,
   POKE_QUIZZ_ASSET_LAYOUT,
@@ -63,8 +64,16 @@ async function canAccessPath(filePath) {
   return mirroredSpriteAvailabilityCache.get(normalizedPath);
 }
 
-async function resolveShowdownSpritePath(spritePath) {
-  const normalizedPath = String(spritePath || '').trim();
+async function resolveShowdownSpritePath(subject = {}) {
+  const explicitAnimatedPath = String(subject?.animated_sprite_path || '').trim();
+  if (explicitAnimatedPath) {
+    return explicitAnimatedPath;
+  }
+  const derivedAnimatedPath = buildPokeQuizzAnimatedSpritePath(subject);
+  if (derivedAnimatedPath && await canAccessPath(derivedAnimatedPath)) {
+    return derivedAnimatedPath;
+  }
+  const normalizedPath = String(subject?.sprite_path || '').trim();
   if (!normalizedPath) {
     return normalizedPath;
   }
@@ -174,11 +183,11 @@ function selectBackground(backgrounds = [], random, selectionState = {}) {
   return pool[Math.floor(random() * pool.length)] || pool[0];
 }
 
-function selectPreferredSoundEffectPath(soundEffects = {}, config = {}) {
+function selectPreferredSoundEffectPath(soundEffects = {}, config = {}, fallbackOverride = null) {
   if (config?.enabled === false) {
     return null;
   }
-  const fallbackPath = soundEffects.timer_end || soundEffects.ding || null;
+  const fallbackPath = fallbackOverride ?? soundEffects.timer_end ?? soundEffects.ding ?? null;
   const preferredKeywords = (Array.isArray(config?.preferred_keywords)
     ? config.preferred_keywords
     : [])
@@ -192,6 +201,23 @@ function selectPreferredSoundEffectPath(soundEffects = {}, config = {}) {
       const normalizedPath = String(filePath || '').trim().toLowerCase();
       return preferredKeywords.every((keyword) => normalizedPath.includes(keyword));
     }) || fallbackPath;
+}
+
+function selectIntroSlotRevealSoundPath(soundEffects = {}, config = {}) {
+  if (config?.enabled === false) {
+    return null;
+  }
+  const preferredKeywords = (Array.isArray(config?.preferred_keywords)
+    ? config.preferred_keywords
+    : [])
+    .map((value) => String(value || '').trim().toLowerCase())
+    .filter(Boolean);
+  const matchedPreferred = (Array.isArray(soundEffects.all) ? soundEffects.all : [])
+    .find((filePath) => {
+      const normalizedPath = String(filePath || '').trim().toLowerCase();
+      return preferredKeywords.every((keyword) => normalizedPath.includes(keyword));
+    });
+  return matchedPreferred || soundEffects.pokeball_intro || null;
 }
 
 function buildParticipantRecord(subject, renderSpritePath, bracketSeedIndex) {
@@ -208,6 +234,7 @@ function buildParticipantRecord(subject, renderSpritePath, bracketSeedIndex) {
     slug: String(subject.slug || '').trim(),
     types: Array.isArray(subject.types) ? [...subject.types] : [],
     sprite_path: String(subject.sprite_path || '').trim(),
+    animated_sprite_path: String(subject.animated_sprite_path || '').trim(),
     render_sprite_path: String(renderSpritePath || subject.sprite_path || '').trim(),
     sprite_source_url: subject.sprite_source_url || null,
     base_stats: baseStats,
@@ -331,7 +358,7 @@ export async function planPokemonShowdownChallenge({
   const participants = await Promise.all(selectedSubjects.map(async (subject, index) => (
     buildParticipantRecord(
       subject,
-      await resolveShowdownSpritePath(subject.sprite_path),
+      await resolveShowdownSpritePath(subject),
       index,
     )
   )));
@@ -381,19 +408,45 @@ export async function planPokemonShowdownChallenge({
     random,
     normalizedSelectionState,
   );
+  const introPokeballOverlayPath = (
+    inventory?.overlay_presets?.pokeball_primary
+    || inventory?.overlay_presets?.pokeball_open_close
+    || null
+  );
+  const introSlotRevealSoundPath = selectIntroSlotRevealSoundPath(
+    inventory?.sound_effects || {},
+    template?.audio?.sound_effects?.intro_slot_reveal || {},
+  );
   const winnerRevealSoundPath = selectPreferredSoundEffectPath(
     inventory?.sound_effects || {},
     template?.audio?.sound_effects?.winner_reveal || {},
+  );
+  const bracketProgressSoundPath = selectPreferredSoundEffectPath(
+    inventory?.sound_effects || {},
+    template?.audio?.sound_effects?.bracket_progress || {},
+    null,
   );
 
   const requiredAssetGaps = [];
   if (!selectedBackgroundPath) requiredAssetGaps.push('background_missing');
   if (!inventory.music.length) requiredAssetGaps.push('battle_intro_music_missing');
   if (
+    template?.audio?.sound_effects?.intro_slot_reveal?.enabled !== false
+    && !introSlotRevealSoundPath
+  ) {
+    requiredAssetGaps.push('intro_slot_reveal_sfx_missing');
+  }
+  if (
     template?.audio?.sound_effects?.winner_reveal?.enabled !== false
     && !winnerRevealSoundPath
   ) {
     requiredAssetGaps.push('winner_reveal_sfx_missing');
+  }
+  if (
+    template?.audio?.sound_effects?.bracket_progress?.enabled !== false
+    && !bracketProgressSoundPath
+  ) {
+    requiredAssetGaps.push('bracket_progress_sfx_missing');
   }
   if (!participants.every((participant) => participant.render_sprite_path || participant.sprite_path)) {
     requiredAssetGaps.push('pokemon_sprite_local_assets_missing');
@@ -443,6 +496,7 @@ export async function planPokemonShowdownChallenge({
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
         available_paths: inventory?.overlays || [],
+        selected_intro_pokeball_path: introPokeballOverlayPath,
       },
       audio: {
         battle_intro_music_directory: POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic,
@@ -450,6 +504,8 @@ export async function planPokemonShowdownChallenge({
         selected_battle_intro_music_path: selectSeededFile(inventory?.music || [], random),
         selected_sound_effects: {
           ...(inventory?.sound_effects || {}),
+          intro_slot_reveal: introSlotRevealSoundPath,
+          bracket_progress: bracketProgressSoundPath,
           winner_reveal: winnerRevealSoundPath,
         },
       },

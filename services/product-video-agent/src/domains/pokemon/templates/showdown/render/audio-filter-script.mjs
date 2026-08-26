@@ -2,8 +2,12 @@ import {
   DEFAULT_MUSIC_VOLUME,
   DEFAULT_TIMER_END_VOLUME,
   DEFAULT_VOICE_VOLUME,
+  ensureNumber,
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
+
+const DEFAULT_SHOWDOWN_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.5).toFixed(3));
+const DEFAULT_SHOWDOWN_BRACKET_PROGRESS_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.5).toFixed(3));
 
 export function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
@@ -11,7 +15,9 @@ export function buildAudioInputs(assets) {
 
 export function buildAudioFilterScript({
   narrationPaths,
+  introSlotRevealPath,
   musicPath,
+  bracketProgressPath,
   winnerRevealPath,
   renderPlan,
 }) {
@@ -37,6 +43,21 @@ export function buildAudioFilterScript({
     inputIndex += 1;
   }
 
+  if (introSlotRevealPath) {
+    const revealTimes = Array.isArray(renderPlan?.intro_sequence?.participant_reveal_times)
+      ? renderPlan.intro_sequence.participant_reveal_times
+      : [];
+    const splitCount = Math.max(1, revealTimes.length);
+    filters.push(`[${inputIndex}:a]asplit=${splitCount}${Array.from({ length: splitCount }, (_, index) => `[osrc${index}]`).join('')}`);
+    revealTimes.forEach((startSeconds, revealIndex) => {
+      const delayMs = Math.max(0, Math.round(ensureNumber(startSeconds, 0) * 1000));
+      const label = `open${revealIndex}`;
+      filters.push(`[osrc${revealIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_SHOWDOWN_POKEBALL_VOLUME}[${label}]`);
+      mixLabels.push(label);
+    });
+    inputIndex += 1;
+  }
+
   if (winnerRevealPath) {
     const splitCount = Math.max(1, renderPlan.matches.length);
     filters.push(`[${inputIndex}:a]asplit=${splitCount}${Array.from({ length: splitCount }, (_, index) => `[wsrc${index}]`).join('')}`);
@@ -44,6 +65,18 @@ export function buildAudioFilterScript({
       const delayMs = Math.max(0, Math.round(match.reveal_start_seconds * 1000));
       const label = `win${matchIndex}`;
       filters.push(`[wsrc${matchIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_TIMER_END_VOLUME}[${label}]`);
+      mixLabels.push(label);
+    });
+    inputIndex += 1;
+  }
+
+  if (bracketProgressPath) {
+    const splitCount = Math.max(1, renderPlan.matches.length);
+    filters.push(`[${inputIndex}:a]asplit=${splitCount}${Array.from({ length: splitCount }, (_, index) => `[psrc${index}]`).join('')}`);
+    renderPlan.matches.forEach((match, matchIndex) => {
+      const delayMs = Math.max(0, Math.round(match.bracket_progress_end_seconds * 1000));
+      const label = `progress${matchIndex}`;
+      filters.push(`[psrc${matchIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_SHOWDOWN_BRACKET_PROGRESS_VOLUME}[${label}]`);
       mixLabels.push(label);
     });
   }
