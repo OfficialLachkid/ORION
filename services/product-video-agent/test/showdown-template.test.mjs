@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { planPokemonTypeChallenge } from '../src/pokemon-type-challenge-planner.mjs';
 import { buildPokeQuizzRenderPlan } from '../src/poke-quizz-renderer.mjs';
 import { buildAudioFilterScript } from '../src/domains/pokemon/templates/showdown/render/audio-filter-script.mjs';
+import { applyNarrationDurationsToRenderPlan } from '../src/domains/pokemon/templates/showdown/render/render-plan.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/showdown/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/showdown/render/visual-inputs.mjs';
 
@@ -255,9 +256,48 @@ test('showdown audio and visual filters include winner sting cues and champion o
 
   assert.match(visualFilter.script, /\[0:v\]fps=30,scale=1080:1920/u);
   assert.match(visualFilter.script, /Champion/u);
-  assert.match(visualFilter.script, /overlay=x='540-w\/2'/u);
-  assert.equal((visualFilter.script.match(/setsar=1\[p\d+champ\]/gu) || []).length, 1);
-  assert.equal((visualFilter.script.match(/colorchannelmixer=aa=0\.46\[p\d+stagegray\]/gu) || []).length, 3);
+  assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
+  assert.equal(/:w=-/u.test(visualFilter.script), false);
+  assert.equal((visualFilter.script.match(/setsar=1\[p\d+champ0\]/gu) || []).length, 1);
+  assert.equal((visualFilter.script.match(/colorchannelmixer=aa=0\.46\[p\d+stagegray0\]/gu) || []).length, 3);
+  assert.match(visualFilter.script, /\[p\d+slot0\]/u);
+  assert.match(visualFilter.script, /\[p\d+stage0\]/u);
+  assert.match(visualFilter.script, /\[p\d+stage1\]/u);
+  assert.match(visualFilter.script, /enable='\(between\(t,0,/u);
+  assert.match(
+    visualFilter.script,
+    new RegExp(`enable='between\\(t,${renderPlan.matches[0].intro_start_seconds},${renderPlan.matches[0].reveal_start_seconds}\\)'`, 'u'),
+  );
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
   assert.match(audioFilter, /amix=inputs=/u);
+});
+
+test('showdown render plan expands scene timings to measured narration durations', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'showdown-narration-stretch',
+    assetInventory,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/showdown.mp4',
+  });
+  const stretchedPlan = applyNarrationDurationsToRenderPlan(renderPlan, [
+    2.4,
+    3.3,
+    1.8,
+    3.1,
+    1.7,
+    3.4,
+    1.9,
+    1.6,
+  ]);
+
+  assert.equal(stretchedPlan.matches[0].intro_start_seconds >= 2.4, true);
+  assert.equal(stretchedPlan.matches[0].reveal_start_seconds > renderPlan.matches[0].reveal_start_seconds, true);
+  assert.equal(stretchedPlan.matches[1].scene_start_seconds >= stretchedPlan.matches[0].scene_end_seconds, true);
+  assert.equal(stretchedPlan.champion_scene.start_seconds >= stretchedPlan.matches.at(-1)?.scene_end_seconds, true);
+  assert.equal(stretchedPlan.total_duration_seconds > renderPlan.total_duration_seconds, true);
 });

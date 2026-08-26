@@ -1,7 +1,10 @@
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { runLocalProcess } from '../../../../../process-runner.mjs';
-import { verifyReadableFiles } from '../../dual-type-reveal/render/media-probe.mjs';
+import {
+  probeMediaDurationSeconds,
+  verifyReadableFiles,
+} from '../../dual-type-reveal/render/media-probe.mjs';
 import { synthesizeNarrationTrack } from '../../dual-type-reveal/render/narration-synthesis.mjs';
 import {
   DEFAULT_FONT_CANDIDATES,
@@ -9,7 +12,10 @@ import {
 } from '../../dual-type-reveal/render/constants.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
 import { buildAudioFilterScript, buildAudioInputs } from './audio-filter-script.mjs';
-import { buildPokeQuizzRenderPlan } from './render-plan.mjs';
+import {
+  applyNarrationDurationsToRenderPlan,
+  buildPokeQuizzRenderPlan,
+} from './render-plan.mjs';
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
 
@@ -23,7 +29,7 @@ export async function renderPokeQuizzVideo({
   runtimeRoot,
   fontCandidates = DEFAULT_FONT_CANDIDATES,
 }) {
-  const renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath });
+  let renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath });
   const outputAbsolutePath = resolve(projectRoot, outputPath);
   const slugBase = `${slugify(plan.template_key || 'showdown')}-${slugify(plan.selection.mode || 'single-elimination-bracket')}-${slugify(plan.seed)}`;
   const audioMixPath = resolve(runtimeRoot, `${slugBase}-audio.m4a`);
@@ -49,6 +55,17 @@ export async function renderPokeQuizzVideo({
     ...(musicPath ? [musicPath] : []),
     ...(winnerRevealPath ? [winnerRevealPath] : []),
   ]);
+
+  const narrationDurations = await Promise.all(
+    narrationPaths.map((narrationPath) => (
+      probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: narrationPath,
+        cwd: projectRoot,
+      })
+    )),
+  );
+  renderPlan = applyNarrationDurationsToRenderPlan(renderPlan, narrationDurations);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
   const audioFilterScript = buildAudioFilterScript({

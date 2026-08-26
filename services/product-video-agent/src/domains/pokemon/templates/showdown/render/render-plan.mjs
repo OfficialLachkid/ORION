@@ -154,6 +154,70 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   };
 }
 
-export function applyNarrationDurationsToRenderPlan(renderPlan) {
-  return renderPlan;
+export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDurations = []) {
+  const matches = Array.isArray(renderPlan?.matches) ? renderPlan.matches : [];
+  if (matches.length === 0) {
+    return renderPlan;
+  }
+
+  const durationsByRole = new Map();
+  (Array.isArray(renderPlan?.narration_cues) ? renderPlan.narration_cues : []).forEach((cue, index) => {
+    const role = String(cue?.role || '').trim();
+    const duration = ensureNumber(narrationDurations[index], 0);
+    if (role) {
+      durationsByRole.set(role, duration);
+    }
+  });
+
+  const hookDuration = ensureNumber(durationsByRole.get('hook'), 0);
+  let currentStart = 0;
+  const updatedMatches = matches.map((match, index) => {
+    const introDelay = roundTime(Math.max(
+      match.intro_start_seconds - match.scene_start_seconds,
+      index === 0 ? hookDuration : 0,
+    ));
+    const introDuration = roundTime(Math.max(
+      match.reveal_start_seconds - match.intro_start_seconds,
+      ensureNumber(durationsByRole.get(`${match.match_id}-intro`), 0),
+    ));
+    const winnerDuration = roundTime(Math.max(
+      match.scene_end_seconds - match.reveal_start_seconds - match.transition_duration_seconds,
+      ensureNumber(durationsByRole.get(`${match.match_id}-winner`), 0),
+    ));
+    const sceneStart = roundTime(currentStart);
+    const introStart = roundTime(sceneStart + introDelay);
+    const revealStart = roundTime(introStart + introDuration);
+    const sceneEnd = roundTime(revealStart + winnerDuration + match.transition_duration_seconds);
+    currentStart = sceneEnd;
+    return {
+      ...match,
+      scene_start_seconds: sceneStart,
+      intro_start_seconds: introStart,
+      reveal_start_seconds: revealStart,
+      scene_end_seconds: sceneEnd,
+      hook_visible_until_seconds: index === 0 ? introStart : null,
+    };
+  });
+
+  const championBaseDuration = roundTime(
+    renderPlan.champion_scene.end_seconds - renderPlan.champion_scene.start_seconds,
+  );
+  const championDuration = roundTime(Math.max(
+    championBaseDuration,
+    ensureNumber(durationsByRole.get('champion'), 0),
+  ));
+  const championStart = roundTime(updatedMatches.at(-1)?.scene_end_seconds || 0);
+  const championScene = {
+    ...renderPlan.champion_scene,
+    start_seconds: championStart,
+    end_seconds: roundTime(championStart + championDuration),
+  };
+
+  return {
+    ...renderPlan,
+    matches: updatedMatches,
+    champion_scene: championScene,
+    total_duration_seconds: championScene.end_seconds,
+    narration_cues: buildNarrationCueSchedule(updatedMatches, championScene),
+  };
 }

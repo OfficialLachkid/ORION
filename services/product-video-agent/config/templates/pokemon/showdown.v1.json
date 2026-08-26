@@ -80,21 +80,21 @@
     },
     "text": {
       "hook_y": 150,
-      "hook_font_size": 122,
-      "round_y": 305,
-      "round_font_size": 68,
-      "matchup_y": 365,
-      "matchup_font_size": 92,
-      "insight_y": 470,
-      "insight_font_size": 58,
+      "hook_font_size": 84,
+      "round_y": 240,
+      "round_font_size": 46,
+      "matchup_y": 318,
+      "matchup_font_size": 62,
+      "insight_y": 410,
+      "insight_font_size": 38,
       "winner_y": 1450,
-      "winner_font_size": 90,
-      "champion_y": 260,
-      "champion_font_size": 104
+      "winner_font_size": 78,
+      "champion_y": 252,
+      "champion_font_size": 90
     },
     "bracket": {
       "slot_sprite_size_px": 120,
-      "slot_name_font_size": 42,
+      "slot_name_font_size": 36,
       "slot_card_width_px": 220,
       "slot_card_height_px": 184,
       "connector_thickness_px": 10,
@@ -109,21 +109,21 @@
       }
     },
     "battle_stage": {
-      "sprite_size_px": 380,
+      "sprite_size_px": 340,
       "left_center_x": 275,
       "right_center_x": 805,
       "center_y": 1150,
       "name_y": 1430,
-      "name_font_size": 62,
+      "name_font_size": 54,
       "vs_y": 1125,
-      "vs_font_size": 100
+      "vs_font_size": 88
     },
     "champion_stage": {
-      "sprite_size_px": 520,
+      "sprite_size_px": 460,
       "center_x": 540,
       "center_y": 1120,
       "name_y": 1510,
-      "name_font_size": 86
+      "name_font_size": 78
     },
     "rounds": {
       "hook_hold_seconds": 1.1,
