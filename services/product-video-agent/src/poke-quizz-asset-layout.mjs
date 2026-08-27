@@ -16,6 +16,7 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   transitions: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Transitions`,
   battleIntroMusic: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Music`,
   soundEffects: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Sound Effects`,
+  cries: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Cries`,
   previews: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Previews`,
   masters: `${ORION_T7_ROOT}/Masters/Poke Quizz`,
   templates: `${ORION_T7_ROOT}/Templates/Poke Quizz`,
@@ -121,6 +122,10 @@ export function buildPokeQuizzAnimatedShinySpritePath(row) {
 
 export function buildPokeQuizzAnimatedSpritePath(row) {
   return `${POKE_QUIZZ_ASSET_LAYOUT.animatedSpriteGifs}/${generationDirectory(row.generation)}/normal/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug || row.name)}.gif`;
+}
+
+export function buildPokeQuizzCryPath(row) {
+  return `${POKE_QUIZZ_ASSET_LAYOUT.cries}/${generationDirectory(row.generation)}/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug || row.name)}.ogg`;
 }
 
 export function buildPokeQuizzSilhouettePath(row) {

@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { planPokemonTypeChallenge } from '../src/pokemon-type-challenge-planner.mjs';
 import { buildPokeQuizzRenderPlan } from '../src/poke-quizz-renderer.mjs';
-import { buildAudioFilterScript } from '../src/domains/pokemon/templates/showdown/render/audio-filter-script.mjs';
+import {
+  buildAudioFilterScript,
+  buildShowdownCryCues,
+} from '../src/domains/pokemon/templates/showdown/render/audio-filter-script.mjs';
 import { applyNarrationDurationsToRenderPlan } from '../src/domains/pokemon/templates/showdown/render/render-plan.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/showdown/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/showdown/render/visual-inputs.mjs';
@@ -138,6 +141,7 @@ const pokedexRows = [
     types: ['fire', 'flying'],
     sprite_path: '/tmp/charizard.png',
     animated_sprite_path: '/tmp/charizard.gif',
+    cry_path: '/tmp/0006.ogg',
     metadata: {
       base_stats: { hp: 78, attack: 84, defense: 78, special_attack: 109, special_defense: 85, speed: 100 },
     },
@@ -152,6 +156,7 @@ const pokedexRows = [
     types: ['water'],
     sprite_path: '/tmp/blastoise.png',
     animated_sprite_path: '/tmp/blastoise.gif',
+    cry_path: '/tmp/0009.ogg',
     metadata: {
       base_stats: { hp: 79, attack: 83, defense: 100, special_attack: 85, special_defense: 105, speed: 78 },
     },
@@ -166,6 +171,7 @@ const pokedexRows = [
     types: ['dragon', 'flying'],
     sprite_path: '/tmp/dragonite.png',
     animated_sprite_path: '/tmp/dragonite.gif',
+    cry_path: '/tmp/0149.ogg',
     metadata: {
       base_stats: { hp: 91, attack: 134, defense: 95, special_attack: 100, special_defense: 100, speed: 80 },
     },
@@ -180,6 +186,7 @@ const pokedexRows = [
     types: ['ghost', 'poison'],
     sprite_path: '/tmp/gengar.png',
     animated_sprite_path: '/tmp/gengar.gif',
+    cry_path: '/tmp/0094.ogg',
     metadata: {
       base_stats: { hp: 60, attack: 65, defense: 60, special_attack: 130, special_defense: 75, speed: 110 },
     },
@@ -217,6 +224,7 @@ test('generic planner dispatch builds a four-participant showdown bracket', asyn
   assert.equal(plan.tournament.matches.length, 3);
   assert.equal(plan.tournament.matches[0].round_label, 'Semi Final 1');
   assert.equal(plan.tournament.participants[0].render_sprite_path.endsWith('.gif'), true);
+  assert.equal(plan.tournament.participants.every((participant) => participant.cry_path.endsWith('.ogg')), true);
   assert.equal(plan.assets.overlays.selected_intro_pokeball_path, '/tmp/open-close-pokeball.gif');
   assert.equal(plan.assets.audio.selected_sound_effects.intro_slot_reveal, '/tmp/pokeball-open-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.bracket_progress, '/tmp/select-sound.mp3');
@@ -290,6 +298,7 @@ test('showdown audio and visual filters include winner sting cues and champion o
     musicPath: '/tmp/music.mp3',
     bracketProgressPath: '/tmp/select-sound.mp3',
     winnerRevealPath: '/tmp/ding-sound.mp3',
+    cryCues: buildShowdownCryCues(plan, renderPlan),
     renderPlan,
   });
   const slotPositions = template.layout.bracket.slot_positions;
@@ -338,6 +347,7 @@ test('showdown audio and visual filters include winner sting cues and champion o
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
   assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
   assert.match(audioFilter, /volume=0\.225\[progress0\]/u);
+  assert.match(audioFilter, /volume=0\.162\[cry0\]/u);
   assert.match(audioFilter, /amix=inputs=/u);
 });
 

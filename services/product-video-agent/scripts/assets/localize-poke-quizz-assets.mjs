@@ -18,6 +18,7 @@ import { enrichPokedexRows } from '../../src/pokedex-enrichment.mjs';
 import { fetchSerebiiPokedex } from '../../src/pokedex-source.mjs';
 import { expandPokedexRowsWithPokeApiVarieties } from '../../src/pokedex-varieties.mjs';
 import {
+  buildPokeQuizzCryPath,
   buildPokeQuizzShinySpritePath,
   buildPokeQuizzSilhouettePath,
   buildPokeQuizzSpritePath,
@@ -266,6 +267,7 @@ async function localizeRows(rows, options = {}) {
   await mkdir(POKE_QUIZZ_ASSET_LAYOUT.threeDTypes, { recursive: true });
   await mkdir(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, { recursive: true });
   await mkdir(POKE_QUIZZ_ASSET_LAYOUT.soundEffects, { recursive: true });
+  await mkdir(POKE_QUIZZ_ASSET_LAYOUT.cries, { recursive: true });
 
   const enrichment = await enrichPokedexRows(targetRows, {
     concurrency: options.enrichmentConcurrency ?? 6,
@@ -276,8 +278,10 @@ async function localizeRows(rows, options = {}) {
     const spritePath = buildPokeQuizzSpritePath(row);
     const shinySpritePath = buildPokeQuizzShinySpritePath(row);
     const silhouettePath = buildPokeQuizzSilhouettePath(row);
+    const cryPath = buildPokeQuizzCryPath(row);
     const spriteMetadata = await fetchPokeApiSpriteMetadata(row);
     const shinySpriteSourceCandidates = [spriteMetadata.preferredShinySpriteSourceUrl].filter(Boolean);
+    const crySourceCandidates = [row.cry_source_url, spriteMetadata.crySourceUrl].filter(Boolean);
 
     if (!row.sprite_source_url) {
       report.push({ id: row.id, status: 'skipped', reason: 'sprite_source_url_missing' });
@@ -296,6 +300,13 @@ async function localizeRows(rows, options = {}) {
         ffmpegExecutable,
       },
     );
+    const localizedCry = await localizeOptionalAsset(
+      crySourceCandidates,
+      cryPath,
+      {
+        ffmpegExecutable,
+      },
+    );
 
     if (!(await fileExists(silhouettePath))) {
       await createSilhouetteFromSprite(spritePath, silhouettePath, ffmpegExecutable);
@@ -304,17 +315,19 @@ async function localizeRows(rows, options = {}) {
     row.sprite_path = spritePath;
     row.shiny_sprite_path = localizedShinySprite.localized ? shinySpritePath : null;
     row.silhouette_path = silhouettePath;
+    row.cry_path = localizedCry.localized ? cryPath : row.cry_path || null;
     row.shiny_sprite_source_url = localizedShinySprite.sourceUrl || row.shiny_sprite_source_url || null;
-    row.cry_source_url = row.cry_source_url || spriteMetadata.crySourceUrl;
+    row.cry_source_url = localizedCry.sourceUrl || row.cry_source_url || spriteMetadata.crySourceUrl;
     row.asset_status = row.shiny_sprite_path
-      ? 'localized_with_shiny_and_silhouette'
-      : 'localized_with_silhouette';
+      ? (row.cry_path ? 'localized_with_shiny_silhouette_and_cry' : 'localized_with_shiny_and_silhouette')
+      : (row.cry_path ? 'localized_with_silhouette_and_cry' : 'localized_with_silhouette');
     row.metadata = {
       ...(row.metadata || {}),
       localized_asset_roots: {
         sprites: POKE_QUIZZ_ASSET_LAYOUT.sprites,
         shiny_sprites: POKE_QUIZZ_ASSET_LAYOUT.shinySprites,
         silhouettes: POKE_QUIZZ_ASSET_LAYOUT.silhouettes,
+        cries: POKE_QUIZZ_ASSET_LAYOUT.cries,
         pixel_types: POKE_QUIZZ_ASSET_LAYOUT.pixelTypes,
         three_d_types: POKE_QUIZZ_ASSET_LAYOUT.threeDTypes,
       },
@@ -332,6 +345,7 @@ async function localizeRows(rows, options = {}) {
       shiny_sprite_path: row.shiny_sprite_path,
       shiny_sprite_source_url: row.shiny_sprite_source_url,
       silhouette_path: row.silhouette_path,
+      cry_path: row.cry_path,
       cry_source_url: row.cry_source_url,
       status: 'localized',
     });

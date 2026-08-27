@@ -11,7 +11,11 @@ import {
   slugify,
 } from '../../dual-type-reveal/render/constants.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
-import { buildAudioFilterScript, buildAudioInputs } from './audio-filter-script.mjs';
+import {
+  buildAudioFilterScript,
+  buildAudioInputs,
+  buildShowdownCryCues,
+} from './audio-filter-script.mjs';
 import {
   applyNarrationDurationsToRenderPlan,
   buildPokeQuizzRenderPlan,
@@ -52,12 +56,14 @@ export async function renderPokeQuizzVideo({
   const introSlotRevealPath = plan.assets.audio.selected_sound_effects?.intro_slot_reveal || null;
   const bracketProgressPath = plan.assets.audio.selected_sound_effects?.bracket_progress || null;
   const winnerRevealPath = plan.assets.audio.selected_sound_effects?.winner_reveal || null;
+  const cryCues = buildShowdownCryCues(plan, renderPlan);
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
     ...(introSlotRevealPath ? [introSlotRevealPath] : []),
     ...(bracketProgressPath ? [bracketProgressPath] : []),
     ...(winnerRevealPath ? [winnerRevealPath] : []),
+    ...cryCues.map((cue) => cue.path),
   ]);
 
   const narrationDurations = await Promise.all(
@@ -78,6 +84,7 @@ export async function renderPokeQuizzVideo({
     musicPath,
     bracketProgressPath,
     winnerRevealPath,
+    cryCues,
     renderPlan,
   });
   await writeFile(audioFilterScriptPath, audioFilterScript, 'utf8');
@@ -91,6 +98,7 @@ export async function renderPokeQuizzVideo({
         ...(introSlotRevealPath ? [introSlotRevealPath] : []),
         ...(bracketProgressPath ? [bracketProgressPath] : []),
         ...(winnerRevealPath ? [winnerRevealPath] : []),
+        ...cryCues.map((cue) => cue.path),
       ]),
       '-/filter_complex',
       audioFilterScriptPath,

@@ -261,6 +261,7 @@ export async function scanPokeQuizzAssetInventory() {
     listPokeQuizzGifBackgroundFiles(),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.soundEffects, AUDIO_EXTENSIONS),
+    listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.cries, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.pixelTypes, IMAGE_EXTENSIONS),
     listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.threeDTypes, new Set(['.png', '.webp'])),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.overlays, new Set(['.png', '.webp', '.gif', '.mov', '.mp4', '.webm'])),
@@ -274,6 +275,7 @@ export async function scanPokeQuizzAssetInventory() {
     gif_backgrounds: gifBackgrounds,
     music,
     sound_effects: selectSoundEffectPresets(soundEffects),
+    cries,
     type_icons: {
       pixel: pixelTypes,
       three_d: threeDTypes,

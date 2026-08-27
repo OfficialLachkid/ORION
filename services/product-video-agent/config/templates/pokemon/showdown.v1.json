@@ -127,7 +127,7 @@
     "rounds": {
       "hook_hold_seconds": 1.1,
       "intro_participant_hold_seconds": 2,
-      "inter_round_bracket_hold_seconds": 3,
+      "inter_round_bracket_hold_seconds": 2,
       "post_progress_hold_seconds": 1,
       "match_intro_hold_seconds": 1.8,
       "suspense_hold_seconds": 0.9,

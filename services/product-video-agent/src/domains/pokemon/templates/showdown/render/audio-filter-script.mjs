@@ -8,9 +8,74 @@ import {
 
 const DEFAULT_SHOWDOWN_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
 const DEFAULT_SHOWDOWN_BRACKET_PROGRESS_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.25).toFixed(3));
+const DEFAULT_SHOWDOWN_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.18).toFixed(3));
 
 export function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
+}
+
+export function buildShowdownCryCues(plan, renderPlan) {
+  const participants = Array.isArray(plan?.tournament?.participants) ? plan.tournament.participants : [];
+  const matches = Array.isArray(renderPlan?.matches) ? renderPlan.matches : [];
+  const participantCryById = new Map(
+    participants
+      .filter((participant) => String(participant?.cry_path || '').trim())
+      .map((participant) => [participant.id, String(participant.cry_path || '').trim()]),
+  );
+  const introRevealTimes = Array.isArray(renderPlan?.intro_sequence?.participant_reveal_times)
+    ? renderPlan.intro_sequence.participant_reveal_times
+    : [];
+  const cues = [];
+
+  participants.forEach((participant, index) => {
+    const cryPath = participantCryById.get(participant.id);
+    if (!cryPath) {
+      return;
+    }
+    cues.push({
+      path: cryPath,
+      start_seconds: ensureNumber(introRevealTimes[index], 0) + 0.02,
+      volume: DEFAULT_SHOWDOWN_CRY_VOLUME,
+    });
+  });
+
+  matches.forEach((match) => {
+    const leftCryPath = participantCryById.get(match?.participant_a?.id);
+    const rightCryPath = participantCryById.get(match?.participant_b?.id);
+    const winnerCryPath = participantCryById.get(match?.winner?.id);
+    if (leftCryPath) {
+      cues.push({
+        path: leftCryPath,
+        start_seconds: ensureNumber(match?.intro_start_seconds, 0) + 0.02,
+        volume: DEFAULT_SHOWDOWN_CRY_VOLUME,
+      });
+    }
+    if (rightCryPath) {
+      cues.push({
+        path: rightCryPath,
+        start_seconds: ensureNumber(match?.intro_start_seconds, 0) + 0.2,
+        volume: DEFAULT_SHOWDOWN_CRY_VOLUME,
+      });
+    }
+    if (winnerCryPath) {
+      cues.push({
+        path: winnerCryPath,
+        start_seconds: ensureNumber(match?.reveal_start_seconds, 0) + 0.08,
+        volume: DEFAULT_SHOWDOWN_CRY_VOLUME,
+      });
+    }
+  });
+
+  const championCryPath = participantCryById.get(plan?.tournament?.champion?.id);
+  if (championCryPath) {
+    cues.push({
+      path: championCryPath,
+      start_seconds: ensureNumber(renderPlan?.champion_scene?.start_seconds, 0) + 0.12,
+      volume: DEFAULT_SHOWDOWN_CRY_VOLUME,
+    });
+  }
+
+  return cues;
 }
 
 export function buildAudioFilterScript({
@@ -19,6 +84,7 @@ export function buildAudioFilterScript({
   musicPath,
   bracketProgressPath,
   winnerRevealPath,
+  cryCues = [],
   renderPlan,
 }) {
   const filters = [];
@@ -80,6 +146,20 @@ export function buildAudioFilterScript({
       mixLabels.push(label);
     });
   }
+
+  const normalizedCryCues = (Array.isArray(cryCues) ? cryCues : [])
+    .map((cue) => ({
+      path: String(cue?.path || '').trim(),
+      start_seconds: ensureNumber(cue?.start_seconds, 0),
+      volume: ensureNumber(cue?.volume, DEFAULT_SHOWDOWN_CRY_VOLUME),
+    }))
+    .filter((cue) => cue.path);
+  normalizedCryCues.forEach((cue, cueIndex) => {
+    const delayMs = Math.max(0, Math.round(cue.start_seconds * 1000));
+    const label = `cry${cueIndex}`;
+    filters.push(`[${inputIndex + cueIndex}:a]adelay=${delayMs}|${delayMs},volume=${cue.volume}[${label}]`);
+    mixLabels.push(label);
+  });
 
   filters.push(`${mixLabels.map((label) => `[${label}]`).join('')}amix=inputs=${mixLabels.length}:normalize=0,alimiter=limit=0.95[aout]`);
   return `${filters.join(';\n')}\n`;

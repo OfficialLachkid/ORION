@@ -1,6 +1,8 @@
-import { access } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import {
   buildPokeQuizzAnimatedSpritePath,
+  buildPokeQuizzCryPath,
   buildPokeQuizzMirroredSpritePath,
   buildPokeQuizzPreviewDirectory,
   POKE_QUIZZ_ASSET_LAYOUT,
@@ -18,6 +20,9 @@ import {
 
 const DEFAULT_PARTICIPANT_COUNT = 4;
 const mirroredSpriteAvailabilityCache = new Map();
+const cryAvailabilityCache = new Map();
+const cryDownloadCache = new Map();
+const crySourceUrlCache = new Map();
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -64,6 +69,64 @@ async function canAccessPath(filePath) {
   return mirroredSpriteAvailabilityCache.get(normalizedPath);
 }
 
+async function canAccessCryPath(filePath) {
+  const normalizedPath = String(filePath || '').trim();
+  if (!normalizedPath) {
+    return false;
+  }
+  if (!cryAvailabilityCache.has(normalizedPath)) {
+    cryAvailabilityCache.set(
+      normalizedPath,
+      access(normalizedPath)
+        .then(() => true)
+        .catch(() => false),
+    );
+  }
+  return cryAvailabilityCache.get(normalizedPath);
+}
+
+async function downloadCryToFile(sourceUrl, outputPath) {
+  const response = await fetch(sourceUrl);
+  if (!response.ok) {
+    throw new Error(`Could not download Pokemon cry from ${sourceUrl} (${response.status}).`);
+  }
+  await mkdir(dirname(outputPath), { recursive: true });
+  const payload = Buffer.from(await response.arrayBuffer());
+  await writeFile(outputPath, payload);
+}
+
+async function resolveShowdownCrySourceUrl(subject = {}) {
+  const explicitCrySourceUrl = String(subject?.cry_source_url || '').trim();
+  if (explicitCrySourceUrl) {
+    return explicitCrySourceUrl;
+  }
+
+  const lookupKey = subject?.metadata?.pokemon_api?.pokemon_id
+    || subject?.slug
+    || subject?.national_dex_number;
+  const normalizedLookupKey = String(lookupKey || '').trim().toLowerCase();
+  if (!normalizedLookupKey) {
+    return '';
+  }
+
+  if (!crySourceUrlCache.has(normalizedLookupKey)) {
+    crySourceUrlCache.set(normalizedLookupKey, (async () => {
+      try {
+        const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${encodeURIComponent(normalizedLookupKey)}`);
+        if (!response.ok) {
+          return '';
+        }
+        const payload = await response.json();
+        return String(payload?.cries?.latest || payload?.cries?.legacy || '').trim();
+      } catch {
+        return '';
+      }
+    })());
+  }
+
+  return crySourceUrlCache.get(normalizedLookupKey);
+}
+
 async function resolveShowdownSpritePath(subject = {}) {
   const explicitAnimatedPath = String(subject?.animated_sprite_path || '').trim();
   if (explicitAnimatedPath) {
@@ -82,6 +145,41 @@ async function resolveShowdownSpritePath(subject = {}) {
     return normalizedPath;
   }
   return (await canAccessPath(mirrorPath)) ? mirrorPath : normalizedPath;
+}
+
+async function resolveShowdownCryPath(subject = {}) {
+  const explicitCryPath = String(subject?.cry_path || '').trim();
+  if (explicitCryPath && await canAccessCryPath(explicitCryPath)) {
+    return explicitCryPath;
+  }
+
+  const derivedCryPath = buildPokeQuizzCryPath(subject);
+  if (derivedCryPath && await canAccessCryPath(derivedCryPath)) {
+    return derivedCryPath;
+  }
+
+  const crySourceUrl = String(
+    subject?.cry_source_url
+    || await resolveShowdownCrySourceUrl(subject)
+    || '',
+  ).trim();
+  if (!crySourceUrl || !derivedCryPath) {
+    return explicitCryPath || '';
+  }
+
+  if (!cryDownloadCache.has(derivedCryPath)) {
+    cryDownloadCache.set(derivedCryPath, (async () => {
+      try {
+        await downloadCryToFile(crySourceUrl, derivedCryPath);
+        cryAvailabilityCache.set(derivedCryPath, Promise.resolve(true));
+        return derivedCryPath;
+      } catch {
+        return explicitCryPath || '';
+      }
+    })());
+  }
+
+  return cryDownloadCache.get(derivedCryPath);
 }
 
 function shuffle(values, random) {
@@ -220,7 +318,7 @@ function selectIntroSlotRevealSoundPath(soundEffects = {}, config = {}) {
   return matchedPreferred || soundEffects.pokeball_intro || null;
 }
 
-function buildParticipantRecord(subject, renderSpritePath, bracketSeedIndex) {
+function buildParticipantRecord(subject, renderSpritePath, cryPath, bracketSeedIndex) {
   const baseStats = normalizeBaseStats(subject?.metadata?.base_stats || {});
   return {
     id: String(subject.id || '').trim(),
@@ -236,6 +334,8 @@ function buildParticipantRecord(subject, renderSpritePath, bracketSeedIndex) {
     sprite_path: String(subject.sprite_path || '').trim(),
     animated_sprite_path: String(subject.animated_sprite_path || '').trim(),
     render_sprite_path: String(renderSpritePath || subject.sprite_path || '').trim(),
+    cry_path: String(cryPath || subject.cry_path || '').trim(),
+    cry_source_url: subject.cry_source_url || null,
     sprite_source_url: subject.sprite_source_url || null,
     base_stats: baseStats,
     base_stat_total: sumBaseStats(baseStats),
@@ -359,6 +459,7 @@ export async function planPokemonShowdownChallenge({
     buildParticipantRecord(
       subject,
       await resolveShowdownSpritePath(subject),
+      await resolveShowdownCryPath(subject),
       index,
     )
   )));
@@ -451,6 +552,9 @@ export async function planPokemonShowdownChallenge({
   if (!participants.every((participant) => participant.render_sprite_path || participant.sprite_path)) {
     requiredAssetGaps.push('pokemon_sprite_local_assets_missing');
   }
+  if (!participants.every((participant) => String(participant.cry_path || '').trim())) {
+    requiredAssetGaps.push('pokemon_cries_missing');
+  }
 
   return {
     schema_version: 'poke-quizz-showdown-plan-v1',
@@ -501,6 +605,7 @@ export async function planPokemonShowdownChallenge({
       audio: {
         battle_intro_music_directory: POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic,
         sound_effects_directory: POKE_QUIZZ_ASSET_LAYOUT.soundEffects,
+        cries_directory: POKE_QUIZZ_ASSET_LAYOUT.cries,
         selected_battle_intro_music_path: selectSeededFile(inventory?.music || [], random),
         selected_sound_effects: {
           ...(inventory?.sound_effects || {}),

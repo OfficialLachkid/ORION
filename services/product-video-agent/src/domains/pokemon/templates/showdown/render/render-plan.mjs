@@ -362,6 +362,16 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
       hook_visible_until_seconds: index === 0 ? introStart : null,
     };
   });
+  const interRoundBracketPauseSeconds = matches.map((match, index) => {
+    if (index >= matches.length - 1) {
+      return 0;
+    }
+    return roundTime(Math.max(
+      0,
+      ensureNumber(matches[index + 1]?.battle_transition_start_seconds, matches[index + 1]?.intro_start_seconds)
+      - ensureNumber(match?.bracket_progress_end_seconds, match?.scene_end_seconds),
+    ));
+  });
   const finalBracketHoldSeconds = roundTime(Math.max(
     0,
     ensureNumber(
@@ -369,13 +379,20 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
       0,
     ),
   ));
-  const updatedMatchesWithBracketProgress = updatedMatches.map((match, index) => ({
-    ...match,
-    bracket_progress_start_seconds: match.scene_end_seconds,
-    bracket_progress_end_seconds: index === updatedMatches.length - 1
+  const updatedMatchesWithBracketProgress = updatedMatches.map((match, index) => {
+    const bracketProgressEndSeconds = index === updatedMatches.length - 1
       ? roundTime(match.scene_end_seconds + finalBracketHoldSeconds)
-      : updatedMatches[index + 1].intro_start_seconds,
-  }));
+      : roundTime(Math.max(
+        match.scene_end_seconds + 0.08,
+        ensureNumber(updatedMatches[index + 1]?.battle_transition_start_seconds, updatedMatches[index + 1]?.intro_start_seconds)
+          - ensureNumber(interRoundBracketPauseSeconds[index], 0),
+      ));
+    return {
+      ...match,
+      bracket_progress_start_seconds: match.scene_end_seconds,
+      bracket_progress_end_seconds: bracketProgressEndSeconds,
+    };
+  });
 
   const championBaseDuration = roundTime(
     renderPlan.champion_scene.end_seconds - renderPlan.champion_scene.start_seconds,

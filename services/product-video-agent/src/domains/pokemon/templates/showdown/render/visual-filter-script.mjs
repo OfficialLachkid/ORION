@@ -218,6 +218,87 @@ function buildSteppedConnectorPath(points = [], thickness, startSeconds, endSeco
   return filters;
 }
 
+function buildParallelConnectorPaths(pathGroups = [], thickness, startSeconds, endSeconds, segmentLengthPx = 10) {
+  const validPaths = (Array.isArray(pathGroups) ? pathGroups : [])
+    .filter((points) => Array.isArray(points) && points.length >= 2);
+  if (validPaths.length === 0) {
+    return [];
+  }
+
+  const allSegments = validPaths.map((points) => {
+    const segments = [];
+    let totalPieces = 0;
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const startPoint = points[index];
+      const endPoint = points[index + 1];
+      if (!startPoint || !endPoint) {
+        continue;
+      }
+      const deltaX = endPoint.x - startPoint.x;
+      const deltaY = endPoint.y - startPoint.y;
+      const isHorizontal = deltaY === 0;
+      const segmentLength = isHorizontal ? Math.abs(deltaX) : Math.abs(deltaY);
+      if (segmentLength <= 0) {
+        continue;
+      }
+      const pieceCount = Math.max(1, Math.ceil(segmentLength / Math.max(1, round(segmentLengthPx))));
+      segments.push({
+        startPoint,
+        endPoint,
+        isHorizontal,
+        pieceCount,
+      });
+      totalPieces += pieceCount;
+    }
+    return { segments, totalPieces };
+  });
+
+  const maxPieceCount = Math.max(1, ...allSegments.map((entry) => entry.totalPieces));
+  const duration = Math.max(0.01, ensureNumber(endSeconds, startSeconds + 0.01) - ensureNumber(startSeconds, 0));
+  const filters = [];
+
+  allSegments.forEach(({ segments, totalPieces }) => {
+    if (segments.length === 0 || totalPieces <= 0) {
+      return;
+    }
+    let pieceCursor = 0;
+    segments.forEach((segment) => {
+      for (let pieceIndex = 0; pieceIndex < segment.pieceCount; pieceIndex += 1) {
+        const pieceStartRatio = pieceIndex / segment.pieceCount;
+        const pieceEndRatio = (pieceIndex + 1) / segment.pieceCount;
+        const absolutePieceIndex = pieceCursor + pieceIndex;
+        const pieceStartSeconds = round((startSeconds + ((absolutePieceIndex / maxPieceCount) * duration)) * 1000) / 1000;
+        if (segment.isHorizontal) {
+          const y = round(segment.startPoint.y - (thickness / 2));
+          const startX = round(segment.startPoint.x + ((segment.endPoint.x - segment.startPoint.x) * pieceStartRatio));
+          const endX = pieceIndex === segment.pieceCount - 1
+            ? round(segment.endPoint.x)
+            : round(segment.startPoint.x + ((segment.endPoint.x - segment.startPoint.x) * pieceEndRatio));
+          const width = Math.max(1, Math.abs(endX - startX));
+          const x = Math.min(startX, endX);
+          filters.push(
+            `drawbox=x=${x}:y=${y}:w=${width}:h=${thickness}:color=0xFFFFFF@0.7:t=fill:enable='gte(t,${pieceStartSeconds})'`,
+          );
+        } else {
+          const x = round(segment.startPoint.x - (thickness / 2));
+          const startY = round(segment.startPoint.y + ((segment.endPoint.y - segment.startPoint.y) * pieceStartRatio));
+          const endY = pieceIndex === segment.pieceCount - 1
+            ? round(segment.endPoint.y)
+            : round(segment.startPoint.y + ((segment.endPoint.y - segment.startPoint.y) * pieceEndRatio));
+          const height = Math.max(1, Math.abs(endY - startY));
+          const y = Math.min(startY, endY);
+          filters.push(
+            `drawbox=x=${x}:y=${y}:w=${thickness}:h=${height}:color=0xFFFFFF@0.7:t=fill:enable='gte(t,${pieceStartSeconds})'`,
+          );
+        }
+      }
+      pieceCursor += segment.pieceCount;
+    });
+  });
+
+  return filters;
+}
+
 function round(value) {
   return Math.round(ensureNumber(value, 0));
 }
@@ -267,20 +348,54 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
 
   if (connectorWindows.connector_left) {
     const window = connectorWindows.connector_left;
-    lines.push(
-      ...buildSteppedConnectorPath([
-        { x: slots.semi_1_a.center_x, y: slots.semi_1_a.y },
-        { x: slots.semi_1_a.center_x, y: leftPairConnectorY },
-        { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
-        { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
-      ], thickness, window.start_seconds, window.end_seconds, 5),
-      ...buildSteppedConnectorPath([
-        { x: slots.semi_1_b.center_x, y: slots.semi_1_b.y },
-        { x: slots.semi_1_b.center_x, y: leftPairConnectorY },
-        { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
-        { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
-      ], thickness, window.start_seconds, window.end_seconds, 5),
-    );
+    const sharedWindow = connectorWindows.connector_right
+      && connectorWindows.connector_right.start_seconds === window.start_seconds
+      && connectorWindows.connector_right.end_seconds === window.end_seconds;
+    if (sharedWindow) {
+      lines.push(
+        ...buildParallelConnectorPaths([
+          [
+            { x: slots.semi_1_a.center_x, y: slots.semi_1_a.y },
+            { x: slots.semi_1_a.center_x, y: leftPairConnectorY },
+            { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
+            { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
+          ],
+          [
+            { x: slots.semi_1_b.center_x, y: slots.semi_1_b.y },
+            { x: slots.semi_1_b.center_x, y: leftPairConnectorY },
+            { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
+            { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
+          ],
+          [
+            { x: slots.semi_2_a.center_x, y: slots.semi_2_a.y },
+            { x: slots.semi_2_a.center_x, y: rightPairConnectorY },
+            { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
+            { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
+          ],
+          [
+            { x: slots.semi_2_b.center_x, y: slots.semi_2_b.y },
+            { x: slots.semi_2_b.center_x, y: rightPairConnectorY },
+            { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
+            { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
+          ],
+        ], thickness, window.start_seconds, window.end_seconds, 5),
+      );
+    } else {
+      lines.push(
+        ...buildSteppedConnectorPath([
+          { x: slots.semi_1_a.center_x, y: slots.semi_1_a.y },
+          { x: slots.semi_1_a.center_x, y: leftPairConnectorY },
+          { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
+          { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
+        ], thickness, window.start_seconds, window.end_seconds, 5),
+        ...buildSteppedConnectorPath([
+          { x: slots.semi_1_b.center_x, y: slots.semi_1_b.y },
+          { x: slots.semi_1_b.center_x, y: leftPairConnectorY },
+          { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
+          { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
+        ], thickness, window.start_seconds, window.end_seconds, 5),
+      );
+    }
   } else {
     lines.push(
       buildVerticalConnector(slots.semi_1_a.center_x, slots.semi_1_a.y, leftPairConnectorY, thickness, leftEnable),
@@ -296,7 +411,11 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
     );
   }
 
-  if (connectorWindows.connector_right) {
+  if (connectorWindows.connector_right && !(
+    connectorWindows.connector_left
+    && connectorWindows.connector_left.start_seconds === connectorWindows.connector_right.start_seconds
+    && connectorWindows.connector_left.end_seconds === connectorWindows.connector_right.end_seconds
+  )) {
     const window = connectorWindows.connector_right;
     lines.push(
       ...buildSteppedConnectorPath([
@@ -713,9 +832,10 @@ function buildAnimatedSceneTextBlock(
   {
     color = 'white',
     maxLines = 2,
+    safeTopOverride = null,
   } = {},
 ) {
-  const safeTop = ensureNumber(template?.canvas?.safe_zone?.top, 160);
+  const safeTop = ensureNumber(safeTopOverride, ensureNumber(template?.canvas?.safe_zone?.top, 160));
   const lineHeight = Math.round(fontSize + 12);
   const maxCharactersPerLine = Math.max(10, Math.floor(estimateWrapCharacterLimit(template, fontSize) * 0.92));
   const wrapped = wrapTextBlock(text, {
@@ -1220,7 +1340,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         renderPlan.text_layout.round_y,
         match.intro_start_seconds,
         match.reveal_start_seconds,
-        { maxLines: 1 },
+        { maxLines: 1, safeTopOverride: 60 },
       ),
       ...buildAnimatedSceneTextBlock(
         `${match.participant_a.display_name} vs ${match.participant_b.display_name}`,
