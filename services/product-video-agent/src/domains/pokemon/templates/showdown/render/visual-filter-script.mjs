@@ -47,37 +47,70 @@ function round(value) {
   return Math.round(ensureNumber(value, 0));
 }
 
+function buildPairConnectorY(winnerSlot, leftSourceSlot, rightSourceSlot) {
+  const sourceTopY = Math.min(leftSourceSlot.y, rightSourceSlot.y);
+  const winnerBottomY = winnerSlot.y + winnerSlot.height;
+  return round((sourceTopY + winnerBottomY) / 2);
+}
+
+function buildFinalConnectorY(finalWinnerSlot, leftWinnerSlot, rightWinnerSlot) {
+  const semiWinnerTopY = Math.min(leftWinnerSlot.y, rightWinnerSlot.y);
+  const finalBottomY = finalWinnerSlot.y + finalWinnerSlot.height;
+  return round((semiWinnerTopY + finalBottomY) / 2);
+}
+
 function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   const thickness = ensureNumber(bracketLayout.connector_thickness_px, 10);
   const slots = bracketLayout.slots;
   const lines = [];
-  const leftSourceRight = slots.semi_1_a.x + slots.semi_1_a.width;
-  const rightSourceLeft = slots.semi_2_a.x;
-  const leftWinnerCenterX = slots.semi_1_winner.center_x;
-  const rightWinnerCenterX = slots.semi_2_winner.center_x;
-  const finalCenterX = slots.final_winner.center_x;
-  const finalMergeY = round((slots.final_winner.center_y + slots.semi_1_winner.center_y) / 2);
+  const leftPairConnectorY = buildPairConnectorY(slots.semi_1_winner, slots.semi_1_a, slots.semi_1_b);
+  const rightPairConnectorY = buildPairConnectorY(slots.semi_2_winner, slots.semi_2_a, slots.semi_2_b);
+  const finalConnectorY = buildFinalConnectorY(
+    slots.final_winner,
+    slots.semi_1_winner,
+    slots.semi_2_winner,
+  );
   const leftEnable = revealSchedule.connector_left ? `gte(t,${revealSchedule.connector_left})` : '';
   const rightEnable = revealSchedule.connector_right ? `gte(t,${revealSchedule.connector_right})` : '';
   const finalEnable = revealSchedule.connector_final ? `gte(t,${revealSchedule.connector_final})` : '';
 
   lines.push(
-    buildHorizontalConnector(slots.semi_1_a.center_y, leftSourceRight, leftWinnerCenterX, thickness, leftEnable),
-    buildHorizontalConnector(slots.semi_1_b.center_y, leftSourceRight, leftWinnerCenterX, thickness, leftEnable),
-    buildVerticalConnector(leftWinnerCenterX, slots.semi_1_a.center_y, slots.semi_1_b.center_y, thickness, leftEnable),
+    buildVerticalConnector(slots.semi_1_a.center_x, slots.semi_1_a.y, leftPairConnectorY, thickness, leftEnable),
+    buildVerticalConnector(slots.semi_1_b.center_x, slots.semi_1_b.y, leftPairConnectorY, thickness, leftEnable),
+    buildHorizontalConnector(leftPairConnectorY, slots.semi_1_a.center_x, slots.semi_1_b.center_x, thickness, leftEnable),
+    buildVerticalConnector(
+      slots.semi_1_winner.center_x,
+      slots.semi_1_winner.y + slots.semi_1_winner.height,
+      leftPairConnectorY,
+      thickness,
+      leftEnable,
+    ),
   );
 
   lines.push(
-    buildHorizontalConnector(slots.semi_2_a.center_y, rightSourceLeft, rightWinnerCenterX, thickness, rightEnable),
-    buildHorizontalConnector(slots.semi_2_b.center_y, rightSourceLeft, rightWinnerCenterX, thickness, rightEnable),
-    buildVerticalConnector(rightWinnerCenterX, slots.semi_2_a.center_y, slots.semi_2_b.center_y, thickness, rightEnable),
+    buildVerticalConnector(slots.semi_2_a.center_x, slots.semi_2_a.y, rightPairConnectorY, thickness, rightEnable),
+    buildVerticalConnector(slots.semi_2_b.center_x, slots.semi_2_b.y, rightPairConnectorY, thickness, rightEnable),
+    buildHorizontalConnector(rightPairConnectorY, slots.semi_2_a.center_x, slots.semi_2_b.center_x, thickness, rightEnable),
+    buildVerticalConnector(
+      slots.semi_2_winner.center_x,
+      slots.semi_2_winner.y + slots.semi_2_winner.height,
+      rightPairConnectorY,
+      thickness,
+      rightEnable,
+    ),
   );
 
   lines.push(
-    buildVerticalConnector(slots.semi_1_winner.center_x, slots.semi_1_winner.center_y, finalMergeY, thickness, finalEnable),
-    buildVerticalConnector(slots.semi_2_winner.center_x, slots.semi_2_winner.center_y, finalMergeY, thickness, finalEnable),
-    buildHorizontalConnector(finalMergeY, slots.semi_1_winner.center_x, slots.semi_2_winner.center_x, thickness, finalEnable),
-    buildVerticalConnector(finalCenterX, slots.final_winner.center_y, finalMergeY, thickness, finalEnable),
+    buildVerticalConnector(slots.semi_1_winner.center_x, slots.semi_1_winner.y, finalConnectorY, thickness, finalEnable),
+    buildVerticalConnector(slots.semi_2_winner.center_x, slots.semi_2_winner.y, finalConnectorY, thickness, finalEnable),
+    buildHorizontalConnector(finalConnectorY, slots.semi_1_winner.center_x, slots.semi_2_winner.center_x, thickness, finalEnable),
+    buildVerticalConnector(
+      slots.final_winner.center_x,
+      slots.final_winner.y + slots.final_winner.height,
+      finalConnectorY,
+      thickness,
+      finalEnable,
+    ),
   );
 
   return lines;
@@ -145,33 +178,39 @@ function buildPathCoordinateExpression(points = [], axis, startSeconds, endSecon
 }
 
 function buildBracketProgressPath(slotMap, match) {
-  const finalMergeY = round((slotMap.final_winner.center_y + slotMap.semi_1_winner.center_y) / 2);
+  const leftPairConnectorY = buildPairConnectorY(slotMap.semi_1_winner, slotMap.semi_1_a, slotMap.semi_1_b);
+  const rightPairConnectorY = buildPairConnectorY(slotMap.semi_2_winner, slotMap.semi_2_a, slotMap.semi_2_b);
+  const finalConnectorY = buildFinalConnectorY(
+    slotMap.final_winner,
+    slotMap.semi_1_winner,
+    slotMap.semi_2_winner,
+  );
   if (match.match_id === 'semi-final-1') {
-    const sourceSlot = match.winner_side === 'a' ? slotMap.semi_1_a : slotMap.semi_1_b;
+    const sourceSlot = match.winner_side === 'left' ? slotMap.semi_1_a : slotMap.semi_1_b;
     const winnerSlot = slotMap.semi_1_winner;
     return [
       { center_x: sourceSlot.center_x, center_y: sourceSlot.center_y },
-      { center_x: sourceSlot.x + sourceSlot.width + 20, center_y: sourceSlot.center_y },
-      { center_x: winnerSlot.center_x, center_y: sourceSlot.center_y },
+      { center_x: sourceSlot.center_x, center_y: leftPairConnectorY },
+      { center_x: winnerSlot.center_x, center_y: leftPairConnectorY },
       { center_x: winnerSlot.center_x, center_y: winnerSlot.center_y },
     ];
   }
   if (match.match_id === 'semi-final-2') {
-    const sourceSlot = match.winner_side === 'a' ? slotMap.semi_2_a : slotMap.semi_2_b;
+    const sourceSlot = match.winner_side === 'left' ? slotMap.semi_2_a : slotMap.semi_2_b;
     const winnerSlot = slotMap.semi_2_winner;
     return [
       { center_x: sourceSlot.center_x, center_y: sourceSlot.center_y },
-      { center_x: sourceSlot.x - 20, center_y: sourceSlot.center_y },
-      { center_x: winnerSlot.center_x, center_y: sourceSlot.center_y },
+      { center_x: sourceSlot.center_x, center_y: rightPairConnectorY },
+      { center_x: winnerSlot.center_x, center_y: rightPairConnectorY },
       { center_x: winnerSlot.center_x, center_y: winnerSlot.center_y },
     ];
   }
-  const sourceSlot = match.winner_side === 'a' ? slotMap.semi_1_winner : slotMap.semi_2_winner;
+  const sourceSlot = match.winner_side === 'left' ? slotMap.semi_1_winner : slotMap.semi_2_winner;
   const winnerSlot = slotMap.final_winner;
   return [
     { center_x: sourceSlot.center_x, center_y: sourceSlot.center_y },
-    { center_x: sourceSlot.center_x, center_y: finalMergeY },
-    { center_x: winnerSlot.center_x, center_y: finalMergeY },
+    { center_x: sourceSlot.center_x, center_y: finalConnectorY },
+    { center_x: winnerSlot.center_x, center_y: finalConnectorY },
     { center_x: winnerSlot.center_x, center_y: winnerSlot.center_y },
   ];
 }

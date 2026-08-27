@@ -63,13 +63,13 @@ const template = {
       slot_card_height_px: 184,
       connector_thickness_px: 10,
       slot_positions: {
-        semi_1_a: { x: 80, y: 920 },
-        semi_1_b: { x: 80, y: 1360 },
-        semi_1_winner: { x: 270, y: 1200 },
-        semi_2_a: { x: 780, y: 920 },
-        semi_2_b: { x: 780, y: 1360 },
-        semi_2_winner: { x: 590, y: 1200 },
-        final_winner: { x: 430, y: 800 },
+        semi_1_a: { x: 40, y: 1380 },
+        semi_1_b: { x: 300, y: 1380 },
+        semi_1_winner: { x: 170, y: 940 },
+        semi_2_a: { x: 560, y: 1380 },
+        semi_2_b: { x: 820, y: 1380 },
+        semi_2_winner: { x: 690, y: 940 },
+        final_winner: { x: 430, y: 340 },
       },
     },
     battle_stage: {
@@ -288,6 +288,18 @@ test('showdown audio and visual filters include winner sting cues and champion o
     winnerRevealPath: '/tmp/ding-sound.mp3',
     renderPlan,
   });
+  const slotPositions = template.layout.bracket.slot_positions;
+  const slotSize = template.layout.bracket.slot_card_width_px;
+  const firstMatchWinnerSlot = renderPlan.matches[0].winner_side === 'left'
+    ? slotPositions.semi_1_a
+    : slotPositions.semi_1_b;
+  const firstMatchWinnerCenterX = firstMatchWinnerSlot.x + (slotSize / 2);
+  const firstMatchBracketCenterX = slotPositions.semi_1_winner.x + (slotSize / 2);
+  const finalMatchWinnerSlot = renderPlan.matches[2].winner_side === 'left'
+    ? slotPositions.semi_1_winner
+    : slotPositions.semi_2_winner;
+  const finalMatchWinnerCenterX = finalMatchWinnerSlot.x + (slotSize / 2);
+  const finalBracketCenterX = slotPositions.final_winner.x + (slotSize / 2);
 
   assert.match(visualFilter.script, /\[0:v\]fps=30,scale=1080:1920/u);
   assert.match(visualFilter.script, /Champion/u);
@@ -300,6 +312,14 @@ test('showdown audio and visual filters include winner sting cues and champion o
   assert.match(visualFilter.script, /\[p\d+stage1\]/u);
   assert.match(visualFilter.script, /vprogress0/u);
   assert.match(visualFilter.script, /vpokeball0/u);
+  assert.match(
+    visualFilter.script,
+    new RegExp(`${firstMatchWinnerCenterX}\\+\\(${firstMatchBracketCenterX}-${firstMatchWinnerCenterX}\\)`, 'u'),
+  );
+  assert.match(
+    visualFilter.script,
+    new RegExp(`${finalMatchWinnerCenterX}\\+\\(${finalBracketCenterX}-${finalMatchWinnerCenterX}\\)`, 'u'),
+  );
   assert.match(visualFilter.script, /gte\(t,0\.33/u);
   assert.match(visualFilter.script, /enable='\(between\(t,0,/u);
   assert.match(
@@ -307,8 +327,10 @@ test('showdown audio and visual filters include winner sting cues and champion o
     new RegExp(`enable='between\\(t,${renderPlan.matches[0].intro_start_seconds},${renderPlan.matches[0].reveal_start_seconds}\\)'`, 'u'),
   );
   assert.match(audioFilter, /asplit=4\[osrc0\]\[osrc1\]\[osrc2\]\[osrc3\]/u);
+  assert.match(audioFilter, /volume=0\.225\[open0\]/u);
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
   assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
+  assert.match(audioFilter, /volume=0\.225\[progress0\]/u);
   assert.match(audioFilter, /amix=inputs=/u);
 });
 

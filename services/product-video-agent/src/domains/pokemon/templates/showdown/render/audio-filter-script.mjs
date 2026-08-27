@@ -6,8 +6,8 @@ import {
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
 
-const DEFAULT_SHOWDOWN_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.5).toFixed(3));
-const DEFAULT_SHOWDOWN_BRACKET_PROGRESS_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.5).toFixed(3));
+const DEFAULT_SHOWDOWN_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.25).toFixed(3));
+const DEFAULT_SHOWDOWN_BRACKET_PROGRESS_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.25).toFixed(3));
 
 export function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
