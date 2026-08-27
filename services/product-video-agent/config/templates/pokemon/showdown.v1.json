@@ -99,12 +99,12 @@
       "slot_card_height_px": 184,
       "connector_thickness_px": 10,
       "slot_positions": {
-        "semi_1_a": { "x": 40, "y": 1380 },
-        "semi_1_b": { "x": 300, "y": 1380 },
-        "semi_1_winner": { "x": 170, "y": 940 },
-        "semi_2_a": { "x": 560, "y": 1380 },
-        "semi_2_b": { "x": 820, "y": 1380 },
-        "semi_2_winner": { "x": 690, "y": 940 },
+        "semi_1_a": { "x": 40, "y": 1100 },
+        "semi_1_b": { "x": 300, "y": 1100 },
+        "semi_1_winner": { "x": 170, "y": 800 },
+        "semi_2_a": { "x": 560, "y": 1100 },
+        "semi_2_b": { "x": 820, "y": 1100 },
+        "semi_2_winner": { "x": 690, "y": 800 },
         "final_winner": { "x": 430, "y": 340 }
       }
     },

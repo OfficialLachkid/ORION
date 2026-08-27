@@ -63,12 +63,12 @@ const template = {
       slot_card_height_px: 184,
       connector_thickness_px: 10,
       slot_positions: {
-        semi_1_a: { x: 40, y: 1380 },
-        semi_1_b: { x: 300, y: 1380 },
-        semi_1_winner: { x: 170, y: 940 },
-        semi_2_a: { x: 560, y: 1380 },
-        semi_2_b: { x: 820, y: 1380 },
-        semi_2_winner: { x: 690, y: 940 },
+        semi_1_a: { x: 40, y: 1100 },
+        semi_1_b: { x: 300, y: 1100 },
+        semi_1_winner: { x: 170, y: 800 },
+        semi_2_a: { x: 560, y: 1100 },
+        semi_2_b: { x: 820, y: 1100 },
+        semi_2_winner: { x: 690, y: 800 },
         final_winner: { x: 430, y: 340 },
       },
     },
@@ -242,7 +242,9 @@ test('showdown render plan and inputs stay deterministic for a four-Pokemon brac
   assert.equal(renderPlan.matches.length, 3);
   assert.equal(renderPlan.output_path, '/tmp/showdown.mp4');
   assert.equal(renderPlan.bracket_layout.slots.final_winner.center_x, 540);
+  assert.equal(renderPlan.bracket_layout.slots.semi_1_winner.center_y, 892);
   assert.equal(renderPlan.matches[0].intro_start_seconds, 4.18);
+  assert.equal(renderPlan.matches[0].battle_transition_start_seconds, 3.78);
   assert.equal(renderPlan.matches[1].intro_start_seconds - renderPlan.matches[1].scene_start_seconds, 0.75);
   assert.equal(renderPlan.intro_sequence.bracket_draw_end_seconds, 1.1);
   assert.equal(renderPlan.intro_sequence.participant_reveal_stagger_seconds, 0.3);
@@ -307,11 +309,14 @@ test('showdown audio and visual filters include winner sting cues and champion o
   assert.equal(/:w=-/u.test(visualFilter.script), false);
   assert.equal((visualFilter.script.match(/setsar=1\[p\d+champ0\]/gu) || []).length, 1);
   assert.equal((visualFilter.script.match(/colorchannelmixer=aa=0\.46\[p\d+stagegray0\]/gu) || []).length, 3);
-  assert.match(visualFilter.script, /\[p\d+slot0\]/u);
-  assert.match(visualFilter.script, /\[p\d+stage0\]/u);
-  assert.match(visualFilter.script, /\[p\d+stage1\]/u);
+  assert.match(visualFilter.script, /\[p\d+slotstatic\]/u);
+  assert.match(visualFilter.script, /\[p\d+stagebattle0\]/u);
+  assert.match(visualFilter.script, /\[p\d+stagewin0\]/u);
+  assert.match(visualFilter.script, /\[p\d+slotgray0\]/u);
   assert.match(visualFilter.script, /vprogress0/u);
   assert.match(visualFilter.script, /vpokeball0/u);
+  assert.match(visualFilter.script, /fade=t=in:st=/u);
+  assert.match(visualFilter.script, /drawtext=text='HP/u);
   assert.match(
     visualFilter.script,
     new RegExp(`${firstMatchWinnerCenterX}\\+\\(${firstMatchBracketCenterX}-${firstMatchWinnerCenterX}\\)`, 'u'),

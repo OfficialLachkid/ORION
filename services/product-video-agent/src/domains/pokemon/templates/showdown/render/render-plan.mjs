@@ -181,11 +181,19 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
     const revealStart = roundTime(introStart + matchIntroHoldSeconds + suspenseHoldSeconds);
     const transitionSeconds = index === matches.length - 1 ? 0 : transitionDurationSeconds;
     const sceneEnd = roundTime(revealStart + revealHoldSeconds + transitionSeconds);
+    const battleTransitionStartSeconds = roundTime(
+      Math.max(
+        sceneStart,
+        introStart - transitionDurationSeconds,
+      ),
+    );
     currentStart = sceneEnd;
     return {
       ...match,
       scene_start_seconds: sceneStart,
       intro_start_seconds: introStart,
+      battle_transition_start_seconds: battleTransitionStartSeconds,
+      battle_transition_duration_seconds: transitionDurationSeconds,
       reveal_start_seconds: revealStart,
       scene_end_seconds: sceneEnd,
       transition_duration_seconds: transitionSeconds,
@@ -289,11 +297,19 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
     const introStart = roundTime(sceneStart + introDelay);
     const revealStart = roundTime(introStart + introDuration);
     const sceneEnd = roundTime(revealStart + winnerDuration + match.transition_duration_seconds);
+    const battleTransitionStartSeconds = roundTime(
+      Math.max(
+        sceneStart,
+        introStart - (match.battle_transition_duration_seconds ?? match.transition_duration_seconds),
+      ),
+    );
     currentStart = sceneEnd;
     return {
       ...match,
       scene_start_seconds: sceneStart,
       intro_start_seconds: introStart,
+      battle_transition_start_seconds: battleTransitionStartSeconds,
+      battle_transition_duration_seconds: match.battle_transition_duration_seconds ?? match.transition_duration_seconds,
       reveal_start_seconds: revealStart,
       scene_end_seconds: sceneEnd,
       hook_visible_until_seconds: index === 0 ? introStart : null,
