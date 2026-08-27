@@ -78,6 +78,67 @@ function buildAnimatedVerticalConnectorSegment(x, startY, endY, thickness, start
   return `drawbox=x=${round((x - (thickness / 2)))}:y=${yExpression}:w=${thickness}:h=${heightExpression}:color=0xFFFFFF@0.7:t=fill`;
 }
 
+function buildAnimatedConnectorPath(points = [], thickness, startSeconds, endSeconds) {
+  if (!Array.isArray(points) || points.length < 2) {
+    return [];
+  }
+
+  const segments = [];
+  let totalLength = 0;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const startPoint = points[index];
+    const endPoint = points[index + 1];
+    if (!startPoint || !endPoint) {
+      continue;
+    }
+    const deltaX = endPoint.x - startPoint.x;
+    const deltaY = endPoint.y - startPoint.y;
+    const isHorizontal = deltaY === 0;
+    const segmentLength = isHorizontal ? Math.abs(deltaX) : Math.abs(deltaY);
+    if (segmentLength <= 0) {
+      continue;
+    }
+    segments.push({
+      startPoint,
+      endPoint,
+      isHorizontal,
+      segmentLength,
+    });
+    totalLength += segmentLength;
+  }
+
+  if (segments.length === 0 || totalLength <= 0) {
+    return [];
+  }
+
+  const totalDuration = Math.max(0.01, ensureNumber(endSeconds, startSeconds + 0.01) - ensureNumber(startSeconds, 0));
+  let traversedLength = 0;
+
+  return segments.map((segment) => {
+    const segmentStartSeconds = round((startSeconds + ((traversedLength / totalLength) * totalDuration)) * 1000) / 1000;
+    traversedLength += segment.segmentLength;
+    const segmentEndSeconds = round((startSeconds + ((traversedLength / totalLength) * totalDuration)) * 1000) / 1000;
+
+    return segment.isHorizontal
+      ? buildAnimatedHorizontalConnectorSegment(
+        segment.startPoint.y,
+        segment.startPoint.x,
+        segment.endPoint.x,
+        thickness,
+        segmentStartSeconds,
+        segmentEndSeconds,
+      )
+      : buildAnimatedVerticalConnectorSegment(
+        segment.startPoint.x,
+        segment.startPoint.y,
+        segment.endPoint.y,
+        thickness,
+        segmentStartSeconds,
+        segmentEndSeconds,
+      );
+  });
+}
+
 function round(value) {
   return Math.round(ensureNumber(value, 0));
 }
@@ -109,63 +170,22 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   const rightEnable = revealSchedule.connector_right ? `gte(t,${revealSchedule.connector_right})` : '';
   const finalEnable = revealSchedule.connector_final ? `gte(t,${revealSchedule.connector_final})` : '';
   const connectorWindows = revealSchedule.connector_windows || {};
-  const buildWindowParts = (window = null) => {
-    const startSeconds = ensureNumber(window?.start_seconds, 0);
-    const endSeconds = Math.max(startSeconds + 0.01, ensureNumber(window?.end_seconds, startSeconds + 0.01));
-    const duration = endSeconds - startSeconds;
-    return {
-      verticalStart: startSeconds,
-      verticalEnd: round((startSeconds + (duration * 0.35)) * 1000) / 1000,
-      horizontalStart: round((startSeconds + (duration * 0.35)) * 1000) / 1000,
-      horizontalEnd: round((startSeconds + (duration * 0.8)) * 1000) / 1000,
-      winnerStart: round((startSeconds + (duration * 0.8)) * 1000) / 1000,
-      winnerEnd: endSeconds,
-    };
-  };
 
   if (connectorWindows.connector_left) {
-    const window = buildWindowParts(connectorWindows.connector_left);
+    const window = connectorWindows.connector_left;
     lines.push(
-      buildAnimatedVerticalConnectorSegment(
-        slots.semi_1_a.center_x,
-        slots.semi_1_a.y,
-        leftPairConnectorY,
-        thickness,
-        window.verticalStart,
-        window.verticalEnd,
-      ),
-      buildAnimatedVerticalConnectorSegment(
-        slots.semi_1_b.center_x,
-        slots.semi_1_b.y,
-        leftPairConnectorY,
-        thickness,
-        window.verticalStart,
-        window.verticalEnd,
-      ),
-      buildAnimatedHorizontalConnectorSegment(
-        leftPairConnectorY,
-        slots.semi_1_a.center_x,
-        slots.semi_1_winner.center_x,
-        thickness,
-        window.horizontalStart,
-        window.horizontalEnd,
-      ),
-      buildAnimatedHorizontalConnectorSegment(
-        leftPairConnectorY,
-        slots.semi_1_b.center_x,
-        slots.semi_1_winner.center_x,
-        thickness,
-        window.horizontalStart,
-        window.horizontalEnd,
-      ),
-      buildAnimatedVerticalConnectorSegment(
-        slots.semi_1_winner.center_x,
-        leftPairConnectorY,
-        slots.semi_1_winner.y + slots.semi_1_winner.height,
-        thickness,
-        window.winnerStart,
-        window.winnerEnd,
-      ),
+      ...buildAnimatedConnectorPath([
+        { x: slots.semi_1_a.center_x, y: slots.semi_1_a.y },
+        { x: slots.semi_1_a.center_x, y: leftPairConnectorY },
+        { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
+        { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
+      ], thickness, window.start_seconds, window.end_seconds),
+      ...buildAnimatedConnectorPath([
+        { x: slots.semi_1_b.center_x, y: slots.semi_1_b.y },
+        { x: slots.semi_1_b.center_x, y: leftPairConnectorY },
+        { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
+        { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
+      ], thickness, window.start_seconds, window.end_seconds),
     );
   } else {
     lines.push(
@@ -183,48 +203,20 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   }
 
   if (connectorWindows.connector_right) {
-    const window = buildWindowParts(connectorWindows.connector_right);
+    const window = connectorWindows.connector_right;
     lines.push(
-      buildAnimatedVerticalConnectorSegment(
-        slots.semi_2_a.center_x,
-        slots.semi_2_a.y,
-        rightPairConnectorY,
-        thickness,
-        window.verticalStart,
-        window.verticalEnd,
-      ),
-      buildAnimatedVerticalConnectorSegment(
-        slots.semi_2_b.center_x,
-        slots.semi_2_b.y,
-        rightPairConnectorY,
-        thickness,
-        window.verticalStart,
-        window.verticalEnd,
-      ),
-      buildAnimatedHorizontalConnectorSegment(
-        rightPairConnectorY,
-        slots.semi_2_a.center_x,
-        slots.semi_2_winner.center_x,
-        thickness,
-        window.horizontalStart,
-        window.horizontalEnd,
-      ),
-      buildAnimatedHorizontalConnectorSegment(
-        rightPairConnectorY,
-        slots.semi_2_b.center_x,
-        slots.semi_2_winner.center_x,
-        thickness,
-        window.horizontalStart,
-        window.horizontalEnd,
-      ),
-      buildAnimatedVerticalConnectorSegment(
-        slots.semi_2_winner.center_x,
-        rightPairConnectorY,
-        slots.semi_2_winner.y + slots.semi_2_winner.height,
-        thickness,
-        window.winnerStart,
-        window.winnerEnd,
-      ),
+      ...buildAnimatedConnectorPath([
+        { x: slots.semi_2_a.center_x, y: slots.semi_2_a.y },
+        { x: slots.semi_2_a.center_x, y: rightPairConnectorY },
+        { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
+        { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
+      ], thickness, window.start_seconds, window.end_seconds),
+      ...buildAnimatedConnectorPath([
+        { x: slots.semi_2_b.center_x, y: slots.semi_2_b.y },
+        { x: slots.semi_2_b.center_x, y: rightPairConnectorY },
+        { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
+        { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
+      ], thickness, window.start_seconds, window.end_seconds),
     );
   } else {
     lines.push(
@@ -242,48 +234,20 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   }
 
   if (connectorWindows.connector_final) {
-    const window = buildWindowParts(connectorWindows.connector_final);
+    const window = connectorWindows.connector_final;
     lines.push(
-      buildAnimatedVerticalConnectorSegment(
-        slots.semi_1_winner.center_x,
-        slots.semi_1_winner.y,
-        finalConnectorY,
-        thickness,
-        window.verticalStart,
-        window.verticalEnd,
-      ),
-      buildAnimatedVerticalConnectorSegment(
-        slots.semi_2_winner.center_x,
-        slots.semi_2_winner.y,
-        finalConnectorY,
-        thickness,
-        window.verticalStart,
-        window.verticalEnd,
-      ),
-      buildAnimatedHorizontalConnectorSegment(
-        finalConnectorY,
-        slots.semi_1_winner.center_x,
-        slots.final_winner.center_x,
-        thickness,
-        window.horizontalStart,
-        window.horizontalEnd,
-      ),
-      buildAnimatedHorizontalConnectorSegment(
-        finalConnectorY,
-        slots.semi_2_winner.center_x,
-        slots.final_winner.center_x,
-        thickness,
-        window.horizontalStart,
-        window.horizontalEnd,
-      ),
-      buildAnimatedVerticalConnectorSegment(
-        slots.final_winner.center_x,
-        finalConnectorY,
-        slots.final_winner.y + slots.final_winner.height,
-        thickness,
-        window.winnerStart,
-        window.winnerEnd,
-      ),
+      ...buildAnimatedConnectorPath([
+        { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y },
+        { x: slots.semi_1_winner.center_x, y: finalConnectorY },
+        { x: slots.final_winner.center_x, y: finalConnectorY },
+        { x: slots.final_winner.center_x, y: slots.final_winner.y + slots.final_winner.height },
+      ], thickness, window.start_seconds, window.end_seconds),
+      ...buildAnimatedConnectorPath([
+        { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y },
+        { x: slots.semi_2_winner.center_x, y: finalConnectorY },
+        { x: slots.final_winner.center_x, y: finalConnectorY },
+        { x: slots.final_winner.center_x, y: slots.final_winner.y + slots.final_winner.height },
+      ], thickness, window.start_seconds, window.end_seconds),
     );
   } else {
     lines.push(
@@ -503,8 +467,9 @@ function buildBattleStatsLayout(battleStage) {
 function buildBattleStatsFilters({ match, battleStage, fontPart }) {
   const layout = buildBattleStatsLayout(battleStage);
   const enableExpression = formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds);
-  const rowStaggerSeconds = 0.08;
-  const rowFillDurationSeconds = 0.24;
+  const rowLeadInSeconds = 0.12;
+  const rowStaggerSeconds = 0.16;
+  const rowFillDurationSeconds = 0.52;
   const statSources = [
     { stats: match.participant_a.base_stats || {}, x: layout.leftX },
     { stats: match.participant_b.base_stats || {}, x: layout.rightX },
@@ -514,7 +479,7 @@ function buildBattleStatsFilters({ match, battleStage, fontPart }) {
       const value = Math.max(0, Math.min(255, round(stats[row.key] || 0)));
       const y = layout.top + (rowIndex * (layout.rowHeight + layout.rowGap));
       const fillWidth = Math.max(2, round((value / 255) * layout.barWidth));
-      const rowStartSeconds = round((match.intro_start_seconds + (rowIndex * rowStaggerSeconds)) * 1000) / 1000;
+      const rowStartSeconds = round((match.intro_start_seconds + rowLeadInSeconds + (rowIndex * rowStaggerSeconds)) * 1000) / 1000;
       const rowEndSeconds = round((rowStartSeconds + rowFillDurationSeconds) * 1000) / 1000;
       const animatedFillWidth = buildAnimatedExtentExpression(fillWidth, rowStartSeconds, rowEndSeconds);
       const barTrackX = x + layout.barX;
