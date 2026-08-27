@@ -43,11 +43,27 @@ function combineEnableExpressions(...expressions) {
 }
 
 function buildCardFilters(bracketLayout, revealSchedule = {}) {
+  const slotWindows = revealSchedule.slot_windows || {};
   return Object.entries(bracketLayout.slots).flatMap(([slotKey, slot]) => {
+    const slotWindow = slotWindows[slotKey] || null;
     const enableExpression = revealSchedule[slotKey]
       ? `gte(t,${revealSchedule[slotKey]})`
       : '';
     const enablePart = buildEnablePart(enableExpression);
+    if (slotWindow) {
+      return [
+        `drawbox=x=${slot.x + 3}:y=${slot.y + 3}:w=${slot.width - 6}:h=${slot.height - 6}:color=0x101010@0.32:t=fill:enable='gte(t,${slotWindow.start_seconds})'`,
+        ...buildSteppedConnectorPath([
+          { x: slot.x, y: slot.y },
+          { x: slot.x + slot.width, y: slot.y },
+          { x: slot.x + slot.width, y: slot.y + slot.height },
+          { x: slot.x, y: slot.y + slot.height },
+          { x: slot.x, y: slot.y },
+        ], 3, slotWindow.start_seconds, slotWindow.end_seconds, 8).map((filter) => (
+          filter.replace('color=0xFFFFFF@0.7', 'color=0xFFFFFF@0.95')
+        )),
+      ];
+    }
     return [
       `drawbox=x=${slot.x}:y=${slot.y}:w=${slot.width}:h=${slot.height}:color=0xFFFFFF@0.95:t=3${enablePart}`,
       `drawbox=x=${slot.x + 3}:y=${slot.y + 3}:w=${slot.width - 6}:h=${slot.height - 6}:color=0x101010@0.32:t=fill${enablePart}`,
@@ -251,20 +267,19 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
 
   if (connectorWindows.connector_left) {
     const window = connectorWindows.connector_left;
-    const parts = splitWindow(window);
     lines.push(
       ...buildSteppedConnectorPath([
         { x: slots.semi_1_a.center_x, y: slots.semi_1_a.y },
         { x: slots.semi_1_a.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
-      ], thickness, parts.first.start_seconds, parts.first.end_seconds, 5),
+      ], thickness, window.start_seconds, window.end_seconds, 5),
       ...buildSteppedConnectorPath([
         { x: slots.semi_1_b.center_x, y: slots.semi_1_b.y },
         { x: slots.semi_1_b.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
-      ], thickness, parts.second.start_seconds, parts.second.end_seconds, 5),
+      ], thickness, window.start_seconds, window.end_seconds, 5),
     );
   } else {
     lines.push(
@@ -283,20 +298,19 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
 
   if (connectorWindows.connector_right) {
     const window = connectorWindows.connector_right;
-    const parts = splitWindow(window);
     lines.push(
       ...buildSteppedConnectorPath([
         { x: slots.semi_2_a.center_x, y: slots.semi_2_a.y },
         { x: slots.semi_2_a.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
-      ], thickness, parts.first.start_seconds, parts.first.end_seconds, 5),
+      ], thickness, window.start_seconds, window.end_seconds, 5),
       ...buildSteppedConnectorPath([
         { x: slots.semi_2_b.center_x, y: slots.semi_2_b.y },
         { x: slots.semi_2_b.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
-      ], thickness, parts.second.start_seconds, parts.second.end_seconds, 5),
+      ], thickness, window.start_seconds, window.end_seconds, 5),
     );
   } else {
     lines.push(
@@ -315,20 +329,19 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
 
   if (connectorWindows.connector_final) {
     const window = connectorWindows.connector_final;
-    const parts = splitWindow(window);
     lines.push(
       ...buildSteppedConnectorPath([
         { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y },
         { x: slots.semi_1_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: slots.final_winner.y + slots.final_winner.height },
-      ], thickness, parts.first.start_seconds, parts.first.end_seconds, 5),
+      ], thickness, window.start_seconds, window.end_seconds, 5),
       ...buildSteppedConnectorPath([
         { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y },
         { x: slots.semi_2_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: slots.final_winner.y + slots.final_winner.height },
-      ], thickness, parts.second.start_seconds, parts.second.end_seconds, 5),
+      ], thickness, window.start_seconds, window.end_seconds, 5),
     );
   } else {
     lines.push(
@@ -361,12 +374,14 @@ function buildIntroRevealSchedule(renderPlan) {
     const semiSlotStart = 0;
     const semiSlotEnd = round((semiSlotStart + ensureNumber(stageSeconds.semi_slot_seconds, 0.18)) * 1000) / 1000;
     const semiConnectorStart = semiSlotEnd;
-    const semiConnectorEnd = round((semiConnectorStart + ensureNumber(stageSeconds.semi_connector_seconds, 0.8)) * 1000) / 1000;
+    const semiConnectorEnd = round((semiConnectorStart + ensureNumber(stageSeconds.semi_connector_seconds, 1.3)) * 1000) / 1000;
     const finalistSlotStart = semiConnectorEnd;
     const finalistSlotEnd = round((finalistSlotStart + ensureNumber(stageSeconds.finalist_slot_seconds, 0.18)) * 1000) / 1000;
     const finalConnectorStart = finalistSlotEnd;
-    const finalConnectorEnd = round((finalConnectorStart + ensureNumber(stageSeconds.final_connector_seconds, 0.8)) * 1000) / 1000;
-    const clampedFinalEnd = Math.min(introEnd, finalConnectorEnd);
+    const finalConnectorEnd = round((finalConnectorStart + ensureNumber(stageSeconds.final_connector_seconds, 1.3)) * 1000) / 1000;
+    const championSlotStart = finalConnectorEnd;
+    const championSlotEnd = round((championSlotStart + ensureNumber(stageSeconds.champion_slot_seconds, 0.18)) * 1000) / 1000;
+    const clampedChampionEnd = Math.min(introEnd, championSlotEnd);
     return {
       slots: {
         semi_1_a: semiSlotStart,
@@ -375,12 +390,42 @@ function buildIntroRevealSchedule(renderPlan) {
         semi_2_b: semiSlotStart,
         semi_1_winner: finalistSlotStart,
         semi_2_winner: finalistSlotStart,
-        final_winner: finalConnectorStart,
+        final_winner: championSlotStart,
       },
       connectors: {
         connector_left: semiConnectorStart,
         connector_right: semiConnectorStart,
         connector_final: finalConnectorStart,
+      },
+      slot_windows: {
+        semi_1_a: {
+          start_seconds: semiSlotStart,
+          end_seconds: Math.min(introEnd, semiSlotEnd),
+        },
+        semi_1_b: {
+          start_seconds: semiSlotStart,
+          end_seconds: Math.min(introEnd, semiSlotEnd),
+        },
+        semi_2_a: {
+          start_seconds: semiSlotStart,
+          end_seconds: Math.min(introEnd, semiSlotEnd),
+        },
+        semi_2_b: {
+          start_seconds: semiSlotStart,
+          end_seconds: Math.min(introEnd, semiSlotEnd),
+        },
+        semi_1_winner: {
+          start_seconds: finalistSlotStart,
+          end_seconds: Math.min(introEnd, finalistSlotEnd),
+        },
+        semi_2_winner: {
+          start_seconds: finalistSlotStart,
+          end_seconds: Math.min(introEnd, finalistSlotEnd),
+        },
+        final_winner: {
+          start_seconds: championSlotStart,
+          end_seconds: clampedChampionEnd,
+        },
       },
       connector_windows: {
         connector_left: {
@@ -393,7 +438,7 @@ function buildIntroRevealSchedule(renderPlan) {
         },
         connector_final: {
           start_seconds: finalConnectorStart,
-          end_seconds: clampedFinalEnd,
+          end_seconds: Math.min(introEnd, finalConnectorEnd),
         },
       },
     };
@@ -565,14 +610,6 @@ function buildLinearSpritePlacement(startCenterX, startCenterY, endCenterX, endC
   };
 }
 
-function buildLinearScaleExpression(startSize, endSize, startSeconds, endSeconds) {
-  const safeStart = ensureNumber(startSeconds, 0);
-  const safeEnd = Math.max(safeStart + 0.01, ensureNumber(endSeconds, safeStart + 0.01));
-  const duration = round(((safeEnd - safeStart) * 1000)) / 1000;
-  const delta = round(endSize - startSize);
-  return `if(lt(t,${safeStart}),${round(startSize)},if(lt(t,${safeEnd}),round(${round(startSize)}+(${delta}*((t-${safeStart})/${duration}))),${round(endSize)}))`;
-}
-
 function buildChampionSpritePlacement(stage) {
   return {
     x: `${stage.center_x}-overlay_w/2`,
@@ -616,6 +653,7 @@ function buildBattleStatsFilters({ match, battleStage, fontPart }) {
   const rowLeadInSeconds = 0.16;
   const rowStaggerSeconds = 0.18;
   const rowFillDurationSeconds = 0.66;
+  const rowValueCountDurationSeconds = 1;
   const statSources = [
     { stats: match.participant_a.base_stats || {}, x: layout.leftX },
     { stats: match.participant_b.base_stats || {}, x: layout.rightX },
@@ -627,6 +665,7 @@ function buildBattleStatsFilters({ match, battleStage, fontPart }) {
       const fillWidth = Math.max(2, round((value / 255) * layout.barWidth));
       const rowStartSeconds = round((match.intro_start_seconds + rowLeadInSeconds + (rowIndex * rowStaggerSeconds)) * 1000) / 1000;
       const rowEndSeconds = round((rowStartSeconds + rowFillDurationSeconds) * 1000) / 1000;
+      const valueCountExpression = `%{eif\\:clip((t-${rowStartSeconds})/${rowValueCountDurationSeconds}\\,0\\,1)*${value}\\:d}`;
       const barTrackX = x + layout.barX;
       const valueX = x + layout.labelWidth + 8;
       return [
@@ -644,7 +683,7 @@ function buildBattleStatsFilters({ match, battleStage, fontPart }) {
           segmentWidthPx: 6,
         }),
         `drawtext=text='${escapeDrawtextText(`${row.label}:`)}'${fontPart}:fontcolor=black:fontsize=${layout.labelFontSize}:borderw=0:fix_bounds=1:x=${x + 10}:y=${y + 3}:enable='${enableExpression}'`,
-        `drawtext=text='${value}'${fontPart}:fontcolor=black:fontsize=${layout.valueFontSize}:borderw=0:fix_bounds=1:x=${valueX}:y=${y + 3}:enable='${enableExpression}'`,
+        `drawtext=text='${valueCountExpression}'${fontPart}:fontcolor=black:fontsize=${layout.valueFontSize}:borderw=0:fix_bounds=1:x=${valueX}:y=${y + 3}:enable='${enableExpression}'`,
       ];
     })
   ));
@@ -1046,25 +1085,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       transitionStart,
       match.intro_start_seconds,
     );
-    const transitionScaleExpression = buildLinearScaleExpression(
-      slotSpriteSize,
-      battleSpriteSize,
-      transitionStart,
-      match.intro_start_seconds,
-    );
-    const leftTransitionScaledLabel = `vmatchtranslscaled${matchIndex}`;
-    const rightTransitionScaledLabel = `vmatchtransrscaled${matchIndex}`;
-    filters.push(
-      `[${leftTransitionLabel}]scale=w='${transitionScaleExpression}':h=-2:eval=frame:flags=lanczos,format=rgba,setsar=1[${leftTransitionScaledLabel}]`,
-      `[${rightTransitionLabel}]scale=w='${transitionScaleExpression}':h=-2:eval=frame:flags=lanczos,format=rgba,setsar=1[${rightTransitionScaledLabel}]`,
-    );
     const transitionLeftLabelName = `vmatchtransl${matchIndex}`;
     filters.push(
-      `[${stageSceneBaseLabel}][${leftTransitionScaledLabel}]overlay=x='${leftTransitionPlacement.x}':y='${leftTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionLeftLabelName}]`,
+      `[${stageSceneBaseLabel}][${leftTransitionLabel}]overlay=x='${leftTransitionPlacement.x}':y='${leftTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionLeftLabelName}]`,
     );
     const transitionRightLabelName = `vmatchtransr${matchIndex}`;
     filters.push(
-      `[${transitionLeftLabelName}][${rightTransitionScaledLabel}]overlay=x='${rightTransitionPlacement.x}':y='${rightTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionRightLabelName}]`,
+      `[${transitionLeftLabelName}][${rightTransitionLabel}]overlay=x='${rightTransitionPlacement.x}':y='${rightTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionRightLabelName}]`,
     );
 
     const preRevealLabel = `vmatchpre${matchIndex}`;

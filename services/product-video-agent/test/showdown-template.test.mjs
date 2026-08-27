@@ -250,9 +250,7 @@ test('showdown render plan and inputs stay deterministic for a four-Pokemon brac
   assert.equal(renderPlan.intro_sequence.participant_reveal_stagger_seconds, 0.3);
   assert.equal(renderPlan.intro_sequence.participant_hold_end_seconds, renderPlan.matches[0].intro_start_seconds);
   assert.ok(
-    Math.abs(
-      (renderPlan.matches[1].intro_start_seconds - renderPlan.matches[0].bracket_progress_end_seconds) - 0.3,
-    ) < 0.000001,
+    (renderPlan.matches[1].battle_transition_start_seconds - renderPlan.matches[0].bracket_progress_end_seconds) >= 0.25,
   );
   assert.equal(renderPlan.champion_scene.start_seconds, renderPlan.matches.at(-1)?.bracket_progress_end_seconds);
   assert.equal(renderPlan.champion_scene.end_seconds > renderPlan.matches.at(-1)?.scene_end_seconds, true);

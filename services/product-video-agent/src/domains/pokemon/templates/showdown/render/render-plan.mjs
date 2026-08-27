@@ -121,6 +121,7 @@ function resolveIntroBracketStageDurations(template) {
     'intro_bracket_semi_connector_seconds',
     'intro_bracket_finalist_slot_seconds',
     'intro_bracket_final_connector_seconds',
+    'intro_bracket_champion_slot_seconds',
   ].some((key) => renderer[key] !== undefined);
 
   if (!hasConfiguredStages) {
@@ -129,9 +130,10 @@ function resolveIntroBracketStageDurations(template) {
 
   return {
     semi_slot_seconds: roundTime(Math.max(0.05, ensureNumber(renderer.intro_bracket_semi_slot_seconds, 0.18))),
-    semi_connector_seconds: roundTime(Math.max(0.1, ensureNumber(renderer.intro_bracket_semi_connector_seconds, 0.8))),
+    semi_connector_seconds: roundTime(Math.max(0.1, ensureNumber(renderer.intro_bracket_semi_connector_seconds, 1.3))),
     finalist_slot_seconds: roundTime(Math.max(0.05, ensureNumber(renderer.intro_bracket_finalist_slot_seconds, 0.18))),
-    final_connector_seconds: roundTime(Math.max(0.1, ensureNumber(renderer.intro_bracket_final_connector_seconds, 0.8))),
+    final_connector_seconds: roundTime(Math.max(0.1, ensureNumber(renderer.intro_bracket_final_connector_seconds, 1.3))),
+    champion_slot_seconds: roundTime(Math.max(0.05, ensureNumber(renderer.intro_bracket_champion_slot_seconds, 0.18))),
   };
 }
 
@@ -199,7 +201,8 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
       bracketStageSeconds.semi_slot_seconds
       + bracketStageSeconds.semi_connector_seconds
       + bracketStageSeconds.finalist_slot_seconds
-      + bracketStageSeconds.final_connector_seconds,
+      + bracketStageSeconds.final_connector_seconds
+      + bracketStageSeconds.champion_slot_seconds,
     )
     : 0;
   const firstRoundLeadSeconds = roundTime(Math.max(
@@ -239,9 +242,14 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
     const nextIntroStart = index === renderedMatches.length - 1
       ? roundTime(match.scene_end_seconds + interRoundBracketHoldSeconds)
       : renderedMatches[index + 1].intro_start_seconds;
+    const nextTransitionLeadSeconds = index === renderedMatches.length - 1
+      ? 0
+      : ensureNumber(renderedMatches[index + 1].battle_transition_duration_seconds, transitionDurationSeconds);
     const bracketProgressEnd = roundTime(Math.max(
       match.scene_end_seconds + 0.08,
-      nextIntroStart - (index === renderedMatches.length - 1 ? 0 : postProgressHoldSeconds),
+      nextIntroStart - (index === renderedMatches.length - 1
+        ? 0
+        : (nextTransitionLeadSeconds + postProgressHoldSeconds)),
     ));
     return {
       ...match,
