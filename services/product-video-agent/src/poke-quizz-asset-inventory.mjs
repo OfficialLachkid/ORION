@@ -252,6 +252,7 @@ export async function scanPokeQuizzAssetInventory() {
     gifBackgrounds,
     music,
     soundEffects,
+    cries,
     pixelTypes,
     threeDTypes,
     overlays,
