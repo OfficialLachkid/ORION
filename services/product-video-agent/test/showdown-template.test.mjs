@@ -35,8 +35,8 @@ const template = {
   question_contract: {
     hook_text: 'Who wins this showdown?',
     hook_text_variants: ['Who wins this showdown?'],
-    champion_text: 'Champion: {champion_name}',
-    champion_text_variants: ['Champion: {champion_name}'],
+    champion_text: '{champion_name} won the tournament',
+    champion_text_variants: ['{champion_name} won the tournament'],
   },
   layout: {
     background: {
@@ -306,7 +306,7 @@ test('showdown audio and visual filters include winner sting cues and champion o
   const finalBracketCenterX = slotPositions.final_winner.x + (slotSize / 2);
 
   assert.match(visualFilter.script, /\[0:v\]fps=30,scale=1080:1920/u);
-  assert.match(visualFilter.script, /Champion/u);
+  assert.match(visualFilter.script, /Winner/u);
   assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
   assert.equal(/:w=-/u.test(visualFilter.script), false);
   assert.equal((visualFilter.script.match(/setsar=1\[p\d+champ0\]/gu) || []).length, 1);
@@ -334,7 +334,7 @@ test('showdown audio and visual filters include winner sting cues and champion o
     new RegExp(`enable='between\\(t,${renderPlan.matches[0].intro_start_seconds},${renderPlan.matches[0].reveal_start_seconds}\\)'`, 'u'),
   );
   assert.match(audioFilter, /asplit=4\[osrc0\]\[osrc1\]\[osrc2\]\[osrc3\]/u);
-  assert.match(audioFilter, /volume=0\.225\[open0\]/u);
+  assert.match(audioFilter, /volume=0\.113\[open0\]/u);
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
   assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
   assert.match(audioFilter, /volume=0\.225\[progress0\]/u);

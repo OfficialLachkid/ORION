@@ -186,7 +186,7 @@ export function resolveShowdownBattle({
     loser: loserCard,
   };
   const insightText = resolveInsightText(winner, loser, scoreCards);
-  const commentaryText = `${left.display_name} faces ${right.display_name}. ${insightText}`;
+  const commentaryText = `${left.display_name} versus ${right.display_name}. ${insightText}`;
   return {
     match_id: matchId,
     round_label: roundLabel,

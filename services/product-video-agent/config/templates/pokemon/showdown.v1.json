@@ -63,12 +63,11 @@
     "matchup_text": "{pokemon_a} vs {pokemon_b}",
     "matchup_text_variants": [
       "{pokemon_a} vs {pokemon_b}",
-      "{pokemon_a} faces {pokemon_b}"
+      "{pokemon_a} versus {pokemon_b}"
     ],
-    "champion_text": "Champion: {champion_name}",
+    "champion_text": "{champion_name} won the tournament",
     "champion_text_variants": [
-      "Champion: {champion_name}",
-      "{champion_name} wins the bracket!"
+      "{champion_name} won the tournament"
     ]
   },
   "layout": {
@@ -81,11 +80,11 @@
     "text": {
       "hook_y": 150,
       "hook_font_size": 84,
-      "round_y": 240,
+      "round_y": 140,
       "round_font_size": 46,
-      "matchup_y": 318,
+      "matchup_y": 218,
       "matchup_font_size": 62,
-      "insight_y": 410,
+      "insight_y": 310,
       "insight_font_size": 38,
       "winner_y": 1450,
       "winner_font_size": 78,
@@ -129,7 +128,7 @@
       "hook_hold_seconds": 1.1,
       "intro_participant_hold_seconds": 2,
       "inter_round_bracket_hold_seconds": 3,
-      "post_progress_hold_seconds": 0.3,
+      "post_progress_hold_seconds": 1,
       "match_intro_hold_seconds": 1.8,
       "suspense_hold_seconds": 0.9,
       "reveal_hold_seconds": 1.2,

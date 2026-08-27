@@ -200,9 +200,7 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
     ? roundTime(
       bracketStageSeconds.semi_slot_seconds
       + bracketStageSeconds.semi_connector_seconds
-      + bracketStageSeconds.finalist_slot_seconds
-      + bracketStageSeconds.final_connector_seconds
-      + bracketStageSeconds.champion_slot_seconds,
+      + bracketStageSeconds.final_connector_seconds,
     )
     : 0;
   const firstRoundLeadSeconds = roundTime(Math.max(

@@ -375,11 +375,11 @@ function buildIntroRevealSchedule(renderPlan) {
     const semiSlotEnd = round((semiSlotStart + ensureNumber(stageSeconds.semi_slot_seconds, 0.18)) * 1000) / 1000;
     const semiConnectorStart = semiSlotEnd;
     const semiConnectorEnd = round((semiConnectorStart + ensureNumber(stageSeconds.semi_connector_seconds, 1.3)) * 1000) / 1000;
-    const finalistSlotStart = semiConnectorEnd;
+    const finalistSlotStart = semiConnectorStart;
     const finalistSlotEnd = round((finalistSlotStart + ensureNumber(stageSeconds.finalist_slot_seconds, 0.18)) * 1000) / 1000;
-    const finalConnectorStart = finalistSlotEnd;
+    const finalConnectorStart = semiConnectorEnd;
     const finalConnectorEnd = round((finalConnectorStart + ensureNumber(stageSeconds.final_connector_seconds, 1.3)) * 1000) / 1000;
-    const championSlotStart = finalConnectorEnd;
+    const championSlotStart = finalConnectorStart;
     const championSlotEnd = round((championSlotStart + ensureNumber(stageSeconds.champion_slot_seconds, 0.18)) * 1000) / 1000;
     const clampedChampionEnd = Math.min(introEnd, championSlotEnd);
     return {
@@ -1265,7 +1265,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
   drawtextParts.push(
     ...buildAnimatedSceneTextBlock(
-      `Champion: ${plan.tournament?.champion?.display_name || ''}`,
+      `Winner: ${plan.tournament?.champion?.display_name || ''}`,
       fontPart,
       template,
       renderPlan.text_layout.champion_font_size,
