@@ -165,6 +165,7 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
         * Math.max(0.05, ensureNumber(template?.renderer?.intro_slot_reveal_stagger_seconds, 0.3))),
   );
   const interRoundBracketHoldSeconds = roundTime(ensureNumber(rounds.inter_round_bracket_hold_seconds, 0.08));
+  const postProgressHoldSeconds = roundTime(ensureNumber(rounds.post_progress_hold_seconds, 0.5));
   const matchIntroHoldSeconds = roundTime(ensureNumber(rounds.match_intro_hold_seconds, 1.8));
   const suspenseHoldSeconds = roundTime(ensureNumber(rounds.suspense_hold_seconds, 0.9));
   const revealHoldSeconds = roundTime(ensureNumber(rounds.reveal_hold_seconds, 1.2));
@@ -201,13 +202,20 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
     };
   });
 
-  return renderedMatches.map((match, index) => ({
-    ...match,
-    bracket_progress_start_seconds: match.scene_end_seconds,
-    bracket_progress_end_seconds: index === renderedMatches.length - 1
+  return renderedMatches.map((match, index) => {
+    const nextIntroStart = index === renderedMatches.length - 1
       ? roundTime(match.scene_end_seconds + interRoundBracketHoldSeconds)
-      : renderedMatches[index + 1].intro_start_seconds,
-  }));
+      : renderedMatches[index + 1].intro_start_seconds;
+    const bracketProgressEnd = roundTime(Math.max(
+      match.scene_end_seconds + 0.08,
+      nextIntroStart - (index === renderedMatches.length - 1 ? 0 : postProgressHoldSeconds),
+    ));
+    return {
+      ...match,
+      bracket_progress_start_seconds: match.scene_end_seconds,
+      bracket_progress_end_seconds: bracketProgressEnd,
+    };
+  });
 }
 
 function buildNarrationCueSchedule(renderedMatches = [], championScene) {

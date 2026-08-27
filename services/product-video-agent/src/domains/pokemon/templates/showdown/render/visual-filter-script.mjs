@@ -32,6 +32,16 @@ function buildEnablePart(enableExpression = '') {
   return enableExpression ? `:enable='${enableExpression}'` : '';
 }
 
+function combineEnableExpressions(...expressions) {
+  const parts = expressions
+    .map((expression) => String(expression || '').trim())
+    .filter(Boolean);
+  if (parts.length === 0) {
+    return '';
+  }
+  return parts.map((expression) => `(${expression})`).join('*');
+}
+
 function buildCardFilters(bracketLayout, revealSchedule = {}) {
   return Object.entries(bracketLayout.slots).flatMap(([slotKey, slot]) => {
     const enableExpression = revealSchedule[slotKey]
@@ -78,7 +88,45 @@ function buildAnimatedVerticalConnectorSegment(x, startY, endY, thickness, start
   return `drawbox=x=${round((x - (thickness / 2)))}:y=${yExpression}:w=${thickness}:h=${heightExpression}:color=0xFFFFFF@0.7:t=fill`;
 }
 
-function buildAnimatedConnectorPath(points = [], thickness, startSeconds, endSeconds) {
+function buildSteppedHorizontalFillBoxes({
+  x,
+  y,
+  width,
+  height,
+  color,
+  startSeconds,
+  endSeconds,
+  baseEnableExpression = '',
+  segmentWidthPx = 8,
+}) {
+  const safeX = round(x);
+  const safeY = round(y);
+  const safeWidth = Math.max(1, round(width));
+  const safeHeight = Math.max(1, round(height));
+  const duration = Math.max(0.01, ensureNumber(endSeconds, startSeconds + 0.01) - ensureNumber(startSeconds, 0));
+  const segmentCount = Math.max(1, Math.ceil(safeWidth / Math.max(1, round(segmentWidthPx))));
+  const filters = [];
+
+  for (let index = 0; index < segmentCount; index += 1) {
+    const segmentStartX = safeX + round((safeWidth * index) / segmentCount);
+    const segmentEndX = index === segmentCount - 1
+      ? safeX + safeWidth
+      : safeX + round((safeWidth * (index + 1)) / segmentCount);
+    const segmentWidth = Math.max(1, segmentEndX - segmentStartX);
+    const segmentStartSeconds = round((startSeconds + ((duration * index) / segmentCount)) * 1000) / 1000;
+    const enableExpression = combineEnableExpressions(
+      baseEnableExpression,
+      `gte(t,${segmentStartSeconds})`,
+    );
+    filters.push(
+      `drawbox=x=${segmentStartX}:y=${safeY}:w=${segmentWidth}:h=${safeHeight}:color=${color}:t=fill:enable='${enableExpression}'`,
+    );
+  }
+
+  return filters;
+}
+
+function buildSteppedConnectorPath(points = [], thickness, startSeconds, endSeconds, segmentLengthPx = 10) {
   if (!Array.isArray(points) || points.length < 2) {
     return [];
   }
@@ -111,32 +159,47 @@ function buildAnimatedConnectorPath(points = [], thickness, startSeconds, endSec
     return [];
   }
 
-  const totalDuration = Math.max(0.01, ensureNumber(endSeconds, startSeconds + 0.01) - ensureNumber(startSeconds, 0));
+  const duration = Math.max(0.01, ensureNumber(endSeconds, startSeconds + 0.01) - ensureNumber(startSeconds, 0));
+  const filters = [];
   let traversedLength = 0;
 
-  return segments.map((segment) => {
-    const segmentStartSeconds = round((startSeconds + ((traversedLength / totalLength) * totalDuration)) * 1000) / 1000;
-    traversedLength += segment.segmentLength;
-    const segmentEndSeconds = round((startSeconds + ((traversedLength / totalLength) * totalDuration)) * 1000) / 1000;
+  segments.forEach((segment) => {
+    const pieceCount = Math.max(1, Math.ceil(segment.segmentLength / Math.max(1, round(segmentLengthPx))));
+    for (let pieceIndex = 0; pieceIndex < pieceCount; pieceIndex += 1) {
+      const pieceStartDistance = traversedLength + ((segment.segmentLength * pieceIndex) / pieceCount);
+      const pieceEndDistance = traversedLength + ((segment.segmentLength * (pieceIndex + 1)) / pieceCount);
+      const pieceStartSeconds = round((startSeconds + ((pieceStartDistance / totalLength) * duration)) * 1000) / 1000;
+      const pieceStartRatio = pieceIndex / pieceCount;
+      const pieceEndRatio = (pieceIndex + 1) / pieceCount;
 
-    return segment.isHorizontal
-      ? buildAnimatedHorizontalConnectorSegment(
-        segment.startPoint.y,
-        segment.startPoint.x,
-        segment.endPoint.x,
-        thickness,
-        segmentStartSeconds,
-        segmentEndSeconds,
-      )
-      : buildAnimatedVerticalConnectorSegment(
-        segment.startPoint.x,
-        segment.startPoint.y,
-        segment.endPoint.y,
-        thickness,
-        segmentStartSeconds,
-        segmentEndSeconds,
-      );
+      if (segment.isHorizontal) {
+        const y = round(segment.startPoint.y - (thickness / 2));
+        const startX = round(segment.startPoint.x + ((segment.endPoint.x - segment.startPoint.x) * pieceStartRatio));
+        const endX = pieceIndex === pieceCount - 1
+          ? round(segment.endPoint.x)
+          : round(segment.startPoint.x + ((segment.endPoint.x - segment.startPoint.x) * pieceEndRatio));
+        const width = Math.max(1, Math.abs(endX - startX));
+        const x = Math.min(startX, endX);
+        filters.push(
+          `drawbox=x=${x}:y=${y}:w=${width}:h=${thickness}:color=0xFFFFFF@0.7:t=fill:enable='gte(t,${pieceStartSeconds})'`,
+        );
+      } else {
+        const x = round(segment.startPoint.x - (thickness / 2));
+        const startY = round(segment.startPoint.y + ((segment.endPoint.y - segment.startPoint.y) * pieceStartRatio));
+        const endY = pieceIndex === pieceCount - 1
+          ? round(segment.endPoint.y)
+          : round(segment.startPoint.y + ((segment.endPoint.y - segment.startPoint.y) * pieceEndRatio));
+        const height = Math.max(1, Math.abs(endY - startY));
+        const y = Math.min(startY, endY);
+        filters.push(
+          `drawbox=x=${x}:y=${y}:w=${thickness}:h=${height}:color=0xFFFFFF@0.7:t=fill:enable='gte(t,${pieceStartSeconds})'`,
+        );
+      }
+    }
+    traversedLength += segment.segmentLength;
   });
+
+  return filters;
 }
 
 function round(value) {
@@ -174,13 +237,13 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   if (connectorWindows.connector_left) {
     const window = connectorWindows.connector_left;
     lines.push(
-      ...buildAnimatedConnectorPath([
+      ...buildSteppedConnectorPath([
         { x: slots.semi_1_a.center_x, y: slots.semi_1_a.y },
         { x: slots.semi_1_a.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
       ], thickness, window.start_seconds, window.end_seconds),
-      ...buildAnimatedConnectorPath([
+      ...buildSteppedConnectorPath([
         { x: slots.semi_1_b.center_x, y: slots.semi_1_b.y },
         { x: slots.semi_1_b.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
@@ -205,13 +268,13 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   if (connectorWindows.connector_right) {
     const window = connectorWindows.connector_right;
     lines.push(
-      ...buildAnimatedConnectorPath([
+      ...buildSteppedConnectorPath([
         { x: slots.semi_2_a.center_x, y: slots.semi_2_a.y },
         { x: slots.semi_2_a.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
       ], thickness, window.start_seconds, window.end_seconds),
-      ...buildAnimatedConnectorPath([
+      ...buildSteppedConnectorPath([
         { x: slots.semi_2_b.center_x, y: slots.semi_2_b.y },
         { x: slots.semi_2_b.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
@@ -236,13 +299,13 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   if (connectorWindows.connector_final) {
     const window = connectorWindows.connector_final;
     lines.push(
-      ...buildAnimatedConnectorPath([
+      ...buildSteppedConnectorPath([
         { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y },
         { x: slots.semi_1_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: slots.final_winner.y + slots.final_winner.height },
       ], thickness, window.start_seconds, window.end_seconds),
-      ...buildAnimatedConnectorPath([
+      ...buildSteppedConnectorPath([
         { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y },
         { x: slots.semi_2_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: finalConnectorY },
@@ -396,6 +459,16 @@ function buildHighlightFilters(renderPlan, template) {
     filters.push(
       `drawbox=x=${winnerSlot.x + 4}:y=${winnerSlot.y + 4}:w=${winnerSlot.width - 8}:h=${winnerSlot.height - 8}:color=0x34C759@${completeAlpha}:t=fill:enable='${formatEnableBetween(match.bracket_progress_end_seconds, renderPlan.total_duration_seconds)}'`,
     );
+    if (match.match_id === 'final') {
+      const winnerSourceSlotKey = match.winner_side === 'left' ? 'semi_1_winner' : 'semi_2_winner';
+      const loserSourceSlotKey = match.winner_side === 'left' ? 'semi_2_winner' : 'semi_1_winner';
+      const winnerSourceSlot = slots[winnerSourceSlotKey];
+      const loserSourceSlot = slots[loserSourceSlotKey];
+      filters.push(
+        `drawbox=x=${winnerSourceSlot.x + 4}:y=${winnerSourceSlot.y + 4}:w=${winnerSourceSlot.width - 8}:h=${winnerSourceSlot.height - 8}:color=0x34C759@${completeAlpha}:t=fill:enable='${formatEnableBetween(match.scene_end_seconds, renderPlan.total_duration_seconds)}'`,
+        `drawbox=x=${loserSourceSlot.x + 4}:y=${loserSourceSlot.y + 4}:w=${loserSourceSlot.width - 8}:h=${loserSourceSlot.height - 8}:color=0xFF453A@${completeAlpha}:t=fill:enable='${formatEnableBetween(match.scene_end_seconds, renderPlan.total_duration_seconds)}'`,
+      );
+    }
     return filters;
   });
 }
@@ -427,6 +500,14 @@ function buildLinearSpritePlacement(startCenterX, startCenterY, endCenterX, endC
   };
 }
 
+function buildLinearScaleExpression(startSize, endSize, startSeconds, endSeconds) {
+  const safeStart = ensureNumber(startSeconds, 0);
+  const safeEnd = Math.max(safeStart + 0.01, ensureNumber(endSeconds, safeStart + 0.01));
+  const duration = round(((safeEnd - safeStart) * 1000)) / 1000;
+  const delta = round(endSize - startSize);
+  return `if(lt(t,${safeStart}),${round(startSize)},if(lt(t,${safeEnd}),${round(startSize)}+(${delta}*((t-${safeStart})/${duration})),${round(endSize)}))`;
+}
+
 function buildChampionSpritePlacement(stage) {
   return {
     x: `${stage.center_x}-overlay_w/2`,
@@ -435,16 +516,16 @@ function buildChampionSpritePlacement(stage) {
 }
 
 function buildBattleStatsLayout(battleStage) {
-  const panelWidth = 310;
-  const rowHeight = 28;
-  const rowGap = 4;
+  const panelWidth = 372;
+  const rowHeight = 34;
+  const rowGap = 5;
   const panelHeight = (SHOWDOWN_STAT_ROWS.length * rowHeight) + ((SHOWDOWN_STAT_ROWS.length - 1) * rowGap);
   const spriteBottom = battleStage.center_y + (battleStage.sprite_size_px / 2);
   const proposedTop = Math.round(spriteBottom + 18);
   const maxTopBeforeName = Math.round(battleStage.name_y - panelHeight - 34);
   const top = Math.max(100, Math.min(proposedTop, maxTopBeforeName));
-  const labelWidth = 92;
-  const valueWidth = 54;
+  const labelWidth = 110;
+  const valueWidth = 62;
   const barX = labelWidth + valueWidth + 22;
   const barWidth = panelWidth - barX - 18;
   return {
@@ -459,17 +540,17 @@ function buildBattleStatsLayout(battleStage) {
     top,
     leftX: Math.round(battleStage.left_center_x - (panelWidth / 2)),
     rightX: Math.round(battleStage.right_center_x - (panelWidth / 2)),
-    valueFontSize: 23,
-    labelFontSize: 22,
+    valueFontSize: 27,
+    labelFontSize: 26,
   };
 }
 
 function buildBattleStatsFilters({ match, battleStage, fontPart }) {
   const layout = buildBattleStatsLayout(battleStage);
   const enableExpression = formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds);
-  const rowLeadInSeconds = 0.12;
-  const rowStaggerSeconds = 0.16;
-  const rowFillDurationSeconds = 0.52;
+  const rowLeadInSeconds = 0.16;
+  const rowStaggerSeconds = 0.18;
+  const rowFillDurationSeconds = 0.66;
   const statSources = [
     { stats: match.participant_a.base_stats || {}, x: layout.leftX },
     { stats: match.participant_b.base_stats || {}, x: layout.rightX },
@@ -487,7 +568,17 @@ function buildBattleStatsFilters({ match, battleStage, fontPart }) {
       return [
         `drawbox=x=${x}:y=${y}:w=${layout.panelWidth}:h=${layout.rowHeight}:color=${row.background}@0.88:t=fill:enable='${enableExpression}'`,
         `drawbox=x=${barTrackX}:y=${y + 4}:w=${layout.barWidth}:h=${layout.rowHeight - 8}:color=0x101010@0.32:t=fill:enable='${enableExpression}'`,
-        `drawbox=x=${barTrackX}:y=${y + 4}:w='${animatedFillWidth}':h=${layout.rowHeight - 8}:color=${row.color}@0.95:t=fill:enable='${enableExpression}'`,
+        ...buildSteppedHorizontalFillBoxes({
+          x: barTrackX,
+          y: y + 4,
+          width: fillWidth,
+          height: layout.rowHeight - 8,
+          color: `${row.color}@0.95`,
+          startSeconds: rowStartSeconds,
+          endSeconds: rowEndSeconds,
+          baseEnableExpression: enableExpression,
+          segmentWidthPx: 6,
+        }),
         `drawtext=text='${escapeDrawtextText(`${row.label}:`)}'${fontPart}:fontcolor=black:fontsize=${layout.labelFontSize}:borderw=0:fix_bounds=1:x=${x + 10}:y=${y + 3}:enable='${enableExpression}'`,
         `drawtext=text='${value}'${fontPart}:fontcolor=black:fontsize=${layout.valueFontSize}:borderw=0:fix_bounds=1:x=${valueX}:y=${y + 3}:enable='${enableExpression}'`,
       ];
@@ -554,13 +645,7 @@ function buildWindowExpression(windows = []) {
 }
 
 function buildAndEnableExpression(...expressions) {
-  const parts = expressions
-    .map((expression) => String(expression || '').trim())
-    .filter(Boolean);
-  if (parts.length === 0) {
-    return '';
-  }
-  return parts.map((expression) => `(${expression})`).join('*');
+  return combineEnableExpressions(...expressions);
 }
 
 function resolveMatchSourceSlotKeys(match = {}) {
@@ -701,12 +786,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     });
     slotTransitionSourceLabels.forEach((sourceLabel, usageIndex) => {
       participantFilters.push(
-        `[${sourceLabel}]scale=${slotSpriteSize}:${slotSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${slotTransitionLabels[usageIndex]}]`,
+        `[${sourceLabel}]format=rgba,setsar=1[${slotTransitionLabels[usageIndex]}]`,
       );
     });
     slotGraySourceLabels.forEach((sourceLabel, usageIndex) => {
       participantFilters.push(
-        `[${sourceLabel}]scale=${slotSpriteSize}:${slotSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1,hue=s=0,colorchannelmixer=aa=0.72[${slotGrayLabels[usageIndex]}]`,
+        `[${sourceLabel}]scale=${slotSpriteSize}:${slotSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,eq=saturation=0:brightness=-0.28:contrast=1.06,setsar=1,colorchannelmixer=aa=0.84[${slotGrayLabels[usageIndex]}]`,
       );
     });
     stageBattleSourceLabels.forEach((sourceLabel, usageIndex) => {
@@ -897,13 +982,25 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       transitionStart,
       match.intro_start_seconds,
     );
+    const transitionScaleExpression = buildLinearScaleExpression(
+      slotSpriteSize,
+      battleSpriteSize,
+      transitionStart,
+      match.intro_start_seconds,
+    );
+    const leftTransitionScaledLabel = `vmatchtranslscaled${matchIndex}`;
+    const rightTransitionScaledLabel = `vmatchtransrscaled${matchIndex}`;
+    filters.push(
+      `[${leftTransitionLabel}]scale=w='${transitionScaleExpression}':h='${transitionScaleExpression}':force_original_aspect_ratio=decrease:eval=frame:flags=lanczos,format=rgba,setsar=1[${leftTransitionScaledLabel}]`,
+      `[${rightTransitionLabel}]scale=w='${transitionScaleExpression}':h='${transitionScaleExpression}':force_original_aspect_ratio=decrease:eval=frame:flags=lanczos,format=rgba,setsar=1[${rightTransitionScaledLabel}]`,
+    );
     const transitionLeftLabelName = `vmatchtransl${matchIndex}`;
     filters.push(
-      `[${stageSceneBaseLabel}][${leftTransitionLabel}]overlay=x='${leftTransitionPlacement.x}':y='${leftTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionLeftLabelName}]`,
+      `[${stageSceneBaseLabel}][${leftTransitionScaledLabel}]overlay=x='${leftTransitionPlacement.x}':y='${leftTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionLeftLabelName}]`,
     );
     const transitionRightLabelName = `vmatchtransr${matchIndex}`;
     filters.push(
-      `[${transitionLeftLabelName}][${rightTransitionLabel}]overlay=x='${rightTransitionPlacement.x}':y='${rightTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionRightLabelName}]`,
+      `[${transitionLeftLabelName}][${rightTransitionScaledLabel}]overlay=x='${rightTransitionPlacement.x}':y='${rightTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionRightLabelName}]`,
     );
 
     const preRevealLabel = `vmatchpre${matchIndex}`;
