@@ -53,6 +53,31 @@ function buildVerticalConnector(x, y1, y2, thickness, enableExpression = '') {
   return `drawbox=x=${round((x - (thickness / 2)))}:y=${Math.min(y1, y2)}:w=${thickness}:h=${Math.max(1, Math.abs(y2 - y1))}:color=0xFFFFFF@0.7:t=fill${buildEnablePart(enableExpression)}`;
 }
 
+function buildAnimatedExtentExpression(fullLength, startSeconds, endSeconds) {
+  const safeStart = ensureNumber(startSeconds, 0);
+  const safeEnd = Math.max(safeStart + 0.01, ensureNumber(endSeconds, safeStart + 0.01));
+  const safeDuration = round(((safeEnd - safeStart) * 1000)) / 1000;
+  return `if(lt(t,${safeStart}),0,if(lt(t,${safeEnd}),${fullLength}*((t-${safeStart})/${safeDuration}),${fullLength}))`;
+}
+
+function buildAnimatedHorizontalConnectorSegment(y, startX, endX, thickness, startSeconds, endSeconds) {
+  const fullWidth = Math.max(1, Math.abs(endX - startX));
+  const widthExpression = buildAnimatedExtentExpression(fullWidth, startSeconds, endSeconds);
+  const xExpression = endX >= startX
+    ? `${startX}`
+    : `${startX}-${widthExpression}`;
+  return `drawbox=x=${xExpression}:y=${round((y - (thickness / 2)))}:w=${widthExpression}:h=${thickness}:color=0xFFFFFF@0.7:t=fill`;
+}
+
+function buildAnimatedVerticalConnectorSegment(x, startY, endY, thickness, startSeconds, endSeconds) {
+  const fullHeight = Math.max(1, Math.abs(endY - startY));
+  const heightExpression = buildAnimatedExtentExpression(fullHeight, startSeconds, endSeconds);
+  const yExpression = endY >= startY
+    ? `${startY}`
+    : `${startY}-${heightExpression}`;
+  return `drawbox=x=${round((x - (thickness / 2)))}:y=${yExpression}:w=${thickness}:h=${heightExpression}:color=0xFFFFFF@0.7:t=fill`;
+}
+
 function round(value) {
   return Math.round(ensureNumber(value, 0));
 }
@@ -83,45 +108,197 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   const leftEnable = revealSchedule.connector_left ? `gte(t,${revealSchedule.connector_left})` : '';
   const rightEnable = revealSchedule.connector_right ? `gte(t,${revealSchedule.connector_right})` : '';
   const finalEnable = revealSchedule.connector_final ? `gte(t,${revealSchedule.connector_final})` : '';
+  const connectorWindows = revealSchedule.connector_windows || {};
+  const buildWindowParts = (window = null) => {
+    const startSeconds = ensureNumber(window?.start_seconds, 0);
+    const endSeconds = Math.max(startSeconds + 0.01, ensureNumber(window?.end_seconds, startSeconds + 0.01));
+    const duration = endSeconds - startSeconds;
+    return {
+      verticalStart: startSeconds,
+      verticalEnd: round((startSeconds + (duration * 0.35)) * 1000) / 1000,
+      horizontalStart: round((startSeconds + (duration * 0.35)) * 1000) / 1000,
+      horizontalEnd: round((startSeconds + (duration * 0.8)) * 1000) / 1000,
+      winnerStart: round((startSeconds + (duration * 0.8)) * 1000) / 1000,
+      winnerEnd: endSeconds,
+    };
+  };
 
-  lines.push(
-    buildVerticalConnector(slots.semi_1_a.center_x, slots.semi_1_a.y, leftPairConnectorY, thickness, leftEnable),
-    buildVerticalConnector(slots.semi_1_b.center_x, slots.semi_1_b.y, leftPairConnectorY, thickness, leftEnable),
-    buildHorizontalConnector(leftPairConnectorY, slots.semi_1_a.center_x, slots.semi_1_b.center_x, thickness, leftEnable),
-    buildVerticalConnector(
-      slots.semi_1_winner.center_x,
-      slots.semi_1_winner.y + slots.semi_1_winner.height,
-      leftPairConnectorY,
-      thickness,
-      leftEnable,
-    ),
-  );
+  if (connectorWindows.connector_left) {
+    const window = buildWindowParts(connectorWindows.connector_left);
+    lines.push(
+      buildAnimatedVerticalConnectorSegment(
+        slots.semi_1_a.center_x,
+        slots.semi_1_a.y,
+        leftPairConnectorY,
+        thickness,
+        window.verticalStart,
+        window.verticalEnd,
+      ),
+      buildAnimatedVerticalConnectorSegment(
+        slots.semi_1_b.center_x,
+        slots.semi_1_b.y,
+        leftPairConnectorY,
+        thickness,
+        window.verticalStart,
+        window.verticalEnd,
+      ),
+      buildAnimatedHorizontalConnectorSegment(
+        leftPairConnectorY,
+        slots.semi_1_a.center_x,
+        slots.semi_1_winner.center_x,
+        thickness,
+        window.horizontalStart,
+        window.horizontalEnd,
+      ),
+      buildAnimatedHorizontalConnectorSegment(
+        leftPairConnectorY,
+        slots.semi_1_b.center_x,
+        slots.semi_1_winner.center_x,
+        thickness,
+        window.horizontalStart,
+        window.horizontalEnd,
+      ),
+      buildAnimatedVerticalConnectorSegment(
+        slots.semi_1_winner.center_x,
+        leftPairConnectorY,
+        slots.semi_1_winner.y + slots.semi_1_winner.height,
+        thickness,
+        window.winnerStart,
+        window.winnerEnd,
+      ),
+    );
+  } else {
+    lines.push(
+      buildVerticalConnector(slots.semi_1_a.center_x, slots.semi_1_a.y, leftPairConnectorY, thickness, leftEnable),
+      buildVerticalConnector(slots.semi_1_b.center_x, slots.semi_1_b.y, leftPairConnectorY, thickness, leftEnable),
+      buildHorizontalConnector(leftPairConnectorY, slots.semi_1_a.center_x, slots.semi_1_b.center_x, thickness, leftEnable),
+      buildVerticalConnector(
+        slots.semi_1_winner.center_x,
+        slots.semi_1_winner.y + slots.semi_1_winner.height,
+        leftPairConnectorY,
+        thickness,
+        leftEnable,
+      ),
+    );
+  }
 
-  lines.push(
-    buildVerticalConnector(slots.semi_2_a.center_x, slots.semi_2_a.y, rightPairConnectorY, thickness, rightEnable),
-    buildVerticalConnector(slots.semi_2_b.center_x, slots.semi_2_b.y, rightPairConnectorY, thickness, rightEnable),
-    buildHorizontalConnector(rightPairConnectorY, slots.semi_2_a.center_x, slots.semi_2_b.center_x, thickness, rightEnable),
-    buildVerticalConnector(
-      slots.semi_2_winner.center_x,
-      slots.semi_2_winner.y + slots.semi_2_winner.height,
-      rightPairConnectorY,
-      thickness,
-      rightEnable,
-    ),
-  );
+  if (connectorWindows.connector_right) {
+    const window = buildWindowParts(connectorWindows.connector_right);
+    lines.push(
+      buildAnimatedVerticalConnectorSegment(
+        slots.semi_2_a.center_x,
+        slots.semi_2_a.y,
+        rightPairConnectorY,
+        thickness,
+        window.verticalStart,
+        window.verticalEnd,
+      ),
+      buildAnimatedVerticalConnectorSegment(
+        slots.semi_2_b.center_x,
+        slots.semi_2_b.y,
+        rightPairConnectorY,
+        thickness,
+        window.verticalStart,
+        window.verticalEnd,
+      ),
+      buildAnimatedHorizontalConnectorSegment(
+        rightPairConnectorY,
+        slots.semi_2_a.center_x,
+        slots.semi_2_winner.center_x,
+        thickness,
+        window.horizontalStart,
+        window.horizontalEnd,
+      ),
+      buildAnimatedHorizontalConnectorSegment(
+        rightPairConnectorY,
+        slots.semi_2_b.center_x,
+        slots.semi_2_winner.center_x,
+        thickness,
+        window.horizontalStart,
+        window.horizontalEnd,
+      ),
+      buildAnimatedVerticalConnectorSegment(
+        slots.semi_2_winner.center_x,
+        rightPairConnectorY,
+        slots.semi_2_winner.y + slots.semi_2_winner.height,
+        thickness,
+        window.winnerStart,
+        window.winnerEnd,
+      ),
+    );
+  } else {
+    lines.push(
+      buildVerticalConnector(slots.semi_2_a.center_x, slots.semi_2_a.y, rightPairConnectorY, thickness, rightEnable),
+      buildVerticalConnector(slots.semi_2_b.center_x, slots.semi_2_b.y, rightPairConnectorY, thickness, rightEnable),
+      buildHorizontalConnector(rightPairConnectorY, slots.semi_2_a.center_x, slots.semi_2_b.center_x, thickness, rightEnable),
+      buildVerticalConnector(
+        slots.semi_2_winner.center_x,
+        slots.semi_2_winner.y + slots.semi_2_winner.height,
+        rightPairConnectorY,
+        thickness,
+        rightEnable,
+      ),
+    );
+  }
 
-  lines.push(
-    buildVerticalConnector(slots.semi_1_winner.center_x, slots.semi_1_winner.y, finalConnectorY, thickness, finalEnable),
-    buildVerticalConnector(slots.semi_2_winner.center_x, slots.semi_2_winner.y, finalConnectorY, thickness, finalEnable),
-    buildHorizontalConnector(finalConnectorY, slots.semi_1_winner.center_x, slots.semi_2_winner.center_x, thickness, finalEnable),
-    buildVerticalConnector(
-      slots.final_winner.center_x,
-      slots.final_winner.y + slots.final_winner.height,
-      finalConnectorY,
-      thickness,
-      finalEnable,
-    ),
-  );
+  if (connectorWindows.connector_final) {
+    const window = buildWindowParts(connectorWindows.connector_final);
+    lines.push(
+      buildAnimatedVerticalConnectorSegment(
+        slots.semi_1_winner.center_x,
+        slots.semi_1_winner.y,
+        finalConnectorY,
+        thickness,
+        window.verticalStart,
+        window.verticalEnd,
+      ),
+      buildAnimatedVerticalConnectorSegment(
+        slots.semi_2_winner.center_x,
+        slots.semi_2_winner.y,
+        finalConnectorY,
+        thickness,
+        window.verticalStart,
+        window.verticalEnd,
+      ),
+      buildAnimatedHorizontalConnectorSegment(
+        finalConnectorY,
+        slots.semi_1_winner.center_x,
+        slots.final_winner.center_x,
+        thickness,
+        window.horizontalStart,
+        window.horizontalEnd,
+      ),
+      buildAnimatedHorizontalConnectorSegment(
+        finalConnectorY,
+        slots.semi_2_winner.center_x,
+        slots.final_winner.center_x,
+        thickness,
+        window.horizontalStart,
+        window.horizontalEnd,
+      ),
+      buildAnimatedVerticalConnectorSegment(
+        slots.final_winner.center_x,
+        finalConnectorY,
+        slots.final_winner.y + slots.final_winner.height,
+        thickness,
+        window.winnerStart,
+        window.winnerEnd,
+      ),
+    );
+  } else {
+    lines.push(
+      buildVerticalConnector(slots.semi_1_winner.center_x, slots.semi_1_winner.y, finalConnectorY, thickness, finalEnable),
+      buildVerticalConnector(slots.semi_2_winner.center_x, slots.semi_2_winner.y, finalConnectorY, thickness, finalEnable),
+      buildHorizontalConnector(finalConnectorY, slots.semi_1_winner.center_x, slots.semi_2_winner.center_x, thickness, finalEnable),
+      buildVerticalConnector(
+        slots.final_winner.center_x,
+        slots.final_winner.y + slots.final_winner.height,
+        finalConnectorY,
+        thickness,
+        finalEnable,
+      ),
+    );
+  }
 
   return lines;
 }
@@ -149,15 +326,21 @@ function buildIntroRevealSchedule(renderPlan) {
   const stepDuration = introEnd / sequence.length;
   const slots = {};
   const connectors = {};
+  const connectorWindows = {};
   sequence.forEach(([key, type], index) => {
     const startSeconds = round(index * stepDuration * 1000) / 1000;
+    const endSeconds = round(Math.min(introEnd, (startSeconds + stepDuration)) * 1000) / 1000;
     if (type === 'slot') {
       slots[key] = startSeconds;
     } else {
       connectors[key] = startSeconds;
+      connectorWindows[key] = {
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+      };
     }
   });
-  return { slots, connectors };
+  return { slots, connectors, connector_windows: connectorWindows };
 }
 
 function buildPathCoordinateExpression(points = [], axis, startSeconds, endSeconds, overlayDimensionExpression) {
@@ -320,6 +503,8 @@ function buildBattleStatsLayout(battleStage) {
 function buildBattleStatsFilters({ match, battleStage, fontPart }) {
   const layout = buildBattleStatsLayout(battleStage);
   const enableExpression = formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds);
+  const rowStaggerSeconds = 0.08;
+  const rowFillDurationSeconds = 0.24;
   const statSources = [
     { stats: match.participant_a.base_stats || {}, x: layout.leftX },
     { stats: match.participant_b.base_stats || {}, x: layout.rightX },
@@ -329,12 +514,15 @@ function buildBattleStatsFilters({ match, battleStage, fontPart }) {
       const value = Math.max(0, Math.min(255, round(stats[row.key] || 0)));
       const y = layout.top + (rowIndex * (layout.rowHeight + layout.rowGap));
       const fillWidth = Math.max(2, round((value / 255) * layout.barWidth));
+      const rowStartSeconds = round((match.intro_start_seconds + (rowIndex * rowStaggerSeconds)) * 1000) / 1000;
+      const rowEndSeconds = round((rowStartSeconds + rowFillDurationSeconds) * 1000) / 1000;
+      const animatedFillWidth = buildAnimatedExtentExpression(fillWidth, rowStartSeconds, rowEndSeconds);
       const barTrackX = x + layout.barX;
       const valueX = x + layout.labelWidth + 8;
       return [
         `drawbox=x=${x}:y=${y}:w=${layout.panelWidth}:h=${layout.rowHeight}:color=${row.background}@0.88:t=fill:enable='${enableExpression}'`,
         `drawbox=x=${barTrackX}:y=${y + 4}:w=${layout.barWidth}:h=${layout.rowHeight - 8}:color=0x101010@0.32:t=fill:enable='${enableExpression}'`,
-        `drawbox=x=${barTrackX}:y=${y + 4}:w=${fillWidth}:h=${layout.rowHeight - 8}:color=${row.color}@0.95:t=fill:enable='${enableExpression}'`,
+        `drawbox=x=${barTrackX}:y=${y + 4}:w='${animatedFillWidth}':h=${layout.rowHeight - 8}:color=${row.color}@0.95:t=fill:enable='${enableExpression}'`,
         `drawtext=text='${escapeDrawtextText(`${row.label}:`)}'${fontPart}:fontcolor=black:fontsize=${layout.labelFontSize}:borderw=0:fix_bounds=1:x=${x + 10}:y=${y + 3}:enable='${enableExpression}'`,
         `drawtext=text='${value}'${fontPart}:fontcolor=black:fontsize=${layout.valueFontSize}:borderw=0:fix_bounds=1:x=${valueX}:y=${y + 3}:enable='${enableExpression}'`,
       ];
@@ -410,10 +598,6 @@ function buildAndEnableExpression(...expressions) {
   return parts.map((expression) => `(${expression})`).join('*');
 }
 
-function resolveParticipantSourceSlotKey(bracketSeedIndex) {
-  return SHOWDOWN_SOURCE_SLOT_KEYS[bracketSeedIndex] || SHOWDOWN_SOURCE_SLOT_KEYS[0];
-}
-
 function resolveMatchSourceSlotKeys(match = {}) {
   if (match.match_id === 'semi-final-1') {
     return ['semi_1_a', 'semi_1_b'];
@@ -424,13 +608,14 @@ function resolveMatchSourceSlotKeys(match = {}) {
   return ['semi_1_winner', 'semi_2_winner'];
 }
 
-function resolveLoserBracketSlotKeys(match = {}, participantById = new Map()) {
-  const loserSeedIndex = participantById.get(match.loser?.id)?.bracket_seed_index ?? 0;
-  const slotKeys = [resolveParticipantSourceSlotKey(loserSeedIndex)];
-  if (match.match_id === 'final') {
-    slotKeys.push(match.winner_side === 'left' ? 'semi_2_winner' : 'semi_1_winner');
+function resolveLoserBracketSlotKeys(match = {}) {
+  if (match.match_id === 'semi-final-1') {
+    return [match.winner_side === 'left' ? 'semi_1_b' : 'semi_1_a'];
   }
-  return [...new Set(slotKeys)];
+  if (match.match_id === 'semi-final-2') {
+    return [match.winner_side === 'left' ? 'semi_2_b' : 'semi_2_a'];
+  }
+  return [match.winner_side === 'left' ? 'semi_2_winner' : 'semi_1_winner'];
 }
 
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = '') {
@@ -488,7 +673,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         : count
     ), 0);
     const winCount = renderPlan.matches.filter((match) => match.winner?.id === participant.id).length;
-    const slotGrayCount = loserParticipantIds.has(participant.id) ? winCount + 1 : 0;
+    const slotGrayCount = loserParticipantIds.has(participant.id) ? 1 : 0;
     const stageGrayUsageCount = loserParticipantIds.has(participant.id) ? 1 : 0;
     const championUsageCount = participant.id === championParticipantId ? 1 : 0;
     const slotStaticLabel = `p${index}slotstatic`;
@@ -693,7 +878,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
   renderPlan.matches.forEach((match, matchIndex) => {
     const loserIndex = participantById.get(match.loser.id)?.bracket_seed_index ?? 0;
-    const graySlotKeys = resolveLoserBracketSlotKeys(match, participantById);
+    const graySlotKeys = resolveLoserBracketSlotKeys(match);
     graySlotKeys.forEach((slotKey, grayIndex) => {
       const slot = slotMap[slotKey];
       const placement = buildSlotSpritePlacement(slot, slotSpriteSize);
