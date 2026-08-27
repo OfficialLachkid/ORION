@@ -165,7 +165,7 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
         * Math.max(0.05, ensureNumber(template?.renderer?.intro_slot_reveal_stagger_seconds, 0.3))),
   );
   const interRoundBracketHoldSeconds = roundTime(ensureNumber(rounds.inter_round_bracket_hold_seconds, 0.08));
-  const postProgressHoldSeconds = roundTime(ensureNumber(rounds.post_progress_hold_seconds, 0.5));
+  const postProgressHoldSeconds = roundTime(ensureNumber(rounds.post_progress_hold_seconds, 0.3));
   const matchIntroHoldSeconds = roundTime(ensureNumber(rounds.match_intro_hold_seconds, 1.8));
   const suspenseHoldSeconds = roundTime(ensureNumber(rounds.suspense_hold_seconds, 0.9));
   const revealHoldSeconds = roundTime(ensureNumber(rounds.reveal_hold_seconds, 1.2));

@@ -233,22 +233,38 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
   const rightEnable = revealSchedule.connector_right ? `gte(t,${revealSchedule.connector_right})` : '';
   const finalEnable = revealSchedule.connector_final ? `gte(t,${revealSchedule.connector_final})` : '';
   const connectorWindows = revealSchedule.connector_windows || {};
+  const splitWindow = (window = {}) => {
+    const startSeconds = ensureNumber(window.start_seconds, 0);
+    const endSeconds = Math.max(startSeconds + 0.01, ensureNumber(window.end_seconds, startSeconds + 0.01));
+    const midSeconds = round((((startSeconds + endSeconds) / 2) * 1000)) / 1000;
+    return {
+      first: {
+        start_seconds: startSeconds,
+        end_seconds: midSeconds,
+      },
+      second: {
+        start_seconds: midSeconds,
+        end_seconds: endSeconds,
+      },
+    };
+  };
 
   if (connectorWindows.connector_left) {
     const window = connectorWindows.connector_left;
+    const parts = splitWindow(window);
     lines.push(
       ...buildSteppedConnectorPath([
         { x: slots.semi_1_a.center_x, y: slots.semi_1_a.y },
         { x: slots.semi_1_a.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
-      ], thickness, window.start_seconds, window.end_seconds),
+      ], thickness, parts.first.start_seconds, parts.first.end_seconds, 5),
       ...buildSteppedConnectorPath([
         { x: slots.semi_1_b.center_x, y: slots.semi_1_b.y },
         { x: slots.semi_1_b.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
         { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
-      ], thickness, window.start_seconds, window.end_seconds),
+      ], thickness, parts.second.start_seconds, parts.second.end_seconds, 5),
     );
   } else {
     lines.push(
@@ -267,19 +283,20 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
 
   if (connectorWindows.connector_right) {
     const window = connectorWindows.connector_right;
+    const parts = splitWindow(window);
     lines.push(
       ...buildSteppedConnectorPath([
         { x: slots.semi_2_a.center_x, y: slots.semi_2_a.y },
         { x: slots.semi_2_a.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
-      ], thickness, window.start_seconds, window.end_seconds),
+      ], thickness, parts.first.start_seconds, parts.first.end_seconds, 5),
       ...buildSteppedConnectorPath([
         { x: slots.semi_2_b.center_x, y: slots.semi_2_b.y },
         { x: slots.semi_2_b.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
         { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
-      ], thickness, window.start_seconds, window.end_seconds),
+      ], thickness, parts.second.start_seconds, parts.second.end_seconds, 5),
     );
   } else {
     lines.push(
@@ -298,19 +315,20 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
 
   if (connectorWindows.connector_final) {
     const window = connectorWindows.connector_final;
+    const parts = splitWindow(window);
     lines.push(
       ...buildSteppedConnectorPath([
         { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y },
         { x: slots.semi_1_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: slots.final_winner.y + slots.final_winner.height },
-      ], thickness, window.start_seconds, window.end_seconds),
+      ], thickness, parts.first.start_seconds, parts.first.end_seconds, 5),
       ...buildSteppedConnectorPath([
         { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y },
         { x: slots.semi_2_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: finalConnectorY },
         { x: slots.final_winner.center_x, y: slots.final_winner.y + slots.final_winner.height },
-      ], thickness, window.start_seconds, window.end_seconds),
+      ], thickness, parts.second.start_seconds, parts.second.end_seconds, 5),
     );
   } else {
     lines.push(
@@ -339,24 +357,26 @@ function buildIntroRevealSchedule(renderPlan) {
     return { slots: {}, connectors: {} };
   }
   const sequence = [
-    ['semi_1_a', 'slot'],
-    ['semi_1_b', 'slot'],
-    ['semi_2_a', 'slot'],
-    ['semi_2_b', 'slot'],
-    ['connector_left', 'connector'],
-    ['connector_right', 'connector'],
-    ['semi_1_winner', 'slot'],
-    ['semi_2_winner', 'slot'],
-    ['connector_final', 'connector'],
-    ['final_winner', 'slot'],
+    ['semi_1_a', 'slot', 0.45],
+    ['semi_1_b', 'slot', 0.45],
+    ['semi_2_a', 'slot', 0.45],
+    ['semi_2_b', 'slot', 0.45],
+    ['connector_left', 'connector', 2.55],
+    ['connector_right', 'connector', 2.55],
+    ['semi_1_winner', 'slot', 0.45],
+    ['semi_2_winner', 'slot', 0.45],
+    ['connector_final', 'connector', 2.55],
+    ['final_winner', 'slot', 0.45],
   ];
-  const stepDuration = introEnd / sequence.length;
+  const totalWeight = sequence.reduce((sum, [, , weight]) => sum + ensureNumber(weight, 1), 0);
   const slots = {};
   const connectors = {};
   const connectorWindows = {};
-  sequence.forEach(([key, type], index) => {
-    const startSeconds = round(index * stepDuration * 1000) / 1000;
-    const endSeconds = round(Math.min(introEnd, (startSeconds + stepDuration)) * 1000) / 1000;
+  let elapsedSeconds = 0;
+  sequence.forEach(([key, type, weight]) => {
+    const durationSeconds = introEnd * (ensureNumber(weight, 1) / Math.max(0.01, totalWeight));
+    const startSeconds = round(elapsedSeconds * 1000) / 1000;
+    const endSeconds = round(Math.min(introEnd, (elapsedSeconds + durationSeconds)) * 1000) / 1000;
     if (type === 'slot') {
       slots[key] = startSeconds;
     } else {
@@ -366,6 +386,7 @@ function buildIntroRevealSchedule(renderPlan) {
         end_seconds: endSeconds,
       };
     }
+    elapsedSeconds += durationSeconds;
   });
   return { slots, connectors, connector_windows: connectorWindows };
 }
@@ -438,6 +459,7 @@ function buildBracketProgressPath(slotMap, match) {
 function buildHighlightFilters(renderPlan, template) {
   const currentAlpha = ensureNumber(template?.renderer?.current_slot_highlight_alpha, 0.2);
   const completeAlpha = ensureNumber(template?.renderer?.completed_slot_highlight_alpha, 0.18);
+  const completedLoseAlpha = Math.min(0.42, completeAlpha + 0.1);
   const slots = renderPlan.bracket_layout.slots;
   const matchToSourceSlotKeys = {
     'semi-final-1': ['semi_1_a', 'semi_1_b'],
@@ -459,14 +481,15 @@ function buildHighlightFilters(renderPlan, template) {
     filters.push(
       `drawbox=x=${winnerSlot.x + 4}:y=${winnerSlot.y + 4}:w=${winnerSlot.width - 8}:h=${winnerSlot.height - 8}:color=0x34C759@${completeAlpha}:t=fill:enable='${formatEnableBetween(match.bracket_progress_end_seconds, renderPlan.total_duration_seconds)}'`,
     );
-    if (match.match_id === 'final') {
-      const winnerSourceSlotKey = match.winner_side === 'left' ? 'semi_1_winner' : 'semi_2_winner';
-      const loserSourceSlotKey = match.winner_side === 'left' ? 'semi_2_winner' : 'semi_1_winner';
-      const winnerSourceSlot = slots[winnerSourceSlotKey];
-      const loserSourceSlot = slots[loserSourceSlotKey];
+    const [leftSourceSlotKey, rightSourceSlotKey] = sourceSlotKeys;
+    const winnerSourceSlotKey = match.winner_side === 'left' ? leftSourceSlotKey : rightSourceSlotKey;
+    const loserSourceSlotKey = match.winner_side === 'left' ? rightSourceSlotKey : leftSourceSlotKey;
+    const winnerSourceSlot = slots[winnerSourceSlotKey];
+    const loserSourceSlot = slots[loserSourceSlotKey];
+    if (winnerSourceSlot && loserSourceSlot) {
       filters.push(
         `drawbox=x=${winnerSourceSlot.x + 4}:y=${winnerSourceSlot.y + 4}:w=${winnerSourceSlot.width - 8}:h=${winnerSourceSlot.height - 8}:color=0x34C759@${completeAlpha}:t=fill:enable='${formatEnableBetween(match.scene_end_seconds, renderPlan.total_duration_seconds)}'`,
-        `drawbox=x=${loserSourceSlot.x + 4}:y=${loserSourceSlot.y + 4}:w=${loserSourceSlot.width - 8}:h=${loserSourceSlot.height - 8}:color=0xFF453A@${completeAlpha}:t=fill:enable='${formatEnableBetween(match.scene_end_seconds, renderPlan.total_duration_seconds)}'`,
+        `drawbox=x=${loserSourceSlot.x + 4}:y=${loserSourceSlot.y + 4}:w=${loserSourceSlot.width - 8}:h=${loserSourceSlot.height - 8}:color=0xFF2A2A@${completedLoseAlpha}:t=fill:enable='${formatEnableBetween(match.scene_end_seconds, renderPlan.total_duration_seconds)}'`,
       );
     }
     return filters;
@@ -505,7 +528,7 @@ function buildLinearScaleExpression(startSize, endSize, startSeconds, endSeconds
   const safeEnd = Math.max(safeStart + 0.01, ensureNumber(endSeconds, safeStart + 0.01));
   const duration = round(((safeEnd - safeStart) * 1000)) / 1000;
   const delta = round(endSize - startSize);
-  return `if(lt(t,${safeStart}),${round(startSize)},if(lt(t,${safeEnd}),${round(startSize)}+(${delta}*((t-${safeStart})/${duration})),${round(endSize)}))`;
+  return `if(lt(t,${safeStart}),${round(startSize)},if(lt(t,${safeEnd}),round(${round(startSize)}+(${delta}*((t-${safeStart})/${duration}))),${round(endSize)}))`;
 }
 
 function buildChampionSpritePlacement(stage) {
@@ -516,16 +539,16 @@ function buildChampionSpritePlacement(stage) {
 }
 
 function buildBattleStatsLayout(battleStage) {
-  const panelWidth = 372;
-  const rowHeight = 34;
-  const rowGap = 5;
+  const panelWidth = 446;
+  const rowHeight = 40;
+  const rowGap = 6;
   const panelHeight = (SHOWDOWN_STAT_ROWS.length * rowHeight) + ((SHOWDOWN_STAT_ROWS.length - 1) * rowGap);
   const spriteBottom = battleStage.center_y + (battleStage.sprite_size_px / 2);
   const proposedTop = Math.round(spriteBottom + 18);
   const maxTopBeforeName = Math.round(battleStage.name_y - panelHeight - 34);
   const top = Math.max(100, Math.min(proposedTop, maxTopBeforeName));
-  const labelWidth = 110;
-  const valueWidth = 62;
+  const labelWidth = 128;
+  const valueWidth = 72;
   const barX = labelWidth + valueWidth + 22;
   const barWidth = panelWidth - barX - 18;
   return {
@@ -540,8 +563,8 @@ function buildBattleStatsLayout(battleStage) {
     top,
     leftX: Math.round(battleStage.left_center_x - (panelWidth / 2)),
     rightX: Math.round(battleStage.right_center_x - (panelWidth / 2)),
-    valueFontSize: 27,
-    labelFontSize: 26,
+    valueFontSize: 31,
+    labelFontSize: 30,
   };
 }
 
@@ -562,7 +585,6 @@ function buildBattleStatsFilters({ match, battleStage, fontPart }) {
       const fillWidth = Math.max(2, round((value / 255) * layout.barWidth));
       const rowStartSeconds = round((match.intro_start_seconds + rowLeadInSeconds + (rowIndex * rowStaggerSeconds)) * 1000) / 1000;
       const rowEndSeconds = round((rowStartSeconds + rowFillDurationSeconds) * 1000) / 1000;
-      const animatedFillWidth = buildAnimatedExtentExpression(fillWidth, rowStartSeconds, rowEndSeconds);
       const barTrackX = x + layout.barX;
       const valueX = x + layout.labelWidth + 8;
       return [
@@ -791,7 +813,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     });
     slotGraySourceLabels.forEach((sourceLabel, usageIndex) => {
       participantFilters.push(
-        `[${sourceLabel}]scale=${slotSpriteSize}:${slotSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,eq=saturation=0:brightness=-0.28:contrast=1.06,setsar=1,colorchannelmixer=aa=0.84[${slotGrayLabels[usageIndex]}]`,
+        `[${sourceLabel}]scale=${slotSpriteSize}:${slotSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,eq=saturation=0:brightness=-0.42:contrast=1.22,setsar=1,colorchannelmixer=aa=0.94[${slotGrayLabels[usageIndex]}]`,
       );
     });
     stageBattleSourceLabels.forEach((sourceLabel, usageIndex) => {
@@ -822,7 +844,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   filters.push(
     `[${currentVideoLabel}]${[
       ...buildCardFilters(bracketLayout, introRevealSchedule.slots),
-      ...buildConnectorSegments(bracketLayout, introRevealSchedule.connectors),
+      ...buildConnectorSegments(bracketLayout, introRevealSchedule),
       ...buildHighlightFilters(renderPlan, template),
     ].join(',')}[${bracketBaseLabel}]`,
   );
@@ -991,8 +1013,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const leftTransitionScaledLabel = `vmatchtranslscaled${matchIndex}`;
     const rightTransitionScaledLabel = `vmatchtransrscaled${matchIndex}`;
     filters.push(
-      `[${leftTransitionLabel}]scale=w='${transitionScaleExpression}':h='${transitionScaleExpression}':force_original_aspect_ratio=decrease:eval=frame:flags=lanczos,format=rgba,setsar=1[${leftTransitionScaledLabel}]`,
-      `[${rightTransitionLabel}]scale=w='${transitionScaleExpression}':h='${transitionScaleExpression}':force_original_aspect_ratio=decrease:eval=frame:flags=lanczos,format=rgba,setsar=1[${rightTransitionScaledLabel}]`,
+      `[${leftTransitionLabel}]scale=w='${transitionScaleExpression}':h=-2:eval=frame:flags=lanczos,format=rgba,setsar=1[${leftTransitionScaledLabel}]`,
+      `[${rightTransitionLabel}]scale=w='${transitionScaleExpression}':h=-2:eval=frame:flags=lanczos,format=rgba,setsar=1[${rightTransitionScaledLabel}]`,
     );
     const transitionLeftLabelName = `vmatchtransl${matchIndex}`;
     filters.push(

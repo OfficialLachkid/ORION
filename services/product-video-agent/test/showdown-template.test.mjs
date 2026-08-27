@@ -249,9 +249,10 @@ test('showdown render plan and inputs stay deterministic for a four-Pokemon brac
   assert.equal(renderPlan.intro_sequence.bracket_draw_end_seconds, 1.1);
   assert.equal(renderPlan.intro_sequence.participant_reveal_stagger_seconds, 0.3);
   assert.equal(renderPlan.intro_sequence.participant_hold_end_seconds, renderPlan.matches[0].intro_start_seconds);
-  assert.equal(
-    renderPlan.matches[1].intro_start_seconds - renderPlan.matches[0].bracket_progress_end_seconds,
-    0.5,
+  assert.ok(
+    Math.abs(
+      (renderPlan.matches[1].intro_start_seconds - renderPlan.matches[0].bracket_progress_end_seconds) - 0.3,
+    ) < 0.000001,
   );
   assert.equal(renderPlan.champion_scene.start_seconds, renderPlan.matches.at(-1)?.bracket_progress_end_seconds);
   assert.equal(renderPlan.champion_scene.end_seconds > renderPlan.matches.at(-1)?.scene_end_seconds, true);
@@ -328,7 +329,7 @@ test('showdown audio and visual filters include winner sting cues and champion o
     visualFilter.script,
     new RegExp(`${finalMatchWinnerCenterX}\\+\\(${finalBracketCenterX}-${finalMatchWinnerCenterX}\\)`, 'u'),
   );
-  assert.match(visualFilter.script, /gte\(t,0\.33/u);
+  assert.ok((visualFilter.script.match(/color=0xFFFFFF@0\.7:t=fill:enable='gte\(t,/gu) || []).length >= 12);
   assert.match(visualFilter.script, /enable='\(between\(t,0,/u);
   assert.match(
     visualFilter.script,
