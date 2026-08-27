@@ -356,6 +356,48 @@ function buildIntroRevealSchedule(renderPlan) {
   if (introEnd <= 0) {
     return { slots: {}, connectors: {} };
   }
+  const stageSeconds = renderPlan?.intro_sequence?.bracket_stage_seconds || null;
+  if (stageSeconds) {
+    const semiSlotStart = 0;
+    const semiSlotEnd = round((semiSlotStart + ensureNumber(stageSeconds.semi_slot_seconds, 0.18)) * 1000) / 1000;
+    const semiConnectorStart = semiSlotEnd;
+    const semiConnectorEnd = round((semiConnectorStart + ensureNumber(stageSeconds.semi_connector_seconds, 0.8)) * 1000) / 1000;
+    const finalistSlotStart = semiConnectorEnd;
+    const finalistSlotEnd = round((finalistSlotStart + ensureNumber(stageSeconds.finalist_slot_seconds, 0.18)) * 1000) / 1000;
+    const finalConnectorStart = finalistSlotEnd;
+    const finalConnectorEnd = round((finalConnectorStart + ensureNumber(stageSeconds.final_connector_seconds, 0.8)) * 1000) / 1000;
+    const clampedFinalEnd = Math.min(introEnd, finalConnectorEnd);
+    return {
+      slots: {
+        semi_1_a: semiSlotStart,
+        semi_1_b: semiSlotStart,
+        semi_2_a: semiSlotStart,
+        semi_2_b: semiSlotStart,
+        semi_1_winner: finalistSlotStart,
+        semi_2_winner: finalistSlotStart,
+        final_winner: finalConnectorStart,
+      },
+      connectors: {
+        connector_left: semiConnectorStart,
+        connector_right: semiConnectorStart,
+        connector_final: finalConnectorStart,
+      },
+      connector_windows: {
+        connector_left: {
+          start_seconds: semiConnectorStart,
+          end_seconds: Math.min(introEnd, semiConnectorEnd),
+        },
+        connector_right: {
+          start_seconds: semiConnectorStart,
+          end_seconds: Math.min(introEnd, semiConnectorEnd),
+        },
+        connector_final: {
+          start_seconds: finalConnectorStart,
+          end_seconds: clampedFinalEnd,
+        },
+      },
+    };
+  }
   const sequence = [
     ['semi_1_a', 'slot', 0.45],
     ['semi_1_b', 'slot', 0.45],

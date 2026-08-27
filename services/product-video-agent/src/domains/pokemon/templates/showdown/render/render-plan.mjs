@@ -114,6 +114,27 @@ function buildTextLayout(template) {
   };
 }
 
+function resolveIntroBracketStageDurations(template) {
+  const renderer = template?.renderer || {};
+  const hasConfiguredStages = [
+    'intro_bracket_semi_slot_seconds',
+    'intro_bracket_semi_connector_seconds',
+    'intro_bracket_finalist_slot_seconds',
+    'intro_bracket_final_connector_seconds',
+  ].some((key) => renderer[key] !== undefined);
+
+  if (!hasConfiguredStages) {
+    return null;
+  }
+
+  return {
+    semi_slot_seconds: roundTime(Math.max(0.05, ensureNumber(renderer.intro_bracket_semi_slot_seconds, 0.18))),
+    semi_connector_seconds: roundTime(Math.max(0.1, ensureNumber(renderer.intro_bracket_semi_connector_seconds, 0.8))),
+    finalist_slot_seconds: roundTime(Math.max(0.05, ensureNumber(renderer.intro_bracket_finalist_slot_seconds, 0.18))),
+    final_connector_seconds: roundTime(Math.max(0.1, ensureNumber(renderer.intro_bracket_final_connector_seconds, 0.8))),
+  };
+}
+
 function buildIntroSequence({ template, seed, participantCount, firstBattleStartSeconds }) {
   const holdSeconds = roundTime(ensureNumber(template?.layout?.rounds?.intro_participant_hold_seconds, 2));
   const revealStaggerSeconds = roundTime(
@@ -139,9 +160,11 @@ function buildIntroSequence({ template, seed, participantCount, firstBattleStart
       participantRevealStartSeconds + (orderIndex * revealStaggerSeconds),
     );
   });
+  const bracketStageSeconds = resolveIntroBracketStageDurations(template);
   return {
     bracket_draw_start_seconds: 0,
     bracket_draw_end_seconds: participantRevealStartSeconds,
+    bracket_stage_seconds: bracketStageSeconds,
     participant_hold_end_seconds: roundTime(firstBattleStartSeconds),
     participant_hold_start_seconds: participantRevealEndSeconds,
     participant_reveal_end_seconds: participantRevealEndSeconds,
@@ -170,9 +193,19 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
   const suspenseHoldSeconds = roundTime(ensureNumber(rounds.suspense_hold_seconds, 0.9));
   const revealHoldSeconds = roundTime(ensureNumber(rounds.reveal_hold_seconds, 1.2));
   const transitionDurationSeconds = roundTime(ensureNumber(rounds.transition_duration_seconds, 0.4));
-  const firstRoundLeadSeconds = roundTime(
+  const bracketStageSeconds = resolveIntroBracketStageDurations(template);
+  const bracketDrawLeadSeconds = bracketStageSeconds
+    ? roundTime(
+      bracketStageSeconds.semi_slot_seconds
+      + bracketStageSeconds.semi_connector_seconds
+      + bracketStageSeconds.finalist_slot_seconds
+      + bracketStageSeconds.final_connector_seconds,
+    )
+    : 0;
+  const firstRoundLeadSeconds = roundTime(Math.max(
     hookHoldSeconds + introParticipantRevealWindowSeconds + introParticipantHoldSeconds,
-  );
+    bracketDrawLeadSeconds + introParticipantRevealWindowSeconds + introParticipantHoldSeconds,
+  ));
   let currentStart = 0;
 
   const renderedMatches = matches.map((match, index) => {
