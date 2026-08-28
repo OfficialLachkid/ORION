@@ -485,16 +485,20 @@ test('tournament audio and visual filters include winner sting cues and champion
   );
   assert.match(
     visualFilter.script,
-    /drawbox=x='150-.*color=0xFFFFFF@0\.95:t=3:enable='gte\(t,0\)'/u,
+    /color=c=black@0:s=220x184:r=30:d=[0-9.]+,format=rgba,drawbox=x=0:y=0:w=220:h=184:color=0xFFFFFF@0\.95:t=3:replace=1/u,
   );
   assert.match(
     visualFilter.script,
     /drawbox=x=0:y='[^']+':w=446:h=40:color=0x2A171D@0\.94:t=fill:replace=1/u,
   );
+  assert.match(
+    visualFilter.script,
+    /\[vbracketbase\]\[vcard0src\]overlay=x=40:y='1100\+if\(lt\(\(t\),0\.32\),\(1-\(\(\(t\)-0\)\/0\.32\)\)\*18\*sin\(\(\(t\)-0\)\*20\),0\)':enable='gte\(t,0\)'/u,
+  );
   assert.match(visualFilter.script, /vmatch0leftstats/u);
   assert.match(visualFilter.script, /fade=t=out:st=/u);
   assert.match(visualFilter.script, /rotate='if\(lt\(t,[0-9.]+\),0,if\(lt\(t,[0-9.]+\),\(1-\(\(t-[0-9.]+\)\/0\.22\)\)\*PI\*2,0\)\)':ow=rotw\(iw\):oh=roth\(ih\):c=none/u);
-  assert.ok((visualFilter.script.match(/color=0xFFFFFF@0\.7:t=fill:enable='gte\(t,/gu) || []).length >= 12);
+  assert.ok((visualFilter.script.match(/color=0xFFFFFF@0\.7:t=fill/gu) || []).length >= 12);
   assert.match(visualFilter.script, /enable='\(between\(t,0,/u);
   assert.match(
     visualFilter.script,
@@ -505,7 +509,7 @@ test('tournament audio and visual filters include winner sting cues and champion
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
   assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
   assert.match(audioFilter, /asplit=3\[dsrc0\]\[dsrc1\]\[dsrc2\]/u);
-  assert.match(audioFilter, /volume=0\.225\[progress0\]/u);
+  assert.match(audioFilter, /volume=0\.113\[progress0\]/u);
   assert.match(audioFilter, /volume=0\.162\[cry0\]/u);
   assert.match(visualFilter.script, /vbattledisappearleft0/u);
   assert.match(visualFilter.script, /vbattledisappearright0/u);

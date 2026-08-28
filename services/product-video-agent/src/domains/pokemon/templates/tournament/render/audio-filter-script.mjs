@@ -8,7 +8,7 @@ import {
 } from '../../dual-type-reveal/render/constants.mjs';
 
 const DEFAULT_TOURNAMENT_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
-const DEFAULT_TOURNAMENT_BRACKET_PROGRESS_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.25).toFixed(3));
+const DEFAULT_TOURNAMENT_BRACKET_PROGRESS_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
 const DEFAULT_TOURNAMENT_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.18).toFixed(3));
 
 export function buildAudioInputs(assets) {

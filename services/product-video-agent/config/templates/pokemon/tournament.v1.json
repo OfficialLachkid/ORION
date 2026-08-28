@@ -171,7 +171,7 @@
       "option_enabled": true,
       "option_width_multiplier": 0.85,
       "center_y_offset_multiplier": 0.34,
-      "option_center_y_offset_px": -20
+      "option_center_y_offset_px": 30
     },
     "rounds": {
       "hook_hold_seconds": 1.1,

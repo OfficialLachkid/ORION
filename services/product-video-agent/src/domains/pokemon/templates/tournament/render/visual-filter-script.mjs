@@ -23,7 +23,6 @@ const TOURNAMENT_STAT_ROWS = Object.freeze([
   { key: 'speed', label: 'Speed', color: '0xFF58A8', background: '0x311625' },
 ]);
 const TOURNAMENT_SOURCE_SLOT_KEYS = Object.freeze(['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b']);
-const TOURNAMENT_CARD_POP_SECONDS = 0.3;
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -43,48 +42,37 @@ function combineEnableExpressions(...expressions) {
   return parts.map((expression) => `(${expression})`).join('*');
 }
 
-function buildAnimatedCardExpressions(slot, slotWindow, paddingPx = 0) {
-  const safePadding = Math.max(0, round(paddingPx));
-  const baseWidth = Math.max(1, slot.width - (safePadding * 2));
-  const baseHeight = Math.max(1, slot.height - (safePadding * 2));
-  const safeStart = ensureNumber(slotWindow?.start_seconds, 0);
-  const safeEnd = Math.max(safeStart + 0.01, ensureNumber(slotWindow?.end_seconds, safeStart + 0.01));
-  const popDuration = round((Math.min(TOURNAMENT_CARD_POP_SECONDS, safeEnd - safeStart)) * 1000) / 1000;
-  const safePopDuration = Math.max(0.01, popDuration);
-  const popEnd = round((safeStart + safePopDuration) * 1000) / 1000;
-  const scaleExpression = `if(lt(t,${safeStart}),0,if(lt(t,${popEnd}),(t-${safeStart})/${safePopDuration},1))`;
-  const widthExpression = `max(1,${baseWidth}*(${scaleExpression}))`;
-  const heightExpression = `max(1,${baseHeight}*(${scaleExpression}))`;
-  return {
-    x: `${slot.center_x}-(${widthExpression})/2`,
-    y: `${slot.center_y}-(${heightExpression})/2`,
-    width: widthExpression,
-    height: heightExpression,
-    enableExpression: `gte(t,${safeStart})`,
-  };
-}
-
-function buildCardFilters(bracketLayout, revealSchedule = {}) {
+function appendBracketCardOverlays({
+  filters,
+  currentLabel,
+  bracketLayout,
+  revealSchedule = {},
+  fps,
+  totalDurationSeconds,
+  labelPrefix = 'vcard',
+}) {
   const slotWindows = revealSchedule.slot_windows || {};
-  return Object.entries(bracketLayout.slots).flatMap(([slotKey, slot]) => {
-    const slotWindow = slotWindows[slotKey] || null;
-    const enableExpression = revealSchedule[slotKey]
-      ? `gte(t,${revealSchedule[slotKey]})`
-      : '';
-    const enablePart = buildEnablePart(enableExpression);
-    if (slotWindow) {
-      const outerExpressions = buildAnimatedCardExpressions(slot, slotWindow, 0);
-      const innerExpressions = buildAnimatedCardExpressions(slot, slotWindow, 3);
-      return [
-        `drawbox=x='${outerExpressions.x}':y='${outerExpressions.y}':w='${outerExpressions.width}':h='${outerExpressions.height}':color=0xFFFFFF@0.95:t=3:enable='${outerExpressions.enableExpression}'`,
-        `drawbox=x='${innerExpressions.x}':y='${innerExpressions.y}':w='${innerExpressions.width}':h='${innerExpressions.height}':color=0x101010@0.32:t=fill:enable='${innerExpressions.enableExpression}'`,
-      ];
-    }
-    return [
-      `drawbox=x=${slot.x}:y=${slot.y}:w=${slot.width}:h=${slot.height}:color=0xFFFFFF@0.95:t=3${enablePart}`,
-      `drawbox=x=${slot.x + 3}:y=${slot.y + 3}:w=${slot.width - 6}:h=${slot.height - 6}:color=0x101010@0.32:t=fill${enablePart}`,
-    ];
+  const slotStarts = revealSchedule.slots || {};
+  let activeLabel = currentLabel;
+
+  Object.entries(bracketLayout.slots).forEach(([slotKey, slot], index) => {
+    const slotStart = ensureNumber(
+      slotWindows[slotKey]?.start_seconds,
+      ensureNumber(slotStarts[slotKey], 0),
+    );
+    const sourceLabel = `${labelPrefix}${index}src`;
+    const nextLabel = `${labelPrefix}${index}`;
+    const durationSeconds = Math.max(0.5, totalDurationSeconds - slotStart);
+    filters.push(
+      `color=c=black@0:s=${slot.width}x${slot.height}:r=${fps}:d=${durationSeconds},format=rgba,drawbox=x=0:y=0:w=${slot.width}:h=${slot.height}:color=0xFFFFFF@0.95:t=3:replace=1,drawbox=x=3:y=3:w=${slot.width - 6}:h=${slot.height - 6}:color=0x101010@0.32:t=fill:replace=1,fade=t=in:st=0:d=0.18:alpha=1,setpts=PTS-STARTPTS+${slotStart}/TB[${sourceLabel}]`,
+    );
+    filters.push(
+      `[${activeLabel}][${sourceLabel}]overlay=x=${slot.x}:y='${buildAnimatedTextYExpression(slot.y, slotStart)}':enable='gte(t,${slotStart})'[${nextLabel}]`,
+    );
+    activeLabel = nextLabel;
   });
+
+  return activeLabel;
 }
 
 function buildHorizontalConnector(y, x1, x2, thickness, enableExpression = '') {
@@ -370,33 +358,76 @@ function buildConnectorSegments(bracketLayout, revealSchedule = {}) {
       && connectorWindows.connector_right.start_seconds === window.start_seconds
       && connectorWindows.connector_right.end_seconds === window.end_seconds;
     if (sharedWindow) {
+      const startSeconds = ensureNumber(window.start_seconds, 0);
+      const endSeconds = Math.max(startSeconds + 0.01, ensureNumber(window.end_seconds, startSeconds + 0.01));
+      const durationSeconds = endSeconds - startSeconds;
+      const firstPhaseEndSeconds = round((startSeconds + (durationSeconds * 0.44)) * 1000) / 1000;
+      const secondPhaseEndSeconds = round((startSeconds + (durationSeconds * 0.68)) * 1000) / 1000;
       lines.push(
-        ...buildParallelConnectorPaths([
-          [
-            { x: slots.semi_1_a.center_x, y: slots.semi_1_a.y },
-            { x: slots.semi_1_a.center_x, y: leftPairConnectorY },
-            { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
-            { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
-          ],
-          [
-            { x: slots.semi_1_b.center_x, y: slots.semi_1_b.y },
-            { x: slots.semi_1_b.center_x, y: leftPairConnectorY },
-            { x: slots.semi_1_winner.center_x, y: leftPairConnectorY },
-            { x: slots.semi_1_winner.center_x, y: slots.semi_1_winner.y + slots.semi_1_winner.height },
-          ],
-          [
-            { x: slots.semi_2_a.center_x, y: slots.semi_2_a.y },
-            { x: slots.semi_2_a.center_x, y: rightPairConnectorY },
-            { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
-            { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
-          ],
-          [
-            { x: slots.semi_2_b.center_x, y: slots.semi_2_b.y },
-            { x: slots.semi_2_b.center_x, y: rightPairConnectorY },
-            { x: slots.semi_2_winner.center_x, y: rightPairConnectorY },
-            { x: slots.semi_2_winner.center_x, y: slots.semi_2_winner.y + slots.semi_2_winner.height },
-          ],
-        ], thickness, window.start_seconds, window.end_seconds, 5),
+        buildAnimatedVerticalConnectorSegment(
+          slots.semi_1_a.center_x,
+          slots.semi_1_a.y,
+          leftPairConnectorY,
+          thickness,
+          startSeconds,
+          firstPhaseEndSeconds,
+        ),
+        buildAnimatedVerticalConnectorSegment(
+          slots.semi_1_b.center_x,
+          slots.semi_1_b.y,
+          leftPairConnectorY,
+          thickness,
+          startSeconds,
+          firstPhaseEndSeconds,
+        ),
+        buildAnimatedVerticalConnectorSegment(
+          slots.semi_2_a.center_x,
+          slots.semi_2_a.y,
+          rightPairConnectorY,
+          thickness,
+          startSeconds,
+          firstPhaseEndSeconds,
+        ),
+        buildAnimatedVerticalConnectorSegment(
+          slots.semi_2_b.center_x,
+          slots.semi_2_b.y,
+          rightPairConnectorY,
+          thickness,
+          startSeconds,
+          firstPhaseEndSeconds,
+        ),
+        buildAnimatedHorizontalConnectorSegment(
+          leftPairConnectorY,
+          slots.semi_1_a.center_x,
+          slots.semi_1_b.center_x,
+          thickness,
+          firstPhaseEndSeconds,
+          secondPhaseEndSeconds,
+        ),
+        buildAnimatedHorizontalConnectorSegment(
+          rightPairConnectorY,
+          slots.semi_2_a.center_x,
+          slots.semi_2_b.center_x,
+          thickness,
+          firstPhaseEndSeconds,
+          secondPhaseEndSeconds,
+        ),
+        buildAnimatedVerticalConnectorSegment(
+          slots.semi_1_winner.center_x,
+          slots.semi_1_winner.y + slots.semi_1_winner.height,
+          leftPairConnectorY,
+          thickness,
+          secondPhaseEndSeconds,
+          endSeconds,
+        ),
+        buildAnimatedVerticalConnectorSegment(
+          slots.semi_2_winner.center_x,
+          slots.semi_2_winner.y + slots.semi_2_winner.height,
+          rightPairConnectorY,
+          thickness,
+          secondPhaseEndSeconds,
+          endSeconds,
+        ),
       );
     } else {
       lines.push(
@@ -1176,12 +1207,23 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const bracketBaseLabel = 'vbracketbase';
   filters.push(
     `[${currentVideoLabel}]${[
-      ...buildCardFilters(bracketLayout, introRevealSchedule),
       ...buildConnectorSegments(bracketLayout, introRevealSchedule),
-      ...buildHighlightFilters(renderPlan, template),
     ].join(',')}[${bracketBaseLabel}]`,
   );
   currentVideoLabel = bracketBaseLabel;
+  currentVideoLabel = appendBracketCardOverlays({
+    filters,
+    currentLabel: currentVideoLabel,
+    bracketLayout,
+    revealSchedule: introRevealSchedule,
+    fps,
+    totalDurationSeconds: renderPlan.total_duration_seconds,
+  });
+  const bracketHighlightLabel = 'vbrackethighlight';
+  filters.push(
+    `[${currentVideoLabel}]${buildHighlightFilters(renderPlan, template).join(',')}[${bracketHighlightLabel}]`,
+  );
+  currentVideoLabel = bracketHighlightLabel;
 
   const participantById = new Map(
     (plan.tournament?.participants || []).map((participant) => [participant.id, participant]),
