@@ -45,7 +45,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'find-the-shiny',
     'know-your-shiny',
     'memory',
-    'showdown',
+    'tournament',
     'type-speed-quiz',
   ]);
   const generateChannelChoiceValues = (generateVideoCommand?.options?.find((option) => option.name === 'channel')?.choices || [])
@@ -474,16 +474,16 @@ test('normalizeSupportedSlashCommandInteraction converts a know-your-shiny slash
   assert.equal(message?.channelKey, 'commands');
 });
 
-test('normalizeSupportedSlashCommandInteraction converts a showdown slash command into a routed message', () => {
+test('normalizeSupportedSlashCommandInteraction converts a tournament slash command into a routed message', () => {
   const message = normalizeSupportedSlashCommandInteraction({
-    id: 'interaction-showdown-1',
+    id: 'interaction-tournament-1',
     type: 2,
     guild_id: 'guild-1',
-    channel_id: 'channel-showdown-1',
+    channel_id: 'channel-tournament-1',
     data: {
       name: 'generate-video',
       options: [
-        { name: 'template', value: 'showdown' },
+        { name: 'template', value: 'tournament' },
         { name: 'channel', value: 'dexguess-youtube' },
       ],
     },
@@ -498,7 +498,7 @@ test('normalizeSupportedSlashCommandInteraction converts a showdown slash comman
     },
   });
 
-  assert.equal(message?.content, 'generate video template: showdown channel: dexguess-youtube');
+  assert.equal(message?.content, 'generate video template: tournament channel: dexguess-youtube');
   assert.equal(message?.channelKey, 'commands');
 });
 

@@ -16,8 +16,8 @@
       "path": "../templates/pokemon/know-your-shiny.v1.json"
     },
     {
-      "template_id": "pokemon.showdown.v1",
-      "path": "../templates/pokemon/showdown.v1.json"
+      "template_id": "pokemon.tournament.v1",
+      "path": "../templates/pokemon/tournament.v1.json"
     },
     {
       "template_id": "pokemon.memory.v1",

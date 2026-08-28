@@ -1,6 +1,7 @@
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
+  buildPokeQuizzAnimatedShinySpritePath,
   buildPokeQuizzAnimatedSpritePath,
   buildPokeQuizzCryPath,
   buildPokeQuizzMirroredSpritePath,
@@ -14,7 +15,7 @@ import {
 } from '../../../../poke-quizz-asset-inventory.mjs';
 import {
   normalizeBaseStats,
-  resolveShowdownBattle,
+  resolveTournamentBattle,
   sumBaseStats,
 } from './battle-logic.mjs';
 
@@ -26,7 +27,7 @@ const crySourceUrlCache = new Map();
 
 function hashSeed(input) {
   let hash = 2166136261;
-  for (const character of String(input || 'pokemon-showdown')) {
+  for (const character of String(input || 'pokemon-tournament')) {
     hash ^= character.codePointAt(0);
     hash = Math.imul(hash, 16777619);
   }
@@ -220,7 +221,7 @@ async function downloadCryToFile(sourceUrl, outputPath) {
   await writeFile(outputPath, payload);
 }
 
-async function resolveShowdownCrySourceUrl(subject = {}) {
+async function resolveTournamentCrySourceUrl(subject = {}) {
   const explicitCrySourceUrl = String(subject?.cry_source_url || '').trim();
   if (explicitCrySourceUrl) {
     return explicitCrySourceUrl;
@@ -252,7 +253,7 @@ async function resolveShowdownCrySourceUrl(subject = {}) {
   return crySourceUrlCache.get(normalizedLookupKey);
 }
 
-async function resolveShowdownSpritePath(subject = {}) {
+async function resolveTournamentSpritePath(subject = {}) {
   const explicitAnimatedPath = String(subject?.animated_sprite_path || '').trim();
   if (explicitAnimatedPath) {
     return explicitAnimatedPath;
@@ -272,7 +273,19 @@ async function resolveShowdownSpritePath(subject = {}) {
   return (await canAccessPath(mirrorPath)) ? mirrorPath : normalizedPath;
 }
 
-async function resolveShowdownCryPath(subject = {}) {
+async function resolveTournamentAnimatedShinySpritePath(subject = {}) {
+  const explicitAnimatedPath = String(subject?.shiny_animated_sprite_path || '').trim();
+  if (explicitAnimatedPath) {
+    return explicitAnimatedPath;
+  }
+  const derivedAnimatedPath = buildPokeQuizzAnimatedShinySpritePath(subject);
+  if (derivedAnimatedPath && await canAccessPath(derivedAnimatedPath)) {
+    return derivedAnimatedPath;
+  }
+  return '';
+}
+
+async function resolveTournamentCryPath(subject = {}) {
   const explicitCryPath = String(subject?.cry_path || '').trim();
   if (explicitCryPath && await canAccessCryPath(explicitCryPath)) {
     return explicitCryPath;
@@ -285,7 +298,7 @@ async function resolveShowdownCryPath(subject = {}) {
 
   const crySourceUrl = String(
     subject?.cry_source_url
-    || await resolveShowdownCrySourceUrl(subject)
+    || await resolveTournamentCrySourceUrl(subject)
     || '',
   ).trim();
   if (!crySourceUrl || !derivedCryPath) {
@@ -305,6 +318,10 @@ async function resolveShowdownCryPath(subject = {}) {
   }
 
   return cryDownloadCache.get(derivedCryPath);
+}
+
+function buildTournamentSubjectIdentity(subject = {}) {
+  return normalizeSlug(subject?.id || subject?.slug || subject?.name);
 }
 
 function shuffle(values, random) {
@@ -392,7 +409,7 @@ function collapseDuplicateCombatants(subjects = []) {
   return unique;
 }
 
-function resolveShowdownPoolVariants(template = {}) {
+function resolveTournamentPoolVariants(template = {}) {
   const configuredVariants = Array.isArray(template?.selection_rules?.pool_variants)
     ? template.selection_rules.pool_variants
     : [];
@@ -415,7 +432,7 @@ function resolveShowdownPoolVariants(template = {}) {
     .filter((variant) => variant.key);
 }
 
-function filterCombatantsForShowdownPool(subjects = [], pool = {}, template = {}) {
+function filterCombatantsForTournamentPool(subjects = [], pool = {}, template = {}) {
   const selector = String(pool?.selector || 'all').trim().toLowerCase();
   const minimumStrongFinalBaseStatTotal = Number.isFinite(Number(pool?.strong_final_evolution_min_base_stat_total))
     ? Number(pool.strong_final_evolution_min_base_stat_total)
@@ -443,7 +460,7 @@ function filterCombatantsForShowdownPool(subjects = [], pool = {}, template = {}
   }
 }
 
-function selectWeightedShowdownPool(pools = [], random = Math.random) {
+function selectWeightedTournamentPool(pools = [], random = Math.random) {
   const availablePools = (Array.isArray(pools) ? pools : []).filter((pool) => (pool?.subjects?.length || 0) > 0);
   if (availablePools.length === 0) {
     return null;
@@ -459,7 +476,7 @@ function selectWeightedShowdownPool(pools = [], random = Math.random) {
   return availablePools.at(-1) || null;
 }
 
-function resolveShowdownBalanceConfig(template = {}, pool = {}) {
+function resolveTournamentBalanceConfig(template = {}, pool = {}) {
   const selectionRules = template?.selection_rules || {};
   const maxSpread = Number(pool?.max_base_stat_total_spread ?? selectionRules.max_base_stat_total_spread);
   const maxPairDelta = Number(pool?.max_matchup_base_stat_total_delta ?? selectionRules.max_matchup_base_stat_total_delta);
@@ -524,7 +541,7 @@ function selectBalancedCombatants(subjects = [], participantCount, template = {}
       metrics: evaluateBalancedBracketOrder(fallbackSelection),
     };
   }
-  const balanceConfig = resolveShowdownBalanceConfig(template, pool);
+  const balanceConfig = resolveTournamentBalanceConfig(template, pool);
   let bestSelection = null;
   let bestScore = Number.POSITIVE_INFINITY;
   for (let attempt = 0; attempt < balanceConfig.sampling_attempts; attempt += 1) {
@@ -612,7 +629,55 @@ function selectIntroSlotRevealSoundPath(soundEffects = {}, config = {}) {
   return matchedPreferred || soundEffects.pokeball_intro || null;
 }
 
-function buildParticipantRecord(subject, renderSpritePath, cryPath, bracketSeedIndex) {
+function resolveTournamentAnimatedShinyConfig(template = {}) {
+  const selectionRules = template?.selection_rules || {};
+  const probability = Number(selectionRules.animated_shiny_probability);
+  return {
+    probability: Number.isFinite(probability)
+      ? Math.max(0, Math.min(1, probability))
+      : 0.5,
+    max_participants: Math.max(
+      0,
+      ensurePositiveInteger(selectionRules.max_animated_shiny_participants, 1),
+    ),
+  };
+}
+
+async function selectTournamentRenderSpritePlans(subjects = [], template = {}, random = Math.random) {
+  const spritePlans = await Promise.all((Array.isArray(subjects) ? subjects : []).map(async (subject) => ({
+    subject,
+    key: buildTournamentSubjectIdentity(subject),
+    normal_path: await resolveTournamentSpritePath(subject),
+    shiny_animated_path: await resolveTournamentAnimatedShinySpritePath(subject),
+  })));
+  const config = resolveTournamentAnimatedShinyConfig(template);
+  if (config.max_participants <= 0 || config.probability <= 0) {
+    return spritePlans.map((plan) => ({
+      ...plan,
+      render_path: plan.normal_path,
+      uses_shiny_render_sprite: false,
+    }));
+  }
+  const shinyCandidates = spritePlans.filter((plan) => plan.key && plan.shiny_animated_path);
+  const selectedShinyKeys = new Set();
+  if (shinyCandidates.length > 0 && random() < config.probability) {
+    shuffle(shinyCandidates, random)
+      .slice(0, Math.min(config.max_participants, shinyCandidates.length))
+      .forEach((plan) => selectedShinyKeys.add(plan.key));
+  }
+  return spritePlans.map((plan) => {
+    const usesShinyRenderSprite = Boolean(plan.key) && selectedShinyKeys.has(plan.key);
+    return {
+      ...plan,
+      render_path: usesShinyRenderSprite
+        ? (plan.shiny_animated_path || plan.normal_path)
+        : plan.normal_path,
+      uses_shiny_render_sprite: usesShinyRenderSprite,
+    };
+  });
+}
+
+function buildParticipantRecord(subject, renderSpritePath, cryPath, bracketSeedIndex, options = {}) {
   const baseStats = normalizeBaseStats(subject?.metadata?.base_stats || {});
   return {
     id: String(subject.id || '').trim(),
@@ -626,8 +691,15 @@ function buildParticipantRecord(subject, renderSpritePath, cryPath, bracketSeedI
     slug: String(subject.slug || '').trim(),
     types: Array.isArray(subject.types) ? [...subject.types] : [],
     sprite_path: String(subject.sprite_path || '').trim(),
+    shiny_sprite_path: String(subject.shiny_sprite_path || '').trim(),
     animated_sprite_path: String(subject.animated_sprite_path || '').trim(),
+    shiny_animated_sprite_path: String(
+      options.shiny_animated_sprite_path
+      || subject.shiny_animated_sprite_path
+      || '',
+    ).trim(),
     render_sprite_path: String(renderSpritePath || subject.sprite_path || '').trim(),
+    uses_shiny_render_sprite: Boolean(options.uses_shiny_render_sprite),
     cry_path: String(cryPath || subject.cry_path || '').trim(),
     cry_source_url: subject.cry_source_url || null,
     sprite_source_url: subject.sprite_source_url || null,
@@ -651,7 +723,7 @@ function buildMatchRecord({
   template,
   random,
 }) {
-  const battle = resolveShowdownBattle({
+  const battle = resolveTournamentBattle({
     left,
     right,
     weights: template?.selection_rules?.battle_weights || {},
@@ -726,10 +798,10 @@ function buildTimeline(template, hookText, matches, championText) {
   ];
 }
 
-export async function planPokemonShowdownChallenge({
+export async function planPokemonTournamentChallenge({
   template,
   pokedexRows,
-  seed = 'pokemon-showdown',
+  seed = 'pokemon-tournament',
   assetInventory = null,
   selectionState = null,
 }) {
@@ -745,16 +817,16 @@ export async function planPokemonShowdownChallenge({
   );
 
   if (eligibleCombatants.length < participantCount) {
-    throw new Error(`Showdown requires at least ${participantCount} Pokemon with local sprites and base stats, found ${eligibleCombatants.length}.`);
+    throw new Error(`Tournament requires at least ${participantCount} Pokemon with local sprites and base stats, found ${eligibleCombatants.length}.`);
   }
-  const configuredPools = resolveShowdownPoolVariants(template);
+  const configuredPools = resolveTournamentPoolVariants(template);
   const availablePools = configuredPools
     .map((pool) => ({
       ...pool,
-      subjects: collapseDuplicateCombatants(filterCombatantsForShowdownPool(eligibleCombatants, pool, template)),
+      subjects: collapseDuplicateCombatants(filterCombatantsForTournamentPool(eligibleCombatants, pool, template)),
     }))
     .filter((pool) => pool.subjects.length >= participantCount);
-  const selectedPool = selectWeightedShowdownPool(availablePools, random) || {
+  const selectedPool = selectWeightedTournamentPool(availablePools, random) || {
     key: 'all',
     label: 'All Combatants',
     selector: 'all',
@@ -769,12 +841,21 @@ export async function planPokemonShowdownChallenge({
     random,
   );
   const selectedSubjects = balancedSelection.selected_subjects;
-  const participants = await Promise.all(selectedSubjects.map(async (subject, index) => (
+  const renderSpritePlans = await selectTournamentRenderSpritePlans(
+    selectedSubjects,
+    template,
+    random,
+  );
+  const participants = await Promise.all(renderSpritePlans.map(async ({ subject, render_path, shiny_animated_path, uses_shiny_render_sprite }, index) => (
     buildParticipantRecord(
       subject,
-      await resolveShowdownSpritePath(subject),
-      await resolveShowdownCryPath(subject),
+      render_path,
+      await resolveTournamentCryPath(subject),
       index,
+      {
+        shiny_animated_sprite_path: shiny_animated_path,
+        uses_shiny_render_sprite,
+      },
     )
   )));
 
@@ -886,12 +967,12 @@ export async function planPokemonShowdownChallenge({
   }
 
   return {
-    schema_version: 'poke-quizz-showdown-plan-v1',
+    schema_version: 'poke-quizz-tournament-plan-v1',
     channel: {
       id: 'poke-quizz',
       name: 'Poke Quizz',
       niche: 'pokemon_quiz',
-      content_lane: 'pokemon_showdown',
+      content_lane: 'pokemon_tournament',
     },
     template_id: template.template_id,
     template_key: template.template_key,
@@ -903,6 +984,7 @@ export async function planPokemonShowdownChallenge({
       pool_key: selectedPool.key,
       pool_label: selectedPool.label,
       pool_selector: selectedPool.selector,
+      animated_shiny_participant_count: participants.filter((participant) => participant.uses_shiny_render_sprite).length,
       balance: {
         base_stat_total_spread: balancedSelection.metrics?.spread ?? null,
         max_matchup_base_stat_total_delta: balancedSelection.metrics?.maxPairDelta ?? null,
@@ -917,6 +999,7 @@ export async function planPokemonShowdownChallenge({
         region: participant.region,
         types: participant.types,
         base_stat_total: participant.base_stat_total,
+        uses_shiny_render_sprite: participant.uses_shiny_render_sprite,
       })),
     },
     tournament: {

@@ -1,6 +1,6 @@
 {
-  "template_id": "pokemon.showdown.v1",
-  "template_key": "showdown",
+  "template_id": "pokemon.tournament.v1",
+  "template_key": "tournament",
   "domain": "pokemon",
   "mechanics": [
     "selection",
@@ -29,6 +29,8 @@
     "sampling_attempts": 240,
     "max_base_stat_total_spread": 180,
     "max_matchup_base_stat_total_delta": 110,
+    "animated_shiny_probability": 0.5,
+    "max_animated_shiny_participants": 1,
     "require_truth_fields": [
       "national_dex_number",
       "name",
@@ -49,7 +51,7 @@
         "key": "legendary_only",
         "label": "Legendary Only",
         "selector": "legendary_only",
-        "weight": 1,
+        "weight": 3,
         "max_base_stat_total_spread": 100,
         "max_matchup_base_stat_total_delta": 90
       },
@@ -93,9 +95,11 @@
     }
   },
   "question_contract": {
-    "hook_text": "Who wins the tournament?",
+    "hook_text": "Who wins this tournament?",
     "hook_text_variants": [
-      "Who wins the tournament?"
+      "Who wins this tournament?",
+      "Who takes this Pokemon tournament?",
+      "Who will champion of this tournament?"
     ],
     "matchup_text": "{pokemon_a} vs {pokemon_b}",
     "matchup_text_variants": [
@@ -227,11 +231,11 @@
     "intro_pokeball_scale_multiplier": 1.04,
     "intro_slot_reveal_fade_seconds": 0.18,
     "intro_slot_reveal_stagger_seconds": 0.3,
-    "intro_bracket_semi_slot_seconds": 0.18,
+    "intro_bracket_semi_slot_seconds": 0.3,
     "intro_bracket_semi_connector_seconds": 1.3,
-    "intro_bracket_finalist_slot_seconds": 0.18,
+    "intro_bracket_finalist_slot_seconds": 0.3,
     "intro_bracket_final_connector_seconds": 1.3,
-    "intro_bracket_champion_slot_seconds": 0.18,
+    "intro_bracket_champion_slot_seconds": 0.3,
     "battle_disappear_duration_seconds": 0.42,
     "final_bracket_progress_duration_seconds": 2,
     "stat_row_stagger_seconds": 0.3,

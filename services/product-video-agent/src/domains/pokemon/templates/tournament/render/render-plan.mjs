@@ -5,7 +5,7 @@ import {
 
 function hashSeed(input) {
   let hash = 2166136261;
-  for (const character of String(input || 'showdown-intro')) {
+  for (const character of String(input || 'tournament-intro')) {
     hash ^= character.codePointAt(0);
     hash = Math.imul(hash, 16777619);
   }
@@ -145,7 +145,7 @@ function buildIntroSequence({ template, seed, participantCount, firstBattleStart
   const revealFadeSeconds = roundTime(
     Math.max(0.08, ensureNumber(template?.renderer?.intro_slot_reveal_fade_seconds, 0.18)),
   );
-  const revealOrder = buildSeededRevealOrder(participantCount, `${seed}:showdown-intro-reveal`);
+  const revealOrder = buildSeededRevealOrder(participantCount, `${seed}:tournament-intro-reveal`);
   const revealWindowSeconds = participantCount > 0
     ? roundTime(revealFadeSeconds + (Math.max(0, participantCount - 1) * revealStaggerSeconds))
     : 0;
@@ -285,7 +285,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   };
   const introSequence = buildIntroSequence({
     template,
-    seed: plan?.seed || 'showdown-intro',
+    seed: plan?.seed || 'tournament-intro',
     participantCount,
     firstBattleStartSeconds: renderedMatches[0]?.intro_start_seconds || 0,
   });
@@ -428,7 +428,7 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
         intro_slot_reveal_stagger_seconds: renderPlan.intro_sequence?.participant_reveal_stagger_seconds,
       },
     },
-    seed: renderPlan.seed || 'showdown-intro',
+    seed: renderPlan.seed || 'tournament-intro',
     participantCount: ensureNumber(renderPlan.participant_count, 0),
     firstBattleStartSeconds: updatedMatchesWithBracketProgress[0]?.intro_start_seconds || 0,
   });

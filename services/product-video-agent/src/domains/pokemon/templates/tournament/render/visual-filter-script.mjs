@@ -14,7 +14,7 @@ import {
   wrapTextBlock,
 } from '../../dual-type-reveal/render/text-layout.mjs';
 
-const SHOWDOWN_STAT_ROWS = Object.freeze([
+const TOURNAMENT_STAT_ROWS = Object.freeze([
   { key: 'hp', label: 'HP', color: '0xFF5A5F', background: '0xFFB7BA' },
   { key: 'attack', label: 'Attack', color: '0xFF8A2A', background: '0xFFD0A6' },
   { key: 'defense', label: 'Defense', color: '0xFFD63A', background: '0xFFF0A3' },
@@ -22,7 +22,8 @@ const SHOWDOWN_STAT_ROWS = Object.freeze([
   { key: 'special_defense', label: 'Sp. Def', color: '0x7ACB50', background: '0xCBE8B0' },
   { key: 'speed', label: 'Speed', color: '0xF45C97', background: '0xF7B6CF' },
 ]);
-const SHOWDOWN_SOURCE_SLOT_KEYS = Object.freeze(['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b']);
+const TOURNAMENT_SOURCE_SLOT_KEYS = Object.freeze(['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b']);
+const TOURNAMENT_CARD_MIN_SCALE = 0.22;
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -42,6 +43,32 @@ function combineEnableExpressions(...expressions) {
   return parts.map((expression) => `(${expression})`).join('*');
 }
 
+function buildAnimatedScaleExpression(startSeconds, endSeconds, fromScale = TOURNAMENT_CARD_MIN_SCALE) {
+  const safeStart = ensureNumber(startSeconds, 0);
+  const safeEnd = Math.max(safeStart + 0.01, ensureNumber(endSeconds, safeStart + 0.01));
+  const safeDuration = round(((safeEnd - safeStart) * 1000)) / 1000;
+  const safeFromScale = Math.max(0.05, Math.min(1, ensureNumber(fromScale, TOURNAMENT_CARD_MIN_SCALE)));
+  return `if(lt(t,${safeStart}),${safeFromScale},if(lt(t,${safeEnd}),${safeFromScale}+(${1 - safeFromScale})*((t-${safeStart})/${safeDuration}),1))`;
+}
+
+function buildAnimatedCardBoxExpressions(slot, slotWindow, paddingPx = 0) {
+  const scaleExpression = buildAnimatedScaleExpression(
+    slotWindow?.start_seconds,
+    slotWindow?.end_seconds,
+  );
+  const safePadding = Math.max(0, round(paddingPx));
+  const baseWidth = Math.max(1, slot.width - (safePadding * 2));
+  const baseHeight = Math.max(1, slot.height - (safePadding * 2));
+  const widthExpression = `max(1,${baseWidth}*(${scaleExpression}))`;
+  const heightExpression = `max(1,${baseHeight}*(${scaleExpression}))`;
+  return {
+    x: `${slot.center_x}-(${widthExpression})/2`,
+    y: `${slot.center_y}-(${heightExpression})/2`,
+    w: widthExpression,
+    h: heightExpression,
+  };
+}
+
 function buildCardFilters(bracketLayout, revealSchedule = {}) {
   const slotWindows = revealSchedule.slot_windows || {};
   return Object.entries(bracketLayout.slots).flatMap(([slotKey, slot]) => {
@@ -51,17 +78,11 @@ function buildCardFilters(bracketLayout, revealSchedule = {}) {
       : '';
     const enablePart = buildEnablePart(enableExpression);
     if (slotWindow) {
+      const outerBox = buildAnimatedCardBoxExpressions(slot, slotWindow, 0);
+      const innerBox = buildAnimatedCardBoxExpressions(slot, slotWindow, 3);
       return [
-        `drawbox=x=${slot.x + 3}:y=${slot.y + 3}:w=${slot.width - 6}:h=${slot.height - 6}:color=0x101010@0.32:t=fill:enable='gte(t,${slotWindow.start_seconds})'`,
-        ...buildSteppedConnectorPath([
-          { x: slot.x, y: slot.y },
-          { x: slot.x + slot.width, y: slot.y },
-          { x: slot.x + slot.width, y: slot.y + slot.height },
-          { x: slot.x, y: slot.y + slot.height },
-          { x: slot.x, y: slot.y },
-        ], 3, slotWindow.start_seconds, slotWindow.end_seconds, 8).map((filter) => (
-          filter.replace('color=0xFFFFFF@0.7', 'color=0xFFFFFF@0.95')
-        )),
+        `drawbox=x='${outerBox.x}':y='${outerBox.y}':w='${outerBox.w}':h='${outerBox.h}':color=0xFFFFFF@0.95:t=3:enable='gte(t,${slotWindow.start_seconds})'`,
+        `drawbox=x='${innerBox.x}':y='${innerBox.y}':w='${innerBox.w}':h='${innerBox.h}':color=0x101010@0.32:t=fill:enable='gte(t,${slotWindow.start_seconds})'`,
       ];
     }
     return [
@@ -742,7 +763,7 @@ function buildBattleStatsLayout(battleStage) {
   const panelWidth = 446;
   const rowHeight = 40;
   const rowGap = 6;
-  const panelHeight = (SHOWDOWN_STAT_ROWS.length * rowHeight) + ((SHOWDOWN_STAT_ROWS.length - 1) * rowGap);
+  const panelHeight = (TOURNAMENT_STAT_ROWS.length * rowHeight) + ((TOURNAMENT_STAT_ROWS.length - 1) * rowGap);
   const spriteBottom = battleStage.center_y + (battleStage.sprite_size_px / 2);
   const proposedTop = Math.round(spriteBottom + 18);
   const maxTopBeforeName = Math.round(battleStage.name_y - panelHeight - 34);
@@ -779,7 +800,7 @@ function buildBattleStatsFilters({ match, battleStage, fontPart, template }) {
     { stats: match.participant_b.base_stats || {}, x: layout.rightX },
   ];
   return statSources.flatMap(({ stats, x }) => (
-    SHOWDOWN_STAT_ROWS.flatMap((row, rowIndex) => {
+    TOURNAMENT_STAT_ROWS.flatMap((row, rowIndex) => {
       const value = Math.max(0, Math.min(255, round(stats[row.key] || 0)));
       const y = layout.top + (rowIndex * (layout.rowHeight + layout.rowGap));
       const fillWidth = Math.max(2, round((value / 255) * layout.barWidth));
@@ -1066,7 +1087,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const bracketBaseLabel = 'vbracketbase';
   filters.push(
     `[${currentVideoLabel}]${[
-      ...buildCardFilters(bracketLayout, introRevealSchedule.slots),
+      ...buildCardFilters(bracketLayout, introRevealSchedule),
       ...buildConnectorSegments(bracketLayout, introRevealSchedule),
       ...buildHighlightFilters(renderPlan, template),
     ].join(',')}[${bracketBaseLabel}]`,
@@ -1077,7 +1098,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     (plan.tournament?.participants || []).map((participant) => [participant.id, participant]),
   );
   const slotMap = bracketLayout.slots;
-  const sourceSlotKeys = [...SHOWDOWN_SOURCE_SLOT_KEYS];
+  const sourceSlotKeys = [...TOURNAMENT_SOURCE_SLOT_KEYS];
 
   if (inputRefs.introPokeball != null) {
     const sourcePokeballLabels = sourceSlotKeys.map((_, index) => `vpokeball${index}`);

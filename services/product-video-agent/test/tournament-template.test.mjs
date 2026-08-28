@@ -4,15 +4,15 @@ import { planPokemonTypeChallenge } from '../src/pokemon-type-challenge-planner.
 import { buildPokeQuizzRenderPlan } from '../src/poke-quizz-renderer.mjs';
 import {
   buildAudioFilterScript,
-  buildShowdownCryCues,
-} from '../src/domains/pokemon/templates/showdown/render/audio-filter-script.mjs';
-import { applyNarrationDurationsToRenderPlan } from '../src/domains/pokemon/templates/showdown/render/render-plan.mjs';
-import { buildVisualFilterScript } from '../src/domains/pokemon/templates/showdown/render/visual-filter-script.mjs';
-import { buildVisualInputs } from '../src/domains/pokemon/templates/showdown/render/visual-inputs.mjs';
+  buildTournamentCryCues,
+} from '../src/domains/pokemon/templates/tournament/render/audio-filter-script.mjs';
+import { applyNarrationDurationsToRenderPlan } from '../src/domains/pokemon/templates/tournament/render/render-plan.mjs';
+import { buildVisualFilterScript } from '../src/domains/pokemon/templates/tournament/render/visual-filter-script.mjs';
+import { buildVisualInputs } from '../src/domains/pokemon/templates/tournament/render/visual-inputs.mjs';
 
 const template = {
-  template_id: 'pokemon.showdown.v1',
-  template_key: 'showdown',
+  template_id: 'pokemon.tournament.v1',
+  template_key: 'tournament',
   canvas: {
     width: 1080,
     height: 1920,
@@ -22,6 +22,8 @@ const template = {
     generation_scope: [1],
     participant_count: 4,
     mode: 'single_elimination_bracket',
+    animated_shiny_probability: 1,
+    max_animated_shiny_participants: 1,
     battle_weights: {
       base_stat_total: 0.06,
       hp: 0.18,
@@ -36,8 +38,8 @@ const template = {
     },
   },
   question_contract: {
-    hook_text: 'Who wins this showdown?',
-    hook_text_variants: ['Who wins this showdown?'],
+    hook_text: 'Who wins this tournament?',
+    hook_text_variants: ['Who wins this tournament?'],
     champion_text: '{champion_name} won the tournament',
     champion_text_variants: ['{champion_name} won the tournament'],
   },
@@ -131,6 +133,11 @@ const template = {
     intro_pokeball_scale_multiplier: 1.04,
     intro_slot_reveal_fade_seconds: 0.18,
     intro_slot_reveal_stagger_seconds: 0.3,
+    intro_bracket_semi_slot_seconds: 0.3,
+    intro_bracket_semi_connector_seconds: 1.3,
+    intro_bracket_finalist_slot_seconds: 0.3,
+    intro_bracket_final_connector_seconds: 1.3,
+    intro_bracket_champion_slot_seconds: 0.3,
     battle_disappear_duration_seconds: 0.42,
     loser_alpha_multiplier: 0.46,
   },
@@ -147,6 +154,7 @@ const pokedexRows = [
     types: ['fire', 'flying'],
     sprite_path: '/tmp/charizard.png',
     animated_sprite_path: '/tmp/charizard.gif',
+    shiny_animated_sprite_path: '/tmp/charizard-shiny.gif',
     cry_path: '/tmp/0006.ogg',
     metadata: {
       base_stats: { hp: 78, attack: 84, defense: 78, special_attack: 109, special_defense: 85, speed: 100 },
@@ -162,6 +170,7 @@ const pokedexRows = [
     types: ['water'],
     sprite_path: '/tmp/blastoise.png',
     animated_sprite_path: '/tmp/blastoise.gif',
+    shiny_animated_sprite_path: '/tmp/blastoise-shiny.gif',
     cry_path: '/tmp/0009.ogg',
     metadata: {
       base_stats: { hp: 79, attack: 83, defense: 100, special_attack: 85, special_defense: 105, speed: 78 },
@@ -177,6 +186,7 @@ const pokedexRows = [
     types: ['dragon', 'flying'],
     sprite_path: '/tmp/dragonite.png',
     animated_sprite_path: '/tmp/dragonite.gif',
+    shiny_animated_sprite_path: '/tmp/dragonite-shiny.gif',
     cry_path: '/tmp/0149.ogg',
     metadata: {
       base_stats: { hp: 91, attack: 134, defense: 95, special_attack: 100, special_defense: 100, speed: 80 },
@@ -192,6 +202,7 @@ const pokedexRows = [
     types: ['ghost', 'poison'],
     sprite_path: '/tmp/gengar.png',
     animated_sprite_path: '/tmp/gengar.gif',
+    shiny_animated_sprite_path: '/tmp/gengar-shiny.gif',
     cry_path: '/tmp/0094.ogg',
     metadata: {
       base_stats: { hp: 60, attack: 65, defense: 60, special_attack: 130, special_defense: 75, speed: 110 },
@@ -228,6 +239,7 @@ const legendaryPoolRows = [
     types: ['ice', 'flying'],
     sprite_path: '/tmp/articuno.png',
     animated_sprite_path: '/tmp/articuno.gif',
+    shiny_animated_sprite_path: '/tmp/articuno-shiny.gif',
     cry_path: '/tmp/0144.ogg',
     metadata: {
       is_legendary: true,
@@ -244,6 +256,7 @@ const legendaryPoolRows = [
     types: ['electric', 'flying'],
     sprite_path: '/tmp/zapdos.png',
     animated_sprite_path: '/tmp/zapdos.gif',
+    shiny_animated_sprite_path: '/tmp/zapdos-shiny.gif',
     cry_path: '/tmp/0145.ogg',
     metadata: {
       is_legendary: true,
@@ -260,6 +273,7 @@ const legendaryPoolRows = [
     types: ['fire', 'flying'],
     sprite_path: '/tmp/moltres.png',
     animated_sprite_path: '/tmp/moltres.gif',
+    shiny_animated_sprite_path: '/tmp/moltres-shiny.gif',
     cry_path: '/tmp/0146.ogg',
     metadata: {
       is_legendary: true,
@@ -276,6 +290,7 @@ const legendaryPoolRows = [
     types: ['psychic'],
     sprite_path: '/tmp/mew.png',
     animated_sprite_path: '/tmp/mew.gif',
+    shiny_animated_sprite_path: '/tmp/mew-shiny.gif',
     cry_path: '/tmp/0151.ogg',
     metadata: {
       is_mythical: true,
@@ -284,21 +299,23 @@ const legendaryPoolRows = [
   },
 ];
 
-test('generic planner dispatch builds a four-participant showdown bracket', async () => {
+test('generic planner dispatch builds a four-participant tournament bracket with at most one shiny gif', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'showdown-bracket',
+    seed: 'tournament-bracket',
     assetInventory,
   });
 
-  assert.equal(plan.template_id, 'pokemon.showdown.v1');
-  assert.equal(plan.template_key, 'showdown');
+  assert.equal(plan.template_id, 'pokemon.tournament.v1');
+  assert.equal(plan.template_key, 'tournament');
   assert.equal(plan.selection.participant_count, 4);
   assert.equal(plan.tournament.participants.length, 4);
   assert.equal(plan.tournament.matches.length, 3);
   assert.equal(plan.tournament.matches[0].round_label, 'Semi Final 1');
   assert.equal(plan.tournament.participants[0].render_sprite_path.endsWith('.gif'), true);
+  assert.equal(plan.tournament.participants.filter((participant) => participant.uses_shiny_render_sprite).length, 1);
+  assert.equal(plan.selection.animated_shiny_participant_count, 1);
   assert.equal(plan.tournament.participants.every((participant) => participant.cry_path.endsWith('.ogg')), true);
   assert.equal(plan.assets.overlays.selected_intro_pokeball_path, '/tmp/open-close-pokeball.gif');
   assert.equal(plan.assets.overlays.selected_disappear_path, '/tmp/disappear.gif');
@@ -307,10 +324,10 @@ test('generic planner dispatch builds a four-participant showdown bracket', asyn
   assert.equal(plan.assets.audio.selected_sound_effects.winner_reveal, '/tmp/ding-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.disappear, '/tmp/disappear-sound.mp3');
   assert.equal(plan.required_asset_gaps.length, 0);
-  assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Showdown$/u);
+  assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Tournament$/u);
 });
 
-test('showdown planner can restrict selection to a seeded legendary-only pool', async () => {
+test('tournament planner can restrict selection to a seeded legendary-only pool', async () => {
   const legendaryPoolTemplate = JSON.parse(JSON.stringify(template));
   legendaryPoolTemplate.selection_rules.generation_scope = [];
   legendaryPoolTemplate.selection_rules.pool_variants = [
@@ -327,7 +344,7 @@ test('showdown planner can restrict selection to a seeded legendary-only pool', 
   const plan = await planPokemonTypeChallenge({
     template: legendaryPoolTemplate,
     pokedexRows: [...pokedexRows, ...legendaryPoolRows],
-    seed: 'showdown-legendary-pool',
+    seed: 'tournament-legendary-pool',
     assetInventory,
   });
 
@@ -341,28 +358,28 @@ test('showdown planner can restrict selection to a seeded legendary-only pool', 
   assert.ok((plan.selection.balance.max_matchup_base_stat_total_delta ?? 999) <= 20);
 });
 
-test('showdown render plan and inputs stay deterministic for a four-Pokemon bracket', async () => {
+test('tournament render plan and inputs stay deterministic for a four-Pokemon bracket', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'showdown-render-plan',
+    seed: 'tournament-render-plan',
     assetInventory,
   });
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
-    outputPath: '/tmp/showdown.mp4',
+    outputPath: '/tmp/tournament.mp4',
   });
   const visualInputs = buildVisualInputs(plan, renderPlan);
 
   assert.equal(renderPlan.matches.length, 3);
-  assert.equal(renderPlan.output_path, '/tmp/showdown.mp4');
+  assert.equal(renderPlan.output_path, '/tmp/tournament.mp4');
   assert.equal(renderPlan.bracket_layout.slots.final_winner.center_x, 540);
   assert.equal(renderPlan.bracket_layout.slots.semi_1_winner.center_y, 892);
-  assert.equal(renderPlan.matches[0].intro_start_seconds, 4.18);
-  assert.equal(renderPlan.matches[0].battle_transition_start_seconds, 3.78);
+  assert.equal(renderPlan.matches[0].intro_start_seconds, 5.98);
+  assert.equal(renderPlan.matches[0].battle_transition_start_seconds, 5.58);
   assert.equal(renderPlan.matches[1].intro_start_seconds - renderPlan.matches[1].scene_start_seconds, 2.5);
-  assert.equal(renderPlan.intro_sequence.bracket_draw_end_seconds, 1.1);
+  assert.equal(renderPlan.intro_sequence.bracket_draw_end_seconds, 2.9);
   assert.equal(renderPlan.intro_sequence.participant_reveal_stagger_seconds, 0.3);
   assert.equal(renderPlan.intro_sequence.participant_hold_end_seconds, renderPlan.matches[0].intro_start_seconds);
   assert.ok(
@@ -378,17 +395,17 @@ test('showdown render plan and inputs stay deterministic for a four-Pokemon brac
   assert.deepEqual(visualInputs[3].args.slice(0, 4), ['-ignore_loop', '0', '-t', String(renderPlan.total_duration_seconds)]);
 });
 
-test('showdown audio and visual filters include winner sting cues and champion overlay logic', async () => {
+test('tournament audio and visual filters include winner sting cues and champion overlay logic', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'showdown-filters',
+    seed: 'tournament-filters',
     assetInventory,
   });
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
-    outputPath: '/tmp/showdown.mp4',
+    outputPath: '/tmp/tournament.mp4',
   });
   const visualFilter = buildVisualFilterScript(
     plan,
@@ -409,7 +426,7 @@ test('showdown audio and visual filters include winner sting cues and champion o
     bracketProgressPath: '/tmp/select-sound.mp3',
     winnerRevealPath: '/tmp/ding-sound.mp3',
     disappearPath: '/tmp/disappear-sound.mp3',
-    cryCues: buildShowdownCryCues(plan, renderPlan),
+    cryCues: buildTournamentCryCues(plan, renderPlan),
     renderPlan,
   });
   const slotPositions = template.layout.bracket.slot_positions;
@@ -447,6 +464,7 @@ test('showdown audio and visual filters include winner sting cues and champion o
     visualFilter.script,
     new RegExp(`${finalMatchWinnerCenterX}\\+\\(${finalBracketCenterX}-${finalMatchWinnerCenterX}\\)`, 'u'),
   );
+  assert.match(visualFilter.script, /max\(1,220\*\(if\(lt\(t,0\),0\.22,/u);
   assert.ok((visualFilter.script.match(/color=0xFFFFFF@0\.7:t=fill:enable='gte\(t,/gu) || []).length >= 12);
   assert.match(visualFilter.script, /enable='\(between\(t,0,/u);
   assert.match(
@@ -465,17 +483,17 @@ test('showdown audio and visual filters include winner sting cues and champion o
   assert.match(audioFilter, /amix=inputs=/u);
 });
 
-test('showdown render plan expands scene timings to measured narration durations', async () => {
+test('tournament render plan expands scene timings to measured narration durations', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
-    seed: 'showdown-narration-stretch',
+    seed: 'tournament-narration-stretch',
     assetInventory,
   });
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
-    outputPath: '/tmp/showdown.mp4',
+    outputPath: '/tmp/tournament.mp4',
   });
   const stretchedPlan = applyNarrationDurationsToRenderPlan(renderPlan, [
     2.4,

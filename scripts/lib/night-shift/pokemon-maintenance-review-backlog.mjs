@@ -42,6 +42,9 @@ function normalizeTemplateIdForQueue(value = '') {
   if (normalizedTemplateId.includes('know-your-shiny')) {
     return 'pokemon.know-your-shiny.v1';
   }
+  if (normalizedTemplateId.includes('tournament') || normalizedTemplateId.includes('showdown')) {
+    return 'pokemon.tournament.v1';
+  }
   if (normalizedTemplateId.includes('memory')) {
     return 'pokemon.memory.v1';
   }

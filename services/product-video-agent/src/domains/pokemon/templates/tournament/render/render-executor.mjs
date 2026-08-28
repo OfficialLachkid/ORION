@@ -14,7 +14,7 @@ import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifact
 import {
   buildAudioFilterScript,
   buildAudioInputs,
-  buildShowdownCryCues,
+  buildTournamentCryCues,
 } from './audio-filter-script.mjs';
 import {
   applyNarrationDurationsToRenderPlan,
@@ -35,7 +35,7 @@ export async function renderPokeQuizzVideo({
 }) {
   let renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath });
   const outputAbsolutePath = resolve(projectRoot, outputPath);
-  const slugBase = `${slugify(plan.template_key || 'showdown')}-${slugify(plan.selection.mode || 'single-elimination-bracket')}-${slugify(plan.seed)}`;
+  const slugBase = `${slugify(plan.template_key || 'tournament')}-${slugify(plan.selection.mode || 'single-elimination-bracket')}-${slugify(plan.seed)}`;
   const audioMixPath = resolve(runtimeRoot, `${slugBase}-audio.m4a`);
   const filterScriptPath = resolve(runtimeRoot, `${slugBase}-video.filters.txt`);
   const audioFilterScriptPath = resolve(runtimeRoot, `${slugBase}-audio.filters.txt`);
@@ -57,7 +57,7 @@ export async function renderPokeQuizzVideo({
   const bracketProgressPath = plan.assets.audio.selected_sound_effects?.bracket_progress || null;
   const winnerRevealPath = plan.assets.audio.selected_sound_effects?.winner_reveal || null;
   const disappearPath = plan.assets.audio.selected_sound_effects?.disappear || null;
-  const cryCues = buildShowdownCryCues(plan, renderPlan);
+  const cryCues = buildTournamentCryCues(plan, renderPlan);
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),

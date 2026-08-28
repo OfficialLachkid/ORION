@@ -163,7 +163,7 @@ function buildScoreCard(subject, opponent, weights, randomFn) {
   };
 }
 
-export function resolveShowdownBattle({
+export function resolveTournamentBattle({
   left,
   right,
   weights = {},

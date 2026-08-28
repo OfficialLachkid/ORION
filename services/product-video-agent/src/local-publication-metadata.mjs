@@ -67,8 +67,13 @@ function resolveTemplateFlavor(plan = {}) {
   if (templateKey.includes('find-the-shiny') || templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
   }
-  if (templateKey.includes('showdown') || templateId.includes('showdown')) {
-    return 'showdown';
+  if (
+    templateKey.includes('tournament')
+    || templateId.includes('tournament')
+    || templateKey.includes('showdown')
+    || templateId.includes('showdown')
+  ) {
+    return 'tournament';
   }
   if (templateKey.includes('know-your-shiny') || templateId.includes('know-your-shiny')) {
     return 'know-your-shiny';
@@ -103,10 +108,10 @@ const DEFAULT_KNOW_YOUR_SHINY_TITLE_BUILDERS = Object.freeze([
   () => 'Spot the real shiny Pokemon',
 ]);
 
-const DEFAULT_SHOWDOWN_TITLE_BUILDERS = Object.freeze([
-  () => 'Pokemon Showdown Bracket',
-  () => 'Who wins this Pokemon showdown?',
-  () => 'Pokemon bracket battle',
+const DEFAULT_TOURNAMENT_TITLE_BUILDERS = Object.freeze([
+  () => 'Pokemon Tournament Bracket',
+  () => 'Who wins this Pokemon tournament?',
+  () => 'Pokemon bracket tournament',
 ]);
 
 const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([
@@ -186,12 +191,12 @@ function buildTemplateAwareDefaultTitle(plan) {
       : 0;
     return DEFAULT_TYPE_QUIZ_TITLE_BUILDERS[templateIndex]();
   }
-  if (flavor === 'showdown') {
+  if (flavor === 'tournament') {
     const seed = String(plan?.seed || '').trim();
     const templateIndex = seed
-      ? hashSeed(`${seed}|showdown`) % DEFAULT_SHOWDOWN_TITLE_BUILDERS.length
+      ? hashSeed(`${seed}|tournament`) % DEFAULT_TOURNAMENT_TITLE_BUILDERS.length
       : 0;
-    return DEFAULT_SHOWDOWN_TITLE_BUILDERS[templateIndex]();
+    return DEFAULT_TOURNAMENT_TITLE_BUILDERS[templateIndex]();
   }
   if (flavor === 'know-your-shiny') {
     const seed = String(plan?.seed || '').trim();
@@ -221,7 +226,7 @@ function buildTemplateAwareDefaultDescription(plan) {
     const subjectCount = selectedSubjects.length || Number(plan?.selection?.round_count || 0) || 5;
     return `Can you get ${subjectCount}/${subjectCount}? Watch each Pokemon, beat the timer, and lock in its type before the reveal.`;
   }
-  if (flavor === 'showdown') {
+  if (flavor === 'tournament') {
     const participantCount = Number(plan?.selection?.participant_count || 0) || 4;
     return `${participantCount} Pokemon enter the bracket, but only one becomes champion. Who do you think wins each battle?`;
   }
@@ -275,11 +280,11 @@ function buildTemplateAwareMetadataPrompt(plan) {
       'Return JSON only.',
     ].join('\n');
   }
-  if (flavor === 'showdown') {
+  if (flavor === 'tournament') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     const championName = String(plan?.tournament?.champion?.name || '').trim();
     return [
-      'Write YouTube Shorts publication metadata as JSON for a Pokemon showdown bracket video.',
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon tournament bracket video.',
       `Participant count: ${selectedSubjects.length || Number(plan?.selection?.participant_count || 0) || 4}`,
       `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
       `Champion: ${championName}`,
@@ -356,10 +361,10 @@ function buildTemplateAwareHashtags(plan) {
       'shorts',
     ]);
   }
-  if (flavor === 'showdown') {
+  if (flavor === 'tournament') {
     return normalizeHashtags([
       'pokemon',
-      'pokemonshowdown',
+      'pokemontournament',
       'pokemonbattle',
       'bracketbattle',
       'shorts',

@@ -14,8 +14,8 @@ export const PRODUCT_VIDEO_TEMPLATE_OPTIONS = Object.freeze([
     value: 'know-your-shiny',
   }),
   Object.freeze({
-    name: 'Showdown',
-    value: 'showdown',
+    name: 'Tournament',
+    value: 'tournament',
   }),
   Object.freeze({
     name: 'Memory',
@@ -51,7 +51,7 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/poke-quizz-find-the-shiny-youtube.json',
     'know-your-shiny': 'services/product-video-agent/config/channels/poke-quizz-know-your-shiny-youtube.json',
-    showdown: 'services/product-video-agent/config/channels/poke-quizz-showdown-youtube.json',
+    tournament: 'services/product-video-agent/config/channels/poke-quizz-tournament-youtube.json',
     memory: 'services/product-video-agent/config/channels/poke-quizz-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json',
   }),
@@ -59,7 +59,7 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/trivamon-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
     'know-your-shiny': 'services/product-video-agent/config/channels/trivamon-know-your-shiny-youtube.json',
-    showdown: 'services/product-video-agent/config/channels/trivamon-showdown-youtube.json',
+    tournament: 'services/product-video-agent/config/channels/trivamon-tournament-youtube.json',
     memory: 'services/product-video-agent/config/channels/trivamon-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json',
   }),
@@ -67,7 +67,7 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/poke-guess-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/poke-guess-find-the-shiny-youtube.json',
     'know-your-shiny': 'services/product-video-agent/config/channels/poke-guess-know-your-shiny-youtube.json',
-    showdown: 'services/product-video-agent/config/channels/poke-guess-showdown-youtube.json',
+    tournament: 'services/product-video-agent/config/channels/poke-guess-tournament-youtube.json',
     memory: 'services/product-video-agent/config/channels/poke-guess-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
   }),
@@ -75,7 +75,7 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/dexguess-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/dexguess-find-the-shiny-youtube.json',
     'know-your-shiny': 'services/product-video-agent/config/channels/dexguess-know-your-shiny-youtube.json',
-    showdown: 'services/product-video-agent/config/channels/dexguess-showdown-youtube.json',
+    tournament: 'services/product-video-agent/config/channels/dexguess-tournament-youtube.json',
     memory: 'services/product-video-agent/config/channels/dexguess-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/dexguess-type-speed-quiz-youtube.json',
   }),
@@ -89,8 +89,13 @@ function normalizeKey(value) {
   return normalizeWhitespace(value).toLowerCase();
 }
 
-function findOption(options, value) {
-  const normalizedValue = normalizeKey(value);
+function normalizeTemplateOptionValue(value) {
+  const normalized = normalizeKey(value);
+  return normalized === 'showdown' ? 'tournament' : normalized;
+}
+
+function findOption(options, value, normalizer = normalizeKey) {
+  const normalizedValue = normalizer(value);
   return options.find((option) => option.value === normalizedValue) || null;
 }
 
@@ -111,7 +116,11 @@ export function parseProductVideoCommand(content) {
     return null;
   }
 
-  const templateOption = findOption(PRODUCT_VIDEO_TEMPLATE_OPTIONS, match[1]);
+  const templateOption = findOption(
+    PRODUCT_VIDEO_TEMPLATE_OPTIONS,
+    match[1],
+    normalizeTemplateOptionValue,
+  );
   const channelOption = findOption(PRODUCT_VIDEO_CHANNEL_OPTIONS, match[2]);
   if (!templateOption || !channelOption) {
     return null;

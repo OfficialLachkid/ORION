@@ -71,8 +71,8 @@ for (const { templatePath, expectedGenreLabel } of [
     expectedGenreLabel: 'Find the Shiny',
   },
   {
-    templatePath: 'services/product-video-agent/config/templates/pokemon/showdown.v1.json',
-    expectedGenreLabel: 'Showdown',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/tournament.v1.json',
+    expectedGenreLabel: 'Tournament',
   },
   {
     templatePath: 'services/product-video-agent/config/templates/pokemon/know-your-shiny.v1.json',
@@ -194,12 +194,12 @@ for (const {
   genreLabel,
 } of [
   {
-    label: 'DexGuess Showdown',
-    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-showdown-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/showdown.v1.json',
-    templateId: 'pokemon.showdown.v1',
+    label: 'DexGuess Tournament',
+    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-tournament-youtube.json',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/tournament.v1.json',
+    templateId: 'pokemon.tournament.v1',
     channelSelector: 'dexguess-youtube',
-    genreLabel: 'Showdown',
+    genreLabel: 'Tournament',
   },
   {
     label: 'Poke Quizz Memory',
