@@ -191,6 +191,10 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
   );
   const interRoundBracketHoldSeconds = roundTime(ensureNumber(rounds.inter_round_bracket_hold_seconds, 0.08));
   const postProgressHoldSeconds = roundTime(ensureNumber(rounds.post_progress_hold_seconds, 0.3));
+  const finalBracketProgressDurationSeconds = roundTime(Math.max(
+    0.08,
+    ensureNumber(template?.renderer?.final_bracket_progress_duration_seconds, interRoundBracketHoldSeconds),
+  ));
   const matchIntroHoldSeconds = roundTime(ensureNumber(rounds.match_intro_hold_seconds, 1.8));
   const suspenseHoldSeconds = roundTime(ensureNumber(rounds.suspense_hold_seconds, 0.9));
   const revealHoldSeconds = roundTime(ensureNumber(rounds.reveal_hold_seconds, 1.2));
@@ -246,7 +250,7 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
     const bracketProgressEnd = roundTime(Math.max(
       match.scene_end_seconds + 0.08,
       nextIntroStart - (index === renderedMatches.length - 1
-        ? 0
+        ? Math.max(0, interRoundBracketHoldSeconds - finalBracketProgressDurationSeconds)
         : (nextTransitionLeadSeconds + postProgressHoldSeconds)),
     ));
     return {

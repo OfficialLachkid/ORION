@@ -26,6 +26,9 @@
     "generation_scope": [],
     "participant_count": 4,
     "mode": "single_elimination_bracket",
+    "sampling_attempts": 240,
+    "max_base_stat_total_spread": 180,
+    "max_matchup_base_stat_total_delta": 110,
     "require_truth_fields": [
       "national_dex_number",
       "name",
@@ -41,6 +44,41 @@
       "types",
       "sprite_path"
     ],
+    "pool_variants": [
+      {
+        "key": "legendary_only",
+        "label": "Legendary Only",
+        "selector": "legendary_only",
+        "weight": 1,
+        "max_base_stat_total_spread": 100,
+        "max_matchup_base_stat_total_delta": 90
+      },
+      {
+        "key": "final_evolution_only",
+        "label": "Final Evolution Only",
+        "selector": "final_evolution_only",
+        "weight": 2,
+        "max_base_stat_total_spread": 180,
+        "max_matchup_base_stat_total_delta": 110
+      },
+      {
+        "key": "baby_only",
+        "label": "Baby Pokemon",
+        "selector": "first_stage_only",
+        "weight": 1,
+        "max_base_stat_total_spread": 120,
+        "max_matchup_base_stat_total_delta": 90
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "selector": "power_mix",
+        "weight": 2,
+        "strong_final_evolution_min_base_stat_total": 500,
+        "max_base_stat_total_spread": 150,
+        "max_matchup_base_stat_total_delta": 95
+      }
+    ],
     "battle_weights": {
       "base_stat_total": 0.06,
       "hp": 0.18,
@@ -55,10 +93,9 @@
     }
   },
   "question_contract": {
-    "hook_text": "Who wins this showdown?",
+    "hook_text": "Who wins the tournament?",
     "hook_text_variants": [
-      "Who wins this showdown?",
-      "Who takes this Pokemon showdown?"
+      "Who wins the tournament?"
     ],
     "matchup_text": "{pokemon_a} vs {pokemon_b}",
     "matchup_text_variants": [
@@ -196,6 +233,8 @@
     "intro_bracket_final_connector_seconds": 1.3,
     "intro_bracket_champion_slot_seconds": 0.18,
     "battle_disappear_duration_seconds": 0.42,
+    "final_bracket_progress_duration_seconds": 2,
+    "stat_row_stagger_seconds": 0.3,
     "winner_scale_multiplier": 1.05,
     "loser_alpha_multiplier": 0.46,
     "winner_banner_fade_seconds": 0.16,

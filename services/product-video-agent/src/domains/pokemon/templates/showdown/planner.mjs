@@ -53,6 +53,131 @@ function normalizeSlug(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function readSubjectMetadataValue(subject, keys = []) {
+  const metadata = subject?.metadata && typeof subject.metadata === 'object'
+    ? subject.metadata
+    : {};
+  for (const key of keys) {
+    if (subject?.[key] !== undefined) {
+      return subject[key];
+    }
+    if (metadata[key] !== undefined) {
+      return metadata[key];
+    }
+  }
+  return undefined;
+}
+
+function readSubjectPokemonApiMetadata(subject, key) {
+  const pokemonApi = subject?.metadata?.pokemon_api && typeof subject.metadata.pokemon_api === 'object'
+    ? subject.metadata.pokemon_api
+    : {};
+  return pokemonApi[key];
+}
+
+function isTruthyMetadataFlag(value) {
+  if (value === true) return true;
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function estimateCombatantBaseStatTotal(subject) {
+  if (Number.isFinite(Number(subject?.base_stat_total))) {
+    return Number(subject.base_stat_total);
+  }
+  return sumBaseStats(normalizeBaseStats(subject?.metadata?.base_stats || subject?.base_stats || {}));
+}
+
+function resolveEvolutionStageToken(subject) {
+  return String(readSubjectMetadataValue(subject, [
+    'evolution_stage',
+    'evolutionStage',
+  ]) || '').trim().toLowerCase();
+}
+
+function isLegendaryLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
+    'is_legendary',
+    'legendary',
+    'isLegendary',
+    'is_mythical',
+    'mythical',
+    'isMythical',
+  ]))) {
+    return true;
+  }
+  const classification = String(readSubjectMetadataValue(subject, [
+    'classification',
+    'category',
+  ]) || '').trim().toLowerCase();
+  return classification === 'legendary' || classification === 'mythical';
+}
+
+function isFinalEvolutionLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
+    'is_final_evolution',
+    'final_evolution',
+    'isFinalEvolution',
+    'is_fully_evolved',
+    'fully_evolved',
+    'isFullyEvolved',
+  ]))) {
+    return true;
+  }
+  const evolutionStage = resolveEvolutionStageToken(subject);
+  return evolutionStage === 'final' || evolutionStage === 'fully_evolved';
+}
+
+function isFirstStageLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
+    'is_baby',
+    'baby',
+    'isBaby',
+  ]))) {
+    return true;
+  }
+  const evolutionStage = resolveEvolutionStageToken(subject);
+  if ([
+    'baby',
+    'basic',
+    'base',
+    'first',
+    'first_stage',
+    'stage_1',
+    'initial',
+    'unevolved',
+  ].includes(evolutionStage)) {
+    return true;
+  }
+  const evolutionPosition = Number(
+    readSubjectMetadataValue(subject, [
+      'evolution_chain_position',
+      'evolutionChainPosition',
+      'evolution_position',
+      'evolutionPosition',
+      'stage_index',
+      'stageIndex',
+    ])
+      ?? readSubjectPokemonApiMetadata(subject, 'evolution_chain_position')
+      ?? NaN,
+  );
+  return Number.isFinite(evolutionPosition) && evolutionPosition === 1;
+}
+
+function isPseudoLegendaryLikeSubject(subject) {
+  if (isLegendaryLikeSubject(subject) || !isFinalEvolutionLikeSubject(subject)) {
+    return false;
+  }
+  const baseStatTotal = estimateCombatantBaseStatTotal(subject);
+  return baseStatTotal >= 600 && baseStatTotal < 630;
+}
+
+function isStrongFinalEvolutionLikeSubject(subject, minimumBaseStatTotal = 500) {
+  return !isLegendaryLikeSubject(subject)
+    && isFinalEvolutionLikeSubject(subject)
+    && estimateCombatantBaseStatTotal(subject) >= minimumBaseStatTotal;
+}
+
 async function canAccessPath(filePath) {
   const normalizedPath = String(filePath || '').trim();
   if (!normalizedPath) {
@@ -267,6 +392,175 @@ function collapseDuplicateCombatants(subjects = []) {
   return unique;
 }
 
+function resolveShowdownPoolVariants(template = {}) {
+  const configuredVariants = Array.isArray(template?.selection_rules?.pool_variants)
+    ? template.selection_rules.pool_variants
+    : [];
+  return configuredVariants
+    .map((variant, index) => ({
+      key: String(variant?.key || `pool-${index + 1}`).trim().toLowerCase(),
+      label: String(variant?.label || variant?.key || `Pool ${index + 1}`).trim(),
+      selector: String(variant?.selector || variant?.key || 'all').trim().toLowerCase(),
+      weight: Math.max(1, Number(variant?.weight) || 1),
+      max_base_stat_total_spread: Number.isFinite(Number(variant?.max_base_stat_total_spread))
+        ? Number(variant.max_base_stat_total_spread)
+        : null,
+      max_matchup_base_stat_total_delta: Number.isFinite(Number(variant?.max_matchup_base_stat_total_delta))
+        ? Number(variant.max_matchup_base_stat_total_delta)
+        : null,
+      strong_final_evolution_min_base_stat_total: Number.isFinite(Number(variant?.strong_final_evolution_min_base_stat_total))
+        ? Number(variant.strong_final_evolution_min_base_stat_total)
+        : 500,
+    }))
+    .filter((variant) => variant.key);
+}
+
+function filterCombatantsForShowdownPool(subjects = [], pool = {}, template = {}) {
+  const selector = String(pool?.selector || 'all').trim().toLowerCase();
+  const minimumStrongFinalBaseStatTotal = Number.isFinite(Number(pool?.strong_final_evolution_min_base_stat_total))
+    ? Number(pool.strong_final_evolution_min_base_stat_total)
+    : Number.isFinite(Number(template?.selection_rules?.strong_final_evolution_min_base_stat_total))
+      ? Number(template.selection_rules.strong_final_evolution_min_base_stat_total)
+      : 500;
+  switch (selector) {
+    case 'legendary_only':
+      return subjects.filter((subject) => isLegendaryLikeSubject(subject));
+    case 'final_evolution_only':
+      return subjects.filter((subject) => !isLegendaryLikeSubject(subject) && isFinalEvolutionLikeSubject(subject));
+    case 'first_stage_only':
+    case 'baby_only':
+      return subjects.filter((subject) => !isLegendaryLikeSubject(subject) && isFirstStageLikeSubject(subject));
+    case 'power_mix':
+    case 'mix':
+      return subjects.filter((subject) => (
+        isLegendaryLikeSubject(subject)
+        || isPseudoLegendaryLikeSubject(subject)
+        || isStrongFinalEvolutionLikeSubject(subject, minimumStrongFinalBaseStatTotal)
+      ));
+    case 'all':
+    default:
+      return [...subjects];
+  }
+}
+
+function selectWeightedShowdownPool(pools = [], random = Math.random) {
+  const availablePools = (Array.isArray(pools) ? pools : []).filter((pool) => (pool?.subjects?.length || 0) > 0);
+  if (availablePools.length === 0) {
+    return null;
+  }
+  const totalWeight = availablePools.reduce((sum, pool) => sum + Math.max(1, Number(pool.weight) || 1), 0);
+  let cursor = random() * totalWeight;
+  for (const pool of availablePools) {
+    cursor -= Math.max(1, Number(pool.weight) || 1);
+    if (cursor <= 0) {
+      return pool;
+    }
+  }
+  return availablePools.at(-1) || null;
+}
+
+function resolveShowdownBalanceConfig(template = {}, pool = {}) {
+  const selectionRules = template?.selection_rules || {};
+  const maxSpread = Number(pool?.max_base_stat_total_spread ?? selectionRules.max_base_stat_total_spread);
+  const maxPairDelta = Number(pool?.max_matchup_base_stat_total_delta ?? selectionRules.max_matchup_base_stat_total_delta);
+  return {
+    max_base_stat_total_spread: Number.isFinite(maxSpread) && maxSpread > 0 ? maxSpread : Number.POSITIVE_INFINITY,
+    max_matchup_base_stat_total_delta: Number.isFinite(maxPairDelta) && maxPairDelta > 0 ? maxPairDelta : Number.POSITIVE_INFINITY,
+    sampling_attempts: Math.max(24, ensurePositiveInteger(
+      pool?.sampling_attempts ?? selectionRules.sampling_attempts,
+      160,
+    )),
+  };
+}
+
+function buildBalancedBracketOrder(subjects = [], random = Math.random) {
+  const sorted = [...subjects].sort((left, right) => (
+    estimateCombatantBaseStatTotal(left) - estimateCombatantBaseStatTotal(right)
+  ));
+  const pairs = [];
+  for (let index = 0; index < sorted.length; index += 2) {
+    const pair = sorted.slice(index, index + 2);
+    if (pair.length === 0) {
+      continue;
+    }
+    if (pair.length === 2 && random() >= 0.5) {
+      pair.reverse();
+    }
+    pairs.push(pair);
+  }
+  const orderedPairs = shuffle(pairs, random);
+  return orderedPairs.flat();
+}
+
+function evaluateBalancedBracketOrder(subjects = []) {
+  const baseStatTotals = subjects.map((subject) => estimateCombatantBaseStatTotal(subject));
+  const spread = baseStatTotals.length > 0
+    ? Math.max(...baseStatTotals) - Math.min(...baseStatTotals)
+    : 0;
+  const pairDeltas = [];
+  for (let index = 0; index < subjects.length - 1; index += 2) {
+    pairDeltas.push(Math.abs(
+      estimateCombatantBaseStatTotal(subjects[index])
+      - estimateCombatantBaseStatTotal(subjects[index + 1]),
+    ));
+  }
+  const maxPairDelta = pairDeltas.length > 0 ? Math.max(...pairDeltas) : 0;
+  const totalPairDelta = pairDeltas.reduce((sum, value) => sum + value, 0);
+  return {
+    spread,
+    maxPairDelta,
+    totalPairDelta,
+  };
+}
+
+function selectBalancedCombatants(subjects = [], participantCount, template = {}, pool = {}, random = Math.random) {
+  if (!Array.isArray(subjects) || subjects.length <= participantCount) {
+    const fallbackSelection = buildBalancedBracketOrder(
+      [...subjects].slice(0, participantCount),
+      random,
+    );
+    return {
+      selected_subjects: fallbackSelection,
+      metrics: evaluateBalancedBracketOrder(fallbackSelection),
+    };
+  }
+  const balanceConfig = resolveShowdownBalanceConfig(template, pool);
+  let bestSelection = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let attempt = 0; attempt < balanceConfig.sampling_attempts; attempt += 1) {
+    const sample = shuffle(subjects, random).slice(0, participantCount);
+    const orderedSample = buildBalancedBracketOrder(sample, random);
+    const metrics = evaluateBalancedBracketOrder(orderedSample);
+    const spreadPenalty = Math.max(0, metrics.spread - balanceConfig.max_base_stat_total_spread);
+    const pairPenalty = Math.max(0, metrics.maxPairDelta - balanceConfig.max_matchup_base_stat_total_delta);
+    const score = (spreadPenalty * 1000) + (pairPenalty * 100) + metrics.totalPairDelta + (metrics.spread * 0.01);
+    if (
+      metrics.spread <= balanceConfig.max_base_stat_total_spread
+      && metrics.maxPairDelta <= balanceConfig.max_matchup_base_stat_total_delta
+    ) {
+      return {
+        selected_subjects: orderedSample,
+        metrics,
+      };
+    }
+    if (score < bestScore) {
+      bestScore = score;
+      bestSelection = {
+        selected_subjects: orderedSample,
+        metrics,
+      };
+    }
+  }
+  const fallbackSelection = buildBalancedBracketOrder(
+    shuffle(subjects, random).slice(0, participantCount),
+    random,
+  );
+  return bestSelection || {
+    selected_subjects: fallbackSelection,
+    metrics: evaluateBalancedBracketOrder(fallbackSelection),
+  };
+}
+
 function selectBackground(backgrounds = [], random, selectionState = {}) {
   const usableBackgrounds = (Array.isArray(backgrounds) ? backgrounds : [])
     .map((value) => String(value || '').trim())
@@ -453,8 +747,28 @@ export async function planPokemonShowdownChallenge({
   if (eligibleCombatants.length < participantCount) {
     throw new Error(`Showdown requires at least ${participantCount} Pokemon with local sprites and base stats, found ${eligibleCombatants.length}.`);
   }
-
-  const selectedSubjects = shuffle(eligibleCombatants, random).slice(0, participantCount);
+  const configuredPools = resolveShowdownPoolVariants(template);
+  const availablePools = configuredPools
+    .map((pool) => ({
+      ...pool,
+      subjects: collapseDuplicateCombatants(filterCombatantsForShowdownPool(eligibleCombatants, pool, template)),
+    }))
+    .filter((pool) => pool.subjects.length >= participantCount);
+  const selectedPool = selectWeightedShowdownPool(availablePools, random) || {
+    key: 'all',
+    label: 'All Combatants',
+    selector: 'all',
+    weight: 1,
+    subjects: eligibleCombatants,
+  };
+  const balancedSelection = selectBalancedCombatants(
+    selectedPool.subjects,
+    participantCount,
+    template,
+    selectedPool,
+    random,
+  );
+  const selectedSubjects = balancedSelection.selected_subjects;
   const participants = await Promise.all(selectedSubjects.map(async (subject, index) => (
     buildParticipantRecord(
       subject,
@@ -586,6 +900,14 @@ export async function planPokemonShowdownChallenge({
       mode: String(template?.selection_rules?.mode || 'single_elimination_bracket').trim().toLowerCase() || 'single_elimination_bracket',
       participant_count: participants.length,
       round_count: matches.length,
+      pool_key: selectedPool.key,
+      pool_label: selectedPool.label,
+      pool_selector: selectedPool.selector,
+      balance: {
+        base_stat_total_spread: balancedSelection.metrics?.spread ?? null,
+        max_matchup_base_stat_total_delta: balancedSelection.metrics?.maxPairDelta ?? null,
+        total_pair_delta: balancedSelection.metrics?.totalPairDelta ?? null,
+      },
       selected_subject_count: participants.length,
       selected_subjects: participants.map((participant) => ({
         pokedex_id: participant.pokedex_id,
@@ -594,6 +916,7 @@ export async function planPokemonShowdownChallenge({
         generation: participant.generation,
         region: participant.region,
         types: participant.types,
+        base_stat_total: participant.base_stat_total,
       })),
     },
     tournament: {

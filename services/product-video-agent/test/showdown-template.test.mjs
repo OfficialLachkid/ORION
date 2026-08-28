@@ -217,6 +217,73 @@ const assetInventory = {
   },
 };
 
+const legendaryPoolRows = [
+  {
+    id: 'pokedex-0144',
+    national_dex_number: 144,
+    name: 'Articuno',
+    slug: 'articuno',
+    generation: 1,
+    region: 'kanto',
+    types: ['ice', 'flying'],
+    sprite_path: '/tmp/articuno.png',
+    animated_sprite_path: '/tmp/articuno.gif',
+    cry_path: '/tmp/0144.ogg',
+    metadata: {
+      is_legendary: true,
+      base_stats: { hp: 90, attack: 85, defense: 100, special_attack: 95, special_defense: 125, speed: 85 },
+    },
+  },
+  {
+    id: 'pokedex-0145',
+    national_dex_number: 145,
+    name: 'Zapdos',
+    slug: 'zapdos',
+    generation: 1,
+    region: 'kanto',
+    types: ['electric', 'flying'],
+    sprite_path: '/tmp/zapdos.png',
+    animated_sprite_path: '/tmp/zapdos.gif',
+    cry_path: '/tmp/0145.ogg',
+    metadata: {
+      is_legendary: true,
+      base_stats: { hp: 90, attack: 90, defense: 85, special_attack: 125, special_defense: 90, speed: 100 },
+    },
+  },
+  {
+    id: 'pokedex-0146',
+    national_dex_number: 146,
+    name: 'Moltres',
+    slug: 'moltres',
+    generation: 1,
+    region: 'kanto',
+    types: ['fire', 'flying'],
+    sprite_path: '/tmp/moltres.png',
+    animated_sprite_path: '/tmp/moltres.gif',
+    cry_path: '/tmp/0146.ogg',
+    metadata: {
+      is_legendary: true,
+      base_stats: { hp: 90, attack: 100, defense: 90, special_attack: 125, special_defense: 85, speed: 90 },
+    },
+  },
+  {
+    id: 'pokedex-0151',
+    national_dex_number: 151,
+    name: 'Mew',
+    slug: 'mew',
+    generation: 1,
+    region: 'kanto',
+    types: ['psychic'],
+    sprite_path: '/tmp/mew.png',
+    animated_sprite_path: '/tmp/mew.gif',
+    cry_path: '/tmp/0151.ogg',
+    metadata: {
+      is_mythical: true,
+      base_stats: { hp: 100, attack: 100, defense: 100, special_attack: 100, special_defense: 100, speed: 100 },
+    },
+  },
+];
+
 test('generic planner dispatch builds a four-participant showdown bracket', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
@@ -241,6 +308,37 @@ test('generic planner dispatch builds a four-participant showdown bracket', asyn
   assert.equal(plan.assets.audio.selected_sound_effects.disappear, '/tmp/disappear-sound.mp3');
   assert.equal(plan.required_asset_gaps.length, 0);
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Showdown$/u);
+});
+
+test('showdown planner can restrict selection to a seeded legendary-only pool', async () => {
+  const legendaryPoolTemplate = JSON.parse(JSON.stringify(template));
+  legendaryPoolTemplate.selection_rules.generation_scope = [];
+  legendaryPoolTemplate.selection_rules.pool_variants = [
+    {
+      key: 'legendary_only',
+      label: 'Legendary Only',
+      selector: 'legendary_only',
+      weight: 1,
+      max_base_stat_total_spread: 40,
+      max_matchup_base_stat_total_delta: 20,
+    },
+  ];
+
+  const plan = await planPokemonTypeChallenge({
+    template: legendaryPoolTemplate,
+    pokedexRows: [...pokedexRows, ...legendaryPoolRows],
+    seed: 'showdown-legendary-pool',
+    assetInventory,
+  });
+
+  assert.equal(plan.selection.pool_key, 'legendary_only');
+  assert.equal(plan.selection.pool_label, 'Legendary Only');
+  assert.equal(plan.selection.participant_count, 4);
+  assert.equal(plan.tournament.participants.every((participant) => (
+    participant.metadata.is_legendary || participant.metadata.is_mythical
+  )), true);
+  assert.ok((plan.selection.balance.base_stat_total_spread ?? 999) <= 40);
+  assert.ok((plan.selection.balance.max_matchup_base_stat_total_delta ?? 999) <= 20);
 });
 
 test('showdown render plan and inputs stay deterministic for a four-Pokemon bracket', async () => {

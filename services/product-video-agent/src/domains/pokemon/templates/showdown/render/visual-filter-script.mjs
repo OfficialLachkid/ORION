@@ -107,6 +107,7 @@ function buildAnimatedVerticalConnectorSegment(x, startY, endY, thickness, start
 function buildSteppedHorizontalFillBoxes({
   x,
   y,
+  yExpression = null,
   width,
   height,
   color,
@@ -117,6 +118,7 @@ function buildSteppedHorizontalFillBoxes({
 }) {
   const safeX = round(x);
   const safeY = round(y);
+  const resolvedY = String(yExpression || safeY).trim() || `${safeY}`;
   const safeWidth = Math.max(1, round(width));
   const safeHeight = Math.max(1, round(height));
   const duration = Math.max(0.01, ensureNumber(endSeconds, startSeconds + 0.01) - ensureNumber(startSeconds, 0));
@@ -135,7 +137,7 @@ function buildSteppedHorizontalFillBoxes({
       `gte(t,${segmentStartSeconds})`,
     );
     filters.push(
-      `drawbox=x=${segmentStartX}:y=${safeY}:w=${segmentWidth}:h=${safeHeight}:color=${color}:t=fill:enable='${enableExpression}'`,
+      `drawbox=x=${segmentStartX}:y='${resolvedY}':w=${segmentWidth}:h=${safeHeight}:color=${color}:t=fill:enable='${enableExpression}'`,
     );
   }
 
@@ -766,11 +768,10 @@ function buildBattleStatsLayout(battleStage) {
   };
 }
 
-function buildBattleStatsFilters({ match, battleStage, fontPart }) {
+function buildBattleStatsFilters({ match, battleStage, fontPart, template }) {
   const layout = buildBattleStatsLayout(battleStage);
-  const enableExpression = formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds);
-  const rowLeadInSeconds = 0.16;
-  const rowStaggerSeconds = 0.18;
+  const rowLeadInSeconds = Math.max(0, ensureNumber(template?.renderer?.stat_row_lead_in_seconds, 0.16));
+  const rowStaggerSeconds = Math.max(0.05, ensureNumber(template?.renderer?.stat_row_stagger_seconds, 0.3));
   const rowFillDurationSeconds = 0.66;
   const rowValueCountDurationSeconds = 1;
   const statSources = [
@@ -785,24 +786,30 @@ function buildBattleStatsFilters({ match, battleStage, fontPart }) {
       const rowStartSeconds = round((match.intro_start_seconds + rowLeadInSeconds + (rowIndex * rowStaggerSeconds)) * 1000) / 1000;
       const rowEndSeconds = round((rowStartSeconds + rowFillDurationSeconds) * 1000) / 1000;
       const valueCountExpression = `%{eif\\:clip((t-${rowStartSeconds})/${rowValueCountDurationSeconds}\\,0\\,1)*${value}\\:d}`;
+      const rowEnableExpression = formatEnableBetween(rowStartSeconds, match.scene_end_seconds);
+      const rowAlphaExpression = buildAnimatedTextSegmentAlphaExpression(rowStartSeconds, match.scene_end_seconds);
+      const rowYExpression = buildAnimatedTextYExpression(y, rowStartSeconds);
+      const rowTextYExpression = buildAnimatedTextYExpression(y + 3, rowStartSeconds);
+      const rowTrackYExpression = buildAnimatedTextYExpression(y + 4, rowStartSeconds);
       const barTrackX = x + layout.barX;
       const valueX = x + layout.labelWidth + 8;
       return [
-        `drawbox=x=${x}:y=${y}:w=${layout.panelWidth}:h=${layout.rowHeight}:color=${row.background}@0.88:t=fill:enable='${enableExpression}'`,
-        `drawbox=x=${barTrackX}:y=${y + 4}:w=${layout.barWidth}:h=${layout.rowHeight - 8}:color=0x101010@0.32:t=fill:enable='${enableExpression}'`,
+        `drawbox=x=${x}:y='${rowYExpression}':w=${layout.panelWidth}:h=${layout.rowHeight}:color=${row.background}@0.88:t=fill:enable='${rowEnableExpression}'`,
+        `drawbox=x=${barTrackX}:y='${rowTrackYExpression}':w=${layout.barWidth}:h=${layout.rowHeight - 8}:color=0x101010@0.32:t=fill:enable='${rowEnableExpression}'`,
         ...buildSteppedHorizontalFillBoxes({
           x: barTrackX,
           y: y + 4,
+          yExpression: rowTrackYExpression,
           width: fillWidth,
           height: layout.rowHeight - 8,
           color: `${row.color}@0.95`,
           startSeconds: rowStartSeconds,
           endSeconds: rowEndSeconds,
-          baseEnableExpression: enableExpression,
+          baseEnableExpression: rowEnableExpression,
           segmentWidthPx: 6,
         }),
-        `drawtext=text='${escapeDrawtextText(`${row.label}:`)}'${fontPart}:fontcolor=black:fontsize=${layout.labelFontSize}:borderw=0:fix_bounds=1:x=${x + 10}:y=${y + 3}:enable='${enableExpression}'`,
-        `drawtext=text='${valueCountExpression}'${fontPart}:fontcolor=black:fontsize=${layout.valueFontSize}:borderw=0:fix_bounds=1:x=${valueX}:y=${y + 3}:enable='${enableExpression}'`,
+        `drawtext=text='${escapeDrawtextText(`${row.label}:`)}'${fontPart}:fontcolor=black:fontsize=${layout.labelFontSize}:borderw=0:fix_bounds=1:x=${x + 10}:y='${rowTextYExpression}':alpha='${rowAlphaExpression}':enable='${rowEnableExpression}'`,
+        `drawtext=text='${valueCountExpression}'${fontPart}:fontcolor=black:fontsize=${layout.valueFontSize}:borderw=0:fix_bounds=1:x=${valueX}:y='${rowTextYExpression}':alpha='${rowAlphaExpression}':enable='${rowEnableExpression}'`,
       ];
     })
   ));
@@ -1419,6 +1426,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         match,
         battleStage: renderPlan.battle_stage,
         fontPart,
+        template,
       }),
       `drawtext=text='${escapeDrawtextText(match.participant_a.display_name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.battle_stage.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.battle_stage.left_center_x}-text_w/2:y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
       `drawtext=text='${escapeDrawtextText(match.participant_b.display_name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.battle_stage.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.battle_stage.right_center_x}-text_w/2:y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
