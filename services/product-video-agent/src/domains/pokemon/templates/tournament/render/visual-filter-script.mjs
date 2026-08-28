@@ -23,9 +23,7 @@ const TOURNAMENT_STAT_ROWS = Object.freeze([
   { key: 'speed', label: 'Speed', color: '0xFF58A8', background: '0x311625' },
 ]);
 const TOURNAMENT_SOURCE_SLOT_KEYS = Object.freeze(['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b']);
-const TOURNAMENT_CARD_MIN_SCALE = 0.01;
-const TOURNAMENT_CARD_ANIMATION_STEPS = 7;
-const TOURNAMENT_CARD_POP_LEAD_FRACTION = 0.22;
+const TOURNAMENT_CARD_POP_SECONDS = 0.3;
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -45,43 +43,25 @@ function combineEnableExpressions(...expressions) {
   return parts.map((expression) => `(${expression})`).join('*');
 }
 
-function buildAnimatedCardStepFilters(slot, slotWindow, color, thickness, paddingPx = 0) {
+function buildAnimatedCardExpressions(slot, slotWindow, paddingPx = 0) {
   const safePadding = Math.max(0, round(paddingPx));
   const baseWidth = Math.max(1, slot.width - (safePadding * 2));
   const baseHeight = Math.max(1, slot.height - (safePadding * 2));
   const safeStart = ensureNumber(slotWindow?.start_seconds, 0);
   const safeEnd = Math.max(safeStart + 0.01, ensureNumber(slotWindow?.end_seconds, safeStart + 0.01));
-  const duration = Math.max(0.01, safeEnd - safeStart);
-  const animationStart = round(
-    Math.min(
-      safeEnd - 0.01,
-      safeStart + Math.max(0.04, duration * TOURNAMENT_CARD_POP_LEAD_FRACTION),
-    ) * 1000,
-  ) / 1000;
-  const animationDuration = Math.max(0.01, safeEnd - animationStart);
-  const stepCount = Math.max(2, TOURNAMENT_CARD_ANIMATION_STEPS);
-  const filters = [];
-
-  for (let index = 0; index < stepCount; index += 1) {
-    const stepStart = round((animationStart + ((animationDuration * index) / stepCount)) * 1000) / 1000;
-    const stepEnd = index === stepCount - 1
-      ? safeEnd
-      : round((animationStart + ((animationDuration * (index + 1)) / stepCount)) * 1000) / 1000;
-    const stepProgress = (index + 1) / stepCount;
-    const scale = TOURNAMENT_CARD_MIN_SCALE + ((1 - TOURNAMENT_CARD_MIN_SCALE) * stepProgress);
-    const width = Math.max(1, round(baseWidth * scale));
-    const height = Math.max(1, round(baseHeight * scale));
-    const x = round(slot.center_x - (width / 2));
-    const y = round(slot.center_y - (height / 2));
-    const enableExpression = index === stepCount - 1
-      ? `gte(t,${stepStart})`
-      : formatEnableBetween(stepStart, stepEnd);
-    filters.push(
-      `drawbox=x=${x}:y=${y}:w=${width}:h=${height}:color=${color}:t=${thickness}:enable='${enableExpression}'`,
-    );
-  }
-
-  return filters;
+  const popDuration = round((Math.min(TOURNAMENT_CARD_POP_SECONDS, safeEnd - safeStart)) * 1000) / 1000;
+  const safePopDuration = Math.max(0.01, popDuration);
+  const popEnd = round((safeStart + safePopDuration) * 1000) / 1000;
+  const scaleExpression = `if(lt(t,${safeStart}),0,if(lt(t,${popEnd}),(t-${safeStart})/${safePopDuration},1))`;
+  const widthExpression = `max(1,${baseWidth}*(${scaleExpression}))`;
+  const heightExpression = `max(1,${baseHeight}*(${scaleExpression}))`;
+  return {
+    x: `${slot.center_x}-(${widthExpression})/2`,
+    y: `${slot.center_y}-(${heightExpression})/2`,
+    width: widthExpression,
+    height: heightExpression,
+    enableExpression: `gte(t,${safeStart})`,
+  };
 }
 
 function buildCardFilters(bracketLayout, revealSchedule = {}) {
@@ -93,9 +73,11 @@ function buildCardFilters(bracketLayout, revealSchedule = {}) {
       : '';
     const enablePart = buildEnablePart(enableExpression);
     if (slotWindow) {
+      const outerExpressions = buildAnimatedCardExpressions(slot, slotWindow, 0);
+      const innerExpressions = buildAnimatedCardExpressions(slot, slotWindow, 3);
       return [
-        ...buildAnimatedCardStepFilters(slot, slotWindow, '0xFFFFFF@0.95', 3, 0),
-        ...buildAnimatedCardStepFilters(slot, slotWindow, '0x101010@0.32', 'fill', 3),
+        `drawbox=x='${outerExpressions.x}':y='${outerExpressions.y}':w='${outerExpressions.width}':h='${outerExpressions.height}':color=0xFFFFFF@0.95:t=3:enable='${outerExpressions.enableExpression}'`,
+        `drawbox=x='${innerExpressions.x}':y='${innerExpressions.y}':w='${innerExpressions.width}':h='${innerExpressions.height}':color=0x101010@0.32:t=fill:enable='${innerExpressions.enableExpression}'`,
       ];
     }
     return [
@@ -171,7 +153,7 @@ function buildSteppedHorizontalFillBoxes({
       `gte(t,${segmentStartSeconds})`,
     );
     filters.push(
-      `drawbox=x=${segmentStartX}:y='${resolvedY}':w=${segmentWidth}:h=${safeHeight}:color=${color}:t=fill:enable='${enableExpression}'`,
+      `drawbox=x=${segmentStartX}:y='${resolvedY}':w=${segmentWidth}:h=${safeHeight}:color=${color}:t=fill:replace=1:enable='${enableExpression}'`,
     );
   }
 
@@ -703,6 +685,13 @@ function resolveVersusLayout(template, battleStage) {
   };
 }
 
+function buildVersusRotationExpression(startSeconds, durationSeconds = 0.22) {
+  const safeStart = ensureNumber(startSeconds, 0);
+  const safeDuration = Math.max(0.08, ensureNumber(durationSeconds, 0.22));
+  const safeEnd = round((safeStart + safeDuration) * 1000) / 1000;
+  return `if(lt(t,${safeStart}),0,if(lt(t,${safeEnd}),(1-((t-${safeStart})/${safeDuration}))*PI*2,0))`;
+}
+
 function buildBracketProgressPath(slotMap, match) {
   const leftPairConnectorY = buildPairConnectorY(slotMap.semi_1_winner, slotMap.semi_1_a, slotMap.semi_1_b);
   const rightPairConnectorY = buildPairConnectorY(slotMap.semi_2_winner, slotMap.semi_2_a, slotMap.semi_2_b);
@@ -902,8 +891,8 @@ function appendBattleStatsFilters({
       const barTrackX = layout.barX;
       const valueX = layout.labelWidth + 8;
       panelFilters.push(
-        `drawbox=x=0:y='${rowYExpression}':w=${layout.panelWidth}:h=${layout.rowHeight}:color=${row.background}@0.94:t=fill:enable='${rowEnableExpression}'`,
-        `drawbox=x=${barTrackX}:y='${rowTrackYExpression}':w=${layout.barWidth}:h=${layout.rowHeight - 8}:color=0x0B1220@0.52:t=fill:enable='${rowEnableExpression}'`,
+        `drawbox=x=0:y='${rowYExpression}':w=${layout.panelWidth}:h=${layout.rowHeight}:color=${row.background}@0.94:t=fill:replace=1:enable='${rowEnableExpression}'`,
+        `drawbox=x=${barTrackX}:y='${rowTrackYExpression}':w=${layout.barWidth}:h=${layout.rowHeight - 8}:color=0x0B1220@0.52:t=fill:replace=1:enable='${rowEnableExpression}'`,
         ...buildSteppedHorizontalFillBoxes({
           x: barTrackX,
           y: y + 4,
@@ -1420,7 +1409,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const versusSourceLabel = `vversussrc${matchIndex}`;
       const versusSceneLabel = `vversus${matchIndex}`;
       filters.push(
-        `[${inputRefs.versus}:v]fps=${fps},scale=${versusLayout.width_px}:-1,format=rgba,setsar=1,fade=t=in:st=${match.intro_start_seconds}:d=0.18:alpha=1[${versusSourceLabel}]`,
+        `[${inputRefs.versus}:v]fps=${fps},scale=${versusLayout.width_px}:-1,format=rgba,rotate='${buildVersusRotationExpression(match.intro_start_seconds)}':ow=rotw(iw):oh=roth(ih):c=none,setsar=1,fade=t=in:st=${match.intro_start_seconds}:d=0.18:alpha=1[${versusSourceLabel}]`,
       );
       filters.push(
         `[${preRevealSceneLabel}][${versusSourceLabel}]overlay=x='(main_w-overlay_w)/2':y='${buildAnimatedTextYExpression(versusLayout.y, match.intro_start_seconds)}':enable='${formatEnableBetween(match.intro_start_seconds, match.reveal_start_seconds)}'[${versusSceneLabel}]`,
