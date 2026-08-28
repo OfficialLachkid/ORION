@@ -219,6 +219,8 @@ export function selectOverlayPresets(overlays) {
     || matchOverlay(overlayImages, ['grass-plateau'])
     || matchOverlay(overlayImages, ['grass_plateau'])
     || matchOverlay(overlayImages, ['plateau']);
+  const versus = matchOverlay(overlayImages, ['versus'])
+    || matchOverlay(overlayImages, ['vs']);
   const typePlaceholder = matchOverlay(overlays, ['question', 'mark'])
     || matchOverlay(overlays, ['question-mark'])
     || matchOverlay(overlays, ['question_mark']);
@@ -237,6 +239,7 @@ export function selectOverlayPresets(overlays) {
     long_hp_bar_frame: longHpBarFrame,
     shiny_sparkle: shinySparkle,
     grass_plateau: grassPlateau,
+    versus,
     type_placeholder: typePlaceholder,
     disappear,
     pokeball_open_close: pokeballOpenClose,

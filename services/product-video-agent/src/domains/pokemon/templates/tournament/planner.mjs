@@ -910,6 +910,8 @@ export async function planPokemonTournamentChallenge({
     || null
   );
   const disappearOverlayPath = inventory?.overlay_presets?.disappear || null;
+  const grassPlateauOverlayPath = inventory?.overlay_presets?.grass_plateau || null;
+  const versusOverlayPath = inventory?.overlay_presets?.versus || null;
   const introSlotRevealSoundPath = selectIntroSlotRevealSoundPath(
     inventory?.sound_effects || {},
     template?.audio?.sound_effects?.intro_slot_reveal || {},
@@ -1023,6 +1025,8 @@ export async function planPokemonTournamentChallenge({
         available_paths: inventory?.overlays || [],
         selected_intro_pokeball_path: introPokeballOverlayPath,
         selected_disappear_path: disappearOverlayPath,
+        selected_grass_plateau_path: grassPlateauOverlayPath,
+        selected_versus_path: versusOverlayPath,
       },
       audio: {
         battle_intro_music_directory: POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic,

@@ -47,6 +47,30 @@ export function buildVisualInputs(plan, renderPlan) {
     });
   }
 
+  if (plan.assets.overlays?.selected_grass_plateau_path) {
+    inputs.push({
+      role: 'grass-platform',
+      path: plan.assets.overlays.selected_grass_plateau_path,
+      args: buildLoopingVisualInput(
+        plan.assets.overlays.selected_grass_plateau_path,
+        renderPlan.total_duration_seconds,
+        renderPlan.canvas.fps,
+      ),
+    });
+  }
+
+  if (plan.assets.overlays?.selected_versus_path) {
+    inputs.push({
+      role: 'versus',
+      path: plan.assets.overlays.selected_versus_path,
+      args: buildLoopingVisualInput(
+        plan.assets.overlays.selected_versus_path,
+        renderPlan.total_duration_seconds,
+        renderPlan.canvas.fps,
+      ),
+    });
+  }
+
   (plan.tournament?.participants || []).forEach((participant, index) => {
     const spritePath = participant.render_sprite_path || participant.sprite_path;
     inputs.push({

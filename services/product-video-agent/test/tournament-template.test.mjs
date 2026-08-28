@@ -86,6 +86,7 @@ const template = {
       name_font_size: 62,
       vs_y: 1125,
       vs_font_size: 100,
+      versus_width_px: 250,
     },
     champion_stage: {
       sprite_size_px: 520,
@@ -93,6 +94,12 @@ const template = {
       center_y: 1120,
       name_y: 1510,
       name_font_size: 86,
+    },
+    sprite_platform: {
+      option_enabled: true,
+      option_width_multiplier: 0.85,
+      center_y_offset_multiplier: 0.34,
+      option_center_y_offset_px: 80,
     },
     rounds: {
       hook_hold_seconds: 1.1,
@@ -221,10 +228,12 @@ const assetInventory = {
     pokeball_intro: '/tmp/pokeball-open-sound.mp3',
     disappear: '/tmp/disappear-sound.mp3',
   },
-  overlays: ['/tmp/open-close-pokeball.gif', '/tmp/disappear.gif'],
+  overlays: ['/tmp/open-close-pokeball.gif', '/tmp/disappear.gif', '/tmp/grass-plateau.png', '/tmp/versus.png'],
   overlay_presets: {
     pokeball_primary: '/tmp/open-close-pokeball.gif',
     disappear: '/tmp/disappear.gif',
+    grass_plateau: '/tmp/grass-plateau.png',
+    versus: '/tmp/versus.png',
   },
 };
 
@@ -319,6 +328,8 @@ test('generic planner dispatch builds a four-participant tournament bracket with
   assert.equal(plan.tournament.participants.every((participant) => participant.cry_path.endsWith('.ogg')), true);
   assert.equal(plan.assets.overlays.selected_intro_pokeball_path, '/tmp/open-close-pokeball.gif');
   assert.equal(plan.assets.overlays.selected_disappear_path, '/tmp/disappear.gif');
+  assert.equal(plan.assets.overlays.selected_grass_plateau_path, '/tmp/grass-plateau.png');
+  assert.equal(plan.assets.overlays.selected_versus_path, '/tmp/versus.png');
   assert.equal(plan.assets.audio.selected_sound_effects.intro_slot_reveal, '/tmp/pokeball-open-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.bracket_progress, '/tmp/select-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.winner_reveal, '/tmp/ding-sound.mp3');
@@ -387,12 +398,14 @@ test('tournament render plan and inputs stay deterministic for a four-Pokemon br
   );
   assert.equal(renderPlan.champion_scene.start_seconds, renderPlan.matches.at(-1)?.bracket_progress_end_seconds);
   assert.equal(renderPlan.champion_scene.end_seconds > renderPlan.matches.at(-1)?.scene_end_seconds, true);
-  assert.equal(visualInputs.length, 7);
+  assert.equal(visualInputs.length, 9);
   assert.equal(visualInputs[0].role, 'background');
   assert.equal(visualInputs[1].role, 'intro-pokeball');
   assert.equal(visualInputs[2].role, 'battle-disappear');
+  assert.equal(visualInputs[3].role, 'grass-platform');
+  assert.equal(visualInputs[4].role, 'versus');
   assert.equal(visualInputs.at(-1)?.role, 'participant-3');
-  assert.deepEqual(visualInputs[3].args.slice(0, 4), ['-ignore_loop', '0', '-t', String(renderPlan.total_duration_seconds)]);
+  assert.deepEqual(visualInputs[5].args.slice(0, 4), ['-ignore_loop', '0', '-t', String(renderPlan.total_duration_seconds)]);
 });
 
 test('tournament audio and visual filters include winner sting cues and champion overlay logic', async () => {
@@ -415,7 +428,9 @@ test('tournament audio and visual filters include winner sting cues and champion
       background: 0,
       introPokeball: 1,
       battleDisappear: 2,
-      participants: [3, 4, 5, 6],
+      grassPlatform: 3,
+      versus: 4,
+      participants: [5, 6, 7, 8],
     },
     '/tmp/font.ttf',
   );
@@ -454,6 +469,9 @@ test('tournament audio and visual filters include winner sting cues and champion
   assert.match(visualFilter.script, /\[p\d+slotgray0\]/u);
   assert.match(visualFilter.script, /vprogress0/u);
   assert.match(visualFilter.script, /vpokeball0/u);
+  assert.match(visualFilter.script, /vmatchplatforml0/u);
+  assert.match(visualFilter.script, /vversus0/u);
+  assert.doesNotMatch(visualFilter.script, /drawtext=text='VS'/u);
   assert.match(visualFilter.script, /fade=t=in:st=/u);
   assert.match(visualFilter.script, /drawtext=text='HP/u);
   assert.match(
@@ -466,11 +484,11 @@ test('tournament audio and visual filters include winner sting cues and champion
   );
   assert.match(
     visualFilter.script,
-    /drawbox=x=126:y=1172:w=48:h=40:color=0xFFFFFF@0\.95:t=3:enable='between\(t,0,0\.05\)'/u,
+    /drawbox=x=134:y=1178:w=33:h=28:color=0xFFFFFF@0\.95:t=3:enable='between\(t,0\.066,0\.099\)'/u,
   );
   assert.match(
     visualFilter.script,
-    /drawbox=x=40:y=1100:w=220:h=184:color=0xFFFFFF@0\.95:t=3:enable='gte\(t,0\.25\)'/u,
+    /drawbox=x=40:y=1100:w=220:h=184:color=0xFFFFFF@0\.95:t=3:enable='gte\(t,0\.267\)'/u,
   );
   assert.ok((visualFilter.script.match(/color=0xFFFFFF@0\.7:t=fill:enable='gte\(t,/gu) || []).length >= 12);
   assert.match(visualFilter.script, /enable='\(between\(t,0,/u);

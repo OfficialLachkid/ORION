@@ -127,6 +127,8 @@ export async function renderPokeQuizzVideo({
     background: inputRoleIndex.get('background'),
     introPokeball: inputRoleIndex.get('intro-pokeball'),
     battleDisappear: inputRoleIndex.has('battle-disappear') ? inputRoleIndex.get('battle-disappear') : null,
+    grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
+    versus: inputRoleIndex.has('versus') ? inputRoleIndex.get('versus') : null,
     participants: (plan.tournament?.participants || []).map((_, index) => inputRoleIndex.get(`participant-${index}`)),
   };
   const templateFontCandidates = (Array.isArray(template?.layout?.text?.font_candidates)

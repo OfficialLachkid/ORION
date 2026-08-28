@@ -23,8 +23,9 @@ const TOURNAMENT_STAT_ROWS = Object.freeze([
   { key: 'speed', label: 'Speed', color: '0xF45C97', background: '0xF7B6CF' },
 ]);
 const TOURNAMENT_SOURCE_SLOT_KEYS = Object.freeze(['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b']);
-const TOURNAMENT_CARD_MIN_SCALE = 0.06;
-const TOURNAMENT_CARD_ANIMATION_STEPS = 6;
+const TOURNAMENT_CARD_MIN_SCALE = 0.01;
+const TOURNAMENT_CARD_ANIMATION_STEPS = 7;
+const TOURNAMENT_CARD_POP_LEAD_FRACTION = 0.22;
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -51,14 +52,21 @@ function buildAnimatedCardStepFilters(slot, slotWindow, color, thickness, paddin
   const safeStart = ensureNumber(slotWindow?.start_seconds, 0);
   const safeEnd = Math.max(safeStart + 0.01, ensureNumber(slotWindow?.end_seconds, safeStart + 0.01));
   const duration = Math.max(0.01, safeEnd - safeStart);
+  const animationStart = round(
+    Math.min(
+      safeEnd - 0.01,
+      safeStart + Math.max(0.04, duration * TOURNAMENT_CARD_POP_LEAD_FRACTION),
+    ) * 1000,
+  ) / 1000;
+  const animationDuration = Math.max(0.01, safeEnd - animationStart);
   const stepCount = Math.max(2, TOURNAMENT_CARD_ANIMATION_STEPS);
   const filters = [];
 
   for (let index = 0; index < stepCount; index += 1) {
-    const stepStart = round((safeStart + ((duration * index) / stepCount)) * 1000) / 1000;
+    const stepStart = round((animationStart + ((animationDuration * index) / stepCount)) * 1000) / 1000;
     const stepEnd = index === stepCount - 1
       ? safeEnd
-      : round((safeStart + ((duration * (index + 1)) / stepCount)) * 1000) / 1000;
+      : round((animationStart + ((animationDuration * (index + 1)) / stepCount)) * 1000) / 1000;
     const stepProgress = (index + 1) / stepCount;
     const scale = TOURNAMENT_CARD_MIN_SCALE + ((1 - TOURNAMENT_CARD_MIN_SCALE) * stepProgress);
     const width = Math.max(1, round(baseWidth * scale));
@@ -652,6 +660,33 @@ function buildPathCoordinateExpression(points = [], axis, startSeconds, endSecon
   return buildSegmentExpression(0);
 }
 
+function resolvePlatformLayout(template) {
+  const config = template?.layout?.sprite_platform || {};
+  return {
+    enabled: config.option_enabled !== false,
+    width_multiplier: ensureNumber(config.option_width_multiplier, 0.85),
+    center_y_offset_multiplier: ensureNumber(config.center_y_offset_multiplier, 0.34),
+    center_y_offset_px: ensureNumber(
+      config.option_center_y_offset_px,
+      ensureNumber(config.center_y_offset_px, 80),
+    ),
+  };
+}
+
+function resolveVersusLayout(template, battleStage) {
+  const config = template?.layout?.battle_stage || {};
+  return {
+    width_px: Math.max(
+      80,
+      round(
+        config.versus_width_px
+        ?? (ensureNumber(battleStage?.vs_font_size, 88) * 2.5),
+      ),
+    ),
+    y: round(config.versus_y_px ?? config.vs_y ?? 935),
+  };
+}
+
 function buildBracketProgressPath(slotMap, match) {
   const leftPairConnectorY = buildPairConnectorY(slotMap.semi_1_winner, slotMap.semi_1_a, slotMap.semi_1_b);
   const rightPairConnectorY = buildPairConnectorY(slotMap.semi_2_winner, slotMap.semi_2_a, slotMap.semi_2_b);
@@ -741,6 +776,18 @@ function buildStageSpritePlacement(centerX, centerY) {
   return {
     x: `${centerX}-overlay_w/2`,
     y: `${centerY}-overlay_h/2`,
+  };
+}
+
+function buildBattlePlatformPlacement(centerX, centerY, spriteSize, platformLayout) {
+  const platformCenterY = round(
+    centerY
+    + (ensureNumber(spriteSize, 0) * ensureNumber(platformLayout?.center_y_offset_multiplier, 0.34))
+    + ensureNumber(platformLayout?.center_y_offset_px, 80),
+  );
+  return {
+    x: `${centerX}-overlay_w/2`,
+    y: `${platformCenterY}-overlay_h/2`,
   };
 }
 
@@ -945,6 +992,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const introPokeballSize = round(
     slotSpriteSize * ensureNumber(template?.renderer?.intro_pokeball_scale_multiplier, 1.04),
   );
+  const platformLayout = resolvePlatformLayout(template);
+  const versusLayout = resolveVersusLayout(template, battleStage);
   const loserAlphaMultiplier = ensureNumber(template?.renderer?.loser_alpha_multiplier, 0.46);
   const championParticipantId = plan.tournament?.champion?.id || '';
   const matchBackgroundLabels = renderPlan.matches.map((_, index) => `vbgmatch${index}`);
@@ -1243,6 +1292,39 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     filters.push(
       `[${currentVideoLabel}][${preparedMatchBackgroundLabels[matchIndex]}]overlay=x=0:y=0:enable='${formatEnableBetween(transitionStart, match.scene_end_seconds)}'[${stageSceneBaseLabel}]`,
     );
+    let stageSurfaceLabel = stageSceneBaseLabel;
+    if (inputRefs.grassPlatform != null && platformLayout.enabled) {
+      const platformWidth = Number((battleSpriteSize * platformLayout.width_multiplier).toFixed(3));
+      const leftPlatformPlacement = buildBattlePlatformPlacement(
+        battleStage.left_center_x,
+        battleStage.center_y,
+        battleSpriteSize,
+        platformLayout,
+      );
+      const rightPlatformPlacement = buildBattlePlatformPlacement(
+        battleStage.right_center_x,
+        battleStage.center_y,
+        battleSpriteSize,
+        platformLayout,
+      );
+      const leftPlatformSourceLabel = `vmatchplatformlsrc${matchIndex}`;
+      const leftPlatformLabel = `vmatchplatforml${matchIndex}`;
+      const rightPlatformSourceLabel = `vmatchplatformrsrc${matchIndex}`;
+      const rightPlatformLabel = `vmatchplatformr${matchIndex}`;
+      filters.push(
+        `[${inputRefs.grassPlatform}:v]fps=${fps},scale=${platformWidth}:-1,format=rgba,setsar=1[${leftPlatformSourceLabel}]`,
+      );
+      filters.push(
+        `[${stageSurfaceLabel}][${leftPlatformSourceLabel}]overlay=x='${leftPlatformPlacement.x}':y='${leftPlatformPlacement.y}':enable='${formatEnableBetween(transitionStart, match.scene_end_seconds)}'[${leftPlatformLabel}]`,
+      );
+      filters.push(
+        `[${inputRefs.grassPlatform}:v]fps=${fps},scale=${platformWidth}:-1,format=rgba,setsar=1[${rightPlatformSourceLabel}]`,
+      );
+      filters.push(
+        `[${leftPlatformLabel}][${rightPlatformSourceLabel}]overlay=x='${rightPlatformPlacement.x}':y='${rightPlatformPlacement.y}':enable='${formatEnableBetween(transitionStart, match.scene_end_seconds)}'[${rightPlatformLabel}]`,
+      );
+      stageSurfaceLabel = rightPlatformLabel;
+    }
     const leftTransitionPlacement = buildLinearSpritePlacement(
       leftSourceSlot.center_x,
       leftSourceSlot.center_y,
@@ -1261,7 +1343,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
     const transitionLeftLabelName = `vmatchtransl${matchIndex}`;
     filters.push(
-      `[${stageSceneBaseLabel}][${leftTransitionLabel}]overlay=x='${leftTransitionPlacement.x}':y='${leftTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionLeftLabelName}]`,
+      `[${stageSurfaceLabel}][${leftTransitionLabel}]overlay=x='${leftTransitionPlacement.x}':y='${leftTransitionPlacement.y}':enable='${formatEnableBetween(transitionStart, match.intro_start_seconds)}'[${transitionLeftLabelName}]`,
     );
     const transitionRightLabelName = `vmatchtransr${matchIndex}`;
     filters.push(
@@ -1276,12 +1358,24 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     filters.push(
       `[${preRevealLabel}][${rightStageLabel}]overlay=x='${rightPlacement.x}':y='${rightPlacement.y}':enable='${formatEnableBetween(match.intro_start_seconds, match.reveal_start_seconds)}'[${preRevealRightLabel}]`,
     );
+    let preRevealSceneLabel = preRevealRightLabel;
+    if (inputRefs.versus != null) {
+      const versusSourceLabel = `vversussrc${matchIndex}`;
+      const versusSceneLabel = `vversus${matchIndex}`;
+      filters.push(
+        `[${inputRefs.versus}:v]fps=${fps},scale=${versusLayout.width_px}:-1,format=rgba,setsar=1[${versusSourceLabel}]`,
+      );
+      filters.push(
+        `[${preRevealSceneLabel}][${versusSourceLabel}]overlay=x='(main_w-overlay_w)/2':y=${versusLayout.y}:enable='${formatEnableBetween(match.intro_start_seconds, match.reveal_start_seconds)}'[${versusSceneLabel}]`,
+      );
+      preRevealSceneLabel = versusSceneLabel;
+    }
 
     const winnerPlacement = winnerIndex === leftIndex ? leftPlacement : rightPlacement;
     const loserPlacement = loserIndex === leftIndex ? leftPlacement : rightPlacement;
     const postWinnerLabel = `vmatchwin${matchIndex}`;
     filters.push(
-      `[${preRevealRightLabel}][${winnerStageLabel}]overlay=x='${winnerPlacement.x}':y='${winnerPlacement.y}':enable='${formatEnableBetween(match.reveal_start_seconds, battleDisappearStart)}'[${postWinnerLabel}]`,
+      `[${preRevealSceneLabel}][${winnerStageLabel}]overlay=x='${winnerPlacement.x}':y='${winnerPlacement.y}':enable='${formatEnableBetween(match.reveal_start_seconds, battleDisappearStart)}'[${postWinnerLabel}]`,
     );
     const postLoserLabel = `vmatchlose${matchIndex}`;
     filters.push(
@@ -1456,7 +1550,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       }),
       `drawtext=text='${escapeDrawtextText(match.participant_a.display_name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.battle_stage.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.battle_stage.left_center_x}-text_w/2:y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
       `drawtext=text='${escapeDrawtextText(match.participant_b.display_name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.battle_stage.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.battle_stage.right_center_x}-text_w/2:y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
-      `drawtext=text='VS'${fontPart}:fontcolor=0xFFD60A:fontsize=${renderPlan.battle_stage.vs_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${renderPlan.battle_stage.vs_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.reveal_start_seconds)}'`,
+      ...(inputRefs.versus == null
+        ? [`drawtext=text='VS'${fontPart}:fontcolor=0xFFD60A:fontsize=${renderPlan.battle_stage.vs_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${renderPlan.battle_stage.vs_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.reveal_start_seconds)}'`]
+        : []),
     );
   });
 
