@@ -112,7 +112,7 @@ function resolveInsightText(winner, loser, scoreCards) {
   if (dominantFactor === 'speed' && winner.base_stats.speed !== loser.base_stats.speed) {
     return `${winner.display_name} is faster.`;
   }
-  return `${winner.display_name} has the stronger stat line.`;
+  return `${winner.display_name} has stronger stats.`;
 }
 
 function resolveBreakdownText(left, right, winner, scoreCards) {

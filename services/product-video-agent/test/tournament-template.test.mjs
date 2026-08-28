@@ -87,6 +87,7 @@ const template = {
       vs_y: 1125,
       vs_font_size: 100,
       versus_width_px: 250,
+      versus_y_px: 960,
     },
     champion_stage: {
       sprite_size_px: 520,
@@ -99,7 +100,7 @@ const template = {
       option_enabled: true,
       option_width_multiplier: 0.85,
       center_y_offset_multiplier: 0.34,
-      option_center_y_offset_px: 80,
+      option_center_y_offset_px: 30,
     },
     rounds: {
       hook_hold_seconds: 1.1,
@@ -484,12 +485,14 @@ test('tournament audio and visual filters include winner sting cues and champion
   );
   assert.match(
     visualFilter.script,
-    /drawbox=x=134:y=1178:w=33:h=28:color=0xFFFFFF@0\.95:t=3:enable='between\(t,0\.066,0\.099\)'/u,
+    /drawbox=x=134:y=1178:w=33:h=28:color=0xFFFFFF@0\.95:t=3:enable='between\(t,0\.055,0\.083\)'/u,
   );
   assert.match(
     visualFilter.script,
-    /drawbox=x=40:y=1100:w=220:h=184:color=0xFFFFFF@0\.95:t=3:enable='gte\(t,0\.267\)'/u,
+    /drawbox=x=40:y=1100:w=220:h=184:color=0xFFFFFF@0\.95:t=3:enable='gte\(t,0\.221\)'/u,
   );
+  assert.match(visualFilter.script, /vmatch0leftstats/u);
+  assert.match(visualFilter.script, /fade=t=out:st=/u);
   assert.ok((visualFilter.script.match(/color=0xFFFFFF@0\.7:t=fill:enable='gte\(t,/gu) || []).length >= 12);
   assert.match(visualFilter.script, /enable='\(between\(t,0,/u);
   assert.match(

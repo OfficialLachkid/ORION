@@ -15,12 +15,12 @@ import {
 } from '../../dual-type-reveal/render/text-layout.mjs';
 
 const TOURNAMENT_STAT_ROWS = Object.freeze([
-  { key: 'hp', label: 'HP', color: '0xFF5A5F', background: '0xFFB7BA' },
-  { key: 'attack', label: 'Attack', color: '0xFF8A2A', background: '0xFFD0A6' },
-  { key: 'defense', label: 'Defense', color: '0xFFD63A', background: '0xFFF0A3' },
-  { key: 'special_attack', label: 'Sp. Atk', color: '0x6F8FF6', background: '0xB8C8FF' },
-  { key: 'special_defense', label: 'Sp. Def', color: '0x7ACB50', background: '0xCBE8B0' },
-  { key: 'speed', label: 'Speed', color: '0xF45C97', background: '0xF7B6CF' },
+  { key: 'hp', label: 'HP', color: '0xFF4D6D', background: '0x2A171D' },
+  { key: 'attack', label: 'Attack', color: '0xFF8F1F', background: '0x2E1D10' },
+  { key: 'defense', label: 'Defense', color: '0xFFD23F', background: '0x302710' },
+  { key: 'special_attack', label: 'Sp. Atk', color: '0x4D8CFF', background: '0x16233A' },
+  { key: 'special_defense', label: 'Sp. Def', color: '0x55D66B', background: '0x16281C' },
+  { key: 'speed', label: 'Speed', color: '0xFF58A8', background: '0x311625' },
 ]);
 const TOURNAMENT_SOURCE_SLOT_KEYS = Object.freeze(['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b']);
 const TOURNAMENT_CARD_MIN_SCALE = 0.01;
@@ -526,16 +526,32 @@ function buildIntroRevealSchedule(renderPlan) {
   }
   const stageSeconds = renderPlan?.intro_sequence?.bracket_stage_seconds || null;
   if (stageSeconds) {
+    const configuredDurations = [
+      ensureNumber(stageSeconds.semi_slot_seconds, 0.18),
+      ensureNumber(stageSeconds.semi_connector_seconds, 1.3),
+      ensureNumber(stageSeconds.finalist_slot_seconds, 0.18),
+      ensureNumber(stageSeconds.final_connector_seconds, 1.3),
+      ensureNumber(stageSeconds.champion_slot_seconds, 0.18),
+    ];
+    const totalConfiguredSeconds = configuredDurations.reduce((sum, value) => sum + Math.max(0.05, value), 0);
+    const stageScale = introEnd > 0
+      ? Math.min(1, introEnd / Math.max(0.01, totalConfiguredSeconds))
+      : 1;
+    const scaledSemiSlotSeconds = round(Math.max(0.05, configuredDurations[0] * stageScale) * 1000) / 1000;
+    const scaledSemiConnectorSeconds = round(Math.max(0.08, configuredDurations[1] * stageScale) * 1000) / 1000;
+    const scaledFinalistSlotSeconds = round(Math.max(0.05, configuredDurations[2] * stageScale) * 1000) / 1000;
+    const scaledFinalConnectorSeconds = round(Math.max(0.08, configuredDurations[3] * stageScale) * 1000) / 1000;
+    const scaledChampionSlotSeconds = round(Math.max(0.05, configuredDurations[4] * stageScale) * 1000) / 1000;
     const semiSlotStart = 0;
-    const semiSlotEnd = round((semiSlotStart + ensureNumber(stageSeconds.semi_slot_seconds, 0.18)) * 1000) / 1000;
+    const semiSlotEnd = round((semiSlotStart + scaledSemiSlotSeconds) * 1000) / 1000;
     const semiConnectorStart = semiSlotEnd;
-    const semiConnectorEnd = round((semiConnectorStart + ensureNumber(stageSeconds.semi_connector_seconds, 1.3)) * 1000) / 1000;
-    const finalistSlotStart = semiConnectorStart;
-    const finalistSlotEnd = round((finalistSlotStart + ensureNumber(stageSeconds.finalist_slot_seconds, 0.18)) * 1000) / 1000;
-    const finalConnectorStart = semiConnectorEnd;
-    const finalConnectorEnd = round((finalConnectorStart + ensureNumber(stageSeconds.final_connector_seconds, 1.3)) * 1000) / 1000;
-    const championSlotStart = finalConnectorStart;
-    const championSlotEnd = round((championSlotStart + ensureNumber(stageSeconds.champion_slot_seconds, 0.18)) * 1000) / 1000;
+    const semiConnectorEnd = round((semiConnectorStart + scaledSemiConnectorSeconds) * 1000) / 1000;
+    const finalistSlotStart = semiConnectorEnd;
+    const finalistSlotEnd = round((finalistSlotStart + scaledFinalistSlotSeconds) * 1000) / 1000;
+    const finalConnectorStart = finalistSlotEnd;
+    const finalConnectorEnd = round((finalConnectorStart + scaledFinalConnectorSeconds) * 1000) / 1000;
+    const championSlotStart = finalConnectorEnd;
+    const championSlotEnd = round((championSlotStart + scaledChampionSlotSeconds) * 1000) / 1000;
     const clampedChampionEnd = Math.min(introEnd, championSlotEnd);
     return {
       slots: {
@@ -841,34 +857,53 @@ function buildBattleStatsLayout(battleStage) {
   };
 }
 
-function buildBattleStatsFilters({ match, battleStage, fontPart, template }) {
+function appendBattleStatsFilters({
+  filters,
+  currentLabel,
+  match,
+  battleStage,
+  fontPart,
+  template,
+  fps,
+  totalDurationSeconds,
+  battleDisappearStart,
+  labelPrefix,
+}) {
   const layout = buildBattleStatsLayout(battleStage);
   const rowLeadInSeconds = Math.max(0, ensureNumber(template?.renderer?.stat_row_lead_in_seconds, 0.16));
   const rowStaggerSeconds = Math.max(0.05, ensureNumber(template?.renderer?.stat_row_stagger_seconds, 0.3));
   const rowFillDurationSeconds = 0.66;
   const rowValueCountDurationSeconds = 1;
+  const fadeOutDurationSeconds = Math.max(0.12, ensureNumber(match.scene_end_seconds, 0) - ensureNumber(battleDisappearStart, 0));
   const statSources = [
-    { stats: match.participant_a.base_stats || {}, x: layout.leftX },
-    { stats: match.participant_b.base_stats || {}, x: layout.rightX },
+    { stats: match.participant_a.base_stats || {}, x: layout.leftX, side: 'left' },
+    { stats: match.participant_b.base_stats || {}, x: layout.rightX, side: 'right' },
   ];
-  return statSources.flatMap(({ stats, x }) => (
-    TOURNAMENT_STAT_ROWS.flatMap((row, rowIndex) => {
+
+  let activeLabel = currentLabel;
+  statSources.forEach(({ stats, x, side }) => {
+    const panelLabel = `${labelPrefix}${side}stats`;
+    const panelFilters = [
+      `color=c=black@0:s=${layout.panelWidth}x${layout.panelHeight}:r=${fps}:d=${totalDurationSeconds},format=rgba`,
+    ];
+
+    TOURNAMENT_STAT_ROWS.forEach((row, rowIndex) => {
       const value = Math.max(0, Math.min(255, round(stats[row.key] || 0)));
-      const y = layout.top + (rowIndex * (layout.rowHeight + layout.rowGap));
+      const y = rowIndex * (layout.rowHeight + layout.rowGap);
       const fillWidth = Math.max(2, round((value / 255) * layout.barWidth));
       const rowStartSeconds = round((match.intro_start_seconds + rowLeadInSeconds + (rowIndex * rowStaggerSeconds)) * 1000) / 1000;
       const rowEndSeconds = round((rowStartSeconds + rowFillDurationSeconds) * 1000) / 1000;
       const valueCountExpression = `%{eif\\:clip((t-${rowStartSeconds})/${rowValueCountDurationSeconds}\\,0\\,1)*${value}\\:d}`;
       const rowEnableExpression = formatEnableBetween(rowStartSeconds, match.scene_end_seconds);
-      const rowAlphaExpression = buildAnimatedTextSegmentAlphaExpression(rowStartSeconds, match.scene_end_seconds);
+      const rowAlphaExpression = buildAnimatedTextSegmentAlphaExpression(rowStartSeconds, battleDisappearStart);
       const rowYExpression = buildAnimatedTextYExpression(y, rowStartSeconds);
       const rowTextYExpression = buildAnimatedTextYExpression(y + 3, rowStartSeconds);
       const rowTrackYExpression = buildAnimatedTextYExpression(y + 4, rowStartSeconds);
-      const barTrackX = x + layout.barX;
-      const valueX = x + layout.labelWidth + 8;
-      return [
-        `drawbox=x=${x}:y='${rowYExpression}':w=${layout.panelWidth}:h=${layout.rowHeight}:color=${row.background}@0.88:t=fill:enable='${rowEnableExpression}'`,
-        `drawbox=x=${barTrackX}:y='${rowTrackYExpression}':w=${layout.barWidth}:h=${layout.rowHeight - 8}:color=0x101010@0.32:t=fill:enable='${rowEnableExpression}'`,
+      const barTrackX = layout.barX;
+      const valueX = layout.labelWidth + 8;
+      panelFilters.push(
+        `drawbox=x=0:y='${rowYExpression}':w=${layout.panelWidth}:h=${layout.rowHeight}:color=${row.background}@0.94:t=fill:enable='${rowEnableExpression}'`,
+        `drawbox=x=${barTrackX}:y='${rowTrackYExpression}':w=${layout.barWidth}:h=${layout.rowHeight - 8}:color=0x0B1220@0.52:t=fill:enable='${rowEnableExpression}'`,
         ...buildSteppedHorizontalFillBoxes({
           x: barTrackX,
           y: y + 4,
@@ -879,13 +914,24 @@ function buildBattleStatsFilters({ match, battleStage, fontPart, template }) {
           startSeconds: rowStartSeconds,
           endSeconds: rowEndSeconds,
           baseEnableExpression: rowEnableExpression,
-          segmentWidthPx: 6,
+          segmentWidthPx: 7,
         }),
-        `drawtext=text='${escapeDrawtextText(`${row.label}:`)}'${fontPart}:fontcolor=black:fontsize=${layout.labelFontSize}:borderw=0:fix_bounds=1:x=${x + 10}:y='${rowTextYExpression}':alpha='${rowAlphaExpression}':enable='${rowEnableExpression}'`,
-        `drawtext=text='${valueCountExpression}'${fontPart}:fontcolor=black:fontsize=${layout.valueFontSize}:borderw=0:fix_bounds=1:x=${valueX}:y='${rowTextYExpression}':alpha='${rowAlphaExpression}':enable='${rowEnableExpression}'`,
-      ];
-    })
-  ));
+        `drawtext=text='${escapeDrawtextText(`${row.label}:`)}'${fontPart}:fontcolor=white:fontsize=${layout.labelFontSize}:borderw=1:bordercolor=0x081018:fix_bounds=1:x=10:y='${rowTextYExpression}':alpha='${rowAlphaExpression}':enable='${rowEnableExpression}'`,
+        `drawtext=text='${valueCountExpression}'${fontPart}:fontcolor=0xF7FAFF:fontsize=${layout.valueFontSize}:borderw=1:bordercolor=0x081018:fix_bounds=1:x=${valueX}:y='${rowTextYExpression}':alpha='${rowAlphaExpression}':enable='${rowEnableExpression}'`,
+      );
+    });
+
+    filters.push(
+      `${panelFilters.join(',')},fade=t=out:st=${battleDisappearStart}:d=${fadeOutDurationSeconds}:alpha=1[${panelLabel}]`,
+    );
+    const overlayLabel = `${labelPrefix}${side}statsov`;
+    filters.push(
+      `[${activeLabel}][${panelLabel}]overlay=x=${x}:y=${layout.top}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'[${overlayLabel}]`,
+    );
+    activeLabel = overlayLabel;
+  });
+
+  return activeLabel;
 }
 
 function buildSlotNameDrawtext(text, slot, fontPart, fontSize, enableExpression = '') {
@@ -1312,16 +1358,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const rightPlatformSourceLabel = `vmatchplatformrsrc${matchIndex}`;
       const rightPlatformLabel = `vmatchplatformr${matchIndex}`;
       filters.push(
-        `[${inputRefs.grassPlatform}:v]fps=${fps},scale=${platformWidth}:-1,format=rgba,setsar=1[${leftPlatformSourceLabel}]`,
+        `[${inputRefs.grassPlatform}:v]fps=${fps},scale=${platformWidth}:-1,format=rgba,setsar=1,fade=t=in:st=${match.intro_start_seconds}:d=0.18:alpha=1[${leftPlatformSourceLabel}]`,
       );
       filters.push(
-        `[${stageSurfaceLabel}][${leftPlatformSourceLabel}]overlay=x='${leftPlatformPlacement.x}':y='${leftPlatformPlacement.y}':enable='${formatEnableBetween(transitionStart, match.scene_end_seconds)}'[${leftPlatformLabel}]`,
+        `[${stageSurfaceLabel}][${leftPlatformSourceLabel}]overlay=x='${leftPlatformPlacement.x}':y='${buildAnimatedTextYExpression(leftPlatformPlacement.y, match.intro_start_seconds)}':enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'[${leftPlatformLabel}]`,
       );
       filters.push(
-        `[${inputRefs.grassPlatform}:v]fps=${fps},scale=${platformWidth}:-1,format=rgba,setsar=1[${rightPlatformSourceLabel}]`,
+        `[${inputRefs.grassPlatform}:v]fps=${fps},scale=${platformWidth}:-1,format=rgba,setsar=1,fade=t=in:st=${match.intro_start_seconds}:d=0.18:alpha=1[${rightPlatformSourceLabel}]`,
       );
       filters.push(
-        `[${leftPlatformLabel}][${rightPlatformSourceLabel}]overlay=x='${rightPlatformPlacement.x}':y='${rightPlatformPlacement.y}':enable='${formatEnableBetween(transitionStart, match.scene_end_seconds)}'[${rightPlatformLabel}]`,
+        `[${leftPlatformLabel}][${rightPlatformSourceLabel}]overlay=x='${rightPlatformPlacement.x}':y='${buildAnimatedTextYExpression(rightPlatformPlacement.y, match.intro_start_seconds)}':enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'[${rightPlatformLabel}]`,
       );
       stageSurfaceLabel = rightPlatformLabel;
     }
@@ -1358,15 +1404,26 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     filters.push(
       `[${preRevealLabel}][${rightStageLabel}]overlay=x='${rightPlacement.x}':y='${rightPlacement.y}':enable='${formatEnableBetween(match.intro_start_seconds, match.reveal_start_seconds)}'[${preRevealRightLabel}]`,
     );
-    let preRevealSceneLabel = preRevealRightLabel;
+    let preRevealSceneLabel = appendBattleStatsFilters({
+      filters,
+      currentLabel: preRevealRightLabel,
+      match,
+      battleStage,
+      fontPart,
+      template,
+      fps,
+      totalDurationSeconds: renderPlan.total_duration_seconds,
+      battleDisappearStart,
+      labelPrefix: `vmatch${matchIndex}`,
+    });
     if (inputRefs.versus != null) {
       const versusSourceLabel = `vversussrc${matchIndex}`;
       const versusSceneLabel = `vversus${matchIndex}`;
       filters.push(
-        `[${inputRefs.versus}:v]fps=${fps},scale=${versusLayout.width_px}:-1,format=rgba,setsar=1[${versusSourceLabel}]`,
+        `[${inputRefs.versus}:v]fps=${fps},scale=${versusLayout.width_px}:-1,format=rgba,setsar=1,fade=t=in:st=${match.intro_start_seconds}:d=0.18:alpha=1[${versusSourceLabel}]`,
       );
       filters.push(
-        `[${preRevealSceneLabel}][${versusSourceLabel}]overlay=x='(main_w-overlay_w)/2':y=${versusLayout.y}:enable='${formatEnableBetween(match.intro_start_seconds, match.reveal_start_seconds)}'[${versusSceneLabel}]`,
+        `[${preRevealSceneLabel}][${versusSourceLabel}]overlay=x='(main_w-overlay_w)/2':y='${buildAnimatedTextYExpression(versusLayout.y, match.intro_start_seconds)}':enable='${formatEnableBetween(match.intro_start_seconds, match.reveal_start_seconds)}'[${versusSceneLabel}]`,
       );
       preRevealSceneLabel = versusSceneLabel;
     }
@@ -1542,12 +1599,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         match.scene_end_seconds,
         { color: '0xFFD60A', maxLines: 2 },
       ),
-      ...buildBattleStatsFilters({
-        match,
-        battleStage: renderPlan.battle_stage,
-        fontPart,
-        template,
-      }),
       `drawtext=text='${escapeDrawtextText(match.participant_a.display_name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.battle_stage.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.battle_stage.left_center_x}-text_w/2:y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
       `drawtext=text='${escapeDrawtextText(match.participant_b.display_name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.battle_stage.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.battle_stage.right_center_x}-text_w/2:y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
       ...(inputRefs.versus == null
