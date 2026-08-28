@@ -23,6 +23,11 @@ const TOURNAMENT_STAT_ROWS = Object.freeze([
   { key: 'speed', label: 'Speed', color: '0xFF58A8', background: '0x311625' },
 ]);
 const TOURNAMENT_SOURCE_SLOT_KEYS = Object.freeze(['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b']);
+const TOURNAMENT_BRACKET_SLOT_GROUPS = Object.freeze([
+  ['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b'],
+  ['semi_1_winner', 'semi_2_winner'],
+  ['final_winner'],
+]);
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -42,6 +47,12 @@ function combineEnableExpressions(...expressions) {
   return parts.map((expression) => `(${expression})`).join('*');
 }
 
+function buildOrderedBracketSlotKeys(slots = {}) {
+  const groupedKeys = TOURNAMENT_BRACKET_SLOT_GROUPS.flatMap((group) => group);
+  const remainingKeys = Object.keys(slots).filter((slotKey) => !groupedKeys.includes(slotKey));
+  return [...groupedKeys, ...remainingKeys];
+}
+
 function appendBracketCardOverlays({
   filters,
   currentLabel,
@@ -54,8 +65,13 @@ function appendBracketCardOverlays({
   const slotWindows = revealSchedule.slot_windows || {};
   const slotStarts = revealSchedule.slots || {};
   let activeLabel = currentLabel;
+  const orderedSlotKeys = buildOrderedBracketSlotKeys(bracketLayout.slots);
 
-  Object.entries(bracketLayout.slots).forEach(([slotKey, slot], index) => {
+  orderedSlotKeys.forEach((slotKey, index) => {
+    const slot = bracketLayout.slots[slotKey];
+    if (!slot) {
+      return;
+    }
     const slotStart = ensureNumber(
       slotWindows[slotKey]?.start_seconds,
       ensureNumber(slotStarts[slotKey], 0),
@@ -847,13 +863,14 @@ function buildChampionSpritePlacement(stage) {
   };
 }
 
-function buildBattleStatsLayout(battleStage) {
+function buildBattleStatsLayout(battleStage, template = {}) {
   const panelWidth = 446;
   const rowHeight = 40;
   const rowGap = 6;
   const panelHeight = (TOURNAMENT_STAT_ROWS.length * rowHeight) + ((TOURNAMENT_STAT_ROWS.length - 1) * rowGap);
   const spriteBottom = battleStage.center_y + (battleStage.sprite_size_px / 2);
-  const proposedTop = Math.round(spriteBottom + 18);
+  const statsTopOffsetPx = ensureNumber(template?.layout?.battle_stage?.stats_top_offset_px, 68);
+  const proposedTop = Math.round(spriteBottom + statsTopOffsetPx);
   const maxTopBeforeName = Math.round(battleStage.name_y - panelHeight - 34);
   const top = Math.max(100, Math.min(proposedTop, maxTopBeforeName));
   const labelWidth = 128;
@@ -889,7 +906,7 @@ function appendBattleStatsFilters({
   battleDisappearStart,
   labelPrefix,
 }) {
-  const layout = buildBattleStatsLayout(battleStage);
+  const layout = buildBattleStatsLayout(battleStage, template);
   const rowLeadInSeconds = Math.max(0, ensureNumber(template?.renderer?.stat_row_lead_in_seconds, 0.16));
   const rowStaggerSeconds = Math.max(0.05, ensureNumber(template?.renderer?.stat_row_stagger_seconds, 0.3));
   const rowFillDurationSeconds = 0.66;
