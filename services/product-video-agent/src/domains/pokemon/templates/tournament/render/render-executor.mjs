@@ -57,7 +57,6 @@ export async function renderPokeQuizzVideo({
   const bracketProgressPath = plan.assets.audio.selected_sound_effects?.bracket_progress || null;
   const winnerRevealPath = plan.assets.audio.selected_sound_effects?.winner_reveal || null;
   const disappearPath = plan.assets.audio.selected_sound_effects?.disappear || null;
-  const cryCues = buildTournamentCryCues(plan, renderPlan);
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
@@ -65,7 +64,6 @@ export async function renderPokeQuizzVideo({
     ...(bracketProgressPath ? [bracketProgressPath] : []),
     ...(winnerRevealPath ? [winnerRevealPath] : []),
     ...(disappearPath ? [disappearPath] : []),
-    ...cryCues.map((cue) => cue.path),
   ]);
 
   const narrationDurations = await Promise.all(
@@ -78,6 +76,8 @@ export async function renderPokeQuizzVideo({
     )),
   );
   renderPlan = applyNarrationDurationsToRenderPlan(renderPlan, narrationDurations);
+  const cryCues = buildTournamentCryCues(plan, renderPlan);
+  await verifyReadableFiles(cryCues.map((cue) => cue.path));
 
   await mkdir(dirname(audioMixPath), { recursive: true });
   const audioFilterScript = buildAudioFilterScript({

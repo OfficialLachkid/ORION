@@ -464,7 +464,14 @@ test('tournament audio and visual filters include winner sting cues and champion
     visualFilter.script,
     new RegExp(`${finalMatchWinnerCenterX}\\+\\(${finalBracketCenterX}-${finalMatchWinnerCenterX}\\)`, 'u'),
   );
-  assert.match(visualFilter.script, /max\(1,220\*\(if\(lt\(t,0\),0\.22,/u);
+  assert.match(
+    visualFilter.script,
+    /drawbox=x=126:y=1172:w=48:h=40:color=0xFFFFFF@0\.95:t=3:enable='between\(t,0,0\.05\)'/u,
+  );
+  assert.match(
+    visualFilter.script,
+    /drawbox=x=40:y=1100:w=220:h=184:color=0xFFFFFF@0\.95:t=3:enable='gte\(t,0\.25\)'/u,
+  );
   assert.ok((visualFilter.script.match(/color=0xFFFFFF@0\.7:t=fill:enable='gte\(t,/gu) || []).length >= 12);
   assert.match(visualFilter.script, /enable='\(between\(t,0,/u);
   assert.match(

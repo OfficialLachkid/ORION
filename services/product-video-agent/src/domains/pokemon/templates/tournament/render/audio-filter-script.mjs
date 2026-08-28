@@ -18,6 +18,10 @@ export function buildAudioInputs(assets) {
 export function buildTournamentCryCues(plan, renderPlan) {
   const participants = Array.isArray(plan?.tournament?.participants) ? plan.tournament.participants : [];
   const matches = Array.isArray(renderPlan?.matches) ? renderPlan.matches : [];
+  const narrationCueByRole = new Map(
+    (Array.isArray(renderPlan?.narration_cues) ? renderPlan.narration_cues : [])
+      .map((cue) => [String(cue?.role || '').trim(), ensureNumber(cue?.start_seconds, 0)]),
+  );
   const participantCryById = new Map(
     participants
       .filter((participant) => String(participant?.cry_path || '').trim())
@@ -44,24 +48,28 @@ export function buildTournamentCryCues(plan, renderPlan) {
     const leftCryPath = participantCryById.get(match?.participant_a?.id);
     const rightCryPath = participantCryById.get(match?.participant_b?.id);
     const winnerCryPath = participantCryById.get(match?.winner?.id);
+    const introCueStartSeconds = narrationCueByRole.get(`${match?.match_id || ''}-intro`)
+      ?? ensureNumber(match?.intro_start_seconds, 0);
+    const winnerCueStartSeconds = narrationCueByRole.get(`${match?.match_id || ''}-winner`)
+      ?? ensureNumber(match?.reveal_start_seconds, 0);
     if (leftCryPath) {
       cues.push({
         path: leftCryPath,
-        start_seconds: ensureNumber(match?.intro_start_seconds, 0) + 0.02,
+        start_seconds: introCueStartSeconds + 0.02,
         volume: DEFAULT_TOURNAMENT_CRY_VOLUME,
       });
     }
     if (rightCryPath) {
       cues.push({
         path: rightCryPath,
-        start_seconds: ensureNumber(match?.intro_start_seconds, 0) + 0.2,
+        start_seconds: introCueStartSeconds + 0.2,
         volume: DEFAULT_TOURNAMENT_CRY_VOLUME,
       });
     }
     if (winnerCryPath) {
       cues.push({
         path: winnerCryPath,
-        start_seconds: ensureNumber(match?.reveal_start_seconds, 0) + 0.08,
+        start_seconds: winnerCueStartSeconds + 0.02,
         volume: DEFAULT_TOURNAMENT_CRY_VOLUME,
       });
     }
@@ -69,9 +77,11 @@ export function buildTournamentCryCues(plan, renderPlan) {
 
   const championCryPath = participantCryById.get(plan?.tournament?.champion?.id);
   if (championCryPath) {
+    const championCueStartSeconds = narrationCueByRole.get('champion')
+      ?? ensureNumber(renderPlan?.champion_scene?.start_seconds, 0);
     cues.push({
       path: championCryPath,
-      start_seconds: ensureNumber(renderPlan?.champion_scene?.start_seconds, 0) + 0.02,
+      start_seconds: championCueStartSeconds + 0.02,
       volume: DEFAULT_TOURNAMENT_CRY_VOLUME,
     });
   }

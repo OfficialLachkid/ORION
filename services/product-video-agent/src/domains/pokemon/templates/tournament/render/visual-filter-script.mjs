@@ -23,7 +23,8 @@ const TOURNAMENT_STAT_ROWS = Object.freeze([
   { key: 'speed', label: 'Speed', color: '0xF45C97', background: '0xF7B6CF' },
 ]);
 const TOURNAMENT_SOURCE_SLOT_KEYS = Object.freeze(['semi_1_a', 'semi_1_b', 'semi_2_a', 'semi_2_b']);
-const TOURNAMENT_CARD_MIN_SCALE = 0.22;
+const TOURNAMENT_CARD_MIN_SCALE = 0.06;
+const TOURNAMENT_CARD_ANIMATION_STEPS = 6;
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -43,30 +44,36 @@ function combineEnableExpressions(...expressions) {
   return parts.map((expression) => `(${expression})`).join('*');
 }
 
-function buildAnimatedScaleExpression(startSeconds, endSeconds, fromScale = TOURNAMENT_CARD_MIN_SCALE) {
-  const safeStart = ensureNumber(startSeconds, 0);
-  const safeEnd = Math.max(safeStart + 0.01, ensureNumber(endSeconds, safeStart + 0.01));
-  const safeDuration = round(((safeEnd - safeStart) * 1000)) / 1000;
-  const safeFromScale = Math.max(0.05, Math.min(1, ensureNumber(fromScale, TOURNAMENT_CARD_MIN_SCALE)));
-  return `if(lt(t,${safeStart}),${safeFromScale},if(lt(t,${safeEnd}),${safeFromScale}+(${1 - safeFromScale})*((t-${safeStart})/${safeDuration}),1))`;
-}
-
-function buildAnimatedCardBoxExpressions(slot, slotWindow, paddingPx = 0) {
-  const scaleExpression = buildAnimatedScaleExpression(
-    slotWindow?.start_seconds,
-    slotWindow?.end_seconds,
-  );
+function buildAnimatedCardStepFilters(slot, slotWindow, color, thickness, paddingPx = 0) {
   const safePadding = Math.max(0, round(paddingPx));
   const baseWidth = Math.max(1, slot.width - (safePadding * 2));
   const baseHeight = Math.max(1, slot.height - (safePadding * 2));
-  const widthExpression = `max(1,${baseWidth}*(${scaleExpression}))`;
-  const heightExpression = `max(1,${baseHeight}*(${scaleExpression}))`;
-  return {
-    x: `${slot.center_x}-(${widthExpression})/2`,
-    y: `${slot.center_y}-(${heightExpression})/2`,
-    w: widthExpression,
-    h: heightExpression,
-  };
+  const safeStart = ensureNumber(slotWindow?.start_seconds, 0);
+  const safeEnd = Math.max(safeStart + 0.01, ensureNumber(slotWindow?.end_seconds, safeStart + 0.01));
+  const duration = Math.max(0.01, safeEnd - safeStart);
+  const stepCount = Math.max(2, TOURNAMENT_CARD_ANIMATION_STEPS);
+  const filters = [];
+
+  for (let index = 0; index < stepCount; index += 1) {
+    const stepStart = round((safeStart + ((duration * index) / stepCount)) * 1000) / 1000;
+    const stepEnd = index === stepCount - 1
+      ? safeEnd
+      : round((safeStart + ((duration * (index + 1)) / stepCount)) * 1000) / 1000;
+    const stepProgress = (index + 1) / stepCount;
+    const scale = TOURNAMENT_CARD_MIN_SCALE + ((1 - TOURNAMENT_CARD_MIN_SCALE) * stepProgress);
+    const width = Math.max(1, round(baseWidth * scale));
+    const height = Math.max(1, round(baseHeight * scale));
+    const x = round(slot.center_x - (width / 2));
+    const y = round(slot.center_y - (height / 2));
+    const enableExpression = index === stepCount - 1
+      ? `gte(t,${stepStart})`
+      : formatEnableBetween(stepStart, stepEnd);
+    filters.push(
+      `drawbox=x=${x}:y=${y}:w=${width}:h=${height}:color=${color}:t=${thickness}:enable='${enableExpression}'`,
+    );
+  }
+
+  return filters;
 }
 
 function buildCardFilters(bracketLayout, revealSchedule = {}) {
@@ -78,11 +85,9 @@ function buildCardFilters(bracketLayout, revealSchedule = {}) {
       : '';
     const enablePart = buildEnablePart(enableExpression);
     if (slotWindow) {
-      const outerBox = buildAnimatedCardBoxExpressions(slot, slotWindow, 0);
-      const innerBox = buildAnimatedCardBoxExpressions(slot, slotWindow, 3);
       return [
-        `drawbox=x='${outerBox.x}':y='${outerBox.y}':w='${outerBox.w}':h='${outerBox.h}':color=0xFFFFFF@0.95:t=3:enable='gte(t,${slotWindow.start_seconds})'`,
-        `drawbox=x='${innerBox.x}':y='${innerBox.y}':w='${innerBox.w}':h='${innerBox.h}':color=0x101010@0.32:t=fill:enable='gte(t,${slotWindow.start_seconds})'`,
+        ...buildAnimatedCardStepFilters(slot, slotWindow, '0xFFFFFF@0.95', 3, 0),
+        ...buildAnimatedCardStepFilters(slot, slotWindow, '0x101010@0.32', 'fill', 3),
       ];
     }
     return [
