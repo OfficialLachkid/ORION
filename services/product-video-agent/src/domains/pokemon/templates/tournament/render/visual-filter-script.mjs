@@ -53,9 +53,40 @@ function buildOrderedBracketSlotKeys(slots = {}) {
   return [...groupedKeys, ...remainingKeys];
 }
 
+function buildBracketSlotRevealGroups(orderedSlotKeys = [], slotWindows = {}, slotStarts = {}) {
+  const groups = [];
+  const groupedByWindow = new Map();
+
+  orderedSlotKeys.forEach((slotKey) => {
+    const startSeconds = ensureNumber(
+      slotWindows[slotKey]?.start_seconds,
+      ensureNumber(slotStarts[slotKey], 0),
+    );
+    const endSeconds = ensureNumber(
+      slotWindows[slotKey]?.end_seconds,
+      Math.max(startSeconds + 0.18, startSeconds),
+    );
+    const windowKey = `${startSeconds}:${endSeconds}`;
+    let groupIndex = groupedByWindow.get(windowKey);
+    if (groupIndex === undefined) {
+      groupIndex = groups.length;
+      groupedByWindow.set(windowKey, groupIndex);
+      groups.push({
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+        slot_keys: [],
+      });
+    }
+    groups[groupIndex].slot_keys.push(slotKey);
+  });
+
+  return groups;
+}
+
 function appendBracketCardOverlays({
   filters,
   currentLabel,
+  canvas,
   bracketLayout,
   revealSchedule = {},
   fps,
@@ -66,24 +97,35 @@ function appendBracketCardOverlays({
   const slotStarts = revealSchedule.slots || {};
   let activeLabel = currentLabel;
   const orderedSlotKeys = buildOrderedBracketSlotKeys(bracketLayout.slots);
+  const slotGroups = buildBracketSlotRevealGroups(orderedSlotKeys, slotWindows, slotStarts);
+  const canvasWidth = ensureNumber(canvas?.width, 1080);
+  const canvasHeight = ensureNumber(canvas?.height, 1920);
 
-  orderedSlotKeys.forEach((slotKey, index) => {
-    const slot = bracketLayout.slots[slotKey];
-    if (!slot) {
-      return;
-    }
-    const slotStart = ensureNumber(
-      slotWindows[slotKey]?.start_seconds,
-      ensureNumber(slotStarts[slotKey], 0),
-    );
+  slotGroups.forEach((group, index) => {
+    const slotStart = ensureNumber(group.start_seconds, 0);
+    const durationSeconds = Math.max(0.5, totalDurationSeconds - slotStart);
     const sourceLabel = `${labelPrefix}${index}src`;
     const nextLabel = `${labelPrefix}${index}`;
-    const durationSeconds = Math.max(0.5, totalDurationSeconds - slotStart);
+    const drawboxFilters = group.slot_keys.flatMap((slotKey) => {
+      const slot = bracketLayout.slots[slotKey];
+      if (!slot) {
+        return [];
+      }
+      const outerY = buildAnimatedTextYExpression(slot.y, slotStart);
+      const innerY = `(${outerY})+3`;
+      return [
+        `drawbox=x=${slot.x}:y='${outerY}':w=${slot.width}:h=${slot.height}:color=0xFFFFFF@0.95:t=3:replace=1`,
+        `drawbox=x=${slot.x + 3}:y='${innerY}':w=${slot.width - 6}:h=${slot.height - 6}:color=0x101010@0.32:t=fill:replace=1`,
+      ];
+    });
+    if (drawboxFilters.length === 0) {
+      return;
+    }
     filters.push(
-      `color=c=black@0:s=${slot.width}x${slot.height}:r=${fps}:d=${durationSeconds},format=rgba,drawbox=x=0:y=0:w=${slot.width}:h=${slot.height}:color=0xFFFFFF@0.95:t=3:replace=1,drawbox=x=3:y=3:w=${slot.width - 6}:h=${slot.height - 6}:color=0x101010@0.32:t=fill:replace=1,fade=t=in:st=0:d=0.18:alpha=1,setpts=PTS-STARTPTS+${slotStart}/TB[${sourceLabel}]`,
+      `color=c=black@0:s=${canvasWidth}x${canvasHeight}:r=${fps}:d=${durationSeconds},format=rgba,${drawboxFilters.join(',')},fade=t=in:st=0:d=0.18:alpha=1,setpts=PTS-STARTPTS+${slotStart}/TB[${sourceLabel}]`,
     );
     filters.push(
-      `[${activeLabel}][${sourceLabel}]overlay=x=${slot.x}:y='${buildAnimatedTextYExpression(slot.y, slotStart)}':enable='gte(t,${slotStart})'[${nextLabel}]`,
+      `[${activeLabel}][${sourceLabel}]overlay=x=0:y=0:enable='gte(t,${slotStart})'[${nextLabel}]`,
     );
     activeLabel = nextLabel;
   });
@@ -1231,6 +1273,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   currentVideoLabel = appendBracketCardOverlays({
     filters,
     currentLabel: currentVideoLabel,
+    canvas: renderPlan.canvas,
     bracketLayout,
     revealSchedule: introRevealSchedule,
     fps,
