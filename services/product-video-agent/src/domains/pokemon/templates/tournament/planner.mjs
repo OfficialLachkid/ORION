@@ -899,8 +899,18 @@ export async function planPokemonTournamentChallenge({
     random,
     { champion_name: champion.display_name },
   );
+  const tournamentBackgroundPool = (
+    Array.isArray(inventory?.battle_backgrounds) && inventory.battle_backgrounds.length > 0
+      ? inventory.battle_backgrounds
+      : inventory.backgrounds
+  );
+  const tournamentBackgroundDirectory = (
+    Array.isArray(inventory?.battle_backgrounds) && inventory.battle_backgrounds.length > 0
+      ? POKE_QUIZZ_ASSET_LAYOUT.battleBackgrounds
+      : POKE_QUIZZ_ASSET_LAYOUT.backgrounds
+  );
   const selectedBackgroundPath = selectBackground(
-    inventory.backgrounds,
+    tournamentBackgroundPool,
     random,
     normalizedSelectionState,
   );
@@ -1017,7 +1027,7 @@ export async function planPokemonTournamentChallenge({
     timeline: buildTimeline(template, hookText, matches, championText),
     assets: {
       background: {
-        expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+        expected_directory: tournamentBackgroundDirectory,
         selected_path: selectedBackgroundPath,
       },
       overlays: {

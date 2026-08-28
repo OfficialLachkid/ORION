@@ -222,6 +222,7 @@ const assetInventory = {
   scanned_at: '2026-08-25T00:00:00.000Z',
   directories: {},
   backgrounds: ['/tmp/backgrounds/arena.png'],
+  battle_backgrounds: ['/tmp/battle-backgrounds/arena.png'],
   music: ['/tmp/music.mp3'],
   sound_effects: {
     all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3', '/tmp/disappear-sound.mp3'],
@@ -462,6 +463,8 @@ test('tournament audio and visual filters include winner sting cues and champion
   assert.match(visualFilter.script, /Winner/u);
   assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
   assert.equal(/:w=-/u.test(visualFilter.script), false);
+  assert.equal(plan.assets.background.expected_directory, '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/battle-backgrounds');
+  assert.equal(plan.assets.background.selected_path, '/tmp/battle-backgrounds/arena.png');
   assert.equal((visualFilter.script.match(/setsar=1\[p\d+champ0\]/gu) || []).length, 1);
   assert.equal((visualFilter.script.match(/colorchannelmixer=aa=0\.46\[p\d+stagegray0\]/gu) || []).length, 3);
   assert.match(visualFilter.script, /\[p\d+slotstatic\]/u);
@@ -510,7 +513,7 @@ test('tournament audio and visual filters include winner sting cues and champion
   assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
   assert.match(audioFilter, /asplit=3\[dsrc0\]\[dsrc1\]\[dsrc2\]/u);
   assert.match(audioFilter, /volume=0\.113\[progress0\]/u);
-  assert.match(audioFilter, /volume=0\.162\[cry0\]/u);
+  assert.match(audioFilter, /volume=0\.113\[cry0\]/u);
   assert.match(visualFilter.script, /vbattledisappearleft0/u);
   assert.match(visualFilter.script, /vbattledisappearright0/u);
   assert.match(audioFilter, /amix=inputs=/u);

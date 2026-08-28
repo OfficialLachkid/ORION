@@ -74,6 +74,10 @@ async function listPokeQuizzGifBackgroundFiles() {
   return listFiles(POKE_QUIZZ_ASSET_LAYOUT.gifBackgrounds, BACKGROUND_EXTENSIONS);
 }
 
+async function listPokeQuizzBattleBackgroundFiles() {
+  return listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.battleBackgrounds, BACKGROUND_EXTENSIONS);
+}
+
 function normalizeTypeName(typeName) {
   return String(typeName || '').trim().toLowerCase();
 }
@@ -253,6 +257,7 @@ export async function scanPokeQuizzAssetInventory() {
   const [
     backgrounds,
     gifBackgrounds,
+    battleBackgrounds,
     music,
     soundEffects,
     cries,
@@ -263,6 +268,7 @@ export async function scanPokeQuizzAssetInventory() {
   ] = await Promise.all([
     listPokeQuizzBackgroundFiles(),
     listPokeQuizzGifBackgroundFiles(),
+    listPokeQuizzBattleBackgroundFiles(),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, AUDIO_EXTENSIONS),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.soundEffects, AUDIO_EXTENSIONS),
     listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.cries, AUDIO_EXTENSIONS),
@@ -277,6 +283,7 @@ export async function scanPokeQuizzAssetInventory() {
     directories: { ...POKE_QUIZZ_ASSET_LAYOUT },
     backgrounds,
     gif_backgrounds: gifBackgrounds,
+    battle_backgrounds: battleBackgrounds,
     music,
     sound_effects: selectSoundEffectPresets(soundEffects),
     cries,
