@@ -514,6 +514,7 @@ export async function planPokemonShowdownChallenge({
     || inventory?.overlay_presets?.pokeball_open_close
     || null
   );
+  const disappearOverlayPath = inventory?.overlay_presets?.disappear || null;
   const introSlotRevealSoundPath = selectIntroSlotRevealSoundPath(
     inventory?.sound_effects || {},
     template?.audio?.sound_effects?.intro_slot_reveal || {},
@@ -526,6 +527,11 @@ export async function planPokemonShowdownChallenge({
     inventory?.sound_effects || {},
     template?.audio?.sound_effects?.bracket_progress || {},
     null,
+  );
+  const disappearSoundPath = selectPreferredSoundEffectPath(
+    inventory?.sound_effects || {},
+    template?.audio?.sound_effects?.disappear || {},
+    inventory?.sound_effects?.disappear || null,
   );
 
   const requiredAssetGaps = [];
@@ -548,6 +554,15 @@ export async function planPokemonShowdownChallenge({
     && !bracketProgressSoundPath
   ) {
     requiredAssetGaps.push('bracket_progress_sfx_missing');
+  }
+  if (
+    template?.audio?.sound_effects?.disappear?.enabled !== false
+    && !disappearSoundPath
+  ) {
+    requiredAssetGaps.push('disappear_sfx_missing');
+  }
+  if (!disappearOverlayPath) {
+    requiredAssetGaps.push('disappear_overlay_missing');
   }
   if (!participants.every((participant) => participant.render_sprite_path || participant.sprite_path)) {
     requiredAssetGaps.push('pokemon_sprite_local_assets_missing');
@@ -601,6 +616,7 @@ export async function planPokemonShowdownChallenge({
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
         available_paths: inventory?.overlays || [],
         selected_intro_pokeball_path: introPokeballOverlayPath,
+        selected_disappear_path: disappearOverlayPath,
       },
       audio: {
         battle_intro_music_directory: POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic,
@@ -612,6 +628,7 @@ export async function planPokemonShowdownChallenge({
           intro_slot_reveal: introSlotRevealSoundPath,
           bracket_progress: bracketProgressSoundPath,
           winner_reveal: winnerRevealSoundPath,
+          disappear: disappearSoundPath,
         },
       },
       outputs: {

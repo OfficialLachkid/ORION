@@ -54,7 +54,7 @@ const template = {
       matchup_font_size: 92,
       insight_y: 470,
       insight_font_size: 58,
-      winner_y: 1450,
+      winner_y: 200,
       winner_font_size: 90,
       champion_y: 260,
       champion_font_size: 104,
@@ -95,7 +95,8 @@ const template = {
     rounds: {
       hook_hold_seconds: 1.1,
       intro_participant_hold_seconds: 2,
-      inter_round_bracket_hold_seconds: 0.75,
+      inter_round_bracket_hold_seconds: 2.5,
+      post_progress_hold_seconds: 1,
       match_intro_hold_seconds: 1.8,
       suspense_hold_seconds: 0.9,
       reveal_hold_seconds: 1.2,
@@ -120,12 +121,17 @@ const template = {
         enabled: true,
         preferred_keywords: ['ding-sound'],
       },
+      disappear: {
+        enabled: true,
+        preferred_keywords: ['disappear-sound'],
+      },
     },
   },
   renderer: {
     intro_pokeball_scale_multiplier: 1.04,
     intro_slot_reveal_fade_seconds: 0.18,
     intro_slot_reveal_stagger_seconds: 0.3,
+    battle_disappear_duration_seconds: 0.42,
     loser_alpha_multiplier: 0.46,
   },
 };
@@ -199,13 +205,15 @@ const assetInventory = {
   backgrounds: ['/tmp/backgrounds/arena.png'],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3'],
+    all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3', '/tmp/disappear-sound.mp3'],
     timer_end: '/tmp/ding-sound.mp3',
     pokeball_intro: '/tmp/pokeball-open-sound.mp3',
+    disappear: '/tmp/disappear-sound.mp3',
   },
-  overlays: ['/tmp/open-close-pokeball.gif'],
+  overlays: ['/tmp/open-close-pokeball.gif', '/tmp/disappear.gif'],
   overlay_presets: {
     pokeball_primary: '/tmp/open-close-pokeball.gif',
+    disappear: '/tmp/disappear.gif',
   },
 };
 
@@ -226,9 +234,11 @@ test('generic planner dispatch builds a four-participant showdown bracket', asyn
   assert.equal(plan.tournament.participants[0].render_sprite_path.endsWith('.gif'), true);
   assert.equal(plan.tournament.participants.every((participant) => participant.cry_path.endsWith('.ogg')), true);
   assert.equal(plan.assets.overlays.selected_intro_pokeball_path, '/tmp/open-close-pokeball.gif');
+  assert.equal(plan.assets.overlays.selected_disappear_path, '/tmp/disappear.gif');
   assert.equal(plan.assets.audio.selected_sound_effects.intro_slot_reveal, '/tmp/pokeball-open-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.bracket_progress, '/tmp/select-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.winner_reveal, '/tmp/ding-sound.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.disappear, '/tmp/disappear-sound.mp3');
   assert.equal(plan.required_asset_gaps.length, 0);
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Showdown$/u);
 });
@@ -253,20 +263,21 @@ test('showdown render plan and inputs stay deterministic for a four-Pokemon brac
   assert.equal(renderPlan.bracket_layout.slots.semi_1_winner.center_y, 892);
   assert.equal(renderPlan.matches[0].intro_start_seconds, 4.18);
   assert.equal(renderPlan.matches[0].battle_transition_start_seconds, 3.78);
-  assert.equal(renderPlan.matches[1].intro_start_seconds - renderPlan.matches[1].scene_start_seconds, 0.75);
+  assert.equal(renderPlan.matches[1].intro_start_seconds - renderPlan.matches[1].scene_start_seconds, 2.5);
   assert.equal(renderPlan.intro_sequence.bracket_draw_end_seconds, 1.1);
   assert.equal(renderPlan.intro_sequence.participant_reveal_stagger_seconds, 0.3);
   assert.equal(renderPlan.intro_sequence.participant_hold_end_seconds, renderPlan.matches[0].intro_start_seconds);
   assert.ok(
-    (renderPlan.matches[1].battle_transition_start_seconds - renderPlan.matches[0].bracket_progress_end_seconds) >= 0.25,
+    (renderPlan.matches[1].battle_transition_start_seconds - renderPlan.matches[0].bracket_progress_end_seconds) >= 0.95,
   );
   assert.equal(renderPlan.champion_scene.start_seconds, renderPlan.matches.at(-1)?.bracket_progress_end_seconds);
   assert.equal(renderPlan.champion_scene.end_seconds > renderPlan.matches.at(-1)?.scene_end_seconds, true);
-  assert.equal(visualInputs.length, 6);
+  assert.equal(visualInputs.length, 7);
   assert.equal(visualInputs[0].role, 'background');
   assert.equal(visualInputs[1].role, 'intro-pokeball');
+  assert.equal(visualInputs[2].role, 'battle-disappear');
   assert.equal(visualInputs.at(-1)?.role, 'participant-3');
-  assert.deepEqual(visualInputs[2].args.slice(0, 4), ['-ignore_loop', '0', '-t', String(renderPlan.total_duration_seconds)]);
+  assert.deepEqual(visualInputs[3].args.slice(0, 4), ['-ignore_loop', '0', '-t', String(renderPlan.total_duration_seconds)]);
 });
 
 test('showdown audio and visual filters include winner sting cues and champion overlay logic', async () => {
@@ -288,7 +299,8 @@ test('showdown audio and visual filters include winner sting cues and champion o
     {
       background: 0,
       introPokeball: 1,
-      participants: [2, 3, 4, 5],
+      battleDisappear: 2,
+      participants: [3, 4, 5, 6],
     },
     '/tmp/font.ttf',
   );
@@ -298,6 +310,7 @@ test('showdown audio and visual filters include winner sting cues and champion o
     musicPath: '/tmp/music.mp3',
     bracketProgressPath: '/tmp/select-sound.mp3',
     winnerRevealPath: '/tmp/ding-sound.mp3',
+    disappearPath: '/tmp/disappear-sound.mp3',
     cryCues: buildShowdownCryCues(plan, renderPlan),
     renderPlan,
   });
@@ -346,8 +359,11 @@ test('showdown audio and visual filters include winner sting cues and champion o
   assert.match(audioFilter, /volume=0\.113\[open0\]/u);
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
   assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
+  assert.match(audioFilter, /asplit=3\[dsrc0\]\[dsrc1\]\[dsrc2\]/u);
   assert.match(audioFilter, /volume=0\.225\[progress0\]/u);
   assert.match(audioFilter, /volume=0\.162\[cry0\]/u);
+  assert.match(visualFilter.script, /vbattledisappearleft0/u);
+  assert.match(visualFilter.script, /vbattledisappearright0/u);
   assert.match(audioFilter, /amix=inputs=/u);
 });
 

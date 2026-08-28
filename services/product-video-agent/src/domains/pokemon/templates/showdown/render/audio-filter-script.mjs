@@ -1,4 +1,5 @@
 import {
+  DEFAULT_DISAPPEAR_SFX_VOLUME,
   DEFAULT_MUSIC_VOLUME,
   DEFAULT_TIMER_END_VOLUME,
   DEFAULT_VOICE_VOLUME,
@@ -70,7 +71,7 @@ export function buildShowdownCryCues(plan, renderPlan) {
   if (championCryPath) {
     cues.push({
       path: championCryPath,
-      start_seconds: ensureNumber(renderPlan?.champion_scene?.start_seconds, 0) + 0.12,
+      start_seconds: ensureNumber(renderPlan?.champion_scene?.start_seconds, 0) + 0.02,
       volume: DEFAULT_SHOWDOWN_CRY_VOLUME,
     });
   }
@@ -84,6 +85,7 @@ export function buildAudioFilterScript({
   musicPath,
   bracketProgressPath,
   winnerRevealPath,
+  disappearPath,
   cryCues = [],
   renderPlan,
 }) {
@@ -145,6 +147,27 @@ export function buildAudioFilterScript({
       filters.push(`[psrc${matchIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_SHOWDOWN_BRACKET_PROGRESS_VOLUME}[${label}]`);
       mixLabels.push(label);
     });
+    inputIndex += 1;
+  }
+
+  if (disappearPath) {
+    const splitCount = Math.max(1, renderPlan.matches.length);
+    const disappearDurationSeconds = Math.max(
+      0.12,
+      ensureNumber(renderPlan?.audio_cues?.battle_disappear_duration_seconds, 0.42),
+    );
+    filters.push(`[${inputIndex}:a]asplit=${splitCount}${Array.from({ length: splitCount }, (_, index) => `[dsrc${index}]`).join('')}`);
+    renderPlan.matches.forEach((match, matchIndex) => {
+      const startSeconds = Math.max(
+        ensureNumber(match?.reveal_start_seconds, 0),
+        ensureNumber(match?.scene_end_seconds, 0) - disappearDurationSeconds,
+      );
+      const delayMs = Math.max(0, Math.round(startSeconds * 1000));
+      const label = `disp${matchIndex}`;
+      filters.push(`[dsrc${matchIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_DISAPPEAR_SFX_VOLUME}[${label}]`);
+      mixLabels.push(label);
+    });
+    inputIndex += 1;
   }
 
   const normalizedCryCues = (Array.isArray(cryCues) ? cryCues : [])

@@ -902,6 +902,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const slotSpriteSize = ensureNumber(bracketLayout.slot_sprite_size_px, 120);
   const battleSpriteSize = ensureNumber(battleStage.sprite_size_px, 380);
   const championSpriteSize = ensureNumber(championStage.sprite_size_px, 520);
+  const battleDisappearDuration = Math.max(
+    0.12,
+    ensureNumber(
+      renderPlan?.audio_cues?.battle_disappear_duration_seconds,
+      ensureNumber(template?.renderer?.battle_disappear_duration_seconds, 0.42),
+    ),
+  );
   const introPokeballSize = round(
     slotSpriteSize * ensureNumber(template?.renderer?.intro_pokeball_scale_multiplier, 1.04),
   );
@@ -927,10 +934,18 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const stageGrayLabels = new Map();
   const championStageLabels = new Map();
   const introRevealSchedule = buildIntroRevealSchedule(renderPlan);
+  const battleDisappearLabels = inputRefs.battleDisappear != null
+    ? Array.from({ length: renderPlan.matches.length * 2 }, (_, index) => `vbattledisappearsrc${index}`)
+    : [];
 
   filters.push(
     `[${inputRefs.background}:v]fps=${fps},scale=${renderPlan.canvas.width}:${renderPlan.canvas.height}:force_original_aspect_ratio=increase,crop=${renderPlan.canvas.width}:${renderPlan.canvas.height},boxblur=${blurSigma}:1,setsar=1,split=${1 + matchBackgroundLabels.length + 1}[vbgbase]${matchBackgroundLabels.map((label) => `[${label}]`).join('')}[${championBackgroundLabel}]`,
   );
+  if (inputRefs.battleDisappear != null && battleDisappearLabels.length > 0) {
+    filters.push(
+      `[${inputRefs.battleDisappear}:v]split=${battleDisappearLabels.length}${battleDisappearLabels.map((label) => `[${label}]`).join('')}`,
+    );
+  }
   renderPlan.matches.forEach((match, index) => {
     const transitionDuration = Math.max(0.08, ensureNumber(match.battle_transition_duration_seconds, 0.4));
     filters.push(
@@ -1178,6 +1193,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const leftPlacement = buildStageSpritePlacement(battleStage.left_center_x, battleStage.center_y);
     const rightPlacement = buildStageSpritePlacement(battleStage.right_center_x, battleStage.center_y);
     const transitionStart = ensureNumber(match.battle_transition_start_seconds, match.intro_start_seconds);
+    const battleDisappearStart = round(
+      Math.max(
+        ensureNumber(match.reveal_start_seconds, 0),
+        ensureNumber(match.scene_end_seconds, 0) - battleDisappearDuration,
+      ) * 1000,
+    ) / 1000;
     const stageSceneBaseLabel = `vmatchscene${matchIndex}`;
     const leftStageLabel = stageBattleLabelQueues.get(leftIndex)?.shift();
     const rightStageLabel = stageBattleLabelQueues.get(rightIndex)?.shift();
@@ -1227,13 +1248,35 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const loserPlacement = loserIndex === leftIndex ? leftPlacement : rightPlacement;
     const postWinnerLabel = `vmatchwin${matchIndex}`;
     filters.push(
-      `[${preRevealRightLabel}][${winnerStageLabel}]overlay=x='${winnerPlacement.x}':y='${winnerPlacement.y}':enable='${formatEnableBetween(match.reveal_start_seconds, match.scene_end_seconds)}'[${postWinnerLabel}]`,
+      `[${preRevealRightLabel}][${winnerStageLabel}]overlay=x='${winnerPlacement.x}':y='${winnerPlacement.y}':enable='${formatEnableBetween(match.reveal_start_seconds, battleDisappearStart)}'[${postWinnerLabel}]`,
     );
     const postLoserLabel = `vmatchlose${matchIndex}`;
     filters.push(
-      `[${postWinnerLabel}][${loserStageGrayLabel}]overlay=x='${loserPlacement.x}':y='${loserPlacement.y}':enable='${formatEnableBetween(match.reveal_start_seconds, match.scene_end_seconds)}'[${postLoserLabel}]`,
+      `[${postWinnerLabel}][${loserStageGrayLabel}]overlay=x='${loserPlacement.x}':y='${loserPlacement.y}':enable='${formatEnableBetween(match.reveal_start_seconds, battleDisappearStart)}'[${postLoserLabel}]`,
     );
-    currentVideoLabel = postLoserLabel;
+    let battleSceneLabel = postLoserLabel;
+    if (inputRefs.battleDisappear != null) {
+      const leftDisappearSourceLabel = battleDisappearLabels[(matchIndex * 2)];
+      const rightDisappearSourceLabel = battleDisappearLabels[(matchIndex * 2) + 1];
+      const leftDisappearLabel = `vbattledisappearleft${matchIndex}`;
+      const rightDisappearLabel = `vbattledisappearright${matchIndex}`;
+      const leftDisappearVideoLabel = `vbattledisappearleftv${matchIndex}`;
+      const rightDisappearVideoLabel = `vbattledisappearrightv${matchIndex}`;
+      filters.push(
+        `[${leftDisappearSourceLabel}]fps=${fps},trim=duration=${battleDisappearDuration},setpts=PTS-STARTPTS+${battleDisappearStart}/TB,scale=${battleSpriteSize}:${battleSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${leftDisappearLabel}]`,
+      );
+      filters.push(
+        `[${battleSceneLabel}][${leftDisappearLabel}]overlay=x='${leftPlacement.x}':y='${leftPlacement.y}':enable='${formatEnableBetween(battleDisappearStart, match.scene_end_seconds)}'[${leftDisappearVideoLabel}]`,
+      );
+      filters.push(
+        `[${rightDisappearSourceLabel}]fps=${fps},trim=duration=${battleDisappearDuration},setpts=PTS-STARTPTS+${battleDisappearStart}/TB,scale=${battleSpriteSize}:${battleSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${rightDisappearLabel}]`,
+      );
+      filters.push(
+        `[${leftDisappearVideoLabel}][${rightDisappearLabel}]overlay=x='${rightPlacement.x}':y='${rightPlacement.y}':enable='${formatEnableBetween(battleDisappearStart, match.scene_end_seconds)}'[${rightDisappearVideoLabel}]`,
+      );
+      battleSceneLabel = rightDisappearVideoLabel;
+    }
+    currentVideoLabel = battleSceneLabel;
   });
 
   const championIndex = participantById.get(plan.tournament?.champion?.id || '')?.bracket_seed_index ?? 0;

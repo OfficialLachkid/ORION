@@ -86,7 +86,7 @@
       "matchup_font_size": 62,
       "insight_y": 310,
       "insight_font_size": 38,
-      "winner_y": 1450,
+      "winner_y": 200,
       "winner_font_size": 78,
       "champion_y": 252,
       "champion_font_size": 90
@@ -127,7 +127,7 @@
     "rounds": {
       "hook_hold_seconds": 1.1,
       "intro_participant_hold_seconds": 2,
-      "inter_round_bracket_hold_seconds": 2,
+      "inter_round_bracket_hold_seconds": 2.5,
       "post_progress_hold_seconds": 1,
       "match_intro_hold_seconds": 1.8,
       "suspense_hold_seconds": 0.9,
@@ -170,6 +170,12 @@
         "preferred_keywords": [
           "ding-sound"
         ]
+      },
+      "disappear": {
+        "enabled": true,
+        "preferred_keywords": [
+          "disappear-sound"
+        ]
       }
     }
   },
@@ -189,6 +195,7 @@
     "intro_bracket_finalist_slot_seconds": 0.18,
     "intro_bracket_final_connector_seconds": 1.3,
     "intro_bracket_champion_slot_seconds": 0.18,
+    "battle_disappear_duration_seconds": 0.42,
     "winner_scale_multiplier": 1.05,
     "loser_alpha_multiplier": 0.46,
     "winner_banner_fade_seconds": 0.16,
