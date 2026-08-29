@@ -20,11 +20,13 @@ import {
   parseTrailingJsonArray,
   runProjectNodeScript,
 } from './process-utils.mjs';
+import { runNightShiftRelatedVideoRefresh } from './related-video-sweep.mjs';
 
 export {
   countActiveTemplateQueueItems,
   selectNextReviewBacklogRuntime,
 } from './pokemon-maintenance-review-backlog.mjs';
+export { runNightShiftRelatedVideoRefresh } from './related-video-sweep.mjs';
 
 export const DEFAULT_PUBLICATION_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 export const REVIEW_READY_TARGET_COUNT = POKE_QUIZZ_REVIEW_TARGET_COUNT;
@@ -321,49 +323,6 @@ async function runNightShiftAutoPublicationAutomation(
 
 export async function reconcilePreviewFallbackStorage() {
   return reconcilePokeQuizzPreviewFallbackStorage();
-}
-
-// Run --refresh-related-videos --include-published for a single channel.
-// Guarded to only touch rows whose apply_status !== 'applied' (via the
-// script's own isPublishedBackfillNeeded filter), so a full pass is a
-// cheap no-op on channels where everything is already covered. Exported
-// for direct test coverage — the loop integration below just delegates.
-export function runNightShiftRelatedVideoRefresh({
-  profile,
-  asOf,
-  runNodeScript,
-} = {}) {
-  const child = runNodeScript(
-    'services/product-video-agent/scripts/execute-youtube-publication.mjs',
-    [
-      '--channel', profile.account_key,
-      '--channels', DEFAULT_PUBLICATION_CHANNELS_PATH,
-      '--refresh-related-videos',
-      '--include-published',
-      '--as-of', asOf,
-    ],
-    { timeoutMs: 45 * 60 * 1000 },
-  );
-  const parsed = Array.isArray(parseTrailingJsonArray(child.stdout))
-    ? parseTrailingJsonArray(child.stdout)
-    : [];
-  const errors = [];
-  const stderrOut = collectChildError(child);
-  if (stderrOut) errors.push(`related-video refresh error for ${profile.account_key}: ${stderrOut}`);
-  const applied = parsed.filter((r) => r?.related_video_apply_status === 'applied').length;
-  const manualActionRequired = parsed.filter((r) => r?.related_video_apply_status === 'manual_action_required').length;
-  const skippedQuota = parsed.filter((r) => r?.related_video_apply_status === 'skipped_quota').length;
-  const featureUnavailable = parsed.filter((r) => r?.related_video_apply_status === 'feature_unavailable').length;
-  return {
-    status: errors.length > 0 && parsed.length === 0 ? 'failed' : 'completed',
-    exitCode: child.status ?? 0,
-    total: parsed.length,
-    applied,
-    manualActionRequired,
-    skippedQuota,
-    featureUnavailable,
-    errors,
-  };
 }
 
 export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), dependencies = {}) {
