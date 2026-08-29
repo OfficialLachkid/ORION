@@ -405,17 +405,10 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
       }
     }
 
-    // Related-video catch-up sweep — runs for EVERY channel that has
+    // Related-video catch-up sweep — runs for every channel with
     // related_video.enabled, independent of publication_automation. The
-    // --schedule-approved step above applies related-video inline for rows
-    // it schedules RIGHT NOW; this sweep catches rows that were scheduled
-    // previously without related-video (e.g. before the profile was set
-    // up, before the audience API was in place, or after a partial-run
-    // interruption). The refresh guard skips rows already marked
-    // apply_status='applied' so it's a cheap no-op when nothing needs
-    // catching up — safe to run nightly across all channels regardless
-    // of auto-schedule preference. Only touches channels that opted in
-    // via related_video.enabled=true.
+    // refresh guard skips rows already marked apply_status='applied' so
+    // it's a cheap no-op when there's nothing to catch up.
     if (profile?.metadata?.related_video?.enabled === true) {
       runResult.relatedVideoSweep = runNightShiftRelatedVideoRefresh({
         profile,
