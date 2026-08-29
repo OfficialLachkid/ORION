@@ -49,6 +49,9 @@ function summarizeVideoQueueMaintenance(profiles, runs) {
     changedSchedule: 0,
     autoApproved: 0,
     autoScheduled: 0,
+    relatedVideoApplied: 0,
+    relatedVideoManualActionRequired: 0,
+    relatedVideoSkippedQuota: 0,
     statusLookupFailures: 0,
     errors: [],
     channels: runs,
@@ -64,6 +67,9 @@ function summarizeVideoQueueMaintenance(profiles, runs) {
     summary.processedChannels += 1;
     summary.autoApproved += Number(run.autoApproved || 0);
     summary.autoScheduled += Number(run.autoScheduled || 0);
+    summary.relatedVideoApplied += Number(run.relatedVideoSweep?.applied || 0);
+    summary.relatedVideoManualActionRequired += Number(run.relatedVideoSweep?.manualActionRequired || 0);
+    summary.relatedVideoSkippedQuota += Number(run.relatedVideoSweep?.skippedQuota || 0);
     for (const result of run.results) {
       const action = String(result?.action || '');
       const workflowState = String(result?.workflow_state || '');
@@ -317,6 +323,49 @@ export async function reconcilePreviewFallbackStorage() {
   return reconcilePokeQuizzPreviewFallbackStorage();
 }
 
+// Run --refresh-related-videos --include-published for a single channel.
+// Guarded to only touch rows whose apply_status !== 'applied' (via the
+// script's own isPublishedBackfillNeeded filter), so a full pass is a
+// cheap no-op on channels where everything is already covered. Exported
+// for direct test coverage — the loop integration below just delegates.
+export function runNightShiftRelatedVideoRefresh({
+  profile,
+  asOf,
+  runNodeScript,
+} = {}) {
+  const child = runNodeScript(
+    'services/product-video-agent/scripts/execute-youtube-publication.mjs',
+    [
+      '--channel', profile.account_key,
+      '--channels', DEFAULT_PUBLICATION_CHANNELS_PATH,
+      '--refresh-related-videos',
+      '--include-published',
+      '--as-of', asOf,
+    ],
+    { timeoutMs: 45 * 60 * 1000 },
+  );
+  const parsed = Array.isArray(parseTrailingJsonArray(child.stdout))
+    ? parseTrailingJsonArray(child.stdout)
+    : [];
+  const errors = [];
+  const stderrOut = collectChildError(child);
+  if (stderrOut) errors.push(`related-video refresh error for ${profile.account_key}: ${stderrOut}`);
+  const applied = parsed.filter((r) => r?.related_video_apply_status === 'applied').length;
+  const manualActionRequired = parsed.filter((r) => r?.related_video_apply_status === 'manual_action_required').length;
+  const skippedQuota = parsed.filter((r) => r?.related_video_apply_status === 'skipped_quota').length;
+  const featureUnavailable = parsed.filter((r) => r?.related_video_apply_status === 'feature_unavailable').length;
+  return {
+    status: errors.length > 0 && parsed.length === 0 ? 'failed' : 'completed',
+    exitCode: child.status ?? 0,
+    total: parsed.length,
+    applied,
+    manualActionRequired,
+    skippedQuota,
+    featureUnavailable,
+    errors,
+  };
+}
+
 export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), dependencies = {}) {
   const loadProfiles = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
   const discoverRuntimes = dependencies.discoverNightShiftChannelRuntimes || discoverNightShiftChannelRuntimes;
@@ -394,6 +443,28 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
       if (autoRun.errors.length > 0) {
         runResult.status = runResult.results.length > 0 ? 'completed' : 'failed';
         runResult.error = [runResult.error, ...autoRun.errors].filter(Boolean).join(' | ');
+      }
+    }
+
+    // Related-video catch-up sweep — runs for EVERY channel that has
+    // related_video.enabled, independent of publication_automation. The
+    // --schedule-approved step above applies related-video inline for rows
+    // it schedules RIGHT NOW; this sweep catches rows that were scheduled
+    // previously without related-video (e.g. before the profile was set
+    // up, before the audience API was in place, or after a partial-run
+    // interruption). The refresh guard skips rows already marked
+    // apply_status='applied' so it's a cheap no-op when nothing needs
+    // catching up — safe to run nightly across all channels regardless
+    // of auto-schedule preference. Only touches channels that opted in
+    // via related_video.enabled=true.
+    if (profile?.metadata?.related_video?.enabled === true) {
+      runResult.relatedVideoSweep = runNightShiftRelatedVideoRefresh({
+        profile,
+        asOf,
+        runNodeScript,
+      });
+      if (runResult.relatedVideoSweep?.errors?.length > 0) {
+        runResult.error = [runResult.error, ...runResult.relatedVideoSweep.errors].filter(Boolean).join(' | ');
       }
     }
     results.push(runResult);
