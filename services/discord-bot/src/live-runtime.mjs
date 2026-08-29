@@ -427,6 +427,37 @@ function buildTrackedOutboundEventKey(channelId, outboundEvent) {
   return `${channelId}:${stream}:${taskId}`;
 }
 
+// Extract the tracked entries for a given task's approval message. Used
+// after a successful lead-outreach send to know which Discord message to
+// delete from the waiting-approval / outreach-followups thread. Exported
+// so the deletion logic has a unit test — the key format is otherwise
+// opaque and easy to mis-match.
+export function findTrackedApprovalMessagesForTask(trackedMap, taskId) {
+  const id = String(taskId || '').trim();
+  if (!id) return [];
+  const suffix = `:approval:${id}`;
+  const results = [];
+  for (const [key, tracked] of trackedMap.entries()) {
+    if (!key.endsWith(suffix)) continue;
+    if (!tracked?.channelId || !tracked?.messageId) continue;
+    results.push({ key, channelId: tracked.channelId, messageId: tracked.messageId });
+  }
+  return results;
+}
+
+// Guard: only delete the original approval message when the outreach send
+// truly went out. Rejects + failures keep their message so the operator
+// has full context for triage. Non-outreach gmail sends (ops tools etc.)
+// don't touch waiting-approval anyway.
+export function isLeadOutreachSendComplete(execution, task) {
+  return Boolean(
+    execution
+    && execution.outcome === 'completed'
+    && String(execution.executionPlan?.action || '') === 'gmail_send_draft'
+    && String(task?.lead_id || '').trim(),
+  );
+}
+
 function buildTaskDispatchBlockedEvents(task) {
   const reason = 'No executor is mapped for this request yet.';
   const publicationId = String(
@@ -1739,6 +1770,35 @@ export async function runLiveDiscordBot(config) {
       const writeBackEvent = buildMemoryWriteBackCandidateEvent(task, writeBackCandidates);
       if (writeBackEvent) {
         await fanOutOutboundEvents(token, config, [writeBackEvent], trackedTaskMessages);
+      }
+    }
+
+    // After a lead-outreach send completes successfully, delete the original
+    // approval message from the waiting-approval / outreach-followups thread
+    // so those threads stay pending-only. The send confirmation already lives
+    // in #sent-outreach (via the executor's channelKey routing), which serves
+    // as the audit trail. Failures / rejects keep their message in place so
+    // the operator has full context for triage.
+    if (isLeadOutreachSendComplete(execution, task)) {
+      const targets = findTrackedApprovalMessagesForTask(trackedTaskMessages, task.task_id);
+      for (const target of targets) {
+        try {
+          await sendDiscordApiRequest(
+            token,
+            `/channels/${target.channelId}/messages/${target.messageId}`,
+            undefined,
+            'DELETE',
+          );
+          trackedTaskMessages.delete(target.key);
+        } catch (error) {
+          // 404 is fine — message may have already been cleaned up manually
+          // or by a prior handler. Any other error just logs, we don't want
+          // a Discord blip to fail the send report (the email is already
+          // gone by this point).
+          process.stderr.write(
+            `Could not delete resolved approval message ${target.messageId} for outreach send ${task.task_id}: ${error.message}\n`,
+          );
+        }
       }
     }
 

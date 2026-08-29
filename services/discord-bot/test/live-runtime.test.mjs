@@ -15,6 +15,8 @@ import {
 import {
   attachImageContextToTasks,
   buildImageContextKey,
+  findTrackedApprovalMessagesForTask,
+  isLeadOutreachSendComplete,
   mergeImageAttachments,
   prepareCommandTasksForExecution,
   rehydratePokeQuizzReviewTask,
@@ -559,4 +561,77 @@ test('rehydratePokeQuizzReviewTask finds TrivaMon reviews without assuming the P
   assert.equal(task?.poke_quizz_publication_review?.publicationId, 'publication-trivamon-review-1');
   assert.equal(task?.poke_quizz_publication_review?.channelSelector, 'trivamon-youtube');
   assert.equal(task?.poke_quizz_publication_review?.reviewThreadId, '1536146358749233222');
+});
+
+test('isLeadOutreachSendComplete only fires for completed lead-outreach gmail sends', () => {
+  // Positive: gmail_send_draft that completed AND carries a lead_id.
+  assert.equal(
+    isLeadOutreachSendComplete(
+      { outcome: 'completed', executionPlan: { action: 'gmail_send_draft' } },
+      { task_id: 'TASK-1', lead_id: 'lead-abc' },
+    ),
+    true,
+  );
+  // Ops-tool gmail send (no lead_id): must NOT clean up any approval msg.
+  assert.equal(
+    isLeadOutreachSendComplete(
+      { outcome: 'completed', executionPlan: { action: 'gmail_send_draft' } },
+      { task_id: 'TASK-1' },
+    ),
+    false,
+  );
+  // Send failed: keep the message for triage.
+  assert.equal(
+    isLeadOutreachSendComplete(
+      { outcome: 'failed', executionPlan: { action: 'gmail_send_draft' } },
+      { task_id: 'TASK-1', lead_id: 'lead-abc' },
+    ),
+    false,
+  );
+  // Wrong action (create vs send): must NOT delete.
+  assert.equal(
+    isLeadOutreachSendComplete(
+      { outcome: 'completed', executionPlan: { action: 'gmail_create_draft' } },
+      { task_id: 'TASK-1', lead_id: 'lead-abc' },
+    ),
+    false,
+  );
+});
+
+test('findTrackedApprovalMessagesForTask matches the approval stream, not queue/result/parsed', () => {
+  // Regression guard for 2026-08-29 delete-on-send fix: the trackedTaskMessages
+  // key format is <channelId>:<stream>:<taskId>. We must match ONLY the
+  // approval stream so we don't accidentally delete task-queue update
+  // messages or the sent-outreach confirmation that just landed.
+  const tracked = new Map([
+    ['CHAN-WAITING:approval:TASK-1', { channelId: 'CHAN-WAITING', messageId: 'MSG-APPROVAL' }],
+    ['CHAN-QUEUE:queue:TASK-1', { channelId: 'CHAN-QUEUE', messageId: 'MSG-QUEUE' }],
+    ['CHAN-RESULT:result:TASK-1', { channelId: 'CHAN-RESULT', messageId: 'MSG-RESULT' }],
+    ['CHAN-WAITING:approval:TASK-OTHER', { channelId: 'CHAN-WAITING', messageId: 'MSG-OTHER' }],
+  ]);
+
+  const matches = findTrackedApprovalMessagesForTask(tracked, 'TASK-1');
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].channelId, 'CHAN-WAITING');
+  assert.equal(matches[0].messageId, 'MSG-APPROVAL');
+});
+
+test('findTrackedApprovalMessagesForTask skips entries missing channelId or messageId', () => {
+  const tracked = new Map([
+    ['CHAN-A:approval:TASK-1', { channelId: 'CHAN-A', messageId: 'MSG-1' }],
+    ['CHAN-B:approval:TASK-1', { channelId: '', messageId: 'MSG-2' }],
+    ['CHAN-C:approval:TASK-1', { channelId: 'CHAN-C' }],
+  ]);
+
+  const matches = findTrackedApprovalMessagesForTask(tracked, 'TASK-1');
+
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0].messageId, 'MSG-1');
+});
+
+test('findTrackedApprovalMessagesForTask returns empty array for empty/missing taskId', () => {
+  const tracked = new Map([['CHAN-A:approval:TASK-1', { channelId: 'CHAN-A', messageId: 'MSG-1' }]]);
+  assert.deepEqual(findTrackedApprovalMessagesForTask(tracked, ''), []);
+  assert.deepEqual(findTrackedApprovalMessagesForTask(tracked, null), []);
 });
