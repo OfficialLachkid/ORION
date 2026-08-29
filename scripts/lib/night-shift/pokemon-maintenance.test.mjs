@@ -4,6 +4,7 @@ import { normalizePublicationChannelProfile } from '../../../services/product-vi
 import {
   countActiveTemplateQueueItems,
   planNightShiftAutoPublicationAutomation,
+  runNightShiftRelatedVideoRefresh,
   runVideoQueueMaintenance,
   selectNextReviewBacklogRuntime,
   selectPrimaryNightShiftRuntimes,
@@ -616,4 +617,80 @@ test('review refresh summary collapses duplicate runtime runs into publication-c
   assert.equal(summary.retried, 10);
   assert.equal(summary.failed, 1);
   assert.equal(summary.failures.length, 1);
+});
+
+test('runNightShiftRelatedVideoRefresh summarises applied vs manual counts from the CLI output', () => {
+  // Regression guard for 2026-08-29 addition: night-shift sweeps every
+  // channel with related_video.enabled=true after the schedule step so
+  // any preview/scheduled/published row missing an applied related-video
+  // gets caught up. The helper spawns
+  // execute-youtube-publication.mjs --refresh-related-videos and rolls
+  // the per-row outcomes into a compact summary.
+  const runResults = [
+    { publication_id: 'pub-1', related_video_apply_status: 'applied' },
+    { publication_id: 'pub-2', related_video_apply_status: 'applied' },
+    { publication_id: 'pub-3', related_video_apply_status: 'manual_action_required' },
+    { publication_id: 'pub-4', related_video_apply_status: 'feature_unavailable' },
+  ];
+  const child = { status: 0, stdout: `${JSON.stringify(runResults)}\n`, stderr: '' };
+  const runNodeScript = () => child;
+
+  const result = runNightShiftRelatedVideoRefresh({
+    profile: {
+      account_key: 'trivamon-youtube',
+      metadata: { related_video: { enabled: true } },
+    },
+    asOf: '2026-08-29T02:00:00.000Z',
+    runNodeScript,
+  });
+
+  assert.equal(result.status, 'completed');
+  assert.equal(result.total, 4);
+  assert.equal(result.applied, 2);
+  assert.equal(result.manualActionRequired, 1);
+  assert.equal(result.featureUnavailable, 1);
+  assert.equal(result.skippedQuota, 0);
+});
+
+test('runNightShiftRelatedVideoRefresh signals failure when the CLI errored with no rows produced', () => {
+  // Distinguish "quiet no-op" (0 candidates → 0 results, exit 0) from a
+  // real failure (crash before writing any rows). The night-shift
+  // digest surfaces the error only in the failure case.
+  const child = {
+    status: 1,
+    stdout: '',
+    stderr: 'YouTube API quota exceeded while updating audience declaration',
+  };
+  const result = runNightShiftRelatedVideoRefresh({
+    profile: { account_key: 'poke-quizz-youtube', metadata: { related_video: { enabled: true } } },
+    asOf: '2026-08-29T02:00:00.000Z',
+    runNodeScript: () => child,
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.total, 0);
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0], /quota exceeded/u);
+});
+
+test('runNightShiftRelatedVideoRefresh counts skipped_quota rows separately from applied/failed', () => {
+  // Quota-aware bail-out (PR #81) marks the row that hit quota with
+  // apply_status=skipped_quota and stops processing. Report this as its
+  // own bucket so the digest can surface "quota out" clearly instead of
+  // hiding it under manual_action_required.
+  const runResults = [
+    { publication_id: 'pub-1', related_video_apply_status: 'applied' },
+    { publication_id: 'pub-2', related_video_apply_status: 'skipped_quota' },
+  ];
+  const child = { status: 0, stdout: `${JSON.stringify(runResults)}\n`, stderr: '' };
+
+  const result = runNightShiftRelatedVideoRefresh({
+    profile: { account_key: 'dexguess-youtube', metadata: { related_video: { enabled: true } } },
+    asOf: '2026-08-29T02:00:00.000Z',
+    runNodeScript: () => child,
+  });
+
+  assert.equal(result.applied, 1);
+  assert.equal(result.skippedQuota, 1);
+  assert.equal(result.manualActionRequired, 0);
 });

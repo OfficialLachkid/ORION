@@ -20,11 +20,13 @@ import {
   parseTrailingJsonArray,
   runProjectNodeScript,
 } from './process-utils.mjs';
+import { runNightShiftRelatedVideoRefresh } from './related-video-sweep.mjs';
 
 export {
   countActiveTemplateQueueItems,
   selectNextReviewBacklogRuntime,
 } from './pokemon-maintenance-review-backlog.mjs';
+export { runNightShiftRelatedVideoRefresh } from './related-video-sweep.mjs';
 
 export const DEFAULT_PUBLICATION_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 export const REVIEW_READY_TARGET_COUNT = POKE_QUIZZ_REVIEW_TARGET_COUNT;
@@ -49,6 +51,9 @@ function summarizeVideoQueueMaintenance(profiles, runs) {
     changedSchedule: 0,
     autoApproved: 0,
     autoScheduled: 0,
+    relatedVideoApplied: 0,
+    relatedVideoManualActionRequired: 0,
+    relatedVideoSkippedQuota: 0,
     statusLookupFailures: 0,
     errors: [],
     channels: runs,
@@ -64,6 +69,9 @@ function summarizeVideoQueueMaintenance(profiles, runs) {
     summary.processedChannels += 1;
     summary.autoApproved += Number(run.autoApproved || 0);
     summary.autoScheduled += Number(run.autoScheduled || 0);
+    summary.relatedVideoApplied += Number(run.relatedVideoSweep?.applied || 0);
+    summary.relatedVideoManualActionRequired += Number(run.relatedVideoSweep?.manualActionRequired || 0);
+    summary.relatedVideoSkippedQuota += Number(run.relatedVideoSweep?.skippedQuota || 0);
     for (const result of run.results) {
       const action = String(result?.action || '');
       const workflowState = String(result?.workflow_state || '');
@@ -394,6 +402,21 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
       if (autoRun.errors.length > 0) {
         runResult.status = runResult.results.length > 0 ? 'completed' : 'failed';
         runResult.error = [runResult.error, ...autoRun.errors].filter(Boolean).join(' | ');
+      }
+    }
+
+    // Related-video catch-up sweep — runs for every channel with
+    // related_video.enabled, independent of publication_automation. The
+    // refresh guard skips rows already marked apply_status='applied' so
+    // it's a cheap no-op when there's nothing to catch up.
+    if (profile?.metadata?.related_video?.enabled === true) {
+      runResult.relatedVideoSweep = runNightShiftRelatedVideoRefresh({
+        profile,
+        asOf,
+        runNodeScript,
+      });
+      if (runResult.relatedVideoSweep?.errors?.length > 0) {
+        runResult.error = [runResult.error, ...runResult.relatedVideoSweep.errors].filter(Boolean).join(' | ');
       }
     }
     results.push(runResult);
