@@ -9,6 +9,7 @@ import {
 
 const DEFAULT_TOURNAMENT_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
 const DEFAULT_TOURNAMENT_BRACKET_PROGRESS_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
+const DEFAULT_TOURNAMENT_STATS_REVEAL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.4).toFixed(3));
 const DEFAULT_TOURNAMENT_CRY_VOLUME = Number(((DEFAULT_TIMER_END_VOLUME * 0.18) * 0.7).toFixed(3));
 
 export function buildAudioInputs(assets) {
@@ -95,6 +96,7 @@ export function buildAudioFilterScript({
   musicPath,
   bracketProgressPath,
   winnerRevealPath,
+  statsRevealPath,
   disappearPath,
   cryCues = [],
   renderPlan,
@@ -143,6 +145,22 @@ export function buildAudioFilterScript({
       const delayMs = Math.max(0, Math.round(match.reveal_start_seconds * 1000));
       const label = `win${matchIndex}`;
       filters.push(`[wsrc${matchIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_TIMER_END_VOLUME}[${label}]`);
+      mixLabels.push(label);
+    });
+    inputIndex += 1;
+  }
+
+  if (statsRevealPath) {
+    const splitCount = Math.max(1, renderPlan.matches.length);
+    const statsLeadInSeconds = Math.max(
+      0,
+      ensureNumber(renderPlan?.audio_cues?.stats_reveal_lead_in_seconds, 0.16),
+    );
+    filters.push(`[${inputIndex}:a]asplit=${splitCount}${Array.from({ length: splitCount }, (_, index) => `[ssrc${index}]`).join('')}`);
+    renderPlan.matches.forEach((match, matchIndex) => {
+      const delayMs = Math.max(0, Math.round((ensureNumber(match?.intro_start_seconds, 0) + statsLeadInSeconds) * 1000));
+      const label = `stats${matchIndex}`;
+      filters.push(`[ssrc${matchIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_TOURNAMENT_STATS_REVEAL_VOLUME}[${label}]`);
       mixLabels.push(label);
     });
     inputIndex += 1;

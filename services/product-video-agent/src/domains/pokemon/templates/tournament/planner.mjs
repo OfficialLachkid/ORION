@@ -930,6 +930,11 @@ export async function planPokemonTournamentChallenge({
     inventory?.sound_effects || {},
     template?.audio?.sound_effects?.winner_reveal || {},
   );
+  const statsRevealSoundPath = selectPreferredSoundEffectPath(
+    inventory?.sound_effects || {},
+    template?.audio?.sound_effects?.stats_reveal || {},
+    inventory?.sound_effects?.stats_reveal || null,
+  );
   const bracketProgressSoundPath = selectPreferredSoundEffectPath(
     inventory?.sound_effects || {},
     template?.audio?.sound_effects?.bracket_progress || {},
@@ -955,6 +960,12 @@ export async function planPokemonTournamentChallenge({
     && !winnerRevealSoundPath
   ) {
     requiredAssetGaps.push('winner_reveal_sfx_missing');
+  }
+  if (
+    template?.audio?.sound_effects?.stats_reveal?.enabled !== false
+    && !statsRevealSoundPath
+  ) {
+    requiredAssetGaps.push('stats_reveal_sfx_missing');
   }
   if (
     template?.audio?.sound_effects?.bracket_progress?.enabled !== false
@@ -1048,6 +1059,7 @@ export async function planPokemonTournamentChallenge({
           intro_slot_reveal: introSlotRevealSoundPath,
           bracket_progress: bracketProgressSoundPath,
           winner_reveal: winnerRevealSoundPath,
+          stats_reveal: statsRevealSoundPath,
           disappear: disappearSoundPath,
         },
       },

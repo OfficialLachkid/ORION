@@ -220,6 +220,12 @@
           "ding-sound"
         ]
       },
+      "stats_reveal": {
+        "enabled": true,
+        "preferred_keywords": [
+          "electric-loading-sound"
+        ]
+      },
       "disappear": {
         "enabled": true,
         "preferred_keywords": [

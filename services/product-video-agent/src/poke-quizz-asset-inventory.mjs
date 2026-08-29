@@ -174,6 +174,11 @@ export function selectSoundEffectPresets(soundEffects) {
     ['pokeball', 'wobble'],
     ['pokeball', 'shake'],
   ]);
+  const statsReveal = matchSoundEffectKeywordGroups(allSoundEffects, [
+    ['electric', 'loading', 'sound'],
+    ['electric', 'loading'],
+    ['loading', 'sound'],
+  ]);
 
   return {
     all: allSoundEffects,
@@ -184,6 +189,7 @@ export function selectSoundEffectPresets(soundEffects) {
     disappear,
     pokeball_intro: pokeballIntro,
     pokeball_wiggle: pokeballWiggle,
+    stats_reveal: statsReveal,
   };
 }
 

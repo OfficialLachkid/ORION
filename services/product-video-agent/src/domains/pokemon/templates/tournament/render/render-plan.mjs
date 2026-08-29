@@ -309,6 +309,10 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     narration_cues: buildNarrationCueSchedule(renderedMatches, championScene),
     audio_cues: {
       battle_music_start_seconds: roundTime(Math.max(0, ensureNumber(template?.audio?.battle_intro_music?.start_seconds, 0))),
+      stats_reveal_lead_in_seconds: roundTime(Math.max(
+        0,
+        ensureNumber(template?.renderer?.stat_row_lead_in_seconds, 0.16),
+      )),
       battle_disappear_duration_seconds: roundTime(Math.max(
         0.12,
         ensureNumber(template?.renderer?.battle_disappear_duration_seconds, 0.42),

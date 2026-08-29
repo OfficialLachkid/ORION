@@ -56,6 +56,7 @@ export async function renderPokeQuizzVideo({
   const introSlotRevealPath = plan.assets.audio.selected_sound_effects?.intro_slot_reveal || null;
   const bracketProgressPath = plan.assets.audio.selected_sound_effects?.bracket_progress || null;
   const winnerRevealPath = plan.assets.audio.selected_sound_effects?.winner_reveal || null;
+  const statsRevealPath = plan.assets.audio.selected_sound_effects?.stats_reveal || null;
   const disappearPath = plan.assets.audio.selected_sound_effects?.disappear || null;
   await verifyReadableFiles([
     ...narrationPaths,
@@ -63,6 +64,7 @@ export async function renderPokeQuizzVideo({
     ...(introSlotRevealPath ? [introSlotRevealPath] : []),
     ...(bracketProgressPath ? [bracketProgressPath] : []),
     ...(winnerRevealPath ? [winnerRevealPath] : []),
+    ...(statsRevealPath ? [statsRevealPath] : []),
     ...(disappearPath ? [disappearPath] : []),
   ]);
 
@@ -86,6 +88,7 @@ export async function renderPokeQuizzVideo({
     musicPath,
     bracketProgressPath,
     winnerRevealPath,
+    statsRevealPath,
     disappearPath,
     cryCues,
     renderPlan,
@@ -101,6 +104,7 @@ export async function renderPokeQuizzVideo({
         ...(introSlotRevealPath ? [introSlotRevealPath] : []),
         ...(bracketProgressPath ? [bracketProgressPath] : []),
         ...(winnerRevealPath ? [winnerRevealPath] : []),
+        ...(statsRevealPath ? [statsRevealPath] : []),
         ...(disappearPath ? [disappearPath] : []),
         ...cryCues.map((cue) => cue.path),
       ]),

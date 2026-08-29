@@ -131,6 +131,10 @@ const template = {
         enabled: true,
         preferred_keywords: ['ding-sound'],
       },
+      stats_reveal: {
+        enabled: true,
+        preferred_keywords: ['electric-loading-sound'],
+      },
       disappear: {
         enabled: true,
         preferred_keywords: ['disappear-sound'],
@@ -225,9 +229,10 @@ const assetInventory = {
   battle_backgrounds: ['/tmp/battle-backgrounds/arena.png'],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3', '/tmp/disappear-sound.mp3'],
+    all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3', '/tmp/electric-loading-sound.mp3', '/tmp/disappear-sound.mp3'],
     timer_end: '/tmp/ding-sound.mp3',
     pokeball_intro: '/tmp/pokeball-open-sound.mp3',
+    stats_reveal: '/tmp/electric-loading-sound.mp3',
     disappear: '/tmp/disappear-sound.mp3',
   },
   overlays: ['/tmp/open-close-pokeball.gif', '/tmp/disappear.gif', '/tmp/grass-plateau.png', '/tmp/versus.png'],
@@ -335,6 +340,7 @@ test('generic planner dispatch builds a four-participant tournament bracket with
   assert.equal(plan.assets.audio.selected_sound_effects.intro_slot_reveal, '/tmp/pokeball-open-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.bracket_progress, '/tmp/select-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.winner_reveal, '/tmp/ding-sound.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.stats_reveal, '/tmp/electric-loading-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.disappear, '/tmp/disappear-sound.mp3');
   assert.equal(plan.required_asset_gaps.length, 0);
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Tournament$/u);
@@ -442,6 +448,7 @@ test('tournament audio and visual filters include winner sting cues and champion
     musicPath: '/tmp/music.mp3',
     bracketProgressPath: '/tmp/select-sound.mp3',
     winnerRevealPath: '/tmp/ding-sound.mp3',
+    statsRevealPath: '/tmp/electric-loading-sound.mp3',
     disappearPath: '/tmp/disappear-sound.mp3',
     cryCues: buildTournamentCryCues(plan, renderPlan),
     renderPlan,
@@ -510,9 +517,11 @@ test('tournament audio and visual filters include winner sting cues and champion
   assert.match(audioFilter, /asplit=4\[osrc0\]\[osrc1\]\[osrc2\]\[osrc3\]/u);
   assert.match(audioFilter, /volume=0\.113\[open0\]/u);
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
+  assert.match(audioFilter, /asplit=3\[ssrc0\]\[ssrc1\]\[ssrc2\]/u);
   assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
   assert.match(audioFilter, /asplit=3\[dsrc0\]\[dsrc1\]\[dsrc2\]/u);
   assert.match(audioFilter, /volume=0\.113\[progress0\]/u);
+  assert.match(audioFilter, /volume=0\.36\[stats0\]/u);
   assert.match(audioFilter, /volume=0\.113\[cry0\]/u);
   assert.match(visualFilter.script, /vbattledisappearleft0/u);
   assert.match(visualFilter.script, /vbattledisappearright0/u);
