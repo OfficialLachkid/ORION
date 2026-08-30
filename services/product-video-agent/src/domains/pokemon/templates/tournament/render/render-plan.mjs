@@ -199,6 +199,7 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
   const suspenseHoldSeconds = roundTime(ensureNumber(rounds.suspense_hold_seconds, 0.9));
   const revealHoldSeconds = roundTime(ensureNumber(rounds.reveal_hold_seconds, 1.2));
   const transitionDurationSeconds = roundTime(ensureNumber(rounds.transition_duration_seconds, 0.4));
+  const insightLeadInSeconds = roundTime(Math.max(0.12, ensureNumber(template?.renderer?.stat_row_lead_in_seconds, 0.16) + 0.34));
   const bracketStageSeconds = resolveIntroBracketStageDurations(template);
   const bracketDrawLeadSeconds = bracketStageSeconds
     ? roundTime(
@@ -231,6 +232,10 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
       ...match,
       scene_start_seconds: sceneStart,
       intro_start_seconds: introStart,
+      insight_start_seconds: roundTime(Math.min(
+        revealStart,
+        introStart + Math.min(matchIntroHoldSeconds, insightLeadInSeconds),
+      )),
       battle_transition_start_seconds: battleTransitionStartSeconds,
       battle_transition_duration_seconds: transitionDurationSeconds,
       reveal_start_seconds: revealStart,
@@ -266,6 +271,7 @@ function buildNarrationCueSchedule(renderedMatches = [], championScene) {
     { role: 'hook', start_seconds: 0 },
     ...renderedMatches.flatMap((match) => ([
       { role: `${match.match_id}-intro`, start_seconds: match.intro_start_seconds },
+      { role: `${match.match_id}-insight`, start_seconds: match.insight_start_seconds },
       { role: `${match.match_id}-winner`, start_seconds: match.reveal_start_seconds + 0.04 },
     ])),
     { role: 'champion', start_seconds: championScene.start_seconds + 0.08 },
@@ -344,9 +350,11 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
       match.intro_start_seconds - match.scene_start_seconds,
       index === 0 ? hookDuration : 0,
     ));
+    const introNarrationDuration = ensureNumber(durationsByRole.get(`${match.match_id}-intro`), 0);
+    const insightNarrationDuration = ensureNumber(durationsByRole.get(`${match.match_id}-insight`), 0);
     const introDuration = roundTime(Math.max(
       match.reveal_start_seconds - match.intro_start_seconds,
-      ensureNumber(durationsByRole.get(`${match.match_id}-intro`), 0),
+      introNarrationDuration + insightNarrationDuration,
     ));
     const winnerDuration = roundTime(Math.max(
       match.scene_end_seconds - match.reveal_start_seconds - match.transition_duration_seconds,
@@ -354,6 +362,10 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
     ));
     const sceneStart = roundTime(currentStart);
     const introStart = roundTime(sceneStart + introDelay);
+    const insightStart = roundTime(Math.min(
+      introStart + introDuration,
+      introStart + introNarrationDuration,
+    ));
     const revealStart = roundTime(introStart + introDuration);
     const sceneEnd = roundTime(revealStart + winnerDuration + match.transition_duration_seconds);
     const battleTransitionStartSeconds = roundTime(
@@ -367,6 +379,7 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
       ...match,
       scene_start_seconds: sceneStart,
       intro_start_seconds: introStart,
+      insight_start_seconds: insightStart,
       battle_transition_start_seconds: battleTransitionStartSeconds,
       battle_transition_duration_seconds: match.battle_transition_duration_seconds ?? match.transition_duration_seconds,
       reveal_start_seconds: revealStart,

@@ -740,6 +740,7 @@ function buildMatchRecord({
     winner: battle.winner,
     loser: battle.loser,
     winner_side: battle.winner_side,
+    intro_line_text: battle.intro_line_text,
     insight_text: battle.insight_text,
     breakdown_text: battle.breakdown_text,
     commentary_text: battle.commentary_text,
@@ -758,7 +759,8 @@ function buildNarrationLines(template, hookText, matches, champion, random) {
   return [
     { role: 'hook', text: hookText },
     ...matches.flatMap((match) => ([
-      { role: `${match.match_id}-intro`, text: match.commentary_text },
+      { role: `${match.match_id}-intro`, text: match.intro_line_text },
+      { role: `${match.match_id}-insight`, text: match.insight_text },
       { role: `${match.match_id}-winner`, text: match.winner_line_text },
     ])),
     { role: 'champion', text: championText },
@@ -786,7 +788,7 @@ function buildTimeline(template, hookText, matches, championText) {
       duration_seconds: matchIntroHoldSeconds + suspenseHoldSeconds + revealHoldSeconds + (
         index === matches.length - 1 ? 0 : transitionDurationSeconds
       ),
-      spoken_text: `${match.commentary_text} ${match.winner_line_text}`.trim(),
+      spoken_text: `${match.intro_line_text} ${match.insight_text} ${match.winner_line_text}`.trim(),
       on_screen_text: match.breakdown_text,
     })),
     {

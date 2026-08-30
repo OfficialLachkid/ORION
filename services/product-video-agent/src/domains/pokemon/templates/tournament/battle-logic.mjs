@@ -107,7 +107,7 @@ function resolveInsightText(winner, loser, scoreCards) {
   const winnerCard = scoreCards?.winner || {};
   const loserCard = scoreCards?.loser || {};
   if (dominantFactor === 'type' && (winnerCard.type_attack?.multiplier || 1) > (loserCard.type_attack?.multiplier || 1)) {
-    return `${winner.display_name} has the type edge.`;
+    return `${winner.display_name} has the type advantage.`;
   }
   if (dominantFactor === 'speed' && winner.base_stats.speed !== loser.base_stats.speed) {
     return `${winner.display_name} is faster.`;
@@ -119,8 +119,8 @@ function resolveBreakdownText(left, right, winner, scoreCards) {
   const leftMultiplier = scoreCards?.left?.type_attack?.multiplier || 1;
   const rightMultiplier = scoreCards?.right?.type_attack?.multiplier || 1;
   const typeLead = leftMultiplier === rightMultiplier
-    ? 'Type edge: even'
-    : `Type edge: ${(leftMultiplier > rightMultiplier ? left : right).display_name}`;
+    ? 'Type advantage: even'
+    : `Type advantage: ${(leftMultiplier > rightMultiplier ? left : right).display_name}`;
   return `BST ${left.base_stat_total}-${right.base_stat_total} | ${typeLead} | Winner: ${winner.display_name}`;
 }
 
@@ -186,7 +186,8 @@ export function resolveTournamentBattle({
     loser: loserCard,
   };
   const insightText = resolveInsightText(winner, loser, scoreCards);
-  const commentaryText = `${left.display_name} versus ${right.display_name}. ${insightText}`;
+  const introLineText = `${left.display_name} versus ${right.display_name}.`;
+  const commentaryText = `${introLineText} ${insightText}`;
   return {
     match_id: matchId,
     round_label: roundLabel,
@@ -195,6 +196,7 @@ export function resolveTournamentBattle({
     winner,
     loser,
     winner_side: winner.id === left.id ? 'left' : 'right',
+    intro_line_text: introLineText,
     insight_text: insightText,
     breakdown_text: resolveBreakdownText(left, right, winner, scoreCards),
     commentary_text: commentaryText,

@@ -1676,7 +1676,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         template,
         renderPlan.text_layout.insight_font_size,
         renderPlan.text_layout.insight_y,
-        match.intro_start_seconds,
+        ensureNumber(match.insight_start_seconds, match.intro_start_seconds),
         match.reveal_start_seconds,
         { maxLines: 2 },
       ),

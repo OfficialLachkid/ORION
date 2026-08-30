@@ -6,6 +6,7 @@ import {
   buildAudioFilterScript,
   buildTournamentCryCues,
 } from '../src/domains/pokemon/templates/tournament/render/audio-filter-script.mjs';
+import { resolveTournamentBattle } from '../src/domains/pokemon/templates/tournament/battle-logic.mjs';
 import { applyNarrationDurationsToRenderPlan } from '../src/domains/pokemon/templates/tournament/render/render-plan.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/tournament/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/tournament/render/visual-inputs.mjs';
@@ -344,6 +345,47 @@ test('generic planner dispatch builds a four-participant tournament bracket with
   assert.equal(plan.assets.audio.selected_sound_effects.disappear, '/tmp/disappear-sound.mp3');
   assert.equal(plan.required_asset_gaps.length, 0);
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Tournament$/u);
+  assert.equal(plan.narration.lines.some((line) => line.role === 'semi-final-1-insight'), true);
+});
+
+test('tournament battle commentary uses type advantage phrasing when typing decides the outcome', () => {
+  const charizard = {
+    id: 'charizard',
+    display_name: 'Charizard',
+    types: ['fire', 'flying'],
+    base_stats: { hp: 78, attack: 84, defense: 78, special_attack: 109, special_defense: 85, speed: 100 },
+    base_stat_total: 534,
+  };
+  const blastoise = {
+    id: 'blastoise',
+    display_name: 'Blastoise',
+    types: ['water'],
+    base_stats: { hp: 79, attack: 83, defense: 100, special_attack: 85, special_defense: 105, speed: 78 },
+    base_stat_total: 530,
+  };
+
+  const battle = resolveTournamentBattle({
+    left: charizard,
+    right: blastoise,
+    weights: {
+      ...template.selection_rules.battle_weights,
+      base_stat_total: 0,
+      hp: 0,
+      attack: 0,
+      defense: 0,
+      special_attack: 0,
+      special_defense: 0,
+      speed: 0,
+      type_advantage: 120,
+      speed_edge: 0,
+      random_spread: 0,
+    },
+    random: () => 0.5,
+  });
+
+  assert.equal(battle.intro_line_text, 'Charizard versus Blastoise.');
+  assert.equal(battle.insight_text, 'Blastoise has the type advantage.');
+  assert.equal(battle.commentary_text, 'Charizard versus Blastoise. Blastoise has the type advantage.');
 });
 
 test('tournament planner can restrict selection to a seeded legendary-only pool', async () => {
@@ -401,6 +443,8 @@ test('tournament render plan and inputs stay deterministic for a four-Pokemon br
   assert.equal(renderPlan.intro_sequence.bracket_draw_end_seconds, 2.9);
   assert.equal(renderPlan.intro_sequence.participant_reveal_stagger_seconds, 0.3);
   assert.equal(renderPlan.intro_sequence.participant_hold_end_seconds, renderPlan.matches[0].intro_start_seconds);
+  assert.equal(renderPlan.matches[0].insight_start_seconds > renderPlan.matches[0].intro_start_seconds, true);
+  assert.equal(renderPlan.narration_cues.some((cue) => cue.role === 'semi-final-1-insight'), true);
   assert.ok(
     (renderPlan.matches[1].battle_transition_start_seconds - renderPlan.matches[0].bracket_progress_end_seconds) >= 0.95,
   );
@@ -514,6 +558,10 @@ test('tournament audio and visual filters include winner sting cues and champion
     visualFilter.script,
     new RegExp(`enable='between\\(t,${renderPlan.matches[0].intro_start_seconds},${renderPlan.matches[0].reveal_start_seconds}\\)'`, 'u'),
   );
+  assert.match(
+    visualFilter.script,
+    new RegExp(`between\\(t,${renderPlan.matches[0].insight_start_seconds},${renderPlan.matches[0].reveal_start_seconds}\\)`, 'u'),
+  );
   assert.match(audioFilter, /asplit=4\[osrc0\]\[osrc1\]\[osrc2\]\[osrc3\]/u);
   assert.match(audioFilter, /volume=0\.113\[open0\]/u);
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
@@ -542,16 +590,23 @@ test('tournament render plan expands scene timings to measured narration duratio
   });
   const stretchedPlan = applyNarrationDurationsToRenderPlan(renderPlan, [
     2.4,
-    3.3,
-    1.8,
-    3.1,
     1.7,
-    3.4,
+    1.4,
+    1.8,
+    1.6,
+    1.5,
+    1.7,
+    1.5,
+    1.6,
     1.9,
     1.6,
   ]);
 
   assert.equal(stretchedPlan.matches[0].intro_start_seconds >= 2.4, true);
+  assert.equal(
+    (stretchedPlan.matches[0].insight_start_seconds - stretchedPlan.matches[0].intro_start_seconds) >= 1.69,
+    true,
+  );
   assert.equal(stretchedPlan.matches[0].reveal_start_seconds > renderPlan.matches[0].reveal_start_seconds, true);
   assert.equal(stretchedPlan.matches[1].scene_start_seconds >= stretchedPlan.matches[0].scene_end_seconds, true);
   assert.equal(stretchedPlan.matches.at(-1)?.bracket_progress_end_seconds >= stretchedPlan.matches.at(-1)?.scene_end_seconds, true);

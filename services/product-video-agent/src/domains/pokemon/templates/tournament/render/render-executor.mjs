@@ -98,13 +98,14 @@ export async function renderPokeQuizzVideo({
     executable: ffmpegExecutable,
     args: [
       '-y',
+      // Keep this input order in lockstep with buildAudioFilterScript().
       ...buildAudioInputs([
         ...narrationPaths,
         ...(musicPath ? [musicPath] : []),
         ...(introSlotRevealPath ? [introSlotRevealPath] : []),
-        ...(bracketProgressPath ? [bracketProgressPath] : []),
         ...(winnerRevealPath ? [winnerRevealPath] : []),
         ...(statsRevealPath ? [statsRevealPath] : []),
+        ...(bracketProgressPath ? [bracketProgressPath] : []),
         ...(disappearPath ? [disappearPath] : []),
         ...cryCues.map((cue) => cue.path),
       ]),
