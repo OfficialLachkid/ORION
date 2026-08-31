@@ -356,11 +356,27 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
   let compositeLabel = backgroundBaseLabel;
   renderPlan.rounds.forEach((round, roundIndex) => {
     const nextCompositeLabel = `scenecomposite${roundIndex}`;
-    const slideStartSeconds = ensureNumber(round.slide_start_seconds, round.scene_start_seconds);
-    const slideEndSeconds = slideStartSeconds + ensureNumber(round.transition_duration_seconds, 0);
-    const xExpression = round.transition_duration_seconds > 0
-      ? `if(lt(t,${slideStartSeconds}),0,if(lt(t,${slideEndSeconds}),-w*(((t)-${slideStartSeconds})/${round.transition_duration_seconds}),-w))`
-      : '0';
+    const incomingTransitionSeconds = Math.max(
+      0,
+      roundIndex > 0
+        ? ensureNumber(renderPlan.rounds[roundIndex - 1]?.transition_duration_seconds, 0)
+        : 0,
+    );
+    const incomingStartSeconds = ensureNumber(round.scene_start_seconds, 0);
+    const incomingEndSeconds = Number((incomingStartSeconds + incomingTransitionSeconds).toFixed(3));
+    const outgoingStartSeconds = ensureNumber(round.slide_start_seconds, round.scene_start_seconds);
+    const outgoingDurationSeconds = Math.max(0, ensureNumber(round.transition_duration_seconds, 0));
+    const outgoingEndSeconds = Number((outgoingStartSeconds + outgoingDurationSeconds).toFixed(3));
+    let xExpression = '0';
+
+    if (incomingTransitionSeconds > 0 && outgoingDurationSeconds > 0) {
+      xExpression = `if(lt(t,${incomingStartSeconds}),w,if(lt(t,${incomingEndSeconds}),w*(1-((t-${incomingStartSeconds})/${incomingTransitionSeconds})),if(lt(t,${outgoingStartSeconds}),0,if(lt(t,${outgoingEndSeconds}),-w*(((t-${outgoingStartSeconds})/${outgoingDurationSeconds})),-w))))`;
+    } else if (incomingTransitionSeconds > 0) {
+      xExpression = `if(lt(t,${incomingStartSeconds}),w,if(lt(t,${incomingEndSeconds}),w*(1-((t-${incomingStartSeconds})/${incomingTransitionSeconds})),0))`;
+    } else if (outgoingDurationSeconds > 0) {
+      xExpression = `if(lt(t,${outgoingStartSeconds}),0,if(lt(t,${outgoingEndSeconds}),-w*(((t-${outgoingStartSeconds})/${outgoingDurationSeconds})),-w))`;
+    }
+
     filters.push(
       `[${compositeLabel}][scene${roundIndex}]overlay=x='${xExpression}':y=0:enable='${formatEnableBetween(round.scene_start_seconds, round.scene_end_seconds)}'[${nextCompositeLabel}]`,
     );
