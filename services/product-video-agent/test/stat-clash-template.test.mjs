@@ -331,7 +331,8 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
     },
   });
 
-  assert.match(visualFilter.script, /xfade=transition=slideleft/u);
+  assert.match(visualFilter.script, /\[bgbase\]\[scene0\]overlay=x='if\(lt\(t,/u);
+  assert.match(visualFilter.script, /scenecomposite0/u);
   assert.match(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /scene0platform0/u);
   assert.match(visualFilter.script, /color=c=0x32D74B@0\.98/u);

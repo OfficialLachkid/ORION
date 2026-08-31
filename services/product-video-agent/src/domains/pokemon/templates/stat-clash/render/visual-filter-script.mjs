@@ -344,20 +344,19 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     filters.push(`[${currentLabel}]format=rgba[scene${roundIndex}]`);
   });
 
-  let currentSceneOutput = 'scene0';
-  for (let roundIndex = 1; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
-    const nextOutputLabel = `sceneout${roundIndex}`;
-    const transitionDuration = renderPlan.rounds[roundIndex - 1].transition_duration_seconds;
+  let compositeLabel = backgroundBaseLabel;
+  renderPlan.rounds.forEach((round, roundIndex) => {
+    const nextCompositeLabel = `scenecomposite${roundIndex}`;
+    const slideStartSeconds = ensureNumber(round.slide_start_seconds, round.scene_start_seconds);
+    const slideEndSeconds = slideStartSeconds + ensureNumber(round.transition_duration_seconds, 0);
+    const xExpression = round.transition_duration_seconds > 0
+      ? `if(lt(t,${slideStartSeconds}),0,if(lt(t,${slideEndSeconds}),-w*(((t)-${slideStartSeconds})/${round.transition_duration_seconds}),-w))`
+      : '0';
     filters.push(
-      `[${currentSceneOutput}][scene${roundIndex}]xfade=transition=slideleft:duration=${transitionDuration}:offset=${renderPlan.rounds[roundIndex].scene_start_seconds}[${nextOutputLabel}]`,
+      `[${compositeLabel}][scene${roundIndex}]overlay=x='${xExpression}':y=0:enable='${formatEnableBetween(round.scene_start_seconds, round.scene_end_seconds)}'[${nextCompositeLabel}]`,
     );
-    currentSceneOutput = nextOutputLabel;
-  }
-
-  const compositeLabel = 'scenecomposite';
-  filters.push(
-    `[${backgroundBaseLabel}][${currentSceneOutput}]overlay=x=0:y=0:shortest=1[${compositeLabel}]`,
-  );
+    compositeLabel = nextCompositeLabel;
+  });
   filters.push(`[${compositeLabel}]format=yuv420p[vout]`);
   return {
     script: `${filters.join(';\n')}\n`,
