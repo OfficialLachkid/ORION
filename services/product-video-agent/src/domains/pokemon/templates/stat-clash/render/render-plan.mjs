@@ -183,6 +183,10 @@ function buildCountdownMoments(round, countdownFrom, countdownTo) {
 }
 
 function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDelaySeconds) {
+  const activationStartLocal = roundTime(Math.max(
+    0,
+    ensureNumber(round?.local?.activation_start_seconds, 0),
+  ));
   const introInitialDelay = Math.max(
     0,
     ensureNumber(template?.renderer?.candidate_intro_initial_delay_seconds, 0.1),
@@ -210,7 +214,9 @@ function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDe
 
   return (Array.isArray(round.candidates) ? round.candidates : []).map((candidate, index) => {
     const revealOrderIndex = orderMap.get(candidate.index) ?? index;
-    const introStartLocal = roundTime(introInitialDelay + (revealOrderIndex * introStaggerSeconds));
+    const introStartLocal = roundTime(
+      activationStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds),
+    );
     const introEndLocal = roundTime(introStartLocal + introDurationSeconds);
     const pokeballStartLocal = roundTime(Math.max(0, introStartLocal - pokeballLeadSeconds));
     const pokeballEndLocal = roundTime(Math.max(
@@ -243,12 +249,18 @@ function buildRenderedRounds({ rounds, template, startingSceneStart = 0 }) {
     const sceneLeadSeconds = roundTime(ensureNumber(round.scene_lead_seconds, 0));
     const countdownDurationSeconds = roundTime(ensureNumber(round.countdown_duration_seconds, 4));
     const revealHoldSeconds = roundTime(ensureNumber(round.reveal_hold_seconds, 1.2));
+    const incomingTransitionSeconds = roundTime(index === 0 ? 0 : ensureNumber(
+      rounds[index - 1]?.transition_duration_seconds,
+      transitionDurationSeconds,
+    ));
     const outgoingTransitionSeconds = roundTime(ensureNumber(
       round.transition_duration_seconds,
       index === rounds.length - 1 ? 0 : transitionDurationSeconds,
     ));
     const finalHoldSeconds = roundTime(ensureNumber(round.final_hold_seconds, 0));
-    const revealStartLocal = roundTime(sceneLeadSeconds + countdownDurationSeconds);
+    const effectiveSceneLeadSeconds = roundTime(sceneLeadSeconds + incomingTransitionSeconds);
+    const promptStartLocal = roundTime(index === 0 ? 0.04 : incomingTransitionSeconds + 0.04);
+    const revealStartLocal = roundTime(effectiveSceneLeadSeconds + countdownDurationSeconds);
     const slideStartLocal = roundTime(revealStartLocal + revealHoldSeconds);
     const sceneDurationSeconds = roundTime(
       slideStartLocal + (outgoingTransitionSeconds > 0 ? outgoingTransitionSeconds : finalHoldSeconds),
@@ -259,17 +271,21 @@ function buildRenderedRounds({ rounds, template, startingSceneStart = 0 }) {
     const renderedRound = {
       ...round,
       base_scene_lead_seconds: sceneLeadSeconds,
-      minimum_scene_lead_seconds: roundTime(sceneLeadSeconds),
+      minimum_scene_lead_seconds: roundTime(effectiveSceneLeadSeconds),
       scene_start_seconds: sceneStartSeconds,
       scene_end_seconds: sceneEndSeconds,
       scene_duration_seconds: sceneDurationSeconds,
-      countdown_start_seconds: roundTime(sceneStartSeconds + sceneLeadSeconds),
+      activation_start_seconds: roundTime(sceneStartSeconds + incomingTransitionSeconds),
+      prompt_start_seconds: roundTime(sceneStartSeconds + promptStartLocal),
+      countdown_start_seconds: roundTime(sceneStartSeconds + effectiveSceneLeadSeconds),
       reveal_start_seconds: roundTime(sceneStartSeconds + revealStartLocal),
       reveal_visual_start_seconds: roundTime(sceneStartSeconds + revealStartLocal + revealVisualDelaySeconds),
       slide_start_seconds: roundTime(sceneStartSeconds + slideStartLocal),
       local: {
-        scene_lead_seconds: sceneLeadSeconds,
-        countdown_start_seconds: sceneLeadSeconds,
+        activation_start_seconds: incomingTransitionSeconds,
+        prompt_start_seconds: promptStartLocal,
+        scene_lead_seconds: effectiveSceneLeadSeconds,
+        countdown_start_seconds: effectiveSceneLeadSeconds,
         reveal_start_seconds: revealStartLocal,
         reveal_visual_start_seconds: roundTime(revealStartLocal + revealVisualDelaySeconds),
         slide_start_seconds: slideStartLocal,
@@ -327,7 +343,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     },
     narration_cues: renderedRounds.map((round) => ({
       role: `round-${round.round_number}-prompt`,
-      start_seconds: round.scene_start_seconds + 0.04,
+      start_seconds: round.prompt_start_seconds,
     })),
     rounds: renderedRounds,
     output_path: outputPath,
@@ -384,7 +400,7 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
     rounds: renderedRounds,
     narration_cues: renderedRounds.map((round) => ({
       role: `round-${round.round_number}-prompt`,
-      start_seconds: round.scene_start_seconds + 0.04,
+      start_seconds: round.prompt_start_seconds,
     })),
   };
 }

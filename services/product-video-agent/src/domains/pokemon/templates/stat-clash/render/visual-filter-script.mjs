@@ -77,7 +77,7 @@ function buildPromptSegments(text, template, textLayout, round) {
     fontSize: textLayout.prompt_font_size,
     maxLines: 2,
     baseY: textLayout.prompt_y,
-    startSeconds: 0.04,
+    startSeconds: ensureNumber(round?.local?.prompt_start_seconds, 0.04),
     endSeconds: round.local.reveal_start_seconds,
   }).segments || [];
 }

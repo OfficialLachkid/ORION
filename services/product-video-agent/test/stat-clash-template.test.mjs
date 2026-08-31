@@ -274,6 +274,19 @@ test('stat-clash render plan and inputs stay deterministic', async () => {
   assert.equal(renderPlan.grid_layout.cells.length, 4);
   assert.equal(renderPlan.stat_value_layout.font_size, 84);
   assert.ok(renderPlan.rounds[0].candidates[0].intro_end_seconds > renderPlan.rounds[0].candidates[0].intro_start_seconds);
+  assert.equal(renderPlan.rounds[0].local.activation_start_seconds, 0);
+  assert.equal(
+    renderPlan.rounds[1].local.activation_start_seconds,
+    renderPlan.rounds[0].transition_duration_seconds,
+  );
+  assert.ok(
+    renderPlan.rounds[1].candidates[0].pokeball_start_seconds
+      >= renderPlan.rounds[1].activation_start_seconds,
+  );
+  assert.equal(
+    renderPlan.narration_cues[1].start_seconds,
+    renderPlan.rounds[1].prompt_start_seconds,
+  );
   assert.equal(visualInputs[0].role, 'background');
   assert.equal(visualInputs[1].role, 'intro-pokeball');
   assert.equal(visualInputs[2].role, 'grass-platform');
