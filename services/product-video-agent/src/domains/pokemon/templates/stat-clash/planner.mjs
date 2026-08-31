@@ -1,6 +1,5 @@
 import { access } from 'node:fs/promises';
 import {
-  buildPokeQuizzAnimatedSpritePath,
   buildPokeQuizzCryPath,
   buildPokeQuizzMirroredSpritePath,
   buildPokeQuizzPreviewDirectory,
@@ -233,16 +232,6 @@ function selectTemplateScopedSound(template, inventory, configKey, fallbackKey) 
 }
 
 async function resolveRenderSpritePath(subject) {
-  const explicitAnimatedPath = String(subject?.animated_sprite_path || '').trim();
-  if (explicitAnimatedPath && await canAccessPath(explicitAnimatedPath)) {
-    return explicitAnimatedPath;
-  }
-
-  const derivedAnimatedPath = buildPokeQuizzAnimatedSpritePath(subject);
-  if (await canAccessPath(derivedAnimatedPath)) {
-    return derivedAnimatedPath;
-  }
-
   const mirroredSharpSpritePath = buildPokeQuizzMirroredSpritePath(subject?.sprite_path || '');
   if (mirroredSharpSpritePath && await canAccessPath(mirroredSharpSpritePath)) {
     return mirroredSharpSpritePath;

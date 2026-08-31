@@ -9,7 +9,9 @@ import {
   escapeDrawtextText,
   ensureNumber,
 } from '../../dual-type-reveal/render/constants.mjs';
-import { buildProgressiveTextArtifacts } from '../../dual-type-reveal/render/text-layout.mjs';
+import {
+  buildProgressiveTextArtifacts,
+} from '../../dual-type-reveal/render/text-layout.mjs';
 
 function buildTimerBarScaleExpression(startSeconds, endSeconds, fullWidth) {
   const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
@@ -80,7 +82,7 @@ function buildPromptSegments(text, template, textLayout, round) {
   }).segments || [];
 }
 
-function buildRevealSegments(text, template, textLayout, round) {
+function buildRevealArtifacts(text, template, textLayout, round) {
   return buildProgressiveTextArtifacts(text, {
     template,
     fontSize: textLayout.reveal_font_size,
@@ -88,7 +90,7 @@ function buildRevealSegments(text, template, textLayout, round) {
     baseY: textLayout.reveal_y,
     startSeconds: round.local.reveal_visual_start_seconds,
     endSeconds: round.local.scene_duration_seconds,
-  }).segments || [];
+  });
 }
 
 function platformOverlayY(cell, baseSpriteSize, platformLayout) {
@@ -309,11 +311,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     );
     currentLabel = timerBorderLabel;
 
-    buildRevealSegments(round.reveal_text, template, renderPlan.text_layout, round)
-      .forEach((segment, segmentIndex) => {
-        const revealLabel = `scene${roundIndex}reveal${segmentIndex}`;
+    const revealArtifacts = buildRevealArtifacts(
+      round.reveal_text,
+      template,
+      renderPlan.text_layout,
+      round,
+    );
+    revealArtifacts.lines.forEach((line, lineIndex) => {
+      const revealLabel = `scene${roundIndex}reveal${lineIndex}`;
         filters.push(
-          `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}':fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${revealLabel}]`,
+          `[${currentLabel}]drawtext=text='${escapeDrawtextText(line.text)}':fontcolor=white:fontsize=${line.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${revealLabel}]`,
         );
         currentLabel = revealLabel;
       });

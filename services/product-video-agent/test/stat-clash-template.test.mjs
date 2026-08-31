@@ -228,6 +228,7 @@ test('stat-clash planner builds a four-candidate highest-stat round set', async 
     assert.ok(round.highest_stat_value >= 35);
     assert.ok(round.selection_score.winner_margin > 0);
     assert.ok(Number.isFinite(round.selection_score.penalty));
+    assert.ok(round.candidates.every((candidate) => candidate.subject.render_sprite_path.endsWith('.png')));
   }
 });
 
