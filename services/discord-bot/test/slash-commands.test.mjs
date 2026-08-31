@@ -45,6 +45,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'find-the-shiny',
     'know-your-shiny',
     'memory',
+    'stat-clash',
     'tournament',
     'type-speed-quiz',
   ]);
@@ -471,6 +472,34 @@ test('normalizeSupportedSlashCommandInteraction converts a know-your-shiny slash
   });
 
   assert.equal(message?.content, 'generate video template: know-your-shiny channel: poke-quizz-youtube');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts a stat-clash slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-stat-clash-1',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-stat-clash-1',
+    data: {
+      name: 'generate-video',
+      options: [
+        { name: 'template', value: 'stat-clash' },
+        { name: 'channel', value: 'poke-quizz-youtube' },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'generate video template: stat-clash channel: poke-quizz-youtube');
   assert.equal(message?.channelKey, 'commands');
 });
 
