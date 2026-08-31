@@ -72,14 +72,21 @@ function appendTimerBarPhase(filters, currentLabel, {
 }
 
 function buildPromptSegments(text, template, textLayout, round) {
-  return buildProgressiveTextArtifacts(text, {
+  const artifacts = buildProgressiveTextArtifacts(text, {
     template,
     fontSize: textLayout.prompt_font_size,
     maxLines: 2,
     baseY: textLayout.prompt_y,
     startSeconds: ensureNumber(round?.local?.prompt_start_seconds, 0.04),
     endSeconds: round.local.reveal_start_seconds,
-  }).segments || [];
+  });
+  return artifacts.lines.map((line) => ({
+    text: line.text,
+    font_size: line.font_size,
+    y: line.y,
+    start_seconds: ensureNumber(round?.local?.prompt_start_seconds, 0.04),
+    end_seconds: round.local.reveal_start_seconds,
+  }));
 }
 
 function buildRevealArtifacts(text, template, textLayout, round) {
@@ -341,7 +348,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       currentLabel = statLabel;
     }
 
-    filters.push(`[${currentLabel}]format=rgba[scene${roundIndex}]`);
+    filters.push(
+      `[${currentLabel}]format=rgba,setpts=PTS-STARTPTS+${Number(round.scene_start_seconds.toFixed(3))}/TB[scene${roundIndex}]`,
+    );
   });
 
   let compositeLabel = backgroundBaseLabel;

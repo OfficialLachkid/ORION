@@ -333,8 +333,10 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
 
   assert.match(visualFilter.script, /\[bgbase\]\[scene0\]overlay=x='if\(lt\(t,/u);
   assert.match(visualFilter.script, /scenecomposite0/u);
+  assert.match(visualFilter.script, /format=rgba,setpts=PTS-STARTPTS\+[0-9.]+\/TB\[scene1\]/u);
   assert.match(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /scene0platform0/u);
+  assert.doesNotMatch(visualFilter.script, /drawtext=text='Who':/u);
   assert.match(visualFilter.script, /color=c=0x32D74B@0\.98/u);
   assert.match(visualFilter.script, /color=c=0xFFD60A@0\.98/u);
   assert.match(visualFilter.script, /color=c=0xFF453A@0\.98/u);
