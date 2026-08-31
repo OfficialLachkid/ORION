@@ -4,6 +4,7 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   root: `${ORION_T7_ROOT}/Pokemon/Poke Quizz`,
   backgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Backgrounds`,
   gifBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/type-quiz-backgrounds`,
+  battleBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/battle-backgrounds`,
   sprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Sprites`,
   newSprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/new pokemon sprites`,
   animatedSpriteGifs: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/new pokemon sprite gifs`,
@@ -16,6 +17,7 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   transitions: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Transitions`,
   battleIntroMusic: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Music`,
   soundEffects: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Sound Effects`,
+  cries: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Cries`,
   previews: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Previews`,
   masters: `${ORION_T7_ROOT}/Masters/Poke Quizz`,
   templates: `${ORION_T7_ROOT}/Templates/Poke Quizz`,
@@ -25,6 +27,7 @@ const POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES = Object.freeze({
   'dual-type-reveal': 'Dual Type Reveal',
   'find-the-shiny': 'Find the Shiny',
   'know-your-shiny': 'Know Your Shiny',
+  tournament: 'Tournament',
   memory: 'Memory',
   'type-quiz': 'Type Quiz',
 });
@@ -70,6 +73,9 @@ export function resolvePokeQuizzPreviewTemplateKey(templateRef) {
   if (candidates.some((value) => value.includes('know-your-shiny'))) {
     return 'know-your-shiny';
   }
+  if (candidates.some((value) => value.includes('tournament') || value.includes('showdown'))) {
+    return 'tournament';
+  }
   if (candidates.some((value) => value.includes('memory'))) {
     return 'memory';
   }
@@ -113,6 +119,14 @@ export function buildPokeQuizzShinySpritePath(row) {
 
 export function buildPokeQuizzAnimatedShinySpritePath(row) {
   return `${POKE_QUIZZ_ASSET_LAYOUT.animatedSpriteGifs}/${generationDirectory(row.generation)}/shiny/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug || row.name)}.gif`;
+}
+
+export function buildPokeQuizzAnimatedSpritePath(row) {
+  return `${POKE_QUIZZ_ASSET_LAYOUT.animatedSpriteGifs}/${generationDirectory(row.generation)}/normal/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug || row.name)}.gif`;
+}
+
+export function buildPokeQuizzCryPath(row) {
+  return `${POKE_QUIZZ_ASSET_LAYOUT.cries}/${generationDirectory(row.generation)}/${formatDexNumber(row.national_dex_number)}-${sanitizePokemonSlug(row.slug || row.name)}.ogg`;
 }
 
 export function buildPokeQuizzSilhouettePath(row) {

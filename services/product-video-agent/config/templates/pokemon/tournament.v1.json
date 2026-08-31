@@ -1,0 +1,262 @@
+{
+  "template_id": "pokemon.tournament.v1",
+  "template_key": "tournament",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "battle_scoring",
+    "bracket_progression",
+    "winner_reveal",
+    "champion_reveal"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 120,
+      "bottom": 240,
+      "left": 120
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "participant_count": 4,
+    "mode": "single_elimination_bracket",
+    "sampling_attempts": 240,
+    "max_base_stat_total_spread": 180,
+    "max_matchup_base_stat_total_delta": 110,
+    "animated_shiny_probability": 0.5,
+    "max_animated_shiny_participants": 1,
+    "require_truth_fields": [
+      "national_dex_number",
+      "name",
+      "types",
+      "sprite_path"
+    ],
+    "preferred_asset_fields": [
+      "sprite_path"
+    ],
+    "skip_subject_when_missing": [
+      "national_dex_number",
+      "name",
+      "types",
+      "sprite_path"
+    ],
+    "pool_variants": [
+      {
+        "key": "legendary_only",
+        "label": "Legendary Only",
+        "selector": "legendary_only",
+        "weight": 3,
+        "max_base_stat_total_spread": 100,
+        "max_matchup_base_stat_total_delta": 90
+      },
+      {
+        "key": "final_evolution_only",
+        "label": "Final Evolution Only",
+        "selector": "final_evolution_only",
+        "weight": 2,
+        "max_base_stat_total_spread": 180,
+        "max_matchup_base_stat_total_delta": 110
+      },
+      {
+        "key": "baby_only",
+        "label": "Baby Pokemon",
+        "selector": "first_stage_only",
+        "weight": 1,
+        "max_base_stat_total_spread": 120,
+        "max_matchup_base_stat_total_delta": 90
+      },
+      {
+        "key": "mix",
+        "label": "Mix",
+        "selector": "power_mix",
+        "weight": 2,
+        "strong_final_evolution_min_base_stat_total": 500,
+        "max_base_stat_total_spread": 150,
+        "max_matchup_base_stat_total_delta": 95
+      }
+    ],
+    "battle_weights": {
+      "base_stat_total": 0.06,
+      "hp": 0.18,
+      "attack": 0.24,
+      "defense": 0.19,
+      "special_attack": 0.23,
+      "special_defense": 0.19,
+      "speed": 0.25,
+      "type_advantage": 20,
+      "speed_edge": 0.42,
+      "random_spread": 18
+    }
+  },
+  "question_contract": {
+    "hook_text": "Who wins this tournament?",
+    "hook_text_variants": [
+      "Who wins this tournament?",
+      "Who takes this Pokemon tournament?",
+      "Who will champion of this tournament?"
+    ],
+    "matchup_text": "{pokemon_a} vs {pokemon_b}",
+    "matchup_text_variants": [
+      "{pokemon_a} vs {pokemon_b}",
+      "{pokemon_a} versus {pokemon_b}"
+    ],
+    "champion_text": "{champion_name} won the tournament",
+    "champion_text_variants": [
+      "{champion_name} won the tournament"
+    ]
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_backgrounds",
+      "media_type": "looping_image_gif_or_video",
+      "fit": "cover",
+      "blur_sigma": 4
+    },
+    "text": {
+      "hook_y": 150,
+      "hook_font_size": 84,
+      "round_y": 140,
+      "round_font_size": 46,
+      "matchup_y": 218,
+      "matchup_font_size": 62,
+      "insight_y": 310,
+      "insight_font_size": 38,
+      "winner_y": 200,
+      "winner_font_size": 78,
+      "champion_y": 252,
+      "champion_font_size": 90
+    },
+    "bracket": {
+      "slot_sprite_size_px": 120,
+      "slot_name_font_size": 36,
+      "slot_card_width_px": 220,
+      "slot_card_height_px": 184,
+      "connector_thickness_px": 10,
+      "slot_positions": {
+        "semi_1_a": { "x": 40, "y": 1100 },
+        "semi_1_b": { "x": 300, "y": 1100 },
+        "semi_1_winner": { "x": 170, "y": 700 },
+        "semi_2_a": { "x": 560, "y": 1100 },
+        "semi_2_b": { "x": 820, "y": 1100 },
+        "semi_2_winner": { "x": 690, "y": 700 },
+        "final_winner": { "x": 430, "y": 340 }
+      }
+    },
+    "battle_stage": {
+      "sprite_size_px": 408,
+      "left_center_x": 275,
+      "right_center_x": 805,
+      "center_y": 600,
+      "name_y": 1160,
+      "name_font_size": 54,
+      "vs_y": 935,
+      "vs_font_size": 88,
+      "versus_width_px": 250,
+      "versus_y_px": 760
+    },
+    "champion_stage": {
+      "sprite_size_px": 460,
+      "center_x": 540,
+      "center_y": 800,
+      "name_y": 1300,
+      "name_font_size": 78
+    },
+    "sprite_platform": {
+      "option_enabled": true,
+      "option_width_multiplier": 0.85,
+      "center_y_offset_multiplier": 0.34,
+      "option_center_y_offset_px": 30
+    },
+    "rounds": {
+      "hook_hold_seconds": 1.1,
+      "intro_participant_hold_seconds": 2,
+      "inter_round_bracket_hold_seconds": 2.5,
+      "post_progress_hold_seconds": 1,
+      "match_intro_hold_seconds": 1.8,
+      "suspense_hold_seconds": 0.9,
+      "reveal_hold_seconds": 1.2,
+      "transition_duration_seconds": 0.4,
+      "champion_hold_seconds": 0.1
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "sound_effects": {
+      "intro_slot_reveal": {
+        "enabled": true,
+        "preferred_keywords": [
+          "pokeball-open-sound"
+        ]
+      },
+      "bracket_progress": {
+        "enabled": true,
+        "preferred_keywords": [
+          "select-sound"
+        ]
+      },
+      "winner_reveal": {
+        "enabled": true,
+        "preferred_keywords": [
+          "ding-sound"
+        ]
+      },
+      "stats_reveal": {
+        "enabled": true,
+        "preferred_keywords": [
+          "electric-loading-sound"
+        ]
+      },
+      "disappear": {
+        "enabled": true,
+        "preferred_keywords": [
+          "disappear-sound"
+        ]
+      }
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true,
+    "intro_pokeball_scale_multiplier": 1.04,
+    "intro_slot_reveal_fade_seconds": 0.18,
+    "intro_slot_reveal_stagger_seconds": 0.3,
+    "intro_bracket_semi_slot_seconds": 0.3,
+    "intro_bracket_semi_connector_seconds": 1.3,
+    "intro_bracket_finalist_slot_seconds": 0.3,
+    "intro_bracket_final_connector_seconds": 1.3,
+    "intro_bracket_champion_slot_seconds": 0.3,
+    "battle_disappear_duration_seconds": 0.42,
+    "final_bracket_progress_duration_seconds": 2,
+    "stat_row_stagger_seconds": 0.3,
+    "winner_scale_multiplier": 1.05,
+    "loser_alpha_multiplier": 0.46,
+    "winner_banner_fade_seconds": 0.16,
+    "current_slot_highlight_alpha": 0.2,
+    "completed_slot_highlight_alpha": 0.18
+  }
+}

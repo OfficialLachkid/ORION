@@ -51,6 +51,7 @@ import {
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts) {
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
+  const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
   const countdownDuration = Math.max(0.5, ensureNumber(renderPlan.phases.countdown?.duration_seconds, 0));
   const countdownStart = ensureNumber(renderPlan.phases.countdown?.start_seconds, 0);
   const revealVisualStart = ensureNumber(
@@ -64,7 +65,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const revealTransitionEnd = roundTime(
     Math.min(renderPlan.total_duration_seconds, revealVisualStart + revealTransitionDuration),
   );
-  filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},fps=${fps},setsar=1[v0]`);
+  const backgroundBlurFilter = backgroundBlurSigma > 0
+    ? `,gblur=sigma=${Number(backgroundBlurSigma.toFixed(3))}:steps=1`
+    : '';
+  filters.push(`[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${backgroundBlurFilter},fps=${fps},setsar=1[v0]`);
 
   for (let index = 0; index < plan.assets.type_icons.length; index += 1) {
     const iconLabel = safeFilterLabel('type', index);

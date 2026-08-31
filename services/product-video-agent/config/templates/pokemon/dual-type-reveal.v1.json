@@ -101,7 +101,8 @@
     "background": {
       "source_policy": "local_t7_rights_cleared",
       "media_type": "image_or_looping_video",
-      "fit": "cover"
+      "fit": "cover",
+      "blur_sigma": 4
     },
     "type_icons": {
       "count": 2,

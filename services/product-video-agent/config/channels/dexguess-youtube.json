@@ -21,7 +21,6 @@
         "services/product-video-agent/config/channels/dexguess-type-speed-quiz-youtube.json",
         "services/product-video-agent/config/channels/dexguess-find-the-shiny-youtube.json",
         "services/product-video-agent/config/channels/dexguess-know-your-shiny-youtube.json"
-        "services/product-video-agent/config/channels/dexguess-know-your-shiny-youtube.json"
       ]
     },
     "review_refresh": {

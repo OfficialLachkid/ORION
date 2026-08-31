@@ -83,6 +83,9 @@ function normalizeTemplateScopeValue(value) {
   if (normalized.includes('know-your-shiny')) {
     return 'know-your-shiny';
   }
+  if (normalized.includes('tournament') || normalized.includes('showdown')) {
+    return 'tournament';
+  }
   if (normalized.includes('memory')) {
     return 'memory';
   }
