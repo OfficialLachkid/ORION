@@ -156,16 +156,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     ensureNumber(template?.renderer?.stat_reveal_fade_duration_seconds, 0.22),
   );
 
-  const backgroundLabels = Array.from({ length: roundCount }, (_, index) => `bg${index}`);
+  const backgroundBaseLabel = 'bgbase';
   filters.push(
-    `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,split=${roundCount}${backgroundLabels.map((label) => `[${label}]`).join('')}`,
+    `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,trim=duration=${renderPlan.total_duration_seconds},setpts=PTS-STARTPTS[${backgroundBaseLabel}]`,
   );
 
   renderPlan.rounds.forEach((round, roundIndex) => {
     const roundInputs = inputRefs.rounds[roundIndex] || { candidates: [] };
     const sceneBaseLabel = `scene${roundIndex}b`;
     filters.push(
-      `[${backgroundLabels[roundIndex]}]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS[${sceneBaseLabel}]`,
+      `color=c=black@0.0:s=${width}x${height}:r=${fps}:d=${round.scene_duration_seconds},format=rgba,trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS[${sceneBaseLabel}]`,
     );
 
     let currentLabel = drawCounter(filters, sceneBaseLabel, roundIndex, round, renderPlan.text_layout);
@@ -354,7 +354,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     currentSceneOutput = nextOutputLabel;
   }
 
-  filters.push(`[${currentSceneOutput}]format=yuv420p[vout]`);
+  const compositeLabel = 'scenecomposite';
+  filters.push(
+    `[${backgroundBaseLabel}][${currentSceneOutput}]overlay=x=0:y=0:shortest=1[${compositeLabel}]`,
+  );
+  filters.push(`[${compositeLabel}]format=yuv420p[vout]`);
   return {
     script: `${filters.join(';\n')}\n`,
   };
