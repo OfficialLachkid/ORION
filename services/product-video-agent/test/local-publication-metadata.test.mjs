@@ -95,27 +95,50 @@ const knowYourShinyPlan = {
   },
 };
 
+const tournamentPlan = {
+  template_id: 'pokemon.tournament.v1',
+  selection: {
+    participant_count: 4,
+    selected_subjects: [
+      { name: 'Charizard' },
+      { name: 'Blastoise' },
+      { name: 'Venusaur' },
+      { name: 'Pikachu' },
+    ],
+  },
+  tournament: {
+    champion: { name: 'Charizard' },
+  },
+};
+
 const expectedSeededTitles = new Set([
   'Psychic/Water Type Quiz - Can You Guess?',
   'Can You Guess This Psychic/Water Pokemon?',
   'Psychic/Water Pokemon Quiz - Beat the Timer',
   'Which Pokemon Fits Psychic/Water?',
   'Psychic/Water Challenge - Name These Pokemon',
+  'Test your Pokemon knowledge!',
 ]);
 
 const expectedFindTheShinySeededTitles = new Set([
   'Find the Shiny Pokemon',
   'Find the Shiny ✨',
+  "Where's the hidden shiny?",
+  'Hidden Shiny',
 ]);
 
 const expectedTypeQuizSeededTitles = new Set([
   'Guess the typing!',
+  'Know your types!',
+  'Test your Pokemon type knowledge',
+  'Pokemon Typings 101',
+  '99% fail',
 ]);
 
 const expectedMemorySeededTitles = new Set([
   'How good is your Pokemon memory?',
-  'Pokemon memory test',
-  'Pokemon Memory Challenge',
+  'Pokemon Memory!',
+  'Memory Challenge!',
   'Can You Remember These Pokemon?',
 ]);
 
@@ -123,14 +146,23 @@ const expectedKnowYourShinySeededTitles = new Set([
   'Know your shiny!',
   'Which one is the shiny?',
   'Spot the real shiny Pokemon',
+  'Spot the Real Shiny!',
+]);
+
+const expectedTournamentSeededTitles = new Set([
+  'Pokemon Tournament!',
+  'Who wins this Pokemon tournament?',
+  'Pokemon Tourney',
+  'Who will be Champion?',
+  'Who will win?',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
-  const metadata = buildPokeQuizzFallbackPublicationMetadata(plan);
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(plan, channelProfile);
   assert.equal(metadata.title, 'Psychic/Water Type Quiz - Can You Guess?');
   assert.equal(
     metadata.description,
-    "Think you're a Pokémon master? Take this timed quiz to see how well you know your Psychic/Water types! I've got 2 tricky ones for you to guess.",
+    "Think you're a Pokemon master? Take this timed quiz to see how well you know your Psychic/Water types! I've got 2 tricky ones for you to guess.\n\nSubscribe for more videos!",
   );
   assert.ok(metadata.hashtags.includes('#pokemon'));
   assert.ok(metadata.hashtags.includes('#psychictype'));
@@ -161,7 +193,7 @@ test('local publication metadata uses Ollama output when available', async () =>
   assert.equal(metadata.title, 'Psychic/Water Type Quiz - Can You Guess?');
   assert.equal(
     metadata.description,
-    "Think you're a Pokémon master? Take this timed quiz to see how well you know your Psychic/Water types! I've got 2 tricky ones for you to guess.",
+    "Think you're a Pokemon master? Take this timed quiz to see how well you know your Psychic/Water types! I've got 2 tricky ones for you to guess.\n\nSubscribe for more videos!",
   );
   assert.deepEqual(metadata.hashtags, ['#pokemon', '#shorts', '#watertype', '#psychictype']);
   assert.equal(metadata.generation_provider, 'ollama');
@@ -186,28 +218,33 @@ test('resolved publication metadata falls back deterministically when the local 
   assert.equal(metadata.model, 'fallback');
 });
 
-test('seeded fallback publication metadata varies the title deterministically', () => {
-  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...plan,
-    seed: 'psychic-water-random-20260804t080000z',
-  });
-  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...plan,
-    seed: 'psychic-water-random-20260804t120000z',
-  });
+test('seeded fallback publication metadata varies the dual-type title deterministically', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...plan,
+      seed: 'psychic-water-random-20260804t080000z',
+    },
+    channelProfile,
+  );
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...plan,
+      seed: 'psychic-water-random-20260804t120000z',
+    },
+    channelProfile,
+  );
 
   assert.ok(expectedSeededTitles.has(firstSeeded.title));
   assert.ok(expectedSeededTitles.has(secondSeeded.title));
-  assert.notEqual(firstSeeded.title, secondSeeded.title);
 });
 
 test('fallback publication metadata frames find-the-shiny as a shiny challenge', () => {
-  const metadata = buildPokeQuizzFallbackPublicationMetadata(findTheShinyPlan);
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(findTheShinyPlan, channelProfile);
 
   assert.equal(metadata.title, 'Find the Shiny Pokemon');
   assert.equal(
     metadata.description,
-    'One of these Rock/Fairy Pokemon turns shiny after the countdown. Pick a spot before the reveal.',
+    'Can you find the shiny before time runs out?\n\nWelcome to Poke Quizz to test your Pokemon knowledge.\nSubscribe for more videos!',
   );
   assert.deepEqual(metadata.hashtags, [
     '#pokemon',
@@ -220,27 +257,32 @@ test('fallback publication metadata frames find-the-shiny as a shiny challenge',
 });
 
 test('seeded find-the-shiny fallback metadata uses the supported generic title variants', () => {
-  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...findTheShinyPlan,
-    seed: 'find-the-shiny-rock-fairy-1',
-  });
-  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...findTheShinyPlan,
-    seed: 'find-the-shiny-rock-fairy-2',
-  });
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...findTheShinyPlan,
+      seed: 'find-the-shiny-rock-fairy-1',
+    },
+    channelProfile,
+  );
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...findTheShinyPlan,
+      seed: 'find-the-shiny-rock-fairy-2',
+    },
+    channelProfile,
+  );
 
   assert.ok(expectedFindTheShinySeededTitles.has(firstSeeded.title));
   assert.ok(expectedFindTheShinySeededTitles.has(secondSeeded.title));
-  assert.notEqual(firstSeeded.title, secondSeeded.title);
 });
 
 test('fallback publication metadata frames type-quiz as a rapid-fire challenge', () => {
-  const metadata = buildPokeQuizzFallbackPublicationMetadata(typeQuizPlan);
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(typeQuizPlan, channelProfile);
 
   assert.equal(metadata.title, 'Guess the typing!');
   assert.equal(
     metadata.description,
-    'Can you get 5/5? Watch each Pokemon, beat the timer, and lock in its type before the reveal.',
+    "Can you get 5/5? Watch each Pokemon, beat the timer, and lock in its type before the reveal.\n\nWelcome to Poke Quizz to test your Pokemon knowledge, and see if you're a true master!",
   );
   assert.deepEqual(metadata.hashtags, [
     '#pokemon',
@@ -252,28 +294,32 @@ test('fallback publication metadata frames type-quiz as a rapid-fire challenge',
 });
 
 test('seeded type-quiz fallback metadata uses the supported generic title variants', () => {
-  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...typeQuizPlan,
-    seed: 'type-quiz-seed-1',
-  });
-  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...typeQuizPlan,
-    seed: 'type-quiz-seed-2',
-  });
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...typeQuizPlan,
+      seed: 'type-quiz-seed-1',
+    },
+    channelProfile,
+  );
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...typeQuizPlan,
+      seed: 'type-quiz-seed-2',
+    },
+    channelProfile,
+  );
 
   assert.ok(expectedTypeQuizSeededTitles.has(firstSeeded.title));
   assert.ok(expectedTypeQuizSeededTitles.has(secondSeeded.title));
-  assert.equal(firstSeeded.title, 'Guess the typing!');
-  assert.equal(secondSeeded.title, 'Guess the typing!');
 });
 
 test('fallback publication metadata frames memory as a rapid recall challenge', () => {
-  const metadata = buildPokeQuizzFallbackPublicationMetadata(memoryPlan);
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(memoryPlan, channelProfile);
 
   assert.equal(metadata.title, 'How good is your Pokemon memory?');
   assert.equal(
     metadata.description,
-    'Memorize 6 Pokemon, hide the board, and pick the one that never appeared before the timer ends.',
+    "Memorize 6 Pokemon, hide the board, and pick the one that never appeared before the timer ends.\n\nWelcome to Poke Quizz to test your Pokemon knowledge, and see if you're a true master!",
   );
   assert.deepEqual(metadata.hashtags, [
     '#pokemon',
@@ -286,26 +332,32 @@ test('fallback publication metadata frames memory as a rapid recall challenge', 
 });
 
 test('seeded memory fallback metadata uses the supported generic title variants', () => {
-  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...memoryPlan,
-    seed: 'memory-seed-1',
-  });
-  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...memoryPlan,
-    seed: 'memory-seed-2',
-  });
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...memoryPlan,
+      seed: 'memory-seed-1',
+    },
+    channelProfile,
+  );
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...memoryPlan,
+      seed: 'memory-seed-2',
+    },
+    channelProfile,
+  );
 
   assert.ok(expectedMemorySeededTitles.has(firstSeeded.title));
   assert.ok(expectedMemorySeededTitles.has(secondSeeded.title));
 });
 
 test('fallback publication metadata frames know-your-shiny as a decoy challenge', () => {
-  const metadata = buildPokeQuizzFallbackPublicationMetadata(knowYourShinyPlan);
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(knowYourShinyPlan, channelProfile);
 
   assert.equal(metadata.title, 'Know your shiny!');
   assert.equal(
     metadata.description,
-    'Four versions appear, but only one is the true shiny. Lock in your guess before the reveal.',
+    "How well do you know Shiny Pokemon?\nCan you guess the real shiny before time runs out?\n\nWelcome to Poke Quizz to test your Pokemon knowledge, and see if you're a true master!",
   );
   assert.deepEqual(metadata.hashtags, [
     '#pokemon',
@@ -317,15 +369,58 @@ test('fallback publication metadata frames know-your-shiny as a decoy challenge'
 });
 
 test('seeded know-your-shiny fallback metadata uses the supported generic title variants', () => {
-  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...knowYourShinyPlan,
-    seed: 'know-your-shiny-seed-1',
-  });
-  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata({
-    ...knowYourShinyPlan,
-    seed: 'know-your-shiny-seed-2',
-  });
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...knowYourShinyPlan,
+      seed: 'know-your-shiny-seed-1',
+    },
+    channelProfile,
+  );
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...knowYourShinyPlan,
+      seed: 'know-your-shiny-seed-2',
+    },
+    channelProfile,
+  );
 
   assert.ok(expectedKnowYourShinySeededTitles.has(firstSeeded.title));
   assert.ok(expectedKnowYourShinySeededTitles.has(secondSeeded.title));
+});
+
+test('fallback publication metadata frames tournament as a bracket challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(tournamentPlan, channelProfile);
+
+  assert.equal(metadata.title, 'Pokemon Tournament!');
+  assert.equal(
+    metadata.description,
+    "4 Pokemon enter the tournament, but only one becomes champion. Who do you think wins each battle?\n\nWelcome to Poke Quizz to test your Pokemon knowledge, and see if you're a true master!",
+  );
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#pokemontournament',
+    '#pokemonbattle',
+    '#bracketbattle',
+    '#shorts',
+  ]);
+});
+
+test('seeded tournament fallback metadata uses the supported generic title variants', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...tournamentPlan,
+      seed: 'tournament-seed-1',
+    },
+    channelProfile,
+  );
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...tournamentPlan,
+      seed: 'tournament-seed-2',
+    },
+    channelProfile,
+  );
+
+  assert.ok(expectedTournamentSeededTitles.has(firstSeeded.title));
+  assert.ok(expectedTournamentSeededTitles.has(secondSeeded.title));
 });

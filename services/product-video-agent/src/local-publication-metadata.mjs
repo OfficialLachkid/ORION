@@ -58,6 +58,18 @@ function buildTypeHashtags(types = []) {
     .map((type) => `#${type}type`);
 }
 
+function resolveMetadataChannelName(channelProfile = {}) {
+  const channelName = String(channelProfile?.name || '').trim();
+  return channelName || 'this channel';
+}
+
+function joinDescriptionParagraphs(...paragraphs) {
+  return paragraphs
+    .map((paragraph) => String(paragraph || '').trim())
+    .filter(Boolean)
+    .join('\n\n');
+}
+
 function resolveTemplateFlavor(plan = {}) {
   const templateKey = String(plan?.template_key || '').trim().toLowerCase();
   const templateId = String(plan?.template_id || '').trim().toLowerCase();
@@ -95,34 +107,44 @@ const DEFAULT_QUIZ_TITLE_BUILDERS = Object.freeze([
   (typePairLabel) => `${typePairLabel} Pokemon Quiz - Beat the Timer`,
   (typePairLabel) => `Which Pokemon Fits ${typePairLabel}?`,
   (typePairLabel) => `${typePairLabel} Challenge - Name These Pokemon`,
+  () => 'Test your Pokemon knowledge!',
 ]);
 
 const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
   () => 'Find the Shiny Pokemon',
   () => 'Find the Shiny \u2728',
+  () => "Where's the hidden shiny?",
+  () => 'Hidden Shiny',
 ]);
 
 const DEFAULT_KNOW_YOUR_SHINY_TITLE_BUILDERS = Object.freeze([
   () => 'Know your shiny!',
   () => 'Which one is the shiny?',
   () => 'Spot the real shiny Pokemon',
+  () => 'Spot the Real Shiny!',
 ]);
 
 const DEFAULT_TOURNAMENT_TITLE_BUILDERS = Object.freeze([
-  () => 'Pokemon Tournament Bracket',
+  () => 'Pokemon Tournament!',
   () => 'Who wins this Pokemon tournament?',
-  () => 'Pokemon bracket tournament',
+  () => 'Pokemon Tourney',
+  () => 'Who will be Champion?',
+  () => 'Who will win?',
 ]);
 
 const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([
   () => 'How good is your Pokemon memory?',
-  () => 'Pokemon memory test',
-  () => 'Pokemon Memory Challenge',
+  () => 'Pokemon Memory!',
+  () => 'Memory Challenge!',
   () => 'Can You Remember These Pokemon?',
 ]);
 
 const DEFAULT_TYPE_QUIZ_TITLE_BUILDERS = Object.freeze([
   () => 'Guess the typing!',
+  () => 'Know your types!',
+  () => 'Test your Pokemon type knowledge',
+  () => 'Pokemon Typings 101',
+  () => '99% fail',
 ]);
 
 function hashSeed(input) {
@@ -150,7 +172,8 @@ function buildDefaultDescription(plan) {
   const typePairLabel = buildTypePairLabel(plan?.selection?.type_pair || []);
   const selectedSubjects = plan?.selection?.selected_subjects || [];
   const subjectCount = selectedSubjects.length || Number(plan?.selection?.display_subject_count || 0) || 4;
-  return `Think you're a Pokémon master? Take this timed quiz to see how well you know your ${typePairLabel} types! I've got ${subjectCount} tricky ones for you to guess.`;
+  const typeLabel = typePairLabel ? `${typePairLabel} types` : 'Pokemon types';
+  return `Think you're a Pokemon master? Take this timed quiz to see how well you know your ${typeLabel}! I've got ${subjectCount} tricky ones for you to guess.`;
 }
 
 function buildMetadataPrompt(plan) {
@@ -215,30 +238,52 @@ function buildTemplateAwareDefaultTitle(plan) {
   return DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS[templateIndex]();
 }
 
-function buildTemplateAwareDefaultDescription(plan) {
+function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
   const flavor = resolveTemplateFlavor(plan);
+  const channelName = resolveMetadataChannelName(channelProfile);
   if (flavor === 'memory') {
     const displayedCount = Number(plan?.selection?.display_subject_count || 0) || 6;
-    return `Memorize ${displayedCount} Pokemon, hide the board, and pick the one that never appeared before the timer ends.`;
+    return joinDescriptionParagraphs(
+      `Memorize ${displayedCount} Pokemon, hide the board, and pick the one that never appeared before the timer ends.`,
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
   }
   if (flavor === 'type-quiz') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     const subjectCount = selectedSubjects.length || Number(plan?.selection?.round_count || 0) || 5;
-    return `Can you get ${subjectCount}/${subjectCount}? Watch each Pokemon, beat the timer, and lock in its type before the reveal.`;
+    return joinDescriptionParagraphs(
+      `Can you get ${subjectCount}/${subjectCount}? Watch each Pokemon, beat the timer, and lock in its type before the reveal.`,
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
   }
   if (flavor === 'tournament') {
     const participantCount = Number(plan?.selection?.participant_count || 0) || 4;
-    return `${participantCount} Pokemon enter the bracket, but only one becomes champion. Who do you think wins each battle?`;
+    return joinDescriptionParagraphs(
+      `${participantCount} Pokemon enter the tournament, but only one becomes champion. Who do you think wins each battle?`,
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
   }
   if (flavor === 'know-your-shiny') {
-    return 'Four versions appear, but only one is the true shiny. Lock in your guess before the reveal.';
+    return joinDescriptionParagraphs(
+      'How well do you know Shiny Pokemon?\nCan you guess the real shiny before time runs out?',
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
   }
   if (flavor !== 'find-the-shiny') {
-    return buildDefaultDescription(plan);
+    const typePairLabel = buildTypePairLabel(plan?.selection?.type_pair || []);
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    const subjectCount = selectedSubjects.length || Number(plan?.selection?.display_subject_count || 0) || 4;
+    const typeLabel = typePairLabel ? `${typePairLabel} types` : 'Pokemon types';
+    return joinDescriptionParagraphs(
+      `Think you're a Pokemon master? Take this timed quiz to see how well you know your ${typeLabel}! I've got ${subjectCount} tricky ones for you to guess.`,
+      'Subscribe for more videos!',
+    );
   }
 
-  const typePairLabel = buildTypePairLabel(plan?.selection?.type_pair || []);
-  return `One of these ${typePairLabel} Pokemon turns shiny after the countdown. Pick a spot before the reveal.`;
+  return joinDescriptionParagraphs(
+    'Can you find the shiny before time runs out?',
+    `Welcome to ${channelName} to test your Pokemon knowledge.\nSubscribe for more videos!`,
+  );
 }
 
 function buildTemplateAwareMetadataPrompt(plan) {
@@ -426,10 +471,10 @@ function parseGeneratedMetadataPayload(responseText) {
   };
 }
 
-export function buildPokeQuizzFallbackPublicationMetadata(plan) {
+export function buildPokeQuizzFallbackPublicationMetadata(plan, channelProfile = null) {
   return {
     title: buildTemplateAwareDefaultTitle(plan),
-    description: buildTemplateAwareDefaultDescription(plan),
+    description: buildTemplateAwareDefaultDescription(plan, channelProfile),
     hashtags: buildTemplateAwareHashtags(plan),
     generation_provider: 'template',
     model: 'fallback',
@@ -451,7 +496,7 @@ export async function resolvePokeQuizzPublicationMetadata({
       config,
       channelProfile,
     })
-    : buildPokeQuizzFallbackPublicationMetadata(plan);
+    : buildPokeQuizzFallbackPublicationMetadata(plan, channelProfile);
 
   if (title) {
     metadata = {
@@ -482,7 +527,7 @@ export async function generatePokeQuizzPublicationMetadata({
   fetchImpl = globalThis.fetch,
   allowFallback = true,
 }) {
-  const fallback = buildPokeQuizzFallbackPublicationMetadata(plan);
+  const fallback = buildPokeQuizzFallbackPublicationMetadata(plan, channelProfile);
   const shouldUseLocalModel = (
     channelProfile?.metadata?.title_generation_model === 'local_ollama'
     || channelProfile?.metadata?.description_generation_model === 'local_ollama'
@@ -521,7 +566,7 @@ export async function generatePokeQuizzPublicationMetadata({
     return {
       ...parsed,
       title: buildTemplateAwareDefaultTitle(plan),
-      description: buildTemplateAwareDefaultDescription(plan),
+      description: buildTemplateAwareDefaultDescription(plan, channelProfile),
       generation_provider: 'ollama',
       model: config.script.model,
     };
