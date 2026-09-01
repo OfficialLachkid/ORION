@@ -292,6 +292,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       const spriteSettledRawLabel = `scene${roundIndex}spritesettledraw${candidate.index}`;
       const spriteGrayRawLabel = `scene${roundIndex}spritegrayraw${candidate.index}`;
       const spriteIntroPreparedLabel = `scene${roundIndex}spriteintroprep${candidate.index}`;
+      const spriteSettledPreparedLabel = `scene${roundIndex}spritesettledprep${candidate.index}`;
       const spriteIntroLabel = `scene${roundIndex}spriteintro${candidate.index}`;
       const spriteSettledInputLabel = `scene${roundIndex}spritesettledsrc${candidate.index}`;
       const spriteGrayInputLabel = `scene${roundIndex}spritegrayscaled${candidate.index}`;
@@ -322,16 +323,26 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
           startSeconds: candidate.intro_start_seconds,
           durationSeconds: introFormingDuration,
         });
+        appendFormingSpriteFilters(filters, {
+          inputLabel: spriteSettledRawLabel,
+          outputLabel: spriteSettledPreparedLabel,
+          workingLabelPrefix: `scene${roundIndex}spritesettledform${candidate.index}`,
+          startSeconds: candidate.intro_start_seconds,
+          durationSeconds: introFormingDuration,
+        });
       } else {
         filters.push(
           `[${spriteIntroRawLabel}]null[${spriteIntroPreparedLabel}]`,
+        );
+        filters.push(
+          `[${spriteSettledRawLabel}]null[${spriteSettledPreparedLabel}]`,
         );
       }
       filters.push(
         `[${spriteIntroPreparedLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteIntroLabel}]`,
       );
       filters.push(
-        `[${spriteSettledRawLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteSettledInputLabel}]`,
+        `[${spriteSettledPreparedLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteSettledInputLabel}]`,
       );
       if (!candidate.is_correct) {
         filters.push(
