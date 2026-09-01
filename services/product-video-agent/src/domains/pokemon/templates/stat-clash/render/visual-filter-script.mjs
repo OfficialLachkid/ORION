@@ -290,9 +290,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       }
       const spriteIntroRawLabel = `scene${roundIndex}spriteintroraw${candidate.index}`;
       const spriteSettledRawLabel = `scene${roundIndex}spritesettledraw${candidate.index}`;
+      const spriteGrayRawLabel = `scene${roundIndex}spritegrayraw${candidate.index}`;
+      const spriteIntroPreparedLabel = `scene${roundIndex}spriteintroprep${candidate.index}`;
       const spriteIntroLabel = `scene${roundIndex}spriteintro${candidate.index}`;
       const spriteSettledInputLabel = `scene${roundIndex}spritesettledsrc${candidate.index}`;
-      const spriteGrayInputLabel = `scene${roundIndex}spritegraysrc${candidate.index}`;
+      const spriteGrayInputLabel = `scene${roundIndex}spritegrayscaled${candidate.index}`;
       const spriteOverlayLabel = `scene${roundIndex}spritev${candidate.index}`;
       const settledSpriteLabel = `scene${roundIndex}settled${candidate.index}`;
       const spriteScaleExpression = buildAnimatedPopSettleExpression(
@@ -308,31 +310,32 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       );
       const spriteSplitLabels = candidate.is_correct
         ? `[${spriteIntroRawLabel}][${spriteSettledRawLabel}]`
-        : `[${spriteIntroRawLabel}][${spriteSettledRawLabel}][${spriteGrayInputLabel}]`;
+        : `[${spriteIntroRawLabel}][${spriteSettledRawLabel}][${spriteGrayRawLabel}]`;
       filters.push(
-        `[${candidateInputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${candidate.is_correct ? 2 : 3}${spriteSplitLabels}`,
+        `[${candidateInputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1,split=${candidate.is_correct ? 2 : 3}${spriteSplitLabels}`,
       );
       if (introFormingEnabled) {
         appendFormingSpriteFilters(filters, {
           inputLabel: spriteIntroRawLabel,
-          outputLabel: spriteIntroLabel,
+          outputLabel: spriteIntroPreparedLabel,
           workingLabelPrefix: `scene${roundIndex}spriteintroform${candidate.index}`,
-          startSeconds: candidate.intro_start_seconds,
-          durationSeconds: introFormingDuration,
-        });
-        appendFormingSpriteFilters(filters, {
-          inputLabel: spriteSettledRawLabel,
-          outputLabel: spriteSettledInputLabel,
-          workingLabelPrefix: `scene${roundIndex}spritesettledform${candidate.index}`,
           startSeconds: candidate.intro_start_seconds,
           durationSeconds: introFormingDuration,
         });
       } else {
         filters.push(
-          `[${spriteIntroRawLabel}]null[${spriteIntroLabel}]`,
+          `[${spriteIntroRawLabel}]null[${spriteIntroPreparedLabel}]`,
         );
+      }
+      filters.push(
+        `[${spriteIntroPreparedLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteIntroLabel}]`,
+      );
+      filters.push(
+        `[${spriteSettledRawLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteSettledInputLabel}]`,
+      );
+      if (!candidate.is_correct) {
         filters.push(
-          `[${spriteSettledRawLabel}]null[${spriteSettledInputLabel}]`,
+          `[${spriteGrayRawLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteGrayInputLabel}]`,
         );
       }
       filters.push(
