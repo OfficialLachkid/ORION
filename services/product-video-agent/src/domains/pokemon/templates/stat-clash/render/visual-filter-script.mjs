@@ -9,10 +9,12 @@ import {
   DEFAULT_TEXT_BORDER,
   escapeDrawtextText,
   ensureNumber,
+  roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
 import {
   buildProgressiveTextArtifacts,
 } from '../../dual-type-reveal/render/text-layout.mjs';
+import { buildFormingSpriteFilterChain } from '../../shared/render/forming-animation.mjs';
 
 function buildTimerBarScaleExpression(startSeconds, endSeconds, fullWidth) {
   const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
@@ -28,7 +30,6 @@ function appendTimerBarPhase(filters, currentLabel, {
   labelPrefix,
   fps,
   sceneDurationSeconds,
-  sourceStartSeconds,
   timerLayout,
   timerBarScaleExpression,
   enableStartSeconds,
@@ -45,7 +46,7 @@ function appendTimerBarPhase(filters, currentLabel, {
 
   const baseSourceLabel = `${labelPrefix}src`;
   filters.push(
-    `color=c=${baseColor}@0.98:s=${timerWidth}x${timerHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS+${Number(ensureNumber(sourceStartSeconds, 0).toFixed(3))}/TB,scale=w='${timerBarScaleExpression}':h=${timerHeight}:eval=frame[${baseSourceLabel}]`,
+    `color=c=${baseColor}@0.98:s=${timerWidth}x${timerHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerHeight}:eval=frame[${baseSourceLabel}]`,
   );
   const baseOverlayLabel = `${labelPrefix}base`;
   filters.push(
@@ -54,7 +55,7 @@ function appendTimerBarPhase(filters, currentLabel, {
 
   const highlightSourceLabel = `${labelPrefix}hlsrc`;
   filters.push(
-    `color=c=white@0.18:s=${timerWidth}x${highlightHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS+${Number(ensureNumber(sourceStartSeconds, 0).toFixed(3))}/TB,scale=w='${timerBarScaleExpression}':h=${highlightHeight}:eval=frame[${highlightSourceLabel}]`,
+    `color=c=white@0.18:s=${timerWidth}x${highlightHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${highlightHeight}:eval=frame[${highlightSourceLabel}]`,
   );
   const highlightOverlayLabel = `${labelPrefix}hl`;
   filters.push(
@@ -63,7 +64,7 @@ function appendTimerBarPhase(filters, currentLabel, {
 
   const shadowSourceLabel = `${labelPrefix}shsrc`;
   filters.push(
-    `color=c=black@0.14:s=${timerWidth}x${shadowHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS+${Number(ensureNumber(sourceStartSeconds, 0).toFixed(3))}/TB,scale=w='${timerBarScaleExpression}':h=${shadowHeight}:eval=frame[${shadowSourceLabel}]`,
+    `color=c=black@0.14:s=${timerWidth}x${shadowHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${shadowHeight}:eval=frame[${shadowSourceLabel}]`,
   );
   const shadowOverlayLabel = `${labelPrefix}sh`;
   filters.push(
@@ -74,20 +75,22 @@ function appendTimerBarPhase(filters, currentLabel, {
 }
 
 function buildPromptSegments(text, template, textLayout, round) {
+  const startSeconds = ensureNumber(round?.local?.prompt_start_seconds, 0.04);
+  const endSeconds = ensureNumber(round?.local?.reveal_start_seconds, startSeconds + 1);
   const artifacts = buildProgressiveTextArtifacts(text, {
     template,
     fontSize: textLayout.prompt_font_size,
     maxLines: 2,
     baseY: textLayout.prompt_y,
-    startSeconds: ensureNumber(round?.prompt_start_seconds, 0.04),
-    endSeconds: round.reveal_start_seconds,
+    startSeconds,
+    endSeconds,
   });
   return artifacts.lines.map((line) => ({
     text: line.text,
     font_size: line.font_size,
     y: line.y,
-    start_seconds: ensureNumber(round?.prompt_start_seconds, 0.04),
-    end_seconds: round.reveal_start_seconds,
+    start_seconds: startSeconds,
+    end_seconds: endSeconds,
   }));
 }
 
@@ -97,8 +100,8 @@ function buildRevealArtifacts(text, template, textLayout, round) {
     fontSize: textLayout.reveal_font_size,
     maxLines: 2,
     baseY: textLayout.reveal_y,
-    startSeconds: round.reveal_visual_start_seconds,
-    endSeconds: round.scene_end_seconds,
+    startSeconds: round.local.reveal_visual_start_seconds,
+    endSeconds: round.local.scene_duration_seconds,
   });
 }
 
@@ -110,29 +113,27 @@ function platformOverlayY(cell, baseSpriteSize, platformLayout) {
   ).toFixed(3));
 }
 
-function buildCounterXExpression(roundIndex, round, textLayout, canvasWidth) {
+function buildCounterXExpression(roundIndex, textLayout, canvasWidth) {
   if (roundIndex === 0) {
     return {
       startSeconds: 0.03,
       xExpression: textLayout.counter_x,
     };
   }
-  const startSeconds = Number((round.scene_start_seconds + 0.03).toFixed(3));
   return {
-    startSeconds,
+    startSeconds: 0.03,
     xExpression: buildAnimatedLerpExpression({
       fromValue: canvasWidth + 48,
       toValue: textLayout.counter_x,
-      holdUntilSeconds: startSeconds,
+      holdUntilSeconds: 0.03,
       transitionDurationSeconds: 0.34,
     }),
   };
 }
 
-function drawCounter(filters, currentLabel, roundIndex, round, textLayout, canvasWidth) {
+function overlayCounterText(filters, currentLabel, roundIndex, round, textLayout, canvasWidth) {
   const { startSeconds: counterStartSeconds, xExpression } = buildCounterXExpression(
     roundIndex,
-    round,
     textLayout,
     canvasWidth,
   );
@@ -145,9 +146,20 @@ function drawCounter(filters, currentLabel, roundIndex, round, textLayout, canva
   );
   const counterLabel = `scene${roundIndex}counter`;
   filters.push(
-    `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.round_label)}':fontcolor=white:fontsize='${textLayout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='${xExpression}':y=${textLayout.counter_y}:alpha='${buildAnimatedTextSegmentAlphaExpression(counterStartSeconds, round.scene_end_seconds)}':enable='${formatEnableBetween(counterStartSeconds, round.scene_end_seconds)}'[${counterLabel}]`,
+    `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.round_label)}':fontcolor=white:fontsize='${textLayout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='${xExpression}':y=${textLayout.counter_y}:alpha='${buildAnimatedTextSegmentAlphaExpression(counterStartSeconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(counterStartSeconds, round.local.scene_duration_seconds)}'[${counterLabel}]`,
   );
   return counterLabel;
+}
+
+function localizeCandidateTiming(candidate, round) {
+  return {
+    ...candidate,
+    intro_start_seconds: roundTime(candidate.intro_start_seconds - round.scene_start_seconds),
+    intro_end_seconds: roundTime(candidate.intro_end_seconds - round.scene_start_seconds),
+    pokeball_start_seconds: roundTime(candidate.pokeball_start_seconds - round.scene_start_seconds),
+    pokeball_end_seconds: roundTime(candidate.pokeball_end_seconds - round.scene_start_seconds),
+    reveal_start_seconds: roundTime(candidate.reveal_start_seconds - round.scene_start_seconds),
+  };
 }
 
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
@@ -161,6 +173,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     height: 34,
     center_x: 540,
   };
+  const roundCount = Math.max(1, renderPlan.rounds.length);
   const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
   const backgroundFilter = backgroundBlurSigma > 0
     ? `gblur=sigma=${backgroundBlurSigma},`
@@ -177,6 +190,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
   const introScalePeak = ensureNumber(template?.renderer?.candidate_intro_scale_peak, 1.08);
   const introScaleSettle = ensureNumber(template?.renderer?.candidate_intro_scale_settle, 1);
   const introYOffset = ensureNumber(template?.renderer?.candidate_intro_y_offset_px, 42);
+  const introFormingEnabled = template?.renderer?.candidate_forming_enabled !== false;
+  const introFormingDuration = Math.max(
+    0.08,
+    ensureNumber(template?.renderer?.candidate_forming_duration_seconds, 1),
+  );
   const introPokeballScaleMultiplier = Math.max(
     0.1,
     ensureNumber(template?.renderer?.intro_pokeball_scale_multiplier, 1.04),
@@ -190,17 +208,21 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     ensureNumber(template?.renderer?.decoy_grayscale_fade_duration_seconds, 0.22),
   );
 
-  const backgroundBaseLabel = 'v0';
+  const backgroundLabels = Array.from({ length: roundCount }, (_unused, index) => `bg${index}`);
   filters.push(
-    `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,trim=duration=${renderPlan.total_duration_seconds},setpts=PTS-STARTPTS[${backgroundBaseLabel}]`,
+    `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,split=${roundCount}${backgroundLabels.map((label) => `[${label}]`).join('')}`,
   );
 
-  let currentVideoLabel = backgroundBaseLabel;
   renderPlan.rounds.forEach((round, roundIndex) => {
     const roundInputs = inputRefs.rounds[roundIndex] || { candidates: [] };
-    let currentLabel = drawCounter(
+    const sceneBaseLabel = `scene${roundIndex}b`;
+    filters.push(
+      `[${backgroundLabels[roundIndex]}]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS[${sceneBaseLabel}]`,
+    );
+
+    let currentLabel = overlayCounterText(
       filters,
-      currentVideoLabel,
+      sceneBaseLabel,
       roundIndex,
       round,
       renderPlan.text_layout,
@@ -222,7 +244,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     ).toFixed(3));
     const decoyGrayCandidates = [];
 
-    for (const candidate of round.candidates) {
+    for (const candidateValue of round.candidates) {
+      const candidate = localizeCandidateTiming(candidateValue, round);
       const cell = gridLayout.cells[candidate.index];
       const candidateInputIndex = roundInputs.candidates?.[candidate.index];
       if (inputRefs.introPokeball != null) {
@@ -254,10 +277,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
           introScaleSettle,
         );
         filters.push(
-          `[${inputRefs.grassPlatform}:v]fps=${fps},scale=w='${platformWidth}*(${platformScaleExpression})':h=-1:eval=frame,format=rgba,setsar=1[${platformSourceLabel}]`,
+          `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${platformWidth}*(${platformScaleExpression})':h=-1:eval=frame,format=rgba,setsar=1[${platformSourceLabel}]`,
         );
         filters.push(
-          `[${currentLabel}][${platformSourceLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(candidate.intro_start_seconds, round.scene_end_seconds)}'[${platformOverlayLabel}]`,
+          `[${currentLabel}][${platformSourceLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(candidate.intro_start_seconds, round.local.scene_duration_seconds)}'[${platformOverlayLabel}]`,
         );
         currentLabel = platformOverlayLabel;
       }
@@ -265,10 +288,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       if (candidateInputIndex == null) {
         continue;
       }
+      const spriteIntroRawLabel = `scene${roundIndex}spriteintroraw${candidate.index}`;
+      const spriteSettledRawLabel = `scene${roundIndex}spritesettledraw${candidate.index}`;
       const spriteIntroLabel = `scene${roundIndex}spriteintro${candidate.index}`;
       const spriteSettledInputLabel = `scene${roundIndex}spritesettledsrc${candidate.index}`;
       const spriteGrayInputLabel = `scene${roundIndex}spritegraysrc${candidate.index}`;
       const spriteOverlayLabel = `scene${roundIndex}spritev${candidate.index}`;
+      const settledSpriteLabel = `scene${roundIndex}settled${candidate.index}`;
       const spriteScaleExpression = buildAnimatedPopSettleExpression(
         candidate.intro_start_seconds,
         introDuration,
@@ -281,21 +307,36 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
         candidate.intro_start_seconds,
       );
       const spriteSplitLabels = candidate.is_correct
-        ? `[${spriteIntroLabel}][${spriteSettledInputLabel}]`
-        : `[${spriteIntroLabel}][${spriteSettledInputLabel}][${spriteGrayInputLabel}]`;
+        ? `[${spriteIntroRawLabel}][${spriteSettledRawLabel}]`
+        : `[${spriteIntroRawLabel}][${spriteSettledRawLabel}][${spriteGrayInputLabel}]`;
       filters.push(
-        `[${candidateInputIndex}:v]fps=${fps},setpts=PTS-STARTPTS+${Number(round.scene_start_seconds.toFixed(3))}/TB,scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${candidate.is_correct ? 2 : 3}${spriteSplitLabels}`,
+        `[${candidateInputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${candidate.is_correct ? 2 : 3}${spriteSplitLabels}`,
+      );
+      filters.push(
+        `[${spriteIntroRawLabel}]${introFormingEnabled
+          ? buildFormingSpriteFilterChain({
+            startSeconds: candidate.intro_start_seconds,
+            durationSeconds: introFormingDuration,
+          })
+          : 'null'}[${spriteIntroLabel}]`,
+      );
+      filters.push(
+        `[${spriteSettledRawLabel}]${introFormingEnabled
+          ? buildFormingSpriteFilterChain({
+            startSeconds: candidate.intro_start_seconds,
+            durationSeconds: introFormingDuration,
+          })
+          : 'null'}[${spriteSettledInputLabel}]`,
       );
       filters.push(
         `[${currentLabel}][${spriteIntroLabel}]overlay=x='${cell.center_x}-w/2':y='${spriteYExpression}+${introYOffset}-h/2':enable='${formatEnableBetween(candidate.intro_start_seconds, candidate.intro_end_seconds)}'[${spriteOverlayLabel}]`,
       );
       currentLabel = spriteOverlayLabel;
-
-      const settledSpriteLabel = `scene${roundIndex}settled${candidate.index}`;
       filters.push(
-        `[${currentLabel}][${spriteSettledInputLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + gridSpriteYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(candidate.intro_end_seconds, round.scene_end_seconds)}'[${settledSpriteLabel}]`,
+        `[${currentLabel}][${spriteSettledInputLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + gridSpriteYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(candidate.intro_end_seconds, round.local.scene_duration_seconds)}'[${settledSpriteLabel}]`,
       );
       currentLabel = settledSpriteLabel;
+
       if (!candidate.is_correct) {
         decoyGrayCandidates.push({
           candidate,
@@ -307,20 +348,20 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
 
     const timerRailLabel = `scene${roundIndex}tb0`;
     const timerBarScaleExpression = buildTimerBarScaleExpression(
-      round.countdown_start_seconds,
-      round.reveal_start_seconds,
+      round.local.countdown_start_seconds,
+      round.local.reveal_start_seconds,
       timerLayout.width,
     );
     const greenEnd = Number((
-      round.countdown_start_seconds
-      + ((round.reveal_start_seconds - round.countdown_start_seconds) * 0.5)
+      round.local.countdown_start_seconds
+      + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.5)
     ).toFixed(3));
     const yellowEnd = Number((
-      round.countdown_start_seconds
-      + ((round.reveal_start_seconds - round.countdown_start_seconds) * 0.8)
+      round.local.countdown_start_seconds
+      + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.8)
     ).toFixed(3));
     filters.push(
-      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=black@0.28:t=fill:enable='${formatEnableBetween(round.countdown_start_seconds, round.reveal_start_seconds)}'[${timerRailLabel}]`,
+      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=black@0.28:t=fill:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerRailLabel}]`,
     );
     currentLabel = timerRailLabel;
 
@@ -328,10 +369,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       labelPrefix: `scene${roundIndex}tb1`,
       fps,
       sceneDurationSeconds: round.scene_duration_seconds,
-      sourceStartSeconds: round.scene_start_seconds,
       timerLayout,
       timerBarScaleExpression,
-      enableStartSeconds: round.countdown_start_seconds,
+      enableStartSeconds: round.local.countdown_start_seconds,
       enableEndSeconds: greenEnd,
       baseColor: '0x32D74B',
     });
@@ -339,7 +379,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       labelPrefix: `scene${roundIndex}tb2`,
       fps,
       sceneDurationSeconds: round.scene_duration_seconds,
-      sourceStartSeconds: round.scene_start_seconds,
       timerLayout,
       timerBarScaleExpression,
       enableStartSeconds: greenEnd,
@@ -350,17 +389,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       labelPrefix: `scene${roundIndex}tb3`,
       fps,
       sceneDurationSeconds: round.scene_duration_seconds,
-      sourceStartSeconds: round.scene_start_seconds,
       timerLayout,
       timerBarScaleExpression,
       enableStartSeconds: yellowEnd,
-      enableEndSeconds: round.reveal_start_seconds,
+      enableEndSeconds: round.local.reveal_start_seconds,
       baseColor: '0xFF453A',
     });
 
     const timerBorderLabel = `scene${roundIndex}tb4`;
     filters.push(
-      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=white@0.16:t=2:enable='${formatEnableBetween(round.countdown_start_seconds, round.reveal_start_seconds)}'[${timerBorderLabel}]`,
+      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=white@0.16:t=2:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerBorderLabel}]`,
     );
     currentLabel = timerBorderLabel;
 
@@ -368,10 +406,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       const grayLabel = `scene${roundIndex}gray${candidate.index}`;
       const grayOverlayLabel = `scene${roundIndex}grayv${candidate.index}`;
       filters.push(
-        `[${grayInputLabel}]format=rgba,eq=saturation=0:brightness=-0.42:contrast=1.22,setsar=1,colorchannelmixer=aa=0.94,fade=t=in:st=${round.reveal_visual_start_seconds}:d=${decoyGrayFadeDuration}:alpha=1[${grayLabel}]`,
+        `[${grayInputLabel}]format=rgba,eq=saturation=0:brightness=-0.42:contrast=1.22,setsar=1,colorchannelmixer=aa=0.94,fade=t=in:st=${round.local.reveal_visual_start_seconds}:d=${decoyGrayFadeDuration}:alpha=1[${grayLabel}]`,
       );
       filters.push(
-        `[${currentLabel}][${grayLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + gridSpriteYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(round.reveal_visual_start_seconds, round.scene_end_seconds)}'[${grayOverlayLabel}]`,
+        `[${currentLabel}][${grayLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + gridSpriteYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${grayOverlayLabel}]`,
       );
       currentLabel = grayOverlayLabel;
     });
@@ -384,13 +422,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     );
     revealArtifacts.lines.forEach((line, lineIndex) => {
       const revealLabel = `scene${roundIndex}reveal${lineIndex}`;
-        filters.push(
-          `[${currentLabel}]drawtext=text='${escapeDrawtextText(line.text)}':fontcolor=white:fontsize=${line.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, round.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.reveal_visual_start_seconds, round.scene_end_seconds)}':enable='${formatEnableBetween(round.reveal_visual_start_seconds, round.scene_end_seconds)}'[${revealLabel}]`,
-        );
-        currentLabel = revealLabel;
-      });
+      filters.push(
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(line.text)}':fontcolor=white:fontsize=${line.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${revealLabel}]`,
+      );
+      currentLabel = revealLabel;
+    });
 
-    for (const candidate of round.candidates) {
+    for (const candidateValue of round.candidates) {
+      const candidate = localizeCandidateTiming(candidateValue, round);
       const cell = gridLayout.cells[candidate.index];
       const isTopRow = cell.row === 0;
       const statY = isTopRow
@@ -401,13 +440,25 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
         : renderPlan.stat_value_layout.default_color;
       const statLabel = `scene${roundIndex}stat${candidate.index}`;
       filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(candidate.stat_value)}':fontcolor=${statColor}:fontsize=${renderPlan.stat_value_layout.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${cell.center_x}-text_w/2:y='${buildAnimatedTextYExpression(statY, round.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.reveal_visual_start_seconds, round.reveal_visual_start_seconds + statRevealFadeDuration)}':enable='${formatEnableBetween(round.reveal_visual_start_seconds, round.scene_end_seconds)}'[${statLabel}]`,
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(candidate.stat_value)}':fontcolor=${statColor}:fontsize=${renderPlan.stat_value_layout.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${cell.center_x}-text_w/2:y='${buildAnimatedTextYExpression(statY, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.reveal_visual_start_seconds + statRevealFadeDuration)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${statLabel}]`,
       );
       currentLabel = statLabel;
     }
-    currentVideoLabel = currentLabel;
+
+    filters.push(`[${currentLabel}]setsar=1[scene${roundIndex}]`);
   });
-  filters.push(`[${currentVideoLabel}]format=yuv420p[vout]`);
+
+  let currentSceneOutput = 'scene0';
+  for (let roundIndex = 1; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
+    const nextOutputLabel = `sceneout${roundIndex}`;
+    const transitionDuration = renderPlan.rounds[roundIndex - 1].transition_duration_seconds;
+    filters.push(
+      `[${currentSceneOutput}][scene${roundIndex}]xfade=transition=slideleft:duration=${transitionDuration}:offset=${renderPlan.rounds[roundIndex].scene_start_seconds}[${nextOutputLabel}]`,
+    );
+    currentSceneOutput = nextOutputLabel;
+  }
+
+  filters.push(`[${currentSceneOutput}]format=yuv420p[vout]`);
   return {
     script: `${filters.join(';\n')}\n`,
   };

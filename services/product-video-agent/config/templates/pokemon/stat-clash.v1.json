@@ -95,7 +95,7 @@
       "column_gap_px": 160,
       "row_gap_px": 320,
       "sprite_scale_multiplier": 1.77,
-      "sprite_center_y_offset_px": -10,
+      "sprite_center_y_offset_px": 90,
       "stage_bounds_px": {
         "left": 120,
         "top": 455,
@@ -186,6 +186,8 @@
     "candidate_intro_scale_initial": 0.68,
     "candidate_intro_scale_peak": 1.08,
     "candidate_intro_scale_settle": 1,
+    "candidate_forming_enabled": true,
+    "candidate_forming_duration_seconds": 1,
     "intro_pokeball_hold_seconds": 0.16,
     "intro_pokeball_lead_seconds": 0.18,
     "intro_pokeball_scale_multiplier": 1.04,

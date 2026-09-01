@@ -7,7 +7,8 @@ import {
 } from '../../dual-type-reveal/render/constants.mjs';
 
 const DEFAULT_STAT_CLASH_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
-const DEFAULT_STAT_CLASH_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
+const DEFAULT_STAT_CLASH_INTRO_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.16).toFixed(3));
+const DEFAULT_STAT_CLASH_REVEAL_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.42).toFixed(3));
 
 export function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
@@ -24,7 +25,7 @@ export function buildStatClashCryCues(plan, renderPlan) {
       cues.push({
         path: cryPath,
         start_seconds: ensureNumber(candidate?.intro_start_seconds, 0) + 0.02,
-        volume: DEFAULT_STAT_CLASH_CRY_VOLUME,
+        volume: DEFAULT_STAT_CLASH_INTRO_CRY_VOLUME,
       });
     }
     const correctCandidate = (Array.isArray(round?.candidates) ? round.candidates : [])
@@ -33,8 +34,8 @@ export function buildStatClashCryCues(plan, renderPlan) {
     if (revealCryPath) {
       cues.push({
         path: revealCryPath,
-        start_seconds: ensureNumber(round?.reveal_visual_start_seconds, 0) + 0.02,
-        volume: DEFAULT_STAT_CLASH_CRY_VOLUME,
+        start_seconds: ensureNumber(round?.reveal_visual_start_seconds, 0),
+        volume: DEFAULT_STAT_CLASH_REVEAL_CRY_VOLUME,
       });
     }
   }
@@ -134,7 +135,7 @@ export function buildAudioFilterScript({
     .map((cue) => ({
       path: String(cue?.path || '').trim(),
       start_seconds: ensureNumber(cue?.start_seconds, 0),
-      volume: ensureNumber(cue?.volume, DEFAULT_STAT_CLASH_CRY_VOLUME),
+      volume: ensureNumber(cue?.volume, DEFAULT_STAT_CLASH_REVEAL_CRY_VOLUME),
     }))
     .filter((cue) => cue.path);
   normalizedCryCues.forEach((cue, cueIndex) => {

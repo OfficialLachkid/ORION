@@ -108,7 +108,7 @@ const template = {
       column_gap_px: 160,
       row_gap_px: 320,
       sprite_scale_multiplier: 1.18,
-      sprite_center_y_offset_px: -10,
+      sprite_center_y_offset_px: 90,
       stage_bounds_px: {
         left: 120,
         top: 455,
@@ -170,6 +170,8 @@ const template = {
     candidate_intro_scale_initial: 0.68,
     candidate_intro_scale_peak: 1.08,
     candidate_intro_scale_settle: 1,
+    candidate_forming_enabled: true,
+    candidate_forming_duration_seconds: 1,
     intro_pokeball_hold_seconds: 0.16,
     intro_pokeball_lead_seconds: 0.18,
     intro_pokeball_scale_multiplier: 1.04,
@@ -353,16 +355,18 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   });
   const cryCues = buildStatClashCryCues(plan, renderPlan);
 
-  assert.match(visualFilter.script, /\[0:v\]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=3,fps=30,setsar=1,trim=duration=[0-9.]+,setpts=PTS-STARTPTS\[v0\]/u);
-  assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=306\.8:306\.8/u);
-  assert.match(visualFilter.script, /split=2\[scene0spriteintro[0-3]\]\[scene0spritesettledsrc[0-3]\]/u);
-  assert.match(visualFilter.script, /split=3\[scene0spriteintro[0-3]\]\[scene0spritesettledsrc[0-3]\]\[scene0spritegraysrc[0-3]\]/u);
+  assert.match(visualFilter.script, /\[0:v\]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=3,fps=30,setsar=1,split=3\[bg0\]\[bg1\]\[bg2\]/u);
+  assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=[0-9.]+:[0-9.]+:force_original_aspect_ratio=decrease/u);
+  assert.match(visualFilter.script, /split=2\[scene0spriteintroraw/u);
+  assert.match(visualFilter.script, /split=3\[scene0spriteintroraw/u);
   assert.doesNotMatch(visualFilter.script, /scenecomposite0/u);
   assert.doesNotMatch(visualFilter.script, /overlay=x='if\(lt\(t,[0-9.]+\),w/u);
   assert.match(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /scene0platform0/u);
+  assert.match(visualFilter.script, /lutrgb=r='val\+\(\(255-val\)\*\(1-\(if\(lt\(/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='Who':/u);
   assert.match(visualFilter.script, /scene1counter[\s\S]*x='[^']*if\(/u);
+  assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
   assert.match(visualFilter.script, /color=c=0x32D74B@0\.98/u);
   assert.match(visualFilter.script, /color=c=0xFFD60A@0\.98/u);
   assert.match(visualFilter.script, /color=c=0xFF453A@0\.98/u);
@@ -370,6 +374,8 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   assert.match(visualFilter.script, /drawtext=text='[0-9]+'/u);
   assert.match(visualFilter.script, /fontcolor=0x32D74B/u);
   assert.equal(cryCues.length, (renderPlan.rounds.length * 5));
+  assert.ok(cryCues.some((cue) => cue.start_seconds === renderPlan.rounds[0].reveal_visual_start_seconds));
+  assert.ok(cryCues.some((cue) => cue.volume > 0.3));
   assert.match(audioFilter, /asplit=12\[osrc0\]|asplit=20\[osrc0\]/u);
   assert.match(audioFilter, /timerend0/u);
   assert.match(audioFilter, /cry0/u);
