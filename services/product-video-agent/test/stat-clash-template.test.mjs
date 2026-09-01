@@ -364,7 +364,8 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   assert.doesNotMatch(visualFilter.script, /overlay=x='if\(lt\(t,[0-9.]+\),w/u);
   assert.match(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /scene0platform0/u);
-  assert.match(visualFilter.script, /lutrgb=r='clip\(val\*\(if\(lt\(T,0\.1\),0,if\(gte\(T,1\.1\),1,\(T-0\.1\)\/1\)\)\)\+255\*\(1-\(if\(lt\(T,0\.1\),0,if\(gte\(T,1\.1\),1,\(T-0\.1\)\/1\)\)\)\),0,255\)'/u);
+  assert.match(visualFilter.script, /lutrgb=r='clip\(val\*0\+255\*1,0,255\)':g='clip\(val\*0\+255\*1,0,255\)':b='clip\(val\*0\+255\*1,0,255\)':enable='between\(t,0\.1,0\.35\)'/u);
+  assert.match(visualFilter.script, /lutrgb=r='clip\(val\*0\.82\+255\*0\.18,0,255\)':g='clip\(val\*0\.82\+255\*0\.18,0,255\)':b='clip\(val\*0\.82\+255\*0\.18,0,255\)':enable='between\(t,0\.85,1\.1\)'/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='Who':/u);
   assert.match(visualFilter.script, /scene1counter[\s\S]*x='[^']*if\(/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
