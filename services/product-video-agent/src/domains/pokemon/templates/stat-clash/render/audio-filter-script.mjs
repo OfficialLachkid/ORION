@@ -27,6 +27,16 @@ export function buildStatClashCryCues(plan, renderPlan) {
         volume: DEFAULT_STAT_CLASH_CRY_VOLUME,
       });
     }
+    const correctCandidate = (Array.isArray(round?.candidates) ? round.candidates : [])
+      .find((candidate) => candidate?.is_correct);
+    const revealCryPath = String(correctCandidate?.subject?.cry_path || '').trim();
+    if (revealCryPath) {
+      cues.push({
+        path: revealCryPath,
+        start_seconds: ensureNumber(round?.reveal_visual_start_seconds, 0) + 0.02,
+        volume: DEFAULT_STAT_CLASH_CRY_VOLUME,
+      });
+    }
   }
   return cues;
 }

@@ -94,7 +94,7 @@
       "min_item_size_px": 214,
       "column_gap_px": 160,
       "row_gap_px": 320,
-      "sprite_scale_multiplier": 1.18,
+      "sprite_scale_multiplier": 1.77,
       "sprite_center_y_offset_px": -10,
       "stage_bounds_px": {
         "left": 120,
@@ -105,7 +105,7 @@
     },
     "sprite_platform": {
       "option_enabled": true,
-      "option_width_multiplier": 0.92,
+      "option_width_multiplier": 1.38,
       "center_y_offset_multiplier": 0.34,
       "option_center_y_offset_px": 82
     },
@@ -189,6 +189,7 @@
     "intro_pokeball_hold_seconds": 0.16,
     "intro_pokeball_lead_seconds": 0.18,
     "intro_pokeball_scale_multiplier": 1.04,
-    "stat_reveal_fade_duration_seconds": 0.22
+    "stat_reveal_fade_duration_seconds": 0.22,
+    "decoy_grayscale_fade_duration_seconds": 0.22
   }
 }

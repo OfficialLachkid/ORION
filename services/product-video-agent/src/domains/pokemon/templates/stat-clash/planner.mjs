@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import {
+  buildPokeQuizzAnimatedSpritePath,
   buildPokeQuizzCryPath,
   buildPokeQuizzMirroredSpritePath,
   buildPokeQuizzPreviewDirectory,
@@ -29,6 +30,14 @@ const STAT_LABELS = Object.freeze({
   defense: 'Defense',
   special_attack: 'Sp. Atk',
   special_defense: 'Sp. Def',
+  speed: 'Speed',
+});
+const STAT_SPOKEN_LABELS = Object.freeze({
+  hp: 'HP',
+  attack: 'Attack',
+  defense: 'Defense',
+  special_attack: 'Special Attack',
+  special_defense: 'Special Defense',
   speed: 'Speed',
 });
 
@@ -197,6 +206,10 @@ function formatReveal(templateText, statLabel, winnerName) {
     .replaceAll('{winner_name}', winnerName);
 }
 
+function resolveSpokenStatLabel(statKey) {
+  return STAT_SPOKEN_LABELS[statKey] || titleCase(String(statKey || '').replaceAll('_', ' '));
+}
+
 function selectBackground(backgrounds = [], random, selectionState = {}) {
   const usableBackgrounds = (Array.isArray(backgrounds) ? backgrounds : [])
     .map((value) => String(value || '').trim())
@@ -232,6 +245,16 @@ function selectTemplateScopedSound(template, inventory, configKey, fallbackKey) 
 }
 
 async function resolveRenderSpritePath(subject) {
+  const explicitAnimatedPath = String(subject?.animated_sprite_path || '').trim();
+  if (explicitAnimatedPath && await canAccessPath(explicitAnimatedPath)) {
+    return explicitAnimatedPath;
+  }
+
+  const derivedAnimatedPath = buildPokeQuizzAnimatedSpritePath(subject);
+  if (derivedAnimatedPath && await canAccessPath(derivedAnimatedPath)) {
+    return derivedAnimatedPath;
+  }
+
   const mirroredSharpSpritePath = buildPokeQuizzMirroredSpritePath(subject?.sprite_path || '');
   if (mirroredSharpSpritePath && await canAccessPath(mirroredSharpSpritePath)) {
     return mirroredSharpSpritePath;
@@ -268,6 +291,7 @@ function sanitizeSubject(subject, renderSpritePath, cryPath) {
     generation: subject?.generation,
     region: subject?.region || null,
     sprite_path: String(subject?.sprite_path || '').trim(),
+    animated_sprite_path: String(subject?.animated_sprite_path || '').trim(),
     render_sprite_path: renderSpritePath,
     sprite_source_url: subject?.sprite_source_url || null,
     types: buildTypeDisplay(subject?.types || []),
@@ -369,7 +393,7 @@ function buildTimeline(rounds) {
     timeline.push({
       phase: `round_${round.round_number}_prompt`,
       duration_seconds: round.scene_lead_seconds,
-      spoken_text: round.prompt_text,
+      spoken_text: round.spoken_prompt_text || round.prompt_text,
       on_screen_text: round.prompt_text,
     });
     timeline.push({
@@ -497,7 +521,9 @@ export async function planPokemonStatClashChallenge({
     resolvedSubjects.forEach((subject) => usedSubjectIds.add(subject.id));
 
     const statLabel = STAT_LABELS[statKey] || titleCase(statKey.replaceAll('_', ' '));
+    const spokenStatLabel = resolveSpokenStatLabel(statKey);
     const promptText = formatPrompt(promptTemplate, statLabel);
+    const spokenPromptText = formatPrompt(promptTemplate, spokenStatLabel);
     const sortedByStat = [...resolvedSubjects]
       .sort((left, right) => statValueFor(right, statKey) - statValueFor(left, statKey));
     const winner = sortedByStat[0];
@@ -517,7 +543,9 @@ export async function planPokemonStatClashChallenge({
       round_label: `${roundIndex + 1}/${roundCount}`,
       stat_key: statKey,
       stat_label: statLabel,
+      spoken_stat_label: spokenStatLabel,
       prompt_text: promptText,
+      spoken_prompt_text: spokenPromptText,
       reveal_text: revealText,
       scene_lead_seconds: sceneLeadSeconds,
       countdown_from: countdownFrom,
@@ -586,7 +614,7 @@ export async function planPokemonStatClashChallenge({
       tts_provider: 'kokoro',
       lines: rounds.map((round) => ({
         role: `round-${round.round_number}-prompt`,
-        text: round.prompt_text,
+        text: round.spoken_prompt_text || round.prompt_text,
       })),
     },
     timeline: buildTimeline(rounds),

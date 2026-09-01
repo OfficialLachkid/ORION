@@ -228,8 +228,28 @@ test('stat-clash planner builds a four-candidate highest-stat round set', async 
     assert.ok(round.highest_stat_value >= 35);
     assert.ok(round.selection_score.winner_margin > 0);
     assert.ok(Number.isFinite(round.selection_score.penalty));
-    assert.ok(round.candidates.every((candidate) => candidate.subject.render_sprite_path.endsWith('.png')));
+    assert.ok(round.candidates.every((candidate) => candidate.subject.render_sprite_path.endsWith('.gif')));
   }
+});
+
+test('stat-clash narration expands abbreviated stat labels for speech', async () => {
+  const specialTemplate = JSON.parse(JSON.stringify(template));
+  specialTemplate.selection_rules.round_count = 1;
+  specialTemplate.selection_rules.round_count_weights = { medium: 1 };
+  specialTemplate.selection_rules.round_count_levels = { medium: { round_count: 1 } };
+  specialTemplate.selection_rules.stat_pool = ['special_defense'];
+
+  const plan = await planPokemonStatClashChallenge({
+    template: specialTemplate,
+    pokedexRows,
+    seed: 'stat-clash-special-speech',
+    assetInventory,
+  });
+
+  assert.match(plan.rounds[0].prompt_text, /Sp\. Def/u);
+  assert.equal(plan.rounds[0].spoken_prompt_text, 'Who has the highest Special Defense?');
+  assert.equal(plan.narration.lines[0].text, 'Who has the highest Special Defense?');
+  assert.equal(plan.timeline[0].spoken_text, 'Who has the highest Special Defense?');
 });
 
 test('stat-clash planner can build a five-round hard variant', async () => {
@@ -290,6 +310,7 @@ test('stat-clash render plan and inputs stay deterministic', async () => {
   assert.equal(visualInputs[0].role, 'background');
   assert.equal(visualInputs[1].role, 'intro-pokeball');
   assert.equal(visualInputs[2].role, 'grass-platform');
+  assert.ok(visualInputs[3].path.endsWith('.gif'));
   assert.equal(visualInputs.length, 15);
 });
 
@@ -330,19 +351,25 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
       countdown_audio_duration_seconds: 0.7,
     },
   });
+  const cryCues = buildStatClashCryCues(plan, renderPlan);
 
-  assert.match(visualFilter.script, /\[bgbase\]\[scene0\]overlay=x='if\(lt\(t,/u);
-  assert.match(visualFilter.script, /scenecomposite0/u);
-  assert.match(visualFilter.script, /format=rgba,setpts=PTS-STARTPTS\+[0-9.]+\/TB\[scene1\]/u);
-  assert.match(visualFilter.script, /overlay=x='if\(lt\(t,[0-9.]+\),w,if\(lt\(t,[0-9.]+\),w\*\(1-\(\(t-[0-9.]+\)\/[0-9.]+\)\)/u);
+  assert.match(visualFilter.script, /\[0:v\]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=3,fps=30,setsar=1,trim=duration=[0-9.]+,setpts=PTS-STARTPTS\[v0\]/u);
+  assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=306\.8:306\.8/u);
+  assert.match(visualFilter.script, /split=2\[scene0spriteintro[0-3]\]\[scene0spritesettledsrc[0-3]\]/u);
+  assert.match(visualFilter.script, /split=3\[scene0spriteintro[0-3]\]\[scene0spritesettledsrc[0-3]\]\[scene0spritegraysrc[0-3]\]/u);
+  assert.doesNotMatch(visualFilter.script, /scenecomposite0/u);
+  assert.doesNotMatch(visualFilter.script, /overlay=x='if\(lt\(t,[0-9.]+\),w/u);
   assert.match(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /scene0platform0/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='Who':/u);
+  assert.match(visualFilter.script, /scene1counter[\s\S]*x='[^']*if\(/u);
   assert.match(visualFilter.script, /color=c=0x32D74B@0\.98/u);
   assert.match(visualFilter.script, /color=c=0xFFD60A@0\.98/u);
   assert.match(visualFilter.script, /color=c=0xFF453A@0\.98/u);
+  assert.match(visualFilter.script, /eq=saturation=0:brightness=-0\.42:contrast=1\.22/u);
   assert.match(visualFilter.script, /drawtext=text='[0-9]+'/u);
   assert.match(visualFilter.script, /fontcolor=0x32D74B/u);
+  assert.equal(cryCues.length, (renderPlan.rounds.length * 5));
   assert.match(audioFilter, /asplit=12\[osrc0\]|asplit=20\[osrc0\]/u);
   assert.match(audioFilter, /timerend0/u);
   assert.match(audioFilter, /cry0/u);
