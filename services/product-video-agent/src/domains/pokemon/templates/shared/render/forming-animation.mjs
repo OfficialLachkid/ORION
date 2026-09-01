@@ -9,16 +9,18 @@ export function appendFormingSpriteFilters(filters, {
 } = {}) {
   const start = roundTime(Math.max(0, ensureNumber(startSeconds, 0)));
   const duration = roundTime(Math.max(0.08, ensureNumber(durationSeconds, 1)));
+  const end = roundTime(start + duration);
   const baseLabel = `${workingLabelPrefix}base`;
   const whiteSourceLabel = `${workingLabelPrefix}whitesrc`;
-  const whiteFadeLabel = `${workingLabelPrefix}white`;
+  const whiteLabel = `${workingLabelPrefix}white`;
+  const mixProgressExpression = `if(lt(T,${start}),0,if(gte(T,${end}),1,(T-${start})/${duration}))`;
   filters.push(
     `[${inputLabel}]split[${baseLabel}][${whiteSourceLabel}]`,
   );
   filters.push(
-    `[${whiteSourceLabel}]lutrgb=r=255:g=255:b=255,fade=t=out:st=${start}:d=${duration}:alpha=1[${whiteFadeLabel}]`,
+    `[${whiteSourceLabel}]lutrgb=r=255:g=255:b=255[${whiteLabel}]`,
   );
   filters.push(
-    `[${baseLabel}][${whiteFadeLabel}]overlay=x=0:y=0[${outputLabel}]`,
+    `[${whiteLabel}][${baseLabel}]blend=all_expr='A*(1-(${mixProgressExpression}))+B*(${mixProgressExpression})':shortest=1[${outputLabel}]`,
   );
 }
