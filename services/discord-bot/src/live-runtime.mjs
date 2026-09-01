@@ -445,6 +445,32 @@ export function findTrackedApprovalMessagesForTask(trackedMap, taskId) {
   return results;
 }
 
+// Merge the two possible sources of "which Discord message to delete after a
+// lead-outreach send completes" into a single list, deduplicated so we don't
+// double-DELETE the same message. Prefers task.approval_origin (set by the
+// button interaction handler at click time — works for approval messages
+// posted by batch scripts that never flow through fanOutOutboundEvents) and
+// falls back to trackedTaskMessages (used when the bot itself posted the
+// approval via fanOutOutboundEvents).
+export function collectApprovalDeleteTargets({ task, trackedMap = new Map() } = {}) {
+  const seen = new Set();
+  const results = [];
+  const dedupeKey = (channelId, messageId) => `${channelId}:${messageId}`;
+  const originChannelId = String(task?.approval_origin?.channelId || '').trim();
+  const originMessageId = String(task?.approval_origin?.messageId || '').trim();
+  if (originChannelId && originMessageId) {
+    seen.add(dedupeKey(originChannelId, originMessageId));
+    results.push({ channelId: originChannelId, messageId: originMessageId, key: null, source: 'approval_origin' });
+  }
+  const tracked = findTrackedApprovalMessagesForTask(trackedMap, task?.task_id);
+  for (const entry of tracked) {
+    if (seen.has(dedupeKey(entry.channelId, entry.messageId))) continue;
+    seen.add(dedupeKey(entry.channelId, entry.messageId));
+    results.push({ ...entry, source: 'tracked_messages' });
+  }
+  return results;
+}
+
 // Guard: only delete the original approval message when the outreach send
 // truly went out. Rejects + failures keep their message so the operator
 // has full context for triage. Non-outreach gmail sends (ops tools etc.)
@@ -1269,7 +1295,19 @@ export async function runLiveDiscordBot(config) {
 
           await fanOutOutboundEvents(token, config, outboundEvents, trackedTaskMessages);
           if (result.accepted && result.route === 'approval' && result.decision?.decision) {
-            await resolvePendingTask(result.decision);
+            // Pass the approval message origin through so runExecutableTask
+            // can delete it after a successful lead-outreach send — the
+            // approval message posted by batch scripts (run-follow-ups,
+            // run-lead-qualification) doesn't flow through the bot's
+            // trackedTaskMessages, so trackedTaskMessages lookup returns
+            // nothing for these. The interaction payload IS the source
+            // of truth for the message ID at click time.
+            await resolvePendingTask({
+              ...result.decision,
+              approvalOrigin: (interactionChannelId && approvalMessageId)
+                ? { channelId: interactionChannelId, messageId: approvalMessageId }
+                : null,
+            });
           }
           return;
         }
@@ -1779,8 +1817,19 @@ export async function runLiveDiscordBot(config) {
     // in #sent-outreach (via the executor's channelKey routing), which serves
     // as the audit trail. Failures / rejects keep their message in place so
     // the operator has full context for triage.
+    //
+    // Look in two places for the approval message location:
+    //   1. task.approval_origin — set by the button interaction handler
+    //      from the Discord interaction payload; works for approval
+    //      messages posted OUT-OF-BAND by batch scripts (run-follow-ups,
+    //      run-lead-qualification), which don't flow through the bot's
+    //      trackedTaskMessages map.
+    //   2. trackedTaskMessages — populated when the bot itself posts an
+    //      approval via fanOutOutboundEvents.
+    // Both paths need to work — 2026-08-29 fix only covered path (2) and
+    // silently no-op'd for the far more common batch-script case.
     if (isLeadOutreachSendComplete(execution, task)) {
-      const targets = findTrackedApprovalMessagesForTask(trackedTaskMessages, task.task_id);
+      const targets = collectApprovalDeleteTargets({ task, trackedMap: trackedTaskMessages });
       for (const target of targets) {
         try {
           await sendDiscordApiRequest(
@@ -1789,7 +1838,7 @@ export async function runLiveDiscordBot(config) {
             undefined,
             'DELETE',
           );
-          trackedTaskMessages.delete(target.key);
+          if (target.key) trackedTaskMessages.delete(target.key);
         } catch (error) {
           // 404 is fine — message may have already been cleaned up manually
           // or by a prior handler. Any other error just logs, we don't want
@@ -2128,6 +2177,17 @@ export async function runLiveDiscordBot(config) {
     pendingTask.approval_state = 'approved';
     pendingTask.approved_by = decision.actor || '';
     pendingTask.approved_by_id = decision.actorId || '';
+    // Carry the approval message origin onto the task so runExecutableTask
+    // can delete it after a successful outreach send. Approval messages
+    // posted by batch scripts aren't in trackedTaskMessages, but the
+    // interaction handler DID have the messageId at click time and
+    // passed it through on decision.approvalOrigin.
+    if (decision.approvalOrigin?.channelId && decision.approvalOrigin?.messageId) {
+      pendingTask.approval_origin = {
+        channelId: String(decision.approvalOrigin.channelId),
+        messageId: String(decision.approvalOrigin.messageId),
+      };
+    }
     const approvalCandidates = buildApprovalOutcomeWriteBackCandidates(pendingTask, decision, config.memoryPromotionRules);
     const approvalWriteBackEvent = buildMemoryWriteBackCandidateEvent(pendingTask, approvalCandidates);
     if (approvalWriteBackEvent) {
