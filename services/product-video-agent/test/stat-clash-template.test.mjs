@@ -9,6 +9,7 @@ import {
   buildAudioFilterScript,
   buildStatClashCryCues,
 } from '../src/domains/pokemon/templates/stat-clash/render/audio-filter-script.mjs';
+import { stabilizeVisualInputs } from '../src/domains/pokemon/templates/stat-clash/render/render-executor.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/stat-clash/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/stat-clash/render/visual-inputs.mjs';
 
@@ -380,4 +381,40 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   assert.match(audioFilter, /timerend0/u);
   assert.match(audioFilter, /cry0/u);
   assert.match(audioFilter, /amix=inputs=/u);
+});
+
+test('stat-clash falls back to still sprites for suspiciously short animated candidates', async () => {
+  const plan = await planPokemonStatClashChallenge({
+    template,
+    pokedexRows,
+    seed: 'stat-clash-short-gif-fallback',
+    assetInventory,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/stat-clash.mp4',
+  });
+  const visualInputs = buildVisualInputs(plan, renderPlan);
+  const candidateInput = visualInputs.find((input) => input.role === 'round-1-candidate-0');
+  assert.ok(candidateInput);
+  assert.match(candidateInput.path, /\.gif$/u);
+
+  const stabilizedInputs = await stabilizeVisualInputs({
+    plan,
+    renderPlan,
+    visualInputs,
+    ffmpegExecutable: 'ffmpeg',
+    projectRoot: '/tmp',
+    probeDuration: async ({ mediaPath }) => (
+      mediaPath === candidateInput.path ? 0.1 : 1.2
+    ),
+  });
+  const stabilizedCandidate = stabilizedInputs.find((input) => input.role === 'round-1-candidate-0');
+  assert.ok(stabilizedCandidate);
+  assert.match(stabilizedCandidate.path, /\.png$/u);
+  assert.deepEqual(
+    stabilizedCandidate.args.slice(0, 4),
+    ['-loop', '1', '-framerate', String(renderPlan.canvas.fps)],
+  );
 });

@@ -20,6 +20,66 @@ import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
 
+const MIN_SAFE_ANIMATED_SPRITE_DURATION_SECONDS = 0.2;
+
+function parseRoundCandidateRole(role = '') {
+  const match = /^round-(\d+)-candidate-(\d+)$/u.exec(String(role || '').trim());
+  if (!match) {
+    return null;
+  }
+  return {
+    roundNumber: Number.parseInt(match[1], 10),
+    candidateIndex: Number.parseInt(match[2], 10),
+  };
+}
+
+function buildStillSpriteInput(path, durationSeconds, fps) {
+  return ['-loop', '1', '-framerate', String(fps), '-t', String(durationSeconds), '-i', path];
+}
+
+export async function stabilizeVisualInputs({
+  plan,
+  renderPlan,
+  visualInputs,
+  ffmpegExecutable,
+  projectRoot,
+  probeDuration = probeMediaDurationSeconds,
+}) {
+  return Promise.all((Array.isArray(visualInputs) ? visualInputs : []).map(async (input) => {
+    const normalizedPath = String(input?.path || '').trim();
+    if (!normalizedPath.toLowerCase().endsWith('.gif')) {
+      return input;
+    }
+    const role = parseRoundCandidateRole(input?.role);
+    if (!role) {
+      return input;
+    }
+    const round = Array.isArray(renderPlan?.rounds) ? renderPlan.rounds[role.roundNumber - 1] : null;
+    const candidate = Array.isArray(round?.candidates) ? round.candidates[role.candidateIndex] : null;
+    const fallbackPath = String(candidate?.subject?.sprite_path || '').trim();
+    if (!round || !candidate || !fallbackPath || fallbackPath === normalizedPath) {
+      return input;
+    }
+    const durationSeconds = await probeDuration({
+      ffmpegExecutable,
+      mediaPath: normalizedPath,
+      cwd: projectRoot,
+    });
+    if (durationSeconds == null || durationSeconds >= MIN_SAFE_ANIMATED_SPRITE_DURATION_SECONDS) {
+      return input;
+    }
+    return {
+      ...input,
+      path: fallbackPath,
+      args: buildStillSpriteInput(
+        fallbackPath,
+        round.scene_duration_seconds,
+        renderPlan?.canvas?.fps || 30,
+      ),
+    };
+  }));
+}
+
 export async function renderPokeQuizzVideo({
   plan,
   template,
@@ -123,7 +183,13 @@ export async function renderPokeQuizzVideo({
     timeoutMs: 300000,
   });
 
-  const visualInputs = buildVisualInputs(plan, renderPlan);
+  const visualInputs = await stabilizeVisualInputs({
+    plan,
+    renderPlan,
+    visualInputs: buildVisualInputs(plan, renderPlan),
+    ffmpegExecutable,
+    projectRoot,
+  });
   await verifyReadableFiles(visualInputs.map((input) => input.path));
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
   const inputRefs = {
