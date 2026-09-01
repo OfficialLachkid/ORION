@@ -15,6 +15,7 @@ import {
 import {
   attachImageContextToTasks,
   buildImageContextKey,
+  collectApprovalDeleteTargets,
   findTrackedApprovalMessagesForTask,
   isLeadOutreachSendComplete,
   mergeImageAttachments,
@@ -634,4 +635,70 @@ test('findTrackedApprovalMessagesForTask returns empty array for empty/missing t
   const tracked = new Map([['CHAN-A:approval:TASK-1', { channelId: 'CHAN-A', messageId: 'MSG-1' }]]);
   assert.deepEqual(findTrackedApprovalMessagesForTask(tracked, ''), []);
   assert.deepEqual(findTrackedApprovalMessagesForTask(tracked, null), []);
+});
+
+test('collectApprovalDeleteTargets uses task.approval_origin from the interaction payload', () => {
+  // Regression guard for 2026-09-01: approval messages posted by batch
+  // scripts (run-follow-ups, run-lead-qualification) don't flow through
+  // the bot's fanOutOutboundEvents, so trackedTaskMessages has nothing
+  // for them. The interaction handler DOES have the messageId from the
+  // Discord button-click payload and stashes it as task.approval_origin.
+  // Without this fallback the delete-on-send fix silently no-op'd for
+  // the most common case (all outreach approvals come from batch scripts).
+  const task = {
+    task_id: 'TASK-1',
+    lead_id: 'lead-abc',
+    approval_origin: {
+      channelId: '1541759565274808410',
+      messageId: '1611234567890',
+    },
+  };
+  const trackedMap = new Map();
+
+  const targets = collectApprovalDeleteTargets({ task, trackedMap });
+
+  assert.equal(targets.length, 1);
+  assert.equal(targets[0].channelId, '1541759565274808410');
+  assert.equal(targets[0].messageId, '1611234567890');
+  assert.equal(targets[0].source, 'approval_origin');
+});
+
+test('collectApprovalDeleteTargets also picks up tracked-map entries for bot-posted approvals', () => {
+  // Non-batch-script approvals (e.g. from Discord bot processing an
+  // incoming task) still flow through trackedTaskMessages the way they
+  // always did — the fallback path must keep working alongside the
+  // new approval_origin path.
+  const task = { task_id: 'TASK-1', lead_id: 'lead-abc' };
+  const trackedMap = new Map([
+    ['CHAN-BOT:approval:TASK-1', { channelId: 'CHAN-BOT', messageId: 'MSG-BOT' }],
+  ]);
+
+  const targets = collectApprovalDeleteTargets({ task, trackedMap });
+
+  assert.equal(targets.length, 1);
+  assert.equal(targets[0].source, 'tracked_messages');
+  assert.equal(targets[0].messageId, 'MSG-BOT');
+});
+
+test('collectApprovalDeleteTargets deduplicates when tracked and origin point to the same message', () => {
+  // Belt-and-braces: if a message ended up in BOTH sources (unlikely
+  // but possible with future refactoring), don't double-DELETE it.
+  const task = {
+    task_id: 'TASK-1',
+    lead_id: 'lead-abc',
+    approval_origin: { channelId: 'CHAN-A', messageId: 'MSG-A' },
+  };
+  const trackedMap = new Map([
+    ['CHAN-A:approval:TASK-1', { channelId: 'CHAN-A', messageId: 'MSG-A' }],
+  ]);
+
+  const targets = collectApprovalDeleteTargets({ task, trackedMap });
+
+  assert.equal(targets.length, 1);
+  assert.equal(targets[0].source, 'approval_origin');
+});
+
+test('collectApprovalDeleteTargets returns empty when neither source has a target', () => {
+  assert.deepEqual(collectApprovalDeleteTargets({ task: { task_id: 'TASK-1' }, trackedMap: new Map() }), []);
+  assert.deepEqual(collectApprovalDeleteTargets({}), []);
 });
