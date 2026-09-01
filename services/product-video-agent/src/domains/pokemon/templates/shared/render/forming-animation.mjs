@@ -9,22 +9,16 @@ export function appendFormingSpriteFilters(filters, {
 } = {}) {
   const start = roundTime(Math.max(0, ensureNumber(startSeconds, 0)));
   const duration = roundTime(Math.max(0.08, ensureNumber(durationSeconds, 1)));
-  const end = roundTime(start + duration);
-  const stepMixes = [0, 0.28, 0.58, 0.82];
-  let currentInputLabel = inputLabel;
-  stepMixes.forEach((mixProgress, index) => {
-    const stepStart = roundTime(start + ((duration / stepMixes.length) * index));
-    const stepEnd = roundTime(index === stepMixes.length - 1
-      ? end
-      : start + ((duration / stepMixes.length) * (index + 1)));
-    const label = index === stepMixes.length - 1
-      ? outputLabel
-      : `${workingLabelPrefix}step${index}`;
-    const whiteness = Number((1 - mixProgress).toFixed(3));
-    const channelExpression = `clip(val*${mixProgress}+255*${whiteness},0,255)`;
-    filters.push(
-      `[${currentInputLabel}]lutrgb=r='${channelExpression}':g='${channelExpression}':b='${channelExpression}':enable='between(t,${stepStart},${stepEnd})'[${label}]`,
-    );
-    currentInputLabel = label;
-  });
+  const progressExpression = `clip((T-${start})/${duration},0,1)`;
+  const whiteSourceLabel = `${workingLabelPrefix}white`;
+  const originalSourceLabel = `${workingLabelPrefix}orig`;
+  filters.push(
+    `[${inputLabel}]split=2[${whiteSourceLabel}src][${originalSourceLabel}]`,
+  );
+  filters.push(
+    `[${whiteSourceLabel}src]lutrgb=r='255':g='255':b='255'[${whiteSourceLabel}]`,
+  );
+  filters.push(
+    `[${whiteSourceLabel}][${originalSourceLabel}]blend=all_expr='A*(1-${progressExpression})+B*${progressExpression}'[${outputLabel}]`,
+  );
 }

@@ -214,14 +214,14 @@ function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDe
 
   return (Array.isArray(round.candidates) ? round.candidates : []).map((candidate, index) => {
     const revealOrderIndex = orderMap.get(candidate.index) ?? index;
-    const introStartLocal = roundTime(
+    const pokeballStartLocal = roundTime(
       activationStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds),
     );
+    const introStartLocal = roundTime(pokeballStartLocal + pokeballLeadSeconds);
     const introEndLocal = roundTime(introStartLocal + introDurationSeconds);
-    const pokeballStartLocal = roundTime(Math.max(0, introStartLocal - pokeballLeadSeconds));
     const pokeballEndLocal = roundTime(Math.max(
       pokeballStartLocal + 0.08,
-      Math.min(introEndLocal, introStartLocal + pokeballHoldSeconds),
+      introStartLocal + pokeballHoldSeconds,
     ));
     return {
       ...candidate,
@@ -301,7 +301,10 @@ function buildRenderedRounds({ rounds, template, startingSceneStart = 0 }) {
     );
     renderedRound.minimum_scene_lead_seconds = roundTime(Math.max(
       sceneLeadSeconds,
-      ...renderedRound.candidates.map((candidate) => candidate.intro_end_seconds - renderedRound.scene_start_seconds + 0.08),
+      ...renderedRound.candidates.map((candidate) => Math.max(
+        candidate.intro_end_seconds,
+        candidate.pokeball_end_seconds,
+      ) - renderedRound.scene_start_seconds + 0.08),
     ));
     renderedRound.countdown_numbers = buildCountdownMoments(
       renderedRound,
@@ -335,6 +338,12 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     text_layout: textLayout,
     stat_value_layout: statValueLayout,
     grid_layout: gridLayout,
+    renderer: {
+      candidate_forming_duration_seconds: roundTime(Math.max(
+        0.08,
+        ensureNumber(template?.renderer?.candidate_forming_duration_seconds, 1),
+      )),
+    },
     audio_cues: {
       battle_music_start_seconds: roundTime(Math.max(
         0,
@@ -377,15 +386,16 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
         visual_delay_seconds: renderPlan.rounds?.[0]?.local?.reveal_visual_start_seconds - renderPlan.rounds?.[0]?.local?.reveal_start_seconds,
       },
       renderer: {
-        candidate_intro_initial_delay_seconds: renderPlan.rounds?.[0]?.candidates?.[0]?.intro_start_seconds - renderPlan.rounds?.[0]?.scene_start_seconds,
+        candidate_intro_initial_delay_seconds: renderPlan.rounds?.[0]?.candidates?.[0]?.pokeball_start_seconds - renderPlan.rounds?.[0]?.scene_start_seconds,
         candidate_intro_stagger_seconds: renderPlan.rounds?.[0]?.candidates?.[1]
-          ? renderPlan.rounds[0].candidates[1].intro_start_seconds - renderPlan.rounds[0].candidates[0].intro_start_seconds
+          ? renderPlan.rounds[0].candidates[1].pokeball_start_seconds - renderPlan.rounds[0].candidates[0].pokeball_start_seconds
           : 0.16,
         candidate_intro_duration_seconds: renderPlan.rounds?.[0]?.candidates?.[0]
           ? renderPlan.rounds[0].candidates[0].intro_end_seconds - renderPlan.rounds[0].candidates[0].intro_start_seconds
           : 0.22,
+        candidate_forming_duration_seconds: renderPlan?.renderer?.candidate_forming_duration_seconds ?? 1,
         intro_pokeball_hold_seconds: renderPlan.rounds?.[0]?.candidates?.[0]
-          ? renderPlan.rounds[0].candidates[0].pokeball_end_seconds - renderPlan.rounds[0].candidates[0].pokeball_start_seconds
+          ? renderPlan.rounds[0].candidates[0].pokeball_end_seconds - renderPlan.rounds[0].candidates[0].intro_start_seconds
           : 0.16,
         intro_pokeball_lead_seconds: renderPlan.rounds?.[0]?.candidates?.[0]
           ? renderPlan.rounds[0].candidates[0].intro_start_seconds - renderPlan.rounds[0].candidates[0].pokeball_start_seconds
@@ -397,6 +407,9 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
   return {
     ...renderPlan,
     total_duration_seconds: renderedRounds.at(-1)?.scene_end_seconds || renderPlan.total_duration_seconds,
+    renderer: {
+      ...renderPlan.renderer,
+    },
     rounds: renderedRounds,
     narration_cues: renderedRounds.map((round) => ({
       role: `round-${round.round_number}-prompt`,

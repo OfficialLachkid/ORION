@@ -16,6 +16,10 @@ export function buildAudioInputs(assets) {
 
 export function buildStatClashCryCues(plan, renderPlan) {
   const cues = [];
+  const introCryDelaySeconds = Math.max(
+    0,
+    ensureNumber(renderPlan?.renderer?.candidate_forming_duration_seconds, 1),
+  );
   for (const round of Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : []) {
     for (const candidate of Array.isArray(round?.candidates) ? round.candidates : []) {
       const cryPath = String(candidate?.subject?.cry_path || '').trim();
@@ -24,7 +28,7 @@ export function buildStatClashCryCues(plan, renderPlan) {
       }
       cues.push({
         path: cryPath,
-        start_seconds: ensureNumber(candidate?.intro_start_seconds, 0) + 0.02,
+        start_seconds: ensureNumber(candidate?.intro_start_seconds, 0) + introCryDelaySeconds + 0.02,
         volume: DEFAULT_STAT_CLASH_INTRO_CRY_VOLUME,
       });
     }

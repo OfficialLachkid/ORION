@@ -1,4 +1,5 @@
-import { access } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import {
   buildPokeQuizzAnimatedSpritePath,
   buildPokeQuizzCryPath,
@@ -42,6 +43,8 @@ const STAT_SPOKEN_LABELS = Object.freeze({
 });
 
 const readablePathAvailabilityCache = new Map();
+const cryDownloadCache = new Map();
+const crySourceUrlCache = new Map();
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -87,6 +90,55 @@ async function canAccessPath(filePath) {
     );
   }
   return readablePathAvailabilityCache.get(normalizedPath);
+}
+
+function readSubjectPokemonApiMetadata(subject, key) {
+  const pokemonApi = subject?.metadata?.pokemon_api && typeof subject.metadata.pokemon_api === 'object'
+    ? subject.metadata.pokemon_api
+    : {};
+  return pokemonApi[key];
+}
+
+async function downloadCryToFile(sourceUrl, outputPath) {
+  const response = await fetch(sourceUrl);
+  if (!response.ok) {
+    throw new Error(`Could not download Pokemon cry from ${sourceUrl} (${response.status}).`);
+  }
+  await mkdir(dirname(outputPath), { recursive: true });
+  const payload = Buffer.from(await response.arrayBuffer());
+  await writeFile(outputPath, payload);
+}
+
+async function resolveStatClashCrySourceUrl(subject = {}) {
+  const explicitCrySourceUrl = String(subject?.cry_source_url || '').trim();
+  if (explicitCrySourceUrl) {
+    return explicitCrySourceUrl;
+  }
+
+  const lookupKey = readSubjectPokemonApiMetadata(subject, 'pokemon_id')
+    || subject?.slug
+    || subject?.national_dex_number;
+  const normalizedLookupKey = String(lookupKey || '').trim().toLowerCase();
+  if (!normalizedLookupKey) {
+    return '';
+  }
+
+  if (!crySourceUrlCache.has(normalizedLookupKey)) {
+    crySourceUrlCache.set(normalizedLookupKey, (async () => {
+      try {
+        const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${encodeURIComponent(normalizedLookupKey)}`);
+        if (!response.ok) {
+          return '';
+        }
+        const payload = await response.json();
+        return String(payload?.cries?.latest || payload?.cries?.legacy || '').trim();
+      } catch {
+        return '';
+      }
+    })());
+  }
+
+  return crySourceUrlCache.get(normalizedLookupKey);
 }
 
 function shuffle(values, random) {
@@ -268,11 +320,34 @@ async function resolveCryPath(subject) {
   if (explicitCryPath && await canAccessPath(explicitCryPath)) {
     return explicitCryPath;
   }
+
   const derivedCryPath = buildPokeQuizzCryPath(subject);
-  if (await canAccessPath(derivedCryPath)) {
+  if (derivedCryPath && await canAccessPath(derivedCryPath)) {
     return derivedCryPath;
   }
-  return '';
+
+  const crySourceUrl = String(
+    subject?.cry_source_url
+    || await resolveStatClashCrySourceUrl(subject)
+    || '',
+  ).trim();
+  if (!crySourceUrl || !derivedCryPath) {
+    return explicitCryPath || '';
+  }
+
+  if (!cryDownloadCache.has(derivedCryPath)) {
+    cryDownloadCache.set(derivedCryPath, (async () => {
+      try {
+        await downloadCryToFile(crySourceUrl, derivedCryPath);
+        readablePathAvailabilityCache.set(derivedCryPath, Promise.resolve(true));
+        return derivedCryPath;
+      } catch {
+        return explicitCryPath || '';
+      }
+    })());
+  }
+
+  return cryDownloadCache.get(derivedCryPath);
 }
 
 function statValueFor(subject, statKey) {
@@ -297,6 +372,7 @@ function sanitizeSubject(subject, renderSpritePath, cryPath) {
     types: buildTypeDisplay(subject?.types || []),
     base_stats: baseStats,
     cry_path: cryPath,
+    cry_source_url: subject?.cry_source_url || null,
     metadata: {
       ...(subject?.metadata || {}),
       base_stats: baseStats,
@@ -478,9 +554,14 @@ export async function planPokemonStatClashChallenge({
     template?.renderer?.candidate_intro_duration_seconds,
     0.22,
   );
+  const introPokeballLeadSeconds = ensureFiniteNumber(
+    template?.renderer?.intro_pokeball_lead_seconds,
+    0.18,
+  );
   const sceneLeadSeconds = Number((
     introInitialDelaySeconds
     + Math.max(0, candidateCount - 1) * introStaggerSeconds
+    + introPokeballLeadSeconds
     + introDurationSeconds
     + preCountdownHoldSeconds
   ).toFixed(3));
