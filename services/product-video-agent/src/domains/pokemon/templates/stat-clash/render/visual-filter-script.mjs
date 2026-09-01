@@ -14,7 +14,7 @@ import {
 import {
   buildProgressiveTextArtifacts,
 } from '../../dual-type-reveal/render/text-layout.mjs';
-import { buildFormingSpriteFilterChain } from '../../shared/render/forming-animation.mjs';
+import { appendFormingSpriteFilters } from '../../shared/render/forming-animation.mjs';
 
 function buildTimerBarScaleExpression(startSeconds, endSeconds, fullWidth) {
   const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
@@ -312,22 +312,29 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       filters.push(
         `[${candidateInputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${candidate.is_correct ? 2 : 3}${spriteSplitLabels}`,
       );
-      filters.push(
-        `[${spriteIntroRawLabel}]${introFormingEnabled
-          ? buildFormingSpriteFilterChain({
-            startSeconds: candidate.intro_start_seconds,
-            durationSeconds: introFormingDuration,
-          })
-          : 'null'}[${spriteIntroLabel}]`,
-      );
-      filters.push(
-        `[${spriteSettledRawLabel}]${introFormingEnabled
-          ? buildFormingSpriteFilterChain({
-            startSeconds: candidate.intro_start_seconds,
-            durationSeconds: introFormingDuration,
-          })
-          : 'null'}[${spriteSettledInputLabel}]`,
-      );
+      if (introFormingEnabled) {
+        appendFormingSpriteFilters(filters, {
+          inputLabel: spriteIntroRawLabel,
+          outputLabel: spriteIntroLabel,
+          workingLabelPrefix: `scene${roundIndex}spriteintroform${candidate.index}`,
+          startSeconds: candidate.intro_start_seconds,
+          durationSeconds: introFormingDuration,
+        });
+        appendFormingSpriteFilters(filters, {
+          inputLabel: spriteSettledRawLabel,
+          outputLabel: spriteSettledInputLabel,
+          workingLabelPrefix: `scene${roundIndex}spritesettledform${candidate.index}`,
+          startSeconds: candidate.intro_start_seconds,
+          durationSeconds: introFormingDuration,
+        });
+      } else {
+        filters.push(
+          `[${spriteIntroRawLabel}]null[${spriteIntroLabel}]`,
+        );
+        filters.push(
+          `[${spriteSettledRawLabel}]null[${spriteSettledInputLabel}]`,
+        );
+      }
       filters.push(
         `[${currentLabel}][${spriteIntroLabel}]overlay=x='${cell.center_x}-w/2':y='${spriteYExpression}+${introYOffset}-h/2':enable='${formatEnableBetween(candidate.intro_start_seconds, candidate.intro_end_seconds)}'[${spriteOverlayLabel}]`,
       );
