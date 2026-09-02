@@ -277,18 +277,18 @@ function appendTimerBarPhase(filters, currentLabel, {
   const accentY = Number((timerLayout.y + Math.round(timerHeight * 0.24)).toFixed(3));
   const shadowHeight = Math.max(3, Math.round(timerHeight * 0.18));
   const shadowY = Number((timerLayout.y + timerHeight - shadowHeight - 2).toFixed(3));
-  const trailPulseRadians = Number((1.35 * 6.283185307).toFixed(6));
+  const trailPulseFramesRadians = Number(((1.1 * 6.283185307) / Math.max(1, fps)).toFixed(6));
   const trailMaskExpression = `(${buildRoundedRectAlphaExpression(
     timerWidth,
     trailHeight,
-    Math.round(0.22 * 255),
-  )})*(0.72+0.28*(sin(T*${trailPulseRadians})*sin(T*${trailPulseRadians})))`;
+    Math.round(0.34 * 255),
+  )})*(0.78+0.22*(sin(N*${trailPulseFramesRadians})*sin(N*${trailPulseFramesRadians})))`;
 
   const trailSourceLabel = `${labelPrefix}trailsrc`;
   appendRoundedRectSource(filters, {
     label: trailSourceLabel,
     color: glowColor,
-    alpha: 0.22,
+    alpha: 0.34,
     width: timerWidth,
     height: trailHeight,
     fps,
