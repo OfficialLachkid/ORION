@@ -198,6 +198,17 @@ export async function renderPokeQuizzVideo({
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     rounds: renderPlan.rounds.map((round) => ({
       candidates: round.candidates.map((candidate) => inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`)),
+      still_candidates: round.candidates.map((candidate) => {
+        const inputIndex = inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`);
+        if (inputIndex == null) {
+          return false;
+        }
+        const candidatePath = String(visualInputs[inputIndex]?.path || '').trim().toLowerCase();
+        return !candidatePath.endsWith('.gif')
+          && !candidatePath.endsWith('.mp4')
+          && !candidatePath.endsWith('.mov')
+          && !candidatePath.endsWith('.webm');
+      }),
     })),
   };
   const templateFontCandidates = (Array.isArray(template?.layout?.text?.font_candidates)

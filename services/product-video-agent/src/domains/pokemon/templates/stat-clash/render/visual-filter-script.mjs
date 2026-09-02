@@ -182,6 +182,71 @@ function buildTimerBarScaleExpression(startSeconds, endSeconds, fullWidth) {
   return `max(2,if(lt(t,${start}),${width},if(lt(t,${end}),${width}*(1-((t-${start})/${Number((end - start).toFixed(3))})),0)))`;
 }
 
+function buildRoundedRectAlphaExpression(width, height, alphaValue) {
+  const normalizedWidth = Math.max(2, Math.round(ensureNumber(width, 0)));
+  const normalizedHeight = Math.max(2, Math.round(ensureNumber(height, 0)));
+  const radius = Math.max(2, Math.floor(normalizedHeight / 2));
+  const radiusSquared = radius * radius;
+  const centerY = Number((((normalizedHeight - 1) / 2)).toFixed(3));
+  const leftCenterX = radius;
+  const rightCenterX = Math.max(radius, normalizedWidth - radius - 1);
+  const railStartX = Math.max(0, radius);
+  const railEndX = Math.max(railStartX, normalizedWidth - radius - 1);
+  const normalizedAlphaValue = Math.max(0, Math.min(255, Math.round(ensureNumber(alphaValue, 255))));
+  return `if(between(X,${railStartX},${railEndX}),${normalizedAlphaValue},if(lte((X-${leftCenterX})*(X-${leftCenterX})+(Y-${centerY})*(Y-${centerY}),${radiusSquared}),${normalizedAlphaValue},if(lte((X-${rightCenterX})*(X-${rightCenterX})+(Y-${centerY})*(Y-${centerY}),${radiusSquared}),${normalizedAlphaValue},0)))`;
+}
+
+function appendRoundedRectSource(filters, {
+  label,
+  color,
+  alpha,
+  width,
+  height,
+  fps,
+  sceneDurationSeconds,
+  blur = null,
+  scaleWidthExpression = null,
+}) {
+  const normalizedWidth = Math.max(2, Math.round(ensureNumber(width, 0)));
+  const normalizedHeight = Math.max(2, Math.round(ensureNumber(height, 0)));
+  const alphaExpression = buildRoundedRectAlphaExpression(
+    normalizedWidth,
+    normalizedHeight,
+    Math.round(Math.max(0, Math.min(1, ensureNumber(alpha, 1))) * 255),
+  );
+  let filter = `color=c=${color}:s=${normalizedWidth}x${normalizedHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${alphaExpression}'`;
+  if (blur) {
+    filter += `,boxblur=${blur}`;
+  }
+  if (scaleWidthExpression) {
+    filter += `,scale=w='${scaleWidthExpression}':h=${normalizedHeight}:eval=frame`;
+  }
+  filters.push(`${filter}[${label}]`);
+}
+
+function buildStaticSpriteWobbleExpression(round, candidate, template) {
+  const startSeconds = roundTime(Math.max(
+    ensureNumber(candidate?.intro_end_seconds, 0),
+    ensureNumber(round?.local?.countdown_start_seconds, 0),
+  ));
+  const endSeconds = roundTime(Math.max(
+    startSeconds,
+    ensureNumber(round?.local?.reveal_start_seconds, startSeconds),
+  ));
+  const amplitude = roundTime(Math.max(
+    0,
+    ensureNumber(template?.renderer?.fallback_sprite_wobble_amplitude_px, 12),
+  ));
+  const frequencyRadians = roundTime(Math.max(
+    0.4,
+    ensureNumber(template?.renderer?.fallback_sprite_wobble_frequency_hz, 2.1),
+  ) * 6.283185307);
+  if (endSeconds <= startSeconds || amplitude <= 0) {
+    return '0';
+  }
+  return `if(lt(t,${startSeconds}),0,if(lt(t,${endSeconds}),sin((t-${startSeconds})*${frequencyRadians})*${amplitude},0))`;
+}
+
 function appendTimerBarPhase(filters, currentLabel, {
   labelPrefix,
   fps,
@@ -207,45 +272,81 @@ function appendTimerBarPhase(filters, currentLabel, {
   const shadowY = Number((timerLayout.y + timerHeight - shadowHeight - 2).toFixed(3));
 
   const glowSourceLabel = `${labelPrefix}glowsrc`;
-  filters.push(
-    `color=c=${glowColor}@0.30:s=${timerWidth}x${glowHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,boxblur=6:2,scale=w='${timerBarScaleExpression}':h=${glowHeight}:eval=frame[${glowSourceLabel}]`,
-  );
+  appendRoundedRectSource(filters, {
+    label: glowSourceLabel,
+    color: glowColor,
+    alpha: 0.30,
+    width: timerWidth,
+    height: glowHeight,
+    fps,
+    sceneDurationSeconds,
+    blur: '6:2',
+    scaleWidthExpression: timerBarScaleExpression,
+  });
   const glowOverlayLabel = `${labelPrefix}glow`;
   filters.push(
     `[${currentLabel}][${glowSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${glowY}:enable='${enableExpression}'[${glowOverlayLabel}]`,
   );
 
   const baseSourceLabel = `${labelPrefix}src`;
-  filters.push(
-    `color=c=${baseColor}@0.98:s=${timerWidth}x${timerHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${timerHeight}:eval=frame[${baseSourceLabel}]`,
-  );
+  appendRoundedRectSource(filters, {
+    label: baseSourceLabel,
+    color: baseColor,
+    alpha: 0.98,
+    width: timerWidth,
+    height: timerHeight,
+    fps,
+    sceneDurationSeconds,
+    scaleWidthExpression: timerBarScaleExpression,
+  });
   const baseOverlayLabel = `${labelPrefix}base`;
   filters.push(
     `[${glowOverlayLabel}][${baseSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${enableExpression}'[${baseOverlayLabel}]`,
   );
 
   const accentSourceLabel = `${labelPrefix}accsrc`;
-  filters.push(
-    `color=c=${accentColor}@0.36:s=${timerWidth}x${accentHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${accentHeight}:eval=frame[${accentSourceLabel}]`,
-  );
+  appendRoundedRectSource(filters, {
+    label: accentSourceLabel,
+    color: accentColor,
+    alpha: 0.36,
+    width: timerWidth,
+    height: accentHeight,
+    fps,
+    sceneDurationSeconds,
+    scaleWidthExpression: timerBarScaleExpression,
+  });
   const accentOverlayLabel = `${labelPrefix}acc`;
   filters.push(
     `[${baseOverlayLabel}][${accentSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${accentY}:enable='${enableExpression}'[${accentOverlayLabel}]`,
   );
 
   const highlightSourceLabel = `${labelPrefix}hlsrc`;
-  filters.push(
-    `color=c=white@0.18:s=${timerWidth}x${highlightHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${highlightHeight}:eval=frame[${highlightSourceLabel}]`,
-  );
+  appendRoundedRectSource(filters, {
+    label: highlightSourceLabel,
+    color: 'white',
+    alpha: 0.18,
+    width: timerWidth,
+    height: highlightHeight,
+    fps,
+    sceneDurationSeconds,
+    scaleWidthExpression: timerBarScaleExpression,
+  });
   const highlightOverlayLabel = `${labelPrefix}hl`;
   filters.push(
     `[${accentOverlayLabel}][${highlightSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${highlightY}:enable='${enableExpression}'[${highlightOverlayLabel}]`,
   );
 
   const shadowSourceLabel = `${labelPrefix}shsrc`;
-  filters.push(
-    `color=c=black@0.14:s=${timerWidth}x${shadowHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${shadowHeight}:eval=frame[${shadowSourceLabel}]`,
-  );
+  appendRoundedRectSource(filters, {
+    label: shadowSourceLabel,
+    color: 'black',
+    alpha: 0.14,
+    width: timerWidth,
+    height: shadowHeight,
+    fps,
+    sceneDurationSeconds,
+    scaleWidthExpression: timerBarScaleExpression,
+  });
   const shadowOverlayLabel = `${labelPrefix}sh`;
   filters.push(
     `[${highlightOverlayLabel}][${shadowSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${shadowY}:enable='${enableExpression}'[${shadowOverlayLabel}]`,
@@ -538,6 +639,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const spriteGrayInputLabel = `scene${roundIndex}spritegraybase${candidate.index}`;
       const spriteOverlayLabel = `scene${roundIndex}spritev${candidate.index}`;
       const settledSpriteLabel = `scene${roundIndex}settled${candidate.index}`;
+      const isStillSpriteFallback = Boolean(roundInputs.still_candidates?.[candidate.index]);
       const spriteScaleExpression = buildAnimatedPopSettleExpression(
         candidate.intro_start_seconds,
         introDuration,
@@ -549,6 +651,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         Number((cell.center_y + gridSpriteYOffset).toFixed(3)),
         candidate.intro_start_seconds,
       );
+      const settledSpriteBaseY = Number((cell.center_y + gridSpriteYOffset).toFixed(3));
+      const settledSpriteYOffsetExpression = isStillSpriteFallback
+        ? `-${buildStaticSpriteWobbleExpression(round, candidate, template)}`
+        : '';
       const spriteSplitLabels = candidate.is_correct
         ? `[${spriteIntroInputLabel}][${spriteSettledInputLabel}]`
         : `[${spriteIntroInputLabel}][${spriteSettledInputLabel}][${spriteGrayInputLabel}]`;
@@ -576,7 +682,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       currentLabel = spriteOverlayLabel;
       filters.push(
-        `[${currentLabel}][${spriteSettledInputLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + gridSpriteYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(candidate.intro_end_seconds, round.local.scene_duration_seconds)}'[${settledSpriteLabel}]`,
+        `[${currentLabel}][${spriteSettledInputLabel}]overlay=x='${cell.center_x}-w/2':y='${settledSpriteBaseY}${settledSpriteYOffsetExpression}-h/2':enable='${formatEnableBetween(candidate.intro_end_seconds, round.local.scene_duration_seconds)}'[${settledSpriteLabel}]`,
       );
       currentLabel = settledSpriteLabel;
 
@@ -591,7 +697,35 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
     const timerOuterBorderThickness = 4;
     const timerInnerBorderInset = 2;
-    const timerRailLabel = `scene${roundIndex}tb0`;
+    const timerOuterLabel = `scene${roundIndex}tb0o`;
+    appendRoundedRectSource(filters, {
+      label: timerOuterLabel,
+      color: 'black',
+      alpha: 0.74,
+      width: timerLayout.width + (timerOuterBorderThickness * 2),
+      height: timerLayout.height + (timerOuterBorderThickness * 2),
+      fps,
+      sceneDurationSeconds: round.scene_duration_seconds,
+    });
+    filters.push(
+      `[${currentLabel}][${timerOuterLabel}]overlay=x=${timerLayout.x - timerOuterBorderThickness}:y=${timerLayout.y - timerOuterBorderThickness}:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[scene${roundIndex}tb0]`,
+    );
+    currentLabel = `scene${roundIndex}tb0`;
+    const timerInnerGlowLabel = `scene${roundIndex}tb0i`;
+    appendRoundedRectSource(filters, {
+      label: timerInnerGlowLabel,
+      color: 'white',
+      alpha: 0.10,
+      width: timerLayout.width - (timerInnerBorderInset * 2),
+      height: timerLayout.height - (timerInnerBorderInset * 2),
+      fps,
+      sceneDurationSeconds: round.scene_duration_seconds,
+    });
+    filters.push(
+      `[${currentLabel}][${timerInnerGlowLabel}]overlay=x=${timerLayout.x + timerInnerBorderInset}:y=${timerLayout.y + timerInnerBorderInset}:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[scene${roundIndex}tb0g]`,
+    );
+    currentLabel = `scene${roundIndex}tb0g`;
+    const timerRailLabel = `scene${roundIndex}tb0r`;
     const timerBarScaleExpression = buildTimerBarScaleExpression(
       round.local.countdown_start_seconds,
       round.local.reveal_start_seconds,
@@ -605,10 +739,19 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       round.local.countdown_start_seconds
       + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.8)
     ).toFixed(3));
+    appendRoundedRectSource(filters, {
+      label: timerRailLabel,
+      color: 'black',
+      alpha: 0.38,
+      width: timerLayout.width,
+      height: timerLayout.height,
+      fps,
+      sceneDurationSeconds: round.scene_duration_seconds,
+    });
     filters.push(
-      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=black@0.38:t=fill:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerRailLabel}]`,
+      `[${currentLabel}][${timerRailLabel}]overlay=x=${timerLayout.x}:y=${timerLayout.y}:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[scene${roundIndex}tb0rail]`,
     );
-    currentLabel = timerRailLabel;
+    currentLabel = `scene${roundIndex}tb0rail`;
 
     currentLabel = appendTimerBarPhase(filters, currentLabel, {
       labelPrefix: `scene${roundIndex}tb1`,
@@ -647,24 +790,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       accentColor: '0xFFB2AC',
     });
 
-    const timerBorderOuterLabel = `scene${roundIndex}tb4o`;
-    filters.push(
-      `[${currentLabel}]drawbox=x=${timerLayout.x - timerOuterBorderThickness}:y=${timerLayout.y - timerOuterBorderThickness}:w=${timerLayout.width + (timerOuterBorderThickness * 2)}:h=${timerLayout.height + (timerOuterBorderThickness * 2)}:color=black@0.74:t=${timerOuterBorderThickness}:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerBorderOuterLabel}]`,
-    );
-    currentLabel = timerBorderOuterLabel;
-
-    const timerBorderInnerLabel = `scene${roundIndex}tb4i`;
-    filters.push(
-      `[${currentLabel}]drawbox=x=${timerLayout.x + timerInnerBorderInset}:y=${timerLayout.y + timerInnerBorderInset}:w=${timerLayout.width - (timerInnerBorderInset * 2)}:h=${timerLayout.height - (timerInnerBorderInset * 2)}:color=white@0.18:t=2:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerBorderInnerLabel}]`,
-    );
-    currentLabel = timerBorderInnerLabel;
-
-    const timerBorderLabel = `scene${roundIndex}tb4`;
-    filters.push(
-      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=white@0.38:t=3:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerBorderLabel}]`,
-    );
-    currentLabel = timerBorderLabel;
-
     decoyGrayCandidates.forEach(({ candidate, cell, grayInputLabel }) => {
       const grayLabel = `scene${roundIndex}gray${candidate.index}`;
       const grayOverlayLabel = `scene${roundIndex}grayv${candidate.index}`;
@@ -672,7 +797,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `[${grayInputLabel}]format=rgba,eq=saturation=0:brightness=-0.42:contrast=1.22,setsar=1,colorchannelmixer=aa=0.94,fade=t=in:st=${round.local.reveal_visual_start_seconds}:d=${decoyGrayFadeDuration}:alpha=1[${grayLabel}]`,
       );
       filters.push(
-        `[${currentLabel}][${grayLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + gridSpriteYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${grayOverlayLabel}]`,
+        `[${currentLabel}][${grayLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + gridSpriteYOffset).toFixed(3))}${Boolean(roundInputs.still_candidates?.[candidate.index]) ? `-${buildStaticSpriteWobbleExpression(round, candidate, template)}` : ''}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${grayOverlayLabel}]`,
       );
       currentLabel = grayOverlayLabel;
     });
