@@ -61,10 +61,8 @@
       "Who has the highest {stat}?",
       "Which Pokemon has the highest {stat}?"
     ],
-    "reveal_text": "{winner_name} has the highest {stat}!",
-    "reveal_text_variants": [
-      "{winner_name} has the highest {stat}!"
-    ]
+    "reveal_text": "",
+    "reveal_text_variants": []
   },
   "layout": {
     "background": {
@@ -74,7 +72,7 @@
       "blur_sigma": 3
     },
     "text": {
-      "prompt_y": 120,
+      "prompt_y": 70,
       "prompt_font_size": 102,
       "reveal_y": 285,
       "reveal_font_size": 92,
@@ -120,8 +118,8 @@
     },
     "stat_values": {
       "font_size": 84,
-      "top_row_y_offset_px": -44,
-      "bottom_row_y_offset_px": 180,
+      "top_row_y_offset_px": 6,
+      "bottom_row_y_offset_px": 230,
       "default_color": "white",
       "winner_color": "0x32D74B"
     },
@@ -181,7 +179,7 @@
     "crf": 20,
     "faststart": true,
     "candidate_intro_initial_delay_seconds": 0.1,
-    "candidate_intro_stagger_seconds": 0.22,
+    "candidate_intro_stagger_seconds": 0.16,
     "candidate_intro_duration_seconds": 0.22,
     "candidate_intro_y_offset_px": 42,
     "candidate_intro_scale_initial": 0.68,

@@ -35,14 +35,29 @@ function appendTimerBarPhase(filters, currentLabel, {
   enableStartSeconds,
   enableEndSeconds,
   baseColor,
+  glowColor,
+  accentColor,
 }) {
   const enableExpression = formatEnableBetween(enableStartSeconds, enableEndSeconds);
   const timerWidth = Math.max(2, Math.round(ensureNumber(timerLayout.width, 0)));
   const timerHeight = Math.max(2, Math.round(ensureNumber(timerLayout.height, 0)));
+  const glowHeight = Math.max(timerHeight + 18, Math.round(timerHeight * 1.55));
+  const glowY = Number((timerLayout.y - ((glowHeight - timerHeight) / 2)).toFixed(3));
   const highlightHeight = Math.max(4, Math.round(timerHeight * 0.34));
   const highlightY = Number((timerLayout.y + 2).toFixed(3));
+  const accentHeight = Math.max(6, Math.round(timerHeight * 0.42));
+  const accentY = Number((timerLayout.y + Math.round(timerHeight * 0.24)).toFixed(3));
   const shadowHeight = Math.max(3, Math.round(timerHeight * 0.18));
   const shadowY = Number((timerLayout.y + timerHeight - shadowHeight - 2).toFixed(3));
+
+  const glowSourceLabel = `${labelPrefix}glowsrc`;
+  filters.push(
+    `color=c=${glowColor}@0.30:s=${timerWidth}x${glowHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,boxblur=6:2,scale=w='${timerBarScaleExpression}':h=${glowHeight}:eval=frame[${glowSourceLabel}]`,
+  );
+  const glowOverlayLabel = `${labelPrefix}glow`;
+  filters.push(
+    `[${currentLabel}][${glowSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${glowY}:enable='${enableExpression}'[${glowOverlayLabel}]`,
+  );
 
   const baseSourceLabel = `${labelPrefix}src`;
   filters.push(
@@ -50,7 +65,16 @@ function appendTimerBarPhase(filters, currentLabel, {
   );
   const baseOverlayLabel = `${labelPrefix}base`;
   filters.push(
-    `[${currentLabel}][${baseSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${enableExpression}'[${baseOverlayLabel}]`,
+    `[${glowOverlayLabel}][${baseSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${timerLayout.y}:enable='${enableExpression}'[${baseOverlayLabel}]`,
+  );
+
+  const accentSourceLabel = `${labelPrefix}accsrc`;
+  filters.push(
+    `color=c=${accentColor}@0.36:s=${timerWidth}x${accentHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w='${timerBarScaleExpression}':h=${accentHeight}:eval=frame[${accentSourceLabel}]`,
+  );
+  const accentOverlayLabel = `${labelPrefix}acc`;
+  filters.push(
+    `[${baseOverlayLabel}][${accentSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${accentY}:enable='${enableExpression}'[${accentOverlayLabel}]`,
   );
 
   const highlightSourceLabel = `${labelPrefix}hlsrc`;
@@ -59,7 +83,7 @@ function appendTimerBarPhase(filters, currentLabel, {
   );
   const highlightOverlayLabel = `${labelPrefix}hl`;
   filters.push(
-    `[${baseOverlayLabel}][${highlightSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${highlightY}:enable='${enableExpression}'[${highlightOverlayLabel}]`,
+    `[${accentOverlayLabel}][${highlightSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${highlightY}:enable='${enableExpression}'[${highlightOverlayLabel}]`,
   );
 
   const shadowSourceLabel = `${labelPrefix}shsrc`;
@@ -95,6 +119,10 @@ function buildPromptSegments(text, template, textLayout, round) {
 }
 
 function buildRevealArtifacts(text, template, textLayout, round) {
+  const normalizedText = String(text || '').trim();
+  if (!normalizedText) {
+    return { lines: [] };
+  }
   return buildProgressiveTextArtifacts(text, {
     template,
     fontSize: textLayout.reveal_font_size,
@@ -203,10 +231,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     template?.renderer?.intro_pokeball_center_y_offset_px,
     0,
   );
-  const introPlatformLeadSeconds = Math.max(
-    0,
-    ensureNumber(template?.renderer?.intro_platform_lead_seconds, 0.08),
-  );
   const statRevealFadeDuration = Math.max(
     0.08,
     ensureNumber(template?.renderer?.stat_reveal_fade_duration_seconds, 0.22),
@@ -258,7 +282,19 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     for (const candidateValue of round.candidates) {
       const candidate = localizeCandidateTiming(candidateValue, round);
       const cell = gridLayout.cells[candidate.index];
-      const candidateInputIndex = roundInputs.candidates?.[candidate.index];
+      if (inputRefs.grassPlatform != null && platformLayout.enabled) {
+        const platformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
+        const platformSourceLabel = `scene${roundIndex}platform${candidate.index}`;
+        const platformOverlayLabel = `scene${roundIndex}platformv${candidate.index}`;
+        filters.push(
+          `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${platformWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${platformSourceLabel}]`,
+        );
+        filters.push(
+          `[${currentLabel}][${platformSourceLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(0, round.local.scene_duration_seconds)}'[${platformOverlayLabel}]`,
+        );
+        currentLabel = platformOverlayLabel;
+      }
+
       if (inputRefs.introPokeball != null) {
         const pokeballLabel = `scene${roundIndex}pokeball${candidate.index}`;
         const pokeballOverlayLabel = `scene${roundIndex}pokeballv${candidate.index}`;
@@ -276,29 +312,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
         currentLabel = pokeballOverlayLabel;
       }
 
-      if (inputRefs.grassPlatform != null && platformLayout.enabled) {
-        const platformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
-        const platformSourceLabel = `scene${roundIndex}platform${candidate.index}`;
-        const platformOverlayLabel = `scene${roundIndex}platformv${candidate.index}`;
-        const platformStartSeconds = Number(Math.max(
-          0,
-          candidate.pokeball_start_seconds - introPlatformLeadSeconds,
-        ).toFixed(3));
-        const platformScaleExpression = buildAnimatedPopSettleExpression(
-          platformStartSeconds,
-          introDuration,
-          introScaleInitial,
-          introScalePeak,
-          introScaleSettle,
-        );
-        filters.push(
-          `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${platformWidth}*(${platformScaleExpression})':h=-1:eval=frame,format=rgba,setsar=1[${platformSourceLabel}]`,
-        );
-        filters.push(
-          `[${currentLabel}][${platformSourceLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(platformStartSeconds, round.local.scene_duration_seconds)}'[${platformOverlayLabel}]`,
-        );
-        currentLabel = platformOverlayLabel;
-      }
+      const candidateInputIndex = roundInputs.candidates?.[candidate.index];
 
       if (candidateInputIndex == null) {
         continue;
@@ -410,6 +424,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       enableStartSeconds: round.local.countdown_start_seconds,
       enableEndSeconds: greenEnd,
       baseColor: '0x32D74B',
+      glowColor: '0x2EEA78',
+      accentColor: '0xB8FFD0',
     });
     currentLabel = appendTimerBarPhase(filters, currentLabel, {
       labelPrefix: `scene${roundIndex}tb2`,
@@ -420,6 +436,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       enableStartSeconds: greenEnd,
       enableEndSeconds: yellowEnd,
       baseColor: '0xFFD60A',
+      glowColor: '0xFFE45C',
+      accentColor: '0xFFF3A8',
     });
     currentLabel = appendTimerBarPhase(filters, currentLabel, {
       labelPrefix: `scene${roundIndex}tb3`,
@@ -430,6 +448,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       enableStartSeconds: yellowEnd,
       enableEndSeconds: round.local.reveal_start_seconds,
       baseColor: '0xFF453A',
+      glowColor: '0xFF7B74',
+      accentColor: '0xFFB2AC',
     });
 
     const timerBorderLabel = `scene${roundIndex}tb4`;
