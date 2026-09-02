@@ -206,15 +206,16 @@ function appendRoundedRectSource(filters, {
   sceneDurationSeconds,
   blur = null,
   scaleWidthExpression = null,
+  alphaMaskExpression = null,
 }) {
   const normalizedWidth = Math.max(2, Math.round(ensureNumber(width, 0)));
   const normalizedHeight = Math.max(2, Math.round(ensureNumber(height, 0)));
-  const alphaExpression = buildRoundedRectAlphaExpression(
+  const resolvedAlphaMaskExpression = alphaMaskExpression || buildRoundedRectAlphaExpression(
     normalizedWidth,
     normalizedHeight,
     Math.round(Math.max(0, Math.min(1, ensureNumber(alpha, 1))) * 255),
   );
-  let filter = `color=c=${color}:s=${normalizedWidth}x${normalizedHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${alphaExpression}'`;
+  let filter = `color=c=${color}:s=${normalizedWidth}x${normalizedHeight}:r=${fps}:d=${sceneDurationSeconds},format=rgba,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${resolvedAlphaMaskExpression}'`;
   if (blur) {
     filter += `,boxblur=${blur}`;
   }
@@ -237,9 +238,13 @@ function buildStaticSpriteWobbleExpression(round, candidate, template) {
     0,
     ensureNumber(template?.renderer?.fallback_sprite_wobble_amplitude_px, 12),
   ));
+  const cycleLengthMultiplier = Math.max(
+    0.1,
+    ensureNumber(template?.renderer?.fallback_sprite_wobble_cycle_length_multiplier, 1.5),
+  );
   const frequencyRadians = roundTime(Math.max(
     0.4,
-    ensureNumber(template?.renderer?.fallback_sprite_wobble_frequency_hz, 2.1),
+    ensureNumber(template?.renderer?.fallback_sprite_wobble_frequency_hz, 2.1) / cycleLengthMultiplier,
   ) * 6.283185307);
   if (endSeconds <= startSeconds || amplitude <= 0) {
     return '0';
@@ -264,12 +269,38 @@ function appendTimerBarPhase(filters, currentLabel, {
   const timerHeight = Math.max(2, Math.round(ensureNumber(timerLayout.height, 0)));
   const glowHeight = Math.max(timerHeight + 18, Math.round(timerHeight * 1.55));
   const glowY = Number((timerLayout.y - ((glowHeight - timerHeight) / 2)).toFixed(3));
+  const trailHeight = Math.max(glowHeight + 8, Math.round(timerHeight * 1.9));
+  const trailY = Number((timerLayout.y - ((trailHeight - timerHeight) / 2)).toFixed(3));
   const highlightHeight = Math.max(4, Math.round(timerHeight * 0.34));
   const highlightY = Number((timerLayout.y + 2).toFixed(3));
   const accentHeight = Math.max(6, Math.round(timerHeight * 0.42));
   const accentY = Number((timerLayout.y + Math.round(timerHeight * 0.24)).toFixed(3));
   const shadowHeight = Math.max(3, Math.round(timerHeight * 0.18));
   const shadowY = Number((timerLayout.y + timerHeight - shadowHeight - 2).toFixed(3));
+  const trailPulseRadians = Number((1.35 * 6.283185307).toFixed(6));
+  const trailMaskExpression = `(${buildRoundedRectAlphaExpression(
+    timerWidth,
+    trailHeight,
+    Math.round(0.22 * 255),
+  )})*(0.72+0.28*(sin(T*${trailPulseRadians})*sin(T*${trailPulseRadians})))`;
+
+  const trailSourceLabel = `${labelPrefix}trailsrc`;
+  appendRoundedRectSource(filters, {
+    label: trailSourceLabel,
+    color: glowColor,
+    alpha: 0.22,
+    width: timerWidth,
+    height: trailHeight,
+    fps,
+    sceneDurationSeconds,
+    blur: '10:3',
+    scaleWidthExpression: timerBarScaleExpression,
+    alphaMaskExpression: trailMaskExpression,
+  });
+  const trailOverlayLabel = `${labelPrefix}trail`;
+  filters.push(
+    `[${currentLabel}][${trailSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${trailY}:enable='${enableExpression}'[${trailOverlayLabel}]`,
+  );
 
   const glowSourceLabel = `${labelPrefix}glowsrc`;
   appendRoundedRectSource(filters, {
@@ -285,7 +316,7 @@ function appendTimerBarPhase(filters, currentLabel, {
   });
   const glowOverlayLabel = `${labelPrefix}glow`;
   filters.push(
-    `[${currentLabel}][${glowSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${glowY}:enable='${enableExpression}'[${glowOverlayLabel}]`,
+    `[${trailOverlayLabel}][${glowSourceLabel}]overlay=x='${timerLayout.center_x}-overlay_w/2':y=${glowY}:enable='${enableExpression}'[${glowOverlayLabel}]`,
   );
 
   const baseSourceLabel = `${labelPrefix}src`;
