@@ -51,9 +51,6 @@ function extractPromptHeaderText(text, round) {
 function buildStyledStatPromptLines(round, textLayout, startSeconds, endSeconds, baseY) {
   const statKey = String(round?.stat_key || '').trim().toLowerCase();
   const largeFontSize = Math.round(textLayout.prompt_font_size * 1.1);
-  const mediumFontSize = Math.round(textLayout.prompt_font_size * 0.96);
-  const lineGap = Math.max(10, Math.round(textLayout.prompt_font_size * 0.12));
-  const lowerLineY = Number((baseY + mediumFontSize + lineGap).toFixed(3));
 
   switch (statKey) {
     case 'hp':
@@ -93,43 +90,27 @@ function buildStyledStatPromptLines(round, textLayout, startSeconds, endSeconds,
         color: '0xAF52DE',
       }];
     case 'special_attack':
-      return [
-        {
-          text: 'Special',
-          font_size: mediumFontSize,
-          y: baseY,
-          start_seconds: startSeconds,
-          end_seconds: endSeconds,
-          color: '0xFFD60A',
-        },
-        {
-          text: 'Attack?',
-          font_size: largeFontSize,
-          y: lowerLineY,
-          start_seconds: startSeconds,
-          end_seconds: endSeconds,
-          color: '0xFF5A5F',
-        },
-      ];
+      return [{
+        parts: [
+          { text: 'Sp.', font_size: largeFontSize, color: '0xFFD60A' },
+          { text: 'Atk?', font_size: largeFontSize, color: '0xFF5A5F' },
+        ],
+        part_gap_px: Math.max(14, Math.round(largeFontSize * 0.16)),
+        y: baseY,
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+      }];
     case 'special_defense':
-      return [
-        {
-          text: 'Special',
-          font_size: mediumFontSize,
-          y: baseY,
-          start_seconds: startSeconds,
-          end_seconds: endSeconds,
-          color: '0xFFD60A',
-        },
-        {
-          text: 'Defense?',
-          font_size: largeFontSize,
-          y: lowerLineY,
-          start_seconds: startSeconds,
-          end_seconds: endSeconds,
-          color: '0x4D96FF',
-        },
-      ];
+      return [{
+        parts: [
+          { text: 'Sp.', font_size: largeFontSize, color: '0xFFD60A' },
+          { text: 'Def?', font_size: largeFontSize, color: '0x4D96FF' },
+        ],
+        part_gap_px: Math.max(14, Math.round(largeFontSize * 0.16)),
+        y: baseY,
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+      }];
     default:
       return [{
         text: `${String(round?.stat_label || 'Stat').trim() || 'Stat'}?`,
@@ -140,6 +121,27 @@ function buildStyledStatPromptLines(round, textLayout, startSeconds, endSeconds,
         color: '0xFFD60A',
       }];
   }
+}
+
+function estimateTextWidth(text, fontSize) {
+  const normalizedText = String(text || '');
+  return Math.max(
+    1,
+    Number((normalizedText.length * ensureNumber(fontSize, 96) * 0.58).toFixed(3)),
+  );
+}
+
+function buildCenteredPromptPartX(parts, gapPx, index) {
+  const safeParts = Array.isArray(parts) ? parts : [];
+  const safeGapPx = Math.max(0, ensureNumber(gapPx, 0));
+  const widths = safeParts.map((part) => estimateTextWidth(part.text, part.font_size));
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0)
+    + (Math.max(0, widths.length - 1) * safeGapPx);
+  const offset = (-totalWidth / 2)
+    + widths.slice(0, index).reduce((sum, width) => sum + width, 0)
+    + (safeGapPx * index);
+  const roundedOffset = Number(offset.toFixed(3));
+  return roundedOffset >= 0 ? `(w/2)+${roundedOffset}` : `(w/2)${roundedOffset}`;
 }
 
 function wrapPromptTextLines(text, maxCharactersPerLine, maxLines = 2) {
@@ -444,6 +446,19 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
     buildPromptSegments(round.prompt_text, template, renderPlan.text_layout, round)
       .forEach((segment, segmentIndex) => {
+        if (Array.isArray(segment.parts) && segment.parts.length > 0) {
+          let segmentLabel = currentLabel;
+          segment.parts.forEach((part, partIndex) => {
+            const promptLabel = `scene${roundIndex}prompt${segmentIndex}part${partIndex}`;
+            filters.push(
+              `[${segmentLabel}]drawtext=text='${escapeDrawtextText(part.text)}'${fontPart}:fontcolor=${part.color || 'white'}:fontsize=${part.font_size}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x='${buildCenteredPromptPartX(segment.parts, segment.part_gap_px, partIndex)}':y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${promptLabel}]`,
+            );
+            segmentLabel = promptLabel;
+          });
+          currentLabel = segmentLabel;
+          return;
+        }
+
         const promptLabel = `scene${roundIndex}prompt${segmentIndex}`;
         filters.push(
           `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=${segment.color || 'white'}:fontsize=${segment.font_size}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${promptLabel}]`,
