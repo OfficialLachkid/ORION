@@ -104,7 +104,7 @@
     },
     "sprite_platform": {
       "option_enabled": true,
-      "option_width_multiplier": 0.60,
+      "option_width_multiplier": 0.68,
       "center_y_offset_multiplier": 0.34,
       "option_center_y_offset_px": 82
     },
@@ -179,7 +179,7 @@
     "crf": 20,
     "faststart": true,
     "candidate_intro_initial_delay_seconds": 0.1,
-    "candidate_intro_stagger_seconds": 0.16,
+    "candidate_intro_stagger_seconds": 0.24,
     "candidate_intro_duration_seconds": 0.22,
     "candidate_intro_y_offset_px": 42,
     "candidate_intro_scale_initial": 0.68,

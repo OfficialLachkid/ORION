@@ -167,7 +167,7 @@ const template = {
   },
   renderer: {
     candidate_intro_initial_delay_seconds: 0.1,
-    candidate_intro_stagger_seconds: 0.16,
+    candidate_intro_stagger_seconds: 0.24,
     candidate_intro_duration_seconds: 0.22,
     candidate_intro_y_offset_px: 42,
     candidate_intro_scale_initial: 0.68,
@@ -418,9 +418,7 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   assert.match(visualFilter.script, /fontcolor=0x32D74B/u);
   assert.equal(cryCues.length, (renderPlan.rounds.length * 5));
   assert.ok(cryCues.some((cue) => cue.start_seconds === Number((
-    renderPlan.rounds[0].candidates[0].intro_start_seconds
-    + renderPlan.renderer.candidate_forming_duration_seconds
-    + 0.02
+    renderPlan.rounds[0].candidates[0].intro_end_seconds
   ).toFixed(3))));
   assert.ok(cryCues.some((cue) => cue.start_seconds === renderPlan.rounds[0].reveal_visual_start_seconds));
   assert.ok(cryCues.some((cue) => cue.volume >= 0.189));
