@@ -397,14 +397,15 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   const cryCues = buildStatClashCryCues(plan, renderPlan);
 
   assert.match(visualFilter.script, /\[0:v\]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=3,fps=30,setsar=1,split=3\[bg0\]\[bg1\]\[bg2\]/u);
-  assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=[0-9.]+:[0-9.]+:force_original_aspect_ratio=decrease/u);
-  assert.match(visualFilter.script, /split=2\[scene0spriteintroraw/u);
-  assert.match(visualFilter.script, /split=3\[scene0spriteintroraw/u);
+  assert.match(visualFilter.script, /\[1:v\]fps=30,trim=duration=[0-9.]+,setpts=PTS-STARTPTS,scale=[0-9.]+:[0-9.]+:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=4/u);
+  assert.match(visualFilter.script, /setpts=PTS-STARTPTS\+[0-9.]+\/TB,format=rgba,setsar=1\[scene0pokeball0\]/u);
+  assert.match(visualFilter.script, /\[scene0spriteprep[0-9]+\]scale=w='[0-9.]+\*\(.+\)':h='[0-9.]+\*\(.+\)':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=2\[scene0spriteintrosrc[0-9]+\]\[scene0spritesettledsrc[0-9]+\]/u);
+  assert.match(visualFilter.script, /\[scene0spriteprep[0-9]+\]scale=w='[0-9.]+\*\(.+\)':h='[0-9.]+\*\(.+\)':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=3\[scene0spriteintrosrc[0-9]+\]\[scene0spritesettledsrc[0-9]+\]\[scene0spritegraybase[0-9]+\]/u);
   assert.doesNotMatch(visualFilter.script, /scenecomposite0/u);
   assert.doesNotMatch(visualFilter.script, /overlay=x='if\(lt\(t,[0-9.]+\),w/u);
   assert.match(visualFilter.script, /scene0pokeball0/u);
-  assert.match(visualFilter.script, /scene0platform0/u);
-  assert.match(visualFilter.script, /\[scene0spriteintroform0whitesrc\]lutrgb=r='255':g='255':b='255'/u);
+  assert.match(visualFilter.script, /scene0platformv0/u);
+  assert.match(visualFilter.script, /\[scene0spriteform0whitesrc\]lutrgb=r='255':g='255':b='255'/u);
   assert.match(visualFilter.script, /blend=all_expr='A\*\(1-clip\(\(T-[0-9.]+\)\/1,0,1\)\)\+B\*clip\(\(T-[0-9.]+\)\/1,0,1\)'/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='Who':/u);
   assert.doesNotMatch(visualFilter.script, /scene1counter/u);

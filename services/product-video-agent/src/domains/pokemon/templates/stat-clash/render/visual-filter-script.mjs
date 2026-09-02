@@ -252,26 +252,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       `[${backgroundLabels[roundIndex]}]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS[${sceneBaseLabel}]`,
     );
 
-    const roundSharedPlatformLabels = Array.from(
-      { length: round.candidates.length },
-      (_unused, index) => `scene${roundIndex}sharedplatform${index}`,
-    );
-    if (inputRefs.grassPlatform != null && platformLayout.enabled && roundSharedPlatformLabels.length > 0) {
-      filters.push(
-        `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1,split=${roundSharedPlatformLabels.length}${roundSharedPlatformLabels.map((label) => `[${label}]`).join('')}`,
-      );
-    }
-
-    const roundSharedPokeballLabels = Array.from(
-      { length: round.candidates.length },
-      (_unused, index) => `scene${roundIndex}sharedpokeball${index}`,
-    );
-    if (inputRefs.introPokeball != null && roundSharedPokeballLabels.length > 0) {
-      filters.push(
-        `[${inputRefs.introPokeball}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1,split=${roundSharedPokeballLabels.length}${roundSharedPokeballLabels.map((label) => `[${label}]`).join('')}`,
-      );
-    }
-
     let currentLabel = sceneBaseLabel;
     if (template?.layout?.text?.show_counter !== false) {
       currentLabel = overlayCounterText(
@@ -297,6 +277,27 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       ensureNumber(gridLayout.item_size_px, 220)
       * ensureNumber(gridLayout.sprite_scale_multiplier, 1)
     ).toFixed(3));
+    const sharedPlatformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
+    const sharedPokeballSize = Number((baseSpriteSize * introPokeballScaleMultiplier).toFixed(3));
+    const roundSharedPlatformLabels = Array.from(
+      { length: round.candidates.length },
+      (_unused, index) => `scene${roundIndex}sharedplatform${index}`,
+    );
+    if (inputRefs.grassPlatform != null && platformLayout.enabled && roundSharedPlatformLabels.length > 0) {
+      filters.push(
+        `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${sharedPlatformWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${roundSharedPlatformLabels.length}${roundSharedPlatformLabels.map((label) => `[${label}]`).join('')}`,
+      );
+    }
+
+    const roundSharedPokeballLabels = Array.from(
+      { length: round.candidates.length },
+      (_unused, index) => `scene${roundIndex}sharedpokeball${index}`,
+    );
+    if (inputRefs.introPokeball != null && roundSharedPokeballLabels.length > 0) {
+      filters.push(
+        `[${inputRefs.introPokeball}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${sharedPokeballSize}:${sharedPokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${roundSharedPokeballLabels.length}${roundSharedPokeballLabels.map((label) => `[${label}]`).join('')}`,
+      );
+    }
     const decoyGrayCandidates = [];
 
     for (const [candidateLoopIndex, candidateValue] of round.candidates.entries()) {
@@ -309,14 +310,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
         0,
       ).toFixed(3));
       if (inputRefs.grassPlatform != null && platformLayout.enabled) {
-        const platformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
-        const platformSourceLabel = `scene${roundIndex}platform${candidate.index}`;
         const platformOverlayLabel = `scene${roundIndex}platformv${candidate.index}`;
         filters.push(
-          `[${sharedPlatformLabel}]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${platformWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${platformSourceLabel}]`,
-        );
-        filters.push(
-          `[${currentLabel}][${platformSourceLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(platformVisibleStart, round.local.scene_duration_seconds)}'[${platformOverlayLabel}]`,
+          `[${currentLabel}][${sharedPlatformLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(platformVisibleStart, round.local.scene_duration_seconds)}'[${platformOverlayLabel}]`,
         );
         currentLabel = platformOverlayLabel;
       }
@@ -328,9 +324,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
           0.08,
           candidate.pokeball_end_seconds - candidate.pokeball_start_seconds,
         ).toFixed(3));
-        const pokeballSize = Number((baseSpriteSize * introPokeballScaleMultiplier).toFixed(3));
         filters.push(
-          `[${sharedPokeballLabel}]trim=duration=${pokeballDuration},setpts=PTS-STARTPTS+${Number(candidate.pokeball_start_seconds.toFixed(3))}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${pokeballLabel}]`,
+          `[${sharedPokeballLabel}]trim=duration=${pokeballDuration},setpts=PTS-STARTPTS+${Number(candidate.pokeball_start_seconds.toFixed(3))}/TB,format=rgba,setsar=1[${pokeballLabel}]`,
         );
         filters.push(
           `[${currentLabel}][${pokeballLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + introPokeballCenterYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(candidate.pokeball_start_seconds, candidate.pokeball_end_seconds)}'[${pokeballOverlayLabel}]`,
@@ -343,14 +338,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       if (candidateInputIndex == null) {
         continue;
       }
-      const spriteIntroRawLabel = `scene${roundIndex}spriteintroraw${candidate.index}`;
-      const spriteSettledRawLabel = `scene${roundIndex}spritesettledraw${candidate.index}`;
-      const spriteGrayRawLabel = `scene${roundIndex}spritegrayraw${candidate.index}`;
-      const spriteIntroPreparedLabel = `scene${roundIndex}spriteintroprep${candidate.index}`;
-      const spriteSettledPreparedLabel = `scene${roundIndex}spritesettledprep${candidate.index}`;
-      const spriteIntroLabel = `scene${roundIndex}spriteintro${candidate.index}`;
+      const spriteRawLabel = `scene${roundIndex}spriteraw${candidate.index}`;
+      const spritePreparedLabel = `scene${roundIndex}spriteprep${candidate.index}`;
+      const spriteIntroInputLabel = `scene${roundIndex}spriteintrosrc${candidate.index}`;
       const spriteSettledInputLabel = `scene${roundIndex}spritesettledsrc${candidate.index}`;
-      const spriteGrayInputLabel = `scene${roundIndex}spritegrayscaled${candidate.index}`;
+      const spriteGrayInputLabel = `scene${roundIndex}spritegraybase${candidate.index}`;
       const spriteOverlayLabel = `scene${roundIndex}spritev${candidate.index}`;
       const settledSpriteLabel = `scene${roundIndex}settled${candidate.index}`;
       const spriteScaleExpression = buildAnimatedPopSettleExpression(
@@ -365,47 +357,29 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
         candidate.intro_start_seconds,
       );
       const spriteSplitLabels = candidate.is_correct
-        ? `[${spriteIntroRawLabel}][${spriteSettledRawLabel}]`
-        : `[${spriteIntroRawLabel}][${spriteSettledRawLabel}][${spriteGrayRawLabel}]`;
+        ? `[${spriteIntroInputLabel}][${spriteSettledInputLabel}]`
+        : `[${spriteIntroInputLabel}][${spriteSettledInputLabel}][${spriteGrayInputLabel}]`;
       filters.push(
-        `[${candidateInputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1,split=${candidate.is_correct ? 2 : 3}${spriteSplitLabels}`,
+        `[${candidateInputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1[${spriteRawLabel}]`,
       );
       if (introFormingEnabled) {
         appendFormingSpriteFilters(filters, {
-          inputLabel: spriteIntroRawLabel,
-          outputLabel: spriteIntroPreparedLabel,
-          workingLabelPrefix: `scene${roundIndex}spriteintroform${candidate.index}`,
-          startSeconds: candidate.intro_start_seconds,
-          durationSeconds: introFormingDuration,
-        });
-        appendFormingSpriteFilters(filters, {
-          inputLabel: spriteSettledRawLabel,
-          outputLabel: spriteSettledPreparedLabel,
-          workingLabelPrefix: `scene${roundIndex}spritesettledform${candidate.index}`,
+          inputLabel: spriteRawLabel,
+          outputLabel: spritePreparedLabel,
+          workingLabelPrefix: `scene${roundIndex}spriteform${candidate.index}`,
           startSeconds: candidate.intro_start_seconds,
           durationSeconds: introFormingDuration,
         });
       } else {
         filters.push(
-          `[${spriteIntroRawLabel}]null[${spriteIntroPreparedLabel}]`,
-        );
-        filters.push(
-          `[${spriteSettledRawLabel}]null[${spriteSettledPreparedLabel}]`,
+          `[${spriteRawLabel}]null[${spritePreparedLabel}]`,
         );
       }
       filters.push(
-        `[${spriteIntroPreparedLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteIntroLabel}]`,
+        `[${spritePreparedLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${candidate.is_correct ? 2 : 3}${spriteSplitLabels}`,
       );
       filters.push(
-        `[${spriteSettledPreparedLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteSettledInputLabel}]`,
-      );
-      if (!candidate.is_correct) {
-        filters.push(
-          `[${spriteGrayRawLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteGrayInputLabel}]`,
-        );
-      }
-      filters.push(
-        `[${currentLabel}][${spriteIntroLabel}]overlay=x='${cell.center_x}-w/2':y='${spriteYExpression}+${introYOffset}-h/2':enable='${formatEnableBetween(candidate.intro_start_seconds, candidate.intro_end_seconds)}'[${spriteOverlayLabel}]`,
+        `[${currentLabel}][${spriteIntroInputLabel}]overlay=x='${cell.center_x}-w/2':y='${spriteYExpression}+${introYOffset}-h/2':enable='${formatEnableBetween(candidate.intro_start_seconds, candidate.intro_end_seconds)}'[${spriteOverlayLabel}]`,
       );
       currentLabel = spriteOverlayLabel;
       filters.push(
