@@ -56,10 +56,10 @@
   "question_contract": {
     "hook_text": "",
     "hook_text_variants": [],
-    "prompt_text": "Who has the highest {stat}?",
+    "prompt_text": "Which Pokemon has the highest {stat}?",
     "prompt_text_variants": [
-      "Who has the highest {stat}?",
-      "Which Pokemon has the highest {stat}?"
+      "Which Pokemon has the highest {stat}?",
+      "Who has the highest {stat}?"
     ],
     "reveal_text": "",
     "reveal_text_variants": []
@@ -72,7 +72,7 @@
       "blur_sigma": 3
     },
     "text": {
-      "prompt_y": 70,
+      "prompt_y": 150,
       "prompt_font_size": 102,
       "reveal_y": 285,
       "reveal_font_size": 92,
