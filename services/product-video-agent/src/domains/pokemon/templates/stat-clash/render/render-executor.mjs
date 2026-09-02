@@ -209,8 +209,8 @@ export async function renderPokeQuizzVideo({
   const effectiveFontCandidates = templateFontCandidates.length > 0
     ? templateFontCandidates
     : fontCandidates;
-  await resolveFontPath(effectiveFontCandidates);
-  const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs);
+  const fontPath = await resolveFontPath(effectiveFontCandidates);
+  const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);
   await writeFile(filterScriptPath, visualFilter.script, 'utf8');
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });

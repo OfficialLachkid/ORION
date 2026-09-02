@@ -98,6 +98,7 @@ const template = {
       prompt_font_size: 102,
       reveal_y: 285,
       reveal_font_size: 92,
+      outline_width: 8,
       show_counter: false,
       counter_x: 72,
       counter_y: 144,
@@ -427,6 +428,46 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   assert.match(audioFilter, /cry0/u);
   assert.match(audioFilter, /silenceremove=start_periods=1:start_duration=0\.02:start_threshold=-50dB/u);
   assert.match(audioFilter, /amix=inputs=/u);
+});
+
+test('stat-clash visual prompt uses fontfile, thick outline, and colored stat emphasis', async () => {
+  const specialTemplate = JSON.parse(JSON.stringify(template));
+  specialTemplate.selection_rules.round_count = 1;
+  specialTemplate.selection_rules.round_count_weights = { medium: 1 };
+  specialTemplate.selection_rules.round_count_levels = { medium: { round_count: 1 } };
+  specialTemplate.selection_rules.stat_pool = ['special_attack'];
+
+  const plan = await planPokemonStatClashChallenge({
+    template: specialTemplate,
+    pokedexRows,
+    seed: 'stat-clash-prompt-style',
+    assetInventory,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template: specialTemplate,
+    outputPath: '/tmp/stat-clash.mp4',
+  });
+  const visualFilter = buildVisualFilterScript(
+    plan,
+    specialTemplate,
+    renderPlan,
+    {
+      background: 0,
+      introPokeball: 1,
+      grassPlatform: 2,
+      rounds: renderPlan.rounds.map((round, roundIndex) => ({
+        candidates: round.candidates.map((_candidate, candidateIndex) => 3 + (roundIndex * 4) + candidateIndex),
+      })),
+    },
+    '/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf',
+  );
+
+  assert.match(visualFilter.script, /fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf'/u);
+  assert.match(visualFilter.script, /drawtext=text='Who has the':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=white:fontsize=[0-9]+:borderw=8/u);
+  assert.match(visualFilter.script, /drawtext=text='highest':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=white:fontsize=[0-9]+:borderw=8/u);
+  assert.match(visualFilter.script, /drawtext=text='Special':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=0xFFD60A/u);
+  assert.match(visualFilter.script, /drawtext=text='Attack\?':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=0xFF5A5F/u);
 });
 
 test('stat-clash falls back to still sprites for suspiciously short animated candidates', async () => {

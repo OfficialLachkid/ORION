@@ -8,13 +8,167 @@ import {
 import {
   DEFAULT_TEXT_BORDER,
   escapeDrawtextText,
+  escapeFilterPath,
   ensureNumber,
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
 import {
   buildProgressiveTextArtifacts,
+  estimateWrapCharacterLimit,
 } from '../../dual-type-reveal/render/text-layout.mjs';
 import { appendFormingSpriteFilters } from '../../shared/render/forming-animation.mjs';
+
+function buildFontPart(fontPath) {
+  return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
+}
+
+function resolveTextOutlineWidth(template) {
+  return Math.max(
+    1,
+    Math.round(ensureNumber(template?.layout?.text?.outline_width, DEFAULT_TEXT_BORDER + 2)),
+  );
+}
+
+function extractPromptHeaderText(text, round) {
+  const normalized = String(text || '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  if (!normalized) {
+    return '';
+  }
+  const statLabel = String(round?.stat_label || '').trim();
+  if (!statLabel) {
+    return normalized.replace(/[?!.,:;]+\s*$/u, '').trim();
+  }
+  const escapedStatLabel = statLabel.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const stripped = normalized.replace(
+    new RegExp(`\\s*${escapedStatLabel}\\s*[?!.,:;]*\\s*$`, 'u'),
+    '',
+  ).trim();
+  return stripped || normalized.replace(/[?!.,:;]+\s*$/u, '').trim();
+}
+
+function buildStyledStatPromptLines(round, textLayout, startSeconds, endSeconds, baseY) {
+  const statKey = String(round?.stat_key || '').trim().toLowerCase();
+  const largeFontSize = Math.round(textLayout.prompt_font_size * 1.1);
+  const mediumFontSize = Math.round(textLayout.prompt_font_size * 0.96);
+  const lineGap = Math.max(10, Math.round(textLayout.prompt_font_size * 0.12));
+  const lowerLineY = Number((baseY + mediumFontSize + lineGap).toFixed(3));
+
+  switch (statKey) {
+    case 'hp':
+      return [{
+        text: 'HP?',
+        font_size: largeFontSize,
+        y: baseY,
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+        color: '0x4CD964',
+      }];
+    case 'attack':
+      return [{
+        text: 'Attack?',
+        font_size: largeFontSize,
+        y: baseY,
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+        color: '0xFF5A5F',
+      }];
+    case 'defense':
+      return [{
+        text: 'Defense?',
+        font_size: largeFontSize,
+        y: baseY,
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+        color: '0x4D96FF',
+      }];
+    case 'speed':
+      return [{
+        text: 'Speed?',
+        font_size: largeFontSize,
+        y: baseY,
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+        color: '0xAF52DE',
+      }];
+    case 'special_attack':
+      return [
+        {
+          text: 'Special',
+          font_size: mediumFontSize,
+          y: baseY,
+          start_seconds: startSeconds,
+          end_seconds: endSeconds,
+          color: '0xFFD60A',
+        },
+        {
+          text: 'Attack?',
+          font_size: largeFontSize,
+          y: lowerLineY,
+          start_seconds: startSeconds,
+          end_seconds: endSeconds,
+          color: '0xFF5A5F',
+        },
+      ];
+    case 'special_defense':
+      return [
+        {
+          text: 'Special',
+          font_size: mediumFontSize,
+          y: baseY,
+          start_seconds: startSeconds,
+          end_seconds: endSeconds,
+          color: '0xFFD60A',
+        },
+        {
+          text: 'Defense?',
+          font_size: largeFontSize,
+          y: lowerLineY,
+          start_seconds: startSeconds,
+          end_seconds: endSeconds,
+          color: '0x4D96FF',
+        },
+      ];
+    default:
+      return [{
+        text: `${String(round?.stat_label || 'Stat').trim() || 'Stat'}?`,
+        font_size: largeFontSize,
+        y: baseY,
+        start_seconds: startSeconds,
+        end_seconds: endSeconds,
+        color: '0xFFD60A',
+      }];
+  }
+}
+
+function wrapPromptTextLines(text, maxCharactersPerLine, maxLines = 2) {
+  const normalizedText = String(text || '').replace(/\s+/gu, ' ').trim();
+  if (!normalizedText) {
+    return [];
+  }
+  const normalizedMaxCharacters = Math.max(8, Math.floor(ensureNumber(maxCharactersPerLine, 24)));
+  const lines = [];
+  let currentLine = '';
+  for (const token of normalizedText.split(/\s+/u).filter(Boolean)) {
+    const nextLine = currentLine ? `${currentLine} ${token}` : token;
+    if (!currentLine || nextLine.length <= normalizedMaxCharacters) {
+      currentLine = nextLine;
+      continue;
+    }
+    lines.push(currentLine);
+    currentLine = token;
+  }
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+  if (lines.length <= maxLines) {
+    return lines;
+  }
+  const preservedLines = lines.slice(0, Math.max(0, maxLines - 1));
+  const lastLine = lines.slice(Math.max(0, maxLines - 1)).join(' ');
+  return [...preservedLines, lastLine];
+}
 
 function buildTimerBarScaleExpression(startSeconds, endSeconds, fullWidth) {
   const start = Number(ensureNumber(startSeconds, 0).toFixed(3));
@@ -101,21 +255,32 @@ function appendTimerBarPhase(filters, currentLabel, {
 function buildPromptSegments(text, template, textLayout, round) {
   const startSeconds = ensureNumber(round?.local?.prompt_start_seconds, 0.04);
   const endSeconds = ensureNumber(round?.local?.reveal_start_seconds, startSeconds + 1);
-  const artifacts = buildProgressiveTextArtifacts(text, {
-    template,
-    fontSize: textLayout.prompt_font_size,
-    maxLines: 2,
-    baseY: textLayout.prompt_y,
-    startSeconds,
-    endSeconds,
-  });
-  return artifacts.lines.map((line) => ({
-    text: line.text,
-    font_size: line.font_size,
-    y: line.y,
+  const headerText = extractPromptHeaderText(text, round);
+  const headerFontSize = Math.max(64, Math.round(textLayout.prompt_font_size * 0.82));
+  const lineHeight = headerFontSize + 12;
+  const wrappedHeaderLines = wrapPromptTextLines(
+    headerText,
+    estimateWrapCharacterLimit(template, headerFontSize),
+    2,
+  );
+  const headerLines = wrappedHeaderLines.map((line, index) => ({
+    text: line,
+    font_size: headerFontSize,
+    y: textLayout.prompt_y + (index * lineHeight),
     start_seconds: startSeconds,
     end_seconds: endSeconds,
+    color: 'white',
   }));
+  const lastHeaderLine = headerLines.at(-1);
+  const statBaseY = Number((
+    (lastHeaderLine?.y ?? textLayout.prompt_y)
+    + (lastHeaderLine?.font_size ?? headerFontSize)
+    + Math.max(10, Math.round(textLayout.prompt_font_size * 0.08))
+  ).toFixed(3));
+  return [
+    ...headerLines,
+    ...buildStyledStatPromptLines(round, textLayout, startSeconds, endSeconds, statBaseY),
+  ];
 }
 
 function buildRevealArtifacts(text, template, textLayout, round) {
@@ -159,7 +324,16 @@ function buildCounterXExpression(roundIndex, textLayout, canvasWidth) {
   };
 }
 
-function overlayCounterText(filters, currentLabel, roundIndex, round, textLayout, canvasWidth) {
+function overlayCounterText(
+  filters,
+  currentLabel,
+  roundIndex,
+  round,
+  textLayout,
+  canvasWidth,
+  fontPart,
+  textOutlineWidth,
+) {
   const { startSeconds: counterStartSeconds, xExpression } = buildCounterXExpression(
     roundIndex,
     textLayout,
@@ -174,7 +348,7 @@ function overlayCounterText(filters, currentLabel, roundIndex, round, textLayout
   );
   const counterLabel = `scene${roundIndex}counter`;
   filters.push(
-    `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.round_label)}':fontcolor=white:fontsize='${textLayout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='${xExpression}':y=${textLayout.counter_y}:alpha='${buildAnimatedTextSegmentAlphaExpression(counterStartSeconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(counterStartSeconds, round.local.scene_duration_seconds)}'[${counterLabel}]`,
+    `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.round_label)}'${fontPart}:fontcolor=white:fontsize='${textLayout.counter_font_size}*(${counterScaleExpression})':borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x='${xExpression}':y=${textLayout.counter_y}:alpha='${buildAnimatedTextSegmentAlphaExpression(counterStartSeconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(counterStartSeconds, round.local.scene_duration_seconds)}'[${counterLabel}]`,
   );
   return counterLabel;
 }
@@ -190,9 +364,11 @@ function localizeCandidateTiming(candidate, round) {
   };
 }
 
-export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
+export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = null) {
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
+  const fontPart = buildFontPart(fontPath);
+  const textOutlineWidth = resolveTextOutlineWidth(template);
   const gridLayout = renderPlan.grid_layout || { cells: [] };
   const timerLayout = renderPlan.timer_layout || {
     x: 210,
@@ -261,6 +437,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
         round,
         renderPlan.text_layout,
         width,
+        fontPart,
+        textOutlineWidth,
       );
     }
 
@@ -268,7 +446,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       .forEach((segment, segmentIndex) => {
         const promptLabel = `scene${roundIndex}prompt${segmentIndex}`;
         filters.push(
-          `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}':fontcolor=white:fontsize=${segment.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${promptLabel}]`,
+          `[${currentLabel}]drawtext=text='${escapeDrawtextText(segment.text)}'${fontPart}:fontcolor=${segment.color || 'white'}:fontsize=${segment.font_size}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(segment.y, segment.start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(segment.start_seconds, segment.end_seconds)}':enable='${formatEnableBetween(segment.start_seconds, segment.end_seconds)}'[${promptLabel}]`,
         );
         currentLabel = promptLabel;
       });
@@ -479,7 +657,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     revealArtifacts.lines.forEach((line, lineIndex) => {
       const revealLabel = `scene${roundIndex}reveal${lineIndex}`;
       filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(line.text)}':fontcolor=white:fontsize=${line.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${revealLabel}]`,
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${line.font_size}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${revealLabel}]`,
       );
       currentLabel = revealLabel;
     });
@@ -496,7 +674,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
         : renderPlan.stat_value_layout.default_color;
       const statLabel = `scene${roundIndex}stat${candidate.index}`;
       filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(candidate.stat_value)}':fontcolor=${statColor}:fontsize=${renderPlan.stat_value_layout.font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${cell.center_x}-text_w/2:y='${buildAnimatedTextYExpression(statY, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.reveal_visual_start_seconds + statRevealFadeDuration)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${statLabel}]`,
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(candidate.stat_value)}'${fontPart}:fontcolor=${statColor}:fontsize=${renderPlan.stat_value_layout.font_size}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=${cell.center_x}-text_w/2:y='${buildAnimatedTextYExpression(statY, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.reveal_visual_start_seconds + statRevealFadeDuration)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${statLabel}]`,
       );
       currentLabel = statLabel;
     }
