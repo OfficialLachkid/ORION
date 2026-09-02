@@ -136,10 +136,10 @@ const DEFAULT_TOURNAMENT_TITLE_BUILDERS = Object.freeze([
 ]);
 
 const DEFAULT_STAT_CLASH_TITLE_BUILDERS = Object.freeze([
-  () => 'Stat Clash!',
-  () => 'Who has the highest stat?',
-  () => 'Which Pokemon wins this stat clash?',
-  () => 'Highest Stat Challenge',
+  () => 'Who has the Better Stat?',
+  () => 'Highest Stat Challenge!',
+  () => 'Who has the Highest Stat?',
+  () => 'Stat Clash! 📊',
 ]);
 
 const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([

@@ -172,10 +172,10 @@ const expectedTournamentSeededTitles = new Set([
 ]);
 
 const expectedStatClashSeededTitles = new Set([
-  'Stat Clash!',
-  'Who has the highest stat?',
-  'Which Pokemon wins this stat clash?',
-  'Highest Stat Challenge',
+  'Who has the Better Stat?',
+  'Highest Stat Challenge!',
+  'Who has the Highest Stat?',
+  'Stat Clash! 📊',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -449,7 +449,7 @@ test('seeded tournament fallback metadata uses the supported generic title varia
 test('fallback publication metadata frames stat-clash as a highest-stat challenge', () => {
   const metadata = buildPokeQuizzFallbackPublicationMetadata(statClashPlan, channelProfile);
 
-  assert.equal(metadata.title, 'Stat Clash!');
+  assert.equal(metadata.title, 'Who has the Better Stat?');
   assert.equal(
     metadata.description,
     "Four Pokemon enter each Stat Clash round. Pick who has the highest Defense before time runs out.\n\nWelcome to Poke Quizz to test your Pokemon knowledge, and see if you're a true master!",

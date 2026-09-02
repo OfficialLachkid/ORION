@@ -466,8 +466,10 @@ test('stat-clash visual prompt uses fontfile, thick outline, and colored stat em
   assert.match(visualFilter.script, /fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf'/u);
   assert.match(visualFilter.script, /drawtext=text='Who has the':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=white:fontsize=[0-9]+:borderw=8/u);
   assert.match(visualFilter.script, /drawtext=text='highest':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=white:fontsize=[0-9]+:borderw=8/u);
-  assert.match(visualFilter.script, /drawtext=text='Special':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=0xFFD60A/u);
-  assert.match(visualFilter.script, /drawtext=text='Attack\?':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=0xFF5A5F/u);
+  assert.match(visualFilter.script, /drawtext=text='Sp\.':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=0xFFD60A/u);
+  assert.match(visualFilter.script, /drawtext=text='Atk\?':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=0xFF5A5F/u);
+  assert.doesNotMatch(visualFilter.script, /drawtext=text='Special'/u);
+  assert.doesNotMatch(visualFilter.script, /drawtext=text='Attack\?'/u);
 });
 
 test('stat-clash falls back to still sprites for suspiciously short animated candidates', async () => {
