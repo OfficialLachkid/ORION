@@ -78,6 +78,7 @@
       "prompt_font_size": 102,
       "reveal_y": 285,
       "reveal_font_size": 92,
+      "show_counter": false,
       "counter_x": 72,
       "counter_y": 144,
       "counter_font_size": 96,
@@ -190,7 +191,8 @@
     "candidate_forming_duration_seconds": 1,
     "intro_pokeball_hold_seconds": 0.16,
     "intro_pokeball_lead_seconds": 0.18,
-    "intro_pokeball_scale_multiplier": 1.04,
+    "intro_pokeball_scale_multiplier": 0.52,
+    "intro_pokeball_center_y_offset_px": 200,
     "stat_reveal_fade_duration_seconds": 0.22,
     "decoy_grayscale_fade_duration_seconds": 0.22
   }

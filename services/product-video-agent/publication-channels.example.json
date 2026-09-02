@@ -50,6 +50,14 @@
             {
               "id": "subscribe",
               "text": "Subscribe for more videos!"
+            },
+            {
+              "id": "subscribe-daily",
+              "text": "Subscribe for daily videos!"
+            },
+            {
+              "id": "like-subscribe-daily",
+              "text": "Don't forget to LIKE & SUBSCRIBE for more daily videos! 👍❤️"
             }
           ],
           "template_variants": {
@@ -216,6 +224,14 @@
             {
               "id": "subscribe",
               "text": "Subscribe for more videos!"
+            },
+            {
+              "id": "subscribe-daily",
+              "text": "Subscribe for daily videos!"
+            },
+            {
+              "id": "like-subscribe-daily",
+              "text": "Don't forget to LIKE & SUBSCRIBE for more daily videos! 👍❤️"
             }
           ],
           "template_variants": {
@@ -383,6 +399,14 @@
             {
               "id": "subscribe",
               "text": "Subscribe for more videos!"
+            },
+            {
+              "id": "subscribe-daily",
+              "text": "Subscribe for daily videos!"
+            },
+            {
+              "id": "like-subscribe-daily",
+              "text": "Don't forget to LIKE & SUBSCRIBE for more daily videos! 👍❤️"
             }
           ],
           "template_variants": {
@@ -550,6 +574,14 @@
             {
               "id": "subscribe",
               "text": "Subscribe for more videos!"
+            },
+            {
+              "id": "subscribe-daily",
+              "text": "Subscribe for daily videos!"
+            },
+            {
+              "id": "like-subscribe-daily",
+              "text": "Don't forget to LIKE & SUBSCRIBE for more daily videos! 👍❤️"
             }
           ],
           "template_variants": {
@@ -715,6 +747,14 @@
             {
               "id": "subscribe",
               "text": "Subscribe for more videos!"
+            },
+            {
+              "id": "subscribe-daily",
+              "text": "Subscribe for daily videos!"
+            },
+            {
+              "id": "like-subscribe-daily",
+              "text": "Don't forget to LIKE & SUBSCRIBE for more daily videos! 👍❤️"
             }
           ]
         }

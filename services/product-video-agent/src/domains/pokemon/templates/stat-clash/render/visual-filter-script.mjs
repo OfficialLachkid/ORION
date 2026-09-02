@@ -199,6 +199,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     0.1,
     ensureNumber(template?.renderer?.intro_pokeball_scale_multiplier, 1.04),
   );
+  const introPokeballCenterYOffset = ensureNumber(
+    template?.renderer?.intro_pokeball_center_y_offset_px,
+    0,
+  );
   const statRevealFadeDuration = Math.max(
     0.08,
     ensureNumber(template?.renderer?.stat_reveal_fade_duration_seconds, 0.22),
@@ -220,14 +224,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       `[${backgroundLabels[roundIndex]}]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS[${sceneBaseLabel}]`,
     );
 
-    let currentLabel = overlayCounterText(
-      filters,
-      sceneBaseLabel,
-      roundIndex,
-      round,
-      renderPlan.text_layout,
-      width,
-    );
+    let currentLabel = sceneBaseLabel;
+    if (template?.layout?.text?.show_counter !== false) {
+      currentLabel = overlayCounterText(
+        filters,
+        sceneBaseLabel,
+        roundIndex,
+        round,
+        renderPlan.text_layout,
+        width,
+      );
+    }
 
     buildPromptSegments(round.prompt_text, template, renderPlan.text_layout, round)
       .forEach((segment, segmentIndex) => {
@@ -260,7 +267,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
           `[${inputRefs.introPokeball}:v]fps=${fps},trim=duration=${pokeballDuration},setpts=PTS-STARTPTS+${Number(candidate.pokeball_start_seconds.toFixed(3))}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${pokeballLabel}]`,
         );
         filters.push(
-          `[${currentLabel}][${pokeballLabel}]overlay=x='${cell.center_x}-w/2':y='${cell.center_y}-h/2':enable='${formatEnableBetween(candidate.pokeball_start_seconds, candidate.pokeball_end_seconds)}'[${pokeballOverlayLabel}]`,
+          `[${currentLabel}][${pokeballLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + introPokeballCenterYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(candidate.pokeball_start_seconds, candidate.pokeball_end_seconds)}'[${pokeballOverlayLabel}]`,
         );
         currentLabel = pokeballOverlayLabel;
       }

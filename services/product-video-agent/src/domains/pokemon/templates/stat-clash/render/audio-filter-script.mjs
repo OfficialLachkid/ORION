@@ -7,8 +7,8 @@ import {
 } from '../../dual-type-reveal/render/constants.mjs';
 
 const DEFAULT_STAT_CLASH_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
-const DEFAULT_STAT_CLASH_INTRO_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.16).toFixed(3));
-const DEFAULT_STAT_CLASH_REVEAL_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.42).toFixed(3));
+const DEFAULT_STAT_CLASH_INTRO_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.08).toFixed(3));
+const DEFAULT_STAT_CLASH_REVEAL_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.21).toFixed(3));
 
 export function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
@@ -26,9 +26,15 @@ export function buildStatClashCryCues(plan, renderPlan) {
       if (!cryPath) {
         continue;
       }
+      const introStartSeconds = ensureNumber(candidate?.intro_start_seconds, 0);
+      const introEndSeconds = ensureNumber(candidate?.intro_end_seconds, introStartSeconds);
+      const formingCompleteSeconds = Math.max(
+        introEndSeconds,
+        introStartSeconds + introCryDelaySeconds,
+      );
       cues.push({
         path: cryPath,
-        start_seconds: ensureNumber(candidate?.intro_start_seconds, 0) + introCryDelaySeconds + 0.02,
+        start_seconds: Number((formingCompleteSeconds + 0.02).toFixed(3)),
         volume: DEFAULT_STAT_CLASH_INTRO_CRY_VOLUME,
       });
     }
@@ -38,12 +44,12 @@ export function buildStatClashCryCues(plan, renderPlan) {
     if (revealCryPath) {
       cues.push({
         path: revealCryPath,
-        start_seconds: ensureNumber(round?.reveal_visual_start_seconds, 0),
+        start_seconds: Number(ensureNumber(round?.reveal_visual_start_seconds, 0).toFixed(3)),
         volume: DEFAULT_STAT_CLASH_REVEAL_CRY_VOLUME,
       });
     }
   }
-  return cues;
+  return cues.sort((left, right) => left.start_seconds - right.start_seconds);
 }
 
 export function buildAudioFilterScript({
@@ -141,11 +147,12 @@ export function buildAudioFilterScript({
       start_seconds: ensureNumber(cue?.start_seconds, 0),
       volume: ensureNumber(cue?.volume, DEFAULT_STAT_CLASH_REVEAL_CRY_VOLUME),
     }))
-    .filter((cue) => cue.path);
+    .filter((cue) => cue.path)
+    .sort((left, right) => left.start_seconds - right.start_seconds);
   normalizedCryCues.forEach((cue, cueIndex) => {
     const delayMs = Math.max(0, Math.round(cue.start_seconds * 1000));
     const label = `cry${cueIndex}`;
-    filters.push(`[${inputIndex + cueIndex}:a]adelay=${delayMs}|${delayMs},volume=${cue.volume}[${label}]`);
+    filters.push(`[${inputIndex + cueIndex}:a]silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB,adelay=${delayMs}|${delayMs},volume=${cue.volume}[${label}]`);
     mixLabels.push(label);
   });
 
