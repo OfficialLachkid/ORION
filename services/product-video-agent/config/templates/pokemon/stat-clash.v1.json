@@ -76,6 +76,7 @@
       "prompt_font_size": 102,
       "reveal_y": 285,
       "reveal_font_size": 92,
+      "outline_width": 8,
       "show_counter": false,
       "counter_x": 72,
       "counter_y": 144,
