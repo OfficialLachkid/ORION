@@ -249,23 +249,31 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,split=${roundCount}${backgroundLabels.map((label) => `[${label}]`).join('')}`,
   );
 
+  const sharedGrassPlatformSourceLabel = 'sharedplatformsrc';
   const sharedGrassPlatformLabels = Array.from(
     { length: totalCandidateSlots },
     (_unused, index) => `sharedplatform${index}`,
   );
   if (inputRefs.grassPlatform != null && platformLayout.enabled && sharedGrassPlatformLabels.length > 0) {
     filters.push(
-      `[${inputRefs.grassPlatform}:v]split=${sharedGrassPlatformLabels.length}${sharedGrassPlatformLabels.map((label) => `[${label}]`).join('')}`,
+      `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${renderPlan.total_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1[${sharedGrassPlatformSourceLabel}]`,
+    );
+    filters.push(
+      `[${sharedGrassPlatformSourceLabel}]split=${sharedGrassPlatformLabels.length}${sharedGrassPlatformLabels.map((label) => `[${label}]`).join('')}`,
     );
   }
 
+  const sharedPokeballSourceLabel = 'sharedpokeballsrc';
   const sharedPokeballLabels = Array.from(
     { length: totalCandidateSlots },
     (_unused, index) => `sharedpokeball${index}`,
   );
   if (inputRefs.introPokeball != null && sharedPokeballLabels.length > 0) {
     filters.push(
-      `[${inputRefs.introPokeball}:v]split=${sharedPokeballLabels.length}${sharedPokeballLabels.map((label) => `[${label}]`).join('')}`,
+      `[${inputRefs.introPokeball}:v]fps=${fps},trim=duration=${renderPlan.total_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1[${sharedPokeballSourceLabel}]`,
+    );
+    filters.push(
+      `[${sharedPokeballSourceLabel}]split=${sharedPokeballLabels.length}${sharedPokeballLabels.map((label) => `[${label}]`).join('')}`,
     );
   }
 
@@ -310,16 +318,20 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
       const cell = gridLayout.cells[candidate.index];
       const sharedPlatformLabel = sharedGrassPlatformLabels[candidateSlotCursor] || null;
       const sharedPokeballLabel = sharedPokeballLabels[candidateSlotCursor] || null;
+      const platformVisibleStart = Number(ensureNumber(
+        round.local.activation_start_seconds,
+        0,
+      ).toFixed(3));
       candidateSlotCursor += 1;
       if (inputRefs.grassPlatform != null && platformLayout.enabled) {
         const platformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
         const platformSourceLabel = `scene${roundIndex}platform${candidate.index}`;
         const platformOverlayLabel = `scene${roundIndex}platformv${candidate.index}`;
         filters.push(
-          `[${sharedPlatformLabel}]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${platformWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${platformSourceLabel}]`,
+          `[${sharedPlatformLabel}]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${platformWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${platformSourceLabel}]`,
         );
         filters.push(
-          `[${currentLabel}][${platformSourceLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(0, round.local.scene_duration_seconds)}'[${platformOverlayLabel}]`,
+          `[${currentLabel}][${platformSourceLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(platformVisibleStart, round.local.scene_duration_seconds)}'[${platformOverlayLabel}]`,
         );
         currentLabel = platformOverlayLabel;
       }
@@ -333,7 +345,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
         ).toFixed(3));
         const pokeballSize = Number((baseSpriteSize * introPokeballScaleMultiplier).toFixed(3));
         filters.push(
-          `[${sharedPokeballLabel}]fps=${fps},trim=duration=${pokeballDuration},setpts=PTS-STARTPTS+${Number(candidate.pokeball_start_seconds.toFixed(3))}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${pokeballLabel}]`,
+          `[${sharedPokeballLabel}]trim=duration=${pokeballDuration},setpts=PTS-STARTPTS+${Number(candidate.pokeball_start_seconds.toFixed(3))}/TB,scale=${pokeballSize}:${pokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${pokeballLabel}]`,
         );
         filters.push(
           `[${currentLabel}][${pokeballLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + introPokeballCenterYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(candidate.pokeball_start_seconds, candidate.pokeball_end_seconds)}'[${pokeballOverlayLabel}]`,
