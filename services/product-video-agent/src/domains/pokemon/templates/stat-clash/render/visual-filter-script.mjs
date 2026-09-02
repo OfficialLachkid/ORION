@@ -203,6 +203,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     template?.renderer?.intro_pokeball_center_y_offset_px,
     0,
   );
+  const introPlatformLeadSeconds = Math.max(
+    0,
+    ensureNumber(template?.renderer?.intro_platform_lead_seconds, 0.08),
+  );
   const statRevealFadeDuration = Math.max(
     0.08,
     ensureNumber(template?.renderer?.stat_reveal_fade_duration_seconds, 0.22),
@@ -276,8 +280,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
         const platformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
         const platformSourceLabel = `scene${roundIndex}platform${candidate.index}`;
         const platformOverlayLabel = `scene${roundIndex}platformv${candidate.index}`;
+        const platformStartSeconds = Number(Math.max(
+          0,
+          candidate.pokeball_start_seconds - introPlatformLeadSeconds,
+        ).toFixed(3));
         const platformScaleExpression = buildAnimatedPopSettleExpression(
-          candidate.intro_start_seconds,
+          platformStartSeconds,
           introDuration,
           introScaleInitial,
           introScalePeak,
@@ -287,7 +295,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
           `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=w='${platformWidth}*(${platformScaleExpression})':h=-1:eval=frame,format=rgba,setsar=1[${platformSourceLabel}]`,
         );
         filters.push(
-          `[${currentLabel}][${platformSourceLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(candidate.intro_start_seconds, round.local.scene_duration_seconds)}'[${platformOverlayLabel}]`,
+          `[${currentLabel}][${platformSourceLabel}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(platformStartSeconds, round.local.scene_duration_seconds)}'[${platformOverlayLabel}]`,
         );
         currentLabel = platformOverlayLabel;
       }

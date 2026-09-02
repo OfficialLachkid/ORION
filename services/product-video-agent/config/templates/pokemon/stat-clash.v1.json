@@ -74,7 +74,7 @@
       "blur_sigma": 3
     },
     "text": {
-      "prompt_y": 170,
+      "prompt_y": 120,
       "prompt_font_size": 102,
       "reveal_y": 285,
       "reveal_font_size": 92,
@@ -120,8 +120,8 @@
     },
     "stat_values": {
       "font_size": 84,
-      "top_row_y_offset_px": -94,
-      "bottom_row_y_offset_px": 130,
+      "top_row_y_offset_px": -44,
+      "bottom_row_y_offset_px": 180,
       "default_color": "white",
       "winner_color": "0x32D74B"
     },
@@ -181,7 +181,7 @@
     "crf": 20,
     "faststart": true,
     "candidate_intro_initial_delay_seconds": 0.1,
-    "candidate_intro_stagger_seconds": 0.3,
+    "candidate_intro_stagger_seconds": 0.22,
     "candidate_intro_duration_seconds": 0.22,
     "candidate_intro_y_offset_px": 42,
     "candidate_intro_scale_initial": 0.68,
@@ -191,6 +191,7 @@
     "candidate_forming_duration_seconds": 1,
     "intro_pokeball_hold_seconds": 0.16,
     "intro_pokeball_lead_seconds": 0.18,
+    "intro_platform_lead_seconds": 0.08,
     "intro_pokeball_scale_multiplier": 0.52,
     "intro_pokeball_center_y_offset_px": 200,
     "stat_reveal_fade_duration_seconds": 0.22,
