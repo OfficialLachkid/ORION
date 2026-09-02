@@ -104,7 +104,7 @@
     },
     "sprite_platform": {
       "option_enabled": true,
-      "option_width_multiplier": 0.78,
+      "option_width_multiplier": 0.60,
       "center_y_offset_multiplier": 0.34,
       "option_center_y_offset_px": 82
     },

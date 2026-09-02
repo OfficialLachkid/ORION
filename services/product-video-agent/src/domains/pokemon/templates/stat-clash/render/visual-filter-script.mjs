@@ -239,45 +239,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     0.08,
     ensureNumber(template?.renderer?.decoy_grayscale_fade_duration_seconds, 0.22),
   );
-  const totalCandidateSlots = (Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : [])
-    .reduce((sum, round) => (
-      sum + (Array.isArray(round?.candidates) ? round.candidates.length : 0)
-    ), 0);
 
   const backgroundLabels = Array.from({ length: roundCount }, (_unused, index) => `bg${index}`);
   filters.push(
     `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,split=${roundCount}${backgroundLabels.map((label) => `[${label}]`).join('')}`,
   );
-
-  const sharedGrassPlatformSourceLabel = 'sharedplatformsrc';
-  const sharedGrassPlatformLabels = Array.from(
-    { length: totalCandidateSlots },
-    (_unused, index) => `sharedplatform${index}`,
-  );
-  if (inputRefs.grassPlatform != null && platformLayout.enabled && sharedGrassPlatformLabels.length > 0) {
-    filters.push(
-      `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${renderPlan.total_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1[${sharedGrassPlatformSourceLabel}]`,
-    );
-    filters.push(
-      `[${sharedGrassPlatformSourceLabel}]split=${sharedGrassPlatformLabels.length}${sharedGrassPlatformLabels.map((label) => `[${label}]`).join('')}`,
-    );
-  }
-
-  const sharedPokeballSourceLabel = 'sharedpokeballsrc';
-  const sharedPokeballLabels = Array.from(
-    { length: totalCandidateSlots },
-    (_unused, index) => `sharedpokeball${index}`,
-  );
-  if (inputRefs.introPokeball != null && sharedPokeballLabels.length > 0) {
-    filters.push(
-      `[${inputRefs.introPokeball}:v]fps=${fps},trim=duration=${renderPlan.total_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1[${sharedPokeballSourceLabel}]`,
-    );
-    filters.push(
-      `[${sharedPokeballSourceLabel}]split=${sharedPokeballLabels.length}${sharedPokeballLabels.map((label) => `[${label}]`).join('')}`,
-    );
-  }
-
-  let candidateSlotCursor = 0;
 
   renderPlan.rounds.forEach((round, roundIndex) => {
     const roundInputs = inputRefs.rounds[roundIndex] || { candidates: [] };
@@ -285,6 +251,26 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     filters.push(
       `[${backgroundLabels[roundIndex]}]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS[${sceneBaseLabel}]`,
     );
+
+    const roundSharedPlatformLabels = Array.from(
+      { length: round.candidates.length },
+      (_unused, index) => `scene${roundIndex}sharedplatform${index}`,
+    );
+    if (inputRefs.grassPlatform != null && platformLayout.enabled && roundSharedPlatformLabels.length > 0) {
+      filters.push(
+        `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1,split=${roundSharedPlatformLabels.length}${roundSharedPlatformLabels.map((label) => `[${label}]`).join('')}`,
+      );
+    }
+
+    const roundSharedPokeballLabels = Array.from(
+      { length: round.candidates.length },
+      (_unused, index) => `scene${roundIndex}sharedpokeball${index}`,
+    );
+    if (inputRefs.introPokeball != null && roundSharedPokeballLabels.length > 0) {
+      filters.push(
+        `[${inputRefs.introPokeball}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1,split=${roundSharedPokeballLabels.length}${roundSharedPokeballLabels.map((label) => `[${label}]`).join('')}`,
+      );
+    }
 
     let currentLabel = sceneBaseLabel;
     if (template?.layout?.text?.show_counter !== false) {
@@ -313,16 +299,15 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs) {
     ).toFixed(3));
     const decoyGrayCandidates = [];
 
-    for (const candidateValue of round.candidates) {
+    for (const [candidateLoopIndex, candidateValue] of round.candidates.entries()) {
       const candidate = localizeCandidateTiming(candidateValue, round);
       const cell = gridLayout.cells[candidate.index];
-      const sharedPlatformLabel = sharedGrassPlatformLabels[candidateSlotCursor] || null;
-      const sharedPokeballLabel = sharedPokeballLabels[candidateSlotCursor] || null;
+      const sharedPlatformLabel = roundSharedPlatformLabels[candidateLoopIndex] || null;
+      const sharedPokeballLabel = roundSharedPokeballLabels[candidateLoopIndex] || null;
       const platformVisibleStart = Number(ensureNumber(
         round.local.activation_start_seconds,
         0,
       ).toFixed(3));
-      candidateSlotCursor += 1;
       if (inputRefs.grassPlatform != null && platformLayout.enabled) {
         const platformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
         const platformSourceLabel = `scene${roundIndex}platform${candidate.index}`;

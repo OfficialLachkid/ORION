@@ -322,6 +322,32 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const gridLayout = buildGridLayout(template, plan?.rounds?.[0]?.candidates?.length || 4);
   const timerLayout = buildTimerBarLayout(template, gridLayout);
   const statValueLayout = buildStatValueLayout(template);
+  const rendererSettings = {
+    candidate_intro_initial_delay_seconds: roundTime(Math.max(
+      0,
+      ensureNumber(template?.renderer?.candidate_intro_initial_delay_seconds, 0.1),
+    )),
+    candidate_intro_stagger_seconds: roundTime(Math.max(
+      0.02,
+      ensureNumber(template?.renderer?.candidate_intro_stagger_seconds, 0.16),
+    )),
+    candidate_intro_duration_seconds: roundTime(Math.max(
+      0.12,
+      ensureNumber(template?.renderer?.candidate_intro_duration_seconds, 0.22),
+    )),
+    candidate_forming_duration_seconds: roundTime(Math.max(
+      0.08,
+      ensureNumber(template?.renderer?.candidate_forming_duration_seconds, 1),
+    )),
+    intro_pokeball_hold_seconds: roundTime(Math.max(
+      0.08,
+      ensureNumber(template?.renderer?.intro_pokeball_hold_seconds, 0.16),
+    )),
+    intro_pokeball_lead_seconds: roundTime(Math.max(
+      0,
+      ensureNumber(template?.renderer?.intro_pokeball_lead_seconds, 0.18),
+    )),
+  };
   const renderedRounds = buildRenderedRounds({
     rounds,
     template,
@@ -338,12 +364,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     text_layout: textLayout,
     stat_value_layout: statValueLayout,
     grid_layout: gridLayout,
-    renderer: {
-      candidate_forming_duration_seconds: roundTime(Math.max(
-        0.08,
-        ensureNumber(template?.renderer?.candidate_forming_duration_seconds, 1),
-      )),
-    },
+    renderer: rendererSettings,
     audio_cues: {
       battle_music_start_seconds: roundTime(Math.max(
         0,
@@ -360,6 +381,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
 }
 
 export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDurations = []) {
+  const rendererSettings = renderPlan?.renderer || {};
   const adjustedRounds = (Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : []).map((round, index) => {
     const narrationDuration = ensureNumber(narrationDurations[index], 0);
     const expandedLead = roundTime(Math.max(
@@ -386,20 +408,30 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
         visual_delay_seconds: renderPlan.rounds?.[0]?.local?.reveal_visual_start_seconds - renderPlan.rounds?.[0]?.local?.reveal_start_seconds,
       },
       renderer: {
-        candidate_intro_initial_delay_seconds: renderPlan.rounds?.[0]?.candidates?.[0]?.pokeball_start_seconds - renderPlan.rounds?.[0]?.scene_start_seconds,
-        candidate_intro_stagger_seconds: renderPlan.rounds?.[0]?.candidates?.[1]
-          ? renderPlan.rounds[0].candidates[1].pokeball_start_seconds - renderPlan.rounds[0].candidates[0].pokeball_start_seconds
-          : 0.16,
-        candidate_intro_duration_seconds: renderPlan.rounds?.[0]?.candidates?.[0]
-          ? renderPlan.rounds[0].candidates[0].intro_end_seconds - renderPlan.rounds[0].candidates[0].intro_start_seconds
-          : 0.22,
-        candidate_forming_duration_seconds: renderPlan?.renderer?.candidate_forming_duration_seconds ?? 1,
-        intro_pokeball_hold_seconds: renderPlan.rounds?.[0]?.candidates?.[0]
-          ? renderPlan.rounds[0].candidates[0].pokeball_end_seconds - renderPlan.rounds[0].candidates[0].intro_start_seconds
-          : 0.16,
-        intro_pokeball_lead_seconds: renderPlan.rounds?.[0]?.candidates?.[0]
-          ? renderPlan.rounds[0].candidates[0].intro_start_seconds - renderPlan.rounds[0].candidates[0].pokeball_start_seconds
-          : 0.18,
+        candidate_intro_initial_delay_seconds: ensureNumber(
+          rendererSettings.candidate_intro_initial_delay_seconds,
+          0.1,
+        ),
+        candidate_intro_stagger_seconds: ensureNumber(
+          rendererSettings.candidate_intro_stagger_seconds,
+          0.16,
+        ),
+        candidate_intro_duration_seconds: ensureNumber(
+          rendererSettings.candidate_intro_duration_seconds,
+          0.22,
+        ),
+        candidate_forming_duration_seconds: ensureNumber(
+          rendererSettings.candidate_forming_duration_seconds,
+          1,
+        ),
+        intro_pokeball_hold_seconds: ensureNumber(
+          rendererSettings.intro_pokeball_hold_seconds,
+          0.16,
+        ),
+        intro_pokeball_lead_seconds: ensureNumber(
+          rendererSettings.intro_pokeball_lead_seconds,
+          0.18,
+        ),
       },
     },
   });

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildPokeQuizzRenderPlan } from '../src/poke-quizz-renderer.mjs';
 import { planPokemonStatClashChallenge } from '../src/domains/pokemon/templates/stat-clash/planner.mjs';
+import { applyNarrationDurationsToRenderPlan } from '../src/domains/pokemon/templates/stat-clash/render/render-plan.mjs';
 import {
   buildAudioFilterScript,
   buildStatClashCryCues,
@@ -317,6 +318,43 @@ test('stat-clash render plan and inputs stay deterministic', async () => {
   assert.equal(visualInputs[2].role, 'grass-platform');
   assert.ok(visualInputs[3].path.endsWith('.gif'));
   assert.equal(visualInputs.length, 15);
+});
+
+test('stat-clash narration timing preserves randomized reveal order across rounds', async () => {
+  const plan = await planPokemonStatClashChallenge({
+    template,
+    pokedexRows,
+    seed: 'stat-clash-reveal-order',
+    assetInventory,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/stat-clash.mp4',
+  });
+  const adjustedRenderPlan = applyNarrationDurationsToRenderPlan(renderPlan, [2.4, 2.7, 2.5]);
+
+  adjustedRenderPlan.rounds.forEach((round, roundIndex) => {
+    const expectedRevealOrder = plan.rounds[roundIndex].candidate_reveal_order;
+    const actualRevealOrder = [...round.candidates]
+      .sort((left, right) => left.pokeball_start_seconds - right.pokeball_start_seconds)
+      .map((candidate) => candidate.index);
+
+    assert.deepEqual(actualRevealOrder, expectedRevealOrder);
+  });
+
+  const firstRoundOrder = plan.rounds[0].candidate_reveal_order;
+  const [firstCandidateIndex, secondCandidateIndex] = firstRoundOrder;
+  const firstRoundCandidates = new Map(
+    adjustedRenderPlan.rounds[0].candidates.map((candidate) => [candidate.index, candidate]),
+  );
+  assert.equal(
+    Number((
+      firstRoundCandidates.get(secondCandidateIndex).pokeball_start_seconds
+      - firstRoundCandidates.get(firstCandidateIndex).pokeball_start_seconds
+    ).toFixed(3)),
+    template.renderer.candidate_intro_stagger_seconds,
+  );
 });
 
 test('stat-clash audio and visual filters include pokeball reveals, timer bar, and stat values', async () => {
