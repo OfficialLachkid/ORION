@@ -218,7 +218,8 @@ config/gmail/.env
 /data/runtime/
 
 # Scheduled leadgen rotation state
-/data/leadgen/
+/data/leadgen/rotation-state.json
+/data/leadgen/last-run.json
 
 # Local Product Video Agent runtime
 /.venv-product-video/

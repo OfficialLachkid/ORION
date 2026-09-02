@@ -43,13 +43,15 @@ test('LOCATION_ROTATION entries have no leading, trailing, or double whitespace'
   assert.deepEqual(offenders, [], `Whitespace-dirty entries: ${JSON.stringify(offenders)}`);
 });
 
-test('LOCATION_ROTATION has expanded to at least 400 entries (Tier 1 expansion 2026-08-10)', () => {
-  // Regression guard against an accidental revert of the Tier 1 expansion.
-  // If someone shortens the list again, the rotation would collapse back
-  // toward the 22-day saturation cycle.
+test('LOCATION_ROTATION has expanded to at least 800 entries (Tier 4 CBS BAG 2026-09-02)', () => {
+  // Regression guard against an accidental revert of either the Tier 1
+  // (2026-08-10, 22→568) or Tier 4 (2026-09-02, 568→841) expansions.
+  // If the list shrinks below 800, at 6 sweeps/day the rotation would
+  // start hitting each town more than once every 4 months, closer to
+  // the earlier saturation curve.
   assert.ok(
-    LOCATION_ROTATION.length >= 400,
-    `Expected at least 400 locations after Tier 1 expansion; got ${LOCATION_ROTATION.length}`,
+    LOCATION_ROTATION.length >= 800,
+    `Expected at least 800 locations after Tier 4 expansion; got ${LOCATION_ROTATION.length}`,
   );
 });
 
@@ -87,14 +89,32 @@ test('LOCATION_ROTATION originals are not accidentally duplicated in the expansi
   );
 });
 
-test('scheduled leadgen defaults to two sweep rounds per daily run', () => {
-  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 2);
-  assert.equal(resolveScheduledSweepRounds(undefined), 2);
-  assert.equal(resolveScheduledSweepRounds(''), 2);
-  assert.equal(resolveScheduledSweepRounds(0), 2);
+test('scheduled leadgen defaults to six sweep rounds per daily run (post-Tier-4 CBS-BAG expansion, 2026-09-02)', () => {
+  // Bumped from 2 to 6 alongside the CBS BAG pool expansion (568→841
+  // active locations) so the qualifier's 30-lead nightly ceiling gets
+  // saturated instead of running at ~33% utilization. Rotation window
+  // stays healthy at ~140 days per niche.
+  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 6);
+  assert.equal(resolveScheduledSweepRounds(undefined), 6);
+  assert.equal(resolveScheduledSweepRounds(''), 6);
+  assert.equal(resolveScheduledSweepRounds(0), 6);
 });
 
 test('scheduled leadgen rounds are clamped to a sane ceiling', () => {
   assert.equal(resolveScheduledSweepRounds(3), 3);
   assert.equal(resolveScheduledSweepRounds(999), 10);
+});
+
+test('CURRENT_POOL_EXPANSION_VERSION reflects the latest LOCATION_ROTATION expansion', async () => {
+  // Regression guard: every LOCATION_ROTATION expansion needs a matching
+  // bump of CURRENT_POOL_EXPANSION_VERSION so the state-file migration
+  // detects "pool grew since I last ran" and jumps each niche's cursor
+  // to the first new location. Skip the bump and the operator waits
+  // months for the rotation to naturally reach the new territory —
+  // defeats the point of expanding.
+  const mod = await import('../run-scheduled-leadgen.mjs');
+  assert.ok(
+    Number.isInteger(mod.CURRENT_POOL_EXPANSION_VERSION) && mod.CURRENT_POOL_EXPANSION_VERSION >= 3,
+    `Expected CURRENT_POOL_EXPANSION_VERSION ≥ 3 after Tier 4; got ${mod.CURRENT_POOL_EXPANSION_VERSION}`,
+  );
 });

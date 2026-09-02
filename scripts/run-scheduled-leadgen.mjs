@@ -22,7 +22,12 @@ const ROTATION_STATE_PATH = resolve(projectRoot, 'data', 'leadgen', 'rotation-st
 // DuckDuckGo returns ~30-40 results per query in practice, so 50 is
 // effectively "everything the search engine will give us".
 export const MAX_RESULTS_PER_NICHE = 50;
-export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 2;
+// Match the installer's DEFAULT_TIMES so callers that skip --times get
+// the same 6 rounds the scheduled launchd job requests. Bumped 2026-09-02
+// as part of the CBS-BAG expansion — see install-leadgen-schedule.mjs for
+// the rationale (qualifier under-fed at 2×/day, expanded pool absorbs
+// the higher rate without saturating).
+export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 6;
 const MAX_SCHEDULED_SWEEP_ROUNDS = 10;
 
 // Dutch search terms — this targets the Dutch market, so the query itself is
@@ -195,30 +200,349 @@ export const LOCATION_ROTATION = [
   'Erica', 'Nieuw-Amsterdam', 'Schoonebeek', 'Beilen', 'Westerbork',
   'Dwingeloo', 'Diever', 'Havelte', 'Ruinen', 'Zuidwolde', 'De Wijk',
   'Norg', 'Vries', 'Peize',
+  // === Positions 568+: CBS BAG expansion (issue #3 Tier 4, 2026-09-02) ===
+  // 273 net-new woonplaatsen not in the operator's curated 568 above.
+  // Derived from data/leadgen/nl-woonplaatsen.json (PDOK BAG, filtered
+  // for is_active=true: municipality capitals + small-gemeente
+  // members + curated set). Alphabetized within this section. Same-name
+  // rows across provinces are disambiguated with "(Provincie)". See
+  // scripts/leadgen/fetch-nl-woonplaatsen.mjs for the fetch/filter policy
+  // and [[05_Playbooks/Leadgen_Location_Expansion]] Tier 4 for context.
+  "'s Gravenmoer",
+  "'t Goy",
+  "'t Harde",
+  'Aadorp',
+  'Aarle-Rixtel',
+  'Aartswoud',
+  'Achterveld',
+  'Achtmaal',
+  'Aerdenhout',
+  'Afferden',
+  'Afferden L',
+  'Amsterdam-Duivendrecht',
+  'Austerlitz',
+  'Baarle-Nassau',
+  'Ballum',
+  'Baneheide',
+  'Bavel',
+  'Benschop',
+  'Bentveld',
+  'Berg en Dal',
+  'Berg en Terblijt',
+  'Bergen (NH)',
+  'Bergen L',
+  'Berkel-Enschot',
+  'Berlicum',
+  'Beuningen Gld',
+  'Biest-Houtakker',
+  'Biezenmortel',
+  'Bocholtz',
+  'Borgercompagnie',
+  'Bornerbroek',
+  'Bosch en Duin',
+  'Bosschenhoofd',
+  'Bredevoort',
+  'Broekhuizen',
+  'Brummen',
+  'Castelre',
+  'Casteren',
+  'Cortelande',
+  'Cromvoirt',
+  'Daarle',
+  'Daarlerveen',
+  'Dalem',
+  'De Heen',
+  'De Heurne',
+  'De Kwakel',
+  'De Meern',
+  'De Moer',
+  'De Schiphorst',
+  'De Weere',
+  'De Zilk',
+  'Deest',
+  'Delfgauw',
+  'Den Dolder',
+  'Den Dungen',
+  'Den Hoorn',
+  'Den Hout',
+  'Den Ilp',
+  'Deurningen',
+  'Diessen',
+  'Dinteloord',
+  'Doesburg',
+  'Doornspijk',
+  'Dorst',
+  'Driebruggen',
+  'Duivendrecht',
+  'Eemdijk',
+  'Eemnes',
+  'Elspeet',
+  'Elst Ut',
+  'Emst',
+  'Erp',
+  'Esbeek',
+  'Esch',
+  'Ewijk',
+  'Eygelshoven',
+  'Gaanderen',
+  'Gelderswoude',
+  'Gemonde',
+  'Geulle',
+  'Glane',
+  'Groessen',
+  'Haaren',
+  'Haarle',
+  'Haarzuilens',
+  'Haghorst',
+  'Heerjansdam',
+  'Heeze',
+  'Heijen',
+  'Hekendorp',
+  'Helenaveen',
+  'Helvoirt',
+  'Herten',
+  'Hertme',
+  'Heukelom',
+  'Heumen',
+  'Hierden',
+  'Hoensbroek',
+  'Hoevelaken',
+  'Hoge Hexel',
+  'Hooge Mierde',
+  'Hoogeloon',
+  'Hoogland',
+  'Hooglanderveen',
+  'Hoogwoud',
+  'Horssen',
+  'Huijbergen',
+  'Huis ter Heide',
+  'Huisduinen',
+  'Hulsel',
+  'Hulshorst',
+  'Hulten',
+  'IJhorst',
+  'Jaarsveld',
+  'Jisp',
+  'Kamerik',
+  'Kapel Avezaath',
+  'Kerk Avezaath',
+  'Klein Zundert',
+  'Klimmen',
+  'Kruisland',
+  'Kudelstaart',
+  'Lage Mierde',
+  'Lage Vuursche',
+  'Leende',
+  'Lemelerveld',
+  'Lemiers',
+  'Lent',
+  'Lepelstraat',
+  'Leveroy',
+  'Liempde',
+  'Lierop',
+  'Liessel',
+  'Loo Gld',
+  'Lopikerkapel',
+  'Lutjebroek',
+  'Luyksgestel',
+  'Maasland',
+  'Maastricht-Airport',
+  'Mariahout',
+  'Marle',
+  'Mastenbroek',
+  'Middelaar',
+  'Middenbeemster',
+  'Midlum',
+  'Milsbeek',
+  'Moerdijk',
+  'Moerkapelle',
+  'Molenhoek',
+  'Molenschot',
+  'Mook',
+  'Moordrecht',
+  'Moorveld',
+  'Muiderberg',
+  'Nederasselt',
+  'Nederweert-Eind',
+  'Neerkant',
+  'Netersel',
+  'Nieuw- en Sint Joosland',
+  'Nieuw-Vossemeer',
+  'Nieuwerbrug aan den Rijn',
+  'Nijeveen',
+  'Nijkerkerveen',
+  'Noordbeemster',
+  'Notter',
+  'Nuland',
+  'Oene',
+  'Oldebroek',
+  'Olst',
+  'Ommel',
+  'Oost West en Middelbeers',
+  'Oost-Souburg',
+  'Oosteind',
+  'Oostknollendam',
+  'Ospel',
+  'Ossendrecht',
+  'Ottersum',
+  'Oud Gastel',
+  'Overasselt',
+  'Overdinkel',
+  'Papekop',
+  'Plasmolen',
+  'Polsbroek',
+  'Poortugaal',
+  'Prinsenbeek',
+  'Puiflijk',
+  'Punthorst',
+  'Purmerland',
+  'Putte',
+  'Raamsdonk',
+  'Ransdaal',
+  'Rhoon',
+  'Riel',
+  'Riethoven',
+  'Rijsbergen',
+  'Ritthem',
+  'Rogat',
+  'Rotterdam-Albrandswaard',
+  'Rouveen',
+  'Rozendaal',
+  'Schalkwijk',
+  'Scherpenzeel',
+  'Schiermonnikoog',
+  'Schijf',
+  'Schin op Geul',
+  'Schipluiden',
+  'Schore',
+  'Siebengewald',
+  'Snelrewaard',
+  'Spaarndam gem. Haarlem',
+  'Spaubeek',
+  'Spijkerboor',
+  'Sprang-Capelle',
+  'St. Willebrord',
+  'Stampersgat',
+  'Sterksel',
+  'Stoutenburg',
+  'Stoutenburg Noord',
+  'Stramproy',
+  'Teteringen',
+  "Tull en 't Waal",
+  'Tynaarlo',
+  'Udenhout',
+  'Ulestraten',
+  'Ulicoten',
+  'Ulvenhout',
+  'Urmond',
+  'Veessen',
+  'Ven-Zelderheide',
+  'Venhorst',
+  'Vierhouten',
+  'Vijlen',
+  'Vinkel',
+  'Vleuten',
+  'Vlieland',
+  'Vlierden',
+  'Voerendaal',
+  'Vogelenzang',
+  'Voorst',
+  'Vorchten',
+  'Waarder',
+  'Wadenoijen',
+  'Walem',
+  'Wapenveld',
+  'Warnsveld',
+  'Waspik',
+  'Wehl',
+  'Well L',
+  'Wellerlooi',
+  'Welsum',
+  'Werkhoven',
+  'Wernhout',
+  'Wesepe',
+  'Westbeemster',
+  'Westerhoven',
+  'Weurt',
+  'Wijdewormer',
+  'Wijhe',
+  'Wijk aan Zee',
+  'Wijnaldum',
+  'Wildervank',
+  'Winssen',
+  'Wormer',
+  'Zegge',
+  'Zegveld',
+  'Zenderen',
+  'Zennewijnen',
+  'Zevenhuizen',
+  'Zoeterwoude',
+  'Zuidoostbeemster',
+  'Zuna',
+  'de Lutte',
+  'de Woude',
 ];
+
+// Marker of the LOCATION_ROTATION pool version currently baked into the
+// code. Bump this whenever LOCATION_ROTATION is expanded so migrations
+// can detect "the pool got bigger since I last ran" and jump each
+// niche's cursor to the first new location — otherwise the newly-added
+// locations wouldn't be hit for months (would have to wait for the
+// cursor to naturally cycle through everything ahead of them).
+//   1 = original 22 major cities
+//   2 = Tier 1 expansion to 568 (PR #40, 2026-08-10)
+//   3 = CBS BAG expansion to 841 (Tier 4, 2026-09-02, this file)
+export const CURRENT_POOL_EXPANSION_VERSION = 3;
+// Cumulative pool sizes at each version — used by the migration to
+// figure out where the "new territory" starts for each expansion.
+// Index into POOL_BOUNDARIES equals the pool version.
+const POOL_BOUNDARIES = { 1: 22, 2: 568, 3: 841 };
 
 function loadRotationState() {
   if (!existsSync(ROTATION_STATE_PATH)) {
-    return { cityIndexByNiche: {} };
+    return { cityIndexByNiche: {}, poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION };
   }
 
   try {
     const state = JSON.parse(readFileSync(ROTATION_STATE_PATH, 'utf8'));
-    if (state.cityIndexByNiche) {
-      return state;
-    }
     // Migrate from the old single-shared-counter shape: every niche was in
     // lockstep through the same city, so seed each niche at that same
     // index — only future runs can diverge.
-    if (Number.isInteger(state.dayCount)) {
-      const cityIndexByNiche = Object.fromEntries(
-        NICHE_ROTATION.map((niche) => [niche.key, state.dayCount]),
+    let baseState = state.cityIndexByNiche
+      ? state
+      : Number.isInteger(state.dayCount)
+        ? {
+          cityIndexByNiche: Object.fromEntries(
+            NICHE_ROTATION.map((niche) => [niche.key, state.dayCount]),
+          ),
+        }
+        : { cityIndexByNiche: {} };
+
+    // Pool-expansion migration: if this state predates the current
+    // expansion, jump each niche's cursor to just BEFORE the first
+    // new location so the next peek returns index (previousPoolSize).
+    // Otherwise the operator would wait months for the cursor to cycle
+    // through hundreds of old locations before ever seeing anything
+    // added in this expansion.
+    const previousVersion = Number(baseState.poolExpansionVersion) || 1;
+    if (previousVersion < CURRENT_POOL_EXPANSION_VERSION) {
+      const jumpToIndex = POOL_BOUNDARIES[previousVersion] - 1;
+      const migratedCityIndexByNiche = Object.fromEntries(
+        NICHE_ROTATION.map((niche) => [niche.key, jumpToIndex]),
       );
-      return { cityIndexByNiche };
+      baseState = {
+        ...baseState,
+        cityIndexByNiche: migratedCityIndexByNiche,
+        poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
+        migratedFromVersion: previousVersion,
+        migratedAt: new Date().toISOString(),
+      };
+    } else {
+      baseState = { ...baseState, poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION };
     }
-    return { cityIndexByNiche: {} };
+    return baseState;
   } catch {
-    return { cityIndexByNiche: {} };
+    return { cityIndexByNiche: {}, poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION };
   }
 }
 
@@ -250,7 +574,9 @@ function peekNicheCity(state, nicheKey) {
 
 function commitNicheAdvance(state, nicheKey, cityIndex) {
   const nextState = {
+    ...state,
     cityIndexByNiche: { ...(state.cityIndexByNiche || {}), [nicheKey]: cityIndex },
+    poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
     updatedAt: new Date().toISOString(),
   };
   saveRotationState(nextState);
