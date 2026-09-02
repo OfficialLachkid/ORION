@@ -574,6 +574,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       }
     }
 
+    const timerOuterBorderThickness = 4;
+    const timerInnerBorderInset = 2;
     const timerRailLabel = `scene${roundIndex}tb0`;
     const timerBarScaleExpression = buildTimerBarScaleExpression(
       round.local.countdown_start_seconds,
@@ -589,7 +591,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       + ((round.local.reveal_start_seconds - round.local.countdown_start_seconds) * 0.8)
     ).toFixed(3));
     filters.push(
-      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=black@0.28:t=fill:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerRailLabel}]`,
+      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=black@0.38:t=fill:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerRailLabel}]`,
     );
     currentLabel = timerRailLabel;
 
@@ -630,9 +632,21 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       accentColor: '0xFFB2AC',
     });
 
+    const timerBorderOuterLabel = `scene${roundIndex}tb4o`;
+    filters.push(
+      `[${currentLabel}]drawbox=x=${timerLayout.x - timerOuterBorderThickness}:y=${timerLayout.y - timerOuterBorderThickness}:w=${timerLayout.width + (timerOuterBorderThickness * 2)}:h=${timerLayout.height + (timerOuterBorderThickness * 2)}:color=black@0.74:t=${timerOuterBorderThickness}:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerBorderOuterLabel}]`,
+    );
+    currentLabel = timerBorderOuterLabel;
+
+    const timerBorderInnerLabel = `scene${roundIndex}tb4i`;
+    filters.push(
+      `[${currentLabel}]drawbox=x=${timerLayout.x + timerInnerBorderInset}:y=${timerLayout.y + timerInnerBorderInset}:w=${timerLayout.width - (timerInnerBorderInset * 2)}:h=${timerLayout.height - (timerInnerBorderInset * 2)}:color=white@0.18:t=2:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerBorderInnerLabel}]`,
+    );
+    currentLabel = timerBorderInnerLabel;
+
     const timerBorderLabel = `scene${roundIndex}tb4`;
     filters.push(
-      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=white@0.16:t=2:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerBorderLabel}]`,
+      `[${currentLabel}]drawbox=x=${timerLayout.x}:y=${timerLayout.y}:w=${timerLayout.width}:h=${timerLayout.height}:color=white@0.38:t=3:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[${timerBorderLabel}]`,
     );
     currentLabel = timerBorderLabel;
 
