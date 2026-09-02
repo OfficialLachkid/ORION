@@ -173,6 +173,30 @@ function pickSeededQuestionText(primaryText, variants, random) {
   return options[Math.floor(random() * options.length)] || options[0];
 }
 
+function pickPreferredPromptTemplate(primaryText, variants, preferredMatcher) {
+  const options = normalizeQuestionTextOptions(primaryText, variants);
+  if (options.length === 0) {
+    return '';
+  }
+  const preferred = options.find((option) => preferredMatcher.test(option));
+  return preferred || options[0];
+}
+
+function selectRoundPromptTemplate(primaryText, variants, roundIndex) {
+  if (roundIndex === 0) {
+    return pickPreferredPromptTemplate(
+      primaryText,
+      variants,
+      /^which\s+pokemon\s+has\s+the\s+highest\b/iu,
+    );
+  }
+  return pickPreferredPromptTemplate(
+    primaryText,
+    variants,
+    /^who\s+has\s+the\s+highest\b/iu,
+  );
+}
+
 function normalizeSlug(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -528,11 +552,6 @@ export async function planPokemonStatClashChallenge({
   );
   const selectedTimerEndSoundPath = selectTemplateScopedSound(template, inventory, 'timer_end', 'timer_end');
   const selectedIntroRevealSoundPath = selectTemplateScopedSound(template, inventory, 'intro_slot_reveal', 'pokeball_intro');
-  const promptTemplate = pickSeededQuestionText(
-    template?.question_contract?.prompt_text,
-    template?.question_contract?.prompt_text_variants,
-    random,
-  );
   const revealTemplate = pickSeededQuestionText(
     template?.question_contract?.reveal_text,
     template?.question_contract?.reveal_text_variants,
@@ -603,6 +622,11 @@ export async function planPokemonStatClashChallenge({
 
     const statLabel = STAT_LABELS[statKey] || titleCase(statKey.replaceAll('_', ' '));
     const spokenStatLabel = resolveSpokenStatLabel(statKey);
+    const promptTemplate = selectRoundPromptTemplate(
+      template?.question_contract?.prompt_text,
+      template?.question_contract?.prompt_text_variants,
+      roundIndex,
+    );
     const promptText = formatPrompt(promptTemplate, statLabel);
     const spokenPromptText = formatPrompt(promptTemplate, spokenStatLabel);
     const sortedByStat = [...resolvedSubjects]

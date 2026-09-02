@@ -84,8 +84,11 @@ const template = {
     max_stat_spread: 45,
   },
   question_contract: {
-    prompt_text: 'Who has the highest {stat}?',
-    prompt_text_variants: ['Who has the highest {stat}?'],
+    prompt_text: 'Which Pokemon has the highest {stat}?',
+    prompt_text_variants: [
+      'Which Pokemon has the highest {stat}?',
+      'Who has the highest {stat}?',
+    ],
     reveal_text: '{winner_name} has the highest {stat}!',
     reveal_text_variants: ['{winner_name} has the highest {stat}!'],
   },
@@ -94,7 +97,7 @@ const template = {
       blur_sigma: 3,
     },
     text: {
-      prompt_y: 170,
+      prompt_y: 250,
       prompt_font_size: 102,
       reveal_y: 285,
       reveal_font_size: 92,
@@ -237,6 +240,12 @@ test('stat-clash planner builds a four-candidate highest-stat round set', async 
     assert.ok(Number.isFinite(round.selection_score.penalty));
     assert.ok(round.candidates.every((candidate) => candidate.subject.render_sprite_path.endsWith('.gif')));
   }
+  assert.match(plan.rounds[0].prompt_text, /^Which Pokemon has the highest /u);
+  assert.match(plan.rounds[0].spoken_prompt_text, /^Which Pokemon has the highest /u);
+  if (plan.rounds.length > 1) {
+    assert.match(plan.rounds[1].prompt_text, /^Who has the highest /u);
+    assert.match(plan.rounds[1].spoken_prompt_text, /^Who has the highest /u);
+  }
 });
 
 test('stat-clash narration expands abbreviated stat labels for speech', async () => {
@@ -254,9 +263,9 @@ test('stat-clash narration expands abbreviated stat labels for speech', async ()
   });
 
   assert.match(plan.rounds[0].prompt_text, /Sp\. Def/u);
-  assert.equal(plan.rounds[0].spoken_prompt_text, 'Who has the highest Special Defense?');
-  assert.equal(plan.narration.lines[0].text, 'Who has the highest Special Defense?');
-  assert.equal(plan.timeline[0].spoken_text, 'Who has the highest Special Defense?');
+  assert.equal(plan.rounds[0].spoken_prompt_text, 'Which Pokemon has the highest Special Defense?');
+  assert.equal(plan.narration.lines[0].text, 'Which Pokemon has the highest Special Defense?');
+  assert.equal(plan.timeline[0].spoken_text, 'Which Pokemon has the highest Special Defense?');
 });
 
 test('stat-clash planner can build a five-round hard variant', async () => {
@@ -464,8 +473,8 @@ test('stat-clash visual prompt uses fontfile, thick outline, and colored stat em
   );
 
   assert.match(visualFilter.script, /fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf'/u);
-  assert.match(visualFilter.script, /drawtext=text='Who has the':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=white:fontsize=[0-9]+:borderw=8/u);
-  assert.match(visualFilter.script, /drawtext=text='highest':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=white:fontsize=[0-9]+:borderw=8/u);
+  assert.match(visualFilter.script, /drawtext=text='Which Pokemon has':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=white:fontsize=[0-9]+:borderw=8/u);
+  assert.match(visualFilter.script, /drawtext=text='the highest':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=white:fontsize=[0-9]+:borderw=8/u);
   assert.match(visualFilter.script, /drawtext=text='Sp\.':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=0xFFD60A/u);
   assert.match(visualFilter.script, /drawtext=text='Atk\?':fontfile='\/System\/Library\/Fonts\/Supplemental\/Arial Rounded Bold\.ttf':fontcolor=0xFF5A5F/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='Special'/u);
