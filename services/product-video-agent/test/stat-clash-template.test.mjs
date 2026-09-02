@@ -420,9 +420,11 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   assert.doesNotMatch(visualFilter.script, /drawtext=text='Who':/u);
   assert.doesNotMatch(visualFilter.script, /scene1counter/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft:duration=0\.42:offset=/u);
-  assert.match(visualFilter.script, /color=c=0x32D74B@0\.98/u);
-  assert.match(visualFilter.script, /color=c=0xFFD60A@0\.98/u);
-  assert.match(visualFilter.script, /color=c=0xFF453A@0\.98/u);
+  assert.match(visualFilter.script, /\[scene0tb0o\]/u);
+  assert.match(visualFilter.script, /geq=r='r\(X,Y\)':g='g\(X,Y\)':b='b\(X,Y\)':a='if\(between\(X,[0-9.]+,[0-9.]+\),[0-9]+,/u);
+  assert.match(visualFilter.script, /color=c=0x32D74B:s=[0-9]+x[0-9]+:r=30:d=/u);
+  assert.match(visualFilter.script, /color=c=0xFFD60A:s=[0-9]+x[0-9]+:r=30:d=/u);
+  assert.match(visualFilter.script, /color=c=0xFF453A:s=[0-9]+x[0-9]+:r=30:d=/u);
   assert.match(visualFilter.script, /eq=saturation=0:brightness=-0\.42:contrast=1\.22/u);
   assert.match(visualFilter.script, /drawtext=text='[0-9]+'/u);
   assert.match(visualFilter.script, /fontcolor=0x32D74B/u);
@@ -514,5 +516,30 @@ test('stat-clash falls back to still sprites for suspiciously short animated can
   assert.deepEqual(
     stabilizedCandidate.args.slice(0, 4),
     ['-loop', '1', '-framerate', String(renderPlan.canvas.fps)],
+  );
+
+  const stabilizedInputRoleIndex = new Map(
+    stabilizedInputs.map((input, index) => [input.role, index]),
+  );
+  const visualFilter = buildVisualFilterScript(
+    plan,
+    template,
+    renderPlan,
+    {
+      background: stabilizedInputRoleIndex.get('background'),
+      introPokeball: stabilizedInputRoleIndex.get('intro-pokeball'),
+      grassPlatform: stabilizedInputRoleIndex.get('grass-platform'),
+      rounds: renderPlan.rounds.map((round) => ({
+        candidates: round.candidates.map((candidate) => stabilizedInputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`)),
+        still_candidates: round.candidates.map((candidate) => {
+          const inputIndex = stabilizedInputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`);
+          return String(stabilizedInputs[inputIndex]?.path || '').toLowerCase().endsWith('.png');
+        }),
+      })),
+    },
+  );
+  assert.match(
+    visualFilter.script,
+    /\[scene0spritev0\]\[scene0spritesettledsrc0\]overlay=x='[^']+':y='[^']+-if\(lt\(t,[0-9.]+\),0,if\(lt\(t,[0-9.]+\),sin\(\(t-[0-9.]+\)\*[0-9.]+\)\*[0-9.]+,0\)\)-h\/2':enable='between\(t,[0-9.]+,[0-9.]+\)'\[scene0settled0\]/u,
   );
 });
