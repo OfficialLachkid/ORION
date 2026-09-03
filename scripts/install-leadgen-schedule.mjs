@@ -8,9 +8,16 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-const DEFAULT_HOUR = 7;
+// Sweep at 06:00 × 6 rounds — the 2026-09-02 CBS-BAG expansion bumped the
+// active pool to 841 locations, and the qualifier's night-shift ceiling
+// (~30 leads/run) was routinely unfilled at the prior 2×/day rate (~10
+// leads/day observed). 6 rounds saturates qualification input while
+// keeping the pool rotation at a healthy ~140 days per niche and finishing
+// before 08:00 so the machine is free for operator Ollama sessions from
+// 09:00 onward. See [[05_Playbooks/Leadgen_Location_Expansion]] Tier 4.
+const DEFAULT_HOUR = 6;
 const DEFAULT_MINUTE = 0;
-const DEFAULT_TIMES = 2;
+const DEFAULT_TIMES = 6;
 const MAX_TIMES = 10;
 const PLIST_LABEL = 'io.vbj.orion.leadgen-schedule';
 

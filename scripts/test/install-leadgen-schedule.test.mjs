@@ -17,9 +17,12 @@ test('buildLeadgenPlistContent OMITS --times when times=1 (preserves existing si
   assert.doesNotMatch(plist, /<string>--times<\/string>/u);
 });
 
-test('buildLeadgenPlistContent EMITS --times when times is unspecified (defaults to 2)', () => {
+test('buildLeadgenPlistContent EMITS --times when times is unspecified (defaults to 6 post-Tier-4 CBS-BAG, 2026-09-02)', () => {
+  // Default bumped from 2 → 6 alongside the 568→841 pool expansion so the
+  // qualifier's 30-lead nightly ceiling gets saturated. See DEFAULT_TIMES
+  // in install-leadgen-schedule.mjs for the reasoning + timing window.
   const plist = buildLeadgenPlistContent(baseArgs);
-  assert.match(plist, /<string>--times<\/string>\s*<string>2<\/string>/u);
+  assert.match(plist, /<string>--times<\/string>\s*<string>6<\/string>/u);
 });
 
 test('buildLeadgenPlistContent EMITS --times when times>1 so leadgen chains sequential sweeps', () => {

@@ -43,36 +43,42 @@ test('LOCATION_ROTATION entries have no leading, trailing, or double whitespace'
   assert.deepEqual(offenders, [], `Whitespace-dirty entries: ${JSON.stringify(offenders)}`);
 });
 
-test('LOCATION_ROTATION has expanded to at least 400 entries (Tier 1 expansion 2026-08-10)', () => {
-  // Regression guard against an accidental revert of the Tier 1 expansion.
-  // If someone shortens the list again, the rotation would collapse back
-  // toward the 22-day saturation cycle.
+test('LOCATION_ROTATION has expanded to at least 2000 entries (Tier 4 all-active CBS BAG 2026-09-03)', () => {
+  // Regression guard against reverting the full-pool switch. The
+  // 2026-09-03 change opened is_active=true for every CBS BAG
+  // woonplaats — dropping back below 2000 would mean someone
+  // reintroduced the aggressive filter that was cutting ~1660 real
+  // localities.
   assert.ok(
-    LOCATION_ROTATION.length >= 400,
-    `Expected at least 400 locations after Tier 1 expansion; got ${LOCATION_ROTATION.length}`,
+    LOCATION_ROTATION.length >= 2000,
+    `Expected at least 2000 locations after Tier 4 all-active; got ${LOCATION_ROTATION.length}`,
   );
 });
 
 test('LOCATION_ROTATION disambiguates cross-province namesake towns with a "(Province)" suffix', () => {
-  // Elst, Bergen, and Valkenburg all have real towns in multiple provinces.
-  // Both instances must be present, and both must carry the disambiguating
-  // suffix — otherwise the search query "elektriciens Elst" is ambiguous
-  // between Utrecht (near Amersfoort) and Gelderland (near Nijmegen).
+  // Bergen and Valkenburg have real towns in multiple provinces AND both
+  // instances live in BAG under abbreviated disambiguators ("Bergen (NH)",
+  // "Bergen L"). LOCATION_ROTATION post-processes these into readable
+  // "Name (Provincie)" so search queries stay unambiguous. Elst is a
+  // one-off in BAG (bare "Elst" for Gelderland-Overbetuwe, "Elst Ut"
+  // for Utrecht-Rhenen) — the Ut form gets rewritten too.
   const namesakes = [
-    { bare: 'Elst', suffixed: ['Elst (Utrecht)', 'Elst (Gelderland)'] },
-    { bare: 'Bergen', suffixed: ['Bergen (Noord-Holland)', 'Bergen (Limburg)'] },
-    { bare: 'Valkenburg', suffixed: ['Valkenburg (Zuid-Holland)', 'Valkenburg (Limburg)'] },
+    { suffixed: ['Elst (Utrecht)', 'Elst'] },
+    { suffixed: ['Bergen (Noord-Holland)', 'Bergen (Limburg)'], bareForbidden: 'Bergen' },
+    { suffixed: ['Valkenburg (Zuid-Holland)', 'Valkenburg (Limburg)'], bareForbidden: 'Valkenburg' },
   ];
-  for (const { bare, suffixed } of namesakes) {
-    assert.equal(
-      LOCATION_ROTATION.includes(bare),
-      false,
-      `Bare "${bare}" is ambiguous — must be disambiguated with a province suffix`,
-    );
-    for (const suffixedName of suffixed) {
+  for (const entry of namesakes) {
+    for (const suffixedName of entry.suffixed) {
       assert.ok(
         LOCATION_ROTATION.includes(suffixedName),
         `Missing disambiguated variant: "${suffixedName}"`,
+      );
+    }
+    if (entry.bareForbidden) {
+      assert.equal(
+        LOCATION_ROTATION.includes(entry.bareForbidden),
+        false,
+        `Bare "${entry.bareForbidden}" is ambiguous — must be disambiguated with a province suffix`,
       );
     }
   }
@@ -87,14 +93,31 @@ test('LOCATION_ROTATION originals are not accidentally duplicated in the expansi
   );
 });
 
-test('scheduled leadgen defaults to two sweep rounds per daily run', () => {
-  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 2);
-  assert.equal(resolveScheduledSweepRounds(undefined), 2);
-  assert.equal(resolveScheduledSweepRounds(''), 2);
-  assert.equal(resolveScheduledSweepRounds(0), 2);
+test('scheduled leadgen defaults to six sweep rounds per daily run (post-Tier-4 CBS-BAG expansion, 2026-09-02)', () => {
+  // Bumped from 2 to 6 alongside the CBS BAG pool expansion (568→841
+  // active locations) so the qualifier's 30-lead nightly ceiling gets
+  // saturated instead of running at ~33% utilization. Rotation window
+  // stays healthy at ~140 days per niche.
+  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 6);
+  assert.equal(resolveScheduledSweepRounds(undefined), 6);
+  assert.equal(resolveScheduledSweepRounds(''), 6);
+  assert.equal(resolveScheduledSweepRounds(0), 6);
 });
 
 test('scheduled leadgen rounds are clamped to a sane ceiling', () => {
   assert.equal(resolveScheduledSweepRounds(3), 3);
   assert.equal(resolveScheduledSweepRounds(999), 10);
+});
+
+test('CURRENT_POOL_EXPANSION_VERSION reflects the latest LOCATION_ROTATION expansion', async () => {
+  // Regression guard: every pool composition change needs a matching
+  // bump of CURRENT_POOL_EXPANSION_VERSION so loadRotationState() knows
+  // to run the migration (backfill visited-set from legacy cityIndex,
+  // etc.). Skip the bump and the state file stays in whatever prior
+  // shape it was written under.
+  const mod = await import('../run-scheduled-leadgen.mjs');
+  assert.ok(
+    Number.isInteger(mod.CURRENT_POOL_EXPANSION_VERSION) && mod.CURRENT_POOL_EXPANSION_VERSION >= 4,
+    `Expected CURRENT_POOL_EXPANSION_VERSION ≥ 4 after 2026-09-03 visited-set switch; got ${mod.CURRENT_POOL_EXPANSION_VERSION}`,
+  );
 });

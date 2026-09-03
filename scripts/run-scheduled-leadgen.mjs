@@ -22,7 +22,12 @@ const ROTATION_STATE_PATH = resolve(projectRoot, 'data', 'leadgen', 'rotation-st
 // DuckDuckGo returns ~30-40 results per query in practice, so 50 is
 // effectively "everything the search engine will give us".
 export const MAX_RESULTS_PER_NICHE = 50;
-export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 2;
+// Match the installer's DEFAULT_TIMES so callers that skip --times get
+// the same 6 rounds the scheduled launchd job requests. Bumped 2026-09-02
+// as part of the CBS-BAG expansion — see install-leadgen-schedule.mjs for
+// the rationale (qualifier under-fed at 2×/day, expanded pool absorbs
+// the higher rate without saturating).
+export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 6;
 const MAX_SCHEDULED_SWEEP_ROUNDS = 10;
 
 // Dutch search terms — this targets the Dutch market, so the query itself is
@@ -37,188 +42,69 @@ export const NICHE_ROTATION = [
   { key: 'liquor_stores', term: 'slijterijen' },
 ];
 
-// One fixed national query saturates fast — a 50-candidate re-run of
-// "loodgieters Nederland" produced exactly 1 new (junk) lead once the
-// known-domain skip was active. City-level queries surface local
-// businesses the national query never ranks. Positions 0-21 are the
-// original 22 major cities + provincial capitals, preserved in their
-// original order — operator wants to return to them on future cycles
-// ("those are big"). Positions 22+ are the smaller-town expansion pool
-// from issue #3 (2026-08-10), roughly the "next tier" of towns per
-// province. See [[05_Playbooks/Leadgen_Location_Expansion]] for the
-// tiered design + rationale.
-//
-// Full rotation of the expanded list = ~560 days per niche at 1 run/day.
-// Cross-province namesake towns (Elst UT/GLD, Bergen NH/LB, Valkenburg
-// ZH/LB) are disambiguated with a "(Province)" suffix — search engines
-// treat parentheses as location modifier.
-export const LOCATION_ROTATION = [
-  // === Positions 0-21: originals (preserved order) ===
-  'Amsterdam',
-  'Rotterdam',
-  'Den Haag',
-  'Utrecht',
-  'Eindhoven',
-  'Groningen',
-  'Tilburg',
-  'Almere',
-  'Breda',
-  'Nijmegen',
-  'Arnhem',
-  'Haarlem',
-  'Amersfoort',
-  'Apeldoorn',
-  "'s-Hertogenbosch",
-  'Zwolle',
-  'Leiden',
-  'Maastricht',
-  'Leeuwarden',
-  'Assen',
-  'Middelburg',
-  'Lelystad',
-  // === Positions 22+: expansion pool (issue #3) ===
-  // Noord-Holland
-  'Alkmaar', 'Hoorn', 'Den Helder', 'Zaandam', 'Purmerend', 'Hilversum',
-  'Amstelveen', 'Heerhugowaard', 'Castricum', 'Heemskerk', 'Beverwijk',
-  'Uitgeest', 'Heiloo', 'Limmen', 'Akersloot', 'Egmond aan Zee',
-  'Egmond aan den Hoef', 'Bergen (Noord-Holland)', 'Schoorl',
-  'Broek op Langedijk', 'Zuid-Scharwoude', 'Noord-Scharwoude', 'Obdam',
-  'Spanbroek', 'Opmeer', 'Medemblik', 'Enkhuizen', 'Bovenkarspel',
-  'Grootebroek', 'Andijk', 'Wervershoof', 'Zwaag', 'Blokker', 'Avenhorn',
-  'De Goorn', 'Volendam', 'Edam', 'Monnickendam', 'Landsmeer', 'Oostzaan',
-  'Wormerveer', 'Krommenie', 'Assendelft', 'Koog aan de Zaan', 'Zaandijk',
-  'IJmuiden', 'Santpoort-Noord', 'Velserbroek', 'Bloemendaal', 'Overveen',
-  'Zandvoort', 'Heemstede', 'Bennebroek', 'Hoofddorp', 'Nieuw-Vennep',
-  'Badhoevedorp', 'Aalsmeer', 'Uithoorn', 'Ouderkerk aan de Amstel',
-  'Diemen', 'Weesp', 'Muiden', 'Bussum', 'Naarden', 'Huizen', 'Laren',
-  'Blaricum', 'Loosdrecht', 'Kortenhoef', "'s-Graveland", 'Den Burg',
-  'Julianadorp', 'Anna Paulowna', 'Schagen', 'Warmenhuizen',
-  // Zuid-Holland
-  'Delft', 'Dordrecht', 'Gouda', 'Zoetermeer', 'Alphen aan den Rijn',
-  'Schiedam', 'Vlaardingen', 'Maassluis', 'Spijkenisse', 'Hellevoetsluis',
-  'Brielle', 'Rockanje', 'Oostvoorne', 'Barendrecht', 'Ridderkerk',
-  'Hendrik-Ido-Ambacht', 'Zwijndrecht', 'Papendrecht', 'Sliedrecht',
-  'Hardinxveld-Giessendam', 'Alblasserdam', 'Capelle aan den IJssel',
-  'Krimpen aan den IJssel', 'Nieuwerkerk aan den IJssel', 'Waddinxveen',
-  'Boskoop', 'Bodegraven', 'Reeuwijk', 'Schoonhoven', 'Bergambacht',
-  'Lekkerkerk', 'Stolwijk', 'Haastrecht', 'Leidschendam', 'Voorburg',
-  'Rijswijk', 'Wassenaar', 'Voorschoten', 'Oegstgeest', 'Leiderdorp',
-  'Katwijk', 'Rijnsburg', 'Valkenburg (Zuid-Holland)', 'Noordwijk',
-  'Noordwijkerhout', 'Lisse', 'Hillegom', 'Sassenheim', 'Voorhout',
-  'Warmond', 'Roelofarendsveen', 'Ter Aar', 'Nieuwkoop', 'Pijnacker',
-  'Nootdorp', 'Berkel en Rodenrijs', 'Bergschenhoek', 'Bleiswijk',
-  'Naaldwijk', 'Monster', "'s-Gravenzande", 'Wateringen', 'De Lier',
-  'Maasdijk', 'Hoek van Holland', 'Gorinchem', 'Leerdam', 'Arkel',
-  'Meerkerk', 'Giessenburg', 'Oud-Beijerland', 'Numansdorp', 'Strijen',
-  "'s-Gravendeel", 'Middelharnis', 'Sommelsdijk', 'Dirksland', 'Ouddorp',
-  'Stellendam',
-  // Utrecht
-  'Nieuwegein', 'Houten', 'Zeist', 'Veenendaal', 'Woerden', 'IJsselstein',
-  'Maarssen', 'De Bilt', 'Bilthoven', 'Bunnik', 'Odijk',
-  'Driebergen-Rijsenburg', 'Doorn', 'Leersum', 'Amerongen',
-  'Wijk bij Duurstede', 'Cothen', 'Langbroek', 'Baarn', 'Soest',
-  'Soesterberg', 'Bunschoten-Spakenburg', 'Leusden', 'Woudenberg',
-  'Renswoude', 'Rhenen', 'Elst (Utrecht)', 'Montfoort', 'Oudewater',
-  'Lopik', 'Vianen', 'Breukelen', 'Loenen aan de Vecht', 'Vinkeveen',
-  'Mijdrecht', 'Wilnis', 'Abcoude', 'Harmelen', 'Linschoten',
-  // Noord-Brabant
-  'Helmond', 'Oss', 'Roosendaal', 'Bergen op Zoom', 'Waalwijk',
-  'Oosterhout', 'Etten-Leur', 'Veldhoven', 'Best', 'Son en Breugel',
-  'Geldrop', 'Mierlo', 'Nuenen', 'Valkenswaard', 'Waalre', 'Eersel',
-  'Bladel', 'Reusel', 'Bergeijk', 'Hapert', 'Oirschot', 'Boxtel', 'Vught',
-  'Sint-Michielsgestel', 'Rosmalen', 'Drunen', 'Vlijmen', 'Heusden',
-  'Kaatsheuvel', 'Loon op Zand', 'Dongen', 'Rijen', 'Gilze', 'Goirle',
-  'Hilvarenbeek', 'Oisterwijk', 'Moergestel', 'Uden', 'Veghel',
-  'Schijndel', 'Sint-Oedenrode', 'Boekel', 'Gemert', 'Bakel', 'Deurne',
-  'Asten', 'Someren', 'Laarbeek', 'Beek en Donk', 'Lieshout', 'Boxmeer',
-  'Cuijk', 'Grave', 'Mill', 'Wanroij', 'Sint Anthonis', 'Zevenbergen',
-  'Klundert', 'Made', 'Drimmelen', 'Raamsdonksveer', 'Geertruidenberg',
-  'Werkendam', 'Woudrichem', 'Sleeuwijk', 'Dussen', 'Zundert', 'Rucphen',
-  'Sprundel', 'Hoeven', 'Oudenbosch', 'Steenbergen', 'Halsteren',
-  'Woensdrecht', 'Hoogerheide',
-  // Gelderland
-  'Ede', 'Doetinchem', 'Harderwijk', 'Tiel', 'Zutphen', 'Wageningen',
-  'Barneveld', 'Nijkerk', 'Putten', 'Ermelo', 'Elburg', 'Nunspeet', 'Epe',
-  'Vaassen', 'Heerde', 'Hattem', 'Lochem', 'Borculo', 'Ruurlo', 'Eibergen',
-  'Neede', 'Winterswijk', 'Aalten', 'Dinxperlo', 'Lichtenvoorde',
-  'Groenlo', 'Varsseveld', 'Terborg', 'Ulft', 'Zevenaar', 'Duiven',
-  'Westervoort', 'Didam', "'s-Heerenberg", 'Velp', 'Rheden', 'Dieren',
-  'Oosterbeek', 'Doorwerth', 'Elst (Gelderland)', 'Bemmel', 'Huissen',
-  'Gendt', 'Wijchen', 'Beuningen', 'Druten', 'Groesbeek', 'Malden',
-  'Beneden-Leeuwen', 'Zaltbommel', 'Geldermalsen', 'Culemborg', 'Beesd',
-  'Buren', 'Maurik', 'Lienden', 'Kesteren', 'Opheusden', 'Renkum',
-  'Lunteren', 'Bennekom', 'Voorthuizen', 'Garderen', 'Twello',
-  // Overijssel
-  'Enschede', 'Deventer', 'Hengelo', 'Almelo', 'Kampen', 'Hardenberg',
-  'Oldenzaal', 'Rijssen', 'Holten', 'Nijverdal', 'Hellendoorn', 'Raalte',
-  'Dalfsen', 'Ommen', 'Dedemsvaart', 'Gramsbergen', 'Steenwijk',
-  'Genemuiden', 'Hasselt', 'Zwartsluis', 'Vollenhove', 'Giethoorn',
-  'Staphorst', 'Nieuwleusen', 'Wierden', 'Enter', 'Goor', 'Delden',
-  'Borne', 'Haaksbergen', 'Losser', 'Denekamp', 'Ootmarsum', 'Tubbergen',
-  'Vriezenveen',
-  // Limburg
-  'Venlo', 'Roermond', 'Heerlen', 'Sittard', 'Geleen', 'Weert', 'Kerkrade',
-  'Brunssum', 'Landgraaf', 'Valkenburg (Limburg)', 'Meerssen', 'Bunde',
-  'Stein', 'Beek', 'Elsloo', 'Echt', 'Susteren', 'Born', 'Limbricht',
-  'Maasbracht', 'Linne', 'Swalmen', 'Reuver', 'Beesel', 'Tegelen',
-  'Belfeld', 'Horst', 'Sevenum', 'Panningen', 'Helden', 'Baarlo', 'Kessel',
-  'Venray', 'Gennep', 'Bergen (Limburg)', 'Well', 'Arcen', 'Grubbenvorst',
-  'Nederweert', 'Heythuysen', 'Roggel', 'Haelen', 'Thorn', 'Heel',
-  'Gulpen', 'Wittem', 'Eijsden', 'Margraten', 'Simpelveld', 'Vaals',
-  // Zeeland
-  'Vlissingen', 'Goes', 'Terneuzen', 'Hulst', 'Zierikzee', 'Sluis',
-  'Oostburg', 'Breskens', 'Cadzand', 'Aardenburg', 'Axel', 'Sas van Gent',
-  'Philippine', 'Kapelle', 'Yerseke', 'Kruiningen', 'Wemeldinge',
-  'Heinkenszand', "'s-Gravenpolder", 'Kloetinge', 'Arnemuiden', 'Veere',
-  'Domburg', 'Westkapelle', 'Zoutelande', 'Oostkapelle', 'Vrouwenpolder',
-  'Renesse', 'Burgh-Haamstede', 'Brouwershaven', 'Bruinisse', 'Tholen',
-  'Sint-Maartensdijk', 'Sint-Annaland', 'Poortvliet',
-  // Flevoland
-  'Dronten', 'Emmeloord', 'Zeewolde', 'Urk', 'Biddinghuizen', 'Swifterbant',
-  'Ens', 'Marknesse', 'Nagele', 'Creil', 'Rutten', 'Bant', 'Espel',
-  'Tollebeek', 'Luttelgeest',
-  // Friesland
-  'Drachten', 'Heerenveen', 'Sneek', 'Harlingen', 'Franeker', 'Joure',
-  'Lemmer', 'Bolsward', 'Dokkum', 'Workum', 'Hindeloopen', 'Stavoren',
-  'Makkum', 'Grou', 'Akkrum', 'Wolvega', 'Oosterwolde', 'Appelscha',
-  'Surhuisterveen', 'Burgum', 'Buitenpost', 'Kollum', 'Gorredijk',
-  'Beetsterzwaag', 'Bakkeveen', 'Hallum', 'Stiens', 'Sint Annaparochie',
-  'West-Terschelling', 'Nes', 'Hollum',
-  // Groningen
-  'Delfzijl', 'Appingedam', 'Winschoten', 'Veendam', 'Stadskanaal',
-  'Hoogezand', 'Sappemeer', 'Haren', 'Zuidhorn', 'Leek', 'Marum', 'Bedum',
-  'Winsum', 'Uithuizen', 'Uithuizermeeden', 'Loppersum', 'Ten Boer',
-  'Scheemda', 'Oude Pekela', 'Nieuwe Pekela', 'Ter Apel', 'Musselkanaal',
-  // Drenthe
-  'Emmen', 'Hoogeveen', 'Meppel', 'Coevorden', 'Roden', 'Eelde',
-  'Paterswolde', 'Zuidlaren', 'Gieten', 'Borger', 'Exloo', 'Klazienaveen',
-  'Erica', 'Nieuw-Amsterdam', 'Schoonebeek', 'Beilen', 'Westerbork',
-  'Dwingeloo', 'Diever', 'Havelte', 'Ruinen', 'Zuidwolde', 'De Wijk',
-  'Norg', 'Vries', 'Peize',
-];
+
+// Pool + version marker live in ./leadgen/location-rotation.mjs — extracted
+// there so the visited-set migration code below stays inside the 700-line
+// script guardrail. Re-export the two names any external caller reads.
+import {
+  BAG_TO_ORIGINALS_ALIAS,
+  CURRENT_POOL_EXPANSION_VERSION,
+  LEGACY_LOCATION_ROTATION_TIER3,
+  LOCATION_ROTATION,
+} from './leadgen/location-rotation.mjs';
+
+export { CURRENT_POOL_EXPANSION_VERSION, LOCATION_ROTATION };
+
+// Rebuild the visited-set for one niche from its legacy cityIndex. The
+// legacy pool was a positional array so the cursor's "current" position
+// meant "everything from position 0 up to and including current has been
+// searched at least once this cycle". Same-name entries across provinces
+// were disambiguated at the source (Elst (Utrecht), Elst (Gelderland)),
+// so the strings match exactly against the new LOCATION_ROTATION for
+// the vast majority of positions. A tiny few (Den Haag alias) are
+// normalized here so state stays continuous across the alias.
+function backfillVisitedFromLegacyIndex(cityIndex) {
+  if (!Number.isInteger(cityIndex) || cityIndex < 0) return [];
+  const upto = Math.min(cityIndex + 1, LEGACY_LOCATION_ROTATION_TIER3.length);
+  const names = LEGACY_LOCATION_ROTATION_TIER3.slice(0, upto);
+  return names.map((n) => BAG_TO_ORIGINALS_ALIAS.get(n) || n);
+}
 
 function loadRotationState() {
-  if (!existsSync(ROTATION_STATE_PATH)) {
-    return { cityIndexByNiche: {} };
-  }
+  const empty = () => ({ visitedByNiche: {}, poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION });
+  if (!existsSync(ROTATION_STATE_PATH)) return empty();
 
   try {
     const state = JSON.parse(readFileSync(ROTATION_STATE_PATH, 'utf8'));
-    if (state.cityIndexByNiche) {
+    // Fast path: already in the new shape at the current version.
+    if (state.visitedByNiche && Number(state.poolExpansionVersion) === CURRENT_POOL_EXPANSION_VERSION) {
       return state;
     }
-    // Migrate from the old single-shared-counter shape: every niche was in
-    // lockstep through the same city, so seed each niche at that same
-    // index — only future runs can diverge.
-    if (Number.isInteger(state.dayCount)) {
-      const cityIndexByNiche = Object.fromEntries(
-        NICHE_ROTATION.map((niche) => [niche.key, state.dayCount]),
-      );
-      return { cityIndexByNiche };
-    }
-    return { cityIndexByNiche: {} };
+
+    // Migration from any prior shape (dayCount, cityIndexByNiche, older
+    // poolExpansionVersion). Backfill visited per niche from whatever
+    // positional cursor was stored. Once written back, we never re-read
+    // the legacy shape — the visited-set model is stable across future
+    // pool changes because it keys on location NAME instead of index.
+    const legacyIndexPerNiche = state.cityIndexByNiche
+      ? state.cityIndexByNiche
+      : Number.isInteger(state.dayCount)
+        ? Object.fromEntries(NICHE_ROTATION.map((n) => [n.key, state.dayCount]))
+        : {};
+    const visitedByNiche = Object.fromEntries(
+      NICHE_ROTATION.map((n) => {
+        const legacyIndex = Number.isInteger(legacyIndexPerNiche[n.key]) ? legacyIndexPerNiche[n.key] : -1;
+        return [n.key, backfillVisitedFromLegacyIndex(legacyIndex)];
+      }),
+    );
+    return {
+      visitedByNiche,
+      poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
+      migratedFromVersion: Number(state.poolExpansionVersion) || 1,
+      migratedAt: new Date().toISOString(),
+    };
   } catch {
-    return { cityIndexByNiche: {} };
+    return empty();
   }
 }
 
@@ -227,30 +113,49 @@ function saveRotationState(state) {
   writeFileSync(ROTATION_STATE_PATH, JSON.stringify(state, null, 2));
 }
 
-// Each niche tracks its OWN city index and advances independently —
-// previously one shared counter drove all six niches together, so if 5
-// niches succeeded and 1 failed, the failed niche's city silently
-// advanced anyway just because the sweep "succeeded overall" (operator
-// caught this: "shouldn't we update it per success leadgen per niche?").
-// peek/commit split for the same reason as before: never persist an
-// advance before the work is confirmed done.
+// Pick the first location the niche hasn't visited THIS CYCLE. When the
+// visited set covers the whole pool, the cycle is complete — reset it
+// so the next call starts a fresh cycle from the first location. Same
+// per-niche independence guarantee as before: a failed niche stays on
+// its own cursor while others advance.
 function peekNicheCity(state, nicheKey) {
-  const current = Number.isInteger(state.cityIndexByNiche?.[nicheKey])
-    ? state.cityIndexByNiche[nicheKey]
-    : -1;
-  const cityIndex = current + 1;
+  const visited = new Set(state.visitedByNiche?.[nicheKey] || []);
+  const cycleComplete = visited.size >= LOCATION_ROTATION.length;
+  const effectiveVisited = cycleComplete ? new Set() : visited;
+  const location = LOCATION_ROTATION.find((name) => !effectiveVisited.has(name)) || LOCATION_ROTATION[0];
+  const afterLocation = new Set(effectiveVisited);
+  afterLocation.add(location);
+  const nextLocation = LOCATION_ROTATION.find((name) => !afterLocation.has(name)) || LOCATION_ROTATION[0];
   return {
-    cityIndex,
-    location: LOCATION_ROTATION[cityIndex % LOCATION_ROTATION.length],
-    // Where THIS niche will search next time (after this run commits) — shown
-    // in the sweep overview so the operator knows the upcoming destination.
-    nextLocation: LOCATION_ROTATION[(cityIndex + 1) % LOCATION_ROTATION.length],
+    location,
+    nextLocation,
+    // Kept for backwards compat with any log formatter still reading the
+    // positional index. Not authoritative under the visited-set model.
+    cityIndex: LOCATION_ROTATION.indexOf(location),
+    cycleReset: cycleComplete,
   };
 }
 
-function commitNicheAdvance(state, nicheKey, cityIndex) {
+function commitNicheAdvance(state, nicheKey, locationOrIndex) {
+  // Accept either a location name (new callers) or the legacy cityIndex
+  // (older callers still passing plans[i].cityIndex). Resolve to name.
+  const location = typeof locationOrIndex === 'string'
+    ? locationOrIndex
+    : (Number.isInteger(locationOrIndex) && locationOrIndex >= 0
+      ? LOCATION_ROTATION[locationOrIndex % LOCATION_ROTATION.length]
+      : '');
+  if (!location) return state;
+  const prevVisited = state.visitedByNiche?.[nicheKey] || [];
+  const nextVisitedSet = new Set(prevVisited);
+  // If the incoming location completes the cycle, reset first so the
+  // "just-completed" location gets carried into the fresh cycle rather
+  // than being lost.
+  if (nextVisitedSet.size >= LOCATION_ROTATION.length) nextVisitedSet.clear();
+  nextVisitedSet.add(location);
   const nextState = {
-    cityIndexByNiche: { ...(state.cityIndexByNiche || {}), [nicheKey]: cityIndex },
+    ...state,
+    visitedByNiche: { ...(state.visitedByNiche || {}), [nicheKey]: [...nextVisitedSet] },
+    poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
     updatedAt: new Date().toISOString(),
   };
   saveRotationState(nextState);
@@ -383,7 +288,10 @@ export async function runLeadgenSweepRound({
     // different niche failing must not hold this one back, and this one
     // failing must not silently skip its own city either.
     if (!outcome.runError) {
-      rotationState = commitNicheAdvance(rotationState, niche.key, cityIndex);
+      // Pass the location NAME (visited-set model) rather than cityIndex
+      // — the pool can reshuffle across expansions without invalidating
+      // per-niche progress.
+      rotationState = commitNicheAdvance(rotationState, niche.key, location);
     } else {
       process.stderr.write(`${niche.key} failed — not advancing its city, will retry ${location} next run.\n`);
     }
