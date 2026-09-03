@@ -97,62 +97,32 @@ async function fetchAllWoonplaatsen() {
   return rows;
 }
 
-const SMALL_GEMEENTE_WOONPLAATSEN_THRESHOLD = 5;
-
-function applyActiveFilter(rows, curatedSet) {
-  // Three inclusion signals:
-  //   (a) woonplaatsnaam === gemeentenaam — the municipality's capital
-  //       town, guaranteed to have business density worth searching.
-  //   (b) The gemeente has ≤ 5 total woonplaatsen — in practice this
-  //       means the whole gemeente is either urban (1-2 places) or
-  //       consists entirely of meaningful named towns, not tiny hamlets.
-  //       Big rural gemeenten like Súdwest-Fryslân (89 woonplaatsen)
-  //       contain many buurtschappen with < 100 people that yield
-  //       nothing for lead-gen — those stay is_active: false and can be
-  //       enabled empirically via a Tier 2 yield-tracking pass later.
-  //   (c) The name is in the operator's curated 565 — already proven
-  //       to yield leads.
+function applyActiveFilter(rows /* , curatedSet unused for now */) {
+  // Ship ALL 2,502 as is_active=true (2026-09-03 operator ask). An earlier
+  // conservative filter (municipality capital + small-gemeente + curated)
+  // dropped ~1,660 tiny hamlets, which was too aggressive: some of those
+  // do have local businesses worth searching, and the yield-tracking
+  // Tier 2 pass (deferred) will empirically flag the truly unproductive
+  // ones without us having to guess upfront. Better to over-include and
+  // measure than under-include and never discover.
   //
-  // Curated entries are normalized during comparison:
-  //   - Strip province-disambiguation suffix like "Elst (Utrecht)" →
-  //     "Elst" (PDOK's woonplaatsnaam is always bare)
-  //   - Alias historic Dutch names like "Den Haag" → "'s-Gravenhage"
-  //     (BAG stores the official name)
-  const normalizedCurated = new Set(
-    [...curatedSet].map((cur) => {
-      const stripped = cur.replace(/\s*\([^)]+\)\s*$/, '').trim();
-      return NAME_ALIASES.get(stripped) || stripped;
-    }),
-  );
-  const woonplaatsenPerGemeente = new Map();
-  for (const r of rows) {
-    const key = r.gemeente || '';
-    woonplaatsenPerGemeente.set(key, (woonplaatsenPerGemeente.get(key) || 0) + 1);
-  }
-  return rows.map((r) => {
-    const isGemeenteHoofdplaats = r.name && r.gemeente && r.name === r.gemeente;
-    const inSmallGemeente = (woonplaatsenPerGemeente.get(r.gemeente || '') || 0) <= SMALL_GEMEENTE_WOONPLAATSEN_THRESHOLD;
-    const curatedMatch = normalizedCurated.has(r.name);
-    return {
-      ...r,
-      is_active: Boolean(isGemeenteHoofdplaats || inSmallGemeente || curatedMatch),
-    };
-  });
+  // is_active stays a per-row flag rather than being removed entirely so
+  // a future Tier 2 pass can flip individual rows to false based on real
+  // yield data without needing to re-fetch or re-shape the file.
+  return rows.map((r) => ({ ...r, is_active: true }));
 }
 
 async function main() {
-  const curated = extractCurrentRotation();
-  process.stderr.write(`Loaded ${curated.size} curated names from run-scheduled-leadgen.mjs\n`);
   const rawRows = await fetchAllWoonplaatsen();
   process.stderr.write(`Fetched ${rawRows.length} raw woonplaatsen from PDOK\n`);
-  const withFlags = applyActiveFilter(rawRows, curated);
+  const withFlags = applyActiveFilter(rawRows);
   const activeCount = withFlags.filter((r) => r.is_active).length;
   process.stderr.write(`Active after filter: ${activeCount} / ${withFlags.length}\n`);
 
   const doc = {
     source: 'PDOK BAG locatieserver v3.1 (fq=type:woonplaats)',
     fetched_at: new Date().toISOString(),
-    filter_policy: 'is_active = (woonplaatsnaam === gemeentenaam) OR (gemeente has ≤ 5 woonplaatsen) OR in operator-curated 565 list',
+    filter_policy: 'is_active = true for all rows (2026-09-03: yield tracking Tier 2 will empirically flag unproductive ones later)',
     total: withFlags.length,
     active_count: activeCount,
     rows: withFlags.sort((a, b) => a.name.localeCompare(b.name, 'nl')),

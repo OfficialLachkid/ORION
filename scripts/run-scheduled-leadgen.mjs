@@ -42,22 +42,15 @@ export const NICHE_ROTATION = [
   { key: 'liquor_stores', term: 'slijterijen' },
 ];
 
-// One fixed national query saturates fast — a 50-candidate re-run of
-// "loodgieters Nederland" produced exactly 1 new (junk) lead once the
-// known-domain skip was active. City-level queries surface local
-// businesses the national query never ranks. Positions 0-21 are the
-// original 22 major cities + provincial capitals, preserved in their
-// original order — operator wants to return to them on future cycles
-// ("those are big"). Positions 22+ are the smaller-town expansion pool
-// from issue #3 (2026-08-10), roughly the "next tier" of towns per
-// province. See [[05_Playbooks/Leadgen_Location_Expansion]] for the
-// tiered design + rationale.
-//
-// Full rotation of the expanded list = ~560 days per niche at 1 run/day.
-// Cross-province namesake towns (Elst UT/GLD, Bergen NH/LB, Valkenburg
-// ZH/LB) are disambiguated with a "(Province)" suffix — search engines
-// treat parentheses as location modifier.
-export const LOCATION_ROTATION = [
+// Legacy hardcoded pool (Tier-3 aka "CBS BAG 841" from PR #87). Kept in
+// the code for ONE reason only: migration. Existing rotation-state.json
+// files reference these entries by INDEX (cityIndexByNiche), so when we
+// convert to the visited-set model in 2026-09-03 (Tier 4), we need to
+// resolve each niche's stored cityIndex back to the specific location
+// name that was visited. After migration completes, this array is no
+// longer read at runtime — LOCATION_ROTATION below is loaded from the
+// checked-in nl-woonplaatsen.json instead.
+const LEGACY_LOCATION_ROTATION_TIER3 = [
   // === Positions 0-21: originals (preserved order) ===
   'Amsterdam',
   'Rotterdam',
@@ -484,65 +477,124 @@ export const LOCATION_ROTATION = [
 ];
 
 // Marker of the LOCATION_ROTATION pool version currently baked into the
-// code. Bump this whenever LOCATION_ROTATION is expanded so migrations
-// can detect "the pool got bigger since I last ran" and jump each
-// niche's cursor to the first new location — otherwise the newly-added
-// locations wouldn't be hit for months (would have to wait for the
-// cursor to naturally cycle through everything ahead of them).
+// code. Bump this whenever the pool composition changes so migrations
+// know to re-derive the visited set from the previous shape.
 //   1 = original 22 major cities
 //   2 = Tier 1 expansion to 568 (PR #40, 2026-08-10)
-//   3 = CBS BAG expansion to 841 (Tier 4, 2026-09-02, this file)
-export const CURRENT_POOL_EXPANSION_VERSION = 3;
-// Cumulative pool sizes at each version — used by the migration to
-// figure out where the "new territory" starts for each expansion.
-// Index into POOL_BOUNDARIES equals the pool version.
-const POOL_BOUNDARIES = { 1: 22, 2: 568, 3: 841 };
+//   3 = CBS BAG 841 hardcoded (PR #87, 2026-09-02) — see LEGACY_LOCATION_ROTATION_TIER3
+//   4 = CBS BAG ~2,500 loaded from data/leadgen/nl-woonplaatsen.json + visited-set state
+//       model (2026-09-03) — every woonplaats active; visited tracked by name so pool
+//       reshuffles don't lose per-niche progress.
+export const CURRENT_POOL_EXPANSION_VERSION = 4;
+
+// Load LOCATION_ROTATION from the checked-in nl-woonplaatsen.json — see
+// scripts/leadgen/fetch-nl-woonplaatsen.mjs for how that file is
+// produced. Format:
+//   - Positions 0-21: 22 originals (preserved in operator's requested
+//     order — big cities they want to revisit each cycle).
+//   - Positions 22+: everything else, alphabetized. Names that appear
+//     in multiple provinces get disambiguated with "(Provincie)" so
+//     the search query stays unambiguous.
+const ORIGINALS = [
+  'Amsterdam', 'Rotterdam', 'Den Haag', 'Utrecht', 'Eindhoven',
+  'Groningen', 'Tilburg', 'Almere', 'Breda', 'Nijmegen', 'Arnhem',
+  'Haarlem', 'Amersfoort', 'Apeldoorn', "'s-Hertogenbosch", 'Zwolle',
+  'Leiden', 'Maastricht', 'Leeuwarden', 'Assen', 'Middelburg', 'Lelystad',
+];
+// PDOK's official BAG name for a few historical Dutch cities differs
+// from the everyday name the operator has in ORIGINALS. Alias so both
+// entries collapse into one canonical form (the ORIGINALS name wins).
+const BAG_TO_ORIGINALS_ALIAS = new Map([
+  ["'s-Gravenhage", 'Den Haag'],
+]);
+// BAG's disambiguation for cross-province namesake towns uses cryptic
+// abbreviations ("Bergen (NH)", "Bergen L", "Elst Ut") instead of full
+// province names. Rewrite to the readable "Name (Provincie)" form —
+// stays unambiguous for search engines and matches the operator's
+// mental model established in the pre-Tier-4 curated list.
+const BAG_DISAMBIGUATION_REWRITES = new Map([
+  ['Bergen (NH)', 'Bergen (Noord-Holland)'],
+  ['Bergen L', 'Bergen (Limburg)'],
+  ['Elst Ut', 'Elst (Utrecht)'],
+]);
+const WOONPLAATSEN_JSON_PATH = resolve(projectRoot, 'data', 'leadgen', 'nl-woonplaatsen.json');
+
+function buildLocationRotation() {
+  const doc = JSON.parse(readFileSync(WOONPLAATSEN_JSON_PATH, 'utf8'));
+  const rows = (doc.rows || []).filter((r) => r.is_active);
+  // Detect names with multiple rows across provinces — those need a
+  // "(Provincie)" disambiguator so search queries stay unambiguous.
+  const nameCounts = new Map();
+  for (const r of rows) nameCounts.set(r.name, (nameCounts.get(r.name) || 0) + 1);
+  const originalsSet = new Set(ORIGINALS);
+  const formatted = new Set(ORIGINALS);
+  const nonOriginal = [];
+  for (const r of rows) {
+    const canonical = BAG_TO_ORIGINALS_ALIAS.get(r.name) || r.name;
+    if (originalsSet.has(canonical)) continue;
+    const rawDisplay = (nameCounts.get(r.name) || 0) > 1 ? `${r.name} (${r.provincie})` : r.name;
+    // Prefer the readable rewrite when BAG shipped an abbreviated form.
+    const display = BAG_DISAMBIGUATION_REWRITES.get(rawDisplay) || rawDisplay;
+    if (formatted.has(display)) continue;
+    formatted.add(display);
+    nonOriginal.push(display);
+  }
+  nonOriginal.sort((a, b) => a.localeCompare(b, 'nl'));
+  return [...ORIGINALS, ...nonOriginal];
+}
+
+export const LOCATION_ROTATION = buildLocationRotation();
+
+// Rebuild the visited-set for one niche from its legacy cityIndex. The
+// legacy pool was a positional array so the cursor's "current" position
+// meant "everything from position 0 up to and including current has been
+// searched at least once this cycle". Same-name entries across provinces
+// were disambiguated at the source (Elst (Utrecht), Elst (Gelderland)),
+// so the strings match exactly against the new LOCATION_ROTATION for
+// the vast majority of positions. A tiny few (Den Haag alias) are
+// normalized here so state stays continuous across the alias.
+function backfillVisitedFromLegacyIndex(cityIndex) {
+  if (!Number.isInteger(cityIndex) || cityIndex < 0) return [];
+  const upto = Math.min(cityIndex + 1, LEGACY_LOCATION_ROTATION_TIER3.length);
+  const names = LEGACY_LOCATION_ROTATION_TIER3.slice(0, upto);
+  return names.map((n) => BAG_TO_ORIGINALS_ALIAS.get(n) || n);
+}
 
 function loadRotationState() {
-  if (!existsSync(ROTATION_STATE_PATH)) {
-    return { cityIndexByNiche: {}, poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION };
-  }
+  const empty = () => ({ visitedByNiche: {}, poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION });
+  if (!existsSync(ROTATION_STATE_PATH)) return empty();
 
   try {
     const state = JSON.parse(readFileSync(ROTATION_STATE_PATH, 'utf8'));
-    // Migrate from the old single-shared-counter shape: every niche was in
-    // lockstep through the same city, so seed each niche at that same
-    // index — only future runs can diverge.
-    let baseState = state.cityIndexByNiche
-      ? state
-      : Number.isInteger(state.dayCount)
-        ? {
-          cityIndexByNiche: Object.fromEntries(
-            NICHE_ROTATION.map((niche) => [niche.key, state.dayCount]),
-          ),
-        }
-        : { cityIndexByNiche: {} };
-
-    // Pool-expansion migration: if this state predates the current
-    // expansion, jump each niche's cursor to just BEFORE the first
-    // new location so the next peek returns index (previousPoolSize).
-    // Otherwise the operator would wait months for the cursor to cycle
-    // through hundreds of old locations before ever seeing anything
-    // added in this expansion.
-    const previousVersion = Number(baseState.poolExpansionVersion) || 1;
-    if (previousVersion < CURRENT_POOL_EXPANSION_VERSION) {
-      const jumpToIndex = POOL_BOUNDARIES[previousVersion] - 1;
-      const migratedCityIndexByNiche = Object.fromEntries(
-        NICHE_ROTATION.map((niche) => [niche.key, jumpToIndex]),
-      );
-      baseState = {
-        ...baseState,
-        cityIndexByNiche: migratedCityIndexByNiche,
-        poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
-        migratedFromVersion: previousVersion,
-        migratedAt: new Date().toISOString(),
-      };
-    } else {
-      baseState = { ...baseState, poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION };
+    // Fast path: already in the new shape at the current version.
+    if (state.visitedByNiche && Number(state.poolExpansionVersion) === CURRENT_POOL_EXPANSION_VERSION) {
+      return state;
     }
-    return baseState;
+
+    // Migration from any prior shape (dayCount, cityIndexByNiche, older
+    // poolExpansionVersion). Backfill visited per niche from whatever
+    // positional cursor was stored. Once written back, we never re-read
+    // the legacy shape — the visited-set model is stable across future
+    // pool changes because it keys on location NAME instead of index.
+    const legacyIndexPerNiche = state.cityIndexByNiche
+      ? state.cityIndexByNiche
+      : Number.isInteger(state.dayCount)
+        ? Object.fromEntries(NICHE_ROTATION.map((n) => [n.key, state.dayCount]))
+        : {};
+    const visitedByNiche = Object.fromEntries(
+      NICHE_ROTATION.map((n) => {
+        const legacyIndex = Number.isInteger(legacyIndexPerNiche[n.key]) ? legacyIndexPerNiche[n.key] : -1;
+        return [n.key, backfillVisitedFromLegacyIndex(legacyIndex)];
+      }),
+    );
+    return {
+      visitedByNiche,
+      poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
+      migratedFromVersion: Number(state.poolExpansionVersion) || 1,
+      migratedAt: new Date().toISOString(),
+    };
   } catch {
-    return { cityIndexByNiche: {}, poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION };
+    return empty();
   }
 }
 
@@ -551,31 +603,48 @@ function saveRotationState(state) {
   writeFileSync(ROTATION_STATE_PATH, JSON.stringify(state, null, 2));
 }
 
-// Each niche tracks its OWN city index and advances independently —
-// previously one shared counter drove all six niches together, so if 5
-// niches succeeded and 1 failed, the failed niche's city silently
-// advanced anyway just because the sweep "succeeded overall" (operator
-// caught this: "shouldn't we update it per success leadgen per niche?").
-// peek/commit split for the same reason as before: never persist an
-// advance before the work is confirmed done.
+// Pick the first location the niche hasn't visited THIS CYCLE. When the
+// visited set covers the whole pool, the cycle is complete — reset it
+// so the next call starts a fresh cycle from the first location. Same
+// per-niche independence guarantee as before: a failed niche stays on
+// its own cursor while others advance.
 function peekNicheCity(state, nicheKey) {
-  const current = Number.isInteger(state.cityIndexByNiche?.[nicheKey])
-    ? state.cityIndexByNiche[nicheKey]
-    : -1;
-  const cityIndex = current + 1;
+  const visited = new Set(state.visitedByNiche?.[nicheKey] || []);
+  const cycleComplete = visited.size >= LOCATION_ROTATION.length;
+  const effectiveVisited = cycleComplete ? new Set() : visited;
+  const location = LOCATION_ROTATION.find((name) => !effectiveVisited.has(name)) || LOCATION_ROTATION[0];
+  const afterLocation = new Set(effectiveVisited);
+  afterLocation.add(location);
+  const nextLocation = LOCATION_ROTATION.find((name) => !afterLocation.has(name)) || LOCATION_ROTATION[0];
   return {
-    cityIndex,
-    location: LOCATION_ROTATION[cityIndex % LOCATION_ROTATION.length],
-    // Where THIS niche will search next time (after this run commits) — shown
-    // in the sweep overview so the operator knows the upcoming destination.
-    nextLocation: LOCATION_ROTATION[(cityIndex + 1) % LOCATION_ROTATION.length],
+    location,
+    nextLocation,
+    // Kept for backwards compat with any log formatter still reading the
+    // positional index. Not authoritative under the visited-set model.
+    cityIndex: LOCATION_ROTATION.indexOf(location),
+    cycleReset: cycleComplete,
   };
 }
 
-function commitNicheAdvance(state, nicheKey, cityIndex) {
+function commitNicheAdvance(state, nicheKey, locationOrIndex) {
+  // Accept either a location name (new callers) or the legacy cityIndex
+  // (older callers still passing plans[i].cityIndex). Resolve to name.
+  const location = typeof locationOrIndex === 'string'
+    ? locationOrIndex
+    : (Number.isInteger(locationOrIndex) && locationOrIndex >= 0
+      ? LOCATION_ROTATION[locationOrIndex % LOCATION_ROTATION.length]
+      : '');
+  if (!location) return state;
+  const prevVisited = state.visitedByNiche?.[nicheKey] || [];
+  const nextVisitedSet = new Set(prevVisited);
+  // If the incoming location completes the cycle, reset first so the
+  // "just-completed" location gets carried into the fresh cycle rather
+  // than being lost.
+  if (nextVisitedSet.size >= LOCATION_ROTATION.length) nextVisitedSet.clear();
+  nextVisitedSet.add(location);
   const nextState = {
     ...state,
-    cityIndexByNiche: { ...(state.cityIndexByNiche || {}), [nicheKey]: cityIndex },
+    visitedByNiche: { ...(state.visitedByNiche || {}), [nicheKey]: [...nextVisitedSet] },
     poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
     updatedAt: new Date().toISOString(),
   };
@@ -709,7 +778,10 @@ export async function runLeadgenSweepRound({
     // different niche failing must not hold this one back, and this one
     // failing must not silently skip its own city either.
     if (!outcome.runError) {
-      rotationState = commitNicheAdvance(rotationState, niche.key, cityIndex);
+      // Pass the location NAME (visited-set model) rather than cityIndex
+      // — the pool can reshuffle across expansions without invalidating
+      // per-niche progress.
+      rotationState = commitNicheAdvance(rotationState, niche.key, location);
     } else {
       process.stderr.write(`${niche.key} failed — not advancing its city, will retry ${location} next run.\n`);
     }

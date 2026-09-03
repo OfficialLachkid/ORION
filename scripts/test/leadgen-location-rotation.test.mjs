@@ -43,38 +43,42 @@ test('LOCATION_ROTATION entries have no leading, trailing, or double whitespace'
   assert.deepEqual(offenders, [], `Whitespace-dirty entries: ${JSON.stringify(offenders)}`);
 });
 
-test('LOCATION_ROTATION has expanded to at least 800 entries (Tier 4 CBS BAG 2026-09-02)', () => {
-  // Regression guard against an accidental revert of either the Tier 1
-  // (2026-08-10, 22→568) or Tier 4 (2026-09-02, 568→841) expansions.
-  // If the list shrinks below 800, at 6 sweeps/day the rotation would
-  // start hitting each town more than once every 4 months, closer to
-  // the earlier saturation curve.
+test('LOCATION_ROTATION has expanded to at least 2000 entries (Tier 4 all-active CBS BAG 2026-09-03)', () => {
+  // Regression guard against reverting the full-pool switch. The
+  // 2026-09-03 change opened is_active=true for every CBS BAG
+  // woonplaats — dropping back below 2000 would mean someone
+  // reintroduced the aggressive filter that was cutting ~1660 real
+  // localities.
   assert.ok(
-    LOCATION_ROTATION.length >= 800,
-    `Expected at least 800 locations after Tier 4 expansion; got ${LOCATION_ROTATION.length}`,
+    LOCATION_ROTATION.length >= 2000,
+    `Expected at least 2000 locations after Tier 4 all-active; got ${LOCATION_ROTATION.length}`,
   );
 });
 
 test('LOCATION_ROTATION disambiguates cross-province namesake towns with a "(Province)" suffix', () => {
-  // Elst, Bergen, and Valkenburg all have real towns in multiple provinces.
-  // Both instances must be present, and both must carry the disambiguating
-  // suffix — otherwise the search query "elektriciens Elst" is ambiguous
-  // between Utrecht (near Amersfoort) and Gelderland (near Nijmegen).
+  // Bergen and Valkenburg have real towns in multiple provinces AND both
+  // instances live in BAG under abbreviated disambiguators ("Bergen (NH)",
+  // "Bergen L"). LOCATION_ROTATION post-processes these into readable
+  // "Name (Provincie)" so search queries stay unambiguous. Elst is a
+  // one-off in BAG (bare "Elst" for Gelderland-Overbetuwe, "Elst Ut"
+  // for Utrecht-Rhenen) — the Ut form gets rewritten too.
   const namesakes = [
-    { bare: 'Elst', suffixed: ['Elst (Utrecht)', 'Elst (Gelderland)'] },
-    { bare: 'Bergen', suffixed: ['Bergen (Noord-Holland)', 'Bergen (Limburg)'] },
-    { bare: 'Valkenburg', suffixed: ['Valkenburg (Zuid-Holland)', 'Valkenburg (Limburg)'] },
+    { suffixed: ['Elst (Utrecht)', 'Elst'] },
+    { suffixed: ['Bergen (Noord-Holland)', 'Bergen (Limburg)'], bareForbidden: 'Bergen' },
+    { suffixed: ['Valkenburg (Zuid-Holland)', 'Valkenburg (Limburg)'], bareForbidden: 'Valkenburg' },
   ];
-  for (const { bare, suffixed } of namesakes) {
-    assert.equal(
-      LOCATION_ROTATION.includes(bare),
-      false,
-      `Bare "${bare}" is ambiguous — must be disambiguated with a province suffix`,
-    );
-    for (const suffixedName of suffixed) {
+  for (const entry of namesakes) {
+    for (const suffixedName of entry.suffixed) {
       assert.ok(
         LOCATION_ROTATION.includes(suffixedName),
         `Missing disambiguated variant: "${suffixedName}"`,
+      );
+    }
+    if (entry.bareForbidden) {
+      assert.equal(
+        LOCATION_ROTATION.includes(entry.bareForbidden),
+        false,
+        `Bare "${entry.bareForbidden}" is ambiguous — must be disambiguated with a province suffix`,
       );
     }
   }
@@ -106,15 +110,14 @@ test('scheduled leadgen rounds are clamped to a sane ceiling', () => {
 });
 
 test('CURRENT_POOL_EXPANSION_VERSION reflects the latest LOCATION_ROTATION expansion', async () => {
-  // Regression guard: every LOCATION_ROTATION expansion needs a matching
-  // bump of CURRENT_POOL_EXPANSION_VERSION so the state-file migration
-  // detects "pool grew since I last ran" and jumps each niche's cursor
-  // to the first new location. Skip the bump and the operator waits
-  // months for the rotation to naturally reach the new territory —
-  // defeats the point of expanding.
+  // Regression guard: every pool composition change needs a matching
+  // bump of CURRENT_POOL_EXPANSION_VERSION so loadRotationState() knows
+  // to run the migration (backfill visited-set from legacy cityIndex,
+  // etc.). Skip the bump and the state file stays in whatever prior
+  // shape it was written under.
   const mod = await import('../run-scheduled-leadgen.mjs');
   assert.ok(
-    Number.isInteger(mod.CURRENT_POOL_EXPANSION_VERSION) && mod.CURRENT_POOL_EXPANSION_VERSION >= 3,
-    `Expected CURRENT_POOL_EXPANSION_VERSION ≥ 3 after Tier 4; got ${mod.CURRENT_POOL_EXPANSION_VERSION}`,
+    Number.isInteger(mod.CURRENT_POOL_EXPANSION_VERSION) && mod.CURRENT_POOL_EXPANSION_VERSION >= 4,
+    `Expected CURRENT_POOL_EXPANSION_VERSION ≥ 4 after 2026-09-03 visited-set switch; got ${mod.CURRENT_POOL_EXPANSION_VERSION}`,
   );
 });
