@@ -514,4 +514,3 @@ function buildLocationRotation() {
 }
 
 export const LOCATION_ROTATION = buildLocationRotation();
-
