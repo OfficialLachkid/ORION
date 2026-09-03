@@ -121,3 +121,36 @@ test('CURRENT_POOL_EXPANSION_VERSION reflects the latest LOCATION_ROTATION expan
     `Expected CURRENT_POOL_EXPANSION_VERSION ≥ 4 after 2026-09-03 visited-set switch; got ${mod.CURRENT_POOL_EXPANSION_VERSION}`,
   );
 });
+
+test('LOCATION_ROTATION expansion pool is deterministically shuffled (no alphabetical clustering)', () => {
+  // 2026-09-03: alphabetical ordering caused a 6-city dead zone during a
+  // real sweep — every niche's first 5 attempts hit "'s-Gravenmoer",
+  // "'s-Graveland", "'s-Gravendeel", "'s-Gravenpolder", "'s-Gravenzande",
+  // "'s-Heer Abtskerke" (tiny hamlets with 0 elektriciens/loodgieters).
+  // Deterministic shuffle spreads BAG's alphabetical hot spots across the
+  // pool. Guard: the first 30 non-original slots must NOT be dominated
+  // by any single first character. In an alphabetical layout, positions
+  // 22-51 would all start with "'" or "A".
+  const firstThirty = LOCATION_ROTATION.slice(22, 52);
+  const firstCharCounts = new Map();
+  for (const name of firstThirty) {
+    const key = name[0].toLowerCase();
+    firstCharCounts.set(key, (firstCharCounts.get(key) || 0) + 1);
+  }
+  const maxCluster = Math.max(...firstCharCounts.values());
+  assert.ok(
+    maxCluster < 15,
+    `Alphabetical clustering detected: ${maxCluster}/30 positions share a first letter. `
+    + `First 30 non-original entries: ${JSON.stringify(firstThirty)}`,
+  );
+});
+
+test('LOCATION_ROTATION shuffle is stable across rebuilds (same input → same order)', async () => {
+  // Deterministic shuffle is worthless if it re-orders on every restart —
+  // the visited-set would still be correct (name-keyed), but logs, tests,
+  // and cycle-progression reasoning would drift. Import twice via cache
+  // bust and assert identity.
+  const mod1 = await import(`../../scripts/leadgen/location-rotation.mjs?stable1=${Date.now()}`);
+  const mod2 = await import(`../../scripts/leadgen/location-rotation.mjs?stable2=${Date.now()}`);
+  assert.deepEqual(mod1.LOCATION_ROTATION, mod2.LOCATION_ROTATION);
+});

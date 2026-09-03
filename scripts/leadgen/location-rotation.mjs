@@ -489,6 +489,23 @@ const BAG_DISAMBIGUATION_REWRITES = new Map([
 ]);
 const WOONPLAATSEN_JSON_PATH = resolve(projectRoot, 'data', 'leadgen', 'nl-woonplaatsen.json');
 
+// Deterministic pseudo-random shuffle key derived from the entry name via
+// FNV-1a. Alphabetical ordering (the pre-2026-09-03 default) let dead
+// clusters of ultra-tiny hamlets (`'s-Gravenmoer`, `'s-Graveland`, ...)
+// dominate whole sweep rounds and return 0 leads consecutively. Sorting
+// by this hash instead spreads BAG's alphabetical hot spots evenly across
+// the pool so every sweep sees a mix of small, medium and namesake towns.
+// Stability matters: same input file → same LOCATION_ROTATION, so logs,
+// tests and the visited-set stay meaningful across restarts.
+function stableShuffleKey(name) {
+  let hash = 2166136261;
+  for (let i = 0; i < name.length; i += 1) {
+    hash ^= name.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 function buildLocationRotation() {
   const doc = JSON.parse(readFileSync(WOONPLAATSEN_JSON_PATH, 'utf8'));
   const rows = (doc.rows || []).filter((r) => r.is_active);
@@ -509,7 +526,9 @@ function buildLocationRotation() {
     formatted.add(display);
     nonOriginal.push(display);
   }
-  nonOriginal.sort((a, b) => a.localeCompare(b, 'nl'));
+  // Deterministic shuffle (see stableShuffleKey above). ORIGINALS stay
+  // at positions 0-21 unchanged — operator explicitly requested that.
+  nonOriginal.sort((a, b) => stableShuffleKey(a) - stableShuffleKey(b));
   return [...ORIGINALS, ...nonOriginal];
 }
 
