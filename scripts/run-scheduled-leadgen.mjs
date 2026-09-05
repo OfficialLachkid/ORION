@@ -33,12 +33,18 @@ const MAX_SCHEDULED_SWEEP_ROUNDS = 10;
 // Dutch search terms — this targets the Dutch market, so the query itself is
 // in Dutch to get relevant local results (matches the "loodgieter Rotterdam"
 // test that worked well during development).
+//
+// clinics: "klinieken" pulled in patient associations (epilepsie.nl),
+// GP practices, and health-info portals in the 2026-09-03 batch — only
+// 1 of 3 hits was a commercial clinic. "medisch centrum" targets the
+// commercial-clinic segment more precisely (physical medical centers,
+// private practices offering paid services).
 export const NICHE_ROTATION = [
   { key: 'electricians', term: 'elektriciens' },
   { key: 'plumbing', term: 'loodgieters' },
   { key: 'real_estate', term: 'makelaars' },
   { key: 'recruitment_agencies', term: 'recruitmentbureaus' },
-  { key: 'clinics', term: 'klinieken' },
+  { key: 'clinics', term: 'medisch centrum' },
   { key: 'liquor_stores', term: 'slijterijen' },
 ];
 
