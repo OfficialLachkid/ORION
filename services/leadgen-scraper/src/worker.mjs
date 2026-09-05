@@ -128,6 +128,58 @@ function sanitizePhone(value) {
   return trimmed;
 }
 
+// Common LLM-emitted stand-ins for "no data" — stored as literal strings
+// in raw_extraction and confusing to grep past when auditing sweeps.
+// Observed live in 8/48 rows of a 3-day batch. Turn them into real nulls
+// so raw_extraction says what the model actually knew.
+const PLACEHOLDER_STRING_PATTERNS = [
+  /^na$/i,
+  /^n\/a$/i,
+  /^none$/i,
+  /^null$/i,
+  /^unknown$/i,
+  /^not (?:available|found|provided|specified|listed)/i,
+  /provided text$/i,
+];
+
+export function sanitizePlaceholderString(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return PLACEHOLDER_STRING_PATTERNS.some((rx) => rx.test(trimmed)) ? null : trimmed;
+}
+
+// business_type comes straight from the LLM and shows up in analytics
+// and Discord digests, so consistent casing matters. Observed junk:
+// the literal search query leaked ("loodgieters Heeze") and a raw
+// English phrase ("Job platform for sustainable jobs"). Strip anything
+// that looks like it came from the query string, cap length so an
+// accidental paragraph doesn't blow up a Discord embed.
+const BUSINESS_TYPE_MAX_LENGTH = 80;
+
+export function sanitizeBusinessType(value, searchQuery = '') {
+  const cleaned = sanitizePlaceholderString(value);
+  if (!cleaned) return '';
+  const queryLower = String(searchQuery || '').trim().toLowerCase();
+  if (queryLower && cleaned.toLowerCase() === queryLower) return '';
+  if (cleaned.length > BUSINESS_TYPE_MAX_LENGTH) return cleaned.slice(0, BUSINESS_TYPE_MAX_LENGTH).trim();
+  return cleaned;
+}
+
+// Copy the raw LLM record but null out placeholder strings on the
+// fields we know the extractor commonly stubs. Keeps raw_extraction
+// truthful as an audit blob without hand-editing the DB later.
+function cleanRawExtractionRecord(record) {
+  if (!record || typeof record !== 'object') return record;
+  return {
+    ...record,
+    kvk_number: sanitizePlaceholderString(record.kvk_number),
+    business_type: sanitizePlaceholderString(record.business_type),
+    business_name: sanitizePlaceholderString(record.business_name),
+  };
+}
+
 const TRACKING_PARAMS = ['srsltid', 'gclid', 'fbclid', 'msclkid'];
 
 function cleanSourceUrl(url) {
@@ -159,24 +211,34 @@ function mapLeadToRow(record, context = {}, existingByDomain = new Map()) {
   const domain = extractDomain(record.source_url);
   const existing = existingByDomain.get(domain) || {};
 
+  const contactEmail = record.contact_email || existing.contact_email || null;
+  const contactPhone = sanitizePhone(record.contact_phone) || existing.contact_phone || null;
+  // Rows with neither email nor phone are dead weight for the qualifier —
+  // it needs at least one channel to reach out on. Marking them here
+  // preserves them for later manual review (or a future contact-hunt
+  // pass) without spending a qualifier slot on them.
+  const status = (contactEmail || contactPhone) ? 'new' : 'no_contact';
+
   return {
     source_url: cleanSourceUrl(record.source_url),
     domain,
     business_name: record.business_name,
-    business_type: record.business_type || '',
+    business_type: sanitizeBusinessType(record.business_type, context.query),
     services: Array.isArray(record.services) ? record.services : [],
     social_links: Array.isArray(record.social_links) ? record.social_links : [],
-    contact_email: record.contact_email || existing.contact_email || null,
-    contact_phone: sanitizePhone(record.contact_phone) || existing.contact_phone || null,
+    contact_email: contactEmail,
+    contact_phone: contactPhone,
     kvk_number: sanitizeKvkNumber(record.kvk_number) || existing.kvk_number || null,
     website_quality: sanitizeWebsiteQuality(record.website_quality) || existing.website_quality || null,
     search_query: context.query || '',
     niche: context.niche || '',
     location: context.location || '',
-    status: 'new',
-    raw_extraction: record,
+    status,
+    raw_extraction: cleanRawExtractionRecord(record),
   };
 }
+
+export { mapLeadToRow };
 
 export async function runLeadgenSearch(query, max, config, options = {}) {
   const boundedMax = Math.min(Math.max(Number(max) || DEFAULT_MAX_RESULTS, 1), 50);
