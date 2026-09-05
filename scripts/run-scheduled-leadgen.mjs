@@ -39,6 +39,19 @@ const MAX_SCHEDULED_SWEEP_ROUNDS = 10;
 // 1 of 3 hits was a commercial clinic. "medisch centrum" targets the
 // commercial-clinic segment more precisely (physical medical centers,
 // private practices offering paid services).
+//
+// Positions 6-25 are the 2026-09-05 expansion — Dutch trades and service
+// businesses picked because they take offertes / phone leads (not because
+// they need complex backends or client logins). Keys use the operator's
+// exact Dutch identifiers verbatim (some are already snake_case like
+// `airco_installateur`); departure from the older English-key convention
+// is intentional so future additions can be pasted straight from a
+// business-directory listing without a manual translation step.
+//
+// New niches naturally start at LOCATION_ROTATION[0] on their first sweep:
+// peekNicheCity's `state.visitedByNiche?.[nicheKey] || []` falls back to
+// an empty set for any niche key it hasn't seen before. Existing niches
+// keep their visited sets untouched.
 export const NICHE_ROTATION = [
   { key: 'electricians', term: 'elektriciens' },
   { key: 'plumbing', term: 'loodgieters' },
@@ -46,6 +59,26 @@ export const NICHE_ROTATION = [
   { key: 'recruitment_agencies', term: 'recruitmentbureaus' },
   { key: 'clinics', term: 'medisch centrum' },
   { key: 'liquor_stores', term: 'slijterijen' },
+  { key: 'dakdekker', term: 'dakdekker' },
+  { key: 'stukadoor', term: 'stukadoor' },
+  { key: 'schilder', term: 'schilder' },
+  { key: 'hoveniersbedrijf', term: 'hoveniersbedrijf' },
+  { key: 'aannemer', term: 'aannemer' },
+  { key: 'installatiebedrijf', term: 'installatiebedrijf' },
+  { key: 'rijschool', term: 'rijschool' },
+  { key: 'fysiotherapie', term: 'fysiotherapie' },
+  { key: 'schoonheidssalon', term: 'schoonheidssalon' },
+  { key: 'ongediertebestrijding', term: 'ongediertebestrijding' },
+  { key: 'verhuisbedrijf', term: 'verhuisbedrijf' },
+  { key: 'glaszetter', term: 'glaszetter' },
+  { key: 'isolatiebedrijf', term: 'isolatiebedrijf' },
+  { key: 'vloerlegger', term: 'vloerlegger' },
+  { key: 'kozijnen', term: 'kozijnen' },
+  { key: 'airco_installateur', term: 'airco installateur' },
+  { key: 'warmtepomp_installateur', term: 'warmtepomp installateur' },
+  { key: 'administratiekantoor', term: 'administratiekantoor' },
+  { key: 'hypotheekadviseur', term: 'hypotheekadviseur' },
+  { key: 'kinderdagverblijf', term: 'kinderdagverblijf' },
 ];
 
 
