@@ -23,11 +23,13 @@ const ROTATION_STATE_PATH = resolve(projectRoot, 'data', 'leadgen', 'rotation-st
 // effectively "everything the search engine will give us".
 export const MAX_RESULTS_PER_NICHE = 50;
 // Match the installer's DEFAULT_TIMES so callers that skip --times get
-// the same 6 rounds the scheduled launchd job requests. Bumped 2026-09-02
-// as part of the CBS-BAG expansion — see install-leadgen-schedule.mjs for
-// the rationale (qualifier under-fed at 2×/day, expanded pool absorbs
-// the higher rate without saturating).
-export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 6;
+// the same 3 rounds the scheduled launchd job requests. Dialed back 6→3
+// on 2026-09-05 after the first 26-niche live run finished in 5h34min
+// (blowing past the 09:00 Ollama window) and produced 286 leads / ~163
+// no-contact rows — well over the qualifier's 30/night ceiling. 3 rounds
+// hits a natural ~2.75h and matches the after-video-generation trigger's
+// night-shift completion timing. See install-leadgen-schedule.mjs.
+export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 3;
 const MAX_SCHEDULED_SWEEP_ROUNDS = 10;
 
 // Dutch search terms — this targets the Dutch market, so the query itself is
@@ -67,8 +69,6 @@ export const NICHE_ROTATION = [
   { key: 'installatiebedrijf', term: 'installatiebedrijf' },
   { key: 'rijschool', term: 'rijschool' },
   { key: 'fysiotherapie', term: 'fysiotherapie' },
-  { key: 'schoonheidssalon', term: 'schoonheidssalon' },
-  { key: 'ongediertebestrijding', term: 'ongediertebestrijding' },
   { key: 'verhuisbedrijf', term: 'verhuisbedrijf' },
   { key: 'glaszetter', term: 'glaszetter' },
   { key: 'isolatiebedrijf', term: 'isolatiebedrijf' },
@@ -76,9 +76,12 @@ export const NICHE_ROTATION = [
   { key: 'kozijnen', term: 'kozijnen' },
   { key: 'airco_installateur', term: 'airco installateur' },
   { key: 'warmtepomp_installateur', term: 'warmtepomp installateur' },
-  { key: 'administratiekantoor', term: 'administratiekantoor' },
-  { key: 'hypotheekadviseur', term: 'hypotheekadviseur' },
-  { key: 'kinderdagverblijf', term: 'kinderdagverblijf' },
+  // Removed 2026-09-05 (operator ask): schoonheidssalon,
+  // ongediertebestrijding, administratiekantoor, hypotheekadviseur,
+  // kinderdagverblijf. Existing visited-set entries for these keys stay
+  // in rotation-state.json (harmless — peekNicheCity only reads keys
+  // currently in NICHE_ROTATION). If they come back later, they'll
+  // resume from their preserved position without a fresh cycle.
 ];
 
 

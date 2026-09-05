@@ -42,13 +42,24 @@ test('NICHE_ROTATION preserves the original 6 niches at positions 0-5 (existing 
   assert.deepEqual(NICHE_ROTATION.slice(0, 6).map((n) => n.key), originalKeys);
 });
 
-test('NICHE_ROTATION has grown to at least 20 niches (post-2026-09-05 expansion)', () => {
-  // Regression guard against accidentally dropping the trades/services
-  // expansion. Bump this number in tandem with any deliberate future
-  // reduction; otherwise the sweep silently narrows and lead volume
-  // craters without an obvious diff signal.
-  assert.ok(
-    NICHE_ROTATION.length >= 20,
-    `Expected at least 20 niches after 2026-09-05 expansion; got ${NICHE_ROTATION.length}`,
+test('NICHE_ROTATION currently ships 21 niches (post-2026-09-05 expansion and prune)', () => {
+  // Regression guard: net count settled at 21 after the initial +20
+  // expansion and the -5 prune (schoonheidssalon, ongediertebestrijding,
+  // administratiekantoor, hypotheekadviseur, kinderdagverblijf) once the
+  // first live 26-niche run showed timing pressure and yield mismatch
+  // vs the qualifier's 30/night ceiling. Adjust in tandem with any
+  // deliberate expansion/prune; otherwise the sweep silently narrows or
+  // widens without an obvious diff signal.
+  assert.equal(
+    NICHE_ROTATION.length, 21,
+    `Expected exactly 21 niches after 2026-09-05 prune; got ${NICHE_ROTATION.length}`,
   );
+});
+
+test('NICHE_ROTATION does NOT include the 2026-09-05 pruned niches', () => {
+  // Explicit guard against someone re-adding these without re-evaluating
+  // the timing/yield tradeoff that motivated their removal.
+  const pruned = ['schoonheidssalon', 'ongediertebestrijding', 'administratiekantoor', 'hypotheekadviseur', 'kinderdagverblijf'];
+  const readded = pruned.filter((key) => NICHE_ROTATION.some((n) => n.key === key));
+  assert.deepEqual(readded, [], `Pruned niches re-added without discussion: ${JSON.stringify(readded)}`);
 });

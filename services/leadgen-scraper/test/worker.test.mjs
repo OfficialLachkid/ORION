@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  extractContactFromHtml,
   isNoResultsLeadgenError,
   mapLeadToRow,
   sanitizeBusinessType,
@@ -117,4 +118,42 @@ test('mapLeadToRow cleans placeholder strings out of raw_extraction', () => {
   assert.equal(row.raw_extraction.business_type, null);
   assert.equal(row.raw_extraction.kvk_number, null);
   assert.equal(row.raw_extraction.business_name, 'Example BV');
+});
+
+test('extractContactFromHtml prefers mailto/tel hrefs over plain-text matches', () => {
+  // Contact-page fallback lands on a /contact page and needs to reliably
+  // pull the ONE canonical email + phone even when the surrounding page
+  // mentions other addresses (e.g. dev contact, partner emails). Href
+  // attributes are the authoritative signal — the operator's business
+  // wants their own contact, not the site vendor's.
+  const html = `
+    <p>Vragen? Bel of mail: <a href="mailto:info@voorbeeld.nl">Stuur mail</a></p>
+    <p>Bereikbaar via <a href="tel:+31 20 555 0100">020 555 0100</a></p>
+    <p>Website gemaakt door dev@leverancier.nl</p>
+  `;
+  const contact = extractContactFromHtml(html);
+  assert.equal(contact.email, 'info@voorbeeld.nl');
+  assert.match(contact.phone, /555 ?0100/u);
+});
+
+test('extractContactFromHtml falls back to a plain-text Dutch phone number when no tel: href', () => {
+  const html = 'Bel ons op 020-1234599 tijdens kantooruren.';
+  const contact = extractContactFromHtml(html);
+  assert.equal(contact.email, null);
+  assert.equal(contact.phone, '020-1234599');
+});
+
+test('extractContactFromHtml strips placeholder phone numbers (123456 signature)', () => {
+  // sanitizePhone runs on the extracted phone too — a fabricated
+  // placeholder like +31 20 1234567 is worse than an empty field for
+  // outreach.
+  const html = 'Voorbeeld: +31 20 1234567';
+  const contact = extractContactFromHtml(html);
+  assert.equal(contact.phone, null);
+});
+
+test('extractContactFromHtml returns nulls on empty input', () => {
+  assert.deepEqual(extractContactFromHtml(''), { email: null, phone: null });
+  assert.deepEqual(extractContactFromHtml(null), { email: null, phone: null });
+  assert.deepEqual(extractContactFromHtml(undefined), { email: null, phone: null });
 });
