@@ -93,15 +93,16 @@ test('LOCATION_ROTATION originals are not accidentally duplicated in the expansi
   );
 });
 
-test('scheduled leadgen defaults to six sweep rounds per daily run (post-Tier-4 CBS-BAG expansion, 2026-09-02)', () => {
-  // Bumped from 2 to 6 alongside the CBS BAG pool expansion (568→841
-  // active locations) so the qualifier's 30-lead nightly ceiling gets
-  // saturated instead of running at ~33% utilization. Rotation window
-  // stays healthy at ~140 days per niche.
-  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 6);
-  assert.equal(resolveScheduledSweepRounds(undefined), 6);
-  assert.equal(resolveScheduledSweepRounds(''), 6);
-  assert.equal(resolveScheduledSweepRounds(0), 6);
+test('scheduled leadgen defaults to three sweep rounds per daily run (post-2026-09-05 26-niche timing calibration)', () => {
+  // Dialed 6→3 after the first 26-niche live run finished in 5h34min
+  // (past the 09:00 Ollama window) and produced 286 leads / 163
+  // no-contact — 10x the qualifier's 30/night ceiling. 3 rounds hits
+  // ~2.75h and pairs with the after-night-shift chained trigger so
+  // leadgen finishes well before the operator's workday.
+  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 3);
+  assert.equal(resolveScheduledSweepRounds(undefined), 3);
+  assert.equal(resolveScheduledSweepRounds(''), 3);
+  assert.equal(resolveScheduledSweepRounds(0), 3);
 });
 
 test('scheduled leadgen rounds are clamped to a sane ceiling', () => {
