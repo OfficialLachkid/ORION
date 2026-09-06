@@ -8,17 +8,17 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-// Sweep at 06:00 × 3 rounds. Original 06:00 × 6 rounds (2026-09-02) was
-// tuned for the then-6-niche pool. After the 2026-09-05 expansion to 21
-// niches the same 6 rounds took 5h34min — past the 09:00 Ollama window
-// and 10x over the qualifier's 30-leads/night ceiling. Dialed back to
-// 3 rounds (~2.75h → done by 08:45) which pairs cleanly with the
-// after-night-shift chained trigger added in the same PR: night-shift
-// finishes video work around 04:00-05:00 UTC, kicks leadgen, and leadgen
-// finishes well before the operator's workday starts.
+// Sweep at 06:00 × 4 rounds. History:
+//   6 (2026-09-02): tuned for the then-6-niche pool.
+//   3 (2026-09-05): after the 26-niche expansion the same 6 rounds took
+//     5h34min. Also added the after-night-shift chained trigger.
+//   4 (2026-09-06): first chained run showed contact-fallback lifted
+//     usable-leads rate 43% → 79.7% and the qualifier's 30/night pipe
+//     was no longer close to full. Bumped 3→4 to feed it enough while
+//     still finishing ~06:45 CEST (well before the 09:00 Ollama window).
 const DEFAULT_HOUR = 6;
 const DEFAULT_MINUTE = 0;
-const DEFAULT_TIMES = 3;
+const DEFAULT_TIMES = 4;
 const MAX_TIMES = 10;
 const PLIST_LABEL = 'io.vbj.orion.leadgen-schedule';
 
