@@ -1,0 +1,199 @@
+{
+  "template_id": "pokemon.stat-clash.v1",
+  "template_key": "stat-clash",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "countdown",
+    "stat_grid",
+    "reveal",
+    "transition"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 120,
+      "bottom": 260,
+      "left": 120
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "round_count": 3,
+    "round_count_weights": {
+      "medium": 1,
+      "hard": 1
+    },
+    "round_count_levels": {
+      "medium": {
+        "round_count": 3
+      },
+      "hard": {
+        "round_count": 5
+      }
+    },
+    "candidate_count": 4,
+    "mode": "highest_stat",
+    "stat_pool": [
+      "hp",
+      "attack",
+      "defense",
+      "special_attack",
+      "special_defense",
+      "speed"
+    ],
+    "sampling_attempts_per_round": 180,
+    "min_stat_value": 35,
+    "min_winner_margin": 6,
+    "max_winner_margin": 28,
+    "max_stat_spread": 42
+  },
+  "question_contract": {
+    "hook_text": "",
+    "hook_text_variants": [],
+    "prompt_text": "Which Pokemon has the highest {stat}?",
+    "prompt_text_variants": [
+      "Which Pokemon has the highest {stat}?",
+      "Who has the highest {stat}?"
+    ],
+    "reveal_text": "",
+    "reveal_text_variants": []
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_backgrounds",
+      "media_type": "looping_image_gif_or_video",
+      "fit": "cover",
+      "blur_sigma": 3
+    },
+    "text": {
+      "prompt_y": 150,
+      "prompt_font_size": 102,
+      "reveal_y": 285,
+      "reveal_font_size": 92,
+      "outline_width": 8,
+      "show_counter": false,
+      "counter_x": 72,
+      "counter_y": 144,
+      "counter_font_size": 96,
+      "font_candidates": [
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
+      ]
+    },
+    "sprite_grid": {
+      "rows": 2,
+      "columns": 2,
+      "item_size_px": 252,
+      "min_item_size_px": 214,
+      "column_gap_px": 160,
+      "row_gap_px": 320,
+      "sprite_scale_multiplier": 1.77,
+      "sprite_center_y_offset_px": 90,
+      "stage_bounds_px": {
+        "left": 120,
+        "top": 455,
+        "width": 840,
+        "height": 820
+      }
+    },
+    "sprite_platform": {
+      "option_enabled": true,
+      "option_width_multiplier": 0.85,
+      "center_y_offset_multiplier": 0.34,
+      "option_center_y_offset_px": 82
+    },
+    "timer": {
+      "countdown_from": 4,
+      "countdown_to": 0,
+      "bar_height_px": 38,
+      "bar_horizontal_inset_px": 20,
+      "center_y": 1010,
+      "bar_y_offset_px": 0
+    },
+    "stat_values": {
+      "font_size": 84,
+      "top_row_y_offset_px": 6,
+      "bottom_row_y_offset_px": 230,
+      "default_color": "white",
+      "winner_color": "0x32D74B"
+    },
+    "rounds": {
+      "pre_countdown_hold_seconds": 0.18,
+      "reveal_hold_seconds": 1.2,
+      "transition_duration_seconds": 0.42,
+      "final_hold_seconds": 1
+    }
+  },
+  "reveal": {
+    "visual_delay_seconds": 0
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "sound_effects": {
+      "countdown_tick": {
+        "enabled": true,
+        "trigger": "each_second"
+      },
+      "timer_end": {
+        "enabled": true,
+        "trigger": "countdown_complete",
+        "preferred_keywords": [
+          "ding-sound"
+        ]
+      },
+      "intro_slot_reveal": {
+        "enabled": true,
+        "trigger": "pokemon_reveal",
+        "preferred_keywords": [
+          "pokeball-open-sound"
+        ]
+      }
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true,
+    "candidate_intro_initial_delay_seconds": 0.1,
+    "candidate_intro_stagger_seconds": 0.24,
+    "candidate_intro_duration_seconds": 0.22,
+    "candidate_intro_y_offset_px": 42,
+    "candidate_intro_scale_initial": 0.68,
+    "candidate_intro_scale_peak": 1.08,
+    "candidate_intro_scale_settle": 1,
+    "candidate_forming_enabled": true,
+    "candidate_forming_duration_seconds": 1,
+    "intro_pokeball_hold_seconds": 0.16,
+    "intro_pokeball_lead_seconds": 0.18,
+    "intro_platform_lead_seconds": 0.08,
+    "intro_pokeball_scale_multiplier": 0.52,
+    "intro_pokeball_center_y_offset_px": 200,
+    "stat_reveal_fade_duration_seconds": 0.22,
+    "decoy_grayscale_fade_duration_seconds": 0.22
+  }
+}

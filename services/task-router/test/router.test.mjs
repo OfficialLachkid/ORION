@@ -264,6 +264,25 @@ test('normalizeTaskMessage recognizes tournament generation commands as explicit
   );
 });
 
+test('normalizeTaskMessage recognizes stat-clash generation commands as explicit runtime actions', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    channelKey: 'commands',
+    submittedAt: '2026-08-31T10:00:00.000Z',
+    content: 'generate video template: stat-clash channel: poke-quizz-youtube',
+    author: { id: 'operator-1', displayName: 'VBJ Services' },
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
+  assert.equal(result.task.summary, 'Generate Stat Clash review for Poke Quizz');
+  assert.equal(result.task.poke_quizz_generate_review.templateKey, 'stat-clash');
+  assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'poke-quizz-youtube');
+  assert.equal(
+    result.task.poke_quizz_generate_review.channelConfigPath,
+    'services/product-video-agent/config/channels/poke-quizz-stat-clash-youtube.json'
+  );
+});
+
 test('normalizeTaskMessage recognizes analytics digest commands as explicit runtime actions', () => {
   const config = loadRuntimeConfig();
   const result = normalizeTaskMessage({

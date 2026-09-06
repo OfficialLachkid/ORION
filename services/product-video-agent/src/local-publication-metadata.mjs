@@ -76,6 +76,9 @@ function resolveTemplateFlavor(plan = {}) {
   if (templateKey.includes('memory') || templateId.includes('memory')) {
     return 'memory';
   }
+  if (templateKey.includes('stat-clash') || templateId.includes('stat-clash') || templateKey.includes('stat-battle') || templateId.includes('stat-battle')) {
+    return 'stat-clash';
+  }
   if (templateKey.includes('find-the-shiny') || templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
   }
@@ -130,6 +133,13 @@ const DEFAULT_TOURNAMENT_TITLE_BUILDERS = Object.freeze([
   () => 'Pokemon Tourney',
   () => 'Who will be Champion?',
   () => 'Who will win?',
+]);
+
+const DEFAULT_STAT_CLASH_TITLE_BUILDERS = Object.freeze([
+  () => 'Who has the Better Stat?',
+  () => 'Highest Stat Challenge!',
+  () => 'Who has the Highest Stat?',
+  () => 'Stat Clash! 📊',
 ]);
 
 const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([
@@ -214,6 +224,13 @@ function buildTemplateAwareDefaultTitle(plan) {
       : 0;
     return DEFAULT_TYPE_QUIZ_TITLE_BUILDERS[templateIndex]();
   }
+  if (flavor === 'stat-clash') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|stat-clash`) % DEFAULT_STAT_CLASH_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_STAT_CLASH_TITLE_BUILDERS[templateIndex]();
+  }
   if (flavor === 'tournament') {
     const seed = String(plan?.seed || '').trim();
     const templateIndex = seed
@@ -253,6 +270,13 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
     const subjectCount = selectedSubjects.length || Number(plan?.selection?.round_count || 0) || 5;
     return joinDescriptionParagraphs(
       `Can you get ${subjectCount}/${subjectCount}? Watch each Pokemon, beat the timer, and lock in its type before the reveal.`,
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
+  }
+  if (flavor === 'stat-clash') {
+    const statLabel = titleCaseWord(plan?.selection?.primary_stat_key || 'stat');
+    return joinDescriptionParagraphs(
+      `Four Pokemon enter each Stat Clash round. Pick who has the highest ${statLabel} before time runs out.`,
       `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
     );
   }
@@ -320,6 +344,25 @@ function buildTemplateAwareMetadataPrompt(plan) {
       '- Do not spoil every exact answer in the title.',
       '- The description should frame the video as a rapid-fire Pokemon type challenge.',
       '- Mention that each Pokemon reveals its type after the timer runs out.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
+  if (flavor === 'stat-clash') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    const statLabel = titleCaseWord(plan?.selection?.primary_stat_key || 'stat');
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon stat challenge video.',
+      `Round count: ${Number(plan?.selection?.round_count || 0) || 3}`,
+      `Tracked stat: ${statLabel}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil all winning answers in the title.',
+      '- The description should frame the video as a fast Pokemon stat challenge.',
+      '- Mention that the viewer must spot the highest stat before the reveal.',
       '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
       '- Keep the tone playful and sharp, not childish and not corporate.',
       'Return JSON only.',
@@ -402,6 +445,15 @@ function buildTemplateAwareHashtags(plan) {
       'pokemon',
       'pokemontypes',
       'typequiz',
+      'pokemonquiz',
+      'shorts',
+    ]);
+  }
+  if (flavor === 'stat-clash') {
+    return normalizeHashtags([
+      'pokemon',
+      'pokemonstats',
+      'statchallenge',
       'pokemonquiz',
       'shorts',
     ]);
