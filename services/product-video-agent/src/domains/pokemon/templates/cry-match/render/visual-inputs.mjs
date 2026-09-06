@@ -62,6 +62,19 @@ export function buildVisualInputs(plan, renderPlan) {
         ),
       });
     });
+    // Cry audio as a visual-pipeline input so `showfreqs` can consume
+    // it and produce a real audio-driven equalizer video stream that
+    // gets overlaid on the meter position. The AUDIO ffmpeg pass also
+    // loads the same cry for its cue mixing — same file, two purposes,
+    // two independent ffmpeg invocations.
+    const targetCryPath = String(round?.target_cry_path || '').trim();
+    if (targetCryPath) {
+      inputs.push({
+        role: `round-${round.round_number}-cry`,
+        path: targetCryPath,
+        args: ['-i', targetCryPath],
+      });
+    }
   });
 
   return inputs;

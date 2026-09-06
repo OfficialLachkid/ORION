@@ -769,165 +769,96 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = revealLabel;
     });
 
-    // Cry meter — equalizer-bars style. Draws N vertical bars centered
-    // above the grid during the countdown phase. Each bar's height
-    // pulses independently via a phase-offset sine on t so the whole
-    // widget reads as an animated audio-level meter (DJ set / voice
-    // waveform), not a single throbbing bar. Bar color transitions
-    // from top (red) → mid (yellow) → bottom (green) — the classic
-    // VU-meter palette — approximated by drawing each bar in a color
-    // sampled from the mid band; a future refactor can gradient-fill
-    // each bar with a mask overlay if needed.
+    // Cry meter — REAL audio-driven equalizer via showfreqs.
+    //
+    // The synthetic sinusoidal bars are replaced with FFmpeg's
+    // showfreqs filter, which performs an FFT on the target cry's
+    // audio and emits a video stream of frequency-magnitude bars.
+    // Bars literally follow the cry's amplitude and spectrum —
+    // silence = flat, cry playing = bars react to the actual sound.
+    //
+    // Wiring (unchanged from earlier v12/v13 experiments — the ONLY
+    // thing reverted in this iteration was the sprite/pokeball
+    // scaling, per operator ask). The synthetic per-bar equalizer
+    // (with 45 scale=eval=frame filters, envelope, quantization) is
+    // gone entirely — one showfreqs subgraph per round replaces it,
+    // dramatically cutting the swscale EAGAIN pressure by construction.
+    //
+    // Multi-play: for short cries that replay, asplit fans the cry
+    // audio into N copies, adelay shifts each to its own play offset,
+    // amix combines them, so bars react to every play.
     const cryMeter = renderPlan.cry_meter_layout;
-    if (cryMeter?.enabled) {
+    const cryInputIndex = roundInputs.cry;
+    if (cryMeter?.enabled && cryInputIndex != null) {
       const meterStart = round.local.countdown_start_seconds;
       const meterEnd = round.local.reveal_start_seconds;
       const eq = cryMeter.equalizer || {};
-      const barCount = Math.max(4, Math.round(eq.bar_count || 24));
       const bandWidth = Math.max(120, eq.band_width_px || cryMeter.bar_width_px || 720);
-      const barGap = Math.max(1, eq.bar_gap_px || 6);
-      const singleBarWidth = Math.max(3, Math.round((bandWidth - barGap * (barCount - 1)) / barCount));
-      const totalBandWidth = singleBarWidth * barCount + barGap * (barCount - 1);
-      const bandLeft = `(w-${totalBandWidth})/2`;
       const centerY = Number(cryMeter.center_y.toFixed(3));
-      const minHeight = Math.max(4, eq.min_bar_height_px || 10);
-      const maxHeight = Math.max(minHeight + 4, eq.max_bar_height_px || 120);
-      const heightRange = maxHeight - minHeight;
-      const waveSpeed = Math.max(0.5, eq.wave_speed || 4.5);
-      // Rotate colors across bars — mostly mid (yellow), with a few
-      // top-red spikes near the middle and green shoulders on the
-      // edges. Purely aesthetic; comes off the config palette.
-      const colors = {
-        top: eq.top_color || '0xFF3B30',
-        mid: eq.mid_color || 'yellow',
-        bottom: eq.bottom_color || '0x30D158',
-      };
-      const midpoint = (barCount - 1) / 2;
-      const barColorForIndex = (index) => {
-        const distanceFromMid = Math.abs(index - midpoint) / Math.max(1, midpoint);
-        if (distanceFromMid < 0.28) return colors.top;
-        if (distanceFromMid < 0.72) return colors.mid;
-        return colors.bottom;
-      };
-
-      // FFmpeg 8's drawbox filter doesn't support :eval=frame — its
-      // x/y/w/h expressions freeze at init values so drawbox-driven
-      // animation is impossible on this build. Workaround: per bar,
-      // a color source at max height gets squished via
-      // `scale=eval=frame`, then overlaid at center_y - h/2 so it
-      // stays vertically centered as it grows/shrinks. This is the
-      // same pattern know-your-shiny uses for its animated timer bar.
-      //
-      // Envelope masking: bars must be FLAT (baseline minHeight)
-      // outside the cry playback windows and only pulse WHILE a cry
-      // is playing. `between(t, start, end) + between(t, start2, end2)
-      // + …` sums to 1 during any window and 0 elsewhere; multiplied
-      // into the sine amplitude, this collapses the height expression
-      // to minHeight in silent gaps.
-      //
-      // Centering fix: overlay's `w`/`h` variables refer to the
-      // OVERLAY input's dimensions (a single bar, ~40 px), NOT the
-      // main frame. Use `main_w` explicitly to place bars against the
-      // 1080-wide canvas — the earlier `(w-720)/2` was silently
-      // computing (40-720)/2 = -340, pushing everything off the
-      // left edge (visible in v4b).
-      // Source spans the whole scene so its PTS is scene-local — no
-      // setpts shift needed (an earlier attempt with setpts+=meterStart
-      // produced non-monotonic overlay PTS and libx264 refused to open,
-      // dropping the whole render). Overlay's `enable=` handles the
-      // per-window visibility gating.
+      const maxHeight = Math.max(20, eq.max_bar_height_px || 128);
+      // Single flat white color so mode=bar's bottom-to-top growth
+      // reads cleanly as upward-only bars. Earlier gradient
+      // (green|yellow|red) made bars look mirrored (colored top,
+      // colored bottom around a middle).
+      const showfreqsColors = eq.active_color || cryMeter.active_color || 'white';
       const sceneDurationSeconds = Number(round.local.scene_duration_seconds.toFixed(3));
-      const cryWindowsLocal = Array.isArray(round.cry_playback_windows_local)
+
+      // Build a padded audio stream that mirrors the audio pipeline's
+      // cue schedule — so the visual bars react to EVERY cry play.
+      // For short cries with a replay, the planner emits two entries
+      // in cry_playback_windows_local. asplit fans the source into N
+      // copies, adelay shifts each to its own scene-local start,
+      // amix combines them, apad extends to scene end.
+      const cryWindowsForShowfreqs = Array.isArray(round.cry_playback_windows_local)
         ? round.cry_playback_windows_local
-            .map((window) => ({
-              start: Math.max(0, Number(window?.start_offset_seconds || 0)),
-              end: Math.max(0, Number(window?.end_offset_seconds || 0)),
-            }))
-            .filter((window) => window.end > window.start)
+            .map((window) => Math.max(0, Number(window?.start_offset_seconds || 0)))
+            .filter((offset) => Number.isFinite(offset))
         : [];
-      // Envelope zeroes the sine amplitude outside the actual cry
-      // playback windows so bars sit flat at minHeight in silence.
-      // Attack/sustain/release shape (2026-09-06 tweak):
-      //   - Attack (0.06s): quick ramp UP from 0 to 1 when the cry
-      //     begins, so bars snap awake immediately.
-      //   - Sustain (until 40% of cry remaining): full amplitude.
-      //   - Release (last 40% of cry): linear ramp DOWN from 1 to 0
-      //     so bars visibly settle to flat as the cry tapers, instead
-      //     of hard-cutting to flat.
-      // Offsets add meterStart because the scale filter's `t` is
-      // scene-local (source starts at scene t=0) while
-      // cry_playback_windows_local stores offsets from
-      // countdown_start (= meterStart).
-      const ENV_ATTACK_SECONDS = 0.06;
-      const perWindowEnvelopes = cryWindowsLocal.map(({ start, end }) => {
-        const absStart = meterStart + start;
-        const absEnd = meterStart + end;
-        const windowDuration = Math.max(0.15, absEnd - absStart);
-        const releaseDuration = Math.max(0.12, Math.min(0.6, windowDuration * 0.4));
-        const attackDuration = Math.min(ENV_ATTACK_SECONDS, Math.max(0.02, windowDuration * 0.15));
-        const sustainStart = absStart + attackDuration;
-        const releaseStart = Math.max(sustainStart + 0.02, absEnd - releaseDuration);
-        // Nested if(): attack ramp, sustain, release ramp, 0 elsewhere.
-        return (
-          `if(lt(t,${absStart.toFixed(3)}),0,`
-          + `if(lt(t,${sustainStart.toFixed(3)}),(t-${absStart.toFixed(3)})/${attackDuration.toFixed(3)},`
-          + `if(lt(t,${releaseStart.toFixed(3)}),1,`
-          + `if(lt(t,${absEnd.toFixed(3)}),(${absEnd.toFixed(3)}-t)/${(absEnd - releaseStart).toFixed(3)},0))))`
-        );
-      });
-      const envelopeExpr = perWindowEnvelopes.length > 0
-        ? `(${perWindowEnvelopes.join('+')})`
-        : '1';
-      // Height-quantization step: with 15 bars × scale=eval=frame per
-      // scene (45 concurrent scales in 3-round graphs), swscale hits
-      // its context-init limit and returns EAGAIN — filter graph
-      // dies with "Failed initializing scaling graph". Root cause:
-      // swscale reinits its context whenever the output DIMENSIONS
-      // change. Smoothly-varying h means every frame is a new
-      // dimension, so reinit every frame across every bar.
-      //
-      // Snap h to multiples of HEIGHT_QUANTUM_PX so consecutive
-      // frames often land on the same integer height and swscale
-      // can reuse its context. With quantum=6 and heightRange=116,
-      // there are ~20 discrete height buckets — an animated frame
-      // sequence dwells on the same bucket for ~3-4 frames on
-      // average, cutting swscale reinit rate by ~75%. Visually the
-      // motion still reads as continuous because 6px steps at 30fps
-      // are below the perceptual threshold for smooth motion.
-      const HEIGHT_QUANTUM_PX = 6;
-      for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
-        const phase = (barIndex / barCount) * Math.PI * 2;
-        const frequency = 1 + (barIndex % 3) * 0.35;
-        const sineExpr = `0.5+0.5*sin(${waveSpeed.toFixed(3)}*(t-${meterStart})*${frequency.toFixed(3)}+${phase.toFixed(3)})`;
-        // NaN guard + quantization. gte(NaN,0)=0 → fallback minHeight
-        // at init when t is NaN. Real branch: raw height computed,
-        // then floored to the nearest HEIGHT_QUANTUM_PX multiple to
-        // keep swscale context stable across most consecutive frames.
-        const rawHeightExpr = `${minHeight}+${heightRange.toFixed(3)}*(${envelopeExpr})*(${sineExpr})`;
-        const quantizedHeightExpr = `${HEIGHT_QUANTUM_PX}*floor((${rawHeightExpr})/${HEIGHT_QUANTUM_PX})`;
-        const heightExpr = `if(gte(t,0),${quantizedHeightExpr},${minHeight})`;
-        const barX = `(main_w-${totalBandWidth})/2+${barIndex * (singleBarWidth + barGap)}`;
-        const barSrcLabel = `scene${roundIndex}eqSrc${barIndex}`;
-        const barLabel = `scene${roundIndex}eq${barIndex}`;
-        // scale=eval=frame is the only filter on this FFmpeg build
-        // that re-runs its dimension expressions per frame — drawbox
-        // has no eval= at all and crop's out_h freezes at init. The
-        // NaN guard above gives scale a valid initial height (12)
-        // when t=NaN, then per-frame overrides take over. format=rgba
-        // is set BOTH before and after scale to keep the swscaler
-        // from renegotiating pixel formats each frame (that was the
-        // "Failed initializing scaling graph" error in v5b/v5).
+      const playCount = Math.max(1, cryWindowsForShowfreqs.length);
+      const cryPaddedLabel = `scene${roundIndex}cryPad`;
+      if (playCount === 1) {
+        const singleDelayMs = Math.max(0, Math.round((meterStart + (cryWindowsForShowfreqs[0] ?? 0)) * 1000));
         filters.push(
-          `color=c=${barColorForIndex(barIndex)}@0.92:s=${singleBarWidth}x${maxHeight}:r=${fps}:d=${sceneDurationSeconds},format=yuva420p,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w=${singleBarWidth}:h='${heightExpr}':eval=frame,format=yuva420p[${barSrcLabel}]`,
+          `[${cryInputIndex}:a]aformat=channel_layouts=stereo,adelay=${singleDelayMs}|${singleDelayMs},apad=whole_dur=${sceneDurationSeconds},asetpts=PTS-STARTPTS[${cryPaddedLabel}]`,
         );
+      } else {
+        const splitTargets = cryWindowsForShowfreqs
+          .map((_, playIndex) => `[scene${roundIndex}crySplit${playIndex}]`)
+          .join('');
         filters.push(
-          `[${currentLabel}][${barSrcLabel}]overlay=x='${barX}':y='${centerY}-h/2':enable='${formatEnableBetween(meterStart, meterEnd)}'[${barLabel}]`,
+          `[${cryInputIndex}:a]aformat=channel_layouts=stereo,asplit=${playCount}${splitTargets}`,
         );
-        currentLabel = barLabel;
+        cryWindowsForShowfreqs.forEach((offsetSeconds, playIndex) => {
+          const delayMs = Math.max(0, Math.round((meterStart + offsetSeconds) * 1000));
+          filters.push(
+            `[scene${roundIndex}crySplit${playIndex}]adelay=${delayMs}|${delayMs}[scene${roundIndex}cryDelayed${playIndex}]`,
+          );
+        });
+        const mixInputs = cryWindowsForShowfreqs
+          .map((_, playIndex) => `[scene${roundIndex}cryDelayed${playIndex}]`)
+          .join('');
+        filters.push(
+          `${mixInputs}amix=inputs=${playCount}:duration=longest:normalize=0,apad=whole_dur=${sceneDurationSeconds},asetpts=PTS-STARTPTS[${cryPaddedLabel}]`,
+        );
       }
 
+      // showfreqs: FFT-driven bar visualization. mode=bar draws
+      // vertical bars from the bottom of the canvas upward,
+      // cmode=combined merges L+R channels into one bar set,
+      // ascale=log + fscale=log make quiet/low frequencies more
+      // visible, win_size=1024 gives smooth-but-responsive updates.
+      const cryBarsLabel = `scene${roundIndex}cryBars`;
+      filters.push(
+        `[${cryPaddedLabel}]showfreqs=s=${bandWidth}x${maxHeight}:mode=bar:ascale=log:fscale=log:win_size=1024:cmode=combined:colors=${showfreqsColors},format=rgba[${cryBarsLabel}]`,
+      );
+      const cryMeterOverlayLabel = `scene${roundIndex}cryMeter`;
+      filters.push(
+        `[${currentLabel}][${cryBarsLabel}]overlay=x='(main_w-${bandWidth})/2':y=${(centerY - maxHeight / 2).toFixed(3)}:enable='${formatEnableBetween(meterStart, meterEnd)}'[${cryMeterOverlayLabel}]`,
+      );
+      currentLabel = cryMeterOverlayLabel;
+
       const labelText = 'LISTEN';
-      const labelFontSize = Math.max(28, Math.round(cryMeter.icon_size_px * 0.9));
+      const labelFontSize = Math.max(28, Math.round((cryMeter.icon_size_px || 42) * 0.9));
       const labelY = Number((centerY - maxHeight / 2 - labelFontSize - 14).toFixed(3));
       const labelOutLabel = `scene${roundIndex}cryLabel`;
       filters.push(

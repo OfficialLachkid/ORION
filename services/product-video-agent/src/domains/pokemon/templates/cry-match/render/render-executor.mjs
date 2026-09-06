@@ -240,6 +240,9 @@ export async function renderPokeQuizzVideo({
           && !candidatePath.endsWith('.mov')
           && !candidatePath.endsWith('.webm');
       }),
+      cry: inputRoleIndex.has(`round-${round.round_number}-cry`)
+        ? inputRoleIndex.get(`round-${round.round_number}-cry`)
+        : null,
     })),
   };
   const templateFontCandidates = (Array.isArray(template?.layout?.text?.font_candidates)
