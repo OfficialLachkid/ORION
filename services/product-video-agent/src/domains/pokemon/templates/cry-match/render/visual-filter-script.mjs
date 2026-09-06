@@ -796,60 +796,77 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const bandWidth = Math.max(120, eq.band_width_px || cryMeter.bar_width_px || 720);
       const centerY = Number(cryMeter.center_y.toFixed(3));
       const maxHeight = Math.max(20, eq.max_bar_height_px || 128);
-      // Single flat white color so mode=bar's bottom-to-top growth
-      // reads cleanly as upward-only bars. Earlier gradient
-      // (green|yellow|red) made bars look mirrored (colored top,
-      // colored bottom around a middle).
-      const showfreqsColors = eq.active_color || cryMeter.active_color || 'white';
       const sceneDurationSeconds = Number(round.local.scene_duration_seconds.toFixed(3));
 
-      // Build a padded audio stream that mirrors the audio pipeline's
-      // cue schedule — so the visual bars react to EVERY cry play.
-      // For short cries with a replay, the planner emits two entries
-      // in cry_playback_windows_local. asplit fans the source into N
-      // copies, adelay shifts each to its own scene-local start,
-      // amix combines them, apad extends to scene end.
-      const cryWindowsForShowfreqs = Array.isArray(round.cry_playback_windows_local)
+      // Build the padded cry via CONCAT (not asplit+amix). amix was
+      // making showfreqs get "stuck" on the second play — likely
+      // because amix uses gapless PTS from all inputs and the delayed
+      // silent stream messed with showfreqs' internal state. concat
+      // literally builds `cry + silence_gap + cry` as one continuous
+      // stream, then adelay shifts it to meterStart. Simpler timing,
+      // no PTS anomalies.
+      const cryWindowsForBars = Array.isArray(round.cry_playback_windows_local)
         ? round.cry_playback_windows_local
             .map((window) => Math.max(0, Number(window?.start_offset_seconds || 0)))
             .filter((offset) => Number.isFinite(offset))
         : [];
-      const playCount = Math.max(1, cryWindowsForShowfreqs.length);
+      const playCount = Math.max(1, cryWindowsForBars.length);
       const cryPaddedLabel = `scene${roundIndex}cryPad`;
+      const cryStartDelayMs = Math.max(0, Math.round((meterStart + (cryWindowsForBars[0] ?? 0)) * 1000));
       if (playCount === 1) {
-        const singleDelayMs = Math.max(0, Math.round((meterStart + (cryWindowsForShowfreqs[0] ?? 0)) * 1000));
         filters.push(
-          `[${cryInputIndex}:a]aformat=channel_layouts=stereo,adelay=${singleDelayMs}|${singleDelayMs},apad=whole_dur=${sceneDurationSeconds},asetpts=PTS-STARTPTS[${cryPaddedLabel}]`,
+          `[${cryInputIndex}:a]aformat=channel_layouts=stereo,adelay=${cryStartDelayMs}|${cryStartDelayMs},apad=whole_dur=${sceneDurationSeconds},asetpts=PTS-STARTPTS[${cryPaddedLabel}]`,
         );
       } else {
-        const splitTargets = cryWindowsForShowfreqs
-          .map((_, playIndex) => `[scene${roundIndex}crySplit${playIndex}]`)
-          .join('');
+        // gapSeconds is derived from the delta between the two window
+        // starts in the plan (start_offset[1] - start_offset[0]).
+        // The audio pipeline uses the same gap for its cue schedule,
+        // so bars stay in sync with the actual audio plays.
+        const gapSeconds = Math.max(0.05, cryWindowsForBars[1] - cryWindowsForBars[0]);
+        const cryCleanLabel = `scene${roundIndex}cryClean`;
+        const silenceLabel = `scene${roundIndex}crySilence`;
+        const concatCopies = Array.from({ length: playCount }, (_, i) => (i === 0 ? `[${cryCleanLabel}]` : `[${cryCleanLabel}${i}]`)).join('');
+        // asplit the cleaned cry N times so concat has N distinct inputs
+        const splitTargets = Array.from({ length: playCount }, (_, i) => (i === 0 ? `[${cryCleanLabel}]` : `[${cryCleanLabel}${i}]`)).join('');
         filters.push(
           `[${cryInputIndex}:a]aformat=channel_layouts=stereo,asplit=${playCount}${splitTargets}`,
         );
-        cryWindowsForShowfreqs.forEach((offsetSeconds, playIndex) => {
-          const delayMs = Math.max(0, Math.round((meterStart + offsetSeconds) * 1000));
-          filters.push(
-            `[scene${roundIndex}crySplit${playIndex}]adelay=${delayMs}|${delayMs}[scene${roundIndex}cryDelayed${playIndex}]`,
-          );
-        });
-        const mixInputs = cryWindowsForShowfreqs
-          .map((_, playIndex) => `[scene${roundIndex}cryDelayed${playIndex}]`)
-          .join('');
         filters.push(
-          `${mixInputs}amix=inputs=${playCount}:duration=longest:normalize=0,apad=whole_dur=${sceneDurationSeconds},asetpts=PTS-STARTPTS[${cryPaddedLabel}]`,
+          `anullsrc=r=44100:cl=stereo:d=${gapSeconds.toFixed(3)}[${silenceLabel}]`,
+        );
+        // Interleave cryN + silence + cry(N+1) + silence + …
+        const concatInputs = [];
+        for (let i = 0; i < playCount; i += 1) {
+          concatInputs.push(i === 0 ? `[${cryCleanLabel}]` : `[${cryCleanLabel}${i}]`);
+          if (i < playCount - 1) {
+            concatInputs.push(`[${silenceLabel}]`);
+            // Each silence needs its own copy — asplit it.
+            // Only if we have more than 2 plays. For 2 plays we
+            // only need 1 silence gap so no split needed.
+          }
+        }
+        const totalConcatSegments = concatInputs.length;
+        filters.push(
+          `${concatInputs.join('')}concat=n=${totalConcatSegments}:v=0:a=1[scene${roundIndex}cryConcat]`,
+        );
+        filters.push(
+          `[scene${roundIndex}cryConcat]adelay=${cryStartDelayMs}|${cryStartDelayMs},apad=whole_dur=${sceneDurationSeconds},asetpts=PTS-STARTPTS[${cryPaddedLabel}]`,
         );
       }
 
-      // showfreqs: FFT-driven bar visualization. mode=bar draws
-      // vertical bars from the bottom of the canvas upward,
-      // cmode=combined merges L+R channels into one bar set,
-      // ascale=log + fscale=log make quiet/low frequencies more
-      // visible, win_size=1024 gives smooth-but-responsive updates.
+      // showcqt — Constant-Q Transform bar visualization, designed
+      // for musical spectrum. Produces discrete colored bars per
+      // note, with a proper spectrum-color gradient across the band.
+      // cscheme picks the gradient: `low_r|low_g|low_b|high_r|high_g|high_b`
+      // Green-to-red = VU-meter aesthetic (green low freqs → yellow
+      // mid → red high freqs by natural additive interpolation).
+      // count controls sensitivity/refinement of bar heights.
+      // fps=30 matches the video, sono_v=0 hides the spectrogram
+      // background (we only want the bars, not the scrolling
+      // spectrogram).
       const cryBarsLabel = `scene${roundIndex}cryBars`;
       filters.push(
-        `[${cryPaddedLabel}]showfreqs=s=${bandWidth}x${maxHeight}:mode=bar:ascale=log:fscale=log:win_size=1024:cmode=combined:colors=${showfreqsColors},format=rgba[${cryBarsLabel}]`,
+        `[${cryPaddedLabel}]showcqt=s=${bandWidth}x${maxHeight}:count=6:fps=${fps}:sono_v=0:bar_v=14:bar_g=2:cscheme=0|1|0|1|0|0:axis=0:tc=0.33:tlength=0.2,format=rgba[${cryBarsLabel}]`,
       );
       const cryMeterOverlayLabel = `scene${roundIndex}cryMeter`;
       filters.push(
