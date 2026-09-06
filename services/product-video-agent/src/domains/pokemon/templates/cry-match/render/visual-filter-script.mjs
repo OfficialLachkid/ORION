@@ -847,14 +847,36 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         : [];
       // Envelope zeroes the sine amplitude outside the actual cry
       // playback windows so bars sit flat at minHeight in silence.
-      // Offsets are added to meterStart because the scale filter's `t`
-      // is scene-local (source starts at scene t=0), while
-      // cry_playback_windows_local expresses offsets from
+      // Attack/sustain/release shape (2026-09-06 tweak):
+      //   - Attack (0.06s): quick ramp UP from 0 to 1 when the cry
+      //     begins, so bars snap awake immediately.
+      //   - Sustain (until 40% of cry remaining): full amplitude.
+      //   - Release (last 40% of cry): linear ramp DOWN from 1 to 0
+      //     so bars visibly settle to flat as the cry tapers, instead
+      //     of hard-cutting to flat.
+      // Offsets add meterStart because the scale filter's `t` is
+      // scene-local (source starts at scene t=0) while
+      // cry_playback_windows_local stores offsets from
       // countdown_start (= meterStart).
-      const envelopeExpr = cryWindowsLocal.length > 0
-        ? cryWindowsLocal
-            .map(({ start, end }) => `between(t,${(meterStart + start).toFixed(3)},${(meterStart + end).toFixed(3)})`)
-            .join('+')
+      const ENV_ATTACK_SECONDS = 0.06;
+      const perWindowEnvelopes = cryWindowsLocal.map(({ start, end }) => {
+        const absStart = meterStart + start;
+        const absEnd = meterStart + end;
+        const windowDuration = Math.max(0.15, absEnd - absStart);
+        const releaseDuration = Math.max(0.12, Math.min(0.6, windowDuration * 0.4));
+        const attackDuration = Math.min(ENV_ATTACK_SECONDS, Math.max(0.02, windowDuration * 0.15));
+        const sustainStart = absStart + attackDuration;
+        const releaseStart = Math.max(sustainStart + 0.02, absEnd - releaseDuration);
+        // Nested if(): attack ramp, sustain, release ramp, 0 elsewhere.
+        return (
+          `if(lt(t,${absStart.toFixed(3)}),0,`
+          + `if(lt(t,${sustainStart.toFixed(3)}),(t-${absStart.toFixed(3)})/${attackDuration.toFixed(3)},`
+          + `if(lt(t,${releaseStart.toFixed(3)}),1,`
+          + `if(lt(t,${absEnd.toFixed(3)}),(${absEnd.toFixed(3)}-t)/${(absEnd - releaseStart).toFixed(3)},0))))`
+        );
+      });
+      const envelopeExpr = perWindowEnvelopes.length > 0
+        ? `(${perWindowEnvelopes.join('+')})`
         : '1';
       for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
         const phase = (barIndex / barCount) * Math.PI * 2;

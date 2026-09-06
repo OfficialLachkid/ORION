@@ -164,7 +164,7 @@
       "enabled": true,
       "trigger": "countdown_start",
       "peak_db": -6,
-      "repeat_count": 2,
+      "repeat_count": 1,
       "gap_between_plays_seconds": 1.5,
       "reveal_replay": true
     },
