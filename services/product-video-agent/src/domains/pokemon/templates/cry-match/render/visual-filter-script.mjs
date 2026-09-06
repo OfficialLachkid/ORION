@@ -878,15 +878,34 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const envelopeExpr = perWindowEnvelopes.length > 0
         ? `(${perWindowEnvelopes.join('+')})`
         : '1';
+      // Height-quantization step: with 15 bars × scale=eval=frame per
+      // scene (45 concurrent scales in 3-round graphs), swscale hits
+      // its context-init limit and returns EAGAIN — filter graph
+      // dies with "Failed initializing scaling graph". Root cause:
+      // swscale reinits its context whenever the output DIMENSIONS
+      // change. Smoothly-varying h means every frame is a new
+      // dimension, so reinit every frame across every bar.
+      //
+      // Snap h to multiples of HEIGHT_QUANTUM_PX so consecutive
+      // frames often land on the same integer height and swscale
+      // can reuse its context. With quantum=6 and heightRange=116,
+      // there are ~20 discrete height buckets — an animated frame
+      // sequence dwells on the same bucket for ~3-4 frames on
+      // average, cutting swscale reinit rate by ~75%. Visually the
+      // motion still reads as continuous because 6px steps at 30fps
+      // are below the perceptual threshold for smooth motion.
+      const HEIGHT_QUANTUM_PX = 6;
       for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
         const phase = (barIndex / barCount) * Math.PI * 2;
         const frequency = 1 + (barIndex % 3) * 0.35;
         const sineExpr = `0.5+0.5*sin(${waveSpeed.toFixed(3)}*(t-${meterStart})*${frequency.toFixed(3)}+${phase.toFixed(3)})`;
-        // NaN guard: init-time evaluation has t=NaN. gte(NaN,0)=0 so
-        // the fallback minHeight is used at init; per-frame eval then
-        // computes real heights. Without this, between()/sin() emit
-        // NaN at init and the whole filter blows up.
-        const heightExpr = `if(gte(t,0),${minHeight}+${heightRange.toFixed(3)}*(${envelopeExpr})*(${sineExpr}),${minHeight})`;
+        // NaN guard + quantization. gte(NaN,0)=0 → fallback minHeight
+        // at init when t is NaN. Real branch: raw height computed,
+        // then floored to the nearest HEIGHT_QUANTUM_PX multiple to
+        // keep swscale context stable across most consecutive frames.
+        const rawHeightExpr = `${minHeight}+${heightRange.toFixed(3)}*(${envelopeExpr})*(${sineExpr})`;
+        const quantizedHeightExpr = `${HEIGHT_QUANTUM_PX}*floor((${rawHeightExpr})/${HEIGHT_QUANTUM_PX})`;
+        const heightExpr = `if(gte(t,0),${quantizedHeightExpr},${minHeight})`;
         const barX = `(main_w-${totalBandWidth})/2+${barIndex * (singleBarWidth + barGap)}`;
         const barSrcLabel = `scene${roundIndex}eqSrc${barIndex}`;
         const barLabel = `scene${roundIndex}eq${barIndex}`;
