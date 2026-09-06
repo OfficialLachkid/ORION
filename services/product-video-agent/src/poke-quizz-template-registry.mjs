@@ -40,6 +40,13 @@ import {
   buildPokeQuizzRenderPlan as buildTypeSpeedQuizRenderPlan,
   renderPokeQuizzVideo as renderTypeSpeedQuizVideo,
 } from './domains/pokemon/templates/type-speed-quiz/renderer.mjs';
+import {
+  planPokemonCryMatchChallenge,
+} from './domains/pokemon/templates/cry-match/planner.mjs';
+import {
+  buildPokeQuizzRenderPlan as buildCryMatchRenderPlan,
+  renderPokeQuizzVideo as renderCryMatchVideo,
+} from './domains/pokemon/templates/cry-match/renderer.mjs';
 
 const TEMPLATE_REGISTRY = Object.freeze({
   'dual-type-reveal': Object.freeze({
@@ -72,6 +79,11 @@ const TEMPLATE_REGISTRY = Object.freeze({
     buildRenderPlan: buildTypeSpeedQuizRenderPlan,
     renderVideo: renderTypeSpeedQuizVideo,
   }),
+  'cry-match': Object.freeze({
+    planner: planPokemonCryMatchChallenge,
+    buildRenderPlan: buildCryMatchRenderPlan,
+    renderVideo: renderCryMatchVideo,
+  }),
 });
 
 function normalizeTemplateSelector(template = {}) {
@@ -101,6 +113,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   if (templateKey === 'know-your-shiny') {
     return 'know-your-shiny';
   }
+  if (templateKey === 'cry-match') {
+    return 'cry-match';
+  }
   if (templateKey && TEMPLATE_REGISTRY[templateKey]) {
     return templateKey;
   }
@@ -112,6 +127,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   }
   if (templateId.includes('know-your-shiny')) {
     return 'know-your-shiny';
+  }
+  if (templateId.includes('cry-match')) {
+    return 'cry-match';
   }
   if (templateId.includes('tournament') || templateId.includes('showdown')) {
     return 'tournament';
