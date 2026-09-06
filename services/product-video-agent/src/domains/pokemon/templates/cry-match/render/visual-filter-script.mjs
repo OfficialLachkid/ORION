@@ -907,7 +907,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // shapes. High enough sigma to round corners without bleeding
       // significantly into gap columns.
       filters.push(
-        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=bilinear,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}',gblur=sigma=8:steps=1[${cryBarsSpacedLabel}]`,
+        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=bilinear,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}',gblur=sigma=5:steps=1[${cryBarsSpacedLabel}]`,
       );
       filters.push(
         `[${cryBarsSpacedLabel}]split=2[${cryBarsUpLabel}][${cryBarsDownLabel}]`,
