@@ -11,6 +11,10 @@ const DEFAULT_CRY_MATCH_QUIZ_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.7
 const DEFAULT_CRY_MATCH_REVEAL_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.55).toFixed(3));
 const DEFAULT_CRY_MATCH_REPEAT_GAP_SECONDS = 0.35;
 const DEFAULT_CRY_MATCH_REPEAT_COUNT = 2;
+// Small breathing room after the sprite reveal before the cry replays
+// — operator noted playing it immediately felt too fast, better to
+// let the correct sprite land on screen for a beat first.
+const DEFAULT_CRY_MATCH_REVEAL_REPLAY_DELAY_SECONDS = 0.3;
 
 export function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
@@ -61,9 +65,13 @@ export function buildCryMatchCryCues(plan, renderPlan, template = null) {
       });
     }
     if (replayOnReveal) {
+      const revealDelaySeconds = ensureNumber(
+        cryPlaybackConfig.reveal_replay_delay_seconds,
+        DEFAULT_CRY_MATCH_REVEAL_REPLAY_DELAY_SECONDS,
+      );
       cues.push({
         path: cryPath,
-        start_seconds: Number(ensureNumber(round?.reveal_visual_start_seconds, 0).toFixed(3)),
+        start_seconds: Number((ensureNumber(round?.reveal_visual_start_seconds, 0) + revealDelaySeconds).toFixed(3)),
         volume: DEFAULT_CRY_MATCH_REVEAL_CRY_VOLUME,
       });
     }

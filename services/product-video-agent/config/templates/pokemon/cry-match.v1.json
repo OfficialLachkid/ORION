@@ -167,6 +167,7 @@
       "gap_between_plays_seconds": 1.0,
       "short_cry_replay_threshold_seconds": 1.0,
       "reveal_replay": true,
+      "reveal_replay_delay_seconds": 0.3,
       "_note": "repeat_count is now derived per-cry: short cries (< threshold) play twice with a start-to-start gap, long cries play once. See planner."
     },
     "sound_effects": {
