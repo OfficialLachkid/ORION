@@ -26,15 +26,11 @@
     "generation_scope": [],
     "round_count": 3,
     "round_count_weights": {
-      "medium": 1,
-      "hard": 1
+      "medium": 1
     },
     "round_count_levels": {
       "medium": {
         "round_count": 3
-      },
-      "hard": {
-        "round_count": 5
       }
     },
     "candidate_count": 4,
