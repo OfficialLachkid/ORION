@@ -862,8 +862,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // Single yellow color reads brightly on the dark background.
       const cryBarsLabel = `scene${roundIndex}cryBars`;
       const cryBarsRawLabel = `scene${roundIndex}cryBarsRaw`;
+      // colors=yellow was rendering as white — showfreqs' color
+      // parser needed hex format. Also add per-channel colors for
+      // stereo input so cmode=combined has BOTH slots filled (it
+      // uses the max across channels internally, so both should
+      // agree on the target color). Hex 0xFFCC00 = warm amber
+      // yellow that reads clearly against the dark background.
       filters.push(
-        `[${cryPaddedLabel}]showfreqs=s=15x${maxHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=combined:colors=yellow[${cryBarsRawLabel}]`,
+        `[${cryPaddedLabel}]showfreqs=s=15x${maxHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=combined:colors=0xFFCC00|0xFFCC00[${cryBarsRawLabel}]`,
       );
       filters.push(
         `[${cryBarsRawLabel}]scale=${bandWidth}:${maxHeight}:flags=neighbor,format=rgba[${cryBarsLabel}]`,
