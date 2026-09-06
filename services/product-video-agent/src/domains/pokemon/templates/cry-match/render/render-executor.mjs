@@ -22,6 +22,37 @@ import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifact
 
 const MIN_SAFE_ANIMATED_SPRITE_DURATION_SECONDS = 0.2;
 
+// Swscaler EAGAIN retry: with 15 equalizer bars × scale=eval=frame
+// per scene, swscale occasionally fails to acquire a context and
+// returns "Resource temporarily unavailable" — the whole encoder
+// then drops with "Could not open encoder before EOF". The error is
+// transient (retry usually succeeds) so wrap the ffmpeg call with a
+// bounded retry that ONLY re-runs on this specific fingerprint.
+// Height quantization (see visual-filter-script.mjs) already cuts
+// the failure rate by ~75%; the retry covers the residual.
+const SWSCALER_EAGAIN_FINGERPRINT = /Failed initializing scaling graph \(Resource temporarily unavailable\)/u;
+const MAX_FFMPEG_RETRIES = 3;
+
+async function runFfmpegWithSwscaleRetry(options, { onRetry } = {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= MAX_FFMPEG_RETRIES; attempt += 1) {
+    try {
+      return await runLocalProcess(options);
+    } catch (error) {
+      const message = String(error?.message || error || '');
+      if (!SWSCALER_EAGAIN_FINGERPRINT.test(message) || attempt === MAX_FFMPEG_RETRIES) {
+        throw error;
+      }
+      lastError = error;
+      if (typeof onRetry === 'function') onRetry(attempt);
+      // Small back-off so any lingering swscale contexts can be
+      // freed by the OS before the next attempt.
+      await new Promise((r) => setTimeout(r, 800));
+    }
+  }
+  throw lastError;
+}
+
 function parseRoundCandidateRole(role = '') {
   const match = /^round-(\d+)-candidate-(\d+)$/u.exec(String(role || '').trim());
   if (!match) {
@@ -225,7 +256,7 @@ export async function renderPokeQuizzVideo({
   await writeFile(filterScriptPath, visualFilter.script, 'utf8');
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
-  await runLocalProcess({
+  await runFfmpegWithSwscaleRetry({
     executable: ffmpegExecutable,
     args: [
       '-y',
