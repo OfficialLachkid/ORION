@@ -41,6 +41,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     .map((choice) => choice.value)
     .sort();
   assert.deepEqual(generateTemplateChoiceValues, [
+    'cry-match',
     'dual-type-reveal',
     'find-the-shiny',
     'know-your-shiny',
