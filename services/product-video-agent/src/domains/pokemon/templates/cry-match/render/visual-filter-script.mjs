@@ -879,28 +879,27 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const cryBarsSpacedLabel = `scene${roundIndex}cryBarsSpaced`;
       const cryBarsUpLabel = `scene${roundIndex}cryBarsUp`;
       const cryBarsDownLabel = `scene${roundIndex}cryBarsDown`;
+      // ascale=cbrt is more sensitive than sqrt for quieter
+      // frequencies — pokemon cries have narrow spectral content
+      // and sqrt was letting many bars stay flat. cbrt boosts the
+      // small values proportionally more.
       filters.push(
-        `[${cryPaddedLabel}]showfreqs=s=${barCount}x${halfHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=combined:colors=0xFFCC00|0xFFCC00[${cryBarsRawLabel}]`,
+        `[${cryPaddedLabel}]showfreqs=s=${barCount}x${halfHeight}:mode=bar:ascale=cbrt:fscale=log:win_size=1024:cmode=combined:colors=0xFFCC00|0xFFCC00[${cryBarsRawLabel}]`,
       );
-      // geq post-processes the bars: (1) reshapes each bar column
-      // into a parabola/bell curve via sin(PI·x/BAR_WIDTH) alpha
-      // (bar tapers to zero at both edges of its unit); (2) recolors
-      // the bar pixels into varying shades of blue based on the bar
-      // index (floor(X/UNIT)). Blue channel stays high; green varies
-      // between shades using sin/cos of the bar index; red stays low.
-      // The bar SHAPE (amplitude-driven) comes from showfreqs' RGB
-      // brightness — we check if the pixel is a bar pixel by testing
-      // r+g+b > threshold to preserve the amplitude cut-off.
-      const alphaBaseCheck = `if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,255\\,0)`;
-      // Parabola falloff: sin(PI * x / BAR_WIDTH) peaks at x=BAR_WIDTH/2 (=1.0), zero at edges.
-      const parabolaFactor = `max(0\\,sin(PI*mod(X\\,${barUnitWidth})/${barWidth}))`;
-      const alphaExpr = `if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,${alphaBaseCheck}*${parabolaFactor}\\,0)`;
-      // Blue palette per bar index — b stays high, g varies, r low.
-      // Different shades cycle every few bars for pleasant variety.
+      // Simple rectangle alpha mask (same as v21 which rendered
+      // properly). Parabola tapering was reducing bar visibility
+      // too aggressively — combined with amplitude-driven height,
+      // bars were only visible as thin arches. Rectangle keeps
+      // full-height amplitude bars with hard vertical edges +
+      // gap-column transparency.
+      // Blue palette per bar index — b stays high, g varies for
+      // saturation variety, r stays low. Different shades cycle
+      // across the 15 bars.
       const barIdxExpr = `floor(X/${barUnitWidth})`;
       const rExpr = `20+15*mod(${barIdxExpr}\\,3)`;
       const gExpr = `100+50*abs(sin(${barIdxExpr}))`;
       const bExpr = `220+35*abs(cos(${barIdxExpr}*0.7))`;
+      const alphaExpr = `if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,255\\,0)\\,0)`;
       filters.push(
         `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}'[${cryBarsSpacedLabel}]`,
       );
@@ -921,7 +920,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       currentLabel = cryMeterOverlayLabel;
 
-      const labelText = 'LISTEN 👂';
+      const labelText = 'LISTEN';
       const labelFontSize = Math.max(28, Math.round((cryMeter.icon_size_px || 42) * 0.9));
       const labelY = Number((centerY - maxHeight / 2 - labelFontSize - 14).toFixed(3));
       const labelOutLabel = `scene${roundIndex}cryLabel`;
