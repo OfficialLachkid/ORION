@@ -872,15 +872,32 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // still at centerY and grows downward — perfect for the
       // bottom half.
       const halfHeight = Math.max(10, Math.round(maxHeight / 2));
+      // Bar spacing (2026-09-06 late-late-late-late — the "make it
+      // look nicer" ask): split each 48px-wide unit into a bar_width
+      // opaque region and a gap_width transparent region. Uses a geq
+      // alpha mask on the scaled-up showfreqs output — one filter
+      // instead of 15 per-bar crops/overlays.
+      const barCount = 15;
+      const barUnitWidth = Math.floor(bandWidth / barCount); // e.g. 48
+      const barWidth = Math.max(4, Math.round(barUnitWidth * 0.68)); // ~68% bar, ~32% gap
       const cryBarsRawLabel = `scene${roundIndex}cryBarsRaw`;
-      const cryBarsScaledLabel = `scene${roundIndex}cryBarsScaled`;
+      const cryBarsSpacedLabel = `scene${roundIndex}cryBarsSpaced`;
       const cryBarsUpLabel = `scene${roundIndex}cryBarsUp`;
       const cryBarsDownLabel = `scene${roundIndex}cryBarsDown`;
       filters.push(
-        `[${cryPaddedLabel}]showfreqs=s=15x${halfHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=combined:colors=0xFFCC00|0xFFCC00[${cryBarsRawLabel}]`,
+        `[${cryPaddedLabel}]showfreqs=s=${barCount}x${halfHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=combined:colors=0xFFCC00|0xFFCC00[${cryBarsRawLabel}]`,
+      );
+      // Scale up with nearest neighbor, then geq stamps a repeating
+      // opaque/transparent alpha pattern across X so each 48px unit
+      // shows ~32px of bar followed by ~16px of transparent gap.
+      // alpha(X,Y) preserves showfreqs' own bar-vs-empty alpha so
+      // vertical amplitude gating still works — the gap mask only
+      // knocks out horizontal spacing between bars.
+      filters.push(
+        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,alpha(X\\,Y)\\,0)'[${cryBarsSpacedLabel}]`,
       );
       filters.push(
-        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,split=2[${cryBarsUpLabel}][${cryBarsDownLabel}]`,
+        `[${cryBarsSpacedLabel}]split=2[${cryBarsUpLabel}][${cryBarsDownLabel}]`,
       );
       const cryBarsDownFlippedLabel = `scene${roundIndex}cryBarsDownF`;
       filters.push(
