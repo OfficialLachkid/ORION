@@ -871,41 +871,52 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // canvas; placed at [centerY, centerY+halfHeight] the base is
       // still at centerY and grows downward — perfect for the
       // bottom half.
-      // Waveform via `showwaves mode=cline` — draws a centered
-      // horizontal line pulsing up/down from a mid-line, in response
-      // to the time-domain audio amplitude. This literally IS the
-      // soundwave-with-bumps shape from the operator's reference
-      // image — no more rectangular bars needing post-processing.
-      // Mirror around center is built into mode=cline, so the
-      // earlier split+vflip+two-overlays trick is dropped too.
-      const cryWaveRawLabel = `scene${roundIndex}cryWaveRaw`;
-      const cryWaveTintedLabel = `scene${roundIndex}cryWaveTinted`;
-      // lowpass before showwaves removes high-frequency content so
-      // the wave has FEWER sharp peaks across the width — smoother,
-      // more legible shape (operator: "too many expanding points").
-      // f=800 keeps low + low-mid frequency energy, drops the fast
-      // oscillations that create dense micro-peaks.
-      const cryPaddedSmoothLabel = `scene${roundIndex}cryPadSmooth`;
+      const halfHeight = Math.max(10, Math.round(maxHeight / 2));
+      const barCount = 15;
+      const barUnitWidth = Math.floor(bandWidth / barCount);
+      const barWidth = Math.max(4, Math.round(barUnitWidth * 0.68));
+      const cryBarsRawLabel = `scene${roundIndex}cryBarsRaw`;
+      const cryBarsSpacedLabel = `scene${roundIndex}cryBarsSpaced`;
+      const cryBarsUpLabel = `scene${roundIndex}cryBarsUp`;
+      const cryBarsDownLabel = `scene${roundIndex}cryBarsDown`;
+      // ascale=cbrt is more sensitive than sqrt for quieter
+      // frequencies — pokemon cries have narrow spectral content
+      // and sqrt was letting many bars stay flat. cbrt boosts the
+      // small values proportionally more.
       filters.push(
-        `[${cryPaddedLabel}]lowpass=f=800[${cryPaddedSmoothLabel}]`,
+        `[${cryPaddedLabel}]showfreqs=s=${barCount}x${halfHeight}:mode=bar:ascale=cbrt:fscale=log:win_size=1024:cmode=combined:colors=0xFFCC00|0xFFCC00[${cryBarsRawLabel}]`,
+      );
+      // Simple rectangle alpha mask (same as v21 which rendered
+      // properly). Parabola tapering was reducing bar visibility
+      // too aggressively — combined with amplitude-driven height,
+      // bars were only visible as thin arches. Rectangle keeps
+      // full-height amplitude bars with hard vertical edges +
+      // gap-column transparency.
+      // Blue palette per bar index — b stays high, g varies for
+      // saturation variety, r stays low. Different shades cycle
+      // across the 15 bars.
+      const barIdxExpr = `floor(X/${barUnitWidth})`;
+      const rExpr = `20+15*mod(${barIdxExpr}\\,3)`;
+      const gExpr = `100+50*abs(sin(${barIdxExpr}))`;
+      const bExpr = `220+35*abs(cos(${barIdxExpr}*0.7))`;
+      const alphaExpr = `if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,255\\,0)\\,0)`;
+      filters.push(
+        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}'[${cryBarsSpacedLabel}]`,
       );
       filters.push(
-        `[${cryPaddedSmoothLabel}]showwaves=s=${bandWidth}x${maxHeight}:mode=cline:rate=${fps}:scale=lin:colors=0x4B7BEF|0x4B7BEF[${cryWaveRawLabel}]`,
+        `[${cryBarsSpacedLabel}]split=2[${cryBarsUpLabel}][${cryBarsDownLabel}]`,
       );
-      // Recolor the line pixels with a subtle blue-shade variation
-      // across X so the wave isn't monotone. Non-line pixels stay
-      // transparent (showwaves paints only the line, leaving alpha
-      // zero elsewhere — the gt(r+g+b) check preserves that shape).
-      const rExprWave = `40+20*abs(sin(X*0.02))`;
-      const gExprWave = `120+40*abs(sin(X*0.015))`;
-      const bExprWave = `230+20*abs(cos(X*0.01))`;
-      const alphaKeepExpr = `if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,alpha(X\\,Y)\\,0)`;
+      const cryBarsDownFlippedLabel = `scene${roundIndex}cryBarsDownF`;
       filters.push(
-        `[${cryWaveRawLabel}]format=rgba,geq=r='${rExprWave}':g='${gExprWave}':b='${bExprWave}':a='${alphaKeepExpr}'[${cryWaveTintedLabel}]`,
+        `[${cryBarsDownLabel}]vflip[${cryBarsDownFlippedLabel}]`,
       );
+      const cryMeterUpperLabel = `scene${roundIndex}cryMeterUpper`;
       const cryMeterOverlayLabel = `scene${roundIndex}cryMeter`;
       filters.push(
-        `[${currentLabel}][${cryWaveTintedLabel}]overlay=x='(main_w-${bandWidth})/2':y=${(centerY - maxHeight / 2).toFixed(3)}:enable='${formatEnableBetween(meterStart, meterEnd)}'[${cryMeterOverlayLabel}]`,
+        `[${currentLabel}][${cryBarsUpLabel}]overlay=x='(main_w-${bandWidth})/2':y=${(centerY - halfHeight).toFixed(3)}:enable='${formatEnableBetween(meterStart, meterEnd)}'[${cryMeterUpperLabel}]`,
+      );
+      filters.push(
+        `[${cryMeterUpperLabel}][${cryBarsDownFlippedLabel}]overlay=x='(main_w-${bandWidth})/2':y=${centerY.toFixed(3)}:enable='${formatEnableBetween(meterStart, meterEnd)}'[${cryMeterOverlayLabel}]`,
       );
       currentLabel = cryMeterOverlayLabel;
 
