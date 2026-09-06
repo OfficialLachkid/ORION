@@ -30,6 +30,7 @@ const POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES = Object.freeze({
   tournament: 'Tournament',
   memory: 'Memory',
   'type-quiz': 'Type Quiz',
+  'cry-match': 'Cry Match',
 });
 
 export function formatDexNumber(value) {
@@ -84,6 +85,9 @@ export function resolvePokeQuizzPreviewTemplateKey(templateRef) {
   }
   if (candidates.some((value) => value.includes('type-quiz') || value.includes('type-speed-quiz'))) {
     return 'type-quiz';
+  }
+  if (candidates.some((value) => value.includes('cry-match'))) {
+    return 'cry-match';
   }
   return null;
 }

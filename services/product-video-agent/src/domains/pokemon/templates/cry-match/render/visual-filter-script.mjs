@@ -30,15 +30,13 @@ function resolveTextOutlineWidth(template) {
 }
 
 function extractPromptHeaderText(text, _round) {
-  // Cry Match's prompt is a single sentence (e.g. "Which Pokemon is this
-  // cry from?") — no {stat} split, no colored trailing keyword. Just
-  // return the full text with any trailing punctuation trimmed so the
-  // renderer's wrap logic can lay it out cleanly.
-  const normalized = String(text || '').replace(/\s+/gu, ' ').trim();
-  if (!normalized) {
-    return '';
-  }
-  return normalized.replace(/[?!.,:;]+\s*$/u, '').trim();
+  // Cry Match's prompts are genuine questions ("Whose cry is this?",
+  // "Who's that Pokemon?") — keep the trailing "?" so the header
+  // reads as a question, not a statement. Stat-clash stripped the
+  // trailing punctuation because the stat suffix (e.g. "Attack?")
+  // carried the "?" on a separate colored line; cry-match has no
+  // such split.
+  return String(text || '').replace(/\s+/gu, ' ').trim();
 }
 
 function buildStyledStatPromptLines(_round, _textLayout, _startSeconds, _endSeconds, _baseY) {
@@ -812,19 +810,39 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         return colors.bottom;
       };
 
+      // FFmpeg 8's drawbox filter doesn't support :eval=frame, so
+      // its x/y/w/h expressions freeze at their init values and the
+      // bars can never animate (v3 + v4-first-try both landed static
+      // or crashed). Workaround: per bar, generate a full-max-height
+      // color source and squish it via `scale=eval=frame` — that IS
+      // the pattern know-your-shiny uses for its animated timer bar.
+      // The scaled source then rides an `overlay` positioned at
+      // center_y - h/2 so it stays vertically centered as it grows /
+      // shrinks. Costs 3 extra pipeline steps per bar (color, scale,
+      // overlay) — 28 bars × 3 rounds ≈ 84 chains, well within
+      // FFmpeg's filter graph limits.
+      const meterDurationSeconds = Number((meterEnd - meterStart).toFixed(3));
       for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
-        // Per-bar phase + frequency give each bar an independent motion.
         const phase = (barIndex / barCount) * Math.PI * 2;
-        const frequency = 1 + (barIndex % 3) * 0.35; // 1, 1.35, 1.7 rotating
+        const frequency = 1 + (barIndex % 3) * 0.35;
         const heightExpr = `${minHeight}+${heightRange.toFixed(3)}*(0.5+0.5*sin(${waveSpeed.toFixed(3)}*(t-${meterStart})*${frequency.toFixed(3)}+${phase.toFixed(3)}))`;
         const barX = `${bandLeft}+${barIndex * (singleBarWidth + barGap)}`;
-        // y=center - height/2 keeps bars vertically centered on center_y
-        // regardless of current height, so the "waveform" pulses
-        // symmetrically instead of anchoring to the top or bottom.
-        const barY = `${centerY}-(${heightExpr})/2`;
+        const barSrcLabel = `scene${roundIndex}eqSrc${barIndex}`;
+        const barScaledLabel = `scene${roundIndex}eqSc${barIndex}`;
         const barLabel = `scene${roundIndex}eq${barIndex}`;
         filters.push(
-          `[${currentLabel}]drawbox=x='${barX}':y='${barY}':w=${singleBarWidth}:h='${heightExpr}':color=${barColorForIndex(barIndex)}@0.92:t=fill:enable='${formatEnableBetween(meterStart, meterEnd)}'[${barLabel}]`,
+          `color=c=${barColorForIndex(barIndex)}@0.92:s=${singleBarWidth}x${maxHeight}:r=${fps}:d=${meterDurationSeconds},format=rgba,trim=duration=${meterDurationSeconds},setpts=PTS-STARTPTS,scale=w=${singleBarWidth}:h='${heightExpr}':eval=frame[${barSrcLabel}]`,
+        );
+        // adelay the source into the round-local timeline so t
+        // inside the color-source's own filter graph aligns with the
+        // main video's countdown_start (adjust by meterStart via
+        // tpad-lead approach: we shift the source's PTS forward with
+        // setpts before overlay).
+        filters.push(
+          `[${barSrcLabel}]setpts=PTS+${meterStart}/TB[${barScaledLabel}]`,
+        );
+        filters.push(
+          `[${currentLabel}][${barScaledLabel}]overlay=x='${barX}':y='${centerY}-h/2':enable='${formatEnableBetween(meterStart, meterEnd)}'[${barLabel}]`,
         );
         currentLabel = barLabel;
       }
