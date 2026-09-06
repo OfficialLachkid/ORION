@@ -23,13 +23,15 @@ const ROTATION_STATE_PATH = resolve(projectRoot, 'data', 'leadgen', 'rotation-st
 // effectively "everything the search engine will give us".
 export const MAX_RESULTS_PER_NICHE = 50;
 // Match the installer's DEFAULT_TIMES so callers that skip --times get
-// the same 3 rounds the scheduled launchd job requests. Dialed back 6→3
-// on 2026-09-05 after the first 26-niche live run finished in 5h34min
-// (blowing past the 09:00 Ollama window) and produced 286 leads / ~163
-// no-contact rows — well over the qualifier's 30/night ceiling. 3 rounds
-// hits a natural ~2.75h and matches the after-video-generation trigger's
-// night-shift completion timing. See install-leadgen-schedule.mjs.
-export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 3;
+// the same 4 rounds the scheduled launchd job requests. Bumped 3→4 on
+// 2026-09-06 after the first chained run showed contact-fallback lifted
+// the usable-leads rate from 43% → 79.7% (12 no_contact of 59), and the
+// qualifier's 30/night pipe was no longer close to full. 4 rounds
+// projects to ~3.7h (still finishes ~06:45 CEST, well before the 09:00
+// Ollama window) and produces ~60-65 qualifiable leads/day — after the
+// natural rejected_fit filter (~1/3 of leads historically), that lands
+// in the qualifier's sweet spot. See install-leadgen-schedule.mjs.
+export const DEFAULT_SCHEDULED_SWEEP_ROUNDS = 4;
 const MAX_SCHEDULED_SWEEP_ROUNDS = 10;
 
 // Dutch search terms — this targets the Dutch market, so the query itself is

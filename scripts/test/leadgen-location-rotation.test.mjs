@@ -93,16 +93,15 @@ test('LOCATION_ROTATION originals are not accidentally duplicated in the expansi
   );
 });
 
-test('scheduled leadgen defaults to three sweep rounds per daily run (post-2026-09-05 26-niche timing calibration)', () => {
-  // Dialed 6→3 after the first 26-niche live run finished in 5h34min
-  // (past the 09:00 Ollama window) and produced 286 leads / 163
-  // no-contact — 10x the qualifier's 30/night ceiling. 3 rounds hits
-  // ~2.75h and pairs with the after-night-shift chained trigger so
-  // leadgen finishes well before the operator's workday.
-  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 3);
-  assert.equal(resolveScheduledSweepRounds(undefined), 3);
-  assert.equal(resolveScheduledSweepRounds(''), 3);
-  assert.equal(resolveScheduledSweepRounds(0), 3);
+test('scheduled leadgen defaults to four sweep rounds per daily run (post-2026-09-06 contact-fallback yield lift)', () => {
+  // Bumped 3→4 after the first chained run showed contact-fallback
+  // lifted usable-leads rate 43% → 79.7% and the qualifier's 30/night
+  // pipe was no longer close to full. Projects to ~3.7h, still finishes
+  // ~06:45 CEST — well before the 09:00 Ollama window.
+  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 4);
+  assert.equal(resolveScheduledSweepRounds(undefined), 4);
+  assert.equal(resolveScheduledSweepRounds(''), 4);
+  assert.equal(resolveScheduledSweepRounds(0), 4);
 });
 
 test('scheduled leadgen rounds are clamped to a sane ceiling', () => {
