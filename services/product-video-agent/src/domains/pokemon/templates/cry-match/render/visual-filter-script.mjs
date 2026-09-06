@@ -880,8 +880,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // earlier split+vflip+two-overlays trick is dropped too.
       const cryWaveRawLabel = `scene${roundIndex}cryWaveRaw`;
       const cryWaveTintedLabel = `scene${roundIndex}cryWaveTinted`;
+      // lowpass before showwaves removes high-frequency content so
+      // the wave has FEWER sharp peaks across the width — smoother,
+      // more legible shape (operator: "too many expanding points").
+      // f=800 keeps low + low-mid frequency energy, drops the fast
+      // oscillations that create dense micro-peaks.
+      const cryPaddedSmoothLabel = `scene${roundIndex}cryPadSmooth`;
       filters.push(
-        `[${cryPaddedLabel}]showwaves=s=${bandWidth}x${maxHeight}:mode=cline:rate=${fps}:scale=lin:colors=0x4B7BEF|0x4B7BEF[${cryWaveRawLabel}]`,
+        `[${cryPaddedLabel}]lowpass=f=800[${cryPaddedSmoothLabel}]`,
+      );
+      filters.push(
+        `[${cryPaddedSmoothLabel}]showwaves=s=${bandWidth}x${maxHeight}:mode=cline:rate=${fps}:scale=lin:colors=0x4B7BEF|0x4B7BEF[${cryWaveRawLabel}]`,
       );
       // Recolor the line pixels with a subtle blue-shade variation
       // across X so the wave isn't monotone. Non-line pixels stay
