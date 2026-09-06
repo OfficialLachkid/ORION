@@ -164,7 +164,7 @@
       "enabled": true,
       "trigger": "countdown_start",
       "peak_db": -6,
-      "gap_between_plays_seconds": 1.5,
+      "gap_between_plays_seconds": 1.0,
       "short_cry_replay_threshold_seconds": 1.0,
       "reveal_replay": true,
       "reveal_replay_delay_seconds": 1.0,

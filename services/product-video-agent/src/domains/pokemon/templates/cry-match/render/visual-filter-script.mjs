@@ -807,42 +807,41 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // no PTS anomalies.
       const cryWindowsForBars = Array.isArray(round.cry_playback_windows_local)
         ? round.cry_playback_windows_local
-            .map((window) => Math.max(0, Number(window?.start_offset_seconds || 0)))
-            .filter((offset) => Number.isFinite(offset))
+            .map((window) => ({
+              start: Math.max(0, Number(window?.start_offset_seconds || 0)),
+              end: Math.max(0, Number(window?.end_offset_seconds || 0)),
+            }))
+            .filter((window) => window.end > window.start)
         : [];
       const playCount = Math.max(1, cryWindowsForBars.length);
       const cryPaddedLabel = `scene${roundIndex}cryPad`;
-      const cryStartDelayMs = Math.max(0, Math.round((meterStart + (cryWindowsForBars[0] ?? 0)) * 1000));
+      const cryStartDelayMs = Math.max(0, Math.round((meterStart + (cryWindowsForBars[0]?.start ?? 0)) * 1000));
       if (playCount === 1) {
         filters.push(
           `[${cryInputIndex}:a]aformat=channel_layouts=stereo,adelay=${cryStartDelayMs}|${cryStartDelayMs},apad=whole_dur=${sceneDurationSeconds},asetpts=PTS-STARTPTS[${cryPaddedLabel}]`,
         );
       } else {
-        // gapSeconds is derived from the delta between the two window
-        // starts in the plan (start_offset[1] - start_offset[0]).
-        // The audio pipeline uses the same gap for its cue schedule,
-        // so bars stay in sync with the actual audio plays.
-        const gapSeconds = Math.max(0.05, cryWindowsForBars[1] - cryWindowsForBars[0]);
+        // The PURE SILENCE gap between plays = next play's start
+        // MINUS previous play's end. Earlier bug: used
+        // `windows[1].start - windows[0].start` which is
+        // cry_duration + gap = double-counts the cry itself, so the
+        // concat inserted 2.4s of silence instead of 1s and the
+        // second bar animation drifted off-sync with the audio.
+        const silenceGapSeconds = Math.max(0.05, cryWindowsForBars[1].start - cryWindowsForBars[0].end);
         const cryCleanLabel = `scene${roundIndex}cryClean`;
         const silenceLabel = `scene${roundIndex}crySilence`;
-        const concatCopies = Array.from({ length: playCount }, (_, i) => (i === 0 ? `[${cryCleanLabel}]` : `[${cryCleanLabel}${i}]`)).join('');
-        // asplit the cleaned cry N times so concat has N distinct inputs
         const splitTargets = Array.from({ length: playCount }, (_, i) => (i === 0 ? `[${cryCleanLabel}]` : `[${cryCleanLabel}${i}]`)).join('');
         filters.push(
           `[${cryInputIndex}:a]aformat=channel_layouts=stereo,asplit=${playCount}${splitTargets}`,
         );
         filters.push(
-          `anullsrc=r=44100:cl=stereo:d=${gapSeconds.toFixed(3)}[${silenceLabel}]`,
+          `anullsrc=r=44100:cl=stereo:d=${silenceGapSeconds.toFixed(3)}[${silenceLabel}]`,
         );
-        // Interleave cryN + silence + cry(N+1) + silence + …
         const concatInputs = [];
         for (let i = 0; i < playCount; i += 1) {
           concatInputs.push(i === 0 ? `[${cryCleanLabel}]` : `[${cryCleanLabel}${i}]`);
           if (i < playCount - 1) {
             concatInputs.push(`[${silenceLabel}]`);
-            // Each silence needs its own copy — asplit it.
-            // Only if we have more than 2 plays. For 2 plays we
-            // only need 1 silence gap so no split needed.
           }
         }
         const totalConcatSegments = concatInputs.length;
@@ -857,24 +856,15 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // Bars pipeline — showfreqs at 15 output columns produces 15
       // discrete bars (one per column). Then upscale with nearest
       // neighbor to fill the band width, giving blocky-wide bars.
-      // showfreqs with cmode=separate:colors=green|yellow renders
-      // two color layers (L=green, R=yellow) that combine into the
-      // green/yellow palette. Adding a red channel via a second
-      // showfreqs subgraph at higher frequency emphasis would enable
-      // full VU palette, but keep v1 simple with green+yellow which
-      // reads clearly on the dark background.
-      //
-      // showcqt was tried but rendered black on this FFmpeg build —
-      // its default cscheme + count=6 + our audio format combination
-      // didn't produce visible output. Switching to showfreqs which
-      // is more predictable and always visible.
+      // cmode=combined merges L+R channels into ONE bar per band
+      // (previous cmode=separate showed L and R as two side-by-side
+      // bars, giving the "2 bars instead of 1" the operator saw).
+      // Single yellow color reads brightly on the dark background.
       const cryBarsLabel = `scene${roundIndex}cryBars`;
       const cryBarsRawLabel = `scene${roundIndex}cryBarsRaw`;
       filters.push(
-        `[${cryPaddedLabel}]showfreqs=s=15x${maxHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=separate:colors=green|yellow[${cryBarsRawLabel}]`,
+        `[${cryPaddedLabel}]showfreqs=s=15x${maxHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=combined:colors=yellow[${cryBarsRawLabel}]`,
       );
-      // Upscale 15-column output to bandWidth with nearest-neighbor
-      // so the 15 columns become 15 wide blocky bars.
       filters.push(
         `[${cryBarsRawLabel}]scale=${bandWidth}:${maxHeight}:flags=neighbor,format=rgba[${cryBarsLabel}]`,
       );
