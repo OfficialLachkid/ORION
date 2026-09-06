@@ -157,6 +157,7 @@ const DEFAULT_CRY_MATCH_TITLE_BUILDERS = Object.freeze([
   () => 'Which Pokemon makes this sound?',
   () => 'Only true fans get this cry',
   () => 'Cry Match — 4 Pokemon, 1 sound',
+  () => 'Can you Guess the Pokemon From Listening? 👂',
 ]);
 
 function hashSeed(input) {

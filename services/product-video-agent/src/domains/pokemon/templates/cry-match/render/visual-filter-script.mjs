@@ -910,11 +910,35 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const gExpr = `60+80*abs(cos(${barIdxExpr}*1.1))+80*abs(cos(${barIdxExpr}*0.5))`;
       const bExpr = `210+45*abs(sin(${barIdxExpr}*0.7+1))`;
       const alphaExpr = `if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,255\\,0)\\,0)`;
+      // Bars pipeline now emits two layers:
+      //   - bars: the colored bar fill
+      //   - outline: a dark navy blurred-and-dilated copy of the
+      //     bars placed BEHIND the fill, giving a bold ~4px outline
+      //     around each bar. gblur sigma=3 both dilates the shape
+      //     into a thicker silhouette AND rounds the sharp corners
+      //     into curves — kills two birds with one filter step.
+      const cryBarsFillLabel = `scene${roundIndex}cryBarsFill`;
+      const cryBarsOutlineLabel = `scene${roundIndex}cryBarsOutline`;
       filters.push(
         `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}'[${cryBarsSpacedLabel}]`,
       );
       filters.push(
-        `[${cryBarsSpacedLabel}]split=2[${cryBarsUpLabel}][${cryBarsDownLabel}]`,
+        `[${cryBarsSpacedLabel}]split=2[${cryBarsFillLabel}][scene${roundIndex}cryBarsFillCopy]`,
+      );
+      // Outline: recolor to dark navy blue, blur to dilate + round,
+      // boost alpha so the outline reads even when the bar's amp
+      // is low. The blur naturally softens corners on the FILL too
+      // once we composite outline+fill.
+      filters.push(
+        `[scene${roundIndex}cryBarsFillCopy]geq=r='10':g='20':b='60':a='alpha(X\\,Y)',gblur=sigma=3:steps=1[${cryBarsOutlineLabel}]`,
+      );
+      // Combine outline + fill into one composited layer (fill on top).
+      const cryBarsCombinedLabel = `scene${roundIndex}cryBarsCombined`;
+      filters.push(
+        `[${cryBarsOutlineLabel}][${cryBarsFillLabel}]overlay=0:0:format=auto,gblur=sigma=1.2:steps=1[${cryBarsCombinedLabel}]`,
+      );
+      filters.push(
+        `[${cryBarsCombinedLabel}]split=2[${cryBarsUpLabel}][${cryBarsDownLabel}]`,
       );
       const cryBarsDownFlippedLabel = `scene${roundIndex}cryBarsDownF`;
       filters.push(
