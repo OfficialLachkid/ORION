@@ -7,8 +7,11 @@ import {
 } from '../../dual-type-reveal/render/constants.mjs';
 
 const DEFAULT_CRY_MATCH_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
-const DEFAULT_CRY_MATCH_QUIZ_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.75).toFixed(3));
-const DEFAULT_CRY_MATCH_REVEAL_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.55).toFixed(3));
+// Halved on 2026-09-06 (operator ask: "50% lower in volume"). The
+// original mix was overpowering the background music + narration —
+// halving keeps the cry clearly audible but no longer dominant.
+const DEFAULT_CRY_MATCH_QUIZ_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.375).toFixed(3));
+const DEFAULT_CRY_MATCH_REVEAL_CRY_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.275).toFixed(3));
 const DEFAULT_CRY_MATCH_REPEAT_GAP_SECONDS = 0.35;
 const DEFAULT_CRY_MATCH_REPEAT_COUNT = 2;
 // Small breathing room after the sprite reveal before the cry replays
