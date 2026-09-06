@@ -43,14 +43,14 @@
     "require_cry_available": true
   },
   "question_contract": {
-    "hook_text": "",
-    "hook_text_variants": [],
-    "prompt_text": "Which Pokemon is this cry from?",
-    "prompt_text_variants": [
-      "Which Pokemon is this cry from?",
+    "hook_text": "Whose cry is this?",
+    "hook_text_variants": [
       "Whose cry is this?",
-      "Can you name this cry?"
+      "Can you name this cry?",
+      "Who's that Pokemon?"
     ],
+    "prompt_text": "",
+    "prompt_text_variants": [],
     "reveal_text": "",
     "reveal_text_variants": []
   },
@@ -109,6 +109,7 @@
     },
     "cry_meter": {
       "enabled": true,
+      "style": "equalizer_bars",
       "center_y": 420,
       "bar_width_px": 720,
       "bar_height_px": 22,
@@ -119,7 +120,19 @@
       "outline_width_px": 4,
       "icon_size_px": 42,
       "pulse_scale_peak": 1.18,
-      "pulse_period_seconds": 0.6
+      "pulse_period_seconds": 0.6,
+      "equalizer": {
+        "bar_count": 28,
+        "bar_gap_px": 8,
+        "min_bar_height_px": 12,
+        "max_bar_height_px": 128,
+        "band_width_px": 720,
+        "top_color": "0xFF3B30",
+        "mid_color": "0xFFD60A",
+        "bottom_color": "0x30D158",
+        "background_alpha": 0.28,
+        "wave_speed": 5.5
+      }
     },
     "rounds": {
       "pre_countdown_hold_seconds": 0.18,
@@ -152,7 +165,7 @@
       "trigger": "countdown_start",
       "peak_db": -6,
       "repeat_count": 2,
-      "gap_between_plays_seconds": 0.35,
+      "gap_between_plays_seconds": 1.5,
       "reveal_replay": true
     },
     "sound_effects": {

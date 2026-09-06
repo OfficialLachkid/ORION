@@ -495,11 +495,20 @@ export async function planPokemonCryMatchChallenge({
     const target = targetPick.subject;
     const correctCandidateIndex = targetPick.index;
 
-    const promptText = pickSeededQuestionText(
-      template?.question_contract?.prompt_text,
-      template?.question_contract?.prompt_text_variants,
-      random,
-    );
+    // The hook ("Whose cry is this?") only appears on round 1 as an
+    // opening prompt — subsequent rounds are just "here's another cry,
+    // guess it". Falls back to prompt_text/prompt_text_variants for
+    // backwards compat if a caller wired hook_* text into prompt_*
+    // instead.
+    const promptText = roundIndex === 0
+      ? pickSeededQuestionText(
+        template?.question_contract?.hook_text || template?.question_contract?.prompt_text,
+        (template?.question_contract?.hook_text_variants?.length
+          ? template.question_contract.hook_text_variants
+          : template?.question_contract?.prompt_text_variants),
+        random,
+      )
+      : '';
     const spokenPromptText = promptText;
     const revealText = String(revealTemplate || '').replaceAll('{winner_name}', target.name);
     const candidates = resolvedSubjects.map((subject, index) => ({
@@ -574,10 +583,16 @@ export async function planPokemonCryMatchChallenge({
     narration: {
       local_model_required: false,
       tts_provider: 'kokoro',
-      lines: rounds.map((round) => ({
-        role: `round-${round.round_number}-prompt`,
-        text: round.spoken_prompt_text || round.prompt_text,
-      })),
+      // Only emit a TTS line when the round actually has spoken text
+      // (round 1 only, per the hook_text convention). Empty entries
+      // would either be silent-generated audio wasting cache space or
+      // produce a "no text" TTS error depending on the provider.
+      lines: rounds
+        .map((round) => ({
+          role: `round-${round.round_number}-prompt`,
+          text: round.spoken_prompt_text || round.prompt_text,
+        }))
+        .filter((line) => String(line.text || '').trim()),
     },
     timeline: buildTimeline(rounds),
     rounds,

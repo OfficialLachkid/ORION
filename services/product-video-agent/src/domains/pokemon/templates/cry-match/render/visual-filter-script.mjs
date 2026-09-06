@@ -771,40 +771,70 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = revealLabel;
     });
 
-    // Cry meter: sits above the sprite grid during the countdown phase
-    // (from countdown_start until reveal_start). Two artifacts:
-    //   1) a horizontal drawbox "sound wave" bar whose width pulses via
-    //      a sinusoid on t, evoking an audio-level meter
-    //   2) a "🔊 LISTEN" label centered above the bar
-    // Both fade in at countdown_start and out at reveal_start so they
-    // don't compete with the reveal text/gray-out.
+    // Cry meter — equalizer-bars style. Draws N vertical bars centered
+    // above the grid during the countdown phase. Each bar's height
+    // pulses independently via a phase-offset sine on t so the whole
+    // widget reads as an animated audio-level meter (DJ set / voice
+    // waveform), not a single throbbing bar. Bar color transitions
+    // from top (red) → mid (yellow) → bottom (green) — the classic
+    // VU-meter palette — approximated by drawing each bar in a color
+    // sampled from the mid band; a future refactor can gradient-fill
+    // each bar with a mask overlay if needed.
     const cryMeter = renderPlan.cry_meter_layout;
     if (cryMeter?.enabled) {
       const meterStart = round.local.countdown_start_seconds;
       const meterEnd = round.local.reveal_start_seconds;
-      const barCenterY = Number(cryMeter.center_y.toFixed(3));
-      const barHalfHeight = Number((cryMeter.bar_height_px / 2).toFixed(3));
-      const pulsePeriod = Math.max(0.15, cryMeter.pulse_period_seconds || 0.6);
-      // Bar width pulses between ~40% and 100% of configured max
-      const pulseExpr = `${cryMeter.bar_width_px}*(0.4+0.6*(0.5+0.5*sin(2*PI*(t-${meterStart})/${pulsePeriod})))`;
-      const outlineLabel = `scene${roundIndex}cryOutline`;
-      filters.push(
-        `[${currentLabel}]drawbox=x='(w-${cryMeter.bar_width_px})/2-${cryMeter.outline_width_px}':y=${barCenterY - barHalfHeight - cryMeter.outline_width_px}:w=${cryMeter.bar_width_px + cryMeter.outline_width_px * 2}:h=${cryMeter.bar_height_px + cryMeter.outline_width_px * 2}:color=${cryMeter.outline_color}@0.85:t=fill:enable='${formatEnableBetween(meterStart, meterEnd)}'[${outlineLabel}]`,
-      );
-      const barBgLabel = `scene${roundIndex}cryBg`;
-      filters.push(
-        `[${outlineLabel}]drawbox=x='(w-${cryMeter.bar_width_px})/2':y=${barCenterY - barHalfHeight}:w=${cryMeter.bar_width_px}:h=${cryMeter.bar_height_px}:color=${cryMeter.inactive_color}@0.9:t=fill:enable='${formatEnableBetween(meterStart, meterEnd)}'[${barBgLabel}]`,
-      );
-      const barActiveLabel = `scene${roundIndex}cryBar`;
-      filters.push(
-        `[${barBgLabel}]drawbox=x='(w-${pulseExpr})/2':y=${barCenterY - barHalfHeight}:w='${pulseExpr}':h=${cryMeter.bar_height_px}:color=${cryMeter.active_color}@0.95:t=fill:enable='${formatEnableBetween(meterStart, meterEnd)}'[${barActiveLabel}]`,
-      );
+      const eq = cryMeter.equalizer || {};
+      const barCount = Math.max(4, Math.round(eq.bar_count || 24));
+      const bandWidth = Math.max(120, eq.band_width_px || cryMeter.bar_width_px || 720);
+      const barGap = Math.max(1, eq.bar_gap_px || 6);
+      const singleBarWidth = Math.max(3, Math.round((bandWidth - barGap * (barCount - 1)) / barCount));
+      const totalBandWidth = singleBarWidth * barCount + barGap * (barCount - 1);
+      const bandLeft = `(w-${totalBandWidth})/2`;
+      const centerY = Number(cryMeter.center_y.toFixed(3));
+      const minHeight = Math.max(4, eq.min_bar_height_px || 10);
+      const maxHeight = Math.max(minHeight + 4, eq.max_bar_height_px || 120);
+      const heightRange = maxHeight - minHeight;
+      const waveSpeed = Math.max(0.5, eq.wave_speed || 4.5);
+      // Rotate colors across bars — mostly mid (yellow), with a few
+      // top-red spikes near the middle and green shoulders on the
+      // edges. Purely aesthetic; comes off the config palette.
+      const colors = {
+        top: eq.top_color || '0xFF3B30',
+        mid: eq.mid_color || 'yellow',
+        bottom: eq.bottom_color || '0x30D158',
+      };
+      const midpoint = (barCount - 1) / 2;
+      const barColorForIndex = (index) => {
+        const distanceFromMid = Math.abs(index - midpoint) / Math.max(1, midpoint);
+        if (distanceFromMid < 0.28) return colors.top;
+        if (distanceFromMid < 0.72) return colors.mid;
+        return colors.bottom;
+      };
+
+      for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
+        // Per-bar phase + frequency give each bar an independent motion.
+        const phase = (barIndex / barCount) * Math.PI * 2;
+        const frequency = 1 + (barIndex % 3) * 0.35; // 1, 1.35, 1.7 rotating
+        const heightExpr = `${minHeight}+${heightRange.toFixed(3)}*(0.5+0.5*sin(${waveSpeed.toFixed(3)}*(t-${meterStart})*${frequency.toFixed(3)}+${phase.toFixed(3)}))`;
+        const barX = `${bandLeft}+${barIndex * (singleBarWidth + barGap)}`;
+        // y=center - height/2 keeps bars vertically centered on center_y
+        // regardless of current height, so the "waveform" pulses
+        // symmetrically instead of anchoring to the top or bottom.
+        const barY = `${centerY}-(${heightExpr})/2`;
+        const barLabel = `scene${roundIndex}eq${barIndex}`;
+        filters.push(
+          `[${currentLabel}]drawbox=x='${barX}':y='${barY}':w=${singleBarWidth}:h='${heightExpr}':color=${barColorForIndex(barIndex)}@0.92:t=fill:enable='${formatEnableBetween(meterStart, meterEnd)}'[${barLabel}]`,
+        );
+        currentLabel = barLabel;
+      }
+
       const labelText = 'LISTEN';
       const labelFontSize = Math.max(28, Math.round(cryMeter.icon_size_px * 0.9));
-      const labelY = Number((barCenterY - barHalfHeight - labelFontSize - 18).toFixed(3));
+      const labelY = Number((centerY - maxHeight / 2 - labelFontSize - 14).toFixed(3));
       const labelOutLabel = `scene${roundIndex}cryLabel`;
       filters.push(
-        `[${barActiveLabel}]drawtext=text='${escapeDrawtextText(labelText)}'${fontPart}:fontcolor=white:fontsize=${labelFontSize}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${labelY}:alpha='${buildAnimatedTextSegmentAlphaExpression(meterStart, meterEnd)}':enable='${formatEnableBetween(meterStart, meterEnd)}'[${labelOutLabel}]`,
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(labelText)}'${fontPart}:fontcolor=white:fontsize=${labelFontSize}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${labelY}:alpha='${buildAnimatedTextSegmentAlphaExpression(meterStart, meterEnd)}':enable='${formatEnableBetween(meterStart, meterEnd)}'[${labelOutLabel}]`,
       );
       currentLabel = labelOutLabel;
     }

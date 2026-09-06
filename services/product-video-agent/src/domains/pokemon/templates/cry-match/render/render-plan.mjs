@@ -157,8 +157,10 @@ function buildTextLayout(template) {
 
 function buildCryMeterLayout(template) {
   const config = template?.layout?.cry_meter || {};
+  const equalizer = config.equalizer || {};
   return {
     enabled: config.enabled !== false,
+    style: String(config.style || 'equalizer_bars').trim() || 'equalizer_bars',
     center_y: ensureNumber(config.center_y, 420),
     bar_width_px: ensureNumber(config.bar_width_px, 720),
     bar_height_px: ensureNumber(config.bar_height_px, 22),
@@ -172,6 +174,18 @@ function buildCryMeterLayout(template) {
     pulse_period_seconds: ensureNumber(config.pulse_period_seconds, 0.6),
     fade_in_seconds: ensureNumber(template?.renderer?.cry_meter_fade_in_seconds, 0.35),
     fade_out_seconds: ensureNumber(template?.renderer?.cry_meter_fade_out_seconds, 0.28),
+    equalizer: {
+      bar_count: ensureNumber(equalizer.bar_count, 24),
+      bar_gap_px: ensureNumber(equalizer.bar_gap_px, 6),
+      min_bar_height_px: ensureNumber(equalizer.min_bar_height_px, 10),
+      max_bar_height_px: ensureNumber(equalizer.max_bar_height_px, 120),
+      band_width_px: ensureNumber(equalizer.band_width_px, config.bar_width_px || 720),
+      top_color: String(equalizer.top_color || '0xFF3B30').trim() || '0xFF3B30',
+      mid_color: String(equalizer.mid_color || 'yellow').trim() || 'yellow',
+      bottom_color: String(equalizer.bottom_color || '0x30D158').trim() || '0x30D158',
+      background_alpha: ensureNumber(equalizer.background_alpha, 0.28),
+      wave_speed: ensureNumber(equalizer.wave_speed, 4.5),
+    },
   };
 }
 

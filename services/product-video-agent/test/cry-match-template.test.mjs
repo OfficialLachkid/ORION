@@ -103,12 +103,26 @@ test('planner picks 4 candidates per round, marks exactly one as the target, and
     assert.equal(round.candidates.length, 4);
     const correctCount = round.candidates.filter((candidate) => candidate.is_correct).length;
     assert.equal(correctCount, 1, `round ${round.round_number} must have exactly one correct target`);
-    assert.match(
-      String(round.prompt_text),
-      /(cry|whose)/iu,
-      'prompt should reflect the cry-match mechanic',
+  }
+  // Only round 1 carries the opening hook prompt; rounds 2+ intentionally
+  // skip it so the video isn't repeating "Whose cry is this?" every round.
+  assert.match(
+    String(plan.rounds[0].prompt_text),
+    /(cry|whose|pokemon)/iu,
+    'round 1 prompt should reflect the cry-match mechanic',
+  );
+  for (const round of plan.rounds.slice(1)) {
+    assert.equal(
+      String(round.prompt_text || '').trim(), '',
+      `round ${round.round_number} should have no prompt hook (only round 1 does)`,
     );
   }
+  // Narration mirrors the prompt-only-on-round-1 policy — exactly one
+  // narration line should be emitted for the whole video.
+  assert.equal(
+    plan.narration.lines.length, 1,
+    'exactly one TTS narration line should be emitted (the round-1 hook)',
+  );
 });
 
 test('cry cue builder emits countdown-start cues and a reveal replay for the target only', async () => {
