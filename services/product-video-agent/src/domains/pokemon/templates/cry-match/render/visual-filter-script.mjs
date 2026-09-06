@@ -895,10 +895,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // Blue palette per bar index — b stays high, g varies for
       // saturation variety, r stays low. Different shades cycle
       // across the 15 bars.
+      // Bar color palette — mix of medium and LIGHT blues so the
+      // 15 bars visually vary from deep royal blue through sky /
+      // baby blue. r + g both push higher for lighter shades (closer
+      // to white); b stays near-max for the blue cast.
       const barIdxExpr = `floor(X/${barUnitWidth})`;
-      const rExpr = `20+15*mod(${barIdxExpr}\\,3)`;
-      const gExpr = `100+50*abs(sin(${barIdxExpr}))`;
-      const bExpr = `220+35*abs(cos(${barIdxExpr}*0.7))`;
+      const rExpr = `80+80*abs(sin(${barIdxExpr}*1.3))`;
+      const gExpr = `160+70*abs(cos(${barIdxExpr}*0.9))`;
+      const bExpr = `230+25*abs(cos(${barIdxExpr}*0.7))`;
       const alphaExpr = `if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,255\\,0)\\,0)`;
       filters.push(
         `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}'[${cryBarsSpacedLabel}]`,
@@ -922,7 +926,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
       const labelText = 'LISTEN';
       const labelFontSize = Math.max(28, Math.round((cryMeter.icon_size_px || 42) * 0.9));
-      const labelY = Number((centerY - maxHeight / 2 - labelFontSize - 14).toFixed(3));
+      // Position LISTEN 30px above the top edge of the timer bar
+      // (operator ask 2026-09-06 late-late-late-late-late-late-late).
+      // Timer top edge = timer center_y - timer height / 2.
+      const timerCenterY = ensureNumber(template?.layout?.timer?.center_y, 1010);
+      const timerHeightPx = ensureNumber(template?.layout?.timer?.bar_height_px, 38);
+      const timerTopY = timerCenterY - timerHeightPx / 2;
+      const labelY = Number((timerTopY - 30 - labelFontSize).toFixed(3));
       const labelOutLabel = `scene${roundIndex}cryLabel`;
       filters.push(
         `[${currentLabel}]drawtext=text='${escapeDrawtextText(labelText)}'${fontPart}:fontcolor=white:fontsize=${labelFontSize}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${labelY}:alpha='${buildAnimatedTextSegmentAlphaExpression(meterStart, meterEnd)}':enable='${formatEnableBetween(meterStart, meterEnd)}'[${labelOutLabel}]`,
