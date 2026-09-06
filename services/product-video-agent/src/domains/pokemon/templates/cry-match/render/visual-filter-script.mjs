@@ -810,39 +810,77 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         return colors.bottom;
       };
 
-      // FFmpeg 8's drawbox filter doesn't support :eval=frame, so
-      // its x/y/w/h expressions freeze at their init values and the
-      // bars can never animate (v3 + v4-first-try both landed static
-      // or crashed). Workaround: per bar, generate a full-max-height
-      // color source and squish it via `scale=eval=frame` — that IS
-      // the pattern know-your-shiny uses for its animated timer bar.
-      // The scaled source then rides an `overlay` positioned at
-      // center_y - h/2 so it stays vertically centered as it grows /
-      // shrinks. Costs 3 extra pipeline steps per bar (color, scale,
-      // overlay) — 28 bars × 3 rounds ≈ 84 chains, well within
-      // FFmpeg's filter graph limits.
-      const meterDurationSeconds = Number((meterEnd - meterStart).toFixed(3));
+      // FFmpeg 8's drawbox filter doesn't support :eval=frame — its
+      // x/y/w/h expressions freeze at init values so drawbox-driven
+      // animation is impossible on this build. Workaround: per bar,
+      // a color source at max height gets squished via
+      // `scale=eval=frame`, then overlaid at center_y - h/2 so it
+      // stays vertically centered as it grows/shrinks. This is the
+      // same pattern know-your-shiny uses for its animated timer bar.
+      //
+      // Envelope masking: bars must be FLAT (baseline minHeight)
+      // outside the cry playback windows and only pulse WHILE a cry
+      // is playing. `between(t, start, end) + between(t, start2, end2)
+      // + …` sums to 1 during any window and 0 elsewhere; multiplied
+      // into the sine amplitude, this collapses the height expression
+      // to minHeight in silent gaps.
+      //
+      // Centering fix: overlay's `w`/`h` variables refer to the
+      // OVERLAY input's dimensions (a single bar, ~40 px), NOT the
+      // main frame. Use `main_w` explicitly to place bars against the
+      // 1080-wide canvas — the earlier `(w-720)/2` was silently
+      // computing (40-720)/2 = -340, pushing everything off the
+      // left edge (visible in v4b).
+      // Source spans the whole scene so its PTS is scene-local — no
+      // setpts shift needed (an earlier attempt with setpts+=meterStart
+      // produced non-monotonic overlay PTS and libx264 refused to open,
+      // dropping the whole render). Overlay's `enable=` handles the
+      // per-window visibility gating.
+      const sceneDurationSeconds = Number(round.local.scene_duration_seconds.toFixed(3));
+      const cryWindowsLocal = Array.isArray(round.cry_playback_windows_local)
+        ? round.cry_playback_windows_local
+            .map((window) => ({
+              start: Math.max(0, Number(window?.start_offset_seconds || 0)),
+              end: Math.max(0, Number(window?.end_offset_seconds || 0)),
+            }))
+            .filter((window) => window.end > window.start)
+        : [];
+      // Envelope zeroes the sine amplitude outside the actual cry
+      // playback windows so bars sit flat at minHeight in silence.
+      // Offsets are added to meterStart because the scale filter's `t`
+      // is scene-local (source starts at scene t=0), while
+      // cry_playback_windows_local expresses offsets from
+      // countdown_start (= meterStart).
+      const envelopeExpr = cryWindowsLocal.length > 0
+        ? cryWindowsLocal
+            .map(({ start, end }) => `between(t,${(meterStart + start).toFixed(3)},${(meterStart + end).toFixed(3)})`)
+            .join('+')
+        : '1';
       for (let barIndex = 0; barIndex < barCount; barIndex += 1) {
         const phase = (barIndex / barCount) * Math.PI * 2;
         const frequency = 1 + (barIndex % 3) * 0.35;
-        const heightExpr = `${minHeight}+${heightRange.toFixed(3)}*(0.5+0.5*sin(${waveSpeed.toFixed(3)}*(t-${meterStart})*${frequency.toFixed(3)}+${phase.toFixed(3)}))`;
-        const barX = `${bandLeft}+${barIndex * (singleBarWidth + barGap)}`;
+        const sineExpr = `0.5+0.5*sin(${waveSpeed.toFixed(3)}*(t-${meterStart})*${frequency.toFixed(3)}+${phase.toFixed(3)})`;
+        // NaN guard: init-time evaluation has t=NaN. gte(NaN,0)=0 so
+        // the fallback minHeight is used at init; per-frame eval then
+        // computes real heights. Without this, between()/sin() emit
+        // NaN at init and the whole filter blows up.
+        const heightExpr = `if(gte(t,0),${minHeight}+${heightRange.toFixed(3)}*(${envelopeExpr})*(${sineExpr}),${minHeight})`;
+        const barX = `(main_w-${totalBandWidth})/2+${barIndex * (singleBarWidth + barGap)}`;
         const barSrcLabel = `scene${roundIndex}eqSrc${barIndex}`;
-        const barScaledLabel = `scene${roundIndex}eqSc${barIndex}`;
         const barLabel = `scene${roundIndex}eq${barIndex}`;
+        // scale=eval=frame is the only filter on this FFmpeg build
+        // that re-runs its dimension expressions per frame — drawbox
+        // has no eval= at all and crop's out_h freezes at init. The
+        // NaN guard above gives scale a valid initial height (12)
+        // when t=NaN, then per-frame overrides take over. format=rgba
+        // is set BOTH before and after scale to keep the swscaler
+        // from renegotiating pixel formats each frame (that was the
+        // "Failed initializing scaling graph" error in v5b/v5).
         filters.push(
-          `color=c=${barColorForIndex(barIndex)}@0.92:s=${singleBarWidth}x${maxHeight}:r=${fps}:d=${meterDurationSeconds},format=rgba,trim=duration=${meterDurationSeconds},setpts=PTS-STARTPTS,scale=w=${singleBarWidth}:h='${heightExpr}':eval=frame[${barSrcLabel}]`,
+          `color=c=${barColorForIndex(barIndex)}@0.92:s=${singleBarWidth}x${maxHeight}:r=${fps}:d=${sceneDurationSeconds},format=yuva420p,trim=duration=${sceneDurationSeconds},setpts=PTS-STARTPTS,scale=w=${singleBarWidth}:h='${heightExpr}':eval=frame,format=yuva420p[${barSrcLabel}]`,
         );
-        // adelay the source into the round-local timeline so t
-        // inside the color-source's own filter graph aligns with the
-        // main video's countdown_start (adjust by meterStart via
-        // tpad-lead approach: we shift the source's PTS forward with
-        // setpts before overlay).
         filters.push(
-          `[${barSrcLabel}]setpts=PTS+${meterStart}/TB[${barScaledLabel}]`,
-        );
-        filters.push(
-          `[${currentLabel}][${barScaledLabel}]overlay=x='${barX}':y='${centerY}-h/2':enable='${formatEnableBetween(meterStart, meterEnd)}'[${barLabel}]`,
+          `[${currentLabel}][${barSrcLabel}]overlay=x='${barX}':y='${centerY}-h/2':enable='${formatEnableBetween(meterStart, meterEnd)}'[${barLabel}]`,
         );
         currentLabel = barLabel;
       }

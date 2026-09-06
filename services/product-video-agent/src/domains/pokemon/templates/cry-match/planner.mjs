@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
@@ -21,10 +22,42 @@ const DEFAULT_PRE_COUNTDOWN_HOLD_SECONDS = 0.18;
 const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
 const DEFAULT_FINAL_HOLD_SECONDS = 1;
 const DEFAULT_SAMPLING_ATTEMPTS = 180;
+const DEFAULT_CRY_GAP_SECONDS = 1.5;
+const DEFAULT_CRY_REPEAT_COUNT = 2;
 
 const readablePathAvailabilityCache = new Map();
 const cryDownloadCache = new Map();
 const crySourceUrlCache = new Map();
+const cryDurationCache = new Map();
+
+// Fall-back duration for when ffprobe isn't available or the cry file
+// couldn't be probed. Real Pokemon cries land in the 0.4-1.0s range —
+// 0.9s is a conservative estimate that avoids overlapping the second
+// play when probing fails.
+const FALLBACK_CRY_DURATION_SECONDS = 0.9;
+
+async function probeCryDurationSeconds(cryPath) {
+  const normalizedPath = String(cryPath || '').trim();
+  if (!normalizedPath) return 0;
+  if (cryDurationCache.has(normalizedPath)) return cryDurationCache.get(normalizedPath);
+  const durationPromise = new Promise((resolve) => {
+    const child = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      normalizedPath,
+    ]);
+    let stdout = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.on('error', () => resolve(0));
+    child.on('close', () => {
+      const parsed = Number.parseFloat(String(stdout || '').trim());
+      resolve(Number.isFinite(parsed) && parsed > 0 ? parsed : 0);
+    });
+  });
+  cryDurationCache.set(normalizedPath, durationPromise);
+  return durationPromise;
+}
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -518,6 +551,33 @@ export async function planPokemonCryMatchChallenge({
       subject,
     }));
 
+    // Cry playback schedule — LOCAL to the round (offsets from
+    // countdown start). The visual equalizer envelope and the audio
+    // cue timings both read from this single source of truth so
+    // they stay in lockstep.
+    //
+    // Gap semantics (operator ask 2026-09-06 evening):
+    //   play 2 must start after play 1 FINISHES + gap_between_plays_seconds
+    //   so cries longer than the gap don't overlap. Probe the target
+    //   cry's actual duration via ffprobe; fall back to a conservative
+    //   0.9s estimate if probing fails.
+    const cryPlaybackConfig = template?.audio?.cry_playback || {};
+    const repeatCount = Math.max(1, ensurePositiveInteger(cryPlaybackConfig.repeat_count, DEFAULT_CRY_REPEAT_COUNT));
+    const gapSeconds = ensureFiniteNumber(cryPlaybackConfig.gap_between_plays_seconds, DEFAULT_CRY_GAP_SECONDS);
+    const probedDuration = await probeCryDurationSeconds(target.cry_path);
+    const effectiveCryDurationSeconds = probedDuration > 0
+      ? probedDuration
+      : FALLBACK_CRY_DURATION_SECONDS;
+    const perPlayStrideSeconds = effectiveCryDurationSeconds + gapSeconds;
+    const cryPlaybackWindowsLocal = [];
+    for (let playIndex = 0; playIndex < repeatCount; playIndex += 1) {
+      const localStart = Number((playIndex * perPlayStrideSeconds).toFixed(3));
+      cryPlaybackWindowsLocal.push({
+        start_offset_seconds: localStart,
+        end_offset_seconds: Number((localStart + effectiveCryDurationSeconds).toFixed(3)),
+      });
+    }
+
     rounds.push({
       round_number: roundIndex + 1,
       round_label: `${roundIndex + 1}/${roundCount}`,
@@ -534,6 +594,7 @@ export async function planPokemonCryMatchChallenge({
       correct_candidate_index: correctCandidateIndex,
       winner_subject_id: target.id,
       target_cry_path: target.cry_path || '',
+      cry_playback_windows_local: cryPlaybackWindowsLocal,
       candidate_reveal_order: candidateRevealOrder,
       candidates,
     });

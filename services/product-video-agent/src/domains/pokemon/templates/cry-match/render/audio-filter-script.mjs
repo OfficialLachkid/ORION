@@ -26,9 +26,13 @@ export function buildAudioInputs(assets) {
 // deliberately dropped here.
 export function buildCryMatchCryCues(plan, renderPlan, template = null) {
   const cryPlaybackConfig = template?.audio?.cry_playback || {};
-  const repeatCount = Math.max(1, ensureNumber(cryPlaybackConfig.repeat_count, DEFAULT_CRY_MATCH_REPEAT_COUNT));
-  const gapSeconds = Math.max(0.05, ensureNumber(cryPlaybackConfig.gap_between_plays_seconds, DEFAULT_CRY_MATCH_REPEAT_GAP_SECONDS));
   const replayOnReveal = cryPlaybackConfig.reveal_replay !== false;
+  // Fallback repeat/gap logic for callers that didn't run the planner
+  // (unit tests do this) — real render pulls from
+  // round.cry_playback_windows_local which the planner already sized
+  // to repeat_count + gap_between_plays_seconds.
+  const fallbackRepeat = Math.max(1, ensureNumber(cryPlaybackConfig.repeat_count, DEFAULT_CRY_MATCH_REPEAT_COUNT));
+  const fallbackGap = Math.max(0.05, ensureNumber(cryPlaybackConfig.gap_between_plays_seconds, DEFAULT_CRY_MATCH_REPEAT_GAP_SECONDS));
 
   const cues = [];
   for (const round of Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : []) {
@@ -41,16 +45,18 @@ export function buildCryMatchCryCues(plan, renderPlan, template = null) {
     ).trim();
     if (!cryPath) continue;
 
-    // Estimate cry duration for gap spacing — a real Pokemon cry is
-    // typically 0.4–1.2 s but we don't have the media duration here
-    // and mediaDurations is per-input, not per-cue. Use a conservative
-    // 1.0 s spacing so plays don't overlap even on long-tail cries.
-    const cryEstimatedDurationSeconds = 1.0;
     const quizStart = ensureNumber(round?.countdown_start_seconds, 0);
-    for (let playIndex = 0; playIndex < repeatCount; playIndex += 1) {
+    const windowsLocal = Array.isArray(round?.cry_playback_windows_local)
+      ? round.cry_playback_windows_local
+      : [];
+    const playStartOffsets = windowsLocal.length > 0
+      ? windowsLocal.map((window) => ensureNumber(window?.start_offset_seconds, 0))
+      : Array.from({ length: fallbackRepeat }, (_, playIndex) => playIndex * fallbackGap);
+
+    for (const offset of playStartOffsets) {
       cues.push({
         path: cryPath,
-        start_seconds: Number((quizStart + playIndex * (cryEstimatedDurationSeconds + gapSeconds)).toFixed(3)),
+        start_seconds: Number((quizStart + offset).toFixed(3)),
         volume: DEFAULT_CRY_MATCH_QUIZ_CRY_VOLUME,
       });
     }
