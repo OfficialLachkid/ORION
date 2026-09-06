@@ -854,19 +854,29 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         );
       }
 
-      // showcqt — Constant-Q Transform bar visualization, designed
-      // for musical spectrum. Produces discrete colored bars per
-      // note, with a proper spectrum-color gradient across the band.
-      // cscheme picks the gradient: `low_r|low_g|low_b|high_r|high_g|high_b`
-      // Green-to-red = VU-meter aesthetic (green low freqs → yellow
-      // mid → red high freqs by natural additive interpolation).
-      // count controls sensitivity/refinement of bar heights.
-      // fps=30 matches the video, sono_v=0 hides the spectrogram
-      // background (we only want the bars, not the scrolling
-      // spectrogram).
+      // Bars pipeline — showfreqs at 15 output columns produces 15
+      // discrete bars (one per column). Then upscale with nearest
+      // neighbor to fill the band width, giving blocky-wide bars.
+      // showfreqs with cmode=separate:colors=green|yellow renders
+      // two color layers (L=green, R=yellow) that combine into the
+      // green/yellow palette. Adding a red channel via a second
+      // showfreqs subgraph at higher frequency emphasis would enable
+      // full VU palette, but keep v1 simple with green+yellow which
+      // reads clearly on the dark background.
+      //
+      // showcqt was tried but rendered black on this FFmpeg build —
+      // its default cscheme + count=6 + our audio format combination
+      // didn't produce visible output. Switching to showfreqs which
+      // is more predictable and always visible.
       const cryBarsLabel = `scene${roundIndex}cryBars`;
+      const cryBarsRawLabel = `scene${roundIndex}cryBarsRaw`;
       filters.push(
-        `[${cryPaddedLabel}]showcqt=s=${bandWidth}x${maxHeight}:count=6:fps=${fps}:sono_v=0:bar_v=14:bar_g=2:cscheme=0|1|0|1|0|0:axis=0:tc=0.33:tlength=0.2,format=rgba[${cryBarsLabel}]`,
+        `[${cryPaddedLabel}]showfreqs=s=15x${maxHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=separate:colors=green|yellow[${cryBarsRawLabel}]`,
+      );
+      // Upscale 15-column output to bandWidth with nearest-neighbor
+      // so the 15 columns become 15 wide blocky bars.
+      filters.push(
+        `[${cryBarsRawLabel}]scale=${bandWidth}:${maxHeight}:flags=neighbor,format=rgba[${cryBarsLabel}]`,
       );
       const cryMeterOverlayLabel = `scene${roundIndex}cryMeter`;
       filters.push(

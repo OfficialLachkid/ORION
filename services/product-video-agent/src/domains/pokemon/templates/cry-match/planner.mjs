@@ -22,7 +22,7 @@ const DEFAULT_PRE_COUNTDOWN_HOLD_SECONDS = 0.18;
 const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
 const DEFAULT_FINAL_HOLD_SECONDS = 1;
 const DEFAULT_SAMPLING_ATTEMPTS = 180;
-const DEFAULT_CRY_GAP_SECONDS = 1.0;
+const DEFAULT_CRY_GAP_SECONDS = 1.5;
 const DEFAULT_SHORT_CRY_REPLAY_THRESHOLD_SECONDS = 1.0;
 
 const readablePathAvailabilityCache = new Map();
@@ -577,11 +577,13 @@ export async function planPokemonCryMatchChallenge({
       : FALLBACK_CRY_DURATION_SECONDS;
     const repeatCount = effectiveCryDurationSeconds < shortCryThresholdSeconds ? 2 : 1;
     const cryPlaybackWindowsLocal = [];
+    // Replay policy (operator ask 2026-09-06 latest): the gap is
+    // measured END-to-START, not start-to-start. So play 2 begins
+    // AFTER play 1 has fully finished PLUS gap_between_plays_seconds.
+    // Only applies when repeat_count derived to 2 (short cry).
+    const perPlayStride = effectiveCryDurationSeconds + gapSeconds;
     for (let playIndex = 0; playIndex < repeatCount; playIndex += 1) {
-      // Start-to-start stride for short cries; only one play anyway
-      // when the cry is long, so the stride value doesn't matter for
-      // playIndex 0.
-      const localStart = Number((playIndex * gapSeconds).toFixed(3));
+      const localStart = Number((playIndex * perPlayStride).toFixed(3));
       cryPlaybackWindowsLocal.push({
         start_offset_seconds: localStart,
         end_offset_seconds: Number((localStart + effectiveCryDurationSeconds).toFixed(3)),
