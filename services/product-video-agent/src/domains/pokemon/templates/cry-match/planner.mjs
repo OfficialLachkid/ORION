@@ -22,8 +22,8 @@ const DEFAULT_PRE_COUNTDOWN_HOLD_SECONDS = 0.18;
 const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
 const DEFAULT_FINAL_HOLD_SECONDS = 1;
 const DEFAULT_SAMPLING_ATTEMPTS = 180;
-const DEFAULT_CRY_GAP_SECONDS = 1.5;
-const DEFAULT_CRY_REPEAT_COUNT = 2;
+const DEFAULT_CRY_GAP_SECONDS = 1.0;
+const DEFAULT_SHORT_CRY_REPLAY_THRESHOLD_SECONDS = 1.0;
 
 const readablePathAvailabilityCache = new Map();
 const cryDownloadCache = new Map();
@@ -556,22 +556,32 @@ export async function planPokemonCryMatchChallenge({
     // cue timings both read from this single source of truth so
     // they stay in lockstep.
     //
-    // Gap semantics (operator ask 2026-09-06 evening):
-    //   play 2 must start after play 1 FINISHES + gap_between_plays_seconds
-    //   so cries longer than the gap don't overlap. Probe the target
-    //   cry's actual duration via ffprobe; fall back to a conservative
-    //   0.9s estimate if probing fails.
+    // Replay policy (operator ask 2026-09-06 late):
+    //   - Short cries (probed duration < short_cry_replay_threshold_seconds,
+    //     default 1s) play TWICE with a start-to-start gap of
+    //     gap_between_plays_seconds (default 1s), so the viewer gets
+    //     two chances to recognize a fast cry.
+    //   - Long cries (>= threshold) play ONCE — a long cry already
+    //     gives the viewer plenty of listening time.
+    // repeat_count is derived here per-cry; the template no longer
+    // carries a fixed repeat_count.
     const cryPlaybackConfig = template?.audio?.cry_playback || {};
-    const repeatCount = Math.max(1, ensurePositiveInteger(cryPlaybackConfig.repeat_count, DEFAULT_CRY_REPEAT_COUNT));
     const gapSeconds = ensureFiniteNumber(cryPlaybackConfig.gap_between_plays_seconds, DEFAULT_CRY_GAP_SECONDS);
+    const shortCryThresholdSeconds = ensureFiniteNumber(
+      cryPlaybackConfig.short_cry_replay_threshold_seconds,
+      DEFAULT_SHORT_CRY_REPLAY_THRESHOLD_SECONDS,
+    );
     const probedDuration = await probeCryDurationSeconds(target.cry_path);
     const effectiveCryDurationSeconds = probedDuration > 0
       ? probedDuration
       : FALLBACK_CRY_DURATION_SECONDS;
-    const perPlayStrideSeconds = effectiveCryDurationSeconds + gapSeconds;
+    const repeatCount = effectiveCryDurationSeconds < shortCryThresholdSeconds ? 2 : 1;
     const cryPlaybackWindowsLocal = [];
     for (let playIndex = 0; playIndex < repeatCount; playIndex += 1) {
-      const localStart = Number((playIndex * perPlayStrideSeconds).toFixed(3));
+      // Start-to-start stride for short cries; only one play anyway
+      // when the cry is long, so the stride value doesn't matter for
+      // playIndex 0.
+      const localStart = Number((playIndex * gapSeconds).toFixed(3));
       cryPlaybackWindowsLocal.push({
         start_offset_seconds: localStart,
         end_offset_seconds: Number((localStart + effectiveCryDurationSeconds).toFixed(3)),
