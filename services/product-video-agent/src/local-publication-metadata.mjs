@@ -98,6 +98,9 @@ function resolveTemplateFlavor(plan = {}) {
   ) {
     return 'type-quiz';
   }
+  if (templateKey.includes('cry-match') || templateId.includes('cry-match')) {
+    return 'cry-match';
+  }
   return 'dual-type-reveal';
 }
 
@@ -145,6 +148,15 @@ const DEFAULT_TYPE_QUIZ_TITLE_BUILDERS = Object.freeze([
   () => 'Test your Pokemon type knowledge',
   () => 'Pokemon Typings 101',
   () => '99% fail',
+]);
+
+const DEFAULT_CRY_MATCH_TITLE_BUILDERS = Object.freeze([
+  () => 'Guess the Pokemon by cry!',
+  () => 'Whose cry is this?',
+  () => 'Can you name this Pokemon cry?',
+  () => 'Which Pokemon makes this sound?',
+  () => 'Only true fans get this cry',
+  () => 'Cry Match — 4 Pokemon, 1 sound',
 ]);
 
 function hashSeed(input) {
@@ -228,6 +240,13 @@ function buildTemplateAwareDefaultTitle(plan) {
       : 0;
     return DEFAULT_KNOW_YOUR_SHINY_TITLE_BUILDERS[templateIndex]();
   }
+  if (flavor === 'cry-match') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|cry-match`) % DEFAULT_CRY_MATCH_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_CRY_MATCH_TITLE_BUILDERS[templateIndex]();
+  }
   if (flavor !== 'find-the-shiny') {
     return buildDefaultTitle(plan);
   }
@@ -266,6 +285,12 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
   if (flavor === 'know-your-shiny') {
     return joinDescriptionParagraphs(
       'How well do you know Shiny Pokemon?\nCan you guess the real shiny before time runs out?',
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
+  }
+  if (flavor === 'cry-match') {
+    return joinDescriptionParagraphs(
+      'A Pokemon cry plays — which of the four Pokemon is it? Listen closely and lock in your guess before the timer runs out.',
       `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
     );
   }
@@ -361,6 +386,24 @@ function buildTemplateAwareMetadataPrompt(plan) {
       'Return JSON only.',
     ].join('\n');
   }
+  if (flavor === 'cry-match') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon cry-guessing challenge video.',
+      `Round count: ${Number(plan?.selection?.round_count || 0) || 3}`,
+      `Pokemon shown per round: 4 (one is the target whose cry plays)`,
+      `Pokemon shown across all rounds: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do NOT spoil the target Pokemon names in the title.',
+      '- Frame the video as a listen-and-guess challenge — a Pokemon cry plays and the viewer picks which of the four Pokemon it belongs to.',
+      '- Mention the audio-driven mechanic (cry, sound) so the description reads unmistakably as an audio quiz.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
   if (flavor !== 'find-the-shiny') {
     return buildMetadataPrompt(plan);
   }
@@ -421,6 +464,15 @@ function buildTemplateAwareHashtags(plan) {
       'shinypokemon',
       'shinyhunt',
       'pokemonquiz',
+      'shorts',
+    ]);
+  }
+  if (flavor === 'cry-match') {
+    return normalizeHashtags([
+      'pokemon',
+      'pokemoncries',
+      'pokemonquiz',
+      'guessthepokemon',
       'shorts',
     ]);
   }

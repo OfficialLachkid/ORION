@@ -895,14 +895,20 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // Blue palette per bar index — b stays high, g varies for
       // saturation variety, r stays low. Different shades cycle
       // across the 15 bars.
-      // Bar color palette — mix of medium and LIGHT blues so the
-      // 15 bars visually vary from deep royal blue through sky /
-      // baby blue. r + g both push higher for lighter shades (closer
-      // to white); b stays near-max for the blue cast.
+      // Modern palette (2026-09-06 late ask: "nicer colors instead
+      // of pastel"). High-saturation cyan → electric purple →
+      // magenta gradient cycling across the 15 bars. r and g swing
+      // wider so bars land in vibrant modern hues instead of
+      // washed-out light blues.
+      //   r: 30-230 (low cyan → high magenta)
+      //   g: 60-220 (low magenta → high cyan)
+      //   b: 210-255 (high across the board)
+      // sin/cos with different frequencies means each bar picks a
+      // different combination without visible repetition.
       const barIdxExpr = `floor(X/${barUnitWidth})`;
-      const rExpr = `80+80*abs(sin(${barIdxExpr}*1.3))`;
-      const gExpr = `160+70*abs(cos(${barIdxExpr}*0.9))`;
-      const bExpr = `230+25*abs(cos(${barIdxExpr}*0.7))`;
+      const rExpr = `30+100*abs(sin(${barIdxExpr}*0.9))+100*abs(sin(${barIdxExpr}*0.4))`;
+      const gExpr = `60+80*abs(cos(${barIdxExpr}*1.1))+80*abs(cos(${barIdxExpr}*0.5))`;
+      const bExpr = `210+45*abs(sin(${barIdxExpr}*0.7+1))`;
       const alphaExpr = `if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,255\\,0)\\,0)`;
       filters.push(
         `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}'[${cryBarsSpacedLabel}]`,
