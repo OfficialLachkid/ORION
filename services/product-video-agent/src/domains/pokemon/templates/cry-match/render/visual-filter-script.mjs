@@ -853,30 +853,46 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         );
       }
 
-      // Bars pipeline — showfreqs at 15 output columns produces 15
-      // discrete bars (one per column). Then upscale with nearest
-      // neighbor to fill the band width, giving blocky-wide bars.
-      // cmode=combined merges L+R channels into ONE bar per band
-      // (previous cmode=separate showed L and R as two side-by-side
-      // bars, giving the "2 bars instead of 1" the operator saw).
-      // Single yellow color reads brightly on the dark background.
-      const cryBarsLabel = `scene${roundIndex}cryBars`;
+      // Mirrored equalizer bars — bars extend UP AND DOWN from a
+      // central baseline. Achieved by generating a HALF-height
+      // showfreqs output, splitting into two copies, vflip'ing the
+      // lower copy so its "base" ends up at the shared middle line,
+      // and overlaying both at the appropriate y positions.
+      //
+      // Layout:
+      //   y = centerY - halfHeight   ← top of upper overlay (bars grow UP)
+      //   y = centerY                ← middle line, shared bar base
+      //   y = centerY + halfHeight   ← bottom of lower overlay (bars grow DOWN)
+      //
+      // Normal showfreqs bars grow from the BOTTOM of their canvas
+      // upward. Placed at [centerY-halfHeight, centerY], the bar
+      // base is at centerY and grows upward — perfect for the top
+      // half. Vflip'd showfreqs has the base at the TOP of its
+      // canvas; placed at [centerY, centerY+halfHeight] the base is
+      // still at centerY and grows downward — perfect for the
+      // bottom half.
+      const halfHeight = Math.max(10, Math.round(maxHeight / 2));
       const cryBarsRawLabel = `scene${roundIndex}cryBarsRaw`;
-      // colors=yellow was rendering as white — showfreqs' color
-      // parser needed hex format. Also add per-channel colors for
-      // stereo input so cmode=combined has BOTH slots filled (it
-      // uses the max across channels internally, so both should
-      // agree on the target color). Hex 0xFFCC00 = warm amber
-      // yellow that reads clearly against the dark background.
+      const cryBarsScaledLabel = `scene${roundIndex}cryBarsScaled`;
+      const cryBarsUpLabel = `scene${roundIndex}cryBarsUp`;
+      const cryBarsDownLabel = `scene${roundIndex}cryBarsDown`;
       filters.push(
-        `[${cryPaddedLabel}]showfreqs=s=15x${maxHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=combined:colors=0xFFCC00|0xFFCC00[${cryBarsRawLabel}]`,
+        `[${cryPaddedLabel}]showfreqs=s=15x${halfHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=combined:colors=0xFFCC00|0xFFCC00[${cryBarsRawLabel}]`,
       );
       filters.push(
-        `[${cryBarsRawLabel}]scale=${bandWidth}:${maxHeight}:flags=neighbor,format=rgba[${cryBarsLabel}]`,
+        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,split=2[${cryBarsUpLabel}][${cryBarsDownLabel}]`,
       );
+      const cryBarsDownFlippedLabel = `scene${roundIndex}cryBarsDownF`;
+      filters.push(
+        `[${cryBarsDownLabel}]vflip[${cryBarsDownFlippedLabel}]`,
+      );
+      const cryMeterUpperLabel = `scene${roundIndex}cryMeterUpper`;
       const cryMeterOverlayLabel = `scene${roundIndex}cryMeter`;
       filters.push(
-        `[${currentLabel}][${cryBarsLabel}]overlay=x='(main_w-${bandWidth})/2':y=${(centerY - maxHeight / 2).toFixed(3)}:enable='${formatEnableBetween(meterStart, meterEnd)}'[${cryMeterOverlayLabel}]`,
+        `[${currentLabel}][${cryBarsUpLabel}]overlay=x='(main_w-${bandWidth})/2':y=${(centerY - halfHeight).toFixed(3)}:enable='${formatEnableBetween(meterStart, meterEnd)}'[${cryMeterUpperLabel}]`,
+      );
+      filters.push(
+        `[${cryMeterUpperLabel}][${cryBarsDownFlippedLabel}]overlay=x='(main_w-${bandWidth})/2':y=${centerY.toFixed(3)}:enable='${formatEnableBetween(meterStart, meterEnd)}'[${cryMeterOverlayLabel}]`,
       );
       currentLabel = cryMeterOverlayLabel;
 
