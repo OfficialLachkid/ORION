@@ -121,7 +121,7 @@
         "bar_count": 15,
         "bar_gap_px": 10,
         "min_bar_height_px": 12,
-        "max_bar_height_px": 128,
+        "max_bar_height_px": 220,
         "band_width_px": 720,
         "top_color": "0xFF3B30",
         "mid_color": "0xFFD60A",

@@ -872,14 +872,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // still at centerY and grows downward — perfect for the
       // bottom half.
       const halfHeight = Math.max(10, Math.round(maxHeight / 2));
-      // Bar spacing (2026-09-06 late-late-late-late — the "make it
-      // look nicer" ask): split each 48px-wide unit into a bar_width
-      // opaque region and a gap_width transparent region. Uses a geq
-      // alpha mask on the scaled-up showfreqs output — one filter
-      // instead of 15 per-bar crops/overlays.
       const barCount = 15;
-      const barUnitWidth = Math.floor(bandWidth / barCount); // e.g. 48
-      const barWidth = Math.max(4, Math.round(barUnitWidth * 0.68)); // ~68% bar, ~32% gap
+      const barUnitWidth = Math.floor(bandWidth / barCount);
+      const barWidth = Math.max(4, Math.round(barUnitWidth * 0.68));
       const cryBarsRawLabel = `scene${roundIndex}cryBarsRaw`;
       const cryBarsSpacedLabel = `scene${roundIndex}cryBarsSpaced`;
       const cryBarsUpLabel = `scene${roundIndex}cryBarsUp`;
@@ -887,14 +882,27 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       filters.push(
         `[${cryPaddedLabel}]showfreqs=s=${barCount}x${halfHeight}:mode=bar:ascale=sqrt:fscale=log:win_size=1024:cmode=combined:colors=0xFFCC00|0xFFCC00[${cryBarsRawLabel}]`,
       );
-      // Scale up with nearest neighbor, then geq stamps a repeating
-      // opaque/transparent alpha pattern across X so each 48px unit
-      // shows ~32px of bar followed by ~16px of transparent gap.
-      // alpha(X,Y) preserves showfreqs' own bar-vs-empty alpha so
-      // vertical amplitude gating still works — the gap mask only
-      // knocks out horizontal spacing between bars.
+      // geq post-processes the bars: (1) reshapes each bar column
+      // into a parabola/bell curve via sin(PI·x/BAR_WIDTH) alpha
+      // (bar tapers to zero at both edges of its unit); (2) recolors
+      // the bar pixels into varying shades of blue based on the bar
+      // index (floor(X/UNIT)). Blue channel stays high; green varies
+      // between shades using sin/cos of the bar index; red stays low.
+      // The bar SHAPE (amplitude-driven) comes from showfreqs' RGB
+      // brightness — we check if the pixel is a bar pixel by testing
+      // r+g+b > threshold to preserve the amplitude cut-off.
+      const alphaBaseCheck = `if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,255\\,0)`;
+      // Parabola falloff: sin(PI * x / BAR_WIDTH) peaks at x=BAR_WIDTH/2 (=1.0), zero at edges.
+      const parabolaFactor = `max(0\\,sin(PI*mod(X\\,${barUnitWidth})/${barWidth}))`;
+      const alphaExpr = `if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,${alphaBaseCheck}*${parabolaFactor}\\,0)`;
+      // Blue palette per bar index — b stays high, g varies, r low.
+      // Different shades cycle every few bars for pleasant variety.
+      const barIdxExpr = `floor(X/${barUnitWidth})`;
+      const rExpr = `20+15*mod(${barIdxExpr}\\,3)`;
+      const gExpr = `100+50*abs(sin(${barIdxExpr}))`;
+      const bExpr = `220+35*abs(cos(${barIdxExpr}*0.7))`;
       filters.push(
-        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,alpha(X\\,Y)\\,0)'[${cryBarsSpacedLabel}]`,
+        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}'[${cryBarsSpacedLabel}]`,
       );
       filters.push(
         `[${cryBarsSpacedLabel}]split=2[${cryBarsUpLabel}][${cryBarsDownLabel}]`,
@@ -913,7 +921,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       currentLabel = cryMeterOverlayLabel;
 
-      const labelText = 'LISTEN';
+      const labelText = 'LISTEN 👂';
       const labelFontSize = Math.max(28, Math.round((cryMeter.icon_size_px || 42) * 0.9));
       const labelY = Number((centerY - maxHeight / 2 - labelFontSize - 14).toFixed(3));
       const labelOutLabel = `scene${roundIndex}cryLabel`;
