@@ -900,8 +900,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const gExpr = `100+50*abs(sin(${barIdxExpr}))`;
       const bExpr = `220+35*abs(cos(${barIdxExpr}*0.7))`;
       const alphaExpr = `if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,255\\,0)\\,0)`;
+      // Bilinear scale (was neighbor) smooths the 15→720 column
+      // expansion so bar top edges blend rather than stair-step.
+      // gblur=sigma=8 softens both horizontal and vertical edges,
+      // turning the rectangular bars into rounded parabola/wave
+      // shapes. High enough sigma to round corners without bleeding
+      // significantly into gap columns.
       filters.push(
-        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=neighbor,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}'[${cryBarsSpacedLabel}]`,
+        `[${cryBarsRawLabel}]scale=${bandWidth}:${halfHeight}:flags=bilinear,format=rgba,geq=r='${rExpr}':g='${gExpr}':b='${bExpr}':a='${alphaExpr}',gblur=sigma=8:steps=1[${cryBarsSpacedLabel}]`,
       );
       filters.push(
         `[${cryBarsSpacedLabel}]split=2[${cryBarsUpLabel}][${cryBarsDownLabel}]`,
