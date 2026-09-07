@@ -31,16 +31,23 @@ const MIN_SAFE_ANIMATED_SPRITE_DURATION_SECONDS = 0.2;
 // Height quantization (see visual-filter-script.mjs) already cuts
 // the failure rate by ~75%; the retry covers the residual.
 const SWSCALER_EAGAIN_FINGERPRINT = /Failed initializing scaling graph \(Resource temporarily unavailable\)/u;
+const TRUNCATED_OUTPUT_FINGERPRINT = /__cry_match_truncated_output__/u;
 const MAX_FFMPEG_RETRIES = 3;
 
-async function runFfmpegWithSwscaleRetry(options, { onRetry } = {}) {
+async function runFfmpegWithSwscaleRetry(options, { onRetry, postCheck } = {}) {
   let lastError = null;
   for (let attempt = 1; attempt <= MAX_FFMPEG_RETRIES; attempt += 1) {
     try {
-      return await runLocalProcess(options);
+      const result = await runLocalProcess(options);
+      if (typeof postCheck === 'function') {
+        await postCheck(result);
+      }
+      return result;
     } catch (error) {
       const message = String(error?.message || error || '');
-      if (!SWSCALER_EAGAIN_FINGERPRINT.test(message) || attempt === MAX_FFMPEG_RETRIES) {
+      const isKnownTransient = SWSCALER_EAGAIN_FINGERPRINT.test(message)
+        || TRUNCATED_OUTPUT_FINGERPRINT.test(message);
+      if (!isKnownTransient || attempt === MAX_FFMPEG_RETRIES) {
         throw error;
       }
       lastError = error;
@@ -259,6 +266,7 @@ export async function renderPokeQuizzVideo({
   await writeFile(filterScriptPath, visualFilter.script, 'utf8');
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
+  const expectedDurationSeconds = Number(renderPlan.total_duration_seconds || 0);
   await runFfmpegWithSwscaleRetry({
     executable: ffmpegExecutable,
     args: [
@@ -294,7 +302,30 @@ export async function renderPokeQuizzVideo({
       outputAbsolutePath,
     ],
     cwd: projectRoot,
-    timeoutMs: 600000,
+    timeoutMs: 900000,
+  }, {
+    // Truncation guard: multi-round renders can produce a short file
+    // when libswscale runs out of contexts under the parallel filter
+    // graph (ffmpeg exits 0 despite the truncation). Verify the encoded
+    // length matches renderPlan.total_duration_seconds within 0.5s and
+    // fail with a fingerprint that the retry wrapper knows to catch.
+    postCheck: async () => {
+      if (!(expectedDurationSeconds > 0)) return;
+      const actualDurationSeconds = await probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: outputAbsolutePath,
+        cwd: projectRoot,
+      });
+      if (
+        Number.isFinite(actualDurationSeconds)
+        && actualDurationSeconds > 0
+        && actualDurationSeconds + 0.5 < expectedDurationSeconds
+      ) {
+        throw new Error(
+          `__cry_match_truncated_output__ expected ~${expectedDurationSeconds.toFixed(2)}s, got ${actualDurationSeconds.toFixed(2)}s`,
+        );
+      }
+    },
   });
 
   await access(outputAbsolutePath);

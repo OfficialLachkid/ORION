@@ -930,7 +930,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // is low. The blur naturally softens corners on the FILL too
       // once we composite outline+fill.
       filters.push(
-        `[scene${roundIndex}cryBarsFillCopy]geq=r='10':g='20':b='60':a='alpha(X\\,Y)',gblur=sigma=3:steps=1[${cryBarsOutlineLabel}]`,
+        `[scene${roundIndex}cryBarsFillCopy]geq=r='0':g='0':b='0':a='if(gt(alpha(X\\,Y)\\,0)\\,255\\,0)',gblur=sigma=3.5:steps=2[${cryBarsOutlineLabel}]`,
       );
       // Combine outline + fill into one composited layer (fill on top).
       const cryBarsCombinedLabel = `scene${roundIndex}cryBarsCombined`;
