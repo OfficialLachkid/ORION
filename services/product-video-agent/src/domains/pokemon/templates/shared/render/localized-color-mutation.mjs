@@ -1,5 +1,6 @@
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { extname, join } from 'node:path';
+import { runLocalProcess } from '../../../../../process-runner.mjs';
 
 const DEFAULT_ALPHA_THRESHOLD = 24;
 const DEFAULT_IDEAL_MIN_PERCENT = 0.05;
@@ -459,41 +460,107 @@ async function writeVariantAsset({
   metadata,
   inputPath,
   outputPath,
+  ffmpegExecutable,
+  cwd,
 }) {
   const channels = Number(info?.channels || 4);
   const width = Number(info?.width || 0);
   const height = Number(info?.height || 0);
   if (shouldOutputAnimatedGif(inputPath, metadata)) {
     const pageHeight = Number(metadata.pageHeight);
-    try {
-      await sharp(data, {
-        raw: {
-          width,
-          height,
-          channels,
-          pageHeight,
-        },
-        animated: true,
-      })
-        .gif({
-          delay: Array.isArray(metadata.delay) && metadata.delay.length > 0 ? metadata.delay : undefined,
-          loop: Number.isFinite(metadata.loop) ? metadata.loop : 0,
-        })
-        .toFile(outputPath);
-      return outputPath;
-    } catch {
-      const fallbackPath = outputPath.replace(/\.gif$/u, '.png');
-      await sharp(data.subarray(0, width * pageHeight * channels), {
-        raw: { width, height: pageHeight, channels },
-      }).png().toFile(fallbackPath);
-      return fallbackPath;
+    if (ffmpegExecutable) {
+      const animatedPath = await writeAnimatedGifWithFfmpeg({
+        sharp,
+        data,
+        width,
+        height,
+        pageHeight,
+        channels,
+        metadata,
+        outputPath,
+        ffmpegExecutable,
+        cwd,
+      });
+      if (animatedPath) {
+        return animatedPath;
+      }
     }
+
+    const fallbackPath = outputPath.replace(/\.gif$/u, '.png');
+    await sharp(data.subarray(0, width * pageHeight * channels), {
+      raw: { width, height: pageHeight, channels },
+    }).png().toFile(fallbackPath);
+    return fallbackPath;
   }
 
   await sharp(data, {
     raw: { width, height, channels },
   }).png().toFile(outputPath.replace(/\.[^.]+$/u, '.png'));
   return outputPath.replace(/\.[^.]+$/u, '.png');
+}
+
+function averageFrameDelayMs(metadata) {
+  const delays = (Array.isArray(metadata?.delay) ? metadata.delay : [])
+    .map((delay) => Number(delay))
+    .filter((delay) => Number.isFinite(delay) && delay > 0);
+  if (delays.length === 0) {
+    return 100;
+  }
+  const total = delays.reduce((sum, delay) => sum + delay, 0);
+  return clamp(total / delays.length, 33, 200);
+}
+
+async function writeAnimatedGifWithFfmpeg({
+  sharp,
+  data,
+  width,
+  height,
+  pageHeight,
+  channels,
+  metadata,
+  outputPath,
+  ffmpegExecutable,
+  cwd,
+}) {
+  const pageCount = Math.max(1, Math.floor(height / pageHeight));
+  const frameDirectory = outputPath.replace(/\.gif$/u, '-frames');
+  await rm(frameDirectory, { recursive: true, force: true });
+  await mkdir(frameDirectory, { recursive: true });
+  try {
+    const frameSize = width * pageHeight * channels;
+    for (let frameIndex = 0; frameIndex < pageCount; frameIndex += 1) {
+      const frameStart = frameIndex * frameSize;
+      const frameEnd = frameStart + frameSize;
+      const framePath = join(frameDirectory, `frame-${String(frameIndex).padStart(4, '0')}.png`);
+      await sharp(data.subarray(frameStart, frameEnd), {
+        raw: { width, height: pageHeight, channels },
+      }).png().toFile(framePath);
+    }
+
+    const fps = Number((1000 / averageFrameDelayMs(metadata)).toFixed(3));
+    await runLocalProcess({
+      executable: ffmpegExecutable,
+      args: [
+        '-y',
+        '-framerate',
+        String(fps),
+        '-i',
+        join(frameDirectory, 'frame-%04d.png'),
+        '-filter_complex',
+        '[0:v]split[s0][s1];[s0]palettegen=reserve_transparent=1:transparency_color=000000[p];[s1][p]paletteuse=alpha_threshold=128',
+        '-loop',
+        Number(metadata?.loop || 0) === 1 ? '1' : '0',
+        outputPath,
+      ],
+      cwd,
+      timeoutMs: 120_000,
+    });
+    return outputPath;
+  } catch {
+    return null;
+  } finally {
+    await rm(frameDirectory, { recursive: true, force: true });
+  }
 }
 
 export async function createLocalizedColorVariantAssets({
@@ -503,6 +570,8 @@ export async function createLocalizedColorVariantAssets({
   variantCount = 3,
   seed = 'localized-color-mutation',
   config = {},
+  ffmpegExecutable = null,
+  cwd = process.cwd(),
 } = {}) {
   const normalizedInputPath = String(inputPath || '').trim();
   const normalizedOutputDirectory = String(outputDirectory || '').trim();
@@ -545,14 +614,16 @@ export async function createLocalizedColorVariantAssets({
       normalizedOutputDirectory,
       `${outputBasename}-${String(variant.index + 1).padStart(2, '0')}-${variant.target.id}${outputExtension}`,
     );
-    const writtenPath = await writeVariantAsset({
-      sharp,
-      data: variant.data,
-      info,
-      metadata,
-      inputPath: normalizedInputPath,
-      outputPath,
-    });
+      const writtenPath = await writeVariantAsset({
+        sharp,
+        data: variant.data,
+        info,
+        metadata,
+        inputPath: normalizedInputPath,
+        outputPath,
+        ffmpegExecutable,
+        cwd,
+      });
     created.push({
       path: writtenPath,
       mutation: variant.mutation,

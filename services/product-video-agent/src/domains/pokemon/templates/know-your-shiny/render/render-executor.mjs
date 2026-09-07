@@ -19,6 +19,8 @@ async function prepareLocalizedDecoyRenderPlan({
   plan,
   template,
   runtimeRoot,
+  projectRoot,
+  ffmpegExecutable,
 }) {
   if (template?.renderer?.localized_decoy_color_mutation?.enabled === false) {
     return renderPlan;
@@ -52,6 +54,8 @@ async function prepareLocalizedDecoyRenderPlan({
           variantCount: decoys.length,
           seed: `${plan.seed || 'know-your-shiny'}:${round?.subject?.pokedex_id || round?.subject?.name || round.round_number}`,
           config: mutationConfig,
+          ffmpegExecutable,
+          cwd: projectRoot,
         });
         if (!Array.isArray(generated.created) || generated.created.length === 0) {
           return {
@@ -210,6 +214,8 @@ export async function renderPokeQuizzVideo({
     plan,
     template,
     runtimeRoot,
+    projectRoot,
+    ffmpegExecutable,
   });
 
   const visualInputs = buildVisualInputs(plan, renderPlan);
