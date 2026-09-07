@@ -163,6 +163,24 @@
             ]
           }
         },
+        "publisher": {
+          "targets": [
+            {
+              "platform": "tiktok_video",
+              "account_key": "poke-quizz-tiktok",
+              "enabled": false,
+              "schedule_mode": "orion",
+              "visibility": "private",
+              "tiktok": {
+                "access_token_env": "TIKTOK_POKE_QUIZZ_ACCESS_TOKEN",
+                "privacy_level": "SELF_ONLY",
+                "comments_enabled": true,
+                "duet_enabled": false,
+                "stitch_enabled": false
+              }
+            }
+          ]
+        },
         "related_video": {
           "enabled": true,
           "provider": "youtube_studio",

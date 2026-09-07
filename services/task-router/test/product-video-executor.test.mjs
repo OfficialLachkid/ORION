@@ -457,6 +457,122 @@ test('publish approval triggers an immediate scheduling pass and returns the sch
   assert.equal(reviewSyncCalls[0].publication.id, 'publication-bug-ground');
 });
 
+test('publish approval fans out scheduled publications to configured additional platforms', async () => {
+  const initialPublication = {
+    id: 'publication-platform-fanout',
+    video_id: 'video-platform-fanout',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'pending',
+    preview_url: 'https://youtube.com/shorts/fanout-preview',
+    metadata: {
+      workflow_state: 'preview_uploaded',
+    },
+  };
+  const scheduledPublication = {
+    ...initialPublication,
+    status: 'scheduled',
+    scheduled_for: '2026-09-08T10:00:00.000Z',
+    metadata: {
+      ...initialPublication.metadata,
+      workflow_state: 'scheduled',
+    },
+  };
+  let fetchCount = 0;
+  const fanOutCalls = [];
+  const publicationStore = {
+    async fetchPublicationById() {
+      fetchCount += 1;
+      return fetchCount === 1 ? initialPublication : scheduledPublication;
+    },
+    async fetchVideoById(id) {
+      return {
+        id,
+        render: {
+          output_path: 'data/runtime/product-video-agent/poke-quizz/fanout.mp4',
+        },
+      };
+    },
+    async updatePublication(_id, patch) {
+      return {
+        ...initialPublication,
+        status: patch.status || initialPublication.status,
+        metadata: {
+          ...initialPublication.metadata,
+          ...(patch.metadata || {}),
+        },
+      };
+    },
+  };
+
+  const result = await executeProductVideoAction(
+    'poke_quizz_publish_preview',
+    {
+      task_id: 'TASK-ORION-PQ-PUBLISH-FANOUT',
+      approved_by: 'Lachkid',
+      approved_by_id: '374565340644114433',
+      poke_quizz_publication_review: {
+        publicationId: 'publication-platform-fanout',
+        channelSelector: 'poke-quizz-youtube',
+      },
+    },
+    { env: {} },
+    {
+      publicationStore,
+      loadPublicationChannelProfiles: async () => ([{
+        platform: 'youtube_shorts',
+        account_key: 'poke-quizz-youtube',
+        metadata: {
+          publisher: {
+            targets: [{
+              platform: 'tiktok_video',
+              account_key: 'poke-quizz-tiktok',
+              enabled: true,
+            }],
+          },
+        },
+      }]),
+      findPublicationChannelProfile: (profiles) => profiles[0],
+      runProcess: async () => ({
+        stdout: JSON.stringify([{
+          publication_id: 'publication-platform-fanout',
+          action: 'schedule_update',
+          scheduled_for: '2026-09-08T10:00:00.000Z',
+        }], null, 2),
+      }),
+      syncQueueStatusMessage: async () => ({ posted: true }),
+      syncPublicationReviewMessage: async () => ({ updated: true, moved: true }),
+      upsertAdditionalPlatformPublicationTargets: async (options) => {
+        fanOutCalls.push(options);
+        return [{
+          platform: 'tiktok_video',
+          account_key: 'poke-quizz-tiktok',
+          publication_id: 'publication-target-tiktok',
+          workflow_state: 'scheduled',
+          scheduled_for: options.scheduledFor,
+        }];
+      },
+      queueStatusChannelProfile: {
+        platform: 'youtube_shorts',
+        account_key: 'poke-quizz-youtube',
+      },
+      executePublicationScriptPath: '/tmp/execute-youtube-publication.mjs',
+    },
+  );
+
+  assert.equal(fanOutCalls.length, 1);
+  assert.equal(fanOutCalls[0].sourcePublication.id, 'publication-platform-fanout');
+  assert.equal(fanOutCalls[0].scheduledFor, '2026-09-08T10:00:00.000Z');
+  assert.deepEqual(result.report.platformPublicationResults, [{
+    platform: 'tiktok_video',
+    account_key: 'poke-quizz-tiktok',
+    publication_id: 'publication-target-tiktok',
+    workflow_state: 'scheduled',
+    scheduled_for: '2026-09-08T10:00:00.000Z',
+  }]);
+  assert.equal(result.report.severity, 'success');
+});
+
 test('publish approval forwards an optional max-scheduled-days cap to the scheduler', async () => {
   const initialPublication = {
     id: 'publication-auto-publish-window',
