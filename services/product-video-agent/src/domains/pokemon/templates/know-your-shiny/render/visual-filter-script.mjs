@@ -357,29 +357,32 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       });
     });
 
-    const roundSpriteInput = inputRefs.rounds[roundIndex].sprite;
-    const splitLabels = round.candidates.map((candidate) => `r${roundIndex}cand${candidate.index}`);
-    const graySplitLabels = round.candidates.filter((candidate) => !candidate.is_correct).map((candidate) => `r${roundIndex}gray${candidate.index}`);
-    filters.push(
-      `[${roundSpriteInput}:v]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,split=${splitLabels.length + graySplitLabels.length}${splitLabels.map((label) => `[${label}]`).join('')}${graySplitLabels.map((label) => `[${label}]`).join('')}`,
-    );
+    const roundInputRefs = inputRefs.rounds[roundIndex] || { candidates: [] };
 
     const baseSpriteSize = roundTime(
       ensureNumber(gridLayout.item_size_px, 220) * ensureNumber(gridLayout.sprite_scale_multiplier, 1),
     );
     const introDuration = Math.max(0.08, ensureNumber(template?.renderer?.candidate_intro_duration_seconds, 0.18));
     const grayFadeDuration = Math.max(0.08, ensureNumber(template?.renderer?.decoy_grayscale_fade_duration_seconds, 0.22));
-    let grayLabelCursor = 0;
 
     for (const candidate of round.candidates) {
+      const candidateInput = roundInputRefs.candidates?.[candidate.index] ?? roundInputRefs.sprite;
+      if (candidateInput == null) {
+        continue;
+      }
       const cell = gridLayout.cells[candidate.index];
       const introStart = roundTime(incomingTransitionSeconds + 0.08 + (candidate.index * 0.03));
       const candidateCenterY = Number((
         cell.center_y + gridSpriteLayout.center_y_offset_px
       ).toFixed(3));
+      const candidateSourceLabel = `r${roundIndex}src${candidate.index}`;
+      const graySourceLabel = `r${roundIndex}gray${candidate.index}`;
+      filters.push(
+        `[${candidateInput}:v]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,split=${candidate.is_correct ? 1 : 2}[${candidateSourceLabel}]${candidate.is_correct ? '' : `[${graySourceLabel}]`}`,
+      );
       const baseLabel = `r${roundIndex}c${candidate.index}`;
       const baseChain = `${buildColorFilterChain(candidate)},scale=${baseSpriteSize}:${baseSpriteSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1`;
-      filters.push(`[${splitLabels[candidate.index]}]fps=${fps},${baseChain}[${baseLabel}]`);
+      filters.push(`[${candidateSourceLabel}]fps=${fps},${baseChain}[${baseLabel}]`);
       if (inputRefs.grassPlatform != null && platformLayout.enabled) {
         const platformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
         const platformLabel = `r${roundIndex}platform${candidate.index}`;
@@ -404,14 +407,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = baseSceneLabel;
 
       if (!candidate.is_correct) {
-        const grayLabel = graySplitLabels[grayLabelCursor];
-        grayLabelCursor += 1;
         const graySceneLabel = `scene${roundIndex}gray${candidate.index}`;
         filters.push(
-          `[${grayLabel}]fps=${fps},${baseChain},hue=s=0,fade=t=in:st=${round.local.reveal_visual_start_seconds}:d=${grayFadeDuration}:alpha=1[${grayLabel}v]`,
+          `[${graySourceLabel}]fps=${fps},${baseChain},hue=s=0,fade=t=in:st=${round.local.reveal_visual_start_seconds}:d=${grayFadeDuration}:alpha=1[${graySourceLabel}v]`,
         );
         filters.push(
-          `[${currentLabel}][${grayLabel}v]overlay=x='${cell.center_x}-w/2':y='${candidateCenterY}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${graySceneLabel}]`,
+          `[${currentLabel}][${graySourceLabel}v]overlay=x='${cell.center_x}-w/2':y='${candidateCenterY}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${graySceneLabel}]`,
         );
         currentLabel = graySceneLabel;
       }

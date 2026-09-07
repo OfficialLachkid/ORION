@@ -232,8 +232,11 @@ test('know-your-shiny render plan and input builders stay deterministic for slid
   assert.equal(renderPlan.grid_layout.sprite_scale_multiplier, 1.5);
   assert.equal(renderPlan.reveal_sprite.sprite_scale_multiplier, 1.38);
   assert.equal(renderPlan.grid_layout.cells[0].center_y, 597);
-  assert.equal(visualInputs.length, 6);
+  assert.equal(visualInputs.length, 15);
   assert.equal(visualInputs[0].role, 'background');
+  assert.equal(visualInputs[1].role, 'round-1-candidate-0');
+  assert.equal(visualInputs[4].role, 'round-1-candidate-3');
+  assert.equal(visualInputs[13].role, 'grass-platform');
   assert.equal(visualInputs.at(-1).role, 'shiny-sparkle');
 });
 
@@ -255,13 +258,11 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
     renderPlan,
     {
       background: 0,
-      rounds: [
-        { sprite: 1 },
-        { sprite: 2 },
-        { sprite: 3 },
-      ],
-      grassPlatform: 4,
-      shinySparkle: 5,
+      rounds: renderPlan.rounds.map((round, roundIndex) => ({
+        candidates: round.candidates.map((_, candidateIndex) => 1 + (roundIndex * 4) + candidateIndex),
+      })),
+      grassPlatform: 13,
+      shinySparkle: 14,
     },
     null,
   );

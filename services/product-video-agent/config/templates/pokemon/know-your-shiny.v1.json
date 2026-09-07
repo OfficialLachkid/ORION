@@ -190,6 +190,16 @@
     "decoy_grayscale_fade_duration_seconds": 0.22,
     "correct_move_duration_seconds": 0.36,
     "correct_cell_fade_duration_seconds": 0.16,
-    "correct_scale_multiplier": 1.08
+    "correct_scale_multiplier": 1.08,
+    "localized_decoy_color_mutation": {
+      "enabled": true,
+      "ideal_min_percent": 0.05,
+      "ideal_max_percent": 0.3,
+      "broad_min_percent": 0.02,
+      "broad_max_percent": 0.45,
+      "min_saturation": 0.18,
+      "hue_tolerance_degrees": 28,
+      "existing_color_min_percent": 0.03
+    }
   }
 }
