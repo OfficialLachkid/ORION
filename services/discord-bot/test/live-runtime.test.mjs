@@ -21,6 +21,7 @@ import {
   mergeImageAttachments,
   prepareCommandTasksForExecution,
   rehydratePokeQuizzReviewTask,
+  resolveInteractionApprovalOrigin,
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
 
@@ -635,6 +636,28 @@ test('findTrackedApprovalMessagesForTask returns empty array for empty/missing t
   const tracked = new Map([['CHAN-A:approval:TASK-1', { channelId: 'CHAN-A', messageId: 'MSG-1' }]]);
   assert.deepEqual(findTrackedApprovalMessagesForTask(tracked, ''), []);
   assert.deepEqual(findTrackedApprovalMessagesForTask(tracked, null), []);
+});
+
+test('resolveInteractionApprovalOrigin keeps approval message origin available after deferred updates', () => {
+  const trackedMap = new Map([
+    ['CHAN-APPROVAL:approval:TASK-1', { channelId: 'CHAN-APPROVAL', messageId: 'MSG-TRACKED' }],
+  ]);
+
+  const resolved = resolveInteractionApprovalOrigin({
+    channel_id: 'CHAN-APPROVAL',
+    message: {
+      id: 'MSG-FALLBACK',
+    },
+  }, trackedMap, 'TASK-1');
+
+  assert.deepEqual(resolved, {
+    interactionChannelId: 'CHAN-APPROVAL',
+    approvalMessageId: 'MSG-TRACKED',
+    approvalOrigin: {
+      channelId: 'CHAN-APPROVAL',
+      messageId: 'MSG-TRACKED',
+    },
+  });
 });
 
 test('collectApprovalDeleteTargets uses task.approval_origin from the interaction payload', () => {

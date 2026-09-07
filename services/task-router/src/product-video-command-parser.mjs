@@ -14,6 +14,10 @@ export const PRODUCT_VIDEO_TEMPLATE_OPTIONS = Object.freeze([
     value: 'know-your-shiny',
   }),
   Object.freeze({
+    name: 'Stat Clash',
+    value: 'stat-clash',
+  }),
+  Object.freeze({
     name: 'Tournament',
     value: 'tournament',
   }),
@@ -51,6 +55,7 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/poke-quizz-find-the-shiny-youtube.json',
     'know-your-shiny': 'services/product-video-agent/config/channels/poke-quizz-know-your-shiny-youtube.json',
+    'stat-clash': 'services/product-video-agent/config/channels/poke-quizz-stat-clash-youtube.json',
     tournament: 'services/product-video-agent/config/channels/poke-quizz-tournament-youtube.json',
     memory: 'services/product-video-agent/config/channels/poke-quizz-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json',
@@ -59,6 +64,7 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/trivamon-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
     'know-your-shiny': 'services/product-video-agent/config/channels/trivamon-know-your-shiny-youtube.json',
+    'stat-clash': 'services/product-video-agent/config/channels/trivamon-stat-clash-youtube.json',
     tournament: 'services/product-video-agent/config/channels/trivamon-tournament-youtube.json',
     memory: 'services/product-video-agent/config/channels/trivamon-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json',
@@ -67,6 +73,7 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/poke-guess-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/poke-guess-find-the-shiny-youtube.json',
     'know-your-shiny': 'services/product-video-agent/config/channels/poke-guess-know-your-shiny-youtube.json',
+    'stat-clash': 'services/product-video-agent/config/channels/poke-guess-stat-clash-youtube.json',
     tournament: 'services/product-video-agent/config/channels/poke-guess-tournament-youtube.json',
     memory: 'services/product-video-agent/config/channels/poke-guess-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
@@ -75,6 +82,7 @@ const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
     'dual-type-reveal': 'services/product-video-agent/config/channels/dexguess-youtube.json',
     'find-the-shiny': 'services/product-video-agent/config/channels/dexguess-find-the-shiny-youtube.json',
     'know-your-shiny': 'services/product-video-agent/config/channels/dexguess-know-your-shiny-youtube.json',
+    'stat-clash': 'services/product-video-agent/config/channels/dexguess-stat-clash-youtube.json',
     tournament: 'services/product-video-agent/config/channels/dexguess-tournament-youtube.json',
     memory: 'services/product-video-agent/config/channels/dexguess-memory-youtube.json',
     'type-speed-quiz': 'services/product-video-agent/config/channels/dexguess-type-speed-quiz-youtube.json',
@@ -91,7 +99,13 @@ function normalizeKey(value) {
 
 function normalizeTemplateOptionValue(value) {
   const normalized = normalizeKey(value);
-  return normalized === 'showdown' ? 'tournament' : normalized;
+  if (normalized === 'showdown') {
+    return 'tournament';
+  }
+  if (normalized === 'stat-battle') {
+    return 'stat-clash';
+  }
+  return normalized;
 }
 
 function findOption(options, value, normalizer = normalizeKey) {

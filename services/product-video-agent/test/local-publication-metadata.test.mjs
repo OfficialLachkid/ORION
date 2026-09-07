@@ -111,6 +111,20 @@ const tournamentPlan = {
   },
 };
 
+const statClashPlan = {
+  template_id: 'pokemon.stat-clash.v1',
+  selection: {
+    primary_stat_key: 'defense',
+    round_count: 3,
+    selected_subjects: [
+      { name: 'Steelix' },
+      { name: 'Aggron' },
+      { name: 'Shuckle' },
+      { name: 'Bastiodon' },
+    ],
+  },
+};
+
 const expectedSeededTitles = new Set([
   'Psychic/Water Type Quiz - Can You Guess?',
   'Can You Guess This Psychic/Water Pokemon?',
@@ -155,6 +169,13 @@ const expectedTournamentSeededTitles = new Set([
   'Pokemon Tourney',
   'Who will be Champion?',
   'Who will win?',
+]);
+
+const expectedStatClashSeededTitles = new Set([
+  'Who has the Better Stat?',
+  'Highest Stat Challenge!',
+  'Who has the Highest Stat?',
+  'Stat Clash! 📊',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -423,4 +444,41 @@ test('seeded tournament fallback metadata uses the supported generic title varia
 
   assert.ok(expectedTournamentSeededTitles.has(firstSeeded.title));
   assert.ok(expectedTournamentSeededTitles.has(secondSeeded.title));
+});
+
+test('fallback publication metadata frames stat-clash as a highest-stat challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(statClashPlan, channelProfile);
+
+  assert.equal(metadata.title, 'Who has the Better Stat?');
+  assert.equal(
+    metadata.description,
+    "Four Pokemon enter each Stat Clash round. Pick who has the highest Defense before time runs out.\n\nWelcome to Poke Quizz to test your Pokemon knowledge, and see if you're a true master!",
+  );
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#pokemonstats',
+    '#statchallenge',
+    '#pokemonquiz',
+    '#shorts',
+  ]);
+});
+
+test('seeded stat-clash fallback metadata uses the supported generic title variants', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...statClashPlan,
+      seed: 'stat-clash-seed-1',
+    },
+    channelProfile,
+  );
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...statClashPlan,
+      seed: 'stat-clash-seed-2',
+    },
+    channelProfile,
+  );
+
+  assert.ok(expectedStatClashSeededTitles.has(firstSeeded.title));
+  assert.ok(expectedStatClashSeededTitles.has(secondSeeded.title));
 });

@@ -427,6 +427,24 @@ function buildTrackedOutboundEventKey(channelId, outboundEvent) {
   return `${channelId}:${stream}:${taskId}`;
 }
 
+export function resolveInteractionApprovalOrigin(interactionPayload, trackedTaskMessages, taskId) {
+  const interactionChannelId = interactionPayload?.channel_id || '';
+  const trackedApprovalKey = buildTrackedOutboundEventKey(interactionChannelId, {
+    type: 'approval_request',
+    metadata: { taskId },
+  });
+  const trackedApprovalMessage = trackedApprovalKey ? trackedTaskMessages.get(trackedApprovalKey) : null;
+  const approvalMessageId = trackedApprovalMessage?.messageId || interactionPayload?.message?.id || '';
+
+  return {
+    interactionChannelId,
+    approvalMessageId,
+    approvalOrigin: (interactionChannelId && approvalMessageId)
+      ? { channelId: interactionChannelId, messageId: approvalMessageId }
+      : null,
+  };
+}
+
 // Extract the tracked entries for a given task's approval message. Used
 // after a successful lead-outreach send to know which Discord message to
 // delete from the waiting-approval / outreach-followups thread. Exported
@@ -1195,6 +1213,11 @@ export async function runLiveDiscordBot(config) {
           const acknowledgement = result.accepted
             ? buildSourceAcknowledgement(result)
             : result.reason || 'Approval action was rejected.';
+          let interactionApprovalOrigin = {
+            interactionChannelId: '',
+            approvalMessageId: '',
+            approvalOrigin: null,
+          };
 
           if (result.accepted && result.route === 'approval' && result.decision?.taskId) {
             resolvedApprovals.set(result.decision.taskId, {
@@ -1236,13 +1259,12 @@ export async function runLiveDiscordBot(config) {
             // treats as "leave embeds unchanged". Fetching the live message by
             // ID sidesteps payload.d.message entirely, so both paths behave
             // the same way.
-            const interactionChannelId = payload.d.channel_id || '';
-            const trackedApprovalKey = buildTrackedOutboundEventKey(interactionChannelId, {
-              type: 'approval_request',
-              metadata: { taskId: result.decision.taskId },
-            });
-            const trackedApprovalMessage = trackedApprovalKey ? trackedTaskMessages.get(trackedApprovalKey) : null;
-            const approvalMessageId = trackedApprovalMessage?.messageId || payload.d.message?.id || '';
+            interactionApprovalOrigin = resolveInteractionApprovalOrigin(
+              payload.d,
+              trackedTaskMessages,
+              result.decision.taskId,
+            );
+            const { interactionChannelId, approvalMessageId } = interactionApprovalOrigin;
 
             await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
               type: DISCORD_INTERACTION_CALLBACK_DEFERRED_UPDATE_MESSAGE,
@@ -1304,9 +1326,7 @@ export async function runLiveDiscordBot(config) {
             // of truth for the message ID at click time.
             await resolvePendingTask({
               ...result.decision,
-              approvalOrigin: (interactionChannelId && approvalMessageId)
-                ? { channelId: interactionChannelId, messageId: approvalMessageId }
-                : null,
+              approvalOrigin: interactionApprovalOrigin.approvalOrigin,
             });
           }
           return;

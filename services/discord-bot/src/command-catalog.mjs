@@ -118,6 +118,7 @@ export function buildCommandHelpDescriptor(config = {}) {
         value: [
           '`generate video template: find-the-shiny channel: trivamon-youtube`',
           '`generate video template: know-your-shiny channel: poke-quizz-youtube`',
+          '`generate video template: stat-clash channel: poke-quizz-youtube`',
           '`generate video template: tournament channel: dexguess-youtube`',
           '`generate video template: memory channel: poke-quizz-youtube`',
           '`generate video template: dual-type-reveal channel: poke-quizz-youtube`',
@@ -125,6 +126,7 @@ export function buildCommandHelpDescriptor(config = {}) {
           '`generate video template: dual-type-reveal channel: dexguess-youtube`',
           '`/generate-video template:Find the Shiny channel:TrivaMon`',
           '`/generate-video template:Know Your Shiny channel:Poke Quizz`',
+          '`/generate-video template:Stat Clash channel:Poke Quizz`',
           '`/generate-video template:Tournament channel:DexGuess`',
           '`/generate-video template:Memory channel:Poke Quizz`',
           '`/generate-video template:Type Speed Quiz channel:Poke Guess`',
