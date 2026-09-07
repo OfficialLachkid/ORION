@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { runLocalProcess } from '../../../../../process-runner.mjs';
 import { probeMediaDurationSeconds, verifyReadableFiles } from '../../dual-type-reveal/render/media-probe.mjs';
@@ -21,6 +21,43 @@ import { buildVisualInputs } from './visual-inputs.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
 
 const MIN_SAFE_ANIMATED_SPRITE_DURATION_SECONDS = 0.2;
+const SWSCALER_EAGAIN_FINGERPRINT = /Failed initializing scaling graph \(Resource temporarily unavailable\)/u;
+const TRUNCATED_OUTPUT_FINGERPRINT = /__stat_clash_truncated_output__/u;
+const MAX_FFMPEG_RETRIES = 3;
+
+async function removeFileIfExists(filePath) {
+  try {
+    await unlink(filePath);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+}
+
+async function runFfmpegWithSwscaleRetry(options, { onRetry, postCheck } = {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= MAX_FFMPEG_RETRIES; attempt += 1) {
+    try {
+      const result = await runLocalProcess(options);
+      if (typeof postCheck === 'function') {
+        await postCheck(result);
+      }
+      return result;
+    } catch (error) {
+      const message = String(error?.message || error || '');
+      const isKnownTransient = SWSCALER_EAGAIN_FINGERPRINT.test(message)
+        || TRUNCATED_OUTPUT_FINGERPRINT.test(message);
+      if (!isKnownTransient || attempt === MAX_FFMPEG_RETRIES) {
+        throw error;
+      }
+      lastError = error;
+      if (typeof onRetry === 'function') onRetry(attempt);
+      await new Promise((resolveRetry) => setTimeout(resolveRetry, 800));
+    }
+  }
+  throw lastError;
+}
 
 function parseRoundCandidateRole(role = '') {
   const match = /^round-(\d+)-candidate-(\d+)$/u.exec(String(role || '').trim());
@@ -225,10 +262,15 @@ export async function renderPokeQuizzVideo({
   await writeFile(filterScriptPath, visualFilter.script, 'utf8');
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
-  await runLocalProcess({
+  const expectedDurationSeconds = Number(renderPlan.total_duration_seconds || 0);
+  await runFfmpegWithSwscaleRetry({
     executable: ffmpegExecutable,
     args: [
       '-y',
+      '-filter_complex_threads',
+      '1',
+      '-filter_threads',
+      '1',
       ...visualInputs.flatMap((input) => input.args),
       '-i',
       audioMixPath,
@@ -260,7 +302,26 @@ export async function renderPokeQuizzVideo({
       outputAbsolutePath,
     ],
     cwd: projectRoot,
-    timeoutMs: 600000,
+    timeoutMs: 900000,
+  }, {
+    postCheck: async () => {
+      if (!(expectedDurationSeconds > 0)) return;
+      const actualDurationSeconds = await probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: outputAbsolutePath,
+        cwd: projectRoot,
+      });
+      if (
+        Number.isFinite(actualDurationSeconds)
+        && actualDurationSeconds > 0
+        && actualDurationSeconds + 1.5 < expectedDurationSeconds
+      ) {
+        await removeFileIfExists(outputAbsolutePath);
+        throw new Error(
+          `__stat_clash_truncated_output__ expected ~${expectedDurationSeconds.toFixed(2)}s, got ${actualDurationSeconds.toFixed(2)}s`,
+        );
+      }
+    },
   });
 
   await access(outputAbsolutePath);
