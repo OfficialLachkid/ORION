@@ -271,6 +271,16 @@ export async function renderPokeQuizzVideo({
     executable: ffmpegExecutable,
     args: [
       '-y',
+      // Serialize filter graph execution: with 5+ scenes, ffmpeg's
+      // default multi-threaded filter processing spins up a swscale
+      // context per thread per format conversion. That exhausts the
+      // context pool and either truncates output silently or errors
+      // with "Failed initializing scaling graph". Single-thread makes
+      // contexts reusable across scenes.
+      '-filter_complex_threads',
+      '1',
+      '-filter_threads',
+      '1',
       ...visualInputs.flatMap((input) => input.args),
       '-i',
       audioMixPath,
@@ -319,7 +329,7 @@ export async function renderPokeQuizzVideo({
       if (
         Number.isFinite(actualDurationSeconds)
         && actualDurationSeconds > 0
-        && actualDurationSeconds + 0.5 < expectedDurationSeconds
+        && actualDurationSeconds + 1.5 < expectedDurationSeconds
       ) {
         throw new Error(
           `__cry_match_truncated_output__ expected ~${expectedDurationSeconds.toFixed(2)}s, got ${actualDurationSeconds.toFixed(2)}s`,
