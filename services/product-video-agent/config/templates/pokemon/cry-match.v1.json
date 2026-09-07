@@ -26,19 +26,12 @@
     "generation_scope": [],
     "round_count": 3,
     "round_count_weights": {
-      "easy": 2,
-      "medium": 2,
-      "hard": 1
+      "easy": 1
     },
     "round_count_levels": {
+      "_comment_pending_multiround": "medium=5 / hard=8 confirmed broken 2026-09-07: multi-scene filter graph exhausts libswscale context pool via parallel format conversions (rgba<->gbrap, yuva<->yuv). Needs per-scene pre-render + concat/xfade second pass. Keeping easy=3 only until that lands.",
       "easy": {
         "round_count": 3
-      },
-      "medium": {
-        "round_count": 5
-      },
-      "hard": {
-        "round_count": 8
       }
     },
     "candidate_count": 4,
