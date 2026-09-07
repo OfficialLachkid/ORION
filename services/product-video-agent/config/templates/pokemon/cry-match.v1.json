@@ -142,7 +142,7 @@
       "pre_countdown_hold_seconds": 0.18,
       "reveal_hold_seconds": 1.6,
       "transition_duration_seconds": 0.42,
-      "final_hold_seconds": 1
+      "final_hold_seconds": 0
     }
   },
   "reveal": {

@@ -107,8 +107,12 @@ export function buildAudioFilterScript({
   if (musicPath) {
     const delayMs = Math.max(0, Math.round((renderPlan.audio_cues?.battle_music_start_seconds || 0) * 1000));
     const musicDuration = Math.max(0.5, renderPlan.total_duration_seconds - (renderPlan.audio_cues?.battle_music_start_seconds || 0));
+    // aloop=loop=-1 keeps the music source repeating so if the video
+    // outlasts the track (hard=8 rounds can push past 60s) the song
+    // just replays from the start instead of leaving silence. size is
+    // the max buffered samples — 2e9 covers any realistic track.
     filters.push(
-      `[${inputIndex}:a]atrim=0:${musicDuration},afade=t=in:st=0:d=0.15,afade=t=out:st=${Math.max(0, musicDuration - 0.6)}:d=0.6,adelay=${delayMs}|${delayMs},volume=${DEFAULT_MUSIC_VOLUME}[music]`,
+      `[${inputIndex}:a]aloop=loop=-1:size=2000000000,atrim=0:${musicDuration},afade=t=in:st=0:d=0.15,afade=t=out:st=${Math.max(0, musicDuration - 0.6)}:d=0.6,adelay=${delayMs}|${delayMs},volume=${DEFAULT_MUSIC_VOLUME}[music]`,
     );
     mixLabels.push('music');
     inputIndex += 1;

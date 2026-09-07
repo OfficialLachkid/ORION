@@ -160,6 +160,14 @@ const DEFAULT_TYPE_QUIZ_TITLE_BUILDERS = Object.freeze([
   () => '99% fail',
 ]);
 
+function formatCryMatchDifficultyLabel(difficultyId) {
+  const normalized = String(difficultyId || '').trim().toLowerCase();
+  if (normalized === 'easy') return 'Easy';
+  if (normalized === 'medium') return 'Medium';
+  if (normalized === 'hard') return 'Hard';
+  return '';
+}
+
 const DEFAULT_CRY_MATCH_TITLE_BUILDERS = Object.freeze([
   () => 'Guess the Pokemon by cry!',
   () => 'Whose cry is this?',
@@ -263,7 +271,9 @@ function buildTemplateAwareDefaultTitle(plan) {
     const templateIndex = seed
       ? hashSeed(`${seed}|cry-match`) % DEFAULT_CRY_MATCH_TITLE_BUILDERS.length
       : 0;
-    return DEFAULT_CRY_MATCH_TITLE_BUILDERS[templateIndex]();
+    const baseTitle = DEFAULT_CRY_MATCH_TITLE_BUILDERS[templateIndex]();
+    const difficultyLabel = formatCryMatchDifficultyLabel(plan?.selection?.difficulty_id);
+    return difficultyLabel ? `${baseTitle} - ${difficultyLabel}` : baseTitle;
   }
   if (flavor !== 'find-the-shiny') {
     return buildDefaultTitle(plan);
