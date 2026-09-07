@@ -15,14 +15,16 @@
         "pokemon.memory.v1": 2,
         "pokemon.stat-clash.v1": 2,
         "pokemon.type-quiz.v1": 2,
-        "pokemon.tournament.v1": 1
+        "pokemon.tournament.v1": 1,
+        "pokemon.cry-match.v1": 2
       },
       "mix_channel_config_paths": [
         "services/product-video-agent/config/channels/poke-quizz-know-your-shiny-youtube.json",
         "services/product-video-agent/config/channels/poke-quizz-memory-youtube.json",
         "services/product-video-agent/config/channels/poke-quizz-stat-clash-youtube.json",
         "services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json",
-        "services/product-video-agent/config/channels/poke-quizz-tournament-youtube.json"
+        "services/product-video-agent/config/channels/poke-quizz-tournament-youtube.json",
+        "services/product-video-agent/config/channels/poke-quizz-cry-match-youtube.json"
       ]
     },
     "review_refresh": {
