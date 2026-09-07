@@ -54,6 +54,18 @@ function consumeRecoveryNote() {
   return note;
 }
 
+export function truncateForHeader(text, maxLength) {
+  const normalized = String(text || '').trim();
+  if (normalized.length <= maxLength) return normalized;
+  // Prefer breaking at a newline near the cap so multi-line stack traces
+  // don't get cut mid-line; fall back to a hard slice otherwise. The
+  // trailing ellipsis flags truncation to the operator.
+  const window = normalized.slice(0, maxLength);
+  const lastNewline = window.lastIndexOf('\n');
+  const cut = lastNewline > maxLength * 0.6 ? lastNewline : maxLength;
+  return `${normalized.slice(0, cut).trimEnd()} …[truncated]`;
+}
+
 function resolveChannelId(config) {
   return config.channelIds.leadGeneration || config.channelIds.agentResults || '';
 }
@@ -240,8 +252,15 @@ export function buildResultDescriptions({
   runDate = new Date(),
 }) {
   if (runError) {
+    // Python subprocess errors can carry the whole captured stdout — a
+    // scrapegraphai / Playwright crash saw runError.message pass 4kB and
+    // blow paginateDiscordLines' 3900-char header guard (real 2026-09-05
+    // sweep: plumbing + glaszetter niches both lost their round to this).
+    // Cap to a length that keeps the header well under budget while still
+    // showing enough of the error for the operator to recognize it.
+    const truncatedMessage = truncateForHeader(runError.message, 400);
     return paginateDiscordLines({
-      firstHeader: `${recoveryNote}${title} failed for **${niche}** (query: "${query}"): ${runError.message}`,
+      firstHeader: `${recoveryNote}${title} failed for **${niche}** (query: "${query}"): ${truncatedMessage}`,
       continuationHeader: `**Follow-up:** This belongs to **${title}** from **${formatLocalDate(runDate)}**.`,
     });
   }

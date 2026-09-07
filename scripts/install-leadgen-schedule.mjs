@@ -1,16 +1,24 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-const DEFAULT_HOUR = 7;
+// Sweep at 06:00 × 4 rounds. History:
+//   6 (2026-09-02): tuned for the then-6-niche pool.
+//   3 (2026-09-05): after the 26-niche expansion the same 6 rounds took
+//     5h34min. Also added the after-night-shift chained trigger.
+//   4 (2026-09-06): first chained run showed contact-fallback lifted
+//     usable-leads rate 43% → 79.7% and the qualifier's 30/night pipe
+//     was no longer close to full. Bumped 3→4 to feed it enough while
+//     still finishing ~06:45 CEST (well before the 09:00 Ollama window).
+const DEFAULT_HOUR = 6;
 const DEFAULT_MINUTE = 0;
-const DEFAULT_TIMES = 2;
+const DEFAULT_TIMES = 4;
 const MAX_TIMES = 10;
 const PLIST_LABEL = 'io.vbj.orion.leadgen-schedule';
 
@@ -104,10 +112,25 @@ function loadLaunchAgent(plistPath) {
   execFileSync('launchctl', ['load', '-w', plistPath], { stdio: 'ignore' });
 }
 
+function uninstallLaunchAgent(plistPath) {
+  if (!existsSync(plistPath)) {
+    process.stdout.write(`No leadgen plist at ${plistPath} — nothing to uninstall.\n`);
+    return;
+  }
+  try {
+    execFileSync('launchctl', ['unload', plistPath], { stdio: 'ignore' });
+  } catch {
+    // Already unloaded — safe to continue.
+  }
+  unlinkSync(plistPath);
+  process.stdout.write(`Uninstalled ${basename(plistPath)}. Leadgen sweeps will no longer fire on the fixed schedule; the night-shift chain remains the sole trigger.\n`);
+}
+
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 7] [--minute 0] [--times 2] [--no-load]',
+      'Usage: node scripts/install-leadgen-schedule.mjs [--hour 6] [--minute 0] [--times 3] [--no-load]',
+      '       node scripts/install-leadgen-schedule.mjs --uninstall',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.leadgen-schedule.plist and loads it by default.',
       'Each run rotates to the next niche in scripts/run-scheduled-leadgen.mjs and searches',
@@ -116,7 +139,11 @@ function main() {
       '',
       '--times N chains N sequential sweeps in one launchd fire. Sweep 2 re-reads',
       'rotation-state.json so it lands on the NEXT set of cities (not the same ones).',
-      'Default is 2 to use the quiet-machine morning window more efficiently.',
+      'Default is 3 (post-2026-09-05 niche expansion — see DEFAULT_TIMES for reasoning).',
+      '',
+      '--uninstall unloads and removes the plist. Use this if you\'re relying on the',
+      'night-shift chain (scripts/lib/night-shift/core.mjs kickOffScheduledLeadgen) as the',
+      'sole leadgen trigger.',
     ].join('\n'));
     return;
   }
@@ -125,14 +152,19 @@ function main() {
     throw new Error('Leadgen schedule LaunchAgent installation is supported only on macOS.');
   }
 
+  const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
+  const plistPath = resolve(launchAgentsDir, `${PLIST_LABEL}.plist`);
+
+  if (hasFlag('--uninstall')) {
+    uninstallLaunchAgent(plistPath);
+    return;
+  }
+
   const config = loadRuntimeConfig();
   const hour = getNumberArgValue('--hour', DEFAULT_HOUR, 23);
   const minute = getNumberArgValue('--minute', DEFAULT_MINUTE, 59);
   const times = getNumberArgValue('--times', DEFAULT_TIMES, MAX_TIMES);
   const shouldLoad = !hasFlag('--no-load');
-
-  const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
-  const plistPath = resolve(launchAgentsDir, `${PLIST_LABEL}.plist`);
   const stdoutPath = resolve(config.runtimePaths.logDir, 'leadgen-schedule.stdout.log');
   const stderrPath = resolve(config.runtimePaths.logDir, 'leadgen-schedule.stderr.log');
   const scriptPath = resolve(projectRoot, 'scripts', 'run-scheduled-leadgen.mjs');

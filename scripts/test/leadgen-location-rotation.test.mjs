@@ -43,36 +43,42 @@ test('LOCATION_ROTATION entries have no leading, trailing, or double whitespace'
   assert.deepEqual(offenders, [], `Whitespace-dirty entries: ${JSON.stringify(offenders)}`);
 });
 
-test('LOCATION_ROTATION has expanded to at least 400 entries (Tier 1 expansion 2026-08-10)', () => {
-  // Regression guard against an accidental revert of the Tier 1 expansion.
-  // If someone shortens the list again, the rotation would collapse back
-  // toward the 22-day saturation cycle.
+test('LOCATION_ROTATION has expanded to at least 2000 entries (Tier 4 all-active CBS BAG 2026-09-03)', () => {
+  // Regression guard against reverting the full-pool switch. The
+  // 2026-09-03 change opened is_active=true for every CBS BAG
+  // woonplaats — dropping back below 2000 would mean someone
+  // reintroduced the aggressive filter that was cutting ~1660 real
+  // localities.
   assert.ok(
-    LOCATION_ROTATION.length >= 400,
-    `Expected at least 400 locations after Tier 1 expansion; got ${LOCATION_ROTATION.length}`,
+    LOCATION_ROTATION.length >= 2000,
+    `Expected at least 2000 locations after Tier 4 all-active; got ${LOCATION_ROTATION.length}`,
   );
 });
 
 test('LOCATION_ROTATION disambiguates cross-province namesake towns with a "(Province)" suffix', () => {
-  // Elst, Bergen, and Valkenburg all have real towns in multiple provinces.
-  // Both instances must be present, and both must carry the disambiguating
-  // suffix — otherwise the search query "elektriciens Elst" is ambiguous
-  // between Utrecht (near Amersfoort) and Gelderland (near Nijmegen).
+  // Bergen and Valkenburg have real towns in multiple provinces AND both
+  // instances live in BAG under abbreviated disambiguators ("Bergen (NH)",
+  // "Bergen L"). LOCATION_ROTATION post-processes these into readable
+  // "Name (Provincie)" so search queries stay unambiguous. Elst is a
+  // one-off in BAG (bare "Elst" for Gelderland-Overbetuwe, "Elst Ut"
+  // for Utrecht-Rhenen) — the Ut form gets rewritten too.
   const namesakes = [
-    { bare: 'Elst', suffixed: ['Elst (Utrecht)', 'Elst (Gelderland)'] },
-    { bare: 'Bergen', suffixed: ['Bergen (Noord-Holland)', 'Bergen (Limburg)'] },
-    { bare: 'Valkenburg', suffixed: ['Valkenburg (Zuid-Holland)', 'Valkenburg (Limburg)'] },
+    { suffixed: ['Elst (Utrecht)', 'Elst'] },
+    { suffixed: ['Bergen (Noord-Holland)', 'Bergen (Limburg)'], bareForbidden: 'Bergen' },
+    { suffixed: ['Valkenburg (Zuid-Holland)', 'Valkenburg (Limburg)'], bareForbidden: 'Valkenburg' },
   ];
-  for (const { bare, suffixed } of namesakes) {
-    assert.equal(
-      LOCATION_ROTATION.includes(bare),
-      false,
-      `Bare "${bare}" is ambiguous — must be disambiguated with a province suffix`,
-    );
-    for (const suffixedName of suffixed) {
+  for (const entry of namesakes) {
+    for (const suffixedName of entry.suffixed) {
       assert.ok(
         LOCATION_ROTATION.includes(suffixedName),
         `Missing disambiguated variant: "${suffixedName}"`,
+      );
+    }
+    if (entry.bareForbidden) {
+      assert.equal(
+        LOCATION_ROTATION.includes(entry.bareForbidden),
+        false,
+        `Bare "${entry.bareForbidden}" is ambiguous — must be disambiguated with a province suffix`,
       );
     }
   }
@@ -87,14 +93,64 @@ test('LOCATION_ROTATION originals are not accidentally duplicated in the expansi
   );
 });
 
-test('scheduled leadgen defaults to two sweep rounds per daily run', () => {
-  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 2);
-  assert.equal(resolveScheduledSweepRounds(undefined), 2);
-  assert.equal(resolveScheduledSweepRounds(''), 2);
-  assert.equal(resolveScheduledSweepRounds(0), 2);
+test('scheduled leadgen defaults to four sweep rounds per daily run (post-2026-09-06 contact-fallback yield lift)', () => {
+  // Bumped 3→4 after the first chained run showed contact-fallback
+  // lifted usable-leads rate 43% → 79.7% and the qualifier's 30/night
+  // pipe was no longer close to full. Projects to ~3.7h, still finishes
+  // ~06:45 CEST — well before the 09:00 Ollama window.
+  assert.equal(DEFAULT_SCHEDULED_SWEEP_ROUNDS, 4);
+  assert.equal(resolveScheduledSweepRounds(undefined), 4);
+  assert.equal(resolveScheduledSweepRounds(''), 4);
+  assert.equal(resolveScheduledSweepRounds(0), 4);
 });
 
 test('scheduled leadgen rounds are clamped to a sane ceiling', () => {
   assert.equal(resolveScheduledSweepRounds(3), 3);
   assert.equal(resolveScheduledSweepRounds(999), 10);
+});
+
+test('CURRENT_POOL_EXPANSION_VERSION reflects the latest LOCATION_ROTATION expansion', async () => {
+  // Regression guard: every pool composition change needs a matching
+  // bump of CURRENT_POOL_EXPANSION_VERSION so loadRotationState() knows
+  // to run the migration (backfill visited-set from legacy cityIndex,
+  // etc.). Skip the bump and the state file stays in whatever prior
+  // shape it was written under.
+  const mod = await import('../run-scheduled-leadgen.mjs');
+  assert.ok(
+    Number.isInteger(mod.CURRENT_POOL_EXPANSION_VERSION) && mod.CURRENT_POOL_EXPANSION_VERSION >= 4,
+    `Expected CURRENT_POOL_EXPANSION_VERSION ≥ 4 after 2026-09-03 visited-set switch; got ${mod.CURRENT_POOL_EXPANSION_VERSION}`,
+  );
+});
+
+test('LOCATION_ROTATION expansion pool is deterministically shuffled (no alphabetical clustering)', () => {
+  // 2026-09-03: alphabetical ordering caused a 6-city dead zone during a
+  // real sweep — every niche's first 5 attempts hit "'s-Gravenmoer",
+  // "'s-Graveland", "'s-Gravendeel", "'s-Gravenpolder", "'s-Gravenzande",
+  // "'s-Heer Abtskerke" (tiny hamlets with 0 elektriciens/loodgieters).
+  // Deterministic shuffle spreads BAG's alphabetical hot spots across the
+  // pool. Guard: the first 30 non-original slots must NOT be dominated
+  // by any single first character. In an alphabetical layout, positions
+  // 22-51 would all start with "'" or "A".
+  const firstThirty = LOCATION_ROTATION.slice(22, 52);
+  const firstCharCounts = new Map();
+  for (const name of firstThirty) {
+    const key = name[0].toLowerCase();
+    firstCharCounts.set(key, (firstCharCounts.get(key) || 0) + 1);
+  }
+  const maxCluster = Math.max(...firstCharCounts.values());
+  assert.ok(
+    maxCluster < 15,
+    `Alphabetical clustering detected: ${maxCluster}/30 positions share a first letter. `
+    + `First 30 non-original entries: ${JSON.stringify(firstThirty)}`,
+  );
+});
+
+test('LOCATION_ROTATION shuffle is stable across rebuilds (same input → same order)', async () => {
+  // Deterministic shuffle is worthless if it re-orders on every restart —
+  // the visited-set would still be correct (name-keyed), but logs, tests,
+  // and cycle-progression reasoning would drift. Import twice via cache
+  // bust and assert identity.
+  const mod1 = await import(`../../scripts/leadgen/location-rotation.mjs?stable1=${Date.now()}`);
+  const mod2 = await import(`../../scripts/leadgen/location-rotation.mjs?stable2=${Date.now()}`);
+  assert.deepEqual(mod1.LOCATION_ROTATION, mod2.LOCATION_ROTATION);
 });

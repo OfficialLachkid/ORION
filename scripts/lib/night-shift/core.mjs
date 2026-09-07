@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../../../services/lib/runtime-config.mjs';
@@ -206,6 +207,25 @@ export async function runNightShift(argv = process.argv) {
     },
   );
 
+  // Kick off the daily leadgen sweep AFTER everything else — the video
+  // pipeline is the machine's heaviest step, and leadgen is the only
+  // background task the operator explicitly wants deferred until last
+  // (2026-09-05 ask: "leadgen is absolute last work that needs to be
+  // done"). Detached + unref so night-shift exits cleanly the moment
+  // the leadgen child is spawned — the child inherits its own Discord
+  // reporting and rotation-state persistence, so no supervisor is
+  // needed here. Suppress in fallback mode: the fallback slot exists
+  // to recover a partially-completed primary, not to double-fire
+  // leadgen.
+  let leadgenChildPid = null;
+  if (!isFallback) {
+    try {
+      leadgenChildPid = kickOffScheduledLeadgen(config);
+    } catch (error) {
+      process.stderr.write(`Failed to kick off scheduled leadgen (non-fatal): ${error.message}\n`);
+    }
+  }
+
   process.stdout.write(`${JSON.stringify({
     processed: outcomes.length,
     redrafted,
@@ -221,5 +241,23 @@ export async function runNightShift(argv = process.argv) {
     previewFallback,
     videoQueueMaintenanceError,
     previewFallbackError,
+    leadgenChildPid,
   }, null, 2)}\n`);
+}
+
+export function kickOffScheduledLeadgen(config) {
+  const scriptPath = resolve(projectRoot, 'scripts', 'run-scheduled-leadgen.mjs');
+  const logDir = config.runtimePaths.logDir;
+  mkdirSync(logDir, { recursive: true });
+  const stdout = openSync(resolve(logDir, 'leadgen-schedule.stdout.log'), 'a');
+  const stderr = openSync(resolve(logDir, 'leadgen-schedule.stderr.log'), 'a');
+
+  const child = spawn(process.execPath, [scriptPath], {
+    detached: true,
+    stdio: ['ignore', stdout, stderr],
+    cwd: projectRoot,
+  });
+  child.unref();
+  process.stdout.write(`Scheduled leadgen sweep started detached as PID ${child.pid}. Log: ${resolve(logDir, 'leadgen-schedule.stdout.log')}\n`);
+  return child.pid ?? null;
 }
