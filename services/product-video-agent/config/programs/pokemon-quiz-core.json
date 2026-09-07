@@ -16,6 +16,10 @@
       "path": "../templates/pokemon/know-your-shiny.v1.json"
     },
     {
+      "template_id": "pokemon.stat-clash.v1",
+      "path": "../templates/pokemon/stat-clash.v1.json"
+    },
+    {
       "template_id": "pokemon.tournament.v1",
       "path": "../templates/pokemon/tournament.v1.json"
     },
