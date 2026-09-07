@@ -24,15 +24,18 @@ export function buildVisualInputs(plan, renderPlan) {
   });
 
   renderPlan.rounds.forEach((round) => {
-    const spritePath = round.subject.render_sprite_path || round.subject.shiny_sprite_path || round.subject.sprite_path;
-    inputs.push({
-      role: `round-${round.round_number}-sprite`,
-      path: spritePath,
-      args: buildLoopingVisualInput(
-        spritePath,
-        round.scene_duration_seconds,
-        renderPlan.canvas.fps,
-      ),
+    const roundSpritePath = round.subject.render_sprite_path || round.subject.shiny_sprite_path || round.subject.sprite_path;
+    round.candidates.forEach((candidate) => {
+      const candidateSpritePath = candidate.render_sprite_path || roundSpritePath;
+      inputs.push({
+        role: `round-${round.round_number}-candidate-${candidate.index}`,
+        path: candidateSpritePath,
+        args: buildLoopingVisualInput(
+          candidateSpritePath,
+          round.scene_duration_seconds,
+          renderPlan.canvas.fps,
+        ),
+      });
     });
   });
 
