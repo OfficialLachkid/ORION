@@ -91,7 +91,14 @@
       "speed": 0.25,
       "type_advantage": 20,
       "speed_edge": 0.42,
-      "random_spread": 18
+      "offensive_matchup": 0.11,
+      "defense_bulk": 0.07,
+      "meaningful_base_stat_total_delta": 25,
+      "meaningful_speed_delta": 10,
+      "meaningful_offense_delta": 18,
+      "meaningful_defense_delta": 22,
+      "close_battle_threshold": 5,
+      "random_spread": 4
     }
   },
   "question_contract": {

@@ -6,7 +6,10 @@ import {
   buildAudioFilterScript,
   buildTournamentCryCues,
 } from '../src/domains/pokemon/templates/tournament/render/audio-filter-script.mjs';
-import { resolveTournamentBattle } from '../src/domains/pokemon/templates/tournament/battle-logic.mjs';
+import {
+  resolveBestTypeAttack,
+  resolveTournamentBattle,
+} from '../src/domains/pokemon/templates/tournament/battle-logic.mjs';
 import { applyNarrationDurationsToRenderPlan } from '../src/domains/pokemon/templates/tournament/render/render-plan.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/tournament/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/tournament/render/visual-inputs.mjs';
@@ -386,6 +389,153 @@ test('tournament battle commentary uses type advantage phrasing when typing deci
   assert.equal(battle.intro_line_text, 'Charizard versus Blastoise.');
   assert.equal(battle.insight_text, 'Blastoise has the type advantage.');
   assert.equal(battle.commentary_text, 'Charizard versus Blastoise. Blastoise has the type advantage.');
+});
+
+test('tournament type effectiveness handles dual typings and immunities', () => {
+  assert.deepEqual(resolveBestTypeAttack(['electric'], ['water', 'flying']), {
+    attacking_type: 'electric',
+    multiplier: 4,
+  });
+  assert.deepEqual(resolveBestTypeAttack(['normal'], ['ghost']), {
+    attacking_type: 'normal',
+    multiplier: 0,
+  });
+});
+
+test('tournament battle uses speed phrasing only when the winner is meaningfully faster', () => {
+  const fastmon = {
+    id: 'fastmon',
+    display_name: 'Fastmon',
+    types: ['normal'],
+    base_stats: { hp: 80, attack: 80, defense: 80, special_attack: 80, special_defense: 80, speed: 130 },
+    base_stat_total: 530,
+  };
+  const slowmon = {
+    id: 'slowmon',
+    display_name: 'Slowmon',
+    types: ['normal'],
+    base_stats: { hp: 80, attack: 80, defense: 80, special_attack: 80, special_defense: 80, speed: 80 },
+    base_stat_total: 480,
+  };
+
+  const battle = resolveTournamentBattle({
+    left: fastmon,
+    right: slowmon,
+    weights: {
+      base_stat_total: 0,
+      offensive_matchup: 0,
+      defense_bulk: 0,
+      type_advantage: 0,
+      speed_edge: 1,
+      random_spread: 0,
+    },
+    random: () => 0.5,
+  });
+
+  assert.equal(battle.winner.id, 'fastmon');
+  assert.equal(battle.selected_advantage.id, 'speed_edge');
+  assert.equal(battle.insight_text, 'Fastmon is faster.');
+  assert.equal(battle.selected_advantage.verified, true);
+});
+
+test('tournament battle does not claim speed when slower stats decide the winner', () => {
+  const slowPower = {
+    id: 'slow-power',
+    display_name: 'Slow Power',
+    types: ['normal'],
+    base_stats: { hp: 110, attack: 130, defense: 120, special_attack: 95, special_defense: 110, speed: 45 },
+    base_stat_total: 610,
+  };
+  const fastGlass = {
+    id: 'fast-glass',
+    display_name: 'Fast Glass',
+    types: ['normal'],
+    base_stats: { hp: 55, attack: 55, defense: 45, special_attack: 55, special_defense: 45, speed: 125 },
+    base_stat_total: 380,
+  };
+
+  const battle = resolveTournamentBattle({
+    left: slowPower,
+    right: fastGlass,
+    weights: {
+      base_stat_total: 0.2,
+      offensive_matchup: 0.08,
+      defense_bulk: 0.08,
+      type_advantage: 0,
+      speed_edge: 0.05,
+      random_spread: 0,
+    },
+    random: () => 0.5,
+  });
+
+  assert.equal(battle.winner.id, 'slow-power');
+  assert.equal(/faster/u.test(battle.insight_text), false);
+  assert.ok(['attack_edge', 'defense_edge', 'overall_stats'].includes(battle.selected_advantage.id));
+  assert.equal(battle.selected_advantage.verified, true);
+});
+
+test('tournament battle uses close phrasing when no verified edge is meaningful', () => {
+  const alpha = {
+    id: 'alpha',
+    display_name: 'Alpha',
+    types: ['normal'],
+    base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 70 },
+    base_stat_total: 420,
+  };
+  const beta = {
+    id: 'beta',
+    display_name: 'Beta',
+    types: ['normal'],
+    base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 70 },
+    base_stat_total: 420,
+  };
+
+  const battle = resolveTournamentBattle({
+    left: alpha,
+    right: beta,
+    weights: {
+      base_stat_total: 0,
+      offensive_matchup: 0,
+      defense_bulk: 0,
+      type_advantage: 0,
+      speed_edge: 0,
+      random_spread: 0,
+      close_battle_threshold: 5,
+    },
+    random: () => 0.5,
+  });
+
+  assert.equal(battle.winner.id, 'alpha');
+  assert.equal(battle.selected_advantage.id, 'close_battle');
+  assert.equal(battle.insight_text, 'Alpha narrowly takes the matchup.');
+});
+
+test('tournament battle output stays deterministic with fixed randomness', () => {
+  const left = {
+    id: 'left-fixed',
+    display_name: 'Left Fixed',
+    types: ['fire'],
+    base_stats: { hp: 78, attack: 84, defense: 78, special_attack: 109, special_defense: 85, speed: 100 },
+    base_stat_total: 534,
+  };
+  const right = {
+    id: 'right-fixed',
+    display_name: 'Right Fixed',
+    types: ['grass'],
+    base_stats: { hp: 80, attack: 82, defense: 83, special_attack: 100, special_defense: 100, speed: 80 },
+    base_stat_total: 525,
+  };
+  const options = {
+    left,
+    right,
+    weights: {
+      ...template.selection_rules.battle_weights,
+      random_spread: 4,
+    },
+    random: () => 0.73,
+  };
+
+  assert.deepEqual(resolveTournamentBattle(options), resolveTournamentBattle(options));
 });
 
 test('tournament planner can restrict selection to a seeded legendary-only pool', async () => {

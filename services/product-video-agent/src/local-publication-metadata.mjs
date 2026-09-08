@@ -171,10 +171,9 @@ function formatCryMatchDifficultyLabel(difficultyId) {
 const DEFAULT_CRY_MATCH_TITLE_BUILDERS = Object.freeze([
   () => 'Guess the Pokemon by cry!',
   () => 'Whose cry is this?',
-  () => 'Can you name this Pokemon cry?',
+  () => 'Can you name this Pokemon by cry?',
   () => 'Which Pokemon makes this sound?',
-  () => 'Only true fans get this cry',
-  () => 'Cry Match — 4 Pokemon, 1 sound',
+  () => 'Only TRUE Fans Know these Pokemon by Listening! 👂',
   () => 'Can you Guess the Pokemon From Listening? 👂',
 ]);
 
