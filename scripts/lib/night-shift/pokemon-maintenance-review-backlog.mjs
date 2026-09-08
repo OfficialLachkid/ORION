@@ -165,6 +165,29 @@ function findMostRecentActiveTemplateId(publications = []) {
 }
 
 async function resolveReviewBacklogGenerationRuntimes(templateRuntime) {
+  const configuredTemplateIds = Array.isArray(templateRuntime?.nightShift?.reviewBacklogTemplateIds)
+    ? templateRuntime.nightShift.reviewBacklogTemplateIds
+      .map((templateId) => normalizeTemplateIdForQueue(templateId))
+      .filter(Boolean)
+    : [];
+  if (configuredTemplateIds.length > 0) {
+    const runtimes = [];
+    const uniqueTemplateIds = [...new Set(configuredTemplateIds)];
+    for (const templateId of uniqueTemplateIds) {
+      const runtime = await resolveVideoTemplateRuntime({
+        projectRoot,
+        channelConfigPath: templateRuntime.channelConfigPath,
+        channelSelector: templateRuntime.channelSelector,
+        templateId,
+      });
+      if (runtime.channelSelector !== templateRuntime.channelSelector) {
+        continue;
+      }
+      runtimes.push(runtime);
+    }
+    return runtimes;
+  }
+
   const configuredPaths = templateRuntime?.nightShift?.reviewBacklogMixChannelConfigPaths || [];
   const uniquePaths = new Set([
     templateRuntime.channelConfigPath,
@@ -328,6 +351,8 @@ export async function replenishReviewBacklogForRuntime(config, templateRuntime, 
         catalogJsonPath,
         '--channel-config',
         generationRuntime?.channelConfigPath || templateRuntime.channelConfigPath,
+        '--template-id',
+        generationRuntime?.templateId || templateRuntime.templateId,
         '--channel',
         templateRuntime.channelSelector,
         '--as-of',

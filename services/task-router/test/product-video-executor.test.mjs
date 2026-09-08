@@ -13,10 +13,11 @@ test('manual review generation uses the selected channel config and default revi
       submitted_at: '2026-08-10T09:45:00.000Z',
       poke_quizz_generate_review: {
         templateKey: 'find-the-shiny',
+        templateId: 'pokemon.find-the-shiny.v1',
         templateLabel: 'Find the Shiny',
         channelSelector: 'trivamon-youtube',
         channelLabel: 'TrivaMon',
-        channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+        channelConfigPath: 'services/product-video-agent/config/channels/trivamon-youtube.json',
       },
     },
     { env: {} },
@@ -54,6 +55,7 @@ test('manual review generation uses the selected channel config and default revi
   );
   assert.equal(runCalls[0].args.includes('--catalog-json'), true);
   assert.equal(runCalls[0].args.includes('--channel-config'), true);
+  assert.equal(runCalls[0].args.includes('--template-id'), true);
   assert.equal(runCalls[0].args.includes('--channel'), true);
   assert.equal(runCalls[0].args.includes('--thread-id'), true);
   assert.equal(
@@ -62,8 +64,13 @@ test('manual review generation uses the selected channel config and default revi
   );
   assert.equal(
     normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json'),
+    false,
+  );
+  assert.equal(
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/trivamon-youtube.json'),
     true,
   );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--template-id') + 1], 'pokemon.find-the-shiny.v1');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'trivamon-youtube');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1536146358749233222');
   assert.equal(result.report.state, 'preview_generated');
@@ -82,10 +89,11 @@ test('manual review generation supports the type-speed-quiz channel config for T
       submitted_at: '2026-08-11T11:10:00.000Z',
       poke_quizz_generate_review: {
         templateKey: 'type-speed-quiz',
+        templateId: 'pokemon.type-quiz.v1',
         templateLabel: 'Type Speed Quiz',
         channelSelector: 'trivamon-youtube',
         channelLabel: 'TrivaMon',
-        channelConfigPath: 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json',
+        channelConfigPath: 'services/product-video-agent/config/channels/trivamon-youtube.json',
       },
     },
     { env: {} },
@@ -116,9 +124,10 @@ test('manual review generation supports the type-speed-quiz channel config for T
 
   assert.equal(runCalls.length, 1);
   assert.equal(
-    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json'),
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/trivamon-youtube.json'),
     true,
   );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--template-id') + 1], 'pokemon.type-quiz.v1');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'trivamon-youtube');
 });
 
@@ -133,10 +142,11 @@ test('manual review generation supports the type-speed-quiz channel config for P
       submitted_at: '2026-08-11T15:10:00.000Z',
       poke_quizz_generate_review: {
         templateKey: 'type-speed-quiz',
+        templateId: 'pokemon.type-quiz.v1',
         templateLabel: 'Type Speed Quiz',
         channelSelector: 'poke-guess-youtube',
         channelLabel: 'Poke Guess',
-        channelConfigPath: 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
+        channelConfigPath: 'services/product-video-agent/config/channels/poke-guess-youtube.json',
       },
     },
     { env: {} },
@@ -167,9 +177,10 @@ test('manual review generation supports the type-speed-quiz channel config for P
 
   assert.equal(runCalls.length, 1);
   assert.equal(
-    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json'),
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-guess-youtube.json'),
     true,
   );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--template-id') + 1], 'pokemon.type-quiz.v1');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'poke-guess-youtube');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1536721345440780339');
 });
@@ -185,6 +196,7 @@ test('manual review generation supports the dual-type channel config for DexGues
       submitted_at: '2026-08-13T15:10:00.000Z',
       poke_quizz_generate_review: {
         templateKey: 'dual-type-reveal',
+        templateId: 'pokemon.dual-type-reveal.v1',
         templateLabel: 'Type Combination',
         channelSelector: 'dexguess-youtube',
         channelLabel: 'DexGuess',
@@ -222,6 +234,7 @@ test('manual review generation supports the dual-type channel config for DexGues
     normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/dexguess-youtube.json'),
     true,
   );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--template-id') + 1], 'pokemon.dual-type-reveal.v1');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'dexguess-youtube');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1537438092338798684');
 });
@@ -237,10 +250,11 @@ test('manual review generation supports the memory channel config for Poke Quizz
       submitted_at: '2026-08-14T10:10:00.000Z',
       poke_quizz_generate_review: {
         templateKey: 'memory',
+        templateId: 'pokemon.memory.v1',
         templateLabel: 'Memory',
         channelSelector: 'poke-quizz-youtube',
         channelLabel: 'Poke Quizz',
-        channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-memory-youtube.json',
+        channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
       },
     },
     { env: {} },
@@ -271,9 +285,10 @@ test('manual review generation supports the memory channel config for Poke Quizz
 
   assert.equal(runCalls.length, 1);
   assert.equal(
-    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-quizz-memory-youtube.json'),
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-quizz-youtube.json'),
     true,
   );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--template-id') + 1], 'pokemon.memory.v1');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'poke-quizz-youtube');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1532709429902839810');
 });
@@ -289,10 +304,11 @@ test('manual review generation supports the stat-clash channel config for Poke Q
       submitted_at: '2026-08-31T10:10:00.000Z',
       poke_quizz_generate_review: {
         templateKey: 'stat-clash',
+        templateId: 'pokemon.stat-clash.v1',
         templateLabel: 'Stat Clash',
         channelSelector: 'poke-quizz-youtube',
         channelLabel: 'Poke Quizz',
-        channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-stat-clash-youtube.json',
+        channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
       },
     },
     { env: {} },
@@ -323,9 +339,10 @@ test('manual review generation supports the stat-clash channel config for Poke Q
 
   assert.equal(runCalls.length, 1);
   assert.equal(
-    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-quizz-stat-clash-youtube.json'),
+    normalizePath(runCalls[0].args[runCalls[0].args.indexOf('--channel-config') + 1]).endsWith('services/product-video-agent/config/channels/poke-quizz-youtube.json'),
     true,
   );
+  assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--template-id') + 1], 'pokemon.stat-clash.v1');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--channel') + 1], 'poke-quizz-youtube');
   assert.equal(runCalls[0].args[runCalls[0].args.indexOf('--thread-id') + 1], '1532709429902839810');
 });

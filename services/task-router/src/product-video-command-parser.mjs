@@ -1,101 +1,26 @@
+import {
+  PRODUCT_VIDEO_CHANNEL_DEFINITIONS,
+  PRODUCT_VIDEO_TEMPLATE_DEFINITIONS,
+  findProductVideoTemplateDefinition,
+  resolveBaseProductVideoChannelConfigPath,
+} from '../../product-video-agent/src/product-video-template-routing.mjs';
+
 const PRODUCT_VIDEO_COMMAND_PATTERN = /^(?:generate|create)\s+video\s+template:\s*(.+?)\s+channel:\s*(.+)$/iu;
 
-export const PRODUCT_VIDEO_TEMPLATE_OPTIONS = Object.freeze([
-  Object.freeze({
-    name: 'Type Combination',
-    value: 'dual-type-reveal',
-  }),
-  Object.freeze({
-    name: 'Find the Shiny',
-    value: 'find-the-shiny',
-  }),
-  Object.freeze({
-    name: 'Know Your Shiny',
-    value: 'know-your-shiny',
-  }),
-  Object.freeze({
-    name: 'Stat Clash',
-    value: 'stat-clash',
-  }),
-  Object.freeze({
-    name: 'Tournament',
-    value: 'tournament',
-  }),
-  Object.freeze({
-    name: 'Memory',
-    value: 'memory',
-  }),
-  Object.freeze({
-    name: 'Type Speed Quiz',
-    value: 'type-speed-quiz',
-  }),
-  Object.freeze({
-    name: 'Cry Match',
-    value: 'cry-match',
-  }),
-]);
+export const PRODUCT_VIDEO_TEMPLATE_OPTIONS = Object.freeze(
+  PRODUCT_VIDEO_TEMPLATE_DEFINITIONS.map((definition) => Object.freeze({
+    name: definition.label,
+    value: definition.templateKey,
+    templateId: definition.templateId,
+  })),
+);
 
-export const PRODUCT_VIDEO_CHANNEL_OPTIONS = Object.freeze([
-  Object.freeze({
-    name: 'Poke Quizz',
-    value: 'poke-quizz-youtube',
-  }),
-  Object.freeze({
-    name: 'TrivaMon',
-    value: 'trivamon-youtube',
-  }),
-  Object.freeze({
-    name: 'Poke Guess',
-    value: 'poke-guess-youtube',
-  }),
-  Object.freeze({
-    name: 'DexGuess',
-    value: 'dexguess-youtube',
-  }),
-]);
-
-const PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS = Object.freeze({
-  'poke-quizz-youtube': Object.freeze({
-    'dual-type-reveal': 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
-    'find-the-shiny': 'services/product-video-agent/config/channels/poke-quizz-find-the-shiny-youtube.json',
-    'know-your-shiny': 'services/product-video-agent/config/channels/poke-quizz-know-your-shiny-youtube.json',
-    'stat-clash': 'services/product-video-agent/config/channels/poke-quizz-stat-clash-youtube.json',
-    tournament: 'services/product-video-agent/config/channels/poke-quizz-tournament-youtube.json',
-    memory: 'services/product-video-agent/config/channels/poke-quizz-memory-youtube.json',
-    'type-speed-quiz': 'services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json',
-    'cry-match': 'services/product-video-agent/config/channels/poke-quizz-cry-match-youtube.json',
-  }),
-  'trivamon-youtube': Object.freeze({
-    'dual-type-reveal': 'services/product-video-agent/config/channels/trivamon-youtube.json',
-    'find-the-shiny': 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
-    'know-your-shiny': 'services/product-video-agent/config/channels/trivamon-know-your-shiny-youtube.json',
-    'stat-clash': 'services/product-video-agent/config/channels/trivamon-stat-clash-youtube.json',
-    tournament: 'services/product-video-agent/config/channels/trivamon-tournament-youtube.json',
-    memory: 'services/product-video-agent/config/channels/trivamon-memory-youtube.json',
-    'type-speed-quiz': 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json',
-    'cry-match': 'services/product-video-agent/config/channels/trivamon-cry-match-youtube.json',
-  }),
-  'poke-guess-youtube': Object.freeze({
-    'dual-type-reveal': 'services/product-video-agent/config/channels/poke-guess-youtube.json',
-    'find-the-shiny': 'services/product-video-agent/config/channels/poke-guess-find-the-shiny-youtube.json',
-    'know-your-shiny': 'services/product-video-agent/config/channels/poke-guess-know-your-shiny-youtube.json',
-    'stat-clash': 'services/product-video-agent/config/channels/poke-guess-stat-clash-youtube.json',
-    tournament: 'services/product-video-agent/config/channels/poke-guess-tournament-youtube.json',
-    memory: 'services/product-video-agent/config/channels/poke-guess-memory-youtube.json',
-    'type-speed-quiz': 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
-    'cry-match': 'services/product-video-agent/config/channels/poke-guess-cry-match-youtube.json',
-  }),
-  'dexguess-youtube': Object.freeze({
-    'dual-type-reveal': 'services/product-video-agent/config/channels/dexguess-youtube.json',
-    'find-the-shiny': 'services/product-video-agent/config/channels/dexguess-find-the-shiny-youtube.json',
-    'know-your-shiny': 'services/product-video-agent/config/channels/dexguess-know-your-shiny-youtube.json',
-    'stat-clash': 'services/product-video-agent/config/channels/dexguess-stat-clash-youtube.json',
-    tournament: 'services/product-video-agent/config/channels/dexguess-tournament-youtube.json',
-    memory: 'services/product-video-agent/config/channels/dexguess-memory-youtube.json',
-    'type-speed-quiz': 'services/product-video-agent/config/channels/dexguess-type-speed-quiz-youtube.json',
-    'cry-match': 'services/product-video-agent/config/channels/dexguess-cry-match-youtube.json',
-  }),
-});
+export const PRODUCT_VIDEO_CHANNEL_OPTIONS = Object.freeze(
+  PRODUCT_VIDEO_CHANNEL_DEFINITIONS.map((definition) => Object.freeze({
+    name: definition.label,
+    value: definition.channelSelector,
+  })),
+);
 
 function normalizeWhitespace(value) {
   return String(value || '').replace(/\s+/gu, ' ').trim();
@@ -106,14 +31,7 @@ function normalizeKey(value) {
 }
 
 function normalizeTemplateOptionValue(value) {
-  const normalized = normalizeKey(value);
-  if (normalized === 'showdown') {
-    return 'tournament';
-  }
-  if (normalized === 'stat-battle') {
-    return 'stat-clash';
-  }
-  return normalized;
+  return findProductVideoTemplateDefinition(value)?.templateKey || normalizeKey(value);
 }
 
 function findOption(options, value, normalizer = normalizeKey) {
@@ -121,10 +39,13 @@ function findOption(options, value, normalizer = normalizeKey) {
   return options.find((option) => option.value === normalizedValue) || null;
 }
 
-export function resolveProductVideoChannelConfigPath(channelSelector, templateKey) {
+export function resolveProductVideoChannelConfigPath(channelSelector) {
   const normalizedChannelSelector = normalizeKey(channelSelector);
-  const normalizedTemplateKey = normalizeKey(templateKey);
-  return PRODUCT_VIDEO_CHANNEL_CONFIG_PATHS[normalizedChannelSelector]?.[normalizedTemplateKey] || '';
+  return resolveBaseProductVideoChannelConfigPath(normalizedChannelSelector);
+}
+
+export function resolveProductVideoTemplateId(templateKey) {
+  return findProductVideoTemplateDefinition(templateKey)?.templateId || '';
 }
 
 export function parseProductVideoCommand(content) {
@@ -150,9 +71,9 @@ export function parseProductVideoCommand(content) {
 
   const channelConfigPath = resolveProductVideoChannelConfigPath(
     channelOption.value,
-    templateOption.value,
   );
-  if (!channelConfigPath) {
+  const templateId = resolveProductVideoTemplateId(templateOption.value);
+  if (!channelConfigPath || !templateId) {
     return null;
   }
 
@@ -162,6 +83,7 @@ export function parseProductVideoCommand(content) {
     channelSelector: channelOption.value,
     channelLabel: channelOption.name,
     channelConfigPath,
+    templateId,
   };
 }
 

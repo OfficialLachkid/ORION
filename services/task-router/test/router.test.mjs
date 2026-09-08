@@ -163,10 +163,11 @@ test('normalizeTaskMessage recognizes product-video generation commands as expli
   assert.equal(result.task.status, 'queued');
   assert.equal(result.task.summary, 'Generate Find the Shiny review for TrivaMon');
   assert.equal(result.task.poke_quizz_generate_review.templateKey, 'find-the-shiny');
+  assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.find-the-shiny.v1');
   assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'trivamon-youtube');
   assert.equal(
     result.task.poke_quizz_generate_review.channelConfigPath,
-    'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json'
+    'services/product-video-agent/config/channels/trivamon-youtube.json'
   );
 });
 
@@ -182,9 +183,10 @@ test('normalizeTaskMessage recognizes type-speed-quiz generation commands as exp
   assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
   assert.equal(result.task.summary, 'Generate Type Speed Quiz review for TrivaMon');
   assert.equal(result.task.poke_quizz_generate_review.templateKey, 'type-speed-quiz');
+  assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.type-quiz.v1');
   assert.equal(
     result.task.poke_quizz_generate_review.channelConfigPath,
-    'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json'
+    'services/product-video-agent/config/channels/trivamon-youtube.json'
   );
 });
 
@@ -200,10 +202,11 @@ test('normalizeTaskMessage recognizes Poke Guess type-speed-quiz generation comm
   assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
   assert.equal(result.task.summary, 'Generate Type Speed Quiz review for Poke Guess');
   assert.equal(result.task.poke_quizz_generate_review.templateKey, 'type-speed-quiz');
+  assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.type-quiz.v1');
   assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'poke-guess-youtube');
   assert.equal(
     result.task.poke_quizz_generate_review.channelConfigPath,
-    'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json'
+    'services/product-video-agent/config/channels/poke-guess-youtube.json'
   );
 });
 
@@ -219,6 +222,7 @@ test('normalizeTaskMessage recognizes DexGuess dual-type generation commands as 
   assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
   assert.equal(result.task.summary, 'Generate Type Combination review for DexGuess');
   assert.equal(result.task.poke_quizz_generate_review.templateKey, 'dual-type-reveal');
+  assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.dual-type-reveal.v1');
   assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'dexguess-youtube');
   assert.equal(
     result.task.poke_quizz_generate_review.channelConfigPath,
@@ -238,10 +242,11 @@ test('normalizeTaskMessage recognizes memory generation commands as explicit run
   assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
   assert.equal(result.task.summary, 'Generate Memory review for Poke Quizz');
   assert.equal(result.task.poke_quizz_generate_review.templateKey, 'memory');
+  assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.memory.v1');
   assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'poke-quizz-youtube');
   assert.equal(
     result.task.poke_quizz_generate_review.channelConfigPath,
-    'services/product-video-agent/config/channels/poke-quizz-memory-youtube.json'
+    'services/product-video-agent/config/channels/poke-quizz-youtube.json'
   );
 });
 
@@ -257,10 +262,11 @@ test('normalizeTaskMessage recognizes tournament generation commands as explicit
   assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
   assert.equal(result.task.summary, 'Generate Tournament review for DexGuess');
   assert.equal(result.task.poke_quizz_generate_review.templateKey, 'tournament');
+  assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.tournament.v1');
   assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'dexguess-youtube');
   assert.equal(
     result.task.poke_quizz_generate_review.channelConfigPath,
-    'services/product-video-agent/config/channels/dexguess-tournament-youtube.json'
+    'services/product-video-agent/config/channels/dexguess-youtube.json'
   );
 });
 
@@ -276,10 +282,11 @@ test('normalizeTaskMessage recognizes stat-clash generation commands as explicit
   assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
   assert.equal(result.task.summary, 'Generate Stat Clash review for Poke Quizz');
   assert.equal(result.task.poke_quizz_generate_review.templateKey, 'stat-clash');
+  assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.stat-clash.v1');
   assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'poke-quizz-youtube');
   assert.equal(
     result.task.poke_quizz_generate_review.channelConfigPath,
-    'services/product-video-agent/config/channels/poke-quizz-stat-clash-youtube.json'
+    'services/product-video-agent/config/channels/poke-quizz-youtube.json'
   );
 });
 

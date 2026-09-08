@@ -187,6 +187,7 @@ async function generateAndReviewPokeQuizz(options) {
   const templateRuntime = await resolveVideoTemplateRuntime({
     projectRoot,
     channelConfigPath: getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH),
+    templateId: getStringOption(options, 'template-id', ''),
     templatePath: getStringOption(options, 'template', ''),
     configPath: getStringOption(options, 'config', ''),
     channelSelector: getStringOption(options, 'channel', ''),
@@ -304,6 +305,7 @@ async function generateAndReviewPokeQuizz(options) {
       catalogJsonPath: getStringOption(options, 'catalog-json', ''),
       channelsPath,
       configPath,
+      templateId: templateRuntime.templateId,
       templatePath,
       channelSelector,
       channelConfigPath: templateRuntime.channelConfigPath,
@@ -366,6 +368,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --type-pair <a,b>          Optional forced pair such as water,flying.',
       '  --output <path>            Render output MP4 path.',
       `  --channel-config <path>    Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
+      '  --template-id <id>         Template id/key from the selected channel config.',
       '  --channel <id>             Channel id or account_key. Default: derived from channel config',
       '  --channels <path>          Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
       '  --config <path>            Product-video config JSON. Default: services/product-video-agent/config.example.json',

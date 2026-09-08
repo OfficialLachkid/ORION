@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -11,9 +12,30 @@ import {
   loadVideoTemplateContext,
   resolveVideoTemplateRuntime,
 } from '../src/video-template-context.mjs';
+import { PRODUCT_VIDEO_TEMPLATE_DEFINITIONS } from '../src/product-video-template-routing.mjs';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(testDirectory, '../../..');
+
+test('pokemon core program registers every shared product-video template option', async () => {
+  const program = JSON.parse(await readFile(
+    resolve(projectRoot, 'services/product-video-agent/config/programs/pokemon-quiz-core.json'),
+    'utf8',
+  ));
+  const registeredTemplateIds = new Set(
+    (Array.isArray(program.templates) ? program.templates : [])
+      .map((entry) => String(entry?.template_id || '').trim())
+      .filter(Boolean),
+  );
+
+  for (const definition of PRODUCT_VIDEO_TEMPLATE_DEFINITIONS) {
+    assert.equal(
+      registeredTemplateIds.has(definition.templateId),
+      true,
+      `${definition.templateId} should be registered in pokemon-quiz-core.json`,
+    );
+  }
+});
 
 test('loadVideoTemplateContext resolves the default Poke Quizz ownership stack', async () => {
   const context = await loadVideoTemplateContext({
@@ -52,19 +74,6 @@ test('resolveVideoTemplateRuntime preserves explicit runtime overrides', async (
   assert.equal(runtime.genreLabel, DEFAULT_GENRE_LABEL);
 });
 
-test('resolveVideoTemplateRuntime remaps genre when a manual template override switches flows', async () => {
-  const runtime = await resolveVideoTemplateRuntime({
-    projectRoot,
-    channelConfigPath: DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
-    templatePath: 'services/product-video-agent/config/templates/pokemon/know-your-shiny.v1.json',
-    channelSelector: 'poke-quizz-youtube',
-  });
-
-  assert.equal(runtime.templatePath, 'services/product-video-agent/config/templates/pokemon/know-your-shiny.v1.json');
-  assert.equal(runtime.channelSelector, 'poke-quizz-youtube');
-  assert.equal(runtime.genreLabel, 'Know Your Shiny');
-});
-
 for (const { templatePath, expectedGenreLabel } of [
   {
     templatePath: 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json',
@@ -101,199 +110,76 @@ for (const { templatePath, expectedGenreLabel } of [
   });
 }
 
-test('loadVideoTemplateContext resolves the dedicated Find the Shiny channel config', async () => {
-  const context = await loadVideoTemplateContext({
-    projectRoot,
-    channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-find-the-shiny-youtube.json',
-  });
-
-  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/poke-quizz-find-the-shiny-youtube.json');
-  assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
-  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json');
-  assert.equal(context.templateId, 'pokemon.find-the-shiny.v1');
-  assert.equal(context.publicationChannelSelector, DEFAULT_CHANNEL_SELECTOR);
-  assert.equal(context.genreLabel, 'Find the Shiny');
-});
-
-test('loadVideoTemplateContext resolves the TrivaMon Find the Shiny ownership stack', async () => {
-  const context = await loadVideoTemplateContext({
-    projectRoot,
-    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
-  });
-
-  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json');
-  assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
-  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json');
-  assert.equal(context.templateId, 'pokemon.find-the-shiny.v1');
-  assert.equal(context.publicationChannelSelector, 'trivamon-youtube');
-  assert.equal(context.genreLabel, 'Find the Shiny');
-});
-
-test('loadVideoTemplateContext resolves the dedicated Type Quiz channel config', async () => {
-  const context = await loadVideoTemplateContext({
-    projectRoot,
-    channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json',
-  });
-
-  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/poke-quizz-type-speed-quiz-youtube.json');
-  assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
-  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json');
-  assert.equal(context.templateId, 'pokemon.type-quiz.v1');
-  assert.equal(context.publicationChannelSelector, DEFAULT_CHANNEL_SELECTOR);
-  assert.equal(context.genreLabel, 'Type Quiz');
-});
-
-test('loadVideoTemplateContext resolves the TrivaMon Type Quiz ownership stack', async () => {
-  const context = await loadVideoTemplateContext({
-    projectRoot,
-    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json',
-  });
-
-  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/trivamon-type-speed-quiz-youtube.json');
-  assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
-  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json');
-  assert.equal(context.templateId, 'pokemon.type-quiz.v1');
-  assert.equal(context.publicationChannelSelector, 'trivamon-youtube');
-  assert.equal(context.genreLabel, 'Type Quiz');
-});
-
-test('loadVideoTemplateContext resolves the Poke Guess Type Quiz ownership stack', async () => {
-  const context = await loadVideoTemplateContext({
-    projectRoot,
-    channelConfigPath: 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json',
-  });
-
-  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/poke-guess-type-speed-quiz-youtube.json');
-  assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
-  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json');
-  assert.equal(context.templateId, 'pokemon.type-quiz.v1');
-  assert.equal(context.publicationChannelSelector, 'poke-guess-youtube');
-  assert.equal(context.genreLabel, 'Type Quiz');
-});
-
-test('loadVideoTemplateContext resolves the DexGuess dual-type ownership stack', async () => {
-  const context = await loadVideoTemplateContext({
-    projectRoot,
-    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-youtube.json',
-  });
-
-  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/dexguess-youtube.json');
-  assert.equal(context.programPath, 'services/product-video-agent/config/programs/pokemon-quiz-core.json');
-  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json');
-  assert.equal(context.templateId, 'pokemon.dual-type-reveal.v1');
-  assert.equal(context.publicationChannelSelector, 'dexguess-youtube');
-  assert.equal(context.genreLabel, 'Type Combination');
-});
-
 for (const {
   label,
   channelConfigPath,
-  templatePath,
   templateId,
+  templatePath,
   channelSelector,
   genreLabel,
 } of [
   {
-    label: 'DexGuess Tournament',
-    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-tournament-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/tournament.v1.json',
+    label: 'Poke Quizz Find the Shiny',
+    channelConfigPath: DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+    templateId: 'pokemon.find-the-shiny.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json',
+    channelSelector: 'poke-quizz-youtube',
+    genreLabel: 'Find the Shiny',
+  },
+  {
+    label: 'Poke Quizz Type Quiz',
+    channelConfigPath: DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+    templateId: 'pokemon.type-quiz.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json',
+    channelSelector: 'poke-quizz-youtube',
+    genreLabel: 'Type Quiz',
+  },
+  {
+    label: 'TrivaMon Find the Shiny',
+    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-youtube.json',
+    templateId: 'pokemon.find-the-shiny.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json',
+    channelSelector: 'trivamon-youtube',
+    genreLabel: 'Find the Shiny',
+  },
+  {
+    label: 'Poke Guess Tournament',
+    channelConfigPath: 'services/product-video-agent/config/channels/poke-guess-youtube.json',
     templateId: 'pokemon.tournament.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/tournament.v1.json',
+    channelSelector: 'poke-guess-youtube',
+    genreLabel: 'Tournament',
+  },
+  {
+    label: 'DexGuess Memory',
+    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-youtube.json',
+    templateId: 'pokemon.memory.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/memory.v1.json',
+    channelSelector: 'dexguess-youtube',
+    genreLabel: 'Memory',
+  },
+  {
+    label: 'DexGuess Tournament manual selection',
+    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-youtube.json',
+    templateId: 'pokemon.tournament.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/tournament.v1.json',
     channelSelector: 'dexguess-youtube',
     genreLabel: 'Tournament',
   },
   {
-    label: 'Poke Quizz Memory',
-    channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-memory-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/memory.v1.json',
-    templateId: 'pokemon.memory.v1',
+    label: 'Poke Quizz Cry Match',
+    channelConfigPath: DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+    templateId: 'pokemon.cry-match.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/cry-match.v1.json',
     channelSelector: 'poke-quizz-youtube',
-    genreLabel: 'Memory',
-  },
-  {
-    label: 'TrivaMon Memory',
-    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-memory-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/memory.v1.json',
-    templateId: 'pokemon.memory.v1',
-    channelSelector: 'trivamon-youtube',
-    genreLabel: 'Memory',
-  },
-  {
-    label: 'Poke Guess Memory',
-    channelConfigPath: 'services/product-video-agent/config/channels/poke-guess-memory-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/memory.v1.json',
-    templateId: 'pokemon.memory.v1',
-    channelSelector: 'poke-guess-youtube',
-    genreLabel: 'Memory',
-  },
-  {
-    label: 'DexGuess Memory',
-    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-memory-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/memory.v1.json',
-    templateId: 'pokemon.memory.v1',
-    channelSelector: 'dexguess-youtube',
-    genreLabel: 'Memory',
-  },
-  {
-    label: 'Poke Quizz Know Your Shiny',
-    channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-know-your-shiny-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/know-your-shiny.v1.json',
-    templateId: 'pokemon.know-your-shiny.v1',
-    channelSelector: 'poke-quizz-youtube',
-    genreLabel: 'Know Your Shiny',
-  },
-  {
-    label: 'TrivaMon Know Your Shiny',
-    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-know-your-shiny-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/know-your-shiny.v1.json',
-    templateId: 'pokemon.know-your-shiny.v1',
-    channelSelector: 'trivamon-youtube',
-    genreLabel: 'Know Your Shiny',
-  },
-  {
-    label: 'Poke Guess Know Your Shiny',
-    channelConfigPath: 'services/product-video-agent/config/channels/poke-guess-know-your-shiny-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/know-your-shiny.v1.json',
-    templateId: 'pokemon.know-your-shiny.v1',
-    channelSelector: 'poke-guess-youtube',
-    genreLabel: 'Know Your Shiny',
-  },
-  {
-    label: 'DexGuess Know Your Shiny',
-    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-know-your-shiny-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/know-your-shiny.v1.json',
-    templateId: 'pokemon.know-your-shiny.v1',
-    channelSelector: 'dexguess-youtube',
-    genreLabel: 'Know Your Shiny',
-  },
-  {
-    label: 'Poke Guess Find the Shiny',
-    channelConfigPath: 'services/product-video-agent/config/channels/poke-guess-find-the-shiny-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json',
-    templateId: 'pokemon.find-the-shiny.v1',
-    channelSelector: 'poke-guess-youtube',
-    genreLabel: 'Find the Shiny',
-  },
-  {
-    label: 'DexGuess Find the Shiny',
-    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-find-the-shiny-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json',
-    templateId: 'pokemon.find-the-shiny.v1',
-    channelSelector: 'dexguess-youtube',
-    genreLabel: 'Find the Shiny',
-  },
-  {
-    label: 'DexGuess Type Quiz',
-    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-type-speed-quiz-youtube.json',
-    templatePath: 'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json',
-    templateId: 'pokemon.type-quiz.v1',
-    channelSelector: 'dexguess-youtube',
-    genreLabel: 'Type Quiz',
+    genreLabel: 'Cry Match',
   },
 ]) {
-  test(`loadVideoTemplateContext resolves the ${label} ownership stack`, async () => {
+  test(`loadVideoTemplateContext resolves ${label} through the channel template map`, async () => {
     const context = await loadVideoTemplateContext({
       projectRoot,
       channelConfigPath,
+      templateId,
     });
 
     assert.equal(context.channelConfigPath, channelConfigPath);
@@ -304,3 +190,16 @@ for (const {
     assert.equal(context.genreLabel, genreLabel);
   });
 }
+
+test('loadVideoTemplateContext resolves legacy per-template channel config paths to the base channel config', async () => {
+  const context = await loadVideoTemplateContext({
+    projectRoot,
+    channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+  });
+
+  assert.equal(context.channelConfigPath, 'services/product-video-agent/config/channels/trivamon-youtube.json');
+  assert.equal(context.templatePath, 'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json');
+  assert.equal(context.templateId, 'pokemon.find-the-shiny.v1');
+  assert.equal(context.publicationChannelSelector, 'trivamon-youtube');
+  assert.equal(context.genreLabel, 'Find the Shiny');
+});
