@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -11,9 +12,30 @@ import {
   loadVideoTemplateContext,
   resolveVideoTemplateRuntime,
 } from '../src/video-template-context.mjs';
+import { PRODUCT_VIDEO_TEMPLATE_DEFINITIONS } from '../src/product-video-template-routing.mjs';
 
 const testDirectory = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(testDirectory, '../../..');
+
+test('pokemon core program registers every shared product-video template option', async () => {
+  const program = JSON.parse(await readFile(
+    resolve(projectRoot, 'services/product-video-agent/config/programs/pokemon-quiz-core.json'),
+    'utf8',
+  ));
+  const registeredTemplateIds = new Set(
+    (Array.isArray(program.templates) ? program.templates : [])
+      .map((entry) => String(entry?.template_id || '').trim())
+      .filter(Boolean),
+  );
+
+  for (const definition of PRODUCT_VIDEO_TEMPLATE_DEFINITIONS) {
+    assert.equal(
+      registeredTemplateIds.has(definition.templateId),
+      true,
+      `${definition.templateId} should be registered in pokemon-quiz-core.json`,
+    );
+  }
+});
 
 test('loadVideoTemplateContext resolves the default Poke Quizz ownership stack', async () => {
   const context = await loadVideoTemplateContext({
@@ -143,6 +165,14 @@ for (const {
     templatePath: 'services/product-video-agent/config/templates/pokemon/tournament.v1.json',
     channelSelector: 'dexguess-youtube',
     genreLabel: 'Tournament',
+  },
+  {
+    label: 'Poke Quizz Cry Match',
+    channelConfigPath: DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+    templateId: 'pokemon.cry-match.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/cry-match.v1.json',
+    channelSelector: 'poke-quizz-youtube',
+    genreLabel: 'Cry Match',
   },
 ]) {
   test(`loadVideoTemplateContext resolves ${label} through the channel template map`, async () => {

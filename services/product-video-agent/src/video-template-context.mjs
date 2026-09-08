@@ -219,6 +219,11 @@ export async function loadVideoTemplateContext({
     );
   }
   const templateEntry = findTemplateEntry(program, effectiveTemplateId);
+  if (requestedTemplateId && !templateEntry && !channelConfig.template_path) {
+    throw new Error(
+      `Template ${requestedTemplateId} is configured for channel config ${effectiveChannelConfigPath}, but is missing from program ${programAbsolutePath}.`,
+    );
+  }
   const templateAbsolutePath = resolveConfigReference(
     projectRoot,
     programAbsolutePath || channelConfigAbsolutePath,

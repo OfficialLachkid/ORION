@@ -30,6 +30,10 @@
     {
       "template_id": "pokemon.type-quiz.v1",
       "path": "../templates/pokemon/type-quiz.v1.json"
+    },
+    {
+      "template_id": "pokemon.cry-match.v1",
+      "path": "../templates/pokemon/cry-match.v1.json"
     }
   ]
 }
