@@ -3,6 +3,50 @@
 // day, city advancing daily. Installed via scripts/install-leadgen-schedule.mjs
 // as a daily 07:00 launchd job.
 
+// Guard against transient socket-level errors from Node's built-in fetch
+// (undici). When Discord throttles + tears down the keep-alive HTTP/2
+// connection mid-request, undici emits an 'error' event on the underlying
+// ClientHttp2Stream that our withRetry wrapper doesn't see — it only
+// catches the fetch promise rejection. Without a top-level handler, Node
+// treats it as an unhandled 'error' event and crashes the whole leadgen
+// sweep mid-run (observed 2026-09-07 + 2026-09-08 as "leadgen got stuck").
+// Log-and-continue for these transient network errors so the sweep can
+// finish; re-throw anything else so real bugs still surface.
+const TRANSIENT_SOCKET_ERROR_CODES = new Set([
+  'UND_ERR_SOCKET',
+  'ECONNRESET',
+  'EPIPE',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+]);
+function isTransientSocketError(error) {
+  const code = error?.code || '';
+  const name = error?.name || '';
+  return TRANSIENT_SOCKET_ERROR_CODES.has(code) || name === 'SocketError';
+}
+process.on('uncaughtException', (error) => {
+  if (isTransientSocketError(error)) {
+    process.stderr.write(
+      `[leadgen] Ignoring transient socket error (${error.code || error.name}): ${error.message}\n`,
+    );
+    return;
+  }
+  process.stderr.write(`[leadgen] Uncaught exception: ${error?.stack || error}\n`);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  if (isTransientSocketError(reason)) {
+    process.stderr.write(
+      `[leadgen] Ignoring transient socket rejection (${reason.code || reason.name}): ${reason.message}\n`,
+    );
+    return;
+  }
+  process.stderr.write(`[leadgen] Unhandled rejection: ${reason?.stack || reason}\n`);
+  process.exit(1);
+});
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

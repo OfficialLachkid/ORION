@@ -182,9 +182,22 @@ function buildSweepOverviewDescription({ statuses, totalLeads = null }) {
     + (queued > 0 ? `, ${queued} queued` : '')
     + (failed > 0 ? `, ${failed} failed` : '');
 
-  const totalLine = Number.isFinite(totalLeads)
-    ? `\n\n📊 Totaal leads in database: ${totalLeads} (voor vandaag's opschoning)`
-    : '';
+  // Two-line footer: today's fresh lead count (what the qualifier
+  // will pick up) on top, running database total below. Only render
+  // once at least one line reports numbers so an empty sweep doesn't
+  // show a bare "0" summary.
+  const newLeadsCount = statuses.reduce((sum, s) => (
+    s.state === 'completed' && Number.isFinite(s.leadCount) ? sum + s.leadCount : sum
+  ), 0);
+  const hasCompleted = statuses.some((s) => s.state === 'completed');
+  const footerLines = [];
+  if (hasCompleted) {
+    footerLines.push(`Total \`new\` leads **${newLeadsCount}**  (for qualification)`);
+  }
+  if (Number.isFinite(totalLeads)) {
+    footerLines.push(`📊 Total leads in database: **${totalLeads}**`);
+  }
+  const totalLine = footerLines.length > 0 ? `\n\n${footerLines.join('\n')}` : '';
 
   return `${headline}\n${lines.join('\n')}${totalLine}`;
 }
