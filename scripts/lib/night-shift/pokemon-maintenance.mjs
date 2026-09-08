@@ -120,7 +120,10 @@ function scoreNightShiftPrimaryRuntime(runtime = {}) {
   if (basename && channelKey && basename === channelKey) {
     score += 1000;
   }
-  if ((runtime?.nightShift?.reviewBacklogMixChannelConfigPaths || []).length > 0) {
+  if (
+    (runtime?.nightShift?.reviewBacklogTemplateIds || []).length > 0
+    || (runtime?.nightShift?.reviewBacklogMixChannelConfigPaths || []).length > 0
+  ) {
     score += 100;
   }
   if (runtime?.nightShift?.publicationAutomationEnabled) {

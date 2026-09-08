@@ -800,6 +800,8 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
       resolve(projectRoot, catalogJsonPath),
       '--channel-config',
       resolve(projectRoot, generation.channelConfigPath),
+      '--template-id',
+      generation.templateId || generation.templateKey || '',
       '--channel',
       generation.channelSelector,
       ...(reviewThreadId ? ['--thread-id', reviewThreadId] : []),
@@ -829,6 +831,7 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
       channelSelector: generation.channelSelector,
       channelConfigPath: generation.channelConfigPath,
       templateKey: generation.templateKey || '',
+      templateId: generation.templateId || '',
     },
   };
 }

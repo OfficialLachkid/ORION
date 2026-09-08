@@ -1,5 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import {
+  findChannelTemplateEntry,
+  findProductVideoTemplateDefinition,
+  resolveLegacyProductVideoChannelConfigAlias,
+  resolveProductVideoTemplateId,
+} from './product-video-template-routing.mjs';
 
 export const DEFAULT_VIDEO_CHANNEL_CONFIG_PATH = 'services/product-video-agent/config/channels/poke-quizz-youtube.json';
 export const DEFAULT_TEMPLATE_PATH = 'services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json';
@@ -107,6 +113,13 @@ function normalizeTemplateGenreLabelFromRef(templateRef = {}, fallbackLabel = DE
   const templateKey = String(templateRef?.template_key || '').trim().toLowerCase();
   const pathHint = String(templateRef?.template_path || '').trim().toLowerCase();
   const selector = `${templateKey}|${templateId}|${pathHint}`;
+  const definition = findProductVideoTemplateDefinition(templateId)
+    || findProductVideoTemplateDefinition(templateKey)
+    || findProductVideoTemplateDefinition(pathHint);
+
+  if (definition?.genreLabel) {
+    return definition.genreLabel;
+  }
 
   if (selector.includes('know-your-shiny')) return 'Know Your Shiny';
   if (selector.includes('cry-match')) return 'Cry Match';
@@ -160,12 +173,17 @@ function mergePresentation(defaults, styleValue, channelValue) {
 export async function loadVideoTemplateContext({
   projectRoot,
   channelConfigPath = DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+  templateId = '',
 } = {}) {
   if (!projectRoot) {
     throw new Error('loadVideoTemplateContext requires a projectRoot.');
   }
 
-  const channelConfigAbsolutePath = resolve(projectRoot, channelConfigPath);
+  const legacyChannelConfigAlias = resolveLegacyProductVideoChannelConfigAlias(channelConfigPath);
+  const effectiveChannelConfigPath = legacyChannelConfigAlias?.channelConfigPath || channelConfigPath;
+  const requestedTemplateValue = String(templateId || legacyChannelConfigAlias?.templateId || '').trim();
+  const requestedTemplateId = resolveProductVideoTemplateId(requestedTemplateValue) || requestedTemplateValue;
+  const channelConfigAbsolutePath = resolve(projectRoot, effectiveChannelConfigPath);
   const channelConfig = await loadJsonFile(channelConfigAbsolutePath);
   const programAbsolutePath = resolveConfigReference(
     projectRoot,
@@ -183,22 +201,43 @@ export async function loadVideoTemplateContext({
   const stylePack = stylePackAbsolutePath
     ? await loadJsonFile(stylePackAbsolutePath)
     : null;
-  const templateId = String(
-    channelConfig.template_id
+  const effectiveTemplateId = String(
+    requestedTemplateId
+    || channelConfig.template_id
     || program?.default_template_id
     || '',
   ).trim();
-  const templateEntry = findTemplateEntry(program, templateId);
+  const channelTemplateEntry = findChannelTemplateEntry(channelConfig, effectiveTemplateId);
+  if (requestedTemplateId && channelConfig.templates && !channelTemplateEntry) {
+    throw new Error(
+      `Template ${requestedTemplateId} is not configured for channel config ${effectiveChannelConfigPath}.`,
+    );
+  }
+  if (channelTemplateEntry && channelTemplateEntry.enabled === false) {
+    throw new Error(
+      `Template ${effectiveTemplateId} is disabled for channel config ${effectiveChannelConfigPath}.`,
+    );
+  }
+  const templateEntry = findTemplateEntry(program, effectiveTemplateId);
   const templateAbsolutePath = resolveConfigReference(
     projectRoot,
     programAbsolutePath || channelConfigAbsolutePath,
     templateEntry?.path || channelConfig.template_path,
     DEFAULT_TEMPLATE_PATH,
   );
+  const templateReviewPresentation = {
+    ...normalizeObject(channelTemplateEntry?.review),
+  };
+  if (channelTemplateEntry?.genreLabel) {
+    templateReviewPresentation.genre_label = channelTemplateEntry.genreLabel;
+  }
   const reviewPresentation = mergePresentation(
     DEFAULT_REVIEW_PRESENTATION,
     stylePack?.review,
-    channelConfig?.review,
+    {
+      ...normalizeObject(channelConfig?.review),
+      ...templateReviewPresentation,
+    },
   );
   reviewPresentation.genre_label = String(
     reviewPresentation.genre_label || DEFAULT_GENRE_LABEL,
@@ -225,7 +264,8 @@ export async function loadVideoTemplateContext({
     stylePackPath: stylePackAbsolutePath
       ? normalizeProjectRelativePath(projectRoot, stylePackAbsolutePath)
       : '',
-    templateId,
+    templateId: effectiveTemplateId,
+    channelTemplate: channelTemplateEntry,
     templatePath: normalizeProjectRelativePath(projectRoot, templateAbsolutePath),
     publicationChannelSelector: String(
       channelConfig.publication_channel_selector || DEFAULT_CHANNEL_SELECTOR,
@@ -240,6 +280,7 @@ export async function loadVideoTemplateContext({
 export async function resolveVideoTemplateRuntime({
   projectRoot,
   channelConfigPath = DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+  templateId = '',
   templatePath = '',
   configPath = '',
   channelSelector = '',
@@ -247,6 +288,7 @@ export async function resolveVideoTemplateRuntime({
   const context = await loadVideoTemplateContext({
     projectRoot,
     channelConfigPath,
+    templateId,
   });
   const effectiveTemplatePath = String(templatePath || context.templatePath || DEFAULT_TEMPLATE_PATH).trim();
   let genreLabel = context.genreLabel;

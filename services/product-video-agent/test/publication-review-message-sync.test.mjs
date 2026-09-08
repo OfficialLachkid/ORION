@@ -39,7 +39,7 @@ function buildVideoRow() {
   };
 }
 
-test('resolvePublicationReviewTemplateRuntime keeps DexGuess mixed-template cards on their own genre config', async () => {
+test('resolvePublicationReviewTemplateRuntime keeps DexGuess mixed-template cards on their own genre runtime', async () => {
   const runtime = await resolvePublicationReviewTemplateRuntime({
     publication: {
       metadata: {
@@ -54,8 +54,9 @@ test('resolvePublicationReviewTemplateRuntime keeps DexGuess mixed-template card
 
   assert.equal(
     runtime?.channelConfigPath,
-    'services/product-video-agent/config/channels/dexguess-type-speed-quiz-youtube.json',
+    'services/product-video-agent/config/channels/dexguess-youtube.json',
   );
+  assert.equal(runtime?.templateId, 'pokemon.type-quiz.v1');
   assert.equal(runtime?.genreLabel, 'Type Quiz');
 });
 

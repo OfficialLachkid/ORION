@@ -1070,8 +1070,9 @@ test('executeTask suppresses extra agent-results cards for manual Poke Quizz gen
     priority: 'normal',
     poke_quizz_generate_review: {
       templateKey: 'find-the-shiny',
+      templateId: 'pokemon.find-the-shiny.v1',
       channelSelector: 'trivamon-youtube',
-      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-youtube.json',
     },
   }, loadRuntimeConfig(), {
     productVideoActionRunner: async () => ({

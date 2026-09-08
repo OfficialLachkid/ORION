@@ -125,6 +125,7 @@ async function main() {
       '  --max-generate <n>        Hard cap on new previews this run. Default: target gap',
       '  --delay-ms <n>            Delay between generations / status rechecks. Default: 5000',
       `  --channel-config <path>   Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
+      '  --template-id <id>        Template id/key from the selected channel config.',
       `  --channel <id>            Channel id or account_key. Default: ${DEFAULT_CHANNEL_SELECTOR}`,
       `  --channels <path>         Channel registry JSON. Default: ${DEFAULT_CHANNELS_PATH}`,
       '  --thread-id <id>          Override the Discord review thread id.',
@@ -139,6 +140,7 @@ async function main() {
   const templateRuntime = await resolveVideoTemplateRuntime({
     projectRoot,
     channelConfigPath,
+    templateId: getStringOption(options, 'template-id', ''),
     channelSelector: getStringOption(options, 'channel', ''),
   });
   const channelSelector = templateRuntime.channelSelector;
@@ -216,6 +218,8 @@ async function main() {
       catalogJsonPath,
       '--channel-config',
       channelConfigPath,
+      '--template-id',
+      templateRuntime.templateId,
       '--channel',
       channelSelector,
       '--as-of',
