@@ -150,7 +150,7 @@ export async function postLeadgenStarted(config, { title, niche, query }) {
   return message;
 }
 
-function buildSweepOverviewDescription({ statuses, totalLeads = null }) {
+function buildSweepOverviewDescription({ statuses, totalLeads = null, newLeadsInDatabase = null }) {
   const completed = statuses.filter((s) => s.state === 'completed').length;
   const running = statuses.find((s) => s.state === 'running');
   const queued = statuses.filter((s) => s.state === 'queued').length;
@@ -182,17 +182,27 @@ function buildSweepOverviewDescription({ statuses, totalLeads = null }) {
     + (queued > 0 ? `, ${queued} queued` : '')
     + (failed > 0 ? `, ${failed} failed` : '');
 
-  // Two-line footer: today's fresh lead count (what the qualifier
-  // will pick up) on top, running database total below. Only render
-  // once at least one line reports numbers so an empty sweep doesn't
-  // show a bare "0" summary.
-  const newLeadsCount = statuses.reduce((sum, s) => (
+  // Three-line footer for at-a-glance progress:
+  //   1. All `new`-status leads currently in the database (what the
+  //      qualifier will pick up across all pending days, not just this
+  //      sweep) — comes from a Supabase count query passed in as
+  //      newLeadsInDatabase.
+  //   2. Leads stored during THIS sweep (sum of per-niche leadCount) —
+  //      what this run just added on top of #1.
+  //   3. Running database total across all statuses — passed in as
+  //      totalLeads.
+  // Each line is omitted when its value isn't available yet (mid-sweep
+  // updates only fill line 2, DB counts come in on the final refresh).
+  const sweepLeadsStored = statuses.reduce((sum, s) => (
     s.state === 'completed' && Number.isFinite(s.leadCount) ? sum + s.leadCount : sum
   ), 0);
   const hasCompleted = statuses.some((s) => s.state === 'completed');
   const footerLines = [];
+  if (Number.isFinite(newLeadsInDatabase)) {
+    footerLines.push(`Total \`new\` leads **${newLeadsInDatabase}**  (for qualification)`);
+  }
   if (hasCompleted) {
-    footerLines.push(`Total \`new\` leads **${newLeadsCount}**  (for qualification)`);
+    footerLines.push(`**${sweepLeadsStored}** leads stored this sweep`);
   }
   if (Number.isFinite(totalLeads)) {
     footerLines.push(`📊 Total leads in database: **${totalLeads}**`);
@@ -205,7 +215,7 @@ function buildSweepOverviewDescription({ statuses, totalLeads = null }) {
 // One pinned-style overview message per sweep: posted before the first
 // niche starts, edited in place at every niche transition so the channel
 // always shows how far the day's sweep is at a glance.
-export async function postSweepOverview(config, { statuses, totalLeads = null, title = 'Daily Leadgen Sweep' }) {
+export async function postSweepOverview(config, { statuses, totalLeads = null, newLeadsInDatabase = null, title = 'Daily Leadgen Sweep' }) {
   const channelId = resolveChannelId(config);
   if (!channelId || !config.env.DISCORD_BOT_TOKEN) {
     return null;
@@ -218,7 +228,7 @@ export async function postSweepOverview(config, { statuses, totalLeads = null, t
       {
         body: buildNoticeDiscordPayload({
           title,
-          description: buildSweepOverviewDescription({ statuses, totalLeads }),
+          description: buildSweepOverviewDescription({ statuses, totalLeads, newLeadsInDatabase }),
           color: 0x5865F2,
           footerText: 'ORION leadgen sweep',
         }),
@@ -230,7 +240,7 @@ export async function postSweepOverview(config, { statuses, totalLeads = null, t
   }
 }
 
-export async function updateSweepOverview(config, message, { statuses, totalLeads = null, title = 'Daily Leadgen Sweep' }) {
+export async function updateSweepOverview(config, message, { statuses, totalLeads = null, newLeadsInDatabase = null, title = 'Daily Leadgen Sweep' }) {
   if (!message?.messageId || !config.env.DISCORD_BOT_TOKEN) {
     return null;
   }
@@ -243,7 +253,7 @@ export async function updateSweepOverview(config, message, { statuses, totalLead
         method: 'PATCH',
         body: buildNoticeDiscordPayload({
           title,
-          description: consumeRecoveryNote() + buildSweepOverviewDescription({ statuses, totalLeads }),
+          description: consumeRecoveryNote() + buildSweepOverviewDescription({ statuses, totalLeads, newLeadsInDatabase }),
           color: statuses.every((s) => s.state === 'completed') ? 0x57F287 : 0x5865F2,
           footerText: 'ORION leadgen sweep',
         }),
