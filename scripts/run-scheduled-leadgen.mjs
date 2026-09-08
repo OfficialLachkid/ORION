@@ -390,15 +390,25 @@ export async function runLeadgenSweepRound({
   // Approximate on purpose: the operator's daily junk-lead review deletes some
   // rows afterward, so this is "leads in DB right after the sweep", not a
   // forever-accurate figure — still a useful at-a-glance number.
+  //
+  // newLeadsInDatabase is separately counted with status='new' so the overview
+  // shows how many total leads the qualifier has queued across all pending
+  // days (not just this sweep) — three progress lines in one card: DB-wide
+  // qualifier backlog, this-sweep additions, and grand DB total.
   let totalLeads = null;
+  let newLeadsInDatabase = null;
   try {
-    totalLeads = await countLeads();
+    [totalLeads, newLeadsInDatabase] = await Promise.all([
+      countLeads(),
+      countLeads({ status: 'new' }),
+    ]);
   } catch {
-    // count is a nicety, never worth failing the sweep over
+    // counts are a nicety, never worth failing the sweep over
   }
   await updateSweepOverview(config, overviewMessage, {
     statuses,
     totalLeads,
+    newLeadsInDatabase,
     title: overviewTitle,
   });
 
@@ -408,6 +418,7 @@ export async function runLeadgenSweepRound({
     outcomes,
     statuses,
     totalLeads,
+    newLeadsInDatabase,
     failures: outcomes.filter((outcome) => outcome.runError),
   };
 }
@@ -434,6 +445,7 @@ export async function runScheduledLeadgen({
   const statuses = roundReports.flatMap((entry) => entry?.statuses || []);
   const failures = outcomes.filter((outcome) => outcome?.runError);
   const totalLeads = roundReports.at(-1)?.totalLeads ?? null;
+  const newLeadsInDatabase = roundReports.at(-1)?.newLeadsInDatabase ?? null;
 
   return {
     title,
@@ -443,6 +455,7 @@ export async function runScheduledLeadgen({
     outcomes,
     statuses,
     totalLeads,
+    newLeadsInDatabase,
     failures,
   };
 }
