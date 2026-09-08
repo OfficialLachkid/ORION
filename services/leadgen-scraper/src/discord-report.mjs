@@ -195,7 +195,7 @@ function buildSweepOverviewDescription({ statuses, totalLeads = null }) {
     footerLines.push(`Total \`new\` leads **${newLeadsCount}**  (for qualification)`);
   }
   if (Number.isFinite(totalLeads)) {
-    footerLines.push(`📊 Total leads in database: **${totalLeads}**`);
+    footerLines.push(`📊 Totaal leads in database: **${totalLeads}**`);
   }
   const totalLine = footerLines.length > 0 ? `\n\n${footerLines.join('\n')}` : '';
 
