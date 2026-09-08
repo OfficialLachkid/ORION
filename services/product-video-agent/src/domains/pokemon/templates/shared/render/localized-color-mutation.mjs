@@ -572,6 +572,7 @@ export async function createLocalizedColorVariantAssets({
   config = {},
   ffmpegExecutable = null,
   cwd = process.cwd(),
+  includeSourceCopy = false,
 } = {}) {
   const normalizedInputPath = String(inputPath || '').trim();
   const normalizedOutputDirectory = String(outputDirectory || '').trim();
@@ -608,6 +609,21 @@ export async function createLocalizedColorVariantAssets({
   });
   await mkdir(normalizedOutputDirectory, { recursive: true });
   const outputExtension = shouldOutputAnimatedGif(normalizedInputPath, metadata) ? '.gif' : '.png';
+  const sourceCopyPath = includeSourceCopy
+    ? await writeVariantAsset({
+      sharp,
+      data: Buffer.from(data),
+      info,
+      metadata,
+      inputPath: normalizedInputPath,
+      outputPath: join(
+        normalizedOutputDirectory,
+        `${outputBasename}-source${outputExtension}`,
+      ),
+      ffmpegExecutable,
+      cwd,
+    })
+    : '';
   const created = [];
   for (const variant of result.variants) {
     const outputPath = join(
@@ -632,6 +648,12 @@ export async function createLocalizedColorVariantAssets({
 
   return {
     created,
+    source: sourceCopyPath
+      ? {
+        path: sourceCopyPath,
+        normalized_from: normalizedInputPath,
+      }
+      : null,
     reason: created.length > 0 ? 'ok' : 'no_variants',
     selected_family: result.selected_family,
     analysis: result.analysis,

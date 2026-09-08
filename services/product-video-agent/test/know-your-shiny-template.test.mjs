@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { planPokemonTypeChallenge } from '../src/pokemon-type-challenge-planner.mjs';
 import { buildPokeQuizzRenderPlan } from '../src/poke-quizz-renderer.mjs';
 import { buildAudioFilterScript } from '../src/domains/pokemon/templates/know-your-shiny/render/audio-filter-script.mjs';
+import { applyLocalizedDecoyAssetsToRound } from '../src/domains/pokemon/templates/know-your-shiny/render/render-executor.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/know-your-shiny/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/know-your-shiny/render/visual-inputs.mjs';
 
@@ -300,4 +301,37 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(audioFilter, /volume=0\.35\[shiny0\]/u);
   assert.match(audioFilter, /shiny0/u);
   assert.match(audioFilter, /shiny2/u);
+});
+
+test('know-your-shiny assigns normalized source gif to correct candidate when decoys are generated', () => {
+  const round = {
+    round_number: 1,
+    candidates: [
+      { index: 0, is_correct: false, color_mix: 'rr=1' },
+      { index: 1, is_correct: true, color_mix: 'rr=0.8' },
+      { index: 2, is_correct: false, color_mix: 'rr=0.7' },
+      { index: 3, is_correct: false, color_mix: 'rr=0.6' },
+    ],
+  };
+  const updated = applyLocalizedDecoyAssetsToRound(round, '/tmp/source-shiny.gif', {
+    created: [
+      { path: '/tmp/decoy-a.gif', mutation: { target: { id: 'cyan' } } },
+      { path: '/tmp/decoy-b.gif', mutation: { target: { id: 'rose' } } },
+      { path: '/tmp/decoy-c.gif', mutation: { target: { id: 'gold' } } },
+    ],
+    source: {
+      path: '/tmp/source-shiny-normalized.gif',
+      normalized_from: '/tmp/source-shiny.gif',
+    },
+    selected_family: { key: 'green' },
+  });
+
+  assert.equal(updated.localized_decoy_generation.status, 'generated');
+  assert.equal(updated.localized_decoy_generation.normalized_source_path, '/tmp/source-shiny-normalized.gif');
+  assert.equal(updated.candidates[1].render_sprite_path, '/tmp/source-shiny-normalized.gif');
+  assert.equal(updated.candidates[1].normalized_from_sprite_path, '/tmp/source-shiny.gif');
+  assert.equal(updated.candidates[1].color_mix, null);
+  assert.equal(updated.candidates[0].render_sprite_path, '/tmp/decoy-a.gif');
+  assert.equal(updated.candidates[2].render_sprite_path, '/tmp/decoy-b.gif');
+  assert.equal(updated.candidates[3].render_sprite_path, '/tmp/decoy-c.gif');
 });

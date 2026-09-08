@@ -14,6 +14,56 @@ import { buildVisualInputs } from './visual-inputs.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
 import { createLocalizedColorVariantAssets } from '../../shared/render/localized-color-mutation.mjs';
 
+export function applyLocalizedDecoyAssetsToRound(round, sourceSpritePath, generated) {
+  if (!Array.isArray(generated?.created) || generated.created.length === 0) {
+    return {
+      ...round,
+      localized_decoy_generation: {
+        status: 'fallback_global_filter',
+        reason: generated?.reason || 'no_decoy_assets_created',
+      },
+    };
+  }
+
+  const normalizedSourcePath = String(generated?.source?.path || '').trim() || sourceSpritePath;
+  let decoyAssetIndex = 0;
+  return {
+    ...round,
+    localized_decoy_generation: {
+      status: 'generated',
+      selected_family: generated.selected_family || null,
+      normalized_source_path: normalizedSourcePath,
+    },
+    candidates: round.candidates.map((candidate) => {
+      if (candidate?.is_correct) {
+        return {
+          ...candidate,
+          render_sprite_path: normalizedSourcePath,
+          color_mix: null,
+          saturation: 1,
+          brightness: 0,
+          contrast: 1,
+          normalized_from_sprite_path: normalizedSourcePath === sourceSpritePath ? null : sourceSpritePath,
+        };
+      }
+      const decoyAsset = generated.created[decoyAssetIndex];
+      decoyAssetIndex += 1;
+      if (!decoyAsset?.path) {
+        return candidate;
+      }
+      return {
+        ...candidate,
+        render_sprite_path: decoyAsset.path,
+        color_mix: null,
+        saturation: 1,
+        brightness: 0,
+        contrast: 1,
+        localized_color_mutation: decoyAsset.mutation || null,
+      };
+    }),
+  };
+}
+
 async function prepareLocalizedDecoyRenderPlan({
   renderPlan,
   plan,
@@ -56,51 +106,9 @@ async function prepareLocalizedDecoyRenderPlan({
           config: mutationConfig,
           ffmpegExecutable,
           cwd: projectRoot,
+          includeSourceCopy: true,
         });
-        if (!Array.isArray(generated.created) || generated.created.length === 0) {
-          return {
-            ...round,
-            localized_decoy_generation: {
-              status: 'fallback_global_filter',
-              reason: generated.reason || 'no_decoy_assets_created',
-            },
-          };
-        }
-
-        let decoyAssetIndex = 0;
-        return {
-          ...round,
-          localized_decoy_generation: {
-            status: 'generated',
-            selected_family: generated.selected_family || null,
-          },
-          candidates: round.candidates.map((candidate) => {
-            if (candidate?.is_correct) {
-              return {
-                ...candidate,
-                render_sprite_path: sourceSpritePath,
-                color_mix: null,
-                saturation: 1,
-                brightness: 0,
-                contrast: 1,
-              };
-            }
-            const decoyAsset = generated.created[decoyAssetIndex];
-            decoyAssetIndex += 1;
-            if (!decoyAsset?.path) {
-              return candidate;
-            }
-            return {
-              ...candidate,
-              render_sprite_path: decoyAsset.path,
-              color_mix: null,
-              saturation: 1,
-              brightness: 0,
-              contrast: 1,
-              localized_color_mutation: decoyAsset.mutation || null,
-            };
-          }),
-        };
+        return applyLocalizedDecoyAssetsToRound(round, sourceSpritePath, generated);
       } catch (error) {
         return {
           ...round,
