@@ -66,6 +66,7 @@ const previewApproved = {
 
 test('runVideoPublicationScheduler executes preview uploads and schedule updates for active channels', async () => {
   const executionCalls = [];
+  const socialExecutionCalls = [];
   const result = await runVideoPublicationScheduler({
     channels: 'services/product-video-agent/publication-channels.example.json',
     'as-of': '2026-08-01T10:01:00.000Z',
@@ -78,6 +79,10 @@ test('runVideoPublicationScheduler executes preview uploads and schedule updates
       return scheduleApproved
         ? [{ publication_id: 'pub-approved', action: 'schedule_update' }]
         : [{ publication_id: 'pub-preview', action: 'preview_upload' }];
+    },
+    executeSocialPublicationPhase: async ({ asOf }) => {
+      socialExecutionCalls.push({ asOf });
+      return [{ publication_id: 'pub-tiktok', action: 'tiktok_publish_due' }];
     },
   });
 
@@ -93,10 +98,17 @@ test('runVideoPublicationScheduler executes preview uploads and schedule updates
   assert.deepEqual(result.execution_results[0].schedule_update_results, [
     { publication_id: 'pub-approved', action: 'schedule_update' },
   ]);
+  assert.deepEqual(socialExecutionCalls, [
+    { asOf: '2026-08-01T10:01:00.000Z' },
+  ]);
+  assert.deepEqual(result.social_publication_results, [
+    { publication_id: 'pub-tiktok', action: 'tiktok_publish_due' },
+  ]);
 });
 
 test('runVideoPublicationScheduler skips execution in plan-only mode', async () => {
   let executionCallCount = 0;
+  let socialExecutionCallCount = 0;
   const result = await runVideoPublicationScheduler({
     channels: 'services/product-video-agent/publication-channels.example.json',
     'as-of': '2026-08-01T10:01:00.000Z',
@@ -109,9 +121,15 @@ test('runVideoPublicationScheduler skips execution in plan-only mode', async () 
       executionCallCount += 1;
       return [];
     },
+    executeSocialPublicationPhase: async () => {
+      socialExecutionCallCount += 1;
+      return [];
+    },
   });
 
   assert.equal(executionCallCount, 0);
+  assert.equal(socialExecutionCallCount, 0);
   assert.deepEqual(result.execution_results, []);
+  assert.deepEqual(result.social_publication_results, []);
   assert.equal(result.queue_plan.channels[0].scheduled_publish_queue.length, 1);
 });
