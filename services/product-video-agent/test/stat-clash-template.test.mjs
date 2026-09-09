@@ -81,7 +81,7 @@ const template = {
     min_stat_value: 35,
     min_winner_margin: 4,
     max_winner_margin: 30,
-    max_stat_spread: 45,
+    max_stat_spread: 30,
   },
   question_contract: {
     prompt_text: 'Which Pokemon has the highest {stat}?',
@@ -246,6 +246,61 @@ test('stat-clash planner builds a four-candidate highest-stat round set', async 
     assert.match(plan.rounds[1].prompt_text, /^Who has the highest /u);
     assert.match(plan.rounds[1].spoken_prompt_text, /^Who has the highest /u);
   }
+});
+
+test('stat-clash planner prefers candidate sets within the configured stat spread', async () => {
+  const boundedTemplate = JSON.parse(JSON.stringify(template));
+  boundedTemplate.selection_rules.round_count = 1;
+  boundedTemplate.selection_rules.round_count_weights = { medium: 1 };
+  boundedTemplate.selection_rules.round_count_levels = { medium: { round_count: 1 } };
+  boundedTemplate.selection_rules.stat_pool = ['speed'];
+  boundedTemplate.selection_rules.max_stat_spread = 30;
+  boundedTemplate.selection_rules.min_winner_margin = 6;
+  boundedTemplate.selection_rules.max_winner_margin = 28;
+  const boundedRows = [
+    { ...pokedexRows[0], id: 'bounded-1', slug: 'bounded-1', name: 'Bounded One', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 95 } } },
+    { ...pokedexRows[1], id: 'bounded-2', slug: 'bounded-2', name: 'Bounded Two', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 86 } } },
+    { ...pokedexRows[2], id: 'bounded-3', slug: 'bounded-3', name: 'Bounded Three', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 74 } } },
+    { ...pokedexRows[3], id: 'bounded-4', slug: 'bounded-4', name: 'Bounded Four', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 68 } } },
+  ];
+
+  const plan = await planPokemonStatClashChallenge({
+    template: boundedTemplate,
+    pokedexRows: boundedRows,
+    seed: 'stat-clash-bounded-spread',
+    assetInventory,
+  });
+
+  assert.equal(plan.rounds[0].selection_score.exact, true);
+  assert.ok(plan.rounds[0].selection_score.spread <= 30);
+});
+
+test('stat-clash planner falls back to the best available set when max spread is impossible', async () => {
+  const constrainedTemplate = JSON.parse(JSON.stringify(template));
+  constrainedTemplate.selection_rules.round_count = 1;
+  constrainedTemplate.selection_rules.round_count_weights = { medium: 1 };
+  constrainedTemplate.selection_rules.round_count_levels = { medium: { round_count: 1 } };
+  constrainedTemplate.selection_rules.stat_pool = ['speed'];
+  constrainedTemplate.selection_rules.max_stat_spread = 30;
+  constrainedTemplate.selection_rules.min_winner_margin = 6;
+  constrainedTemplate.selection_rules.max_winner_margin = 120;
+  const constrainedRows = [
+    { ...pokedexRows[0], id: 'spread-1', slug: 'spread-1', name: 'Spread One', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 200 } } },
+    { ...pokedexRows[1], id: 'spread-2', slug: 'spread-2', name: 'Spread Two', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 130 } } },
+    { ...pokedexRows[2], id: 'spread-3', slug: 'spread-3', name: 'Spread Three', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 120 } } },
+    { ...pokedexRows[3], id: 'spread-4', slug: 'spread-4', name: 'Spread Four', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 110 } } },
+  ];
+
+  const plan = await planPokemonStatClashChallenge({
+    template: constrainedTemplate,
+    pokedexRows: constrainedRows,
+    seed: 'stat-clash-impossible-spread',
+    assetInventory,
+  });
+
+  assert.equal(plan.rounds[0].candidates.length, 4);
+  assert.equal(plan.rounds[0].selection_score.exact, false);
+  assert.ok(plan.rounds[0].selection_score.spread > 30);
 });
 
 test('stat-clash narration expands abbreviated stat labels for speech', async () => {
@@ -437,6 +492,7 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   assert.ok(cryCues.some((cue) => cue.start_seconds === renderPlan.rounds[0].reveal_visual_start_seconds));
   assert.ok(cryCues.some((cue) => cue.volume >= 0.189));
   assert.match(audioFilter, /asplit=12\[osrc0\]|asplit=20\[osrc0\]/u);
+  assert.match(audioFilter, /\[3:a\]aloop=loop=-1:size=2000000000,atrim=0:[0-9.]+,/u);
   assert.match(audioFilter, /timerend0/u);
   assert.match(audioFilter, /cry0/u);
   assert.match(audioFilter, /silenceremove=start_periods=1:start_duration=0\.02:start_threshold=-50dB/u);

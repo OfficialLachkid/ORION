@@ -51,7 +51,7 @@
     "min_stat_value": 35,
     "min_winner_margin": 6,
     "max_winner_margin": 28,
-    "max_stat_spread": 42
+    "max_stat_spread": 30
   },
   "question_contract": {
     "hook_text": "",

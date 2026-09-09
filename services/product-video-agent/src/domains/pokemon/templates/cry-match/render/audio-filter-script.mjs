@@ -1,10 +1,10 @@
 import {
   DEFAULT_COUNTDOWN_VOLUME,
-  DEFAULT_MUSIC_VOLUME,
   DEFAULT_TIMER_END_VOLUME,
   DEFAULT_VOICE_VOLUME,
   ensureNumber,
 } from '../../dual-type-reveal/render/constants.mjs';
+import { buildLoopingMusicFilter } from '../../shared/render/audio-looping.mjs';
 
 const DEFAULT_CRY_MATCH_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
 // Halved on 2026-09-06 (operator ask: "50% lower in volume"). The
@@ -105,16 +105,9 @@ export function buildAudioFilterScript({
 
   let inputIndex = narrationPaths.length;
   if (musicPath) {
-    const delayMs = Math.max(0, Math.round((renderPlan.audio_cues?.battle_music_start_seconds || 0) * 1000));
-    const musicDuration = Math.max(0.5, renderPlan.total_duration_seconds - (renderPlan.audio_cues?.battle_music_start_seconds || 0));
-    // aloop=loop=-1 keeps the music source repeating so if the video
-    // outlasts the track (hard=8 rounds can push past 60s) the song
-    // just replays from the start instead of leaving silence. size is
-    // the max buffered samples — 2e9 covers any realistic track.
-    filters.push(
-      `[${inputIndex}:a]aloop=loop=-1:size=2000000000,atrim=0:${musicDuration},afade=t=in:st=0:d=0.15,afade=t=out:st=${Math.max(0, musicDuration - 0.6)}:d=0.6,adelay=${delayMs}|${delayMs},volume=${DEFAULT_MUSIC_VOLUME}[music]`,
-    );
-    mixLabels.push('music');
+    const musicFilter = buildLoopingMusicFilter({ inputIndex, renderPlan });
+    filters.push(musicFilter.filter);
+    mixLabels.push(musicFilter.label);
     inputIndex += 1;
   }
 
