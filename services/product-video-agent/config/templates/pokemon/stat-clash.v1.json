@@ -51,7 +51,27 @@
     "min_stat_value": 35,
     "min_winner_margin": 6,
     "max_winner_margin": 28,
-    "max_stat_spread": 30
+    "max_stat_spread": 30,
+    "pool_variants": [
+      {
+        "key": "showcase_power",
+        "label": "Mega / Legendary / Mythical",
+        "selector": "mega_legendary_mythical",
+        "weight": 3
+      },
+      {
+        "key": "final_evolution",
+        "label": "Final Evolutions",
+        "selector": "final_evolution_only",
+        "weight": 2
+      },
+      {
+        "key": "all",
+        "label": "All Pokemon",
+        "selector": "all",
+        "weight": 1
+      }
+    ]
   },
   "question_contract": {
     "hook_text": "",
