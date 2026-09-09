@@ -125,6 +125,29 @@ const statClashPlan = {
   },
 };
 
+const buildYourTeamPlan = {
+  template_id: 'pokemon.build-your-team.v1',
+  selection: {
+    round_count: 6,
+    pool_labels: [
+      'Baby Pokemon',
+      'First Stage Evolutions',
+      'Middle Stage Evolutions',
+      'Final Stage Evolutions',
+      'Legendary and Mythical Pokemon',
+      'Dynamax Pokemon',
+    ],
+    selected_subjects: [
+      { name: 'Pichu' },
+      { name: 'Charmander' },
+      { name: 'Charmeleon' },
+      { name: 'Charizard' },
+      { name: 'Mewtwo' },
+      { name: 'Venusaur Gigantamax' },
+    ],
+  },
+};
+
 const expectedSeededTitles = new Set([
   'Psychic/Water Type Quiz - Can You Guess?',
   'Can You Guess This Psychic/Water Pokemon?',
@@ -176,6 +199,13 @@ const expectedStatClashSeededTitles = new Set([
   'Highest Stat Challenge!',
   'Who has the Highest Stat?',
   'Stat Clash! 📊',
+]);
+
+const expectedBuildYourTeamSeededTitles = new Set([
+  'Build Your Pokemon Team!',
+  'Pick Your Pokemon Team',
+  'Choose Your Team!',
+  'Pokemon Team Builder',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -481,4 +511,41 @@ test('seeded stat-clash fallback metadata uses the supported generic title varia
 
   assert.ok(expectedStatClashSeededTitles.has(firstSeeded.title));
   assert.ok(expectedStatClashSeededTitles.has(secondSeeded.title));
+});
+
+test('fallback publication metadata frames build-your-team as a team choice challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(buildYourTeamPlan, channelProfile);
+
+  assert.equal(metadata.title, 'Build Your Pokemon Team!');
+  assert.equal(
+    metadata.description,
+    "6 rounds, 4 Pokemon each round. Pick one Pokemon from every pool and build your final team before the timer runs out.\n\nWelcome to Poke Quizz to test your Pokemon knowledge, and see if you're a true master!",
+  );
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#pokemonteam',
+    '#teambuilder',
+    '#pokemonquiz',
+    '#shorts',
+  ]);
+});
+
+test('seeded build-your-team fallback metadata uses the supported generic title variants', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...buildYourTeamPlan,
+      seed: 'build-your-team-seed-1',
+    },
+    channelProfile,
+  );
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...buildYourTeamPlan,
+      seed: 'build-your-team-seed-2',
+    },
+    channelProfile,
+  );
+
+  assert.ok(expectedBuildYourTeamSeededTitles.has(firstSeeded.title));
+  assert.ok(expectedBuildYourTeamSeededTitles.has(secondSeeded.title));
 });

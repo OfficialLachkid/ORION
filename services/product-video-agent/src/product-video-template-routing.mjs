@@ -30,6 +30,13 @@ export const PRODUCT_VIDEO_TEMPLATE_DEFINITIONS = Object.freeze([
     legacyConfigSlug: 'stat-clash',
   },
   {
+    templateKey: 'build-your-team',
+    templateId: 'pokemon.build-your-team.v1',
+    label: 'Build Your Team',
+    genreLabel: 'Build Your Team',
+    legacyConfigSlug: 'build-your-team',
+  },
+  {
     templateKey: 'tournament',
     templateId: 'pokemon.tournament.v1',
     label: 'Tournament',
@@ -89,6 +96,7 @@ export const PRODUCT_VIDEO_CHANNEL_DEFINITIONS = Object.freeze([
 const TEMPLATE_KEY_ALIASES = Object.freeze({
   showdown: 'tournament',
   'stat-battle': 'stat-clash',
+  'team-builder': 'build-your-team',
   'type-quiz': 'type-speed-quiz',
 });
 

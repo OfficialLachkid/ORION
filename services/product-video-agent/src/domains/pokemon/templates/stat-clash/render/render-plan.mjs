@@ -157,6 +157,7 @@ function buildTextLayout(template) {
 
 function buildStatValueLayout(template) {
   return {
+    enabled: template?.layout?.stat_values?.enabled !== false,
     font_size: ensureNumber(template?.layout?.stat_values?.font_size, 84),
     top_row_y_offset_px: ensureNumber(template?.layout?.stat_values?.top_row_y_offset_px, -94),
     bottom_row_y_offset_px: ensureNumber(template?.layout?.stat_values?.bottom_row_y_offset_px, 130),

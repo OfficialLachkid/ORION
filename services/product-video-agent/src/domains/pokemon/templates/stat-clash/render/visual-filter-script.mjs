@@ -50,6 +50,9 @@ function extractPromptHeaderText(text, round) {
 
 function buildStyledStatPromptLines(round, textLayout, startSeconds, endSeconds, baseY) {
   const statKey = String(round?.stat_key || '').trim().toLowerCase();
+  if (!statKey) {
+    return [];
+  }
   const largeFontSize = Math.round(textLayout.prompt_font_size * 1.1);
 
   switch (statKey) {
@@ -551,6 +554,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     0.08,
     ensureNumber(template?.renderer?.decoy_grayscale_fade_duration_seconds, 0.22),
   );
+  const decoyGrayscaleEnabled = template?.reveal?.decoy_grayscale_enabled !== false;
 
   const backgroundLabels = Array.from({ length: roundCount }, (_unused, index) => `bg${index}`);
   filters.push(
@@ -719,7 +723,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       currentLabel = settledSpriteLabel;
 
-      if (!candidate.is_correct) {
+      if (!candidate.is_correct && decoyGrayscaleEnabled) {
         decoyGrayCandidates.push({
           candidate,
           cell,
@@ -849,21 +853,23 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = revealLabel;
     });
 
-    for (const candidateValue of round.candidates) {
-      const candidate = localizeCandidateTiming(candidateValue, round);
-      const cell = gridLayout.cells[candidate.index];
-      const isTopRow = cell.row === 0;
-      const statY = isTopRow
-        ? Number((cell.y + renderPlan.stat_value_layout.top_row_y_offset_px).toFixed(3))
-        : Number((cell.y + cell.height + renderPlan.stat_value_layout.bottom_row_y_offset_px).toFixed(3));
-      const statColor = candidate.is_correct
-        ? renderPlan.stat_value_layout.winner_color
-        : renderPlan.stat_value_layout.default_color;
-      const statLabel = `scene${roundIndex}stat${candidate.index}`;
-      filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(candidate.stat_value)}'${fontPart}:fontcolor=${statColor}:fontsize=${renderPlan.stat_value_layout.font_size}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=${cell.center_x}-text_w/2:y='${buildAnimatedTextYExpression(statY, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.reveal_visual_start_seconds + statRevealFadeDuration)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${statLabel}]`,
-      );
-      currentLabel = statLabel;
+    if (renderPlan.stat_value_layout?.enabled !== false) {
+      for (const candidateValue of round.candidates) {
+        const candidate = localizeCandidateTiming(candidateValue, round);
+        const cell = gridLayout.cells[candidate.index];
+        const isTopRow = cell.row === 0;
+        const statY = isTopRow
+          ? Number((cell.y + renderPlan.stat_value_layout.top_row_y_offset_px).toFixed(3))
+          : Number((cell.y + cell.height + renderPlan.stat_value_layout.bottom_row_y_offset_px).toFixed(3));
+        const statColor = candidate.is_correct
+          ? renderPlan.stat_value_layout.winner_color
+          : renderPlan.stat_value_layout.default_color;
+        const statLabel = `scene${roundIndex}stat${candidate.index}`;
+        filters.push(
+          `[${currentLabel}]drawtext=text='${escapeDrawtextText(candidate.stat_value)}'${fontPart}:fontcolor=${statColor}:fontsize=${renderPlan.stat_value_layout.font_size}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=${cell.center_x}-text_w/2:y='${buildAnimatedTextYExpression(statY, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.reveal_visual_start_seconds + statRevealFadeDuration)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${statLabel}]`,
+        );
+        currentLabel = statLabel;
+      }
     }
 
     filters.push(`[${currentLabel}]setsar=1[scene${roundIndex}]`);
