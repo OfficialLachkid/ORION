@@ -504,6 +504,34 @@ test('normalizeSupportedSlashCommandInteraction converts a stat-clash slash comm
   assert.equal(message?.channelKey, 'commands');
 });
 
+test('normalizeSupportedSlashCommandInteraction converts a cry-match slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-cry-match-1',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-cry-match-1',
+    data: {
+      name: 'generate-video',
+      options: [
+        { name: 'template', value: 'cry-match' },
+        { name: 'channel', value: 'poke-quizz-youtube' },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'generate video template: cry-match channel: poke-quizz-youtube');
+  assert.equal(message?.channelKey, 'commands');
+});
+
 test('normalizeSupportedSlashCommandInteraction converts a tournament slash command into a routed message', () => {
   const message = normalizeSupportedSlashCommandInteraction({
     id: 'interaction-tournament-1',

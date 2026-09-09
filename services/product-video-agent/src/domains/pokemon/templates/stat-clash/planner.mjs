@@ -24,7 +24,7 @@ const DEFAULT_SAMPLING_ATTEMPTS = 180;
 const DEFAULT_MIN_STAT_VALUE = 35;
 const DEFAULT_MIN_WINNER_MARGIN = 6;
 const DEFAULT_MAX_WINNER_MARGIN = 28;
-const DEFAULT_MAX_STAT_SPREAD = 42;
+const DEFAULT_MAX_STAT_SPREAD = 30;
 const STAT_LABELS = Object.freeze({
   hp: 'HP',
   attack: 'Attack',
@@ -97,6 +97,85 @@ function readSubjectPokemonApiMetadata(subject, key) {
     ? subject.metadata.pokemon_api
     : {};
   return pokemonApi[key];
+}
+
+function readSubjectMetadataValue(subject, keys = []) {
+  const metadata = subject?.metadata && typeof subject.metadata === 'object'
+    ? subject.metadata
+    : {};
+  for (const key of keys) {
+    if (subject?.[key] !== undefined) {
+      return subject[key];
+    }
+    if (metadata[key] !== undefined) {
+      return metadata[key];
+    }
+  }
+  return undefined;
+}
+
+function isTruthyMetadataFlag(value) {
+  if (value === true) return true;
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function normalizeSubjectSlug(subject) {
+  return String(
+    readSubjectPokemonApiMetadata(subject, 'pokemon_name')
+    || subject?.slug
+    || subject?.name
+    || '',
+  ).trim().toLowerCase();
+}
+
+function isMegaLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
+    'is_mega',
+    'isMega',
+  ]))) {
+    return true;
+  }
+  if (readSubjectPokemonApiMetadata(subject, 'is_mega') === true) {
+    return true;
+  }
+  return normalizeSubjectSlug(subject).includes('-mega');
+}
+
+function isLegendaryOrMythicalLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
+    'is_legendary',
+    'legendary',
+    'isLegendary',
+    'is_mythical',
+    'mythical',
+    'isMythical',
+  ]))) {
+    return true;
+  }
+  const classification = String(readSubjectMetadataValue(subject, [
+    'classification',
+    'category',
+  ]) || '').trim().toLowerCase();
+  return classification === 'legendary' || classification === 'mythical';
+}
+
+function isFinalEvolutionLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
+    'is_final_evolution',
+    'final_evolution',
+    'isFinalEvolution',
+    'is_fully_evolved',
+    'fully_evolved',
+    'isFullyEvolved',
+  ]))) {
+    return true;
+  }
+  const evolutionStage = String(readSubjectMetadataValue(subject, [
+    'evolution_stage',
+    'evolutionStage',
+  ]) || '').trim().toLowerCase();
+  return evolutionStage === 'final' || evolutionStage === 'fully_evolved';
 }
 
 async function downloadCryToFile(sourceUrl, outputPath) {
@@ -256,6 +335,139 @@ function collapseDuplicateSubjects(subjects = []) {
     unique.push(subject);
   }
   return unique;
+}
+
+function resolveStatClashPoolVariants(template = {}) {
+  const configuredVariants = Array.isArray(template?.selection_rules?.pool_variants)
+    ? template.selection_rules.pool_variants
+    : [];
+  return configuredVariants
+    .map((variant, index) => ({
+      key: String(variant?.key || `pool-${index + 1}`).trim().toLowerCase(),
+      label: String(variant?.label || variant?.key || `Pool ${index + 1}`).trim(),
+      selector: String(variant?.selector || variant?.key || 'all').trim().toLowerCase(),
+      weight: Math.max(1, ensurePositiveInteger(variant?.weight, 1)),
+    }))
+    .filter((variant) => variant.key);
+}
+
+function normalizeStatClashPoolOverrideValue(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function resolveForcedStatClashPoolValue(template = {}) {
+  return normalizeStatClashPoolOverrideValue(
+    template?.selection_rules?.force_pool_key
+    || template?.selection_rules?.forced_pool_key
+    || template?.selection_rules?.force_pool
+    || template?.selection_rules?.forced_pool
+    || template?.selection_rules?.force_pool_weight
+    || template?.selection_rules?.forced_pool_weight
+    || '',
+  );
+}
+
+function statClashPoolMatchesOverride(pool = {}, overrideValue = '') {
+  const normalizedOverride = normalizeStatClashPoolOverrideValue(overrideValue);
+  if (!normalizedOverride) {
+    return false;
+  }
+  return [
+    pool.key,
+    pool.selector,
+    pool.label,
+    String(pool.weight || ''),
+  ].some((candidate) => normalizeStatClashPoolOverrideValue(candidate) === normalizedOverride);
+}
+
+function filterSubjectsForStatClashPool(subjects = [], pool = {}) {
+  const selector = String(pool?.selector || 'all').trim().toLowerCase();
+  switch (selector) {
+    case 'mega_legendary_mythical':
+    case 'showcase_power':
+    case 'power_showcase':
+      return subjects.filter((subject) => (
+        isMegaLikeSubject(subject)
+        || isLegendaryOrMythicalLikeSubject(subject)
+      ));
+    case 'final_evolution_only':
+      return subjects.filter((subject) => (
+        !isMegaLikeSubject(subject)
+        && !isLegendaryOrMythicalLikeSubject(subject)
+        && isFinalEvolutionLikeSubject(subject)
+      ));
+    case 'all':
+    default:
+      return [...subjects];
+  }
+}
+
+function selectWeightedStatClashPool(pools = [], random = Math.random) {
+  const availablePools = (Array.isArray(pools) ? pools : [])
+    .filter((pool) => (pool?.subjects?.length || 0) > 0);
+  if (availablePools.length === 0) {
+    return null;
+  }
+  const totalWeight = availablePools.reduce(
+    (sum, pool) => sum + Math.max(1, Number(pool.weight) || 1),
+    0,
+  );
+  let cursor = random() * totalWeight;
+  for (const pool of availablePools) {
+    cursor -= Math.max(1, Number(pool.weight) || 1);
+    if (cursor <= 0) {
+      return pool;
+    }
+  }
+  return availablePools.at(-1) || null;
+}
+
+function selectConfiguredSubjectPool({
+  eligibleSubjects,
+  template,
+  candidateCount,
+  random,
+}) {
+  const poolVariants = resolveStatClashPoolVariants(template);
+  const forcedPoolValue = resolveForcedStatClashPoolValue(template);
+  if (forcedPoolValue) {
+    const forcedPool = poolVariants.find((pool) => statClashPoolMatchesOverride(pool, forcedPoolValue));
+    if (!forcedPool) {
+      throw new Error(`Stat Clash pool override "${forcedPoolValue}" does not match a configured pool.`);
+    }
+    const forcedSubjects = collapseDuplicateSubjects(
+      filterSubjectsForStatClashPool(eligibleSubjects, forcedPool),
+    );
+    if (forcedSubjects.length < candidateCount) {
+      throw new Error(
+        `Stat Clash pool override "${forcedPoolValue}" only has ${forcedSubjects.length} eligible Pokemon; ${candidateCount} required.`,
+      );
+    }
+    return {
+      ...forcedPool,
+      forced: true,
+      subjects: forcedSubjects,
+    };
+  }
+
+  const configuredPools = poolVariants
+    .map((pool) => ({
+      ...pool,
+      subjects: collapseDuplicateSubjects(filterSubjectsForStatClashPool(eligibleSubjects, pool)),
+    }))
+    .filter((pool) => pool.subjects.length >= candidateCount);
+  const selectedPool = selectWeightedStatClashPool(configuredPools, random);
+  if (selectedPool) {
+    return selectedPool;
+  }
+  return {
+    key: 'all',
+    label: 'All Pokemon',
+    selector: 'all',
+    weight: 1,
+    forced: false,
+    subjects: eligibleSubjects,
+  };
 }
 
 function buildTypeDisplay(types = []) {
@@ -544,6 +756,12 @@ export async function planPokemonStatClashChallenge({
   if (eligibleSubjects.length < candidateCount) {
     throw new Error(`Stat Clash requires at least ${candidateCount} Pokemon with local sprites and base stats, found ${eligibleSubjects.length}.`);
   }
+  const selectedSubjectPool = selectConfiguredSubjectPool({
+    eligibleSubjects,
+    template,
+    candidateCount,
+    random,
+  });
 
   const selectedBackgroundPath = selectBackground(
     inventory.backgrounds,
@@ -595,7 +813,7 @@ export async function planPokemonStatClashChallenge({
   for (let roundIndex = 0; roundIndex < roundCount; roundIndex += 1) {
     const statKey = statPool[roundIndex];
     const selection = selectRoundCandidates({
-      subjects: eligibleSubjects,
+      subjects: selectedSubjectPool.subjects,
       statKey,
       candidateCount,
       attempts: samplingAttempts,
@@ -706,6 +924,12 @@ export async function planPokemonStatClashChallenge({
     seed: String(seed),
     selection: {
       mode: String(template?.selection_rules?.mode || 'highest_stat').trim().toLowerCase() || 'highest_stat',
+      pool_key: selectedSubjectPool.key,
+      pool_label: selectedSubjectPool.label,
+      pool_selector: selectedSubjectPool.selector,
+      pool_weight: selectedSubjectPool.weight,
+      pool_subject_count: selectedSubjectPool.subjects.length,
+      pool_forced: selectedSubjectPool.forced === true,
       difficulty_id: selectedRoundCountDifficulty?.id || null,
       round_count: roundCount,
       primary_stat_key: rounds[0]?.stat_key || statPool[0] || 'hp',

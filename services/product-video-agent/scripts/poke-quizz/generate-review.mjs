@@ -94,6 +94,25 @@ function resolveTypePairSlug(plan) {
     .join('-');
 }
 
+function applyStatClashPoolOverride(template, forcedPoolValue) {
+  const normalizedPoolValue = String(forcedPoolValue || '').trim();
+  if (!normalizedPoolValue) {
+    return template;
+  }
+  const templateKey = String(template?.template_key || '').trim().toLowerCase();
+  const templateId = String(template?.template_id || '').trim().toLowerCase();
+  if (templateKey !== 'stat-clash' && !templateId.includes('stat-clash')) {
+    throw new Error('--stat-clash-pool can only be used with the Stat Clash template.');
+  }
+  return {
+    ...template,
+    selection_rules: {
+      ...(template.selection_rules || {}),
+      force_pool_key: normalizedPoolValue,
+    },
+  };
+}
+
 async function resolvePlan(
   options,
   selectionState = null,
@@ -126,7 +145,14 @@ async function resolvePlan(
   const forcedTypePair = forcedTypePairInput
     ? normalizeTypePair(forcedTypePairInput.split(','))
     : null;
-  const template = await loadJson(templatePath);
+  const template = applyStatClashPoolOverride(
+    await loadJson(templatePath),
+    getStringOption(
+      options,
+      'stat-clash-pool',
+      getStringOption(options, 'stat-clash-pool-weight', ''),
+    ),
+  );
   const statePath = getStringOption(
     options,
     'state',
@@ -366,6 +392,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --state <path>             Selection-state JSON path used by the planner. Defaults to a template-scoped runtime file.',
       '  --seed <text>              Deterministic planning seed.',
       '  --type-pair <a,b>          Optional forced pair such as water,flying.',
+      '  --stat-clash-pool <key>    Optional Stat Clash pool override. Accepts key, selector, label, or weight.',
       '  --output <path>            Render output MP4 path.',
       `  --channel-config <path>    Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
       '  --template-id <id>         Template id/key from the selected channel config.',

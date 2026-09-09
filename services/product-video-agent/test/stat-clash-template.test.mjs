@@ -81,7 +81,7 @@ const template = {
     min_stat_value: 35,
     min_winner_margin: 4,
     max_winner_margin: 30,
-    max_stat_spread: 45,
+    max_stat_spread: 30,
   },
   question_contract: {
     prompt_text: 'Which Pokemon has the highest {stat}?',
@@ -228,6 +228,9 @@ test('stat-clash planner builds a four-candidate highest-stat round set', async 
   assert.equal(plan.template_key, 'stat-clash');
   assert.equal(plan.rounds.length, 3);
   assert.equal(plan.selection.round_count, 3);
+  assert.equal(plan.selection.pool_key, 'all');
+  assert.equal(plan.selection.pool_subject_count, pokedexRows.length);
+  assert.equal(plan.selection.pool_forced, false);
   assert.equal(plan.assets.audio.selected_sound_effects.timer_end, mediaPath('ding-sound.mp3'));
   assert.equal(plan.assets.audio.selected_sound_effects.intro_slot_reveal, mediaPath('pokeball-open-sound.mp3'));
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Stat Clash$/u);
@@ -246,6 +249,213 @@ test('stat-clash planner builds a four-candidate highest-stat round set', async 
     assert.match(plan.rounds[1].prompt_text, /^Who has the highest /u);
     assert.match(plan.rounds[1].spoken_prompt_text, /^Who has the highest /u);
   }
+});
+
+test('stat-clash planner can select the showcase power pool for mega legendary and mythical Pokemon', async () => {
+  const showcaseTemplate = JSON.parse(JSON.stringify(template));
+  showcaseTemplate.selection_rules.round_count = 1;
+  showcaseTemplate.selection_rules.round_count_weights = { medium: 1 };
+  showcaseTemplate.selection_rules.round_count_levels = { medium: { round_count: 1 } };
+  showcaseTemplate.selection_rules.stat_pool = ['attack'];
+  showcaseTemplate.selection_rules.pool_variants = [{
+    key: 'showcase_power',
+    label: 'Mega / Legendary / Mythical',
+    selector: 'mega_legendary_mythical',
+    weight: 3,
+  }];
+  const showcaseRows = [
+    { ...pokedexRows[0], id: 'showcase-1', slug: 'mewtwo-mega-x', name: 'Mewtwo Mega X', metadata: { is_final_evolution: true, pokemon_api: { is_mega: true }, base_stats: { hp: 106, attack: 190, defense: 100, special_attack: 154, special_defense: 100, speed: 130 } } },
+    { ...pokedexRows[1], id: 'showcase-2', slug: 'rayquaza-mega', name: 'Mega Rayquaza', metadata: { is_final_evolution: true, pokemon_api: { pokemon_name: 'rayquaza-mega' }, base_stats: { hp: 105, attack: 180, defense: 100, special_attack: 180, special_defense: 100, speed: 115 } } },
+    { ...pokedexRows[2], id: 'showcase-3', slug: 'lugia', name: 'Lugia', metadata: { is_legendary: true, base_stats: { hp: 106, attack: 90, defense: 130, special_attack: 90, special_defense: 154, speed: 110 } } },
+    { ...pokedexRows[3], id: 'showcase-4', slug: 'mew', name: 'Mew', metadata: { is_mythical: true, base_stats: { hp: 100, attack: 100, defense: 100, special_attack: 100, special_defense: 100, speed: 100 } } },
+    { ...pokedexRows[4], id: 'ordinary-1', slug: 'rattata', name: 'Rattata', metadata: { evolution_stage: 'base', base_stats: { hp: 30, attack: 56, defense: 35, special_attack: 25, special_defense: 35, speed: 72 } } },
+  ];
+
+  const plan = await planPokemonStatClashChallenge({
+    template: showcaseTemplate,
+    pokedexRows: showcaseRows,
+    seed: 'stat-clash-showcase-power',
+    assetInventory,
+  });
+
+  assert.equal(plan.selection.pool_key, 'showcase_power');
+  assert.equal(plan.selection.pool_selector, 'mega_legendary_mythical');
+  assert.equal(plan.selection.pool_weight, 3);
+  assert.equal(plan.selection.pool_forced, false);
+  assert.equal(plan.selection.pool_subject_count, 4);
+  assert.equal(
+    plan.rounds[0].candidates.some((candidate) => candidate.subject.slug === 'rattata'),
+    false,
+  );
+});
+
+test('stat-clash planner can force a configured pool by weight for operator previews', async () => {
+  const forcedTemplate = JSON.parse(JSON.stringify(template));
+  forcedTemplate.selection_rules.round_count = 1;
+  forcedTemplate.selection_rules.round_count_weights = { medium: 1 };
+  forcedTemplate.selection_rules.round_count_levels = { medium: { round_count: 1 } };
+  forcedTemplate.selection_rules.stat_pool = ['defense'];
+  forcedTemplate.selection_rules.force_pool_key = '2';
+  forcedTemplate.selection_rules.pool_variants = [
+    {
+      key: 'showcase_power',
+      label: 'Mega / Legendary / Mythical',
+      selector: 'mega_legendary_mythical',
+      weight: 3,
+    },
+    {
+      key: 'final_evolution',
+      label: 'Final Evolutions',
+      selector: 'final_evolution_only',
+      weight: 2,
+    },
+    {
+      key: 'all',
+      label: 'All Pokemon',
+      selector: 'all',
+      weight: 1,
+    },
+  ];
+  const forcedRows = [
+    ...pokedexRows.slice(0, 4).map((row, index) => ({
+      ...row,
+      id: `forced-final-${index}`,
+      metadata: {
+        ...(row.metadata || {}),
+        is_final_evolution: true,
+        is_legendary: false,
+        is_mythical: false,
+        pokemon_api: {
+          ...(row.metadata?.pokemon_api || {}),
+          is_mega: false,
+        },
+      },
+    })),
+    ...pokedexRows.slice(4, 8).map((row, index) => ({
+      ...row,
+      id: `forced-base-${index}`,
+      metadata: {
+        ...(row.metadata || {}),
+        is_final_evolution: false,
+        evolution_stage: 'base',
+      },
+    })),
+  ];
+
+  const plan = await planPokemonStatClashChallenge({
+    template: forcedTemplate,
+    pokedexRows: forcedRows,
+    seed: 'stat-clash-force-weight-two',
+    assetInventory,
+  });
+
+  assert.equal(plan.selection.pool_key, 'final_evolution');
+  assert.equal(plan.selection.pool_selector, 'final_evolution_only');
+  assert.equal(plan.selection.pool_weight, 2);
+  assert.equal(plan.selection.pool_forced, true);
+  assert.equal(plan.selection.pool_subject_count, 4);
+  assert.equal(
+    plan.rounds[0].candidates.every((candidate) => candidate.subject.id.startsWith('forced-final-')),
+    true,
+  );
+});
+
+test('stat-clash planner skips undersized specialty pools and falls back to all Pokemon', async () => {
+  const fallbackTemplate = JSON.parse(JSON.stringify(template));
+  fallbackTemplate.selection_rules.round_count = 1;
+  fallbackTemplate.selection_rules.round_count_weights = { medium: 1 };
+  fallbackTemplate.selection_rules.round_count_levels = { medium: { round_count: 1 } };
+  fallbackTemplate.selection_rules.stat_pool = ['defense'];
+  fallbackTemplate.selection_rules.pool_variants = [{
+    key: 'showcase_power',
+    label: 'Mega / Legendary / Mythical',
+    selector: 'mega_legendary_mythical',
+    weight: 3,
+  }];
+  const fallbackRows = [
+    { ...pokedexRows[0], id: 'undersized-showcase-1', slug: 'mewtwo', name: 'Mewtwo', metadata: { is_legendary: true, base_stats: { hp: 106, attack: 110, defense: 90, special_attack: 154, special_defense: 90, speed: 130 } } },
+    ...pokedexRows.slice(1, 5).map((row, index) => ({
+      ...row,
+      id: `fallback-ordinary-${index}`,
+      metadata: {
+        ...(row.metadata || {}),
+        is_legendary: false,
+        is_mythical: false,
+        is_final_evolution: index % 2 === 0,
+        pokemon_api: {
+          ...(row.metadata?.pokemon_api || {}),
+          is_mega: false,
+        },
+      },
+    })),
+  ];
+
+  const plan = await planPokemonStatClashChallenge({
+    template: fallbackTemplate,
+    pokedexRows: fallbackRows,
+    seed: 'stat-clash-pool-fallback',
+    assetInventory,
+  });
+
+  assert.equal(plan.selection.pool_key, 'all');
+  assert.equal(plan.selection.pool_selector, 'all');
+  assert.equal(plan.selection.pool_subject_count, fallbackRows.length);
+  assert.equal(plan.rounds[0].candidates.length, 4);
+});
+
+test('stat-clash planner prefers candidate sets within the configured stat spread', async () => {
+  const boundedTemplate = JSON.parse(JSON.stringify(template));
+  boundedTemplate.selection_rules.round_count = 1;
+  boundedTemplate.selection_rules.round_count_weights = { medium: 1 };
+  boundedTemplate.selection_rules.round_count_levels = { medium: { round_count: 1 } };
+  boundedTemplate.selection_rules.stat_pool = ['speed'];
+  boundedTemplate.selection_rules.max_stat_spread = 30;
+  boundedTemplate.selection_rules.min_winner_margin = 6;
+  boundedTemplate.selection_rules.max_winner_margin = 28;
+  const boundedRows = [
+    { ...pokedexRows[0], id: 'bounded-1', slug: 'bounded-1', name: 'Bounded One', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 95 } } },
+    { ...pokedexRows[1], id: 'bounded-2', slug: 'bounded-2', name: 'Bounded Two', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 86 } } },
+    { ...pokedexRows[2], id: 'bounded-3', slug: 'bounded-3', name: 'Bounded Three', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 74 } } },
+    { ...pokedexRows[3], id: 'bounded-4', slug: 'bounded-4', name: 'Bounded Four', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 68 } } },
+  ];
+
+  const plan = await planPokemonStatClashChallenge({
+    template: boundedTemplate,
+    pokedexRows: boundedRows,
+    seed: 'stat-clash-bounded-spread',
+    assetInventory,
+  });
+
+  assert.equal(plan.rounds[0].selection_score.exact, true);
+  assert.ok(plan.rounds[0].selection_score.spread <= 30);
+});
+
+test('stat-clash planner falls back to the best available set when max spread is impossible', async () => {
+  const constrainedTemplate = JSON.parse(JSON.stringify(template));
+  constrainedTemplate.selection_rules.round_count = 1;
+  constrainedTemplate.selection_rules.round_count_weights = { medium: 1 };
+  constrainedTemplate.selection_rules.round_count_levels = { medium: { round_count: 1 } };
+  constrainedTemplate.selection_rules.stat_pool = ['speed'];
+  constrainedTemplate.selection_rules.max_stat_spread = 30;
+  constrainedTemplate.selection_rules.min_winner_margin = 6;
+  constrainedTemplate.selection_rules.max_winner_margin = 120;
+  const constrainedRows = [
+    { ...pokedexRows[0], id: 'spread-1', slug: 'spread-1', name: 'Spread One', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 200 } } },
+    { ...pokedexRows[1], id: 'spread-2', slug: 'spread-2', name: 'Spread Two', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 130 } } },
+    { ...pokedexRows[2], id: 'spread-3', slug: 'spread-3', name: 'Spread Three', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 120 } } },
+    { ...pokedexRows[3], id: 'spread-4', slug: 'spread-4', name: 'Spread Four', metadata: { base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 110 } } },
+  ];
+
+  const plan = await planPokemonStatClashChallenge({
+    template: constrainedTemplate,
+    pokedexRows: constrainedRows,
+    seed: 'stat-clash-impossible-spread',
+    assetInventory,
+  });
+
+  assert.equal(plan.rounds[0].candidates.length, 4);
+  assert.equal(plan.rounds[0].selection_score.exact, false);
+  assert.ok(plan.rounds[0].selection_score.spread > 30);
 });
 
 test('stat-clash narration expands abbreviated stat labels for speech', async () => {
@@ -437,6 +647,7 @@ test('stat-clash audio and visual filters include pokeball reveals, timer bar, a
   assert.ok(cryCues.some((cue) => cue.start_seconds === renderPlan.rounds[0].reveal_visual_start_seconds));
   assert.ok(cryCues.some((cue) => cue.volume >= 0.189));
   assert.match(audioFilter, /asplit=12\[osrc0\]|asplit=20\[osrc0\]/u);
+  assert.match(audioFilter, /\[3:a\]aloop=loop=-1:size=2000000000,atrim=0:[0-9.]+,/u);
   assert.match(audioFilter, /timerend0/u);
   assert.match(audioFilter, /cry0/u);
   assert.match(audioFilter, /silenceremove=start_periods=1:start_duration=0\.02:start_threshold=-50dB/u);
