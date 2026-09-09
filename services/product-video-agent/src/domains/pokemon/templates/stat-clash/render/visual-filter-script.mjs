@@ -692,9 +692,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const settledSpriteYOffsetExpression = isStillSpriteFallback
         ? `-${buildStaticSpriteWobbleExpression(round, candidate, template)}`
         : '';
-      const spriteSplitLabels = candidate.is_correct
-        ? `[${spriteIntroInputLabel}][${spriteSettledInputLabel}]`
-        : `[${spriteIntroInputLabel}][${spriteSettledInputLabel}][${spriteGrayInputLabel}]`;
+      const shouldCreateGraySprite = !candidate.is_correct && decoyGrayscaleEnabled;
+      const spriteSplitLabels = shouldCreateGraySprite
+        ? `[${spriteIntroInputLabel}][${spriteSettledInputLabel}][${spriteGrayInputLabel}]`
+        : `[${spriteIntroInputLabel}][${spriteSettledInputLabel}]`;
       filters.push(
         `[${candidateInputIndex}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba,setsar=1[${spriteRawLabel}]`,
       );
@@ -712,7 +713,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         );
       }
       filters.push(
-        `[${spritePreparedLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${candidate.is_correct ? 2 : 3}${spriteSplitLabels}`,
+        `[${spritePreparedLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${shouldCreateGraySprite ? 3 : 2}${spriteSplitLabels}`,
       );
       filters.push(
         `[${currentLabel}][${spriteIntroInputLabel}]overlay=x='${cell.center_x}-w/2':y='${spriteYExpression}+${introYOffset}-h/2':enable='${formatEnableBetween(candidate.intro_start_seconds, candidate.intro_end_seconds)}'[${spriteOverlayLabel}]`,
@@ -723,7 +724,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       currentLabel = settledSpriteLabel;
 
-      if (!candidate.is_correct && decoyGrayscaleEnabled) {
+      if (shouldCreateGraySprite) {
         decoyGrayCandidates.push({
           candidate,
           cell,
