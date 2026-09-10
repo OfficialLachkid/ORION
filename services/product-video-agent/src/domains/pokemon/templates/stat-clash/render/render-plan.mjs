@@ -259,9 +259,9 @@ function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDe
 
   return (Array.isArray(round.candidates) ? round.candidates : []).map((candidate, index) => {
     const revealOrderIndex = orderMap.get(candidate.index) ?? index;
-    const pokeballHoldStartLocal = roundTime(
-      activationStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds),
-    );
+    const pokeballHoldStartLocal = holdPokeballsUntilReveal
+      ? activationStartLocal
+      : roundTime(activationStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds));
     const pokeballStartLocal = roundTime(
       anchorStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds),
     );
@@ -275,9 +275,7 @@ function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDe
       ...candidate,
       intro_start_seconds: roundTime(sceneStartSeconds + introStartLocal),
       intro_end_seconds: roundTime(sceneStartSeconds + introEndLocal),
-      pokeball_hold_start_seconds: roundTime(sceneStartSeconds + (
-        holdPokeballsUntilReveal ? pokeballHoldStartLocal : pokeballStartLocal
-      )),
+      pokeball_hold_start_seconds: roundTime(sceneStartSeconds + pokeballHoldStartLocal),
       pokeball_start_seconds: roundTime(sceneStartSeconds + pokeballStartLocal),
       pokeball_end_seconds: roundTime(sceneStartSeconds + pokeballEndLocal),
       reveal_start_seconds: roundTime(sceneStartSeconds + round.local.reveal_start_seconds + revealVisualDelaySeconds),
