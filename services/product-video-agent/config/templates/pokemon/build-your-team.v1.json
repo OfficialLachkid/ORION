@@ -42,6 +42,12 @@
         "weight": 1
       },
       {
+        "key": "starter",
+        "label": "Starter Pokemon",
+        "selector": "starter_pokemon",
+        "weight": 1
+      },
+      {
         "key": "middle_stage",
         "label": "Middle Stage Evolutions",
         "selector": "middle_stage_evolutions",
@@ -68,8 +74,10 @@
     ]
   },
   "question_contract": {
-    "hook_text": "",
-    "hook_text_variants": [],
+    "hook_text": "Build Your Team",
+    "hook_text_variants": [
+      "Build Your Team"
+    ],
     "prompt_text": "Build your team: {pool_label}",
     "prompt_text_variants": [
       "Build your team: {pool_label}",
@@ -87,6 +95,8 @@
       "blur_sigma": 3
     },
     "text": {
+      "hook_y": 650,
+      "hook_font_size": 132,
       "prompt_y": 150,
       "prompt_font_size": 102,
       "reveal_y": 285,
@@ -136,6 +146,8 @@
       "enabled": false
     },
     "rounds": {
+      "hook_hold_seconds": 1.15,
+      "hook_transition_duration_seconds": 0.42,
       "pre_countdown_hold_seconds": 0.18,
       "reveal_hold_seconds": 0.75,
       "transition_duration_seconds": 0.42,

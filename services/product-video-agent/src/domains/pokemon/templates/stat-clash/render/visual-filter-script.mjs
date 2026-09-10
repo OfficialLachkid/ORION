@@ -492,6 +492,31 @@ function overlayCounterText(
   return counterLabel;
 }
 
+function buildIntroHookScene(filters, {
+  backgroundLabel,
+  hook,
+  textLayout,
+  fontPart,
+  textOutlineWidth,
+}) {
+  const baseLabel = 'introhookbase';
+  const textLabel = 'introhooktext';
+  const hookScaleExpression = buildAnimatedPopSettleExpression(
+    hook.text_start_seconds,
+    0.32,
+    0.62,
+    1.16,
+    1,
+  );
+  filters.push(
+    `[${backgroundLabel}]trim=duration=${hook.scene_duration_seconds},setpts=PTS-STARTPTS[${baseLabel}]`,
+  );
+  filters.push(
+    `[${baseLabel}]drawtext=text='${escapeDrawtextText(hook.text)}'${fontPart}:fontcolor=white:fontsize='${textLayout.hook_font_size}*(${hookScaleExpression})':borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(textLayout.hook_y, hook.text_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(hook.text_start_seconds, hook.text_end_seconds)}':enable='${formatEnableBetween(hook.text_start_seconds, hook.text_end_seconds)}'[${textLabel}]`,
+  );
+  return textLabel;
+}
+
 function localizeCandidateTiming(candidate, round) {
   return {
     ...candidate,
@@ -556,10 +581,26 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
   const decoyGrayscaleEnabled = template?.reveal?.decoy_grayscale_enabled !== false;
 
+  const hasIntroHook = Boolean(renderPlan?.intro_hook?.enabled);
+  const hookBackgroundLabel = hasIntroHook ? 'bghook' : null;
   const backgroundLabels = Array.from({ length: roundCount }, (_unused, index) => `bg${index}`);
+  const allBackgroundLabels = [
+    ...(hasIntroHook ? [hookBackgroundLabel] : []),
+    ...backgroundLabels,
+  ];
   filters.push(
-    `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,split=${roundCount}${backgroundLabels.map((label) => `[${label}]`).join('')}`,
+    `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,split=${allBackgroundLabels.length}${allBackgroundLabels.map((label) => `[${label}]`).join('')}`,
   );
+
+  const introHookSceneLabel = hasIntroHook
+    ? buildIntroHookScene(filters, {
+      backgroundLabel: hookBackgroundLabel,
+      hook: renderPlan.intro_hook,
+      textLayout: renderPlan.text_layout,
+      fontPart,
+      textOutlineWidth,
+    })
+    : null;
 
   renderPlan.rounds.forEach((round, roundIndex) => {
     const roundInputs = inputRefs.rounds[roundIndex] || { candidates: [] };
@@ -877,7 +918,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   });
 
   let currentSceneOutput = 'scene0';
-  for (let roundIndex = 1; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
+  let firstRoundIndex = 1;
+  if (introHookSceneLabel) {
+    const hookOutputLabel = 'sceneout0';
+    filters.push(
+      `[${introHookSceneLabel}][scene0]xfade=transition=slideleft:duration=${renderPlan.intro_hook.transition_duration_seconds}:offset=${renderPlan.rounds[0].scene_start_seconds}[${hookOutputLabel}]`,
+    );
+    currentSceneOutput = hookOutputLabel;
+    firstRoundIndex = 1;
+  }
+  for (let roundIndex = firstRoundIndex; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
     const nextOutputLabel = `sceneout${roundIndex}`;
     const transitionDuration = renderPlan.rounds[roundIndex - 1].transition_duration_seconds;
     filters.push(

@@ -33,14 +33,18 @@ const fixtureAssets = [
 ];
 
 const fixturePokemon = [
-  ['pichu', 'Pichu', { is_baby: true, evolution_stage: 'baby' }],
-  ['cleffa', 'Cleffa', { is_baby: true, evolution_stage: 'baby' }],
-  ['igglybuff', 'Igglybuff', { is_baby: true, evolution_stage: 'baby' }],
-  ['togepi', 'Togepi', { is_baby: true, evolution_stage: 'baby' }],
+  ['pichu', 'Pichu', { evolution_stage: 'base' }],
+  ['cleffa', 'Cleffa', { evolution_stage: 'base' }],
+  ['igglybuff', 'Igglybuff', { evolution_stage: 'base' }],
+  ['togepi', 'Togepi', { evolution_stage: 'base' }],
   ['charmander', 'Charmander', { evolution_stage: 'base' }],
   ['squirtle', 'Squirtle', { evolution_stage: 'base' }],
   ['bulbasaur', 'Bulbasaur', { evolution_stage: 'base' }],
   ['cyndaquil', 'Cyndaquil', { evolution_stage: 'base' }],
+  ['caterpie', 'Caterpie', { evolution_stage: 'base' }],
+  ['weedle', 'Weedle', { evolution_stage: 'base' }],
+  ['pidgey', 'Pidgey', { evolution_stage: 'base' }],
+  ['ralts', 'Ralts', { evolution_stage: 'base' }],
   ['charmeleon', 'Charmeleon', { evolution_stage: 'middle' }],
   ['wartortle', 'Wartortle', { evolution_stage: 'middle' }],
   ['ivysaur', 'Ivysaur', { evolution_stage: 'middle' }],
@@ -49,6 +53,7 @@ const fixturePokemon = [
   ['blastoise', 'Blastoise', { is_final_evolution: true, evolution_stage: 'final' }],
   ['venusaur', 'Venusaur', { is_final_evolution: true, evolution_stage: 'final' }],
   ['meganium', 'Meganium', { is_final_evolution: true, evolution_stage: 'final' }],
+  ['charizard-mega-x', 'Mega Charizard X', { is_final_evolution: true, evolution_stage: 'final', pokemon_api: { is_mega: true } }],
   ['mewtwo', 'Mewtwo', { is_legendary: true }],
   ['mew', 'Mew', { is_mythical: true }],
   ['lugia', 'Lugia', { is_legendary: true }],
@@ -107,7 +112,8 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.template_key, 'build-your-team');
   assert.equal(template.selection_rules.round_count, 6);
   assert.equal(template.selection_rules.candidate_count, 4);
-  assert.equal(template.selection_rules.pool_variants.length, 6);
+  assert.equal(template.selection_rules.pool_variants.length, 7);
+  assert.equal(template.question_contract.hook_text, 'Build Your Team');
   assert.equal(template.layout.stat_values.enabled, false);
   assert.equal(template.reveal.decoy_grayscale_enabled, false);
 });
@@ -143,14 +149,16 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
   assert.equal(plan.selection.candidate_count, 4);
   assert.equal(plan.selection.display_subject_count, 24);
   assert.equal(plan.selection.pool_fallback_count, 0);
-  assert.deepEqual(new Set(plan.selection.pool_keys), new Set([
+  assert.equal(plan.selection.pool_keys.length, 6);
+  assert.ok(plan.selection.pool_keys.every((poolKey) => [
     'baby',
     'first_stage',
+    'starter',
     'middle_stage',
     'final_stage',
     'legendary_mythical',
     'dynamax',
-  ]));
+  ].includes(poolKey)));
   assert.equal(plan.rounds.length, 6);
   for (const round of plan.rounds) {
     assert.equal(round.candidates.length, 4);
@@ -160,6 +168,49 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
     assert.ok(round.candidates.every((candidate) => candidate.subject.cry_path.endsWith('.ogg')));
   }
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Build Your Team$/u);
+});
+
+test('build-your-team pool selectors handle babies starters and non-mega final stages', async () => {
+  const sevenRoundTemplate = {
+    ...template,
+    selection_rules: {
+      ...template.selection_rules,
+      round_count: 7,
+    },
+  };
+  const plan = await planPokemonBuildYourTeamChallenge({
+    template: sevenRoundTemplate,
+    pokedexRows,
+    seed: 'build-team-seven-pools',
+    assetInventory,
+  });
+
+  assert.deepEqual(new Set(plan.selection.pool_keys), new Set([
+    'baby',
+    'first_stage',
+    'starter',
+    'middle_stage',
+    'final_stage',
+    'legendary_mythical',
+    'dynamax',
+  ]));
+  const babyRound = plan.rounds.find((round) => round.pool_key === 'baby');
+  const starterRound = plan.rounds.find((round) => round.pool_key === 'starter');
+  const finalRound = plan.rounds.find((round) => round.pool_key === 'final_stage');
+  assert.ok(babyRound.candidates.every((candidate) => (
+    ['pichu', 'cleffa', 'igglybuff', 'togepi'].includes(candidate.subject.slug)
+  )));
+  assert.ok(starterRound.candidates.every((candidate) => (
+    ['charmander', 'squirtle', 'bulbasaur', 'cyndaquil'].includes(candidate.subject.slug)
+  )));
+  assert.ok(
+    finalRound.candidates.every((candidate) => (
+      !candidate.subject.slug.includes('-mega')
+      && !candidate.subject.slug.startsWith('mega-')
+      && !candidate.subject.slug.includes('gmax')
+    )),
+    JSON.stringify(finalRound.candidates.map((candidate) => candidate.subject.slug)),
+  );
 });
 
 test('build-your-team render plan reuses grid reveal without stat or decoy reveal overlays', async () => {
@@ -202,8 +253,10 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   });
 
   assert.equal(renderPlan.rounds.length, 6);
+  assert.equal(renderPlan.intro_hook.text, 'Build Your Team');
   assert.equal(renderPlan.stat_value_layout.enabled, false);
-  assert.match(visualFilter.script, /split=6\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
+  assert.match(visualFilter.script, /split=7\[bghook\]\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
+  assert.match(visualFilter.script, /introhooktext/u);
   assert.match(visualFilter.script, /scene0platformv0/u);
   assert.match(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /scene0spriteform0whitesrc/u);

@@ -22,6 +22,58 @@ const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
 const DEFAULT_FINAL_HOLD_SECONDS = 1;
 const DEFAULT_SAMPLING_ATTEMPTS = 120;
 
+const BABY_POKEMON_SPECIES_SLUGS = new Set([
+  'pichu',
+  'cleffa',
+  'igglybuff',
+  'togepi',
+  'tyrogue',
+  'smoochum',
+  'elekid',
+  'magby',
+  'azurill',
+  'wynaut',
+  'budew',
+  'chingling',
+  'bonsly',
+  'mime-jr',
+  'happiny',
+  'munchlax',
+  'riolu',
+  'mantyke',
+  'toxel',
+]);
+
+const STARTER_POKEMON_SPECIES_SLUGS = new Set([
+  'bulbasaur',
+  'charmander',
+  'squirtle',
+  'chikorita',
+  'cyndaquil',
+  'totodile',
+  'treecko',
+  'torchic',
+  'mudkip',
+  'turtwig',
+  'chimchar',
+  'piplup',
+  'snivy',
+  'tepig',
+  'oshawott',
+  'chespin',
+  'fennekin',
+  'froakie',
+  'rowlet',
+  'litten',
+  'popplio',
+  'grookey',
+  'scorbunny',
+  'sobble',
+  'sprigatito',
+  'fuecoco',
+  'quaxly',
+]);
+
 const readablePathAvailabilityCache = new Map();
 const cryDownloadCache = new Map();
 const crySourceUrlCache = new Map();
@@ -85,6 +137,18 @@ function normalizeSubjectSlug(subject) {
   ).trim().toLowerCase();
 }
 
+function normalizeSubjectSpeciesSlug(subject) {
+  return normalizeSlug(
+    readSubjectPokemonApiMetadata(subject, 'species_name')
+    || subject?.species_slug
+    || subject?.metadata?.species_slug
+    || readSubjectPokemonApiMetadata(subject, 'pokemon_name')
+    || subject?.slug
+    || subject?.name
+    || '',
+  );
+}
+
 function readSubjectPokemonApiMetadata(subject, key) {
   const pokemonApi = subject?.metadata?.pokemon_api && typeof subject.metadata.pokemon_api === 'object'
     ? subject.metadata.pokemon_api
@@ -141,7 +205,31 @@ function isBabyLikeSubject(subject) {
   ]))) {
     return true;
   }
-  return readEvolutionStage(subject) === 'baby';
+  return readEvolutionStage(subject) === 'baby'
+    || BABY_POKEMON_SPECIES_SLUGS.has(normalizeSubjectSpeciesSlug(subject));
+}
+
+function isStarterLikeSubject(subject) {
+  return STARTER_POKEMON_SPECIES_SLUGS.has(normalizeSubjectSpeciesSlug(subject));
+}
+
+function isMegaLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
+    'is_mega',
+    'mega',
+    'isMega',
+  ]))) {
+    return true;
+  }
+  if (readSubjectPokemonApiMetadata(subject, 'is_mega') === true) {
+    return true;
+  }
+  const slug = normalizeSubjectSlug(subject);
+  const formName = String(readSubjectPokemonApiMetadata(subject, 'form_name') || '').trim().toLowerCase();
+  return slug.includes('-mega')
+    || slug.includes('mega-')
+    || slug.startsWith('mega-')
+    || formName.includes('mega');
 }
 
 function isFirstStageLikeSubject(subject) {
@@ -325,14 +413,25 @@ function filterSubjectsForBuildYourTeamPool(subjects = [], pool = {}) {
     case 'first_stage_evolutions':
       return subjects.filter((subject) => (
         !isLegendaryOrMythicalLikeSubject(subject)
+        && !isMegaLikeSubject(subject)
         && !isDynamaxLikeSubject(subject)
+        && !isStarterLikeSubject(subject)
         && isFirstStageLikeSubject(subject)
+      ));
+    case 'starter':
+    case 'starter_only':
+    case 'starter_pokemon':
+      return subjects.filter((subject) => (
+        !isMegaLikeSubject(subject)
+        && !isDynamaxLikeSubject(subject)
+        && isStarterLikeSubject(subject)
       ));
     case 'middle_stage':
     case 'middle_stage_only':
     case 'middle_stage_evolutions':
       return subjects.filter((subject) => (
         !isLegendaryOrMythicalLikeSubject(subject)
+        && !isMegaLikeSubject(subject)
         && !isDynamaxLikeSubject(subject)
         && isMiddleStageLikeSubject(subject)
       ));
@@ -341,6 +440,7 @@ function filterSubjectsForBuildYourTeamPool(subjects = [], pool = {}) {
     case 'final_stage_evolutions':
       return subjects.filter((subject) => (
         !isLegendaryOrMythicalLikeSubject(subject)
+        && !isMegaLikeSubject(subject)
         && !isDynamaxLikeSubject(subject)
         && isFinalEvolutionLikeSubject(subject)
       ));

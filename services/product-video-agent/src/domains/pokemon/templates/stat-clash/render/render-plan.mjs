@@ -145,6 +145,8 @@ function buildTimerBarLayout(template, gridLayout = { cells: [] }) {
 
 function buildTextLayout(template) {
   return {
+    hook_y: ensureNumber(template?.layout?.text?.hook_y, 650),
+    hook_font_size: ensureNumber(template?.layout?.text?.hook_font_size, 132),
     prompt_y: ensureNumber(template?.layout?.text?.prompt_y, 170),
     prompt_font_size: ensureNumber(template?.layout?.text?.prompt_font_size, 100),
     reveal_y: ensureNumber(template?.layout?.text?.reveal_y, 285),
@@ -152,6 +154,31 @@ function buildTextLayout(template) {
     counter_x: ensureNumber(template?.layout?.text?.counter_x, 72),
     counter_y: ensureNumber(template?.layout?.text?.counter_y, 144),
     counter_font_size: ensureNumber(template?.layout?.text?.counter_font_size, 96),
+  };
+}
+
+function buildIntroHookScene(template) {
+  const hookText = String(template?.question_contract?.hook_text || '').trim();
+  if (!hookText) {
+    return null;
+  }
+  const holdSeconds = roundTime(Math.max(
+    0.3,
+    ensureNumber(template?.layout?.rounds?.hook_hold_seconds, 1.15),
+  ));
+  const transitionDurationSeconds = roundTime(Math.max(
+    0,
+    ensureNumber(template?.layout?.rounds?.hook_transition_duration_seconds, 0.42),
+  ));
+  return {
+    enabled: true,
+    text: hookText,
+    scene_start_seconds: 0,
+    round_start_seconds: holdSeconds,
+    scene_duration_seconds: roundTime(holdSeconds + transitionDurationSeconds),
+    transition_duration_seconds: transitionDurationSeconds,
+    text_start_seconds: 0.04,
+    text_end_seconds: roundTime(holdSeconds + transitionDurationSeconds),
   };
 }
 
@@ -323,6 +350,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const gridLayout = buildGridLayout(template, plan?.rounds?.[0]?.candidates?.length || 4);
   const timerLayout = buildTimerBarLayout(template, gridLayout);
   const statValueLayout = buildStatValueLayout(template);
+  const introHook = buildIntroHookScene(template);
   const rendererSettings = {
     candidate_intro_initial_delay_seconds: roundTime(Math.max(
       0,
@@ -352,6 +380,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const renderedRounds = buildRenderedRounds({
     rounds,
     template,
+    startingSceneStart: introHook?.round_start_seconds || 0,
   });
 
   return {
@@ -360,7 +389,11 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       height: ensureNumber(template?.canvas?.height, 1920),
       fps: ensureNumber(template?.canvas?.fps, 30),
     },
-    total_duration_seconds: renderedRounds.at(-1)?.scene_end_seconds || 0,
+    total_duration_seconds: Math.max(
+      introHook?.scene_duration_seconds || 0,
+      renderedRounds.at(-1)?.scene_end_seconds || 0,
+    ),
+    intro_hook: introHook,
     timer_layout: timerLayout,
     text_layout: textLayout,
     stat_value_layout: statValueLayout,
