@@ -27,6 +27,8 @@
     "candidate_count": 4,
     "mode": "team_builder",
     "sampling_attempts_per_round": 120,
+    "shiny_chance_per_candidate": 0.08,
+    "max_shiny_per_round": 1,
     "pool_order_mode": "shuffle_each_once",
     "pool_variants": [
       {
@@ -85,7 +87,13 @@
       "Choose your {pool_label}"
     ],
     "reveal_text": "",
-    "reveal_text_variants": []
+    "reveal_text_variants": [],
+    "final_prompt_text": "Who did you choose?",
+    "final_prompt_text_variants": [
+      "Who did you choose?",
+      "What's your team?",
+      "Share your team in the comments!"
+    ]
   },
   "layout": {
     "background": {
@@ -102,7 +110,7 @@
       "reveal_y": 285,
       "reveal_font_size": 92,
       "outline_width": 8,
-      "show_counter": true,
+      "show_counter": false,
       "counter_x": 72,
       "counter_y": 144,
       "counter_font_size": 96,
@@ -135,7 +143,7 @@
       "option_center_y_offset_px": 82
     },
     "timer": {
-      "countdown_from": 4,
+      "countdown_from": 3,
       "countdown_to": 0,
       "bar_height_px": 38,
       "bar_horizontal_inset_px": 20,
@@ -149,7 +157,7 @@
       "hook_hold_seconds": 1.15,
       "hook_transition_duration_seconds": 0.42,
       "pre_countdown_hold_seconds": 0.18,
-      "reveal_hold_seconds": 0.75,
+      "reveal_hold_seconds": 2.4,
       "transition_duration_seconds": 0.42,
       "final_hold_seconds": 1
     }
@@ -206,17 +214,24 @@
     "candidate_intro_initial_delay_seconds": 0.1,
     "candidate_intro_stagger_seconds": 0.24,
     "candidate_intro_duration_seconds": 0.22,
+    "candidate_intro_anchor": "reveal",
     "candidate_intro_y_offset_px": 42,
     "candidate_intro_scale_initial": 0.68,
     "candidate_intro_scale_peak": 1.08,
     "candidate_intro_scale_settle": 1,
     "candidate_forming_enabled": true,
     "candidate_forming_duration_seconds": 1,
+    "hold_pokeballs_until_reveal": true,
+    "hook_pokeballs_enabled": true,
+    "hook_pokeball_intro_duration_seconds": 0.56,
+    "hook_pokeball_intro_stagger_seconds": 0.32,
     "intro_pokeball_hold_seconds": 0.16,
     "intro_pokeball_lead_seconds": 0.18,
     "intro_platform_lead_seconds": 0.08,
     "intro_pokeball_scale_multiplier": 0.52,
     "intro_pokeball_center_y_offset_px": 200,
+    "fallback_sprite_wobble_amplitude_px": 6,
+    "fallback_sprite_wobble_cycle_length_multiplier": 3,
     "stat_reveal_fade_duration_seconds": 0.22,
     "decoy_grayscale_fade_duration_seconds": 0.22
   }

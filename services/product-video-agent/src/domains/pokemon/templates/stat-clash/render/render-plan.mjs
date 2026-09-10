@@ -182,6 +182,13 @@ function buildIntroHookScene(template) {
   };
 }
 
+function resolveCandidateIntroAnchor(template) {
+  const configuredAnchor = String(template?.renderer?.candidate_intro_anchor || 'activation')
+    .trim()
+    .toLowerCase();
+  return configuredAnchor === 'reveal' ? 'reveal' : 'activation';
+}
+
 function buildStatValueLayout(template) {
   return {
     enabled: template?.layout?.stat_values?.enabled !== false,
@@ -215,6 +222,13 @@ function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDe
     0,
     ensureNumber(round?.local?.activation_start_seconds, 0),
   ));
+  const candidateIntroAnchor = resolveCandidateIntroAnchor(template);
+  const anchorStartLocal = candidateIntroAnchor === 'reveal'
+    ? roundTime(Math.max(
+      activationStartLocal,
+      ensureNumber(round?.local?.reveal_visual_start_seconds, round?.local?.reveal_start_seconds || activationStartLocal),
+    ))
+    : activationStartLocal;
   const introInitialDelay = Math.max(
     0,
     ensureNumber(template?.renderer?.candidate_intro_initial_delay_seconds, 0.1),
@@ -243,7 +257,7 @@ function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDe
   return (Array.isArray(round.candidates) ? round.candidates : []).map((candidate, index) => {
     const revealOrderIndex = orderMap.get(candidate.index) ?? index;
     const pokeballStartLocal = roundTime(
-      activationStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds),
+      anchorStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds),
     );
     const introStartLocal = roundTime(pokeballStartLocal + pokeballLeadSeconds);
     const introEndLocal = roundTime(introStartLocal + introDurationSeconds);
@@ -271,6 +285,7 @@ function buildRenderedRounds({ rounds, template, startingSceneStart = 0 }) {
     0,
     ensureNumber(template?.reveal?.visual_delay_seconds, DEFAULT_REVEAL_VISUAL_DELAY_SECONDS),
   ));
+  const candidateIntroAnchor = resolveCandidateIntroAnchor(template);
   let currentSceneStart = roundTime(startingSceneStart);
 
   return rounds.map((round, index) => {
@@ -327,13 +342,15 @@ function buildRenderedRounds({ rounds, template, startingSceneStart = 0 }) {
       renderedRound.scene_start_seconds,
       revealVisualDelaySeconds,
     );
-    renderedRound.minimum_scene_lead_seconds = roundTime(Math.max(
-      sceneLeadSeconds,
-      ...renderedRound.candidates.map((candidate) => Math.max(
-        candidate.intro_end_seconds,
-        candidate.pokeball_end_seconds,
-      ) - renderedRound.scene_start_seconds + 0.08),
-    ));
+    renderedRound.minimum_scene_lead_seconds = candidateIntroAnchor === 'reveal'
+      ? roundTime(sceneLeadSeconds)
+      : roundTime(Math.max(
+        sceneLeadSeconds,
+        ...renderedRound.candidates.map((candidate) => Math.max(
+          candidate.intro_end_seconds,
+          candidate.pokeball_end_seconds,
+        ) - renderedRound.scene_start_seconds + 0.08),
+      ));
     renderedRound.countdown_numbers = buildCountdownMoments(
       renderedRound,
       round.countdown_from,
@@ -376,6 +393,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       0,
       ensureNumber(template?.renderer?.intro_pokeball_lead_seconds, 0.18),
     )),
+    candidate_intro_anchor: resolveCandidateIntroAnchor(template),
   };
   const renderedRounds = buildRenderedRounds({
     rounds,
@@ -466,6 +484,7 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
           rendererSettings.intro_pokeball_lead_seconds,
           0.18,
         ),
+        candidate_intro_anchor: rendererSettings.candidate_intro_anchor,
       },
     },
   });

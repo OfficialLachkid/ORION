@@ -1,10 +1,12 @@
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
+  buildPokeQuizzAnimatedShinySpritePath,
   buildPokeQuizzAnimatedSpritePath,
   buildPokeQuizzCryPath,
   buildPokeQuizzMirroredSpritePath,
   buildPokeQuizzPreviewDirectory,
+  buildPokeQuizzShinySpritePath,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
 import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selection-state.mjs';
@@ -21,6 +23,8 @@ const DEFAULT_PRE_COUNTDOWN_HOLD_SECONDS = 0.18;
 const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
 const DEFAULT_FINAL_HOLD_SECONDS = 1;
 const DEFAULT_SAMPLING_ATTEMPTS = 120;
+const DEFAULT_SHINY_CHANCE_PER_CANDIDATE = 0;
+const DEFAULT_MAX_SHINY_PER_ROUND = 1;
 
 const BABY_POKEMON_SPECIES_SLUGS = new Set([
   'pichu',
@@ -106,6 +110,10 @@ function ensurePositiveInteger(value, fallback) {
 function ensureFiniteNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampNumber(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }
 
 async function canAccessPath(filePath) {
@@ -570,7 +578,31 @@ async function resolveBuildYourTeamCrySourceUrl(subject = {}) {
   return crySourceUrlCache.get(normalizedLookupKey);
 }
 
-async function resolveRenderSpritePath(subject) {
+async function resolveShinyRenderSpritePath(subject) {
+  const explicitAnimatedPath = String(subject?.shiny_animated_sprite_path || '').trim();
+  if (explicitAnimatedPath && await canAccessPath(explicitAnimatedPath)) {
+    return explicitAnimatedPath;
+  }
+
+  const derivedAnimatedPath = buildPokeQuizzAnimatedShinySpritePath(subject);
+  if (derivedAnimatedPath && await canAccessPath(derivedAnimatedPath)) {
+    return derivedAnimatedPath;
+  }
+
+  const explicitSpritePath = String(subject?.shiny_sprite_path || '').trim();
+  if (explicitSpritePath && await canAccessPath(explicitSpritePath)) {
+    return explicitSpritePath;
+  }
+
+  const derivedSpritePath = buildPokeQuizzShinySpritePath(subject);
+  if (derivedSpritePath && await canAccessPath(derivedSpritePath)) {
+    return derivedSpritePath;
+  }
+
+  return '';
+}
+
+async function resolveNormalRenderSpritePath(subject) {
   const explicitAnimatedPath = String(subject?.animated_sprite_path || '').trim();
   if (explicitAnimatedPath && await canAccessPath(explicitAnimatedPath)) {
     return explicitAnimatedPath;
@@ -587,6 +619,23 @@ async function resolveRenderSpritePath(subject) {
   }
 
   return String(subject?.sprite_path || '').trim();
+}
+
+async function resolveRenderSpriteAsset(subject, { shiny = false } = {}) {
+  if (shiny) {
+    const shinySpritePath = await resolveShinyRenderSpritePath(subject);
+    if (shinySpritePath) {
+      return {
+        path: shinySpritePath,
+        variant: 'shiny',
+      };
+    }
+  }
+
+  return {
+    path: await resolveNormalRenderSpritePath(subject),
+    variant: 'normal',
+  };
 }
 
 async function resolveCryPath(subject) {
@@ -624,7 +673,9 @@ async function resolveCryPath(subject) {
   return cryDownloadCache.get(derivedCryPath);
 }
 
-function sanitizeSubject(subject, renderSpritePath, cryPath) {
+function sanitizeSubject(subject, renderSpritePath, cryPath, {
+  isShinyVariant = false,
+} = {}) {
   const baseStats = normalizeBaseStats(subject?.metadata?.base_stats || subject?.base_stats || {});
   return {
     id: String(subject?.id || '').trim() || normalizeSlug(subject?.slug || subject?.name),
@@ -637,7 +688,11 @@ function sanitizeSubject(subject, renderSpritePath, cryPath) {
     region: subject?.region || null,
     sprite_path: String(subject?.sprite_path || '').trim(),
     animated_sprite_path: String(subject?.animated_sprite_path || '').trim(),
+    shiny_sprite_path: String(subject?.shiny_sprite_path || '').trim(),
+    shiny_animated_sprite_path: String(subject?.shiny_animated_sprite_path || '').trim(),
     render_sprite_path: renderSpritePath,
+    render_variant: isShinyVariant ? 'shiny' : 'normal',
+    is_shiny_variant: isShinyVariant,
     sprite_source_url: subject?.sprite_source_url || null,
     types: buildTypeDisplay(subject?.types || []),
     base_stats: baseStats,
@@ -648,6 +703,42 @@ function sanitizeSubject(subject, renderSpritePath, cryPath) {
       base_stats: baseStats,
     },
   };
+}
+
+function selectShinyCandidateIndexes({ candidateCount, template, random }) {
+  const shinyChance = clampNumber(
+    ensureFiniteNumber(
+      template?.selection_rules?.shiny_chance_per_candidate,
+      DEFAULT_SHINY_CHANCE_PER_CANDIDATE,
+    ),
+    0,
+    1,
+  );
+  const maxShinyPerRound = Math.max(
+    0,
+    ensurePositiveInteger(
+      template?.selection_rules?.max_shiny_per_round,
+      DEFAULT_MAX_SHINY_PER_ROUND,
+    ),
+  );
+  if (shinyChance <= 0 || maxShinyPerRound <= 0 || candidateCount <= 0) {
+    return new Set();
+  }
+
+  const selectedIndexes = [];
+  for (const candidateIndex of shuffle(
+    Array.from({ length: candidateCount }, (_unused, index) => index),
+    random,
+  )) {
+    if (random() >= shinyChance) {
+      continue;
+    }
+    selectedIndexes.push(candidateIndex);
+    if (selectedIndexes.length >= maxShinyPerRound) {
+      break;
+    }
+  }
+  return new Set(selectedIndexes);
 }
 
 function chooseSamplePool(subjects, usedSubjectIds, candidateCount) {
@@ -730,7 +821,7 @@ export async function planPokemonBuildYourTeamChallenge({
   );
   const selectedTimerEndSoundPath = selectTemplateScopedSound(template, inventory, 'timer_end', 'timer_end');
   const selectedIntroRevealSoundPath = selectTemplateScopedSound(template, inventory, 'intro_slot_reveal', 'pokeball_intro');
-  const revealHoldSeconds = Number(template?.layout?.rounds?.reveal_hold_seconds ?? DEFAULT_REVEAL_HOLD_SECONDS);
+  const configuredRevealHoldSeconds = Number(template?.layout?.rounds?.reveal_hold_seconds ?? DEFAULT_REVEAL_HOLD_SECONDS);
   const preCountdownHoldSeconds = Number(template?.layout?.rounds?.pre_countdown_hold_seconds ?? DEFAULT_PRE_COUNTDOWN_HOLD_SECONDS);
   const transitionDurationSeconds = Number(template?.layout?.rounds?.transition_duration_seconds ?? DEFAULT_TRANSITION_DURATION_SECONDS);
   const finalHoldSeconds = Number(template?.layout?.rounds?.final_hold_seconds ?? DEFAULT_FINAL_HOLD_SECONDS);
@@ -750,12 +841,20 @@ export async function planPokemonBuildYourTeamChallenge({
     template?.renderer?.intro_pokeball_lead_seconds,
     0.18,
   );
-  const sceneLeadSeconds = Number((
+  const candidateIntroAnchor = String(template?.renderer?.candidate_intro_anchor || 'activation').trim().toLowerCase();
+  const candidateIntroWindowSeconds = Number((
     introInitialDelaySeconds
     + Math.max(0, candidateCount - 1) * introStaggerSeconds
     + introPokeballLeadSeconds
     + introDurationSeconds
+  ).toFixed(3));
+  const sceneLeadSeconds = Number((
+    (candidateIntroAnchor === 'reveal' ? 0 : candidateIntroWindowSeconds)
     + preCountdownHoldSeconds
+  ).toFixed(3));
+  const revealHoldSeconds = Number(Math.max(
+    configuredRevealHoldSeconds,
+    candidateIntroAnchor === 'reveal' ? candidateIntroWindowSeconds + 1.05 : configuredRevealHoldSeconds,
   ).toFixed(3));
   const samplingAttempts = ensurePositiveInteger(
     template?.selection_rules?.sampling_attempts_per_round,
@@ -782,12 +881,19 @@ export async function planPokemonBuildYourTeamChallenge({
       Array.from({ length: candidateCount }, (_unused, index) => index),
       random,
     );
-    const resolvedSubjects = await Promise.all(selection.sample.map(async (subject) => {
-      const [renderSpritePath, cryPath] = await Promise.all([
-        resolveRenderSpritePath(subject),
+    const shinyCandidateIndexes = selectShinyCandidateIndexes({
+      candidateCount,
+      template,
+      random,
+    });
+    const resolvedSubjects = await Promise.all(selection.sample.map(async (subject, index) => {
+      const [renderSpriteAsset, cryPath] = await Promise.all([
+        resolveRenderSpriteAsset(subject, { shiny: shinyCandidateIndexes.has(index) }),
         resolveCryPath(subject),
       ]);
-      return sanitizeSubject(subject, renderSpritePath, cryPath);
+      return sanitizeSubject(subject, renderSpriteAsset.path, cryPath, {
+        isShinyVariant: renderSpriteAsset.variant === 'shiny',
+      });
     }));
     resolvedSubjects.forEach((subject) => usedSubjectIds.add(subject.id));
 
@@ -798,6 +904,13 @@ export async function planPokemonBuildYourTeamChallenge({
       { pool_label: pool.label },
     );
     const spokenPromptText = promptText.replace(/\band\b/giu, 'and');
+    const finalPromptText = roundIndex === roundCount - 1
+      ? pickSeededQuestionText(
+        template?.question_contract?.final_prompt_text,
+        template?.question_contract?.final_prompt_text_variants,
+        random,
+      )
+      : '';
     const candidates = resolvedSubjects.map((subject, index) => ({
       index,
       label: String.fromCharCode(65 + index),
@@ -815,7 +928,7 @@ export async function planPokemonBuildYourTeamChallenge({
       pool_original_subject_count: pool.fallback_subject_count ?? pool.subjects.length,
       prompt_text: promptText,
       spoken_prompt_text: spokenPromptText,
-      reveal_text: '',
+      reveal_text: finalPromptText,
       scene_lead_seconds: sceneLeadSeconds,
       countdown_from: countdownFrom,
       countdown_to: countdownTo,

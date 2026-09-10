@@ -69,6 +69,7 @@ await Promise.all([
   ...fixturePokemon.flatMap(([slug]) => [
     `${slug}.png`,
     `${slug}.gif`,
+    `${slug}-shiny.gif`,
     `${slug}.ogg`,
   ]),
 ].map((filename) => writeFile(mediaPath(filename), 'fixture', 'utf8')));
@@ -85,6 +86,7 @@ const pokedexRows = fixturePokemon.map(([slug, name, metadata], index) => ({
   types: ['normal'],
   sprite_path: mediaPath(`${slug}.png`),
   animated_sprite_path: mediaPath(`${slug}.gif`),
+  shiny_animated_sprite_path: mediaPath(`${slug}-shiny.gif`),
   cry_path: mediaPath(`${slug}.ogg`),
   metadata,
 }));
@@ -112,10 +114,17 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.template_key, 'build-your-team');
   assert.equal(template.selection_rules.round_count, 6);
   assert.equal(template.selection_rules.candidate_count, 4);
+  assert.equal(template.selection_rules.max_shiny_per_round, 1);
   assert.equal(template.selection_rules.pool_variants.length, 7);
   assert.equal(template.question_contract.hook_text, 'Build Your Team');
+  assert.equal(template.question_contract.final_prompt_text, 'Who did you choose?');
+  assert.equal(template.layout.timer.countdown_from, 3);
+  assert.equal(template.layout.text.show_counter, false);
   assert.equal(template.layout.stat_values.enabled, false);
   assert.equal(template.reveal.decoy_grayscale_enabled, false);
+  assert.equal(template.renderer.candidate_intro_anchor, 'reveal');
+  assert.equal(template.renderer.hold_pokeballs_until_reveal, true);
+  assert.equal(template.renderer.hook_pokeballs_enabled, true);
 });
 
 test('build-your-team template is exposed in slash-command template options', () => {
@@ -168,6 +177,29 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
     assert.ok(round.candidates.every((candidate) => candidate.subject.cry_path.endsWith('.ogg')));
   }
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Build Your Team$/u);
+});
+
+test('build-your-team shiny selection is deterministic and capped to one per round', async () => {
+  const forcedShinyTemplate = {
+    ...template,
+    selection_rules: {
+      ...template.selection_rules,
+      shiny_chance_per_candidate: 1,
+      max_shiny_per_round: 1,
+    },
+  };
+  const plan = await planPokemonBuildYourTeamChallenge({
+    template: forcedShinyTemplate,
+    pokedexRows,
+    seed: 'build-team-shiny-cap',
+    assetInventory,
+  });
+
+  for (const round of plan.rounds) {
+    const shinyCandidates = round.candidates.filter((candidate) => candidate.subject.is_shiny_variant);
+    assert.equal(shinyCandidates.length, 1);
+    assert.match(shinyCandidates[0].subject.render_sprite_path, /-shiny\.gif$/u);
+  }
 });
 
 test('build-your-team pool selectors handle babies starters and non-mega final stages', async () => {
@@ -255,12 +287,17 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.equal(renderPlan.rounds.length, 6);
   assert.equal(renderPlan.intro_hook.text, 'Build Your Team');
   assert.equal(renderPlan.stat_value_layout.enabled, false);
+  assert.ok(renderPlan.rounds[0].candidates.every((candidate) => (
+    candidate.intro_start_seconds >= renderPlan.rounds[0].reveal_visual_start_seconds
+  )));
   assert.match(visualFilter.script, /split=7\[bghook\]\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
   assert.match(visualFilter.script, /introhooktext/u);
+  assert.match(visualFilter.script, /introhookpokeball0/u);
   assert.match(visualFilter.script, /scene0platformv0/u);
+  assert.match(visualFilter.script, /scene0pokeballhold0/u);
   assert.match(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /scene0spriteform0whitesrc/u);
-  assert.match(visualFilter.script, /scene1counter/u);
+  assert.doesNotMatch(visualFilter.script, /scene1counter/u);
   assert.doesNotMatch(visualFilter.script, /scene0stat/u);
   assert.doesNotMatch(visualFilter.script, /eq=saturation=0:brightness=-0\.42:contrast=1\.22/u);
   assert.equal(cryCues.length, 24);

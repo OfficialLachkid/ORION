@@ -3,6 +3,7 @@ import {
   buildAnimatedPopSettleExpression,
   buildAnimatedTextSegmentAlphaExpression,
   buildAnimatedTextYExpression,
+  buildScaleFilterTimeExpression,
   formatEnableBetween,
 } from '../../dual-type-reveal/render/animation-expressions.mjs';
 import {
@@ -495,11 +496,20 @@ function overlayCounterText(
 function buildIntroHookScene(filters, {
   backgroundLabel,
   hook,
+  template,
+  inputRefs,
+  gridLayout,
+  platformLayout,
+  baseSpriteSize,
+  fps,
+  introPokeballScaleMultiplier,
+  introPokeballCenterYOffset,
   textLayout,
   fontPart,
   textOutlineWidth,
 }) {
   const baseLabel = 'introhookbase';
+  const hookPokeballsEnabled = template?.renderer?.hook_pokeballs_enabled === true;
   const textLabel = 'introhooktext';
   const hookScaleExpression = buildAnimatedPopSettleExpression(
     hook.text_start_seconds,
@@ -511,8 +521,73 @@ function buildIntroHookScene(filters, {
   filters.push(
     `[${backgroundLabel}]trim=duration=${hook.scene_duration_seconds},setpts=PTS-STARTPTS[${baseLabel}]`,
   );
+  let currentLabel = baseLabel;
+
+  const cells = Array.isArray(gridLayout?.cells) ? gridLayout.cells : [];
+  if (hookPokeballsEnabled && cells.length > 0 && inputRefs?.grassPlatform != null && platformLayout?.enabled) {
+    const sharedPlatformWidth = Number((
+      ensureNumber(baseSpriteSize, 220)
+      * ensureNumber(platformLayout.width_multiplier, 0.92)
+    ).toFixed(3));
+    const platformLabels = cells.map((_cell, index) => `introhookplatformsrc${index}`);
+    filters.push(
+      `[${inputRefs.grassPlatform}:v]fps=${fps},trim=duration=${hook.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${sharedPlatformWidth}:-1:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${platformLabels.length}${platformLabels.map((label) => `[${label}]`).join('')}`,
+    );
+    cells.forEach((cell, index) => {
+      const platformLabel = `introhookplatform${index}`;
+      filters.push(
+        `[${currentLabel}][${platformLabels[index]}]overlay=x='${cell.center_x}-w/2':y='${platformOverlayY(cell, baseSpriteSize, platformLayout)}-h/2':enable='${formatEnableBetween(0, hook.scene_duration_seconds)}'[${platformLabel}]`,
+      );
+      currentLabel = platformLabel;
+    });
+  }
+
+  if (hookPokeballsEnabled && cells.length > 0 && inputRefs?.introPokeball != null) {
+    const sharedPokeballSize = Number((
+      ensureNumber(baseSpriteSize, 220)
+      * Math.max(0.1, ensureNumber(introPokeballScaleMultiplier, 1.04))
+    ).toFixed(3));
+    const pokeballIntroDuration = Math.max(
+      0.12,
+      ensureNumber(template?.renderer?.hook_pokeball_intro_duration_seconds, 0.56),
+    );
+    const pokeballIntroStagger = Math.max(
+      0.02,
+      ensureNumber(template?.renderer?.hook_pokeball_intro_stagger_seconds, 0.32),
+    );
+    const pokeballFrameDuration = roundTime(Math.max(1 / Math.max(1, fps), 0.02));
+    const pokeballCloneDuration = roundTime(Math.max(
+      0,
+      hook.scene_duration_seconds - pokeballFrameDuration,
+    ));
+    const pokeballLabels = cells.map((_cell, index) => `introhookpokeballsrc${index}`);
+    filters.push(
+      `[${inputRefs.introPokeball}:v]fps=${fps},trim=duration=${hook.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${sharedPokeballSize}:${sharedPokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${pokeballLabels.length}${pokeballLabels.map((label) => `[${label}]`).join('')}`,
+    );
+    cells.forEach((cell, index) => {
+      const startSeconds = roundTime(0.1 + (index * pokeballIntroStagger));
+      const scaleExpression = buildAnimatedPopSettleExpression(
+        startSeconds,
+        pokeballIntroDuration,
+        0.02,
+        1.08,
+        1,
+        buildScaleFilterTimeExpression({ fps, streamStartSeconds: startSeconds }),
+      );
+      const animatedLabel = `introhookpokeball${index}`;
+      filters.push(
+        `[${pokeballLabels[index]}]trim=duration=${pokeballFrameDuration},tpad=stop_mode=clone:stop_duration=${pokeballCloneDuration},setpts=PTS-STARTPTS+${startSeconds}/TB,scale=w='${sharedPokeballSize}*(${scaleExpression})':h='${sharedPokeballSize}*(${scaleExpression})':eval=frame,setsar=1[${animatedLabel}]`,
+      );
+      const overlayLabel = `introhookpokeballv${index}`;
+      filters.push(
+        `[${currentLabel}][${animatedLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + introPokeballCenterYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(startSeconds, hook.scene_duration_seconds)}'[${overlayLabel}]`,
+      );
+      currentLabel = overlayLabel;
+    });
+  }
+
   filters.push(
-    `[${baseLabel}]drawtext=text='${escapeDrawtextText(hook.text)}'${fontPart}:fontcolor=white:fontsize='${textLayout.hook_font_size}*(${hookScaleExpression})':borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(textLayout.hook_y, hook.text_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(hook.text_start_seconds, hook.text_end_seconds)}':enable='${formatEnableBetween(hook.text_start_seconds, hook.text_end_seconds)}'[${textLabel}]`,
+    `[${currentLabel}]drawtext=text='${escapeDrawtextText(hook.text)}'${fontPart}:fontcolor=white:fontsize='${textLayout.hook_font_size}*(${hookScaleExpression})':borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(textLayout.hook_y, hook.text_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(hook.text_start_seconds, hook.text_end_seconds)}':enable='${formatEnableBetween(hook.text_start_seconds, hook.text_end_seconds)}'[${textLabel}]`,
   );
   return textLabel;
 }
@@ -580,6 +655,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     ensureNumber(template?.renderer?.decoy_grayscale_fade_duration_seconds, 0.22),
   );
   const decoyGrayscaleEnabled = template?.reveal?.decoy_grayscale_enabled !== false;
+  const holdPokeballsUntilReveal = template?.renderer?.hold_pokeballs_until_reveal === true;
+  const hookBaseSpriteSize = Number((
+    ensureNumber(gridLayout.item_size_px, 220)
+    * ensureNumber(gridLayout.sprite_scale_multiplier, 1)
+  ).toFixed(3));
 
   const hasIntroHook = Boolean(renderPlan?.intro_hook?.enabled);
   const hookBackgroundLabel = hasIntroHook ? 'bghook' : null;
@@ -596,6 +676,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     ? buildIntroHookScene(filters, {
       backgroundLabel: hookBackgroundLabel,
       hook: renderPlan.intro_hook,
+      template,
+      inputRefs,
+      gridLayout,
+      platformLayout,
+      baseSpriteSize: hookBaseSpriteSize,
+      fps,
+      introPokeballScaleMultiplier,
+      introPokeballCenterYOffset,
       textLayout: renderPlan.text_layout,
       fontPart,
       textOutlineWidth,
@@ -690,6 +778,33 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       }
 
       if (inputRefs.introPokeball != null) {
+        let pokeballSourceLabel = sharedPokeballLabel;
+        if (holdPokeballsUntilReveal && sharedPokeballLabel) {
+          const holdSourceLabel = `scene${roundIndex}pokeballholdsrc${candidate.index}`;
+          const openSourceLabel = `scene${roundIndex}pokeballopensrc${candidate.index}`;
+          const holdLabel = `scene${roundIndex}pokeballhold${candidate.index}`;
+          const holdOverlayLabel = `scene${roundIndex}pokeballholdv${candidate.index}`;
+          const holdDuration = Number(Math.max(
+            0.08,
+            candidate.pokeball_start_seconds - platformVisibleStart,
+          ).toFixed(3));
+          const holdFrameDuration = roundTime(Math.max(1 / Math.max(1, fps), 0.02));
+          const holdCloneDuration = Number(Math.max(
+            0,
+            holdDuration - holdFrameDuration,
+          ).toFixed(3));
+          filters.push(
+            `[${sharedPokeballLabel}]split=2[${holdSourceLabel}][${openSourceLabel}]`,
+          );
+          filters.push(
+            `[${holdSourceLabel}]trim=duration=${holdFrameDuration},tpad=stop_mode=clone:stop_duration=${holdCloneDuration},setpts=PTS-STARTPTS+${Number(platformVisibleStart.toFixed(3))}/TB,format=rgba,setsar=1[${holdLabel}]`,
+          );
+          filters.push(
+            `[${currentLabel}][${holdLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + introPokeballCenterYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(platformVisibleStart, candidate.pokeball_start_seconds)}'[${holdOverlayLabel}]`,
+          );
+          currentLabel = holdOverlayLabel;
+          pokeballSourceLabel = openSourceLabel;
+        }
         const pokeballLabel = `scene${roundIndex}pokeball${candidate.index}`;
         const pokeballOverlayLabel = `scene${roundIndex}pokeballv${candidate.index}`;
         const pokeballDuration = Number(Math.max(
@@ -697,7 +812,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           candidate.pokeball_end_seconds - candidate.pokeball_start_seconds,
         ).toFixed(3));
         filters.push(
-          `[${sharedPokeballLabel}]trim=duration=${pokeballDuration},setpts=PTS-STARTPTS+${Number(candidate.pokeball_start_seconds.toFixed(3))}/TB,format=rgba,setsar=1[${pokeballLabel}]`,
+          `[${pokeballSourceLabel}]trim=duration=${pokeballDuration},setpts=PTS-STARTPTS+${Number(candidate.pokeball_start_seconds.toFixed(3))}/TB,format=rgba,setsar=1[${pokeballLabel}]`,
         );
         filters.push(
           `[${currentLabel}][${pokeballLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + introPokeballCenterYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(candidate.pokeball_start_seconds, candidate.pokeball_end_seconds)}'[${pokeballOverlayLabel}]`,
