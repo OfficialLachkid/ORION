@@ -100,7 +100,13 @@
       "source_policy": "local_t7_pixel_backgrounds",
       "media_type": "looping_image_gif_or_video",
       "fit": "cover",
-      "blur_sigma": 6
+      "blur_sigma": 6,
+      "motion": {
+        "enabled": true,
+        "zoom_scale": 1.12,
+        "pan_cycle_seconds": 18,
+        "vertical_pan_ratio": 0.72
+      }
     },
     "text": {
       "hook_y": 650,
@@ -164,7 +170,15 @@
   },
   "reveal": {
     "visual_delay_seconds": 0,
-    "decoy_grayscale_enabled": false
+    "decoy_grayscale_enabled": false,
+    "shiny": {
+      "enabled": true,
+      "sparkle_overlay_role": "shiny_sparkle",
+      "sound_effect_role": "shiny",
+      "sparkle_duration_seconds": 0.9,
+      "sparkle_scale_multiplier": 1.35,
+      "sound_volume_multiplier": 1
+    }
   },
   "audio": {
     "voice_peak_db": -3,
@@ -207,6 +221,13 @@
         "trigger": "pokemon_reveal",
         "preferred_keywords": [
           "pokeball-open-sound"
+        ]
+      },
+      "shiny": {
+        "enabled": true,
+        "trigger": "shiny_pokemon_reveal",
+        "preferred_keywords": [
+          "shiny"
         ]
       }
     }

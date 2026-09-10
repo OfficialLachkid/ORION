@@ -844,6 +844,19 @@ export async function planPokemonBuildYourTeamChallenge({
   const selectedTimerEndSoundPath = selectTemplateScopedSound(template, inventory, 'timer_end', 'timer_end');
   const selectedPokeballIntroSoundPath = selectTemplateScopedSound(template, inventory, 'pokeball_intro', 'pokeball_intro');
   const selectedIntroRevealSoundPath = selectTemplateScopedSound(template, inventory, 'intro_slot_reveal', 'pokeball_intro');
+  const shinyEffectConfig = template?.reveal?.shiny || {};
+  const shinyEffectsRequested = shinyEffectConfig?.enabled !== false;
+  const selectedShinySoundPath = shinyEffectsRequested
+    ? selectTemplateScopedSound(
+      template,
+      inventory,
+      shinyEffectConfig.sound_effect_role || 'shiny',
+      'shiny',
+    )
+    : null;
+  const selectedShinySparklePath = shinyEffectsRequested
+    ? inventory?.overlay_presets?.[shinyEffectConfig.sparkle_overlay_role || 'shiny_sparkle'] || null
+    : null;
   const configuredRevealHoldSeconds = Number(template?.layout?.rounds?.reveal_hold_seconds ?? DEFAULT_REVEAL_HOLD_SECONDS);
   const preCountdownHoldSeconds = Number(template?.layout?.rounds?.pre_countdown_hold_seconds ?? DEFAULT_PRE_COUNTDOWN_HOLD_SECONDS);
   const transitionDurationSeconds = Number(template?.layout?.rounds?.transition_duration_seconds ?? DEFAULT_TRANSITION_DURATION_SECONDS);
@@ -984,6 +997,12 @@ export async function planPokemonBuildYourTeamChallenge({
   if (!selectedIntroRevealSoundPath) requiredAssetGaps.push('intro_slot_reveal_sfx_missing');
   if (!inventory?.overlay_presets?.grass_plateau) requiredAssetGaps.push('grass_plateau_overlay_missing');
   if (!inventory?.overlay_presets?.pokeball_primary) requiredAssetGaps.push('intro_pokeball_overlay_missing');
+  const shinyCandidateCount = rounds.reduce((count, round) => (
+    count + round.candidates.filter((candidate) => candidate.subject.is_shiny_variant).length
+  ), 0);
+  const shinyEffectsActive = shinyEffectsRequested && shinyCandidateCount > 0;
+  if (shinyEffectsActive && !selectedShinySparklePath) requiredAssetGaps.push('shiny_sparkle_overlay_missing');
+  if (shinyEffectsActive && !selectedShinySoundPath) requiredAssetGaps.push('shiny_sfx_missing');
 
   return {
     schema_version: 'poke-quizz-build-your-team-plan-v1',
@@ -1018,6 +1037,25 @@ export async function planPokemonBuildYourTeamChallenge({
     },
     timeline: buildTimeline(rounds),
     rounds,
+    shiny_reveal: {
+      active: shinyEffectsActive,
+      mode: 'candidate_spawn',
+      shiny_candidate_count: shinyCandidateCount,
+      sparkle_overlay_path: selectedShinySparklePath,
+      sound_effect_path: selectedShinySoundPath,
+      sparkle_duration_seconds: ensurePositiveNumber(
+        shinyEffectConfig.sparkle_duration_seconds,
+        0.9,
+      ),
+      sparkle_scale_multiplier: ensurePositiveNumber(
+        shinyEffectConfig.sparkle_scale_multiplier,
+        1.35,
+      ),
+      sound_volume_multiplier: ensurePositiveNumber(
+        shinyEffectConfig.sound_volume_multiplier,
+        1,
+      ),
+    },
     assets: {
       background: {
         expected_directory: backgroundPool.expected_directory,
@@ -1027,6 +1065,7 @@ export async function planPokemonBuildYourTeamChallenge({
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
         selected_grass_plateau_path: inventory?.overlay_presets?.grass_plateau || null,
         selected_intro_pokeball_path: inventory?.overlay_presets?.pokeball_primary || null,
+        selected_shiny_sparkle_path: selectedShinySparklePath,
         available_paths: inventory?.overlays || [],
       },
       audio: {
@@ -1040,6 +1079,7 @@ export async function planPokemonBuildYourTeamChallenge({
           timer_end: selectedTimerEndSoundPath,
           pokeball_intro: selectedPokeballIntroSoundPath,
           intro_slot_reveal: selectedIntroRevealSoundPath,
+          shiny: selectedShinySoundPath,
         },
       },
       outputs: {

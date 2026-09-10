@@ -11,7 +11,10 @@ import {
   buildPokeQuizzRenderPlan,
   buildVisualFilterScript,
 } from '../src/domains/pokemon/templates/build-your-team/renderer.mjs';
-import { buildStatClashCryCues } from '../src/domains/pokemon/templates/stat-clash/render/audio-filter-script.mjs';
+import {
+  buildCandidateShinyCues,
+  buildStatClashCryCues,
+} from '../src/domains/pokemon/templates/stat-clash/render/audio-filter-script.mjs';
 import { PRODUCT_VIDEO_TEMPLATE_OPTIONS } from '../../task-router/src/product-video-command-parser.mjs';
 import {
   resolvePokeQuizzPlanner,
@@ -31,8 +34,10 @@ const fixtureAssets = [
   'ding-sound.mp3',
   'pokeball-intro.mp3',
   'pokeball-open-sound.mp3',
+  'shiny.mp3',
   'grass-plateau.png',
   'open-close-pokeball.gif',
+  'shiny-sparkle.gif',
 ];
 
 const fixturePokemon = [
@@ -106,16 +111,23 @@ const assetInventory = {
       mediaPath('ding-sound.mp3'),
       mediaPath('pokeball-intro.mp3'),
       mediaPath('pokeball-open-sound.mp3'),
+      mediaPath('shiny.mp3'),
     ],
     countdown_tick: mediaPath('countdown.mp3'),
     timer_end: mediaPath('ding-sound.mp3'),
     pokeball_intro: mediaPath('pokeball-intro.mp3'),
+    shiny: mediaPath('shiny.mp3'),
   },
   overlay_presets: {
     grass_plateau: mediaPath('grass-plateau.png'),
     pokeball_primary: mediaPath('open-close-pokeball.gif'),
+    shiny_sparkle: mediaPath('shiny-sparkle.gif'),
   },
-  overlays: [mediaPath('grass-plateau.png'), mediaPath('open-close-pokeball.gif')],
+  overlays: [
+    mediaPath('grass-plateau.png'),
+    mediaPath('open-close-pokeball.gif'),
+    mediaPath('shiny-sparkle.gif'),
+  ],
 };
 
 test('build-your-team config sanity aligns template identity and pool count', () => {
@@ -128,6 +140,8 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.question_contract.hook_text, 'Build Your Team');
   assert.equal(template.question_contract.final_prompt_text, 'Who did you choose?');
   assert.equal(template.layout.background.blur_sigma, 6);
+  assert.equal(template.layout.background.motion.enabled, true);
+  assert.equal(template.reveal.shiny.enabled, true);
   assert.equal(template.layout.timer.countdown_from, 2.5);
   assert.ok(template.layout.rounds.hook_hold_seconds >= 2.3);
   assert.equal(template.layout.text.show_counter, false);
@@ -217,6 +231,10 @@ test('build-your-team shiny selection is deterministic and capped to one per rou
     assert.equal(shinyCandidates.length, 1);
     assert.match(shinyCandidates[0].subject.render_sprite_path, /-shiny\.gif$/u);
   }
+  assert.equal(plan.shiny_reveal.active, true);
+  assert.equal(plan.shiny_reveal.shiny_candidate_count, 6);
+  assert.equal(plan.assets.overlays.selected_shiny_sparkle_path, mediaPath('shiny-sparkle.gif'));
+  assert.equal(plan.assets.audio.selected_sound_effects.shiny, mediaPath('shiny.mp3'));
 });
 
 test('build-your-team pool selectors handle babies starters and non-mega final stages', async () => {
@@ -325,6 +343,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
       && candidate.pokeball_hold_start_seconds < candidate.pokeball_start_seconds
   )));
   assert.match(visualFilter.script, /split=6\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
+  assert.match(visualFilter.script, /crop=w=1080:h=1920:x='\(iw-1080\)\*\(0\.5\+0\.5\*sin\(t\*/u);
   assert.doesNotMatch(visualFilter.script, /bghook/u);
   assert.doesNotMatch(visualFilter.script, /introhooktext/u);
   assert.match(visualFilter.script, /scene0hookoverlay/u);
@@ -342,4 +361,62 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.match(audioFilter, /pokeballintro0/u);
   assert.match(audioFilter, /asplit=24\[osrc0\]/u);
   assert.match(audioFilter, /cry0/u);
+});
+
+test('build-your-team render path overlays shiny sparkle and audio for shiny candidates', async () => {
+  const forcedShinyTemplate = {
+    ...template,
+    selection_rules: {
+      ...template.selection_rules,
+      shiny_chance_per_candidate: 1,
+      max_shiny_per_round: 1,
+    },
+  };
+  const plan = await planPokemonBuildYourTeamChallenge({
+    template: forcedShinyTemplate,
+    pokedexRows,
+    seed: 'build-team-render-shiny',
+    assetInventory,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template: forcedShinyTemplate,
+    outputPath: '/tmp/build-your-team-shiny.mp4',
+  });
+  const visualFilter = buildVisualFilterScript(
+    plan,
+    forcedShinyTemplate,
+    renderPlan,
+    {
+      background: 0,
+      introPokeball: 1,
+      grassPlatform: 2,
+      shinySparkle: 3,
+      rounds: renderPlan.rounds.map((round, roundIndex) => ({
+        candidates: round.candidates.map((_candidate, candidateIndex) => 4 + (roundIndex * 4) + candidateIndex),
+      })),
+    },
+  );
+  const shinyCues = buildCandidateShinyCues(plan, renderPlan);
+  const audioFilter = buildAudioFilterScript({
+    narrationPaths: Array.from({ length: plan.narration.lines.length }, (_unused, index) => `/tmp/${index}.wav`),
+    musicPath: '/tmp/music.mp3',
+    countdownPath: '/tmp/countdown.mp3',
+    timerEndPath: '/tmp/ding-sound.mp3',
+    pokeballIntroPath: '/tmp/pokeball-intro.mp3',
+    introSlotRevealPath: '/tmp/pokeball-open-sound.mp3',
+    shinyPath: '/tmp/shiny.mp3',
+    shinyCues,
+    cryCues: buildStatClashCryCues(plan, renderPlan),
+    renderPlan,
+    mediaDurations: {
+      countdown_audio_duration_seconds: 0.7,
+    },
+  });
+
+  assert.equal(plan.shiny_reveal.active, true);
+  assert.equal(shinyCues.length, 6);
+  assert.match(visualFilter.script, /shiny-sparkle|sparklebase|sparklev/u);
+  assert.match(audioFilter, /shiny0/u);
+  assert.match(audioFilter, /asplit=6\[shsrc0\]/u);
 });

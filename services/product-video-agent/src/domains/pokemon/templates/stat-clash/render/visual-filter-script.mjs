@@ -7,6 +7,7 @@ import {
   formatEnableBetween,
 } from '../../dual-type-reveal/render/animation-expressions.mjs';
 import {
+  DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
   DEFAULT_TEXT_BORDER,
   escapeDrawtextText,
   escapeFilterPath,
@@ -254,6 +255,41 @@ function buildStaticSpriteWobbleExpression(round, candidate, template) {
     return '0';
   }
   return `if(lt(t,${startSeconds}),0,if(lt(t,${endSeconds}),sin((t-${startSeconds})*${frequencyRadians})*${amplitude},0))`;
+}
+
+function buildBackgroundPreparationFilter({
+  inputRef,
+  width,
+  height,
+  fps,
+  blurSigma,
+  template,
+}) {
+  const motionConfig = template?.layout?.background?.motion || {};
+  const motionEnabled = motionConfig?.enabled === true;
+  const safeBlurSigma = Math.max(0, ensureNumber(blurSigma, 0));
+  const blurFilter = safeBlurSigma > 0
+    ? `,gblur=sigma=${Number(safeBlurSigma.toFixed(3))}`
+    : '';
+
+  if (!motionEnabled) {
+    return `[${inputRef}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}${blurFilter},fps=${fps},setsar=1`;
+  }
+
+  const zoomScale = Math.max(1.01, ensureNumber(motionConfig.zoom_scale, 1.12));
+  const panCycleSeconds = Math.max(4, ensureNumber(motionConfig.pan_cycle_seconds, 18));
+  const verticalPanRatio = Math.max(
+    0,
+    Math.min(1, ensureNumber(motionConfig.vertical_pan_ratio, 0.72)),
+  );
+  const scaledWidth = Math.ceil(width * zoomScale);
+  const scaledHeight = Math.ceil(height * zoomScale);
+  const xSpeed = Number(((Math.PI * 2) / panCycleSeconds).toFixed(6));
+  const ySpeed = Number((xSpeed * 0.73).toFixed(6));
+  const xExpression = `(iw-${width})*(0.5+0.5*sin(t*${xSpeed}))`;
+  const yExpression = `((ih-${height})*(1-${verticalPanRatio})/2)+((ih-${height})*${verticalPanRatio})*(0.5+0.5*cos(t*${ySpeed}))`;
+
+  return `[${inputRef}:v]scale=${scaledWidth}:${scaledHeight}:force_original_aspect_ratio=increase,crop=w=${width}:h=${height}:x='${xExpression}':y='${yExpression}'${blurFilter},fps=${fps},setsar=1`;
 }
 
 function appendTimerBarPhase(filters, currentLabel, {
@@ -653,9 +689,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   };
   const roundCount = Math.max(1, renderPlan.rounds.length);
   const backgroundBlurSigma = Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 0));
-  const backgroundFilter = backgroundBlurSigma > 0
-    ? `gblur=sigma=${backgroundBlurSigma},`
-    : '';
   const platformLayout = {
     enabled: template?.layout?.sprite_platform?.option_enabled !== false,
     width_multiplier: ensureNumber(template?.layout?.sprite_platform?.option_width_multiplier, 0.92),
@@ -708,9 +741,39 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     ...(hasSeparateIntroHook ? [hookBackgroundLabel] : []),
     ...backgroundLabels,
   ];
+  const backgroundPreparationFilter = buildBackgroundPreparationFilter({
+    inputRef: inputRefs.background,
+    width,
+    height,
+    fps,
+    blurSigma: backgroundBlurSigma,
+    template,
+  });
   filters.push(
-    `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,split=${allBackgroundLabels.length}${allBackgroundLabels.map((label) => `[${label}]`).join('')}`,
+    `${backgroundPreparationFilter},split=${allBackgroundLabels.length}${allBackgroundLabels.map((label) => `[${label}]`).join('')}`,
   );
+
+  const shinySparkleEnabled = plan.shiny_reveal?.active && inputRefs.shinySparkle != null;
+  const shinySparkleEntries = [];
+  const shinySparkleBaseLabels = new Map();
+  if (shinySparkleEnabled) {
+    renderPlan.rounds.forEach((round, roundIndex) => {
+      for (const candidate of Array.isArray(round.candidates) ? round.candidates : []) {
+        if (candidate?.subject?.is_shiny_variant !== true) {
+          continue;
+        }
+        const key = `${roundIndex}:${candidate.index}`;
+        const label = `scene${roundIndex}sparklebase${candidate.index}`;
+        shinySparkleEntries.push({ key, label });
+        shinySparkleBaseLabels.set(key, label);
+      }
+    });
+  }
+  if (shinySparkleEntries.length > 0) {
+    filters.push(
+      `[${inputRefs.shinySparkle}:v]fps=${fps},format=rgba,setsar=1,split=${shinySparkleEntries.length}${shinySparkleEntries.map((entry) => `[${entry.label}]`).join('')}`,
+    );
+  }
 
   const introHookSceneLabel = hasSeparateIntroHook
     ? buildIntroHookScene(filters, {
@@ -930,6 +993,41 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `[${currentLabel}][${spriteSettledInputLabel}]overlay=x='${cell.center_x}-w/2':y='${settledSpriteBaseY}${settledSpriteYOffsetExpression}-h/2':enable='${formatEnableBetween(candidate.intro_end_seconds, round.local.scene_duration_seconds)}'[${settledSpriteLabel}]`,
       );
       currentLabel = settledSpriteLabel;
+
+      const sparkleBaseLabel = shinySparkleBaseLabels.get(`${roundIndex}:${candidate.index}`);
+      if (sparkleBaseLabel) {
+        const sparkleDuration = Math.max(
+          0.12,
+          ensureNumber(
+            plan.assets.overlays?.selected_shiny_sparkle_duration_seconds,
+            ensureNumber(plan.shiny_reveal?.sparkle_duration_seconds, 0.9),
+          ),
+        );
+        const sparkleStart = Number(candidate.intro_start_seconds.toFixed(3));
+        const sparkleEnd = Number(Math.min(
+          round.local.scene_duration_seconds,
+          sparkleStart + sparkleDuration,
+        ).toFixed(3));
+        const sparkleSize = Number((
+          baseSpriteSize
+          * Math.max(
+            1,
+            ensureNumber(
+              plan.shiny_reveal?.sparkle_scale_multiplier,
+              DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
+            ),
+          )
+        ).toFixed(3));
+        const sparklePreparedLabel = `scene${roundIndex}sparkle${candidate.index}`;
+        const sparkleOverlayLabel = `scene${roundIndex}sparklev${candidate.index}`;
+        filters.push(
+          `[${sparkleBaseLabel}]trim=duration=${sparkleDuration},setpts=PTS-STARTPTS+${sparkleStart}/TB,scale=${sparkleSize}:${sparkleSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${sparklePreparedLabel}]`,
+        );
+        filters.push(
+          `[${currentLabel}][${sparklePreparedLabel}]overlay=x='${cell.center_x}-w/2':y='${settledSpriteBaseY}-h/2':enable='${formatEnableBetween(sparkleStart, sparkleEnd)}'[${sparkleOverlayLabel}]`,
+        );
+        currentLabel = sparkleOverlayLabel;
+      }
 
       if (shouldCreateGraySprite) {
         decoyGrayCandidates.push({

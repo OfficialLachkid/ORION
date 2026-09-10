@@ -47,6 +47,18 @@ export function buildVisualInputs(plan, renderPlan) {
     });
   }
 
+  if (plan.shiny_reveal?.active && plan.assets.overlays?.selected_shiny_sparkle_path) {
+    inputs.push({
+      role: 'shiny-sparkle',
+      path: plan.assets.overlays.selected_shiny_sparkle_path,
+      args: buildLoopingVisualInput(
+        plan.assets.overlays.selected_shiny_sparkle_path,
+        renderPlan.total_duration_seconds,
+        renderPlan.canvas.fps,
+      ),
+    });
+  }
+
   renderPlan.rounds.forEach((round) => {
     round.candidates.forEach((candidate) => {
       const spritePath = candidate?.subject?.render_sprite_path

@@ -10,6 +10,7 @@ import {
 import {
   buildAudioFilterScript,
   buildAudioInputs,
+  buildCandidateShinyCues,
   buildStatClashCryCues,
 } from './audio-filter-script.mjs';
 import {
@@ -164,7 +165,11 @@ export async function renderPokeQuizzVideo({
     ? plan.assets.audio.selected_sound_effects?.pokeball_intro || null
     : null;
   const introSlotRevealPath = plan.assets.audio.selected_sound_effects?.intro_slot_reveal || null;
+  const shinyPath = plan.shiny_reveal?.active
+    ? plan.assets.audio.selected_sound_effects?.shiny || null
+    : null;
   const cryCues = buildStatClashCryCues(plan, renderPlan);
+  const shinyCues = buildCandidateShinyCues(plan, renderPlan);
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
@@ -172,6 +177,7 @@ export async function renderPokeQuizzVideo({
     ...(timerEndPath ? [timerEndPath] : []),
     ...(pokeballIntroPath ? [pokeballIntroPath] : []),
     ...(introSlotRevealPath ? [introSlotRevealPath] : []),
+    ...(shinyPath ? [shinyPath] : []),
     ...cryCues.map((cue) => cue.path),
   ]);
 
@@ -190,6 +196,8 @@ export async function renderPokeQuizzVideo({
     timerEndPath,
     pokeballIntroPath,
     introSlotRevealPath,
+    shinyPath,
+    shinyCues,
     cryCues,
     renderPlan,
     mediaDurations: {
@@ -208,6 +216,7 @@ export async function renderPokeQuizzVideo({
         ...(timerEndPath ? [timerEndPath] : []),
         ...(pokeballIntroPath ? [pokeballIntroPath] : []),
         ...(introSlotRevealPath ? [introSlotRevealPath] : []),
+        ...(shinyPath ? [shinyPath] : []),
         ...cryCues.map((cue) => cue.path),
       ]),
       '-/filter_complex',
@@ -239,6 +248,7 @@ export async function renderPokeQuizzVideo({
     background: inputRoleIndex.get('background'),
     introPokeball: inputRoleIndex.has('intro-pokeball') ? inputRoleIndex.get('intro-pokeball') : null,
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
+    shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
     rounds: renderPlan.rounds.map((round) => ({
       candidates: round.candidates.map((candidate) => inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`)),
       still_candidates: round.candidates.map((candidate) => {
