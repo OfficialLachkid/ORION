@@ -495,6 +495,7 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
         candidate_intro_anchor: rendererSettings.candidate_intro_anchor,
       },
     },
+    startingSceneStart: renderPlan.intro_hook?.round_start_seconds || 0,
   });
 
   return {

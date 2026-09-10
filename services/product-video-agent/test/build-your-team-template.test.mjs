@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planPokemonBuildYourTeamChallenge } from '../src/domains/pokemon/templates/build-your-team/planner.mjs';
 import {
+  applyNarrationDurationsToRenderPlan,
   buildAudioFilterScript,
   buildPokeQuizzRenderPlan,
   buildVisualFilterScript,
@@ -301,6 +302,14 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
 
   assert.equal(renderPlan.rounds.length, 6);
   assert.equal(renderPlan.intro_hook.text, 'Build Your Team');
+  const narrationAdjustedRenderPlan = applyNarrationDurationsToRenderPlan(
+    renderPlan,
+    Array.from({ length: plan.narration.lines.length }, () => 1.2),
+  );
+  assert.equal(
+    narrationAdjustedRenderPlan.rounds[0].scene_start_seconds,
+    renderPlan.intro_hook.round_start_seconds,
+  );
   assert.equal(renderPlan.stat_value_layout.enabled, false);
   assert.ok(renderPlan.rounds[0].candidates.every((candidate) => (
     candidate.intro_start_seconds >= renderPlan.rounds[0].reveal_visual_start_seconds
