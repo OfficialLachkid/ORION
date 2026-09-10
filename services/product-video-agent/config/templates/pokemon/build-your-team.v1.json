@@ -97,7 +97,7 @@
   },
   "layout": {
     "background": {
-      "source_policy": "local_t7_backgrounds",
+      "source_policy": "local_t7_pixel_backgrounds",
       "media_type": "looping_image_gif_or_video",
       "fit": "cover",
       "blur_sigma": 3
@@ -143,7 +143,7 @@
       "option_center_y_offset_px": 82
     },
     "timer": {
-      "countdown_from": 3,
+      "countdown_from": 2.5,
       "countdown_to": 0,
       "bar_height_px": 38,
       "bar_horizontal_inset_px": 20,
@@ -154,7 +154,7 @@
       "enabled": false
     },
     "rounds": {
-      "hook_hold_seconds": 1.15,
+      "hook_hold_seconds": 2.35,
       "hook_transition_duration_seconds": 0.42,
       "pre_countdown_hold_seconds": 0.18,
       "reveal_hold_seconds": 2.4,
@@ -194,6 +194,14 @@
           "ding-sound"
         ]
       },
+      "pokeball_intro": {
+        "enabled": true,
+        "trigger": "pokeball_spawn",
+        "preferred_keywords": [
+          "pokeball",
+          "intro"
+        ]
+      },
       "intro_slot_reveal": {
         "enabled": true,
         "trigger": "pokemon_reveal",
@@ -223,6 +231,7 @@
     "candidate_forming_duration_seconds": 1,
     "hold_pokeballs_until_reveal": true,
     "hook_pokeballs_enabled": true,
+    "pokeball_spawn_sfx_enabled": true,
     "hook_pokeball_intro_duration_seconds": 0.56,
     "hook_pokeball_intro_stagger_seconds": 0.32,
     "intro_pokeball_hold_seconds": 0.16,

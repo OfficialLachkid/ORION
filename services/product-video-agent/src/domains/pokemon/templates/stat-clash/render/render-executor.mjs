@@ -160,6 +160,9 @@ export async function renderPokeQuizzVideo({
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
   const countdownPath = plan.assets.audio.selected_sound_effects?.countdown_tick || null;
   const timerEndPath = plan.assets.audio.selected_sound_effects?.timer_end || null;
+  const pokeballIntroPath = template?.renderer?.pokeball_spawn_sfx_enabled === true
+    ? plan.assets.audio.selected_sound_effects?.pokeball_intro || null
+    : null;
   const introSlotRevealPath = plan.assets.audio.selected_sound_effects?.intro_slot_reveal || null;
   const cryCues = buildStatClashCryCues(plan, renderPlan);
   await verifyReadableFiles([
@@ -167,6 +170,7 @@ export async function renderPokeQuizzVideo({
     ...(musicPath ? [musicPath] : []),
     ...(countdownPath ? [countdownPath] : []),
     ...(timerEndPath ? [timerEndPath] : []),
+    ...(pokeballIntroPath ? [pokeballIntroPath] : []),
     ...(introSlotRevealPath ? [introSlotRevealPath] : []),
     ...cryCues.map((cue) => cue.path),
   ]);
@@ -184,6 +188,7 @@ export async function renderPokeQuizzVideo({
     musicPath,
     countdownPath,
     timerEndPath,
+    pokeballIntroPath,
     introSlotRevealPath,
     cryCues,
     renderPlan,
@@ -201,6 +206,7 @@ export async function renderPokeQuizzVideo({
         ...(musicPath ? [musicPath] : []),
         ...(countdownPath ? [countdownPath] : []),
         ...(timerEndPath ? [timerEndPath] : []),
+        ...(pokeballIntroPath ? [pokeballIntroPath] : []),
         ...(introSlotRevealPath ? [introSlotRevealPath] : []),
         ...cryCues.map((cue) => cue.path),
       ]),

@@ -28,6 +28,7 @@ test('asset layout helpers build deterministic Pokemon asset paths', () => {
   assert.match(buildPokeQuizzTypeIconPath('Psychic'), /Pixel Types\/psychic\.gif$/u);
   assert.match(buildPokeQuizzThreeDTypeIconPath('Psychic'), /3D Types\/psychic\.png$/u);
   assert.match(POKE_QUIZZ_ASSET_LAYOUT.previews, /Pokemon\/Poke Quizz\/Previews$/u);
+  assert.match(POKE_QUIZZ_ASSET_LAYOUT.pixelBackgrounds, /Pokemon\/Poke Quizz\/pixel-backgrounds$/u);
   assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'type-quiz' }), /Previews\/Type Quiz$/u);
   assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'find-the-shiny' }), /Previews\/Find the Shiny$/u);
   assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'memory' }), /Previews\/Memory$/u);

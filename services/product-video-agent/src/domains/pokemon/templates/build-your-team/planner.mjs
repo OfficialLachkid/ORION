@@ -112,6 +112,11 @@ function ensureFiniteNumber(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function ensurePositiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function clampNumber(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
@@ -516,6 +521,22 @@ function selectBackground(backgrounds = [], random, selectionState = {}) {
   return pool[Math.floor(random() * pool.length)] || pool[0];
 }
 
+function resolveBackgroundPool(inventory = {}) {
+  const pixelBackgrounds = Array.isArray(inventory.pixel_backgrounds)
+    ? inventory.pixel_backgrounds
+    : [];
+  if (pixelBackgrounds.length > 0) {
+    return {
+      backgrounds: pixelBackgrounds,
+      expected_directory: POKE_QUIZZ_ASSET_LAYOUT.pixelBackgrounds,
+    };
+  }
+  return {
+    backgrounds: inventory.backgrounds || [],
+    expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+  };
+}
+
 function selectTemplateScopedSound(template, inventory, configKey, fallbackKey) {
   const entry = template?.audio?.sound_effects?.[configKey] || {};
   if (entry?.enabled === false) {
@@ -805,7 +826,7 @@ export async function planPokemonBuildYourTeamChallenge({
     template?.selection_rules?.candidate_count,
     DEFAULT_CANDIDATE_COUNT,
   );
-  const countdownFrom = ensurePositiveInteger(template?.layout?.timer?.countdown_from, 4);
+  const countdownFrom = ensurePositiveNumber(template?.layout?.timer?.countdown_from, 4);
   const countdownTo = Number.parseInt(String(template?.layout?.timer?.countdown_to ?? 0), 10);
   const eligibleSubjects = collapseDuplicateSubjects(
     selectEligibleSubjects(pokedexRows, template?.selection_rules?.generation_scope || []),
@@ -814,12 +835,14 @@ export async function planPokemonBuildYourTeamChallenge({
     throw new Error(`Build Your Team requires at least ${candidateCount} Pokemon with local sprites, found ${eligibleSubjects.length}.`);
   }
 
+  const backgroundPool = resolveBackgroundPool(inventory);
   const selectedBackgroundPath = selectBackground(
-    inventory.backgrounds,
+    backgroundPool.backgrounds,
     random,
     normalizedSelectionState,
   );
   const selectedTimerEndSoundPath = selectTemplateScopedSound(template, inventory, 'timer_end', 'timer_end');
+  const selectedPokeballIntroSoundPath = selectTemplateScopedSound(template, inventory, 'pokeball_intro', 'pokeball_intro');
   const selectedIntroRevealSoundPath = selectTemplateScopedSound(template, inventory, 'intro_slot_reveal', 'pokeball_intro');
   const configuredRevealHoldSeconds = Number(template?.layout?.rounds?.reveal_hold_seconds ?? DEFAULT_REVEAL_HOLD_SECONDS);
   const preCountdownHoldSeconds = Number(template?.layout?.rounds?.pre_countdown_hold_seconds ?? DEFAULT_PRE_COUNTDOWN_HOLD_SECONDS);
@@ -957,6 +980,7 @@ export async function planPokemonBuildYourTeamChallenge({
   if (!selectedBackgroundPath) requiredAssetGaps.push('background_missing');
   if (!inventory?.sound_effects?.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
   if (!selectedTimerEndSoundPath) requiredAssetGaps.push('timer_end_sfx_missing');
+  if (!selectedPokeballIntroSoundPath) requiredAssetGaps.push('pokeball_intro_sfx_missing');
   if (!selectedIntroRevealSoundPath) requiredAssetGaps.push('intro_slot_reveal_sfx_missing');
   if (!inventory?.overlay_presets?.grass_plateau) requiredAssetGaps.push('grass_plateau_overlay_missing');
   if (!inventory?.overlay_presets?.pokeball_primary) requiredAssetGaps.push('intro_pokeball_overlay_missing');
@@ -996,7 +1020,7 @@ export async function planPokemonBuildYourTeamChallenge({
     rounds,
     assets: {
       background: {
-        expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+        expected_directory: backgroundPool.expected_directory,
         selected_path: selectedBackgroundPath,
       },
       overlays: {
@@ -1014,6 +1038,7 @@ export async function planPokemonBuildYourTeamChallenge({
           ...(inventory?.sound_effects || {}),
           countdown_tick: inventory?.sound_effects?.countdown_tick || null,
           timer_end: selectedTimerEndSoundPath,
+          pokeball_intro: selectedPokeballIntroSoundPath,
           intro_slot_reveal: selectedIntroRevealSoundPath,
         },
       },

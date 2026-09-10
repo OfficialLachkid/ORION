@@ -24,9 +24,11 @@ const mediaPath = (filename) => join(fixtureRoot, filename);
 
 const fixtureAssets = [
   'backgrounds-forest.png',
+  'pixel-background.png',
   'music.mp3',
   'countdown.mp3',
   'ding-sound.mp3',
+  'pokeball-intro.mp3',
   'pokeball-open-sound.mp3',
   'grass-plateau.png',
   'open-close-pokeball.gif',
@@ -95,12 +97,18 @@ const assetInventory = {
   scanned_at: '2026-09-09T00:00:00.000Z',
   directories: {},
   backgrounds: [mediaPath('backgrounds-forest.png')],
+  pixel_backgrounds: [mediaPath('pixel-background.png')],
   music: [mediaPath('music.mp3')],
   sound_effects: {
-    all: [mediaPath('countdown.mp3'), mediaPath('ding-sound.mp3'), mediaPath('pokeball-open-sound.mp3')],
+    all: [
+      mediaPath('countdown.mp3'),
+      mediaPath('ding-sound.mp3'),
+      mediaPath('pokeball-intro.mp3'),
+      mediaPath('pokeball-open-sound.mp3'),
+    ],
     countdown_tick: mediaPath('countdown.mp3'),
     timer_end: mediaPath('ding-sound.mp3'),
-    pokeball_intro: mediaPath('pokeball-open-sound.mp3'),
+    pokeball_intro: mediaPath('pokeball-intro.mp3'),
   },
   overlay_presets: {
     grass_plateau: mediaPath('grass-plateau.png'),
@@ -118,13 +126,15 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.selection_rules.pool_variants.length, 7);
   assert.equal(template.question_contract.hook_text, 'Build Your Team');
   assert.equal(template.question_contract.final_prompt_text, 'Who did you choose?');
-  assert.equal(template.layout.timer.countdown_from, 3);
+  assert.equal(template.layout.timer.countdown_from, 2.5);
+  assert.ok(template.layout.rounds.hook_hold_seconds >= 2.3);
   assert.equal(template.layout.text.show_counter, false);
   assert.equal(template.layout.stat_values.enabled, false);
   assert.equal(template.reveal.decoy_grayscale_enabled, false);
   assert.equal(template.renderer.candidate_intro_anchor, 'reveal');
   assert.equal(template.renderer.hold_pokeballs_until_reveal, true);
   assert.equal(template.renderer.hook_pokeballs_enabled, true);
+  assert.equal(template.renderer.pokeball_spawn_sfx_enabled, true);
 });
 
 test('build-your-team template is exposed in slash-command template options', () => {
@@ -159,6 +169,10 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
   assert.equal(plan.selection.display_subject_count, 24);
   assert.equal(plan.selection.pool_fallback_count, 0);
   assert.equal(plan.selection.pool_keys.length, 6);
+  assert.equal(plan.assets.background.selected_path, mediaPath('pixel-background.png'));
+  assert.equal(plan.assets.background.expected_directory, '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/pixel-backgrounds');
+  assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, mediaPath('pokeball-intro.mp3'));
+  assert.equal(plan.assets.audio.selected_sound_effects.intro_slot_reveal, mediaPath('pokeball-open-sound.mp3'));
   assert.ok(plan.selection.pool_keys.every((poolKey) => [
     'baby',
     'first_stage',
@@ -276,6 +290,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
     musicPath: '/tmp/music.mp3',
     countdownPath: '/tmp/countdown.mp3',
     timerEndPath: '/tmp/ding-sound.mp3',
+    pokeballIntroPath: '/tmp/pokeball-intro.mp3',
     introSlotRevealPath: '/tmp/pokeball-open-sound.mp3',
     cryCues,
     renderPlan,
@@ -290,6 +305,9 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.ok(renderPlan.rounds[0].candidates.every((candidate) => (
     candidate.intro_start_seconds >= renderPlan.rounds[0].reveal_visual_start_seconds
   )));
+  assert.ok(renderPlan.rounds[0].candidates.every((candidate) => (
+    candidate.pokeball_hold_start_seconds < candidate.pokeball_start_seconds
+  )));
   assert.match(visualFilter.script, /split=7\[bghook\]\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
   assert.match(visualFilter.script, /introhooktext/u);
   assert.match(visualFilter.script, /introhookpokeball0/u);
@@ -302,6 +320,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.doesNotMatch(visualFilter.script, /eq=saturation=0:brightness=-0\.42:contrast=1\.22/u);
   assert.equal(cryCues.length, 24);
   assert.ok(cryCues.every((cue) => cue.volume > 0));
+  assert.match(audioFilter, /pokeballintro0/u);
   assert.match(audioFilter, /asplit=24\[osrc0\]/u);
   assert.match(audioFilter, /cry0/u);
 });

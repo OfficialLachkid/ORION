@@ -1,5 +1,7 @@
 import {
   DEFAULT_COUNTDOWN_VOLUME,
+  DEFAULT_POKEBALL_INTRO_SFX_TRIM_SECONDS,
+  DEFAULT_POKEBALL_INTRO_SFX_VOLUME,
   DEFAULT_TIMER_END_VOLUME,
   DEFAULT_VOICE_VOLUME,
   ensureNumber,
@@ -49,6 +51,7 @@ export function buildAudioFilterScript({
   musicPath,
   countdownPath,
   timerEndPath,
+  pokeballIntroPath,
   introSlotRevealPath,
   cryCues = [],
   renderPlan,
@@ -112,6 +115,33 @@ export function buildAudioFilterScript({
       filters.push(`[tsrc${roundIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_TIMER_END_VOLUME}[${label}]`);
       mixLabels.push(label);
     });
+    inputIndex += 1;
+  }
+
+  if (pokeballIntroPath) {
+    const hookSpawnStart = renderPlan?.intro_hook?.enabled
+      ? ensureNumber(renderPlan.intro_hook.pokeball_intro_start_seconds, 0)
+      : null;
+    const roundSpawnMoments = (Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : [])
+      .map((round) => Math.min(
+        ...round.candidates
+          .map((candidate) => ensureNumber(candidate?.pokeball_hold_start_seconds, Number.POSITIVE_INFINITY))
+          .filter((value) => Number.isFinite(value)),
+      ))
+      .filter((value) => Number.isFinite(value));
+    const spawnMoments = [
+      ...(hookSpawnStart != null ? [hookSpawnStart] : []),
+      ...roundSpawnMoments,
+    ];
+    if (spawnMoments.length > 0) {
+      filters.push(`[${inputIndex}:a]asplit=${spawnMoments.length}${spawnMoments.map((_moment, index) => `[pisrc${index}]`).join('')}`);
+      spawnMoments.forEach((startSeconds, spawnIndex) => {
+        const delayMs = Math.max(0, Math.round(startSeconds * 1000));
+        const label = `pokeballintro${spawnIndex}`;
+        filters.push(`[pisrc${spawnIndex}]atrim=start=${DEFAULT_POKEBALL_INTRO_SFX_TRIM_SECONDS},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs},volume=${DEFAULT_POKEBALL_INTRO_SFX_VOLUME}[${label}]`);
+        mixLabels.push(label);
+      });
+    }
     inputIndex += 1;
   }
 
