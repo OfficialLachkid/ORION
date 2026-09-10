@@ -100,7 +100,7 @@
       "source_policy": "local_t7_pixel_backgrounds",
       "media_type": "looping_image_gif_or_video",
       "fit": "cover",
-      "blur_sigma": 3
+      "blur_sigma": 6
     },
     "text": {
       "hook_y": 650,
@@ -231,6 +231,7 @@
     "candidate_forming_duration_seconds": 1,
     "hold_pokeballs_until_reveal": true,
     "hook_pokeballs_enabled": true,
+    "hook_overlay_first_round": true,
     "pokeball_spawn_sfx_enabled": true,
     "hook_pokeball_intro_duration_seconds": 0.56,
     "hook_pokeball_intro_stagger_seconds": 0.32,

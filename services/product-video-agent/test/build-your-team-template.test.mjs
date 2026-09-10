@@ -127,6 +127,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.selection_rules.pool_variants.length, 7);
   assert.equal(template.question_contract.hook_text, 'Build Your Team');
   assert.equal(template.question_contract.final_prompt_text, 'Who did you choose?');
+  assert.equal(template.layout.background.blur_sigma, 6);
   assert.equal(template.layout.timer.countdown_from, 2.5);
   assert.ok(template.layout.rounds.hook_hold_seconds >= 2.3);
   assert.equal(template.layout.text.show_counter, false);
@@ -135,6 +136,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.candidate_intro_anchor, 'reveal');
   assert.equal(template.renderer.hold_pokeballs_until_reveal, true);
   assert.equal(template.renderer.hook_pokeballs_enabled, true);
+  assert.equal(template.renderer.hook_overlay_first_round, true);
   assert.equal(template.renderer.pokeball_spawn_sfx_enabled, true);
 });
 
@@ -302,14 +304,17 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
 
   assert.equal(renderPlan.rounds.length, 6);
   assert.equal(renderPlan.intro_hook.text, 'Build Your Team');
+  assert.equal(renderPlan.rounds[0].scene_start_seconds, 0);
   const narrationAdjustedRenderPlan = applyNarrationDurationsToRenderPlan(
     renderPlan,
     Array.from({ length: plan.narration.lines.length }, () => 1.2),
   );
-  assert.equal(
-    narrationAdjustedRenderPlan.rounds[0].scene_start_seconds,
-    renderPlan.intro_hook.round_start_seconds,
-  );
+  assert.equal(narrationAdjustedRenderPlan.rounds[0].scene_start_seconds, 0);
+  assert.ok(narrationAdjustedRenderPlan.rounds.every((round) => (
+    round.candidates.every((candidate) => (
+      candidate.pokeball_hold_start_seconds < candidate.pokeball_start_seconds
+    ))
+  )));
   assert.equal(renderPlan.stat_value_layout.enabled, false);
   assert.ok(renderPlan.rounds[0].candidates.every((candidate) => (
     candidate.intro_start_seconds >= renderPlan.rounds[0].reveal_visual_start_seconds
@@ -317,11 +322,14 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.ok(renderPlan.rounds[0].candidates.every((candidate) => (
     candidate.pokeball_hold_start_seconds < candidate.pokeball_start_seconds
   )));
-  assert.match(visualFilter.script, /split=7\[bghook\]\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
-  assert.match(visualFilter.script, /introhooktext/u);
-  assert.match(visualFilter.script, /introhookpokeball0/u);
+  assert.match(visualFilter.script, /split=6\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
+  assert.doesNotMatch(visualFilter.script, /bghook/u);
+  assert.doesNotMatch(visualFilter.script, /introhooktext/u);
+  assert.match(visualFilter.script, /scene0hookoverlay/u);
   assert.match(visualFilter.script, /scene0platformv0/u);
-  assert.match(visualFilter.script, /scene0pokeballhold0/u);
+  for (let roundIndex = 0; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
+    assert.match(visualFilter.script, new RegExp(`scene${roundIndex}pokeballhold0`, 'u'));
+  }
   assert.match(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /scene0spriteform0whitesrc/u);
   assert.doesNotMatch(visualFilter.script, /scene1counter/u);

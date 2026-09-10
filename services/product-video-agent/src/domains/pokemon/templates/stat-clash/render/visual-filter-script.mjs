@@ -587,6 +587,43 @@ function buildIntroHookScene(filters, {
   return textLabel;
 }
 
+function overlayIntroHookTextOnRound(filters, currentLabel, {
+  hook,
+  round,
+  textLayout,
+  fontPart,
+  textOutlineWidth,
+}) {
+  const roundStartSeconds = ensureNumber(round?.scene_start_seconds, 0);
+  const candidateIntroStarts = (Array.isArray(round?.candidates) ? round.candidates : [])
+    .map((candidate) => ensureNumber(candidate?.intro_start_seconds, Number.POSITIVE_INFINITY) - roundStartSeconds)
+    .filter(Number.isFinite);
+  const firstPokemonIntroStart = candidateIntroStarts.length > 0
+    ? Math.min(...candidateIntroStarts)
+    : ensureNumber(hook?.text_end_seconds, 1.2);
+  const startSeconds = roundTime(Math.max(0, ensureNumber(hook?.text_start_seconds, 0.04)));
+  const configuredEndSeconds = roundTime(Math.max(
+    startSeconds + 0.3,
+    ensureNumber(hook?.text_end_seconds, firstPokemonIntroStart),
+  ));
+  const endSeconds = roundTime(Math.max(
+    startSeconds + 0.3,
+    Math.min(configuredEndSeconds, firstPokemonIntroStart - 0.05),
+  ));
+  const hookScaleExpression = buildAnimatedPopSettleExpression(
+    startSeconds,
+    0.32,
+    0.62,
+    1.16,
+    1,
+  );
+  const hookLabel = 'scene0hookoverlay';
+  filters.push(
+    `[${currentLabel}]drawtext=text='${escapeDrawtextText(hook.text)}'${fontPart}:fontcolor=white:fontsize='${textLayout.hook_font_size}*(${hookScaleExpression})':borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(textLayout.hook_y, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'[${hookLabel}]`,
+  );
+  return hookLabel;
+}
+
 function localizeCandidateTiming(candidate, round) {
   return {
     ...candidate,
@@ -660,17 +697,22 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   ).toFixed(3));
 
   const hasIntroHook = Boolean(renderPlan?.intro_hook?.enabled);
-  const hookBackgroundLabel = hasIntroHook ? 'bghook' : null;
+  const hookOverlayFirstRound = hasIntroHook && (
+    renderPlan?.intro_hook?.overlay_first_round === true
+    || renderPlan?.renderer?.hook_overlay_first_round === true
+  );
+  const hasSeparateIntroHook = hasIntroHook && !hookOverlayFirstRound;
+  const hookBackgroundLabel = hasSeparateIntroHook ? 'bghook' : null;
   const backgroundLabels = Array.from({ length: roundCount }, (_unused, index) => `bg${index}`);
   const allBackgroundLabels = [
-    ...(hasIntroHook ? [hookBackgroundLabel] : []),
+    ...(hasSeparateIntroHook ? [hookBackgroundLabel] : []),
     ...backgroundLabels,
   ];
   filters.push(
     `[${inputRefs.background}:v]scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},${backgroundFilter}fps=${fps},setsar=1,split=${allBackgroundLabels.length}${allBackgroundLabels.map((label) => `[${label}]`).join('')}`,
   );
 
-  const introHookSceneLabel = hasIntroHook
+  const introHookSceneLabel = hasSeparateIntroHook
     ? buildIntroHookScene(filters, {
       backgroundLabel: hookBackgroundLabel,
       hook: renderPlan.intro_hook,
@@ -896,6 +938,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           grayInputLabel: spriteGrayInputLabel,
         });
       }
+    }
+
+    if (roundIndex === 0 && hookOverlayFirstRound) {
+      currentLabel = overlayIntroHookTextOnRound(filters, currentLabel, {
+        hook: renderPlan.intro_hook,
+        round,
+        textLayout: renderPlan.text_layout,
+        fontPart,
+        textOutlineWidth,
+      });
     }
 
     const timerOuterBorderThickness = 4;

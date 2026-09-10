@@ -180,6 +180,7 @@ function buildIntroHookScene(template) {
     pokeball_intro_start_seconds: 0.1,
     text_start_seconds: 0.04,
     text_end_seconds: roundTime(holdSeconds + transitionDurationSeconds),
+    overlay_first_round: template?.renderer?.hook_overlay_first_round === true,
   };
 }
 
@@ -402,11 +403,14 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       ensureNumber(template?.renderer?.intro_pokeball_lead_seconds, 0.18),
     )),
     candidate_intro_anchor: resolveCandidateIntroAnchor(template),
+    hold_pokeballs_until_reveal: template?.renderer?.hold_pokeballs_until_reveal === true,
+    hook_overlay_first_round: template?.renderer?.hook_overlay_first_round === true,
   };
+  const hookOverlayFirstRound = introHook?.overlay_first_round === true;
   const renderedRounds = buildRenderedRounds({
     rounds,
     template,
-    startingSceneStart: introHook?.round_start_seconds || 0,
+    startingSceneStart: hookOverlayFirstRound ? 0 : introHook?.round_start_seconds || 0,
   });
 
   return {
@@ -416,7 +420,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       fps: ensureNumber(template?.canvas?.fps, 30),
     },
     total_duration_seconds: Math.max(
-      introHook?.scene_duration_seconds || 0,
+      hookOverlayFirstRound ? 0 : introHook?.scene_duration_seconds || 0,
       renderedRounds.at(-1)?.scene_end_seconds || 0,
     ),
     intro_hook: introHook,
@@ -493,9 +497,13 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
           0.18,
         ),
         candidate_intro_anchor: rendererSettings.candidate_intro_anchor,
+        hold_pokeballs_until_reveal: rendererSettings.hold_pokeballs_until_reveal === true,
+        hook_overlay_first_round: rendererSettings.hook_overlay_first_round === true,
       },
     },
-    startingSceneStart: renderPlan.intro_hook?.round_start_seconds || 0,
+    startingSceneStart: rendererSettings.hook_overlay_first_round === true
+      ? 0
+      : renderPlan.intro_hook?.round_start_seconds || 0,
   });
 
   return {
