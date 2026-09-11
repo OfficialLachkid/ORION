@@ -37,6 +37,8 @@ const fixtureAssets = [
   'shiny.mp3',
   'grass-plateau.png',
   'open-close-pokeball.gif',
+  'pokeball-sprite-01.png',
+  'pokeball-sprite-02.png',
   'shiny-sparkle.gif',
 ];
 
@@ -105,6 +107,10 @@ const assetInventory = {
   backgrounds: [mediaPath('backgrounds-forest.png')],
   pixel_backgrounds: [mediaPath('pixel-background.png')],
   music: [mediaPath('music.mp3')],
+  pokeball_sprites: [
+    mediaPath('pokeball-sprite-01.png'),
+    mediaPath('pokeball-sprite-02.png'),
+  ],
   sound_effects: {
     all: [
       mediaPath('countdown.mp3'),
@@ -149,6 +155,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.reveal.decoy_grayscale_enabled, false);
   assert.equal(template.renderer.candidate_intro_anchor, 'reveal');
   assert.equal(template.renderer.hold_pokeballs_until_reveal, true);
+  assert.equal(template.renderer.held_pokeball_source, 'random_static_sprite');
   assert.equal(template.renderer.hook_pokeballs_enabled, true);
   assert.equal(template.renderer.hook_overlay_first_round, true);
   assert.equal(template.renderer.pokeball_spawn_sfx_enabled, true);
@@ -191,6 +198,11 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
   assert.equal(plan.assets.background.expected_directory, '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/pixel-backgrounds');
   assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, mediaPath('pokeball-intro.mp3'));
   assert.equal(plan.assets.audio.selected_sound_effects.intro_slot_reveal, mediaPath('pokeball-open-sound.mp3'));
+  assert.equal(
+    plan.assets.overlays.pokeball_sprites_expected_directory,
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Pokeball Sprites',
+  );
+  assert.ok(plan.assets.overlays.selected_pokeball_sprite_paths.length > 0);
   assert.ok(plan.selection.pool_keys.every((poolKey) => [
     'baby',
     'first_stage',
@@ -207,6 +219,7 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
     assert.match(round.prompt_text, /(Build your team|Pick your|Choose your)/u);
     assert.ok(round.candidates.every((candidate) => candidate.subject.render_sprite_path.endsWith('.gif')));
     assert.ok(round.candidates.every((candidate) => candidate.subject.cry_path.endsWith('.ogg')));
+    assert.ok(round.candidates.every((candidate) => candidate.pokeball_sprite_path.endsWith('.png')));
   }
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Build Your Team$/u);
 });
@@ -302,7 +315,8 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
       introPokeball: 1,
       grassPlatform: 2,
       rounds: renderPlan.rounds.map((round, roundIndex) => ({
-        candidates: round.candidates.map((_candidate, candidateIndex) => 3 + (roundIndex * 4) + candidateIndex),
+        pokeball_hold_sprites: round.candidates.map((_candidate, candidateIndex) => 3 + (roundIndex * 8) + candidateIndex),
+        candidates: round.candidates.map((_candidate, candidateIndex) => 7 + (roundIndex * 8) + candidateIndex),
       })),
     },
   );
@@ -353,7 +367,8 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
     assert.match(visualFilter.script, new RegExp(`scene${roundIndex}pokeballhold0`, 'u'));
   }
   assert.match(visualFilter.script, /scene0pokeball0/u);
-  assert.match(visualFilter.script, /trim=start=0\.7:duration=/u);
+  assert.match(visualFilter.script, /\[3:v\]fps=30,trim=duration=.*scene0pokeballhold0/u);
+  assert.doesNotMatch(visualFilter.script, /trim=start=0\.7:duration=/u);
   assert.match(visualFilter.script, /scene0spriteform0whitesrc/u);
   assert.doesNotMatch(visualFilter.script, /scene1counter/u);
   assert.doesNotMatch(visualFilter.script, /scene0stat/u);
@@ -395,7 +410,8 @@ test('build-your-team render path overlays shiny sparkle and audio for shiny can
       grassPlatform: 2,
       shinySparkle: 3,
       rounds: renderPlan.rounds.map((round, roundIndex) => ({
-        candidates: round.candidates.map((_candidate, candidateIndex) => 4 + (roundIndex * 4) + candidateIndex),
+        pokeball_hold_sprites: round.candidates.map((_candidate, candidateIndex) => 4 + (roundIndex * 8) + candidateIndex),
+        candidates: round.candidates.map((_candidate, candidateIndex) => 8 + (roundIndex * 8) + candidateIndex),
       })),
     },
   );

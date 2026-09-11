@@ -250,6 +250,7 @@ export async function renderPokeQuizzVideo({
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
     rounds: renderPlan.rounds.map((round) => ({
+      pokeball_hold_sprites: round.candidates.map((candidate) => inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}-pokeball-hold`)),
       candidates: round.candidates.map((candidate) => inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`)),
       still_candidates: round.candidates.map((candidate) => {
         const inputIndex = inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`);

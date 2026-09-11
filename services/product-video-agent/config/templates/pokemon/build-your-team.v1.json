@@ -251,6 +251,7 @@
     "candidate_forming_enabled": true,
     "candidate_forming_duration_seconds": 1,
     "hold_pokeballs_until_reveal": true,
+    "held_pokeball_source": "random_static_sprite",
     "hook_pokeballs_enabled": true,
     "hook_overlay_first_round": true,
     "pokeball_spawn_sfx_enabled": true,

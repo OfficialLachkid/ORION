@@ -557,6 +557,12 @@ function selectTemplateScopedSound(template, inventory, configKey, fallbackKey) 
     }) || fallbackPath;
 }
 
+function shouldUseStaticPokeballSprites(template) {
+  return String(template?.renderer?.held_pokeball_source || '')
+    .trim()
+    .toLowerCase() === 'random_static_sprite';
+}
+
 async function downloadCryToFile(sourceUrl, outputPath) {
   const response = await fetch(sourceUrl);
   if (!response.ok) {
@@ -844,6 +850,10 @@ export async function planPokemonBuildYourTeamChallenge({
   const selectedTimerEndSoundPath = selectTemplateScopedSound(template, inventory, 'timer_end', 'timer_end');
   const selectedPokeballIntroSoundPath = selectTemplateScopedSound(template, inventory, 'pokeball_intro', 'pokeball_intro');
   const selectedIntroRevealSoundPath = selectTemplateScopedSound(template, inventory, 'intro_slot_reveal', 'pokeball_intro');
+  const staticPokeballSpritesRequested = shouldUseStaticPokeballSprites(template);
+  const pokeballSpritePool = Array.isArray(inventory?.pokeball_sprites)
+    ? inventory.pokeball_sprites
+    : [];
   const shinyEffectConfig = template?.reveal?.shiny || {};
   const shinyEffectsRequested = shinyEffectConfig?.enabled !== false;
   const selectedShinySoundPath = shinyEffectsRequested
@@ -952,6 +962,9 @@ export async function planPokemonBuildYourTeamChallenge({
       label: String.fromCharCode(65 + index),
       is_correct: false,
       subject,
+      pokeball_sprite_path: staticPokeballSpritesRequested
+        ? selectSeededFile(pokeballSpritePool, random)
+        : null,
     }));
 
     rounds.push({
@@ -997,6 +1010,9 @@ export async function planPokemonBuildYourTeamChallenge({
   if (!selectedIntroRevealSoundPath) requiredAssetGaps.push('intro_slot_reveal_sfx_missing');
   if (!inventory?.overlay_presets?.grass_plateau) requiredAssetGaps.push('grass_plateau_overlay_missing');
   if (!inventory?.overlay_presets?.pokeball_primary) requiredAssetGaps.push('intro_pokeball_overlay_missing');
+  if (staticPokeballSpritesRequested && pokeballSpritePool.length === 0) {
+    requiredAssetGaps.push('pokeball_sprite_overlays_missing');
+  }
   const shinyCandidateCount = rounds.reduce((count, round) => (
     count + round.candidates.filter((candidate) => candidate.subject.is_shiny_variant).length
   ), 0);
@@ -1063,10 +1079,17 @@ export async function planPokemonBuildYourTeamChallenge({
       },
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
+        pokeball_sprites_expected_directory: POKE_QUIZZ_ASSET_LAYOUT.pokeballSprites,
         selected_grass_plateau_path: inventory?.overlay_presets?.grass_plateau || null,
         selected_intro_pokeball_path: inventory?.overlay_presets?.pokeball_primary || null,
         selected_shiny_sparkle_path: selectedShinySparklePath,
+        selected_pokeball_sprite_paths: [...new Set(rounds.flatMap((round) => (
+          round.candidates
+            .map((candidate) => candidate.pokeball_sprite_path)
+            .filter(Boolean)
+        )))],
         available_paths: inventory?.overlays || [],
+        available_pokeball_sprite_paths: pokeballSpritePool,
       },
       audio: {
         battle_intro_music_directory: POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic,

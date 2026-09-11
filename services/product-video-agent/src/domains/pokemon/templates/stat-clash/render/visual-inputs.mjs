@@ -61,6 +61,22 @@ export function buildVisualInputs(plan, renderPlan) {
 
   renderPlan.rounds.forEach((round) => {
     round.candidates.forEach((candidate) => {
+      const pokeballSpritePath = String(candidate?.pokeball_sprite_path || '').trim();
+      if (!pokeballSpritePath) {
+        return;
+      }
+      inputs.push({
+        role: `round-${round.round_number}-candidate-${candidate.index}-pokeball-hold`,
+        path: pokeballSpritePath,
+        args: buildLoopingVisualInput(
+          pokeballSpritePath,
+          round.scene_duration_seconds,
+          renderPlan.canvas.fps,
+        ),
+      });
+    });
+
+    round.candidates.forEach((candidate) => {
       const spritePath = candidate?.subject?.render_sprite_path
         || candidate?.subject?.sprite_path
         || '';

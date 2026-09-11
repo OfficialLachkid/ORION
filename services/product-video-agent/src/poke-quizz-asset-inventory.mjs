@@ -275,6 +275,7 @@ export async function scanPokeQuizzAssetInventory() {
     pixelTypes,
     threeDTypes,
     overlays,
+    pokeballSprites,
     transitions,
   ] = await Promise.all([
     listPokeQuizzBackgroundFiles(),
@@ -287,6 +288,7 @@ export async function scanPokeQuizzAssetInventory() {
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.pixelTypes, IMAGE_EXTENSIONS),
     listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.threeDTypes, new Set(['.png', '.webp'])),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.overlays, new Set(['.png', '.webp', '.gif', '.mov', '.mp4', '.webm'])),
+    listFiles(POKE_QUIZZ_ASSET_LAYOUT.pokeballSprites, new Set(['.png', '.webp'])),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.transitions, new Set(['.png', '.webp', '.gif', '.mov', '.mp4', '.webm'])),
   ]);
   const threeDTypeStyles = buildThreeDTypeStyleCatalog(threeDTypes);
@@ -307,6 +309,7 @@ export async function scanPokeQuizzAssetInventory() {
     },
     overlay_presets: selectOverlayPresets(overlays),
     overlays,
+    pokeball_sprites: pokeballSprites,
     transitions,
   };
 }

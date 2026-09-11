@@ -15,6 +15,7 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   threeDTypes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/3D Types`,
   threeDTypeSources: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/3D Type Sources`,
   overlays: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Overlays`,
+  pokeballSprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Overlays/Pokeball Sprites`,
   transitions: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Transitions`,
   battleIntroMusic: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Music`,
   soundEffects: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Sound Effects`,
