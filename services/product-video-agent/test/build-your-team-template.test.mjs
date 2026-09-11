@@ -164,8 +164,8 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.held_pokeball_source_start_seconds, 0.7);
   assert.equal(template.renderer.held_pokeball_scale_multiplier, 0.416);
   assert.equal(template.renderer.held_pokeball_intro_duration_seconds, 1.12);
-  assert.equal(template.renderer.held_pokeball_wiggle_amplitude_radians, 0.12);
-  assert.equal(template.renderer.held_pokeball_wiggle_frequency_hz, 1.35);
+  assert.equal(template.renderer.held_pokeball_wiggle_amplitude_radians, 0.24);
+  assert.equal(template.renderer.held_pokeball_wiggle_frequency_hz, 0.675);
   assert.equal(template.renderer.held_pokeball_wiggle_horizontal_amplitude_px, 24);
 });
 
@@ -367,6 +367,12 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.match(visualFilter.script, /split=6\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
   assert.match(visualFilter.script, /crop=w=2160:h=3840:x='\(iw-2160\)\*\(0\.5\+0\.5\*sin\(t\*/u);
   assert.match(visualFilter.script, /scale=1080:1920:flags=lanczos/u);
+  for (const [roundIndex, round] of renderPlan.rounds.entries()) {
+    const expectedTrim = roundIndex === 0
+      ? `[bg${roundIndex}]trim=duration=${round.scene_duration_seconds}`
+      : `[bg${roundIndex}]trim=start=${round.scene_start_seconds}:duration=${round.scene_duration_seconds}`;
+    assert.ok(visualFilter.script.includes(expectedTrim), expectedTrim);
+  }
   assert.doesNotMatch(visualFilter.script, /bghook/u);
   assert.doesNotMatch(visualFilter.script, /introhooktext/u);
   assert.match(visualFilter.script, /scene0hookoverlay/u);
@@ -377,8 +383,8 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.doesNotMatch(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /\[3:v\]fps=30,trim=duration=.*scale=w='184\.08\*\(if\(lt/u);
   assert.match(visualFilter.script, /pad=258:258:\(ow-iw\)\/2:\(oh-ih\)\/2:color=black@0:eval=frame/u);
-  assert.match(visualFilter.script, /rotate='if\(lt\(.*1\.12\),0,sin\(.*\*8\.482\)\*0\.12\)'/u);
-  assert.match(visualFilter.script, /overlay=x='335-w\/2\+\(if\(lt\(\(t\),1\.12\),0,sin\(\(\(t\)-1\.12\)\*8\.482\)\*24\)\)'/u);
+  assert.match(visualFilter.script, /rotate='if\(lt\(.*1\.12\),0,sin\(.*\*4\.241\)\*0\.24\)'/u);
+  assert.match(visualFilter.script, /overlay=x='335-w\/2\+\(if\(lt\(\(t\),1\.12\),0,sin\(\(\(t\)-1\.12\)\*4\.241\)\*24\)\)'/u);
   assert.match(visualFilter.script, /scene0pokeballhold0/u);
   assert.doesNotMatch(visualFilter.script, /trim=start=0\.7:duration=/u);
   assert.match(visualFilter.script, /scene0spriteform0whitesrc/u);

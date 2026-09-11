@@ -850,8 +850,15 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   renderPlan.rounds.forEach((round, roundIndex) => {
     const roundInputs = inputRefs.rounds[roundIndex] || { candidates: [] };
     const sceneBaseLabel = `scene${roundIndex}b`;
+    const backgroundStartSeconds = roundTime(Math.max(
+      0,
+      ensureNumber(round.scene_start_seconds, 0),
+    ));
+    const backgroundTrimFilter = backgroundStartSeconds > 0
+      ? `trim=start=${backgroundStartSeconds}:duration=${round.scene_duration_seconds}`
+      : `trim=duration=${round.scene_duration_seconds}`;
     filters.push(
-      `[${backgroundLabels[roundIndex]}]trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS[${sceneBaseLabel}]`,
+      `[${backgroundLabels[roundIndex]}]${backgroundTrimFilter},setpts=PTS-STARTPTS[${sceneBaseLabel}]`,
     );
 
     let currentLabel = sceneBaseLabel;
