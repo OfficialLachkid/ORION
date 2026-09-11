@@ -619,6 +619,14 @@ function buildPokeballWiggleSpeedMultipliers(candidateCount, template, random) {
   return shuffle(speedMultipliers, random);
 }
 
+function buildPokeballWiggleDirectionMultipliers(candidateCount, random) {
+  const directionMultipliers = Array.from(
+    { length: candidateCount },
+    (_unused, index) => (index % 2 === 0 ? -1 : 1),
+  );
+  return shuffle(directionMultipliers, random);
+}
+
 async function downloadCryToFile(sourceUrl, outputPath) {
   const response = await fetch(sourceUrl);
   if (!response.ok) {
@@ -1018,6 +1026,10 @@ export async function planPokemonBuildYourTeamChallenge({
       template,
       random,
     );
+    const pokeballWiggleDirectionMultipliers = buildPokeballWiggleDirectionMultipliers(
+      resolvedSubjects.length,
+      random,
+    );
     const candidates = resolvedSubjects.map((subject, index) => ({
       index,
       label: String.fromCharCode(65 + index),
@@ -1027,6 +1039,7 @@ export async function planPokemonBuildYourTeamChallenge({
         ? selectWeightedPokeballSprite(pokeballSpritePool, template, random)
         : null,
       pokeball_wiggle_speed_multiplier: pokeballWiggleSpeedMultipliers[index] || 1,
+      pokeball_wiggle_direction_multiplier: pokeballWiggleDirectionMultipliers[index] || 1,
     }));
 
     rounds.push({

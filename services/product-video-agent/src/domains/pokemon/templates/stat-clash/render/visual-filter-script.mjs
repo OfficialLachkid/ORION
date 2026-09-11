@@ -263,6 +263,7 @@ function buildHeldPokeballWiggleValueExpression({
   amplitude,
   frequencyHz,
   momentumStrength,
+  directionMultiplier,
   timeExpression,
 }) {
   const time = normalizeAnimationTimeExpression(timeExpression);
@@ -270,6 +271,7 @@ function buildHeldPokeballWiggleValueExpression({
   const normalizedAmplitude = roundTime(Math.max(0, amplitude));
   const frequencyRadians = roundTime(Math.max(0.1, frequencyHz) * 6.283185307);
   const normalizedMomentumStrength = roundTime(Math.max(0, momentumStrength));
+  const normalizedDirectionMultiplier = ensureNumber(directionMultiplier, 1) < 0 ? -1 : 1;
   if (normalizedAmplitude <= 0) {
     return '0';
   }
@@ -277,7 +279,8 @@ function buildHeldPokeballWiggleValueExpression({
   const momentumExpression = normalizedMomentumStrength > 0
     ? `(${sineExpression})*(1+${normalizedMomentumStrength}*(1-abs(${sineExpression})))`
     : sineExpression;
-  return `if(lt(${time},${start}),0,(${momentumExpression})*${normalizedAmplitude})`;
+  const signedAmplitude = roundTime(normalizedAmplitude * normalizedDirectionMultiplier);
+  return `if(lt(${time},${start}),0,(${momentumExpression})*${signedAmplitude})`;
 }
 
 function buildBackgroundPreparationFilter({
@@ -989,6 +992,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
             const candidateWiggleFrequencyHz = (
               heldPokeballWiggleFrequencyHz * heldPokeballWiggleSpeedMultiplier
             );
+            const candidateWiggleDirectionMultiplier = (
+              ensureNumber(candidate?.pokeball_wiggle_direction_multiplier, 1) < 0 ? -1 : 1
+            );
             const holdScaleTimeExpression = buildScaleFilterTimeExpression({
               fps,
               streamStartSeconds: holdStart,
@@ -1010,6 +1016,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
               amplitude: heldPokeballWiggleAmplitudeRadians,
               frequencyHz: candidateWiggleFrequencyHz,
               momentumStrength: heldPokeballWiggleMomentumStrength,
+              directionMultiplier: candidateWiggleDirectionMultiplier,
               timeExpression: holdScaleTimeExpression,
             });
             const holdHorizontalWiggleExpression = buildHeldPokeballWiggleValueExpression({
@@ -1017,6 +1024,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
               amplitude: heldPokeballWiggleHorizontalAmplitudePx,
               frequencyHz: candidateWiggleFrequencyHz,
               momentumStrength: heldPokeballWiggleMomentumStrength,
+              directionMultiplier: candidateWiggleDirectionMultiplier,
               timeExpression: 't',
             });
             holdXExpression = `${cell.center_x}-w/2+(${holdHorizontalWiggleExpression})`;

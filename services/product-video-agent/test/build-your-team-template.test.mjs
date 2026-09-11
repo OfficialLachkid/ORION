@@ -177,11 +177,12 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.held_pokeball_wiggle_horizontal_amplitude_px, 24);
   assert.deepEqual(template.renderer.held_pokeball_sprite_weights, {
     default: 1,
-    1: 6,
-    2: 3,
-    3: 3,
-    4: 2,
+    1: 10,
+    2: 4,
+    3: 4,
+    4: 3,
   });
+  assert.equal(template.renderer.intro_pokeball_center_y_offset_px, 150);
 });
 
 test('build-your-team template is exposed in slash-command template options', () => {
@@ -247,6 +248,12 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
         .map((candidate) => candidate.pokeball_wiggle_speed_multiplier)
         .sort((left, right) => left - right),
       [0.88, 0.96, 1.04, 1.12],
+    );
+    assert.deepEqual(
+      round.candidates
+        .map((candidate) => candidate.pokeball_wiggle_direction_multiplier)
+        .sort((left, right) => left - right),
+      [-1, -1, 1, 1],
     );
   }
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Build Your Team$/u);
@@ -433,6 +440,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.match(visualFilter.script, /\[3:v\]fps=30,trim=duration=.*scale=w='184\.08\*\(if\(lt/u);
   assert.match(visualFilter.script, /pad=258:258:\(ow-iw\)\/2:\(oh-ih\)\/2:color=black@0:eval=frame/u);
   const firstPokeballSpeed = renderPlan.rounds[0].candidates[0].pokeball_wiggle_speed_multiplier;
+  const firstPokeballDirection = renderPlan.rounds[0].candidates[0].pokeball_wiggle_direction_multiplier;
   const firstPokeballFrequencyRadians = Number((
     template.renderer.held_pokeball_wiggle_frequency_hz
     * firstPokeballSpeed
@@ -451,12 +459,14 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   }
   assert.match(
     visualFilter.script,
-    new RegExp(`rotate='if\\(lt\\(.*1\\.12\\),0,\\(\\(sin\\(.*\\*${firstPokeballFrequencyRadians}\\)\\)\\*\\(1\\+0\\.45\\*\\(1-abs\\(sin\\(.*\\*${firstPokeballFrequencyRadians}\\)\\)\\)\\)\\)\\*0\\.24\\)'`, 'u'),
+    new RegExp(`rotate='if\\(lt\\(.*1\\.12\\),0,\\(\\(sin\\(.*\\*${firstPokeballFrequencyRadians}\\)\\)\\*\\(1\\+0\\.45\\*\\(1-abs\\(sin\\(.*\\*${firstPokeballFrequencyRadians}\\)\\)\\)\\)\\)\\*${firstPokeballDirection < 0 ? '-0\\.24' : '0\\.24'}\\)'`, 'u'),
   );
   assert.match(
     visualFilter.script,
-    new RegExp(`overlay=x='335-w\\/2\\+\\(if\\(lt\\(\\(t\\),1\\.12\\),0,.*${firstPokeballFrequencyRadians}.*0\\.45.*${firstPokeballFrequencyRadians}.*\\*24\\)\\)'`, 'u'),
+    new RegExp(`overlay=x='335-w\\/2\\+\\(if\\(lt\\(\\(t\\),1\\.12\\),0,.*${firstPokeballFrequencyRadians}.*0\\.45.*${firstPokeballFrequencyRadians}.*\\*${firstPokeballDirection < 0 ? '-24' : '24'}\\)\\)'`, 'u'),
   );
+  const firstPokeballY = Number((renderPlan.grid_layout.cells[0].center_y + 150).toFixed(3));
+  assert.match(visualFilter.script, new RegExp(`y='${firstPokeballY}-h\\/2'`, 'u'));
   assert.match(visualFilter.script, /scene0pokeballhold0/u);
   assert.doesNotMatch(visualFilter.script, /trim=start=0\.7:duration=/u);
   assert.match(visualFilter.script, /scene0spriteform0whitesrc/u);
