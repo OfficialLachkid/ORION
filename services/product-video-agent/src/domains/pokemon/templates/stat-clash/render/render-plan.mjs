@@ -78,6 +78,7 @@ function buildCenteredGridLayout({
 
 function buildGridLayout(template, optionCount = 4) {
   const grid = template?.layout?.sprite_grid || {};
+  const foregroundYOffset = ensureNumber(template?.layout?.foreground_y_offset_px, 0);
   const columns = Math.max(1, ensureNumber(grid.columns, 2));
   const rows = Math.max(1, ensureNumber(grid.rows, Math.ceil(optionCount / columns)));
   const layout = buildCenteredGridLayout({
@@ -98,7 +99,7 @@ function buildGridLayout(template, optionCount = 4) {
   return {
     ...layout,
     cells: layout.cells.slice(0, optionCount).map((cell) => {
-      const rowYOffset = ensureNumber(rowYOffsets[cell.row], 0);
+      const rowYOffset = ensureNumber(rowYOffsets[cell.row], 0) + foregroundYOffset;
       return {
         ...cell,
         y: roundTime(cell.y + rowYOffset),
@@ -116,10 +117,11 @@ function buildTimerBarLayout(template, gridLayout = { cells: [] }) {
   const configuredInset = ensureNumber(template?.layout?.timer?.bar_horizontal_inset_px, 56);
   const configuredHeight = ensureNumber(template?.layout?.timer?.bar_height_px, 34);
   const yOffset = ensureNumber(template?.layout?.timer?.bar_y_offset_px, 0);
+  const foregroundYOffset = ensureNumber(template?.layout?.foreground_y_offset_px, 0);
   const explicitCenterY = Number(template?.layout?.timer?.center_y);
   const hasExplicitCenterY = Number.isFinite(explicitCenterY);
   let centerX = canvasWidth / 2;
-  let centerY = (hasExplicitCenterY ? explicitCenterY : 1040) + yOffset;
+  let centerY = (hasExplicitCenterY ? explicitCenterY : 1040) + yOffset + foregroundYOffset;
   let width = canvasWidth - safeLeft - safeRight - (configuredInset * 2);
 
   if (cells.length > 0) {
@@ -154,15 +156,17 @@ function buildTimerBarLayout(template, gridLayout = { cells: [] }) {
 }
 
 function buildTextLayout(template) {
+  const foregroundYOffset = ensureNumber(template?.layout?.foreground_y_offset_px, 0);
   return {
-    hook_y: ensureNumber(template?.layout?.text?.hook_y, 650),
+    foreground_y_offset_px: foregroundYOffset,
+    hook_y: ensureNumber(template?.layout?.text?.hook_y, 650) + foregroundYOffset,
     hook_font_size: ensureNumber(template?.layout?.text?.hook_font_size, 132),
-    prompt_y: ensureNumber(template?.layout?.text?.prompt_y, 170),
+    prompt_y: ensureNumber(template?.layout?.text?.prompt_y, 170) + foregroundYOffset,
     prompt_font_size: ensureNumber(template?.layout?.text?.prompt_font_size, 100),
-    reveal_y: ensureNumber(template?.layout?.text?.reveal_y, 285),
+    reveal_y: ensureNumber(template?.layout?.text?.reveal_y, 285) + foregroundYOffset,
     reveal_font_size: ensureNumber(template?.layout?.text?.reveal_font_size, 92),
     counter_x: ensureNumber(template?.layout?.text?.counter_x, 72),
-    counter_y: ensureNumber(template?.layout?.text?.counter_y, 144),
+    counter_y: ensureNumber(template?.layout?.text?.counter_y, 144) + foregroundYOffset,
     counter_font_size: ensureNumber(template?.layout?.text?.counter_font_size, 96),
   };
 }

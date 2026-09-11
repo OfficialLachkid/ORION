@@ -152,6 +152,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.question_contract.hook_text, 'BUILD YOUR ULTIMATE TEAM!');
   assert.equal(template.question_contract.final_prompt_text, 'Who did you choose?');
   assert.equal(template.layout.background.blur_sigma, 6);
+  assert.equal(template.layout.foreground_y_offset_px, 100);
   assert.equal(template.layout.background.motion.enabled, true);
   assert.equal(template.layout.background.motion.subpixel_scale, 2);
   assert.equal(template.reveal.shiny.enabled, true);
@@ -180,10 +181,10 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.reveal_pokeball_overlay_enabled, false);
   assert.equal(template.renderer.hook_pokeballs_enabled, true);
   assert.equal(template.renderer.hook_overlay_first_round, true);
-  assert.equal(template.renderer.candidate_intro_stagger_seconds, 0.20);
+  assert.equal(template.renderer.candidate_intro_stagger_seconds, 0.15);
   assert.equal(template.renderer.pokeball_spawn_sfx_enabled, true);
   assert.equal(template.renderer.held_pokeball_source_start_seconds, 0.7);
-  assert.equal(template.renderer.held_pokeball_scale_multiplier, 0.416);
+  assert.equal(template.renderer.held_pokeball_scale_multiplier, 0.3328);
   assert.equal(template.renderer.held_pokeball_intro_duration_seconds, 1.12);
   assert.equal(template.renderer.held_pokeball_wiggle_amplitude_radians, 0.24);
   assert.equal(template.renderer.held_pokeball_wiggle_frequency_hz, 0.675);
@@ -416,10 +417,14 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.equal(renderPlan.rounds.length, 6);
   assert.equal(renderPlan.intro_hook.text, 'BUILD YOUR ULTIMATE TEAM!');
   assert.equal(renderPlan.rounds[0].scene_start_seconds, 0);
-  assert.equal(renderPlan.grid_layout.cells[0].center_y, 430);
-  assert.equal(renderPlan.grid_layout.cells[1].center_y, 430);
-  assert.equal(renderPlan.grid_layout.cells[2].center_y, 1150);
-  assert.equal(renderPlan.grid_layout.cells[3].center_y, 1150);
+  assert.equal(renderPlan.text_layout.hook_y, 750);
+  assert.equal(renderPlan.text_layout.prompt_y, 250);
+  assert.equal(renderPlan.text_layout.reveal_y, 385);
+  assert.equal(renderPlan.timer_layout.center_y, 1110);
+  assert.equal(renderPlan.grid_layout.cells[0].center_y, 530);
+  assert.equal(renderPlan.grid_layout.cells[1].center_y, 530);
+  assert.equal(renderPlan.grid_layout.cells[2].center_y, 1250);
+  assert.equal(renderPlan.grid_layout.cells[3].center_y, 1250);
   const narrationAdjustedRenderPlan = applyNarrationDurationsToRenderPlan(
     renderPlan,
     Array.from({ length: plan.narration.lines.length }, () => 1.2),
@@ -457,13 +462,14 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   }
   assert.match(visualFilter.script, /drawtext=text='ULTIMATE TEAM!'.*fontcolor=0xFFD60A.*shadowcolor=black@0\.72/u);
   assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0x2B6DA6/u);
+  assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0xF4FBFF.*:y='196\+/u);
   assert.match(visualFilter.script, /scene0platformv0/u);
   for (let roundIndex = 0; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
     assert.match(visualFilter.script, new RegExp(`scene${roundIndex}pokeballhold0`, 'u'));
   }
   assert.doesNotMatch(visualFilter.script, /scene0pokeball0/u);
-  assert.match(visualFilter.script, /\[3:v\]fps=30,trim=duration=.*scale=w='184\.08\*\(if\(lt/u);
-  assert.match(visualFilter.script, /pad=258:258:\(ow-iw\)\/2:\(oh-ih\)\/2:color=black@0:eval=frame/u);
+  assert.match(visualFilter.script, /\[3:v\]fps=30,trim=duration=.*scale=w='147\.264\*\(if\(lt/u);
+  assert.match(visualFilter.script, /pad=208:208:\(ow-iw\)\/2:\(oh-ih\)\/2:color=black@0:eval=frame/u);
   const firstPokeballSpeed = renderPlan.rounds[0].candidates[0].pokeball_wiggle_speed_multiplier;
   const firstPokeballDirection = renderPlan.rounds[0].candidates[0].pokeball_wiggle_direction_multiplier;
   const firstPokeballFrequencyRadians = Number((

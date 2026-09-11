@@ -486,7 +486,8 @@ function appendRoundHeadline(filters, currentLabel, {
   const shadowColor = String(headlineConfig.shadow_color || 'black@0.7');
   const shadowX = Math.round(ensureNumber(headlineConfig.shadow_x_px, 4));
   const shadowY = Math.round(ensureNumber(headlineConfig.shadow_y_px, 6));
-  let lineY = ensureNumber(headlineConfig.y, 96);
+  let lineY = ensureNumber(headlineConfig.y, 96)
+    + ensureNumber(template?.layout?.foreground_y_offset_px, 0);
   let outputLabel = currentLabel;
 
   lines.forEach((line, lineIndex) => {

@@ -96,6 +96,7 @@
     ]
   },
   "layout": {
+    "foreground_y_offset_px": 100,
     "background": {
       "source_policy": "local_t7_pixel_backgrounds",
       "media_type": "looping_image_gif_or_video",
@@ -275,7 +276,7 @@
     "crf": 20,
     "faststart": true,
     "candidate_intro_initial_delay_seconds": 0.1,
-    "candidate_intro_stagger_seconds": 0.20,
+    "candidate_intro_stagger_seconds": 0.15,
     "candidate_intro_duration_seconds": 0.22,
     "candidate_intro_anchor": "reveal",
     "candidate_intro_y_offset_px": 42,
@@ -297,7 +298,7 @@
     "intro_pokeball_lead_seconds": 0.18,
     "intro_platform_lead_seconds": 0.08,
     "intro_pokeball_scale_multiplier": 0.52,
-    "held_pokeball_scale_multiplier": 0.416,
+    "held_pokeball_scale_multiplier": 0.3328,
     "held_pokeball_intro_duration_seconds": 1.12,
     "held_pokeball_wiggle_amplitude_radians": 0.24,
     "held_pokeball_wiggle_frequency_hz": 0.675,
