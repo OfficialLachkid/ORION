@@ -76,9 +76,9 @@
     ]
   },
   "question_contract": {
-    "hook_text": "Build Your Team",
+    "hook_text": "BUILD YOUR ULTIMATE TEAM!",
     "hook_text_variants": [
-      "Build Your Team"
+      "BUILD YOUR ULTIMATE TEAM!"
     ],
     "prompt_text": "Build your team: {pool_label}",
     "prompt_text_variants": [
@@ -113,7 +113,35 @@
       "hook_y": 650,
       "hook_font_size": 132,
       "prompt_y": 150,
-      "prompt_font_size": 102,
+      "prompt_font_size": 68,
+      "prompt_above_timer": true,
+      "prompt_above_timer_gap_px": 28,
+      "round_headline": {
+        "enabled": true,
+        "y": 96,
+        "line_gap_px": 4,
+        "depth_px": 10,
+        "depth_steps": 5,
+        "shadow_color": "black@0.72",
+        "shadow_x_px": 5,
+        "shadow_y_px": 7,
+        "lines": [
+          {
+            "text": "BUILD YOUR",
+            "font_size": 72,
+            "color": "0xF4FBFF",
+            "outline_color": "0x173A63",
+            "depth_color": "0x2B6DA6"
+          },
+          {
+            "text": "ULTIMATE TEAM!",
+            "font_size": 88,
+            "color": "0xFFD60A",
+            "outline_color": "0x704400",
+            "depth_color": "0xC97900"
+          }
+        ]
+      },
       "reveal_y": 285,
       "reveal_font_size": 92,
       "outline_width": 8,
@@ -122,8 +150,8 @@
       "counter_y": 144,
       "counter_font_size": 96,
       "font_candidates": [
-        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
         "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
         "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
       ]
     },
@@ -134,6 +162,10 @@
       "min_item_size_px": 214,
       "column_gap_px": 160,
       "row_gap_px": 320,
+      "row_y_offsets_px": [
+        -150,
+        0
+      ],
       "sprite_scale_multiplier": 1.77,
       "sprite_center_y_offset_px": 90,
       "stage_bounds_px": {
@@ -155,7 +187,8 @@
       "bar_height_px": 38,
       "bar_horizontal_inset_px": 20,
       "center_y": 1010,
-      "bar_y_offset_px": 0
+      "bar_y_offset_px": 0,
+      "show_before_countdown": true
     },
     "stat_values": {
       "enabled": false
@@ -242,7 +275,7 @@
     "crf": 20,
     "faststart": true,
     "candidate_intro_initial_delay_seconds": 0.1,
-    "candidate_intro_stagger_seconds": 0.24,
+    "candidate_intro_stagger_seconds": 0.20,
     "candidate_intro_duration_seconds": 0.22,
     "candidate_intro_anchor": "reveal",
     "candidate_intro_y_offset_px": 42,
@@ -273,12 +306,12 @@
     "held_pokeball_wiggle_horizontal_amplitude_px": 24,
     "held_pokeball_sprite_weights": {
       "default": 1,
-      "1": 10,
-      "2": 4,
+      "1": 15,
+      "2": 5,
       "3": 4,
       "4": 3
     },
-    "intro_pokeball_center_y_offset_px": 150,
+    "intro_pokeball_center_y_offset_px": 180,
     "fallback_sprite_wobble_amplitude_px": 6,
     "fallback_sprite_wobble_cycle_length_multiplier": 3,
     "stat_reveal_fade_duration_seconds": 0.22,

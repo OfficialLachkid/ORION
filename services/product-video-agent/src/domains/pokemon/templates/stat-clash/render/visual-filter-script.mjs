@@ -463,28 +463,97 @@ function appendTimerBarPhase(filters, currentLabel, {
   return shadowOverlayLabel;
 }
 
-function buildPromptSegments(text, template, textLayout, round) {
+function appendRoundHeadline(filters, currentLabel, {
+  roundIndex,
+  round,
+  template,
+  fontPart,
+  textOutlineWidth,
+}) {
+  const headlineConfig = template?.layout?.text?.round_headline || {};
+  const lines = Array.isArray(headlineConfig.lines)
+    ? headlineConfig.lines.filter((line) => String(line?.text || '').trim())
+    : [];
+  if (headlineConfig.enabled !== true || lines.length === 0) {
+    return currentLabel;
+  }
+
+  const startSeconds = ensureNumber(round?.local?.prompt_start_seconds, 0.04);
+  const endSeconds = ensureNumber(round?.local?.scene_duration_seconds, startSeconds + 1);
+  const lineGapPx = Math.max(0, ensureNumber(headlineConfig.line_gap_px, 4));
+  const depthPx = Math.max(0, Math.round(ensureNumber(headlineConfig.depth_px, 8)));
+  const depthSteps = Math.max(1, Math.round(ensureNumber(headlineConfig.depth_steps, 4)));
+  const shadowColor = String(headlineConfig.shadow_color || 'black@0.7');
+  const shadowX = Math.round(ensureNumber(headlineConfig.shadow_x_px, 4));
+  const shadowY = Math.round(ensureNumber(headlineConfig.shadow_y_px, 6));
+  let lineY = ensureNumber(headlineConfig.y, 96);
+  let outputLabel = currentLabel;
+
+  lines.forEach((line, lineIndex) => {
+    const text = String(line.text || '').trim();
+    const fontSize = Math.max(24, Math.round(ensureNumber(line.font_size, 84)));
+    const outlineWidth = Math.max(
+      1,
+      Math.round(ensureNumber(line.outline_width, textOutlineWidth)),
+    );
+    for (let depthStep = depthSteps; depthStep >= 1; depthStep -= 1) {
+      const depthOffset = Number(((depthPx * depthStep) / depthSteps).toFixed(3));
+      const depthLabel = `scene${roundIndex}headline${lineIndex}depth${depthStep}`;
+      filters.push(
+        `[${outputLabel}]drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=${line.depth_color || '0x244B73'}:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=${line.outline_color || 'black'}:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(lineY + depthOffset, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'[${depthLabel}]`,
+      );
+      outputLabel = depthLabel;
+    }
+
+    const faceLabel = `scene${roundIndex}headline${lineIndex}face`;
+    filters.push(
+      `[${outputLabel}]drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=${line.color || 'white'}:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=${line.outline_color || 'black'}:shadowcolor=${shadowColor}:shadowx=${shadowX}:shadowy=${shadowY}:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(lineY, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'[${faceLabel}]`,
+    );
+    outputLabel = faceLabel;
+    lineY += fontSize + lineGapPx;
+  });
+
+  return outputLabel;
+}
+
+function buildPromptSegments(text, template, textLayout, round, timerLayout = null) {
   const startSeconds = ensureNumber(round?.local?.prompt_start_seconds, 0.04);
   const endSeconds = ensureNumber(round?.local?.reveal_start_seconds, startSeconds + 1);
   const headerText = extractPromptHeaderText(text, round);
-  const headerFontSize = Math.max(64, Math.round(textLayout.prompt_font_size * 0.82));
+  const promptAboveTimer = template?.layout?.text?.prompt_above_timer === true && timerLayout;
+  const headerFontSize = Math.max(
+    promptAboveTimer ? 44 : 64,
+    Math.round(textLayout.prompt_font_size * 0.82),
+  );
   const lineHeight = headerFontSize + 12;
   const wrappedHeaderLines = wrapPromptTextLines(
     headerText,
     estimateWrapCharacterLimit(template, headerFontSize),
     2,
   );
+  const promptBlockHeight = Math.max(
+    headerFontSize,
+    (wrappedHeaderLines.length * headerFontSize)
+      + (Math.max(0, wrappedHeaderLines.length - 1) * 12),
+  );
+  const promptBaseY = promptAboveTimer
+    ? Number((
+      timerLayout.y
+      - Math.max(0, ensureNumber(template?.layout?.text?.prompt_above_timer_gap_px, 24))
+      - promptBlockHeight
+    ).toFixed(3))
+    : textLayout.prompt_y;
   const headerLines = wrappedHeaderLines.map((line, index) => ({
     text: line,
     font_size: headerFontSize,
-    y: textLayout.prompt_y + (index * lineHeight),
+    y: promptBaseY + (index * lineHeight),
     start_seconds: startSeconds,
     end_seconds: endSeconds,
     color: 'white',
   }));
   const lastHeaderLine = headerLines.at(-1);
   const statBaseY = Number((
-    (lastHeaderLine?.y ?? textLayout.prompt_y)
+    (lastHeaderLine?.y ?? promptBaseY)
     + (lastHeaderLine?.font_size ?? headerFontSize)
     + Math.max(10, Math.round(textLayout.prompt_font_size * 0.08))
   ).toFixed(3));
@@ -891,7 +960,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
     }
 
-    buildPromptSegments(round.prompt_text, template, renderPlan.text_layout, round)
+    buildPromptSegments(round.prompt_text, template, renderPlan.text_layout, round, timerLayout)
       .forEach((segment, segmentIndex) => {
         if (Array.isArray(segment.parts) && segment.parts.length > 0) {
           let segmentLabel = currentLabel;
@@ -1184,7 +1253,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       }
     }
 
-    if (roundIndex === 0 && hookOverlayFirstRound) {
+    const roundHeadlineEnabled = template?.layout?.text?.round_headline?.enabled === true;
+    if (roundIndex === 0 && hookOverlayFirstRound && !roundHeadlineEnabled) {
       currentLabel = overlayIntroHookTextOnRound(filters, currentLabel, {
         hook: renderPlan.intro_hook,
         round,
@@ -1194,6 +1264,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       });
     }
 
+    currentLabel = appendRoundHeadline(filters, currentLabel, {
+      roundIndex,
+      round,
+      template,
+      fontPart,
+      textOutlineWidth,
+    });
+
+    const timerVisibleStartSeconds = template?.layout?.timer?.show_before_countdown === true
+      ? round.local.activation_start_seconds
+      : round.local.countdown_start_seconds;
     const timerOuterBorderThickness = 4;
     const timerInnerBorderInset = 2;
     const timerOuterLabel = `scene${roundIndex}tb0o`;
@@ -1207,7 +1288,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       sceneDurationSeconds: round.scene_duration_seconds,
     });
     filters.push(
-      `[${currentLabel}][${timerOuterLabel}]overlay=x=${timerLayout.x - timerOuterBorderThickness}:y=${timerLayout.y - timerOuterBorderThickness}:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[scene${roundIndex}tb0]`,
+      `[${currentLabel}][${timerOuterLabel}]overlay=x=${timerLayout.x - timerOuterBorderThickness}:y=${timerLayout.y - timerOuterBorderThickness}:enable='${formatEnableBetween(timerVisibleStartSeconds, round.local.reveal_start_seconds)}'[scene${roundIndex}tb0]`,
     );
     currentLabel = `scene${roundIndex}tb0`;
     const timerInnerGlowLabel = `scene${roundIndex}tb0i`;
@@ -1221,7 +1302,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       sceneDurationSeconds: round.scene_duration_seconds,
     });
     filters.push(
-      `[${currentLabel}][${timerInnerGlowLabel}]overlay=x=${timerLayout.x + timerInnerBorderInset}:y=${timerLayout.y + timerInnerBorderInset}:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[scene${roundIndex}tb0g]`,
+      `[${currentLabel}][${timerInnerGlowLabel}]overlay=x=${timerLayout.x + timerInnerBorderInset}:y=${timerLayout.y + timerInnerBorderInset}:enable='${formatEnableBetween(timerVisibleStartSeconds, round.local.reveal_start_seconds)}'[scene${roundIndex}tb0g]`,
     );
     currentLabel = `scene${roundIndex}tb0g`;
     const timerRailLabel = `scene${roundIndex}tb0r`;
@@ -1248,7 +1329,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       sceneDurationSeconds: round.scene_duration_seconds,
     });
     filters.push(
-      `[${currentLabel}][${timerRailLabel}]overlay=x=${timerLayout.x}:y=${timerLayout.y}:enable='${formatEnableBetween(round.local.countdown_start_seconds, round.local.reveal_start_seconds)}'[scene${roundIndex}tb0rail]`,
+      `[${currentLabel}][${timerRailLabel}]overlay=x=${timerLayout.x}:y=${timerLayout.y}:enable='${formatEnableBetween(timerVisibleStartSeconds, round.local.reveal_start_seconds)}'[scene${roundIndex}tb0rail]`,
     );
     currentLabel = `scene${roundIndex}tb0rail`;
 
@@ -1258,7 +1339,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       sceneDurationSeconds: round.scene_duration_seconds,
       timerLayout,
       timerBarScaleExpression,
-      enableStartSeconds: round.local.countdown_start_seconds,
+      enableStartSeconds: timerVisibleStartSeconds,
       enableEndSeconds: greenEnd,
       baseColor: '0x32D74B',
       glowColor: '0x2EEA78',

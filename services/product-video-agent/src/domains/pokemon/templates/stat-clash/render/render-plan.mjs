@@ -92,9 +92,19 @@ function buildGridLayout(template, optionCount = 4) {
     rowGapPx: grid.row_gap_px,
     spriteScaleMultiplier: grid.sprite_scale_multiplier,
   });
+  const rowYOffsets = Array.isArray(grid.row_y_offsets_px)
+    ? grid.row_y_offsets_px
+    : [];
   return {
     ...layout,
-    cells: layout.cells.slice(0, optionCount),
+    cells: layout.cells.slice(0, optionCount).map((cell) => {
+      const rowYOffset = ensureNumber(rowYOffsets[cell.row], 0);
+      return {
+        ...cell,
+        y: roundTime(cell.y + rowYOffset),
+        center_y: roundTime(cell.center_y + rowYOffset),
+      };
+    }),
   };
 }
 

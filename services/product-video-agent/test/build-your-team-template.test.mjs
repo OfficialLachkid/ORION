@@ -149,14 +149,28 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.selection_rules.candidate_count, 4);
   assert.equal(template.selection_rules.max_shiny_per_round, 1);
   assert.equal(template.selection_rules.pool_variants.length, 7);
-  assert.equal(template.question_contract.hook_text, 'Build Your Team');
+  assert.equal(template.question_contract.hook_text, 'BUILD YOUR ULTIMATE TEAM!');
   assert.equal(template.question_contract.final_prompt_text, 'Who did you choose?');
   assert.equal(template.layout.background.blur_sigma, 6);
   assert.equal(template.layout.background.motion.enabled, true);
   assert.equal(template.layout.background.motion.subpixel_scale, 2);
   assert.equal(template.reveal.shiny.enabled, true);
   assert.equal(template.layout.timer.countdown_from, 2.5);
+  assert.equal(template.layout.timer.show_before_countdown, true);
   assert.ok(template.layout.rounds.hook_hold_seconds >= 2.3);
+  assert.equal(template.layout.text.prompt_above_timer, true);
+  assert.equal(template.layout.text.prompt_above_timer_gap_px, 28);
+  assert.equal(template.layout.text.prompt_font_size, 68);
+  assert.equal(template.layout.text.round_headline.enabled, true);
+  assert.deepEqual(
+    template.layout.text.round_headline.lines.map((line) => [line.text, line.color]),
+    [
+      ['BUILD YOUR', '0xF4FBFF'],
+      ['ULTIMATE TEAM!', '0xFFD60A'],
+    ],
+  );
+  assert.match(template.layout.text.font_candidates[0], /Arial Black\.ttf$/u);
+  assert.deepEqual(template.layout.sprite_grid.row_y_offsets_px, [-150, 0]);
   assert.equal(template.layout.text.show_counter, false);
   assert.equal(template.layout.stat_values.enabled, false);
   assert.equal(template.reveal.decoy_grayscale_enabled, false);
@@ -166,6 +180,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.reveal_pokeball_overlay_enabled, false);
   assert.equal(template.renderer.hook_pokeballs_enabled, true);
   assert.equal(template.renderer.hook_overlay_first_round, true);
+  assert.equal(template.renderer.candidate_intro_stagger_seconds, 0.20);
   assert.equal(template.renderer.pokeball_spawn_sfx_enabled, true);
   assert.equal(template.renderer.held_pokeball_source_start_seconds, 0.7);
   assert.equal(template.renderer.held_pokeball_scale_multiplier, 0.416);
@@ -177,12 +192,12 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.held_pokeball_wiggle_horizontal_amplitude_px, 24);
   assert.deepEqual(template.renderer.held_pokeball_sprite_weights, {
     default: 1,
-    1: 10,
-    2: 4,
+    1: 15,
+    2: 5,
     3: 4,
     4: 3,
   });
-  assert.equal(template.renderer.intro_pokeball_center_y_offset_px, 150);
+  assert.equal(template.renderer.intro_pokeball_center_y_offset_px, 180);
 });
 
 test('build-your-team template is exposed in slash-command template options', () => {
@@ -399,8 +414,12 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   });
 
   assert.equal(renderPlan.rounds.length, 6);
-  assert.equal(renderPlan.intro_hook.text, 'Build Your Team');
+  assert.equal(renderPlan.intro_hook.text, 'BUILD YOUR ULTIMATE TEAM!');
   assert.equal(renderPlan.rounds[0].scene_start_seconds, 0);
+  assert.equal(renderPlan.grid_layout.cells[0].center_y, 430);
+  assert.equal(renderPlan.grid_layout.cells[1].center_y, 430);
+  assert.equal(renderPlan.grid_layout.cells[2].center_y, 1150);
+  assert.equal(renderPlan.grid_layout.cells[3].center_y, 1150);
   const narrationAdjustedRenderPlan = applyNarrationDurationsToRenderPlan(
     renderPlan,
     Array.from({ length: plan.narration.lines.length }, () => 1.2),
@@ -431,7 +450,13 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   }
   assert.doesNotMatch(visualFilter.script, /bghook/u);
   assert.doesNotMatch(visualFilter.script, /introhooktext/u);
-  assert.match(visualFilter.script, /scene0hookoverlay/u);
+  assert.doesNotMatch(visualFilter.script, /scene0hookoverlay/u);
+  for (let roundIndex = 0; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
+    assert.match(visualFilter.script, new RegExp(`scene${roundIndex}headline0face`, 'u'));
+    assert.match(visualFilter.script, new RegExp(`scene${roundIndex}headline1face`, 'u'));
+  }
+  assert.match(visualFilter.script, /drawtext=text='ULTIMATE TEAM!'.*fontcolor=0xFFD60A.*shadowcolor=black@0\.72/u);
+  assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0x2B6DA6/u);
   assert.match(visualFilter.script, /scene0platformv0/u);
   for (let roundIndex = 0; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
     assert.match(visualFilter.script, new RegExp(`scene${roundIndex}pokeballhold0`, 'u'));
@@ -465,7 +490,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
     visualFilter.script,
     new RegExp(`overlay=x='335-w\\/2\\+\\(if\\(lt\\(\\(t\\),1\\.12\\),0,.*${firstPokeballFrequencyRadians}.*0\\.45.*${firstPokeballFrequencyRadians}.*\\*${firstPokeballDirection < 0 ? '-24' : '24'}\\)\\)'`, 'u'),
   );
-  const firstPokeballY = Number((renderPlan.grid_layout.cells[0].center_y + 150).toFixed(3));
+  const firstPokeballY = Number((renderPlan.grid_layout.cells[0].center_y + 180).toFixed(3));
   assert.match(visualFilter.script, new RegExp(`y='${firstPokeballY}-h\\/2'`, 'u'));
   assert.match(visualFilter.script, /scene0pokeballhold0/u);
   assert.doesNotMatch(visualFilter.script, /trim=start=0\.7:duration=/u);
@@ -473,6 +498,24 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.doesNotMatch(visualFilter.script, /scene1counter/u);
   assert.doesNotMatch(visualFilter.script, /scene0stat/u);
   assert.doesNotMatch(visualFilter.script, /eq=saturation=0:brightness=-0\.42:contrast=1\.22/u);
+  const firstRound = renderPlan.rounds[0];
+  const timerVisibleWindow = `enable='between(t,${firstRound.local.activation_start_seconds},${firstRound.local.reveal_start_seconds})'[scene0tb0]`;
+  assert.ok(visualFilter.script.includes(timerVisibleWindow), timerVisibleWindow);
+  const fullTimerScalePrefix = `max(2,if(lt(t,${firstRound.local.countdown_start_seconds}),${Math.round(renderPlan.timer_layout.width)}`;
+  assert.ok(visualFilter.script.includes(fullTimerScalePrefix), fullTimerScalePrefix);
+  const firstRoundPromptLines = visualFilter.script
+    .split(';\n')
+    .filter((line) => /\[scene0prompt\d+\]$/u.test(line));
+  assert.ok(firstRoundPromptLines.length > 0);
+  const lowestPromptEdge = Math.max(...firstRoundPromptLines.map((line) => {
+    const y = Number(line.match(/:y='([0-9.]+)\+/u)?.[1]);
+    const fontSize = Number(line.match(/:fontsize=([0-9.]+)/u)?.[1]);
+    return y + fontSize;
+  }));
+  assert.ok(
+    lowestPromptEdge <= renderPlan.timer_layout.y - template.layout.text.prompt_above_timer_gap_px,
+    `${lowestPromptEdge} must stay above timer y=${renderPlan.timer_layout.y}`,
+  );
   assert.equal(cryCues.length, 24);
   assert.ok(cryCues.every((cue) => cue.volume > 0));
   assert.match(audioFilter, /pokeballintro0/u);
