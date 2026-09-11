@@ -1,5 +1,5 @@
 import { access, mkdir, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { basename, dirname } from 'node:path';
 import {
   buildPokeQuizzAnimatedShinySpritePath,
   buildPokeQuizzAnimatedSpritePath,
@@ -563,6 +563,62 @@ function shouldUseStaticPokeballSprites(template) {
     .toLowerCase() === 'random_static_sprite';
 }
 
+function resolvePokeballSpriteWeight(filePath, template) {
+  const configuredWeights = template?.renderer?.held_pokeball_sprite_weights || {};
+  const defaultWeight = Math.max(0, ensureFiniteNumber(configuredWeights.default, 1));
+  const spriteNumberMatch = basename(String(filePath || '')).match(/0*(\d+)(?=\.[^.]+$)/u);
+  if (!spriteNumberMatch) {
+    return defaultWeight;
+  }
+  const spriteNumber = String(Number.parseInt(spriteNumberMatch[1], 10));
+  return Math.max(
+    0,
+    ensureFiniteNumber(configuredWeights[spriteNumber], defaultWeight),
+  );
+}
+
+function selectWeightedPokeballSprite(files, template, random) {
+  const weightedSprites = (Array.isArray(files) ? files : [])
+    .map((filePath) => ({
+      filePath,
+      weight: resolvePokeballSpriteWeight(filePath, template),
+    }))
+    .filter((entry) => entry.weight > 0);
+  const totalWeight = weightedSprites.reduce((sum, entry) => sum + entry.weight, 0);
+  if (totalWeight <= 0) {
+    return selectSeededFile(files, random);
+  }
+
+  let selectionPoint = random() * totalWeight;
+  for (const entry of weightedSprites) {
+    selectionPoint -= entry.weight;
+    if (selectionPoint < 0) {
+      return entry.filePath;
+    }
+  }
+  return weightedSprites.at(-1)?.filePath || null;
+}
+
+function buildPokeballWiggleSpeedMultipliers(candidateCount, template, random) {
+  const speedVariationRatio = clampNumber(
+    ensureFiniteNumber(
+      template?.renderer?.held_pokeball_wiggle_speed_variation_ratio,
+      0,
+    ),
+    0,
+    0.5,
+  );
+  if (candidateCount <= 1 || speedVariationRatio <= 0) {
+    return Array.from({ length: candidateCount }, () => 1);
+  }
+
+  const speedMultipliers = Array.from({ length: candidateCount }, (_unused, index) => Number((
+    (1 - speedVariationRatio)
+    + ((speedVariationRatio * 2 * index) / (candidateCount - 1))
+  ).toFixed(3)));
+  return shuffle(speedMultipliers, random);
+}
+
 async function downloadCryToFile(sourceUrl, outputPath) {
   const response = await fetch(sourceUrl);
   if (!response.ok) {
@@ -957,14 +1013,20 @@ export async function planPokemonBuildYourTeamChallenge({
         random,
       )
       : '';
+    const pokeballWiggleSpeedMultipliers = buildPokeballWiggleSpeedMultipliers(
+      resolvedSubjects.length,
+      template,
+      random,
+    );
     const candidates = resolvedSubjects.map((subject, index) => ({
       index,
       label: String.fromCharCode(65 + index),
       is_correct: false,
       subject,
       pokeball_sprite_path: staticPokeballSpritesRequested
-        ? selectSeededFile(pokeballSpritePool, random)
+        ? selectWeightedPokeballSprite(pokeballSpritePool, template, random)
         : null,
+      pokeball_wiggle_speed_multiplier: pokeballWiggleSpeedMultipliers[index] || 1,
     }));
 
     rounds.push({

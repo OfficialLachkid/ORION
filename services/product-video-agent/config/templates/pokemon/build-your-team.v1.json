@@ -268,7 +268,16 @@
     "held_pokeball_intro_duration_seconds": 1.12,
     "held_pokeball_wiggle_amplitude_radians": 0.24,
     "held_pokeball_wiggle_frequency_hz": 0.675,
+    "held_pokeball_wiggle_speed_variation_ratio": 0.12,
+    "held_pokeball_wiggle_momentum_strength": 0.45,
     "held_pokeball_wiggle_horizontal_amplitude_px": 24,
+    "held_pokeball_sprite_weights": {
+      "default": 1,
+      "1": 6,
+      "2": 3,
+      "3": 3,
+      "4": 2
+    },
     "intro_pokeball_center_y_offset_px": 200,
     "fallback_sprite_wobble_amplitude_px": 6,
     "fallback_sprite_wobble_cycle_length_multiplier": 3,

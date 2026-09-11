@@ -262,16 +262,22 @@ function buildHeldPokeballWiggleValueExpression({
   startSeconds,
   amplitude,
   frequencyHz,
+  momentumStrength,
   timeExpression,
 }) {
   const time = normalizeAnimationTimeExpression(timeExpression);
   const start = roundTime(startSeconds);
   const normalizedAmplitude = roundTime(Math.max(0, amplitude));
   const frequencyRadians = roundTime(Math.max(0.1, frequencyHz) * 6.283185307);
+  const normalizedMomentumStrength = roundTime(Math.max(0, momentumStrength));
   if (normalizedAmplitude <= 0) {
     return '0';
   }
-  return `if(lt(${time},${start}),0,sin((${time}-${start})*${frequencyRadians})*${normalizedAmplitude})`;
+  const sineExpression = `sin((${time}-${start})*${frequencyRadians})`;
+  const momentumExpression = normalizedMomentumStrength > 0
+    ? `(${sineExpression})*(1+${normalizedMomentumStrength}*(1-abs(${sineExpression})))`
+    : sineExpression;
+  return `if(lt(${time},${start}),0,(${momentumExpression})*${normalizedAmplitude})`;
 }
 
 function buildBackgroundPreparationFilter({
@@ -759,6 +765,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     0,
     ensureNumber(template?.renderer?.held_pokeball_wiggle_horizontal_amplitude_px, 24),
   );
+  const heldPokeballWiggleMomentumStrength = Math.max(
+    0,
+    Math.min(
+      1,
+      ensureNumber(template?.renderer?.held_pokeball_wiggle_momentum_strength, 0),
+    ),
+  );
   const introPokeballCenterYOffset = ensureNumber(
     template?.renderer?.intro_pokeball_center_y_offset_px,
     0,
@@ -966,6 +979,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           ).toFixed(3));
           const holdDuration = Number(Math.max(0.08, holdEnd - holdStart).toFixed(3));
           if (hasStaticPokeballHold) {
+            const heldPokeballWiggleSpeedMultiplier = Math.max(
+              0.5,
+              Math.min(
+                1.5,
+                ensureNumber(candidate?.pokeball_wiggle_speed_multiplier, 1),
+              ),
+            );
+            const candidateWiggleFrequencyHz = (
+              heldPokeballWiggleFrequencyHz * heldPokeballWiggleSpeedMultiplier
+            );
             const holdScaleTimeExpression = buildScaleFilterTimeExpression({
               fps,
               streamStartSeconds: holdStart,
@@ -985,13 +1008,15 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
             const holdWiggleExpression = buildHeldPokeballWiggleValueExpression({
               startSeconds: wiggleStart,
               amplitude: heldPokeballWiggleAmplitudeRadians,
-              frequencyHz: heldPokeballWiggleFrequencyHz,
+              frequencyHz: candidateWiggleFrequencyHz,
+              momentumStrength: heldPokeballWiggleMomentumStrength,
               timeExpression: holdScaleTimeExpression,
             });
             const holdHorizontalWiggleExpression = buildHeldPokeballWiggleValueExpression({
               startSeconds: wiggleStart,
               amplitude: heldPokeballWiggleHorizontalAmplitudePx,
-              frequencyHz: heldPokeballWiggleFrequencyHz,
+              frequencyHz: candidateWiggleFrequencyHz,
+              momentumStrength: heldPokeballWiggleMomentumStrength,
               timeExpression: 't',
             });
             holdXExpression = `${cell.center_x}-w/2+(${holdHorizontalWiggleExpression})`;
