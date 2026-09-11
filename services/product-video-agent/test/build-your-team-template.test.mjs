@@ -162,6 +162,10 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.hook_overlay_first_round, true);
   assert.equal(template.renderer.pokeball_spawn_sfx_enabled, true);
   assert.equal(template.renderer.held_pokeball_source_start_seconds, 0.7);
+  assert.equal(template.renderer.held_pokeball_scale_multiplier, 0.416);
+  assert.equal(template.renderer.held_pokeball_intro_duration_seconds, 0.56);
+  assert.equal(template.renderer.held_pokeball_wiggle_amplitude_radians, 0.12);
+  assert.equal(template.renderer.held_pokeball_wiggle_frequency_hz, 1.35);
 });
 
 test('build-your-team template is exposed in slash-command template options', () => {
@@ -370,7 +374,10 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
     assert.match(visualFilter.script, new RegExp(`scene${roundIndex}pokeballhold0`, 'u'));
   }
   assert.doesNotMatch(visualFilter.script, /scene0pokeball0/u);
-  assert.match(visualFilter.script, /\[3:v\]fps=30,trim=duration=.*scene0pokeballhold0/u);
+  assert.match(visualFilter.script, /\[3:v\]fps=30,trim=duration=.*scale=w='184\.08\*\(if\(lt/u);
+  assert.match(visualFilter.script, /pad=258:258:\(ow-iw\)\/2:\(oh-ih\)\/2:color=black@0:eval=frame/u);
+  assert.match(visualFilter.script, /rotate='if\(lt\(.*0\.56\),0,sin\(.*\*8\.482\)\*0\.12\)'/u);
+  assert.match(visualFilter.script, /scene0pokeballhold0/u);
   assert.doesNotMatch(visualFilter.script, /trim=start=0\.7:duration=/u);
   assert.match(visualFilter.script, /scene0spriteform0whitesrc/u);
   assert.doesNotMatch(visualFilter.script, /scene1counter/u);

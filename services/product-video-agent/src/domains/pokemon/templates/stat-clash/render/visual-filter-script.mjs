@@ -5,6 +5,7 @@ import {
   buildAnimatedTextYExpression,
   buildScaleFilterTimeExpression,
   formatEnableBetween,
+  normalizeAnimationTimeExpression,
 } from '../../dual-type-reveal/render/animation-expressions.mjs';
 import {
   DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER,
@@ -255,6 +256,22 @@ function buildStaticSpriteWobbleExpression(round, candidate, template) {
     return '0';
   }
   return `if(lt(t,${startSeconds}),0,if(lt(t,${endSeconds}),sin((t-${startSeconds})*${frequencyRadians})*${amplitude},0))`;
+}
+
+function buildHeldPokeballWiggleExpression({
+  startSeconds,
+  amplitudeRadians,
+  frequencyHz,
+  timeExpression,
+}) {
+  const time = normalizeAnimationTimeExpression(timeExpression);
+  const start = roundTime(startSeconds);
+  const amplitude = roundTime(Math.max(0, amplitudeRadians));
+  const frequencyRadians = roundTime(Math.max(0.1, frequencyHz) * 6.283185307);
+  if (amplitude <= 0) {
+    return '0';
+  }
+  return `if(lt(${time},${start}),0,sin((${time}-${start})*${frequencyRadians})*${amplitude})`;
 }
 
 function buildBackgroundPreparationFilter({
@@ -719,6 +736,25 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     0.1,
     ensureNumber(template?.renderer?.intro_pokeball_scale_multiplier, 1.04),
   );
+  const heldPokeballScaleMultiplier = Math.max(
+    0.1,
+    ensureNumber(
+      template?.renderer?.held_pokeball_scale_multiplier,
+      introPokeballScaleMultiplier,
+    ),
+  );
+  const heldPokeballIntroDuration = Math.max(
+    0.12,
+    ensureNumber(template?.renderer?.held_pokeball_intro_duration_seconds, 0.56),
+  );
+  const heldPokeballWiggleAmplitudeRadians = Math.max(
+    0,
+    ensureNumber(template?.renderer?.held_pokeball_wiggle_amplitude_radians, 0.12),
+  );
+  const heldPokeballWiggleFrequencyHz = Math.max(
+    0.1,
+    ensureNumber(template?.renderer?.held_pokeball_wiggle_frequency_hz, 1.35),
+  );
   const introPokeballCenterYOffset = ensureNumber(
     template?.renderer?.intro_pokeball_center_y_offset_px,
     0,
@@ -856,6 +892,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     ).toFixed(3));
     const sharedPlatformWidth = Number((baseSpriteSize * platformLayout.width_multiplier).toFixed(3));
     const sharedPokeballSize = Number((baseSpriteSize * introPokeballScaleMultiplier).toFixed(3));
+    const heldPokeballSize = Number((baseSpriteSize * heldPokeballScaleMultiplier).toFixed(3));
+    const heldPokeballCanvasSize = Math.max(
+      2,
+      Math.ceil((heldPokeballSize * 1.4) / 2) * 2,
+    );
     const roundSharedPlatformLabels = Array.from(
       { length: round.candidates.length },
       (_unused, index) => `scene${roundIndex}sharedplatform${index}`,
@@ -913,8 +954,30 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           ).toFixed(3));
           const holdDuration = Number(Math.max(0.08, holdEnd - holdStart).toFixed(3));
           if (hasStaticPokeballHold) {
+            const holdScaleTimeExpression = buildScaleFilterTimeExpression({
+              fps,
+              streamStartSeconds: holdStart,
+            });
+            const holdScaleExpression = buildAnimatedPopSettleExpression(
+              holdStart,
+              heldPokeballIntroDuration,
+              0.02,
+              1.08,
+              1,
+              holdScaleTimeExpression,
+            );
+            const wiggleStart = roundTime(Math.min(
+              holdEnd,
+              holdStart + heldPokeballIntroDuration,
+            ));
+            const holdWiggleExpression = buildHeldPokeballWiggleExpression({
+              startSeconds: wiggleStart,
+              amplitudeRadians: heldPokeballWiggleAmplitudeRadians,
+              frequencyHz: heldPokeballWiggleFrequencyHz,
+              timeExpression: holdScaleTimeExpression,
+            });
             filters.push(
-              `[${staticPokeballHoldInputIndex}:v]fps=${fps},trim=duration=${holdDuration},setpts=PTS-STARTPTS+${holdStart}/TB,scale=${sharedPokeballSize}:${sharedPokeballSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${holdLabel}]`,
+              `[${staticPokeballHoldInputIndex}:v]fps=${fps},trim=duration=${holdDuration},setpts=PTS-STARTPTS+${holdStart}/TB,scale=w='${heldPokeballSize}*(${holdScaleExpression})':h='${heldPokeballSize}*(${holdScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,pad=${heldPokeballCanvasSize}:${heldPokeballCanvasSize}:(ow-iw)/2:(oh-ih)/2:color=black@0:eval=frame,rotate='${holdWiggleExpression}':ow=iw:oh=ih:c=none,setsar=1[${holdLabel}]`,
             );
           } else {
             const holdIntroDuration = Math.max(
