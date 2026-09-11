@@ -258,20 +258,20 @@ function buildStaticSpriteWobbleExpression(round, candidate, template) {
   return `if(lt(t,${startSeconds}),0,if(lt(t,${endSeconds}),sin((t-${startSeconds})*${frequencyRadians})*${amplitude},0))`;
 }
 
-function buildHeldPokeballWiggleExpression({
+function buildHeldPokeballWiggleValueExpression({
   startSeconds,
-  amplitudeRadians,
+  amplitude,
   frequencyHz,
   timeExpression,
 }) {
   const time = normalizeAnimationTimeExpression(timeExpression);
   const start = roundTime(startSeconds);
-  const amplitude = roundTime(Math.max(0, amplitudeRadians));
+  const normalizedAmplitude = roundTime(Math.max(0, amplitude));
   const frequencyRadians = roundTime(Math.max(0.1, frequencyHz) * 6.283185307);
-  if (amplitude <= 0) {
+  if (normalizedAmplitude <= 0) {
     return '0';
   }
-  return `if(lt(${time},${start}),0,sin((${time}-${start})*${frequencyRadians})*${amplitude})`;
+  return `if(lt(${time},${start}),0,sin((${time}-${start})*${frequencyRadians})*${normalizedAmplitude})`;
 }
 
 function buildBackgroundPreparationFilter({
@@ -755,6 +755,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     0.1,
     ensureNumber(template?.renderer?.held_pokeball_wiggle_frequency_hz, 1.35),
   );
+  const heldPokeballWiggleHorizontalAmplitudePx = Math.max(
+    0,
+    ensureNumber(template?.renderer?.held_pokeball_wiggle_horizontal_amplitude_px, 24),
+  );
   const introPokeballCenterYOffset = ensureNumber(
     template?.renderer?.intro_pokeball_center_y_offset_px,
     0,
@@ -944,6 +948,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         if (holdPokeballsUntilReveal) {
           const holdLabel = `scene${roundIndex}pokeballhold${candidate.index}`;
           const holdOverlayLabel = `scene${roundIndex}pokeballholdv${candidate.index}`;
+          let holdXExpression = `${cell.center_x}-w/2`;
           const holdStart = Number(Math.max(
             platformVisibleStart,
             ensureNumber(candidate.pokeball_hold_start_seconds, platformVisibleStart),
@@ -970,12 +975,19 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
               holdEnd,
               holdStart + heldPokeballIntroDuration,
             ));
-            const holdWiggleExpression = buildHeldPokeballWiggleExpression({
+            const holdWiggleExpression = buildHeldPokeballWiggleValueExpression({
               startSeconds: wiggleStart,
-              amplitudeRadians: heldPokeballWiggleAmplitudeRadians,
+              amplitude: heldPokeballWiggleAmplitudeRadians,
               frequencyHz: heldPokeballWiggleFrequencyHz,
               timeExpression: holdScaleTimeExpression,
             });
+            const holdHorizontalWiggleExpression = buildHeldPokeballWiggleValueExpression({
+              startSeconds: wiggleStart,
+              amplitude: heldPokeballWiggleHorizontalAmplitudePx,
+              frequencyHz: heldPokeballWiggleFrequencyHz,
+              timeExpression: 't',
+            });
+            holdXExpression = `${cell.center_x}-w/2+(${holdHorizontalWiggleExpression})`;
             filters.push(
               `[${staticPokeballHoldInputIndex}:v]fps=${fps},trim=duration=${holdDuration},setpts=PTS-STARTPTS+${holdStart}/TB,scale=w='${heldPokeballSize}*(${holdScaleExpression})':h='${heldPokeballSize}*(${holdScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,pad=${heldPokeballCanvasSize}:${heldPokeballCanvasSize}:(ow-iw)/2:(oh-ih)/2:color=black@0:eval=frame,rotate='${holdWiggleExpression}':ow=iw:oh=ih:c=none,setsar=1[${holdLabel}]`,
             );
@@ -1000,7 +1012,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
             );
           }
           filters.push(
-            `[${currentLabel}][${holdLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + introPokeballCenterYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(holdStart, holdEnd)}'[${holdOverlayLabel}]`,
+            `[${currentLabel}][${holdLabel}]overlay=x='${holdXExpression}':y='${Number((cell.center_y + introPokeballCenterYOffset).toFixed(3))}-h/2':enable='${formatEnableBetween(holdStart, holdEnd)}'[${holdOverlayLabel}]`,
           );
           currentLabel = holdOverlayLabel;
           pokeballSourceLabel = null;
