@@ -152,6 +152,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.hook_pokeballs_enabled, true);
   assert.equal(template.renderer.hook_overlay_first_round, true);
   assert.equal(template.renderer.pokeball_spawn_sfx_enabled, true);
+  assert.equal(template.renderer.held_pokeball_source_start_seconds, 0.7);
 });
 
 test('build-your-team template is exposed in slash-command template options', () => {
@@ -352,6 +353,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
     assert.match(visualFilter.script, new RegExp(`scene${roundIndex}pokeballhold0`, 'u'));
   }
   assert.match(visualFilter.script, /scene0pokeball0/u);
+  assert.match(visualFilter.script, /trim=start=0\.7:duration=/u);
   assert.match(visualFilter.script, /scene0spriteform0whitesrc/u);
   assert.doesNotMatch(visualFilter.script, /scene1counter/u);
   assert.doesNotMatch(visualFilter.script, /scene0stat/u);
