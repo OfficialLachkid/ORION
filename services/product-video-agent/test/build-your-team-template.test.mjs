@@ -147,6 +147,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.question_contract.final_prompt_text, 'Who did you choose?');
   assert.equal(template.layout.background.blur_sigma, 6);
   assert.equal(template.layout.background.motion.enabled, true);
+  assert.equal(template.layout.background.motion.subpixel_scale, 2);
   assert.equal(template.reveal.shiny.enabled, true);
   assert.equal(template.layout.timer.countdown_from, 2.5);
   assert.ok(template.layout.rounds.hook_hold_seconds >= 2.3);
@@ -156,6 +157,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.candidate_intro_anchor, 'reveal');
   assert.equal(template.renderer.hold_pokeballs_until_reveal, true);
   assert.equal(template.renderer.held_pokeball_source, 'random_static_sprite');
+  assert.equal(template.renderer.reveal_pokeball_overlay_enabled, false);
   assert.equal(template.renderer.hook_pokeballs_enabled, true);
   assert.equal(template.renderer.hook_overlay_first_round, true);
   assert.equal(template.renderer.pokeball_spawn_sfx_enabled, true);
@@ -358,7 +360,8 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
       && candidate.pokeball_hold_start_seconds < candidate.pokeball_start_seconds
   )));
   assert.match(visualFilter.script, /split=6\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
-  assert.match(visualFilter.script, /crop=w=1080:h=1920:x='\(iw-1080\)\*\(0\.5\+0\.5\*sin\(t\*/u);
+  assert.match(visualFilter.script, /crop=w=2160:h=3840:x='\(iw-2160\)\*\(0\.5\+0\.5\*sin\(t\*/u);
+  assert.match(visualFilter.script, /scale=1080:1920:flags=lanczos/u);
   assert.doesNotMatch(visualFilter.script, /bghook/u);
   assert.doesNotMatch(visualFilter.script, /introhooktext/u);
   assert.match(visualFilter.script, /scene0hookoverlay/u);
@@ -366,7 +369,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   for (let roundIndex = 0; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
     assert.match(visualFilter.script, new RegExp(`scene${roundIndex}pokeballhold0`, 'u'));
   }
-  assert.match(visualFilter.script, /scene0pokeball0/u);
+  assert.doesNotMatch(visualFilter.script, /scene0pokeball0/u);
   assert.match(visualFilter.script, /\[3:v\]fps=30,trim=duration=.*scene0pokeballhold0/u);
   assert.doesNotMatch(visualFilter.script, /trim=start=0\.7:duration=/u);
   assert.match(visualFilter.script, /scene0spriteform0whitesrc/u);

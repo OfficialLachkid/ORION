@@ -277,19 +277,28 @@ function buildBackgroundPreparationFilter({
   }
 
   const zoomScale = Math.max(1.01, ensureNumber(motionConfig.zoom_scale, 1.12));
+  const subpixelScale = Math.max(
+    1,
+    Math.min(3, Math.round(ensureNumber(motionConfig.subpixel_scale, 1))),
+  );
   const panCycleSeconds = Math.max(4, ensureNumber(motionConfig.pan_cycle_seconds, 18));
   const verticalPanRatio = Math.max(
     0,
     Math.min(1, ensureNumber(motionConfig.vertical_pan_ratio, 0.72)),
   );
-  const scaledWidth = Math.ceil(width * zoomScale);
-  const scaledHeight = Math.ceil(height * zoomScale);
+  const outputWidth = width * subpixelScale;
+  const outputHeight = height * subpixelScale;
+  const scaledWidth = Math.ceil(width * zoomScale * subpixelScale);
+  const scaledHeight = Math.ceil(height * zoomScale * subpixelScale);
   const xSpeed = Number(((Math.PI * 2) / panCycleSeconds).toFixed(6));
   const ySpeed = Number((xSpeed * 0.73).toFixed(6));
-  const xExpression = `(iw-${width})*(0.5+0.5*sin(t*${xSpeed}))`;
-  const yExpression = `((ih-${height})*(1-${verticalPanRatio})/2)+((ih-${height})*${verticalPanRatio})*(0.5+0.5*cos(t*${ySpeed}))`;
+  const xExpression = `(iw-${outputWidth})*(0.5+0.5*sin(t*${xSpeed}))`;
+  const yExpression = `((ih-${outputHeight})*(1-${verticalPanRatio})/2)+((ih-${outputHeight})*${verticalPanRatio})*(0.5+0.5*cos(t*${ySpeed}))`;
+  const subpixelDownscaleFilter = subpixelScale > 1
+    ? `,scale=${width}:${height}:flags=lanczos`
+    : '';
 
-  return `[${inputRef}:v]scale=${scaledWidth}:${scaledHeight}:force_original_aspect_ratio=increase,crop=w=${width}:h=${height}:x='${xExpression}':y='${yExpression}'${blurFilter},fps=${fps},setsar=1`;
+  return `[${inputRef}:v]fps=${fps},scale=${scaledWidth}:${scaledHeight}:force_original_aspect_ratio=increase,crop=w=${outputWidth}:h=${outputHeight}:x='${xExpression}':y='${yExpression}'${subpixelDownscaleFilter}${blurFilter},setsar=1`;
 }
 
 function appendTimerBarPhase(filters, currentLabel, {
@@ -728,6 +737,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
   const decoyGrayscaleEnabled = template?.reveal?.decoy_grayscale_enabled !== false;
   const holdPokeballsUntilReveal = template?.renderer?.hold_pokeballs_until_reveal === true;
+  const revealPokeballOverlayEnabled = template?.renderer?.reveal_pokeball_overlay_enabled !== false;
   const hookBaseSpriteSize = Number((
     ensureNumber(gridLayout.item_size_px, 220)
     * ensureNumber(gridLayout.sprite_scale_multiplier, 1)
@@ -888,7 +898,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
       const staticPokeballHoldInputIndex = roundInputs.pokeball_hold_sprites?.[candidate.index];
       const hasStaticPokeballHold = holdPokeballsUntilReveal && staticPokeballHoldInputIndex != null;
-      if (inputRefs.introPokeball != null || hasStaticPokeballHold) {
+      if ((inputRefs.introPokeball != null && revealPokeballOverlayEnabled) || hasStaticPokeballHold) {
         let pokeballSourceLabel = sharedPokeballLabel;
         if (holdPokeballsUntilReveal) {
           const holdLabel = `scene${roundIndex}pokeballhold${candidate.index}`;
@@ -932,7 +942,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           currentLabel = holdOverlayLabel;
           pokeballSourceLabel = null;
         }
-        if (inputRefs.introPokeball != null) {
+        if (inputRefs.introPokeball != null && revealPokeballOverlayEnabled) {
           const pokeballLabel = `scene${roundIndex}pokeball${candidate.index}`;
           const pokeballOverlayLabel = `scene${roundIndex}pokeballv${candidate.index}`;
           const pokeballDuration = Number(Math.max(

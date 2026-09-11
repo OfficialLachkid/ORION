@@ -104,6 +104,7 @@
       "motion": {
         "enabled": true,
         "zoom_scale": 1.12,
+        "subpixel_scale": 2,
         "pan_cycle_seconds": 18,
         "vertical_pan_ratio": 0.72
       }
@@ -252,6 +253,7 @@
     "candidate_forming_duration_seconds": 1,
     "hold_pokeballs_until_reveal": true,
     "held_pokeball_source": "random_static_sprite",
+    "reveal_pokeball_overlay_enabled": false,
     "hook_pokeballs_enabled": true,
     "hook_overlay_first_round": true,
     "pokeball_spawn_sfx_enabled": true,
