@@ -25,6 +25,15 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_CONFIG_PATH = resolve(HERE, '..', 'config', 'templates', 'pokemon', 'build-your-team.v1.json');
 const fixtureRoot = await mkdtemp(join(tmpdir(), 'build-your-team-template-'));
 const mediaPath = (filename) => join(fixtureRoot, filename);
+const promptLabelByPoolKey = Object.freeze({
+  baby: 'Baby',
+  first_stage: 'First Stage',
+  starter: 'Starter',
+  middle_stage: 'Middle Stage',
+  final_stage: 'Final Stage',
+  legendary_mythical: 'Legendary or Mythical',
+  dynamax: 'Dynamax',
+});
 
 const fixtureAssets = [
   'backgrounds-forest.png',
@@ -149,7 +158,13 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.selection_rules.candidate_count, 4);
   assert.equal(template.selection_rules.max_shiny_per_round, 1);
   assert.equal(template.selection_rules.pool_variants.length, 7);
+  assert.deepEqual(
+    Object.fromEntries(template.selection_rules.pool_variants.map((pool) => [pool.key, pool.prompt_label])),
+    promptLabelByPoolKey,
+  );
   assert.equal(template.question_contract.hook_text, 'BUILD YOUR ULTIMATE TEAM!');
+  assert.equal(template.question_contract.prompt_text, 'Pick your\n{round} Pokémon');
+  assert.deepEqual(template.question_contract.prompt_text_variants, []);
   assert.equal(template.question_contract.final_prompt_text, 'Tell me your team');
   assert.deepEqual(template.question_contract.final_prompt_text_variants, [
     'Tell me your team',
@@ -275,7 +290,9 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
   for (const round of plan.rounds) {
     assert.equal(round.candidates.length, 4);
     assert.equal(round.candidates.some((candidate) => candidate.is_correct), false);
-    assert.match(round.prompt_text, /(Build your team|Pick your|Choose your)/u);
+    assert.equal(round.pool_prompt_label, promptLabelByPoolKey[round.pool_key]);
+    assert.equal(round.prompt_text, `Pick your\n${round.pool_prompt_label} Pokémon`);
+    assert.equal(round.spoken_prompt_text, `Pick your ${round.pool_prompt_label} Pokémon`);
     assert.ok(round.candidates.every((candidate) => candidate.subject.render_sprite_path.endsWith('.gif')));
     assert.ok(round.candidates.every((candidate) => candidate.subject.cry_path.endsWith('.ogg')));
     assert.ok(round.candidates.every((candidate) => candidate.pokeball_sprite_path.endsWith('.png')));
@@ -494,6 +511,16 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.match(visualFilter.script, /drawtext=text='ULTIMATE TEAM!'.*fontcolor=0xFFD60A.*shadowcolor=black@0\.72/u);
   assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0x2B6DA6/u);
   assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0xF4FBFF.*:y='146\+/u);
+  for (const [roundIndex, round] of renderPlan.rounds.entries()) {
+    assert.match(
+      visualFilter.script,
+      new RegExp(`drawtext=text='Pick your'.*\\[scene${roundIndex}prompt0\\]`, 'u'),
+    );
+    assert.match(
+      visualFilter.script,
+      new RegExp(`drawtext=text='${round.pool_prompt_label} Pokémon'.*\\[scene${roundIndex}prompt1\\]`, 'u'),
+    );
+  }
   assert.match(visualFilter.script, /fontcolor=0x(?:2B6DA6|C97900).*\[scene5finalprompt0depth5\]/u);
   assert.match(visualFilter.script, /fontcolor=0x(?:F4FBFF|FFD60A).*fontsize=72.*:y='(?:886|924)\+.*\[scene5finalprompt0face\]/u);
   assert.doesNotMatch(visualFilter.script, /\[scene5reveal0\]/u);

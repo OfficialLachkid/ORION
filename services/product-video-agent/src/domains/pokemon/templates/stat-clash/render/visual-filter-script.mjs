@@ -34,8 +34,11 @@ function resolveTextOutlineWidth(template) {
 
 function extractPromptHeaderText(text, round) {
   const normalized = String(text || '')
-    .replace(/\s+/gu, ' ')
-    .trim();
+    .replace(/\r\n?/gu, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/gu, ' ').trim())
+    .filter(Boolean)
+    .join('\n');
   if (!normalized) {
     return '';
   }
@@ -631,11 +634,17 @@ function buildPromptSegments(text, template, textLayout, round, timerLayout = nu
     Math.round(textLayout.prompt_font_size * 0.82),
   );
   const lineHeight = headerFontSize + 12;
-  const wrappedHeaderLines = wrapPromptTextLines(
-    headerText,
-    estimateWrapCharacterLimit(template, headerFontSize),
-    2,
-  );
+  const explicitHeaderLines = headerText
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const wrappedHeaderLines = explicitHeaderLines.length > 1
+    ? [explicitHeaderLines[0], explicitHeaderLines.slice(1).join(' ')]
+    : wrapPromptTextLines(
+      headerText,
+      estimateWrapCharacterLimit(template, headerFontSize),
+      2,
+    );
   const promptBlockHeight = Math.max(
     headerFontSize,
     (wrappedHeaderLines.length * headerFontSize)

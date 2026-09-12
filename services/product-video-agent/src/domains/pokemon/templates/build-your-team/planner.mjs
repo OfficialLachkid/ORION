@@ -408,6 +408,9 @@ function resolveBuildYourTeamPoolVariants(template = {}) {
     .map((variant, index) => ({
       key: String(variant?.key || `pool-${index + 1}`).trim().toLowerCase(),
       label: String(variant?.label || variant?.key || `Pool ${index + 1}`).trim(),
+      prompt_label: String(
+        variant?.prompt_label || variant?.label || variant?.key || `Pool ${index + 1}`,
+      ).trim(),
       selector: String(variant?.selector || variant?.key || 'all').trim().toLowerCase(),
       weight: Math.max(1, ensurePositiveInteger(variant?.weight, 1)),
     }))
@@ -488,6 +491,7 @@ function buildRoundPoolSequence(template, eligibleSubjects, candidateCount, roun
     : [{
       key: 'all',
       label: 'All Pokemon',
+      prompt_label: 'Any',
       selector: 'all',
       weight: 1,
       subjects: eligibleSubjects,
@@ -1011,9 +1015,15 @@ export async function planPokemonBuildYourTeamChallenge({
       template?.question_contract?.prompt_text,
       template?.question_contract?.prompt_text_variants,
       random,
-      { pool_label: pool.label },
+      {
+        pool_label: pool.label,
+        round: pool.prompt_label || pool.label,
+      },
     );
-    const spokenPromptText = promptText.replace(/\band\b/giu, 'and');
+    const spokenPromptText = promptText
+      .replace(/\s+/gu, ' ')
+      .trim()
+      .replace(/\band\b/giu, 'and');
     const finalPromptText = roundIndex === roundCount - 1
       ? pickSeededQuestionText(
         template?.question_contract?.final_prompt_text,
@@ -1047,6 +1057,7 @@ export async function planPokemonBuildYourTeamChallenge({
       round_label: `${roundIndex + 1}/${roundCount}`,
       pool_key: pool.key,
       pool_label: pool.label,
+      pool_prompt_label: pool.prompt_label || pool.label,
       pool_selector: pool.selector,
       pool_fallback: pool.fallback === true,
       pool_original_subject_count: pool.fallback_subject_count ?? pool.subjects.length,

@@ -34,42 +34,49 @@
       {
         "key": "baby",
         "label": "Baby Pokemon",
+        "prompt_label": "Baby",
         "selector": "baby_pokemon",
         "weight": 1
       },
       {
         "key": "first_stage",
         "label": "First Stage Evolutions",
+        "prompt_label": "First Stage",
         "selector": "first_stage_evolutions",
         "weight": 1
       },
       {
         "key": "starter",
         "label": "Starter Pokemon",
+        "prompt_label": "Starter",
         "selector": "starter_pokemon",
         "weight": 1
       },
       {
         "key": "middle_stage",
         "label": "Middle Stage Evolutions",
+        "prompt_label": "Middle Stage",
         "selector": "middle_stage_evolutions",
         "weight": 1
       },
       {
         "key": "final_stage",
         "label": "Final Stage Evolutions",
+        "prompt_label": "Final Stage",
         "selector": "final_stage_evolutions",
         "weight": 1
       },
       {
         "key": "legendary_mythical",
         "label": "Legendary and Mythical Pokemon",
+        "prompt_label": "Legendary or Mythical",
         "selector": "legendary_mythical",
         "weight": 1
       },
       {
         "key": "dynamax",
         "label": "Dynamax Pokemon",
+        "prompt_label": "Dynamax",
         "selector": "dynamax_pokemon",
         "weight": 1
       }
@@ -80,12 +87,8 @@
     "hook_text_variants": [
       "BUILD YOUR ULTIMATE TEAM!"
     ],
-    "prompt_text": "Build your team: {pool_label}",
-    "prompt_text_variants": [
-      "Build your team: {pool_label}",
-      "Pick your {pool_label}",
-      "Choose your {pool_label}"
-    ],
+    "prompt_text": "Pick your\n{round} Pokémon",
+    "prompt_text_variants": [],
     "reveal_text": "",
     "reveal_text_variants": [],
     "final_prompt_text": "Tell me your team",
