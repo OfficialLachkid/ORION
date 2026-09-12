@@ -125,6 +125,29 @@ const statClashPlan = {
   },
 };
 
+const buildYourTeamPlan = {
+  template_id: 'pokemon.build-your-team.v1',
+  selection: {
+    round_count: 6,
+    pool_labels: [
+      'Baby Pokemon',
+      'First Stage Evolutions',
+      'Middle Stage Evolutions',
+      'Final Stage Evolutions',
+      'Legendary and Mythical Pokemon',
+      'Dynamax Pokemon',
+    ],
+    selected_subjects: [
+      { name: 'Pichu' },
+      { name: 'Charmander' },
+      { name: 'Charmeleon' },
+      { name: 'Charizard' },
+      { name: 'Mewtwo' },
+      { name: 'Venusaur Gigantamax' },
+    ],
+  },
+};
+
 const expectedSeededTitles = new Set([
   'Psychic/Water Type Quiz - Can You Guess?',
   'Can You Guess This Psychic/Water Pokemon?',
@@ -175,7 +198,23 @@ const expectedStatClashSeededTitles = new Set([
   'Who has the Better Stat?',
   'Highest Stat Challenge!',
   'Who has the Highest Stat?',
-  'Stat Clash! 📊',
+  'Who has the Highest Stats? 🤔 💭',
+]);
+
+const expectedBuildYourTeamSeededTitles = new Set([
+  'Build Your Ultimate Pokémon Team! 🔥',
+  'Pick 1 Pokémon Every Round!',
+  'Can You Build the Best Pokémon Team?',
+  '6 Rounds to Build Your Pokémon Team!',
+  'Choose Your Pokémon Team! ⚡',
+  'Pick Your Pokémon Team! ⚡',
+  'You Have 6 Rounds to Build a Pokémon Team ✨',
+  'Which Pokémon Are You Picking? 👀',
+  'Build a Team of 6 Pokémon!',
+  'Create Your Ultimate Team of 6!',
+  'Pokémon Team Builder Challenge!',
+  'Can You Build an OP Pokémon Team?',
+  'Your Pokémon Team Depends on Your Choices!',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -481,4 +520,69 @@ test('seeded stat-clash fallback metadata uses the supported generic title varia
 
   assert.ok(expectedStatClashSeededTitles.has(firstSeeded.title));
   assert.ok(expectedStatClashSeededTitles.has(secondSeeded.title));
+  assert.deepEqual(
+    new Set(Array.from({ length: 256 }, (_unused, index) => (
+      buildPokeQuizzFallbackPublicationMetadata({
+        ...statClashPlan,
+        seed: `stat-clash-pool-${index}`,
+      }, channelProfile).title
+    ))),
+    expectedStatClashSeededTitles,
+  );
+});
+
+test('stat-clash title pool replaces the Stat Clash emoji title', () => {
+  assert.equal(expectedStatClashSeededTitles.size, 4);
+  assert.ok(expectedStatClashSeededTitles.has('Who has the Highest Stats? 🤔 💭'));
+  assert.ok(!expectedStatClashSeededTitles.has('Stat Clash! 📊'));
+});
+
+test('fallback publication metadata frames build-your-team as a team choice challenge', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(buildYourTeamPlan, channelProfile);
+
+  assert.equal(metadata.title, 'Build Your Ultimate Pokémon Team! 🔥');
+  assert.equal(
+    metadata.description,
+    "6 rounds, 4 Pokemon each round. Pick one Pokemon from every pool and build your final team before the timer runs out.\n\nWelcome to Poke Quizz to test your Pokemon knowledge, and see if you're a true master!",
+  );
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#pokemonteam',
+    '#teambuilder',
+    '#pokemonquiz',
+    '#shorts',
+  ]);
+});
+
+test('build-your-team title pool contains all requested variants', () => {
+  assert.equal(expectedBuildYourTeamSeededTitles.size, 13);
+});
+
+test('seeded build-your-team fallback metadata uses the supported generic title variants', () => {
+  const firstSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...buildYourTeamPlan,
+      seed: 'build-your-team-seed-1',
+    },
+    channelProfile,
+  );
+  const secondSeeded = buildPokeQuizzFallbackPublicationMetadata(
+    {
+      ...buildYourTeamPlan,
+      seed: 'build-your-team-seed-2',
+    },
+    channelProfile,
+  );
+
+  assert.ok(expectedBuildYourTeamSeededTitles.has(firstSeeded.title));
+  assert.ok(expectedBuildYourTeamSeededTitles.has(secondSeeded.title));
+  assert.deepEqual(
+    new Set(Array.from({ length: 512 }, (_unused, index) => (
+      buildPokeQuizzFallbackPublicationMetadata({
+        ...buildYourTeamPlan,
+        seed: `build-your-team-pool-${index}`,
+      }, channelProfile).title
+    ))),
+    expectedBuildYourTeamSeededTitles,
+  );
 });

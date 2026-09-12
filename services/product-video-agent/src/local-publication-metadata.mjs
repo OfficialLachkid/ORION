@@ -79,6 +79,9 @@ function resolveTemplateFlavor(plan = {}) {
   if (templateKey.includes('stat-clash') || templateId.includes('stat-clash') || templateKey.includes('stat-battle') || templateId.includes('stat-battle')) {
     return 'stat-clash';
   }
+  if (templateKey.includes('build-your-team') || templateId.includes('build-your-team') || templateKey.includes('team-builder') || templateId.includes('team-builder')) {
+    return 'build-your-team';
+  }
   if (templateKey.includes('find-the-shiny') || templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
   }
@@ -142,7 +145,23 @@ const DEFAULT_STAT_CLASH_TITLE_BUILDERS = Object.freeze([
   () => 'Who has the Better Stat?',
   () => 'Highest Stat Challenge!',
   () => 'Who has the Highest Stat?',
-  () => 'Stat Clash! 📊',
+  () => 'Who has the Highest Stats? 🤔 💭',
+]);
+
+const DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS = Object.freeze([
+  () => 'Build Your Ultimate Pokémon Team! 🔥',
+  () => 'Pick 1 Pokémon Every Round!',
+  () => 'Can You Build the Best Pokémon Team?',
+  () => '6 Rounds to Build Your Pokémon Team!',
+  () => 'Choose Your Pokémon Team! ⚡',
+  () => 'Pick Your Pokémon Team! ⚡',
+  () => 'You Have 6 Rounds to Build a Pokémon Team ✨',
+  () => 'Which Pokémon Are You Picking? 👀',
+  () => 'Build a Team of 6 Pokémon!',
+  () => 'Create Your Ultimate Team of 6!',
+  () => 'Pokémon Team Builder Challenge!',
+  () => 'Can You Build an OP Pokémon Team?',
+  () => 'Your Pokémon Team Depends on Your Choices!',
 ]);
 
 const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([
@@ -251,6 +270,13 @@ function buildTemplateAwareDefaultTitle(plan) {
       : 0;
     return DEFAULT_STAT_CLASH_TITLE_BUILDERS[templateIndex]();
   }
+  if (flavor === 'build-your-team') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|build-your-team`) % DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS[templateIndex]();
+  }
   if (flavor === 'tournament') {
     const seed = String(plan?.seed || '').trim();
     const templateIndex = seed
@@ -306,6 +332,13 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
     const statLabel = titleCaseWord(plan?.selection?.primary_stat_key || 'stat');
     return joinDescriptionParagraphs(
       `Four Pokemon enter each Stat Clash round. Pick who has the highest ${statLabel} before time runs out.`,
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
+  }
+  if (flavor === 'build-your-team') {
+    const roundCount = Number(plan?.selection?.round_count || 0) || 6;
+    return joinDescriptionParagraphs(
+      `${roundCount} rounds, 4 Pokemon each round. Pick one Pokemon from every pool and build your final team before the timer runs out.`,
       `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
     );
   }
@@ -398,6 +431,28 @@ function buildTemplateAwareMetadataPrompt(plan) {
       '- Do not spoil all winning answers in the title.',
       '- The description should frame the video as a fast Pokemon stat challenge.',
       '- Mention that the viewer must spot the highest stat before the reveal.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
+  if (flavor === 'build-your-team') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    const poolLabels = Array.isArray(plan?.selection?.pool_labels)
+      ? plan.selection.pool_labels
+      : [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon team-building choice video.',
+      `Round count: ${Number(plan?.selection?.round_count || 0) || 6}`,
+      'Mechanic: the viewer picks one Pokemon from four options each round to build a team.',
+      `Round pools: ${poolLabels.join(', ')}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil every Pokemon in the title.',
+      '- The description should frame the video as a fast team-building challenge.',
+      '- Mention that the viewer chooses one Pokemon per round before the timer ends.',
       '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
       '- Keep the tone playful and sharp, not childish and not corporate.',
       'Return JSON only.',
@@ -507,6 +562,15 @@ function buildTemplateAwareHashtags(plan) {
       'pokemon',
       'pokemonstats',
       'statchallenge',
+      'pokemonquiz',
+      'shorts',
+    ]);
+  }
+  if (flavor === 'build-your-team') {
+    return normalizeHashtags([
+      'pokemon',
+      'pokemonteam',
+      'teambuilder',
       'pokemonquiz',
       'shorts',
     ]);

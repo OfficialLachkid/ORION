@@ -1,5 +1,8 @@
 import {
   DEFAULT_COUNTDOWN_VOLUME,
+  DEFAULT_POKEBALL_INTRO_SFX_TRIM_SECONDS,
+  DEFAULT_POKEBALL_INTRO_SFX_VOLUME,
+  DEFAULT_SHINY_SFX_VOLUME,
   DEFAULT_TIMER_END_VOLUME,
   DEFAULT_VOICE_VOLUME,
   ensureNumber,
@@ -44,12 +47,38 @@ export function buildStatClashCryCues(plan, renderPlan) {
   return cues.sort((left, right) => left.start_seconds - right.start_seconds);
 }
 
+export function buildCandidateShinyCues(plan, renderPlan) {
+  if (!plan?.shiny_reveal?.active) {
+    return [];
+  }
+  const soundVolumeMultiplier = Math.max(
+    0,
+    ensureNumber(plan.shiny_reveal.sound_volume_multiplier, 1),
+  );
+  const cues = [];
+  for (const round of Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : []) {
+    for (const candidate of Array.isArray(round?.candidates) ? round.candidates : []) {
+      if (candidate?.subject?.is_shiny_variant !== true) {
+        continue;
+      }
+      cues.push({
+        start_seconds: Number(ensureNumber(candidate.intro_start_seconds, 0).toFixed(3)),
+        volume: Number((DEFAULT_SHINY_SFX_VOLUME * soundVolumeMultiplier).toFixed(3)),
+      });
+    }
+  }
+  return cues.sort((left, right) => left.start_seconds - right.start_seconds);
+}
+
 export function buildAudioFilterScript({
   narrationPaths,
   musicPath,
   countdownPath,
   timerEndPath,
+  pokeballIntroPath,
   introSlotRevealPath,
+  shinyPath,
+  shinyCues = [],
   cryCues = [],
   renderPlan,
   mediaDurations = {},
@@ -115,6 +144,33 @@ export function buildAudioFilterScript({
     inputIndex += 1;
   }
 
+  if (pokeballIntroPath) {
+    const hookSpawnStart = renderPlan?.intro_hook?.enabled
+      ? ensureNumber(renderPlan.intro_hook.pokeball_intro_start_seconds, 0)
+      : null;
+    const roundSpawnMoments = (Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : [])
+      .map((round) => Math.min(
+        ...round.candidates
+          .map((candidate) => ensureNumber(candidate?.pokeball_hold_start_seconds, Number.POSITIVE_INFINITY))
+          .filter((value) => Number.isFinite(value)),
+      ))
+      .filter((value) => Number.isFinite(value));
+    const spawnMoments = [
+      ...(hookSpawnStart != null ? [hookSpawnStart] : []),
+      ...roundSpawnMoments,
+    ];
+    if (spawnMoments.length > 0) {
+      filters.push(`[${inputIndex}:a]asplit=${spawnMoments.length}${spawnMoments.map((_moment, index) => `[pisrc${index}]`).join('')}`);
+      spawnMoments.forEach((startSeconds, spawnIndex) => {
+        const delayMs = Math.max(0, Math.round(startSeconds * 1000));
+        const label = `pokeballintro${spawnIndex}`;
+        filters.push(`[pisrc${spawnIndex}]atrim=start=${DEFAULT_POKEBALL_INTRO_SFX_TRIM_SECONDS},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs},volume=${DEFAULT_POKEBALL_INTRO_SFX_VOLUME}[${label}]`);
+        mixLabels.push(label);
+      });
+    }
+    inputIndex += 1;
+  }
+
   if (introSlotRevealPath) {
     const revealMoments = renderPlan.rounds.flatMap((round) => (
       round.candidates.map((candidate) => candidate.pokeball_start_seconds)
@@ -127,6 +183,25 @@ export function buildAudioFilterScript({
       filters.push(`[osrc${revealIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_STAT_CLASH_POKEBALL_VOLUME}[${label}]`);
       mixLabels.push(label);
     });
+    inputIndex += 1;
+  }
+
+  const normalizedShinyCues = (Array.isArray(shinyCues) ? shinyCues : [])
+    .map((cue) => ({
+      start_seconds: ensureNumber(cue?.start_seconds, 0),
+      volume: ensureNumber(cue?.volume, DEFAULT_SHINY_SFX_VOLUME),
+    }))
+    .sort((left, right) => left.start_seconds - right.start_seconds);
+  if (shinyPath) {
+    if (normalizedShinyCues.length > 0) {
+      filters.push(`[${inputIndex}:a]asplit=${normalizedShinyCues.length}${normalizedShinyCues.map((_cue, index) => `[shsrc${index}]`).join('')}`);
+      normalizedShinyCues.forEach((cue, cueIndex) => {
+        const delayMs = Math.max(0, Math.round(cue.start_seconds * 1000));
+        const label = `shiny${cueIndex}`;
+        filters.push(`[shsrc${cueIndex}]adelay=${delayMs}|${delayMs},volume=${cue.volume}[${label}]`);
+        mixLabels.push(label);
+      });
+    }
     inputIndex += 1;
   }
 

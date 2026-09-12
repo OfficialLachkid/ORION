@@ -46,6 +46,14 @@
       "weight": 2,
       "genre_label": "Stat Clash"
     },
+    "pokemon.build-your-team.v1": {
+      "template_key": "build-your-team",
+      "enabled": true,
+      "manual_generate": true,
+      "night_shift": false,
+      "weight": 1,
+      "genre_label": "Build Your Team"
+    },
     "pokemon.type-quiz.v1": {
       "template_key": "type-speed-quiz",
       "enabled": true,

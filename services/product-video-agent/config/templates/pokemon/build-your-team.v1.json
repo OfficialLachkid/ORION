@@ -1,0 +1,346 @@
+{
+  "template_id": "pokemon.build-your-team.v1",
+  "template_key": "build-your-team",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "team_builder",
+    "countdown",
+    "transition"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 120,
+      "bottom": 260,
+      "left": 120
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "round_count": 6,
+    "candidate_count": 4,
+    "mode": "team_builder",
+    "sampling_attempts_per_round": 120,
+    "shiny_chance_per_candidate": 0.08,
+    "max_shiny_per_round": 1,
+    "pool_order_mode": "shuffle_each_once",
+    "pool_variants": [
+      {
+        "key": "baby",
+        "label": "Baby Pokemon",
+        "prompt_label": "Baby",
+        "prompt_color": "0xFF6FAE",
+        "selector": "baby_pokemon",
+        "weight": 1
+      },
+      {
+        "key": "first_stage",
+        "label": "First Stage Evolutions",
+        "prompt_label": "First Stage",
+        "prompt_color": "0xFF9500",
+        "selector": "first_stage_evolutions",
+        "weight": 1
+      },
+      {
+        "key": "starter",
+        "label": "Starter Pokemon",
+        "prompt_label": "Starter",
+        "prompt_color": "0x4CD964",
+        "selector": "starter_pokemon",
+        "weight": 1
+      },
+      {
+        "key": "middle_stage",
+        "label": "Middle Stage Evolutions",
+        "prompt_label": "Middle Stage",
+        "prompt_color": "0x4D96FF",
+        "selector": "middle_stage_evolutions",
+        "weight": 1
+      },
+      {
+        "key": "final_stage",
+        "label": "Final Stage Evolutions",
+        "prompt_label": "Final Stage",
+        "prompt_color": "0xFFD60A",
+        "selector": "final_stage_evolutions",
+        "weight": 1
+      },
+      {
+        "key": "legendary_mythical",
+        "label": "Legendary and Mythical Pokemon",
+        "prompt_label": "Legendary or Mythical",
+        "prompt_color": "0xFF3B30",
+        "selector": "legendary_mythical",
+        "weight": 1
+      },
+      {
+        "key": "dynamax",
+        "label": "Dynamax Pokemon",
+        "prompt_label": "Dynamax",
+        "prompt_color": "0xAF52DE",
+        "selector": "dynamax_pokemon",
+        "weight": 1
+      }
+    ]
+  },
+  "question_contract": {
+    "hook_text": "BUILD YOUR ULTIMATE TEAM!",
+    "hook_text_variants": [
+      "BUILD YOUR ULTIMATE TEAM!"
+    ],
+    "intro_spoken_text": "Build your ultimate team",
+    "prompt_text": "Pick your\n{round} Pokémon",
+    "prompt_text_variants": [],
+    "reveal_text": "",
+    "reveal_text_variants": [],
+    "final_prompt_text": "Tell me your team",
+    "final_prompt_text_variants": [
+      "Tell me your team",
+      "What's your team?",
+      "Which Pokemon did you choose?",
+      "Can your team beat Elite Four?",
+      "Who did you choose?",
+      "Share your team in the comments"
+    ]
+  },
+  "layout": {
+    "foreground_y_offset_px": 50,
+    "background": {
+      "source_policy": "local_t7_pixel_backgrounds",
+      "media_type": "looping_image_gif_or_video",
+      "fit": "cover",
+      "blur_sigma": 6,
+      "motion": {
+        "enabled": true,
+        "zoom_scale": 1.12,
+        "subpixel_scale": 2,
+        "pan_cycle_seconds": 18,
+        "vertical_pan_ratio": 0.72
+      }
+    },
+    "text": {
+      "hook_y": 650,
+      "hook_font_size": 132,
+      "prompt_y": 150,
+      "prompt_font_size": 68,
+      "prompt_above_timer": true,
+      "prompt_above_timer_gap_px": 28,
+      "round_headline": {
+        "enabled": true,
+        "y": 96,
+        "line_gap_px": 4,
+        "depth_px": 10,
+        "depth_steps": 5,
+        "shadow_color": "black@0.72",
+        "shadow_x_px": 5,
+        "shadow_y_px": 7,
+        "lines": [
+          {
+            "text": "BUILD YOUR",
+            "font_size": 72,
+            "color": "0xF4FBFF",
+            "outline_color": "0x173A63",
+            "depth_color": "0x2B6DA6"
+          },
+          {
+            "text": "ULTIMATE TEAM!",
+            "font_size": 88,
+            "color": "0xFFD60A",
+            "outline_color": "0x704400",
+            "depth_color": "0xC97900"
+          }
+        ]
+      },
+      "final_prompt": {
+        "enabled": true,
+        "anchor": "timer_center",
+        "center_y_offset_px": -100,
+        "font_size": 72,
+        "max_lines": 2,
+        "line_gap_px": 4,
+        "uppercase": true,
+        "single_line_style_index": 1
+      },
+      "reveal_y": 285,
+      "reveal_font_size": 92,
+      "outline_width": 8,
+      "show_counter": false,
+      "counter_x": 72,
+      "counter_y": 144,
+      "counter_font_size": 96,
+      "font_candidates": [
+        "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
+      ]
+    },
+    "sprite_grid": {
+      "rows": 2,
+      "columns": 2,
+      "item_size_px": 252,
+      "min_item_size_px": 214,
+      "column_gap_px": 160,
+      "row_gap_px": 320,
+      "row_y_offsets_px": [
+        -150,
+        0
+      ],
+      "sprite_scale_multiplier": 1.77,
+      "sprite_center_y_offset_px": 90,
+      "stage_bounds_px": {
+        "left": 120,
+        "top": 455,
+        "width": 840,
+        "height": 820
+      }
+    },
+    "sprite_platform": {
+      "option_enabled": true,
+      "option_width_multiplier": 0.85,
+      "center_y_offset_multiplier": 0.34,
+      "option_center_y_offset_px": 82
+    },
+    "timer": {
+      "countdown_from": 2.5,
+      "countdown_to": 0,
+      "bar_height_px": 38,
+      "bar_horizontal_inset_px": 20,
+      "center_y": 1010,
+      "bar_y_offset_px": 0,
+      "show_before_countdown": true
+    },
+    "stat_values": {
+      "enabled": false
+    },
+    "rounds": {
+      "hook_hold_seconds": 2.0,
+      "hook_transition_duration_seconds": 0.42,
+      "pre_countdown_hold_seconds": 0.06,
+      "narration_duration_padding_seconds": 0.06,
+      "reveal_hold_seconds": 2.4,
+      "transition_duration_seconds": 0.42,
+      "final_hold_seconds": 1
+    }
+  },
+  "reveal": {
+    "visual_delay_seconds": 0,
+    "decoy_grayscale_enabled": false,
+    "shiny": {
+      "enabled": true,
+      "sparkle_overlay_role": "shiny_sparkle",
+      "sound_effect_role": "shiny",
+      "sparkle_duration_seconds": 0.9,
+      "sparkle_scale_multiplier": 1.35,
+      "sound_volume_multiplier": 1
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "sound_effects": {
+      "countdown_tick": {
+        "enabled": true,
+        "trigger": "each_second"
+      },
+      "timer_end": {
+        "enabled": true,
+        "trigger": "countdown_complete",
+        "preferred_keywords": [
+          "ding-sound"
+        ]
+      },
+      "pokeball_intro": {
+        "enabled": true,
+        "trigger": "pokeball_spawn",
+        "preferred_keywords": [
+          "pokeball",
+          "intro"
+        ]
+      },
+      "intro_slot_reveal": {
+        "enabled": true,
+        "trigger": "pokemon_reveal",
+        "preferred_keywords": [
+          "pokeball-open-sound"
+        ]
+      },
+      "shiny": {
+        "enabled": true,
+        "trigger": "shiny_pokemon_reveal",
+        "preferred_keywords": [
+          "shiny"
+        ]
+      }
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true,
+    "candidate_intro_initial_delay_seconds": 0.1,
+    "candidate_intro_stagger_seconds": 0.15,
+    "candidate_intro_duration_seconds": 0.22,
+    "candidate_intro_anchor": "reveal",
+    "candidate_intro_y_offset_px": 42,
+    "candidate_intro_scale_initial": 0.68,
+    "candidate_intro_scale_peak": 1.08,
+    "candidate_intro_scale_settle": 1,
+    "candidate_forming_enabled": true,
+    "candidate_forming_duration_seconds": 1,
+    "hold_pokeballs_until_reveal": true,
+    "held_pokeball_source": "random_static_sprite",
+    "reveal_pokeball_overlay_enabled": false,
+    "hook_pokeballs_enabled": true,
+    "hook_overlay_first_round": true,
+    "pokeball_spawn_sfx_enabled": true,
+    "hook_pokeball_intro_duration_seconds": 0.56,
+    "hook_pokeball_intro_stagger_seconds": 0.32,
+    "held_pokeball_source_start_seconds": 0.7,
+    "intro_pokeball_hold_seconds": 0.16,
+    "intro_pokeball_lead_seconds": 0.18,
+    "intro_platform_lead_seconds": 0.08,
+    "intro_pokeball_scale_multiplier": 0.52,
+    "held_pokeball_scale_multiplier": 0.3328,
+    "held_pokeball_intro_duration_seconds": 1.12,
+    "held_pokeball_wiggle_amplitude_radians": 0.24,
+    "held_pokeball_wiggle_frequency_hz": 0.675,
+    "held_pokeball_wiggle_speed_variation_ratio": 0.12,
+    "held_pokeball_wiggle_momentum_strength": 0.45,
+    "held_pokeball_wiggle_horizontal_amplitude_px": 24,
+    "held_pokeball_sprite_weights": {
+      "default": 1,
+      "1": 15,
+      "2": 5,
+      "3": 4,
+      "4": 3
+    },
+    "intro_pokeball_center_y_offset_px": 180,
+    "fallback_sprite_wobble_amplitude_px": 6,
+    "fallback_sprite_wobble_cycle_length_multiplier": 3,
+    "stat_reveal_fade_duration_seconds": 0.22,
+    "decoy_grayscale_fade_duration_seconds": 0.22
+  }
+}
