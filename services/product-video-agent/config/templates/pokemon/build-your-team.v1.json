@@ -88,15 +88,18 @@
     ],
     "reveal_text": "",
     "reveal_text_variants": [],
-    "final_prompt_text": "Who did you choose?",
+    "final_prompt_text": "Tell me your team",
     "final_prompt_text_variants": [
+      "Tell me your team",
+      "What's your team?",
+      "Which Pokemon did you choose?",
+      "Can your team beat Elite Four?",
       "Who did you choose?",
-      "What is your team?",
-      "Share your team in the comments!"
+      "Share your team in the comments"
     ]
   },
   "layout": {
-    "foreground_y_offset_px": 100,
+    "foreground_y_offset_px": 50,
     "background": {
       "source_policy": "local_t7_pixel_backgrounds",
       "media_type": "looping_image_gif_or_video",
@@ -142,6 +145,16 @@
             "depth_color": "0xC97900"
           }
         ]
+      },
+      "final_prompt": {
+        "enabled": true,
+        "anchor": "timer_center",
+        "center_y_offset_px": 0,
+        "font_size": 72,
+        "max_lines": 2,
+        "line_gap_px": 4,
+        "uppercase": true,
+        "single_line_style_index": 1
       },
       "reveal_y": 285,
       "reveal_font_size": 92,
@@ -195,7 +208,7 @@
       "enabled": false
     },
     "rounds": {
-      "hook_hold_seconds": 2.35,
+      "hook_hold_seconds": 2.0,
       "hook_transition_duration_seconds": 0.42,
       "pre_countdown_hold_seconds": 0.18,
       "reveal_hold_seconds": 2.4,

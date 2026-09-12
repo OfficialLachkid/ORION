@@ -463,6 +463,51 @@ function appendTimerBarPhase(filters, currentLabel, {
   return shadowOverlayLabel;
 }
 
+function appendLayered3dText(filters, currentLabel, {
+  labelPrefix,
+  lines,
+  startSeconds,
+  endSeconds,
+  baseY,
+  lineGapPx,
+  depthPx,
+  depthSteps,
+  shadowColor,
+  shadowX,
+  shadowY,
+  fontPart,
+  textOutlineWidth,
+}) {
+  let lineY = baseY;
+  let outputLabel = currentLabel;
+
+  lines.forEach((line, lineIndex) => {
+    const text = String(line.text || '').trim();
+    const fontSize = Math.max(24, Math.round(ensureNumber(line.font_size, 84)));
+    const outlineWidth = Math.max(
+      1,
+      Math.round(ensureNumber(line.outline_width, textOutlineWidth)),
+    );
+    for (let depthStep = depthSteps; depthStep >= 1; depthStep -= 1) {
+      const depthOffset = Number(((depthPx * depthStep) / depthSteps).toFixed(3));
+      const depthLabel = `${labelPrefix}${lineIndex}depth${depthStep}`;
+      filters.push(
+        `[${outputLabel}]drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=${line.depth_color || '0x244B73'}:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=${line.outline_color || 'black'}:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(lineY + depthOffset, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'[${depthLabel}]`,
+      );
+      outputLabel = depthLabel;
+    }
+
+    const faceLabel = `${labelPrefix}${lineIndex}face`;
+    filters.push(
+      `[${outputLabel}]drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=${line.color || 'white'}:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=${line.outline_color || 'black'}:shadowcolor=${shadowColor}:shadowx=${shadowX}:shadowy=${shadowY}:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(lineY, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'[${faceLabel}]`,
+    );
+    outputLabel = faceLabel;
+    lineY += fontSize + lineGapPx;
+  });
+
+  return outputLabel;
+}
+
 function appendRoundHeadline(filters, currentLabel, {
   roundIndex,
   round,
@@ -480,41 +525,100 @@ function appendRoundHeadline(filters, currentLabel, {
 
   const startSeconds = ensureNumber(round?.local?.prompt_start_seconds, 0.04);
   const endSeconds = ensureNumber(round?.local?.scene_duration_seconds, startSeconds + 1);
-  const lineGapPx = Math.max(0, ensureNumber(headlineConfig.line_gap_px, 4));
-  const depthPx = Math.max(0, Math.round(ensureNumber(headlineConfig.depth_px, 8)));
-  const depthSteps = Math.max(1, Math.round(ensureNumber(headlineConfig.depth_steps, 4)));
-  const shadowColor = String(headlineConfig.shadow_color || 'black@0.7');
-  const shadowX = Math.round(ensureNumber(headlineConfig.shadow_x_px, 4));
-  const shadowY = Math.round(ensureNumber(headlineConfig.shadow_y_px, 6));
-  let lineY = ensureNumber(headlineConfig.y, 96)
-    + ensureNumber(template?.layout?.foreground_y_offset_px, 0);
-  let outputLabel = currentLabel;
-
-  lines.forEach((line, lineIndex) => {
-    const text = String(line.text || '').trim();
-    const fontSize = Math.max(24, Math.round(ensureNumber(line.font_size, 84)));
-    const outlineWidth = Math.max(
-      1,
-      Math.round(ensureNumber(line.outline_width, textOutlineWidth)),
-    );
-    for (let depthStep = depthSteps; depthStep >= 1; depthStep -= 1) {
-      const depthOffset = Number(((depthPx * depthStep) / depthSteps).toFixed(3));
-      const depthLabel = `scene${roundIndex}headline${lineIndex}depth${depthStep}`;
-      filters.push(
-        `[${outputLabel}]drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=${line.depth_color || '0x244B73'}:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=${line.outline_color || 'black'}:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(lineY + depthOffset, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'[${depthLabel}]`,
-      );
-      outputLabel = depthLabel;
-    }
-
-    const faceLabel = `scene${roundIndex}headline${lineIndex}face`;
-    filters.push(
-      `[${outputLabel}]drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=${line.color || 'white'}:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=${line.outline_color || 'black'}:shadowcolor=${shadowColor}:shadowx=${shadowX}:shadowy=${shadowY}:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(lineY, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'[${faceLabel}]`,
-    );
-    outputLabel = faceLabel;
-    lineY += fontSize + lineGapPx;
+  return appendLayered3dText(filters, currentLabel, {
+    labelPrefix: `scene${roundIndex}headline`,
+    lines,
+    startSeconds,
+    endSeconds,
+    baseY: ensureNumber(headlineConfig.y, 96)
+      + ensureNumber(template?.layout?.foreground_y_offset_px, 0),
+    lineGapPx: Math.max(0, ensureNumber(headlineConfig.line_gap_px, 4)),
+    depthPx: Math.max(0, Math.round(ensureNumber(headlineConfig.depth_px, 8))),
+    depthSteps: Math.max(1, Math.round(ensureNumber(headlineConfig.depth_steps, 4))),
+    shadowColor: String(headlineConfig.shadow_color || 'black@0.7'),
+    shadowX: Math.round(ensureNumber(headlineConfig.shadow_x_px, 4)),
+    shadowY: Math.round(ensureNumber(headlineConfig.shadow_y_px, 6)),
+    fontPart,
+    textOutlineWidth,
   });
+}
 
-  return outputLabel;
+function appendFinalPrompt(filters, currentLabel, {
+  roundIndex,
+  round,
+  template,
+  timerLayout,
+  fontPart,
+  textOutlineWidth,
+}) {
+  const promptText = String(round?.reveal_text || '').trim();
+  const promptConfig = template?.layout?.text?.final_prompt || {};
+  const headlineConfig = template?.layout?.text?.round_headline || {};
+  if (!promptText || promptConfig.enabled !== true || !timerLayout) {
+    return null;
+  }
+
+  const fontSize = Math.max(24, Math.round(ensureNumber(promptConfig.font_size, 72)));
+  const maxLines = Math.max(1, Math.round(ensureNumber(promptConfig.max_lines, 2)));
+  const lineGapPx = Math.max(0, ensureNumber(
+    promptConfig.line_gap_px,
+    headlineConfig.line_gap_px || 4,
+  ));
+  const renderedText = promptConfig.uppercase === false ? promptText : promptText.toUpperCase();
+  const wrappedLines = wrapPromptTextLines(
+    renderedText,
+    estimateWrapCharacterLimit(template, fontSize),
+    maxLines,
+  );
+  if (wrappedLines.length === 0) {
+    return null;
+  }
+
+  const headlineStyles = Array.isArray(headlineConfig.lines)
+    ? headlineConfig.lines.filter((line) => line && typeof line === 'object')
+    : [];
+  const singleLineStyleIndex = Math.max(
+    0,
+    Math.round(ensureNumber(promptConfig.single_line_style_index, 1)),
+  );
+  const styledLines = wrappedLines.map((text, lineIndex) => {
+    const styleIndex = wrappedLines.length === 1 ? singleLineStyleIndex : lineIndex;
+    const style = headlineStyles[styleIndex % Math.max(1, headlineStyles.length)] || {};
+    return {
+      text,
+      font_size: fontSize,
+      color: style.color || 'white',
+      outline_color: style.outline_color || 'black',
+      depth_color: style.depth_color || '0x244B73',
+      outline_width: style.outline_width,
+    };
+  });
+  const blockHeight = (styledLines.length * fontSize)
+    + (Math.max(0, styledLines.length - 1) * lineGapPx);
+  const anchor = String(promptConfig.anchor || 'timer_center').trim().toLowerCase();
+  const anchorY = anchor === 'timer_center'
+    ? ensureNumber(timerLayout.center_y, timerLayout.y)
+    : ensureNumber(promptConfig.center_y, timerLayout.center_y);
+  const centerY = anchorY + ensureNumber(promptConfig.center_y_offset_px, 0);
+  const baseY = Number((centerY - (blockHeight / 2)).toFixed(3));
+  const startSeconds = ensureNumber(round?.local?.reveal_visual_start_seconds, 0);
+  const endSeconds = ensureNumber(round?.local?.scene_duration_seconds, startSeconds + 1);
+
+  return appendLayered3dText(filters, currentLabel, {
+    labelPrefix: `scene${roundIndex}finalprompt`,
+    lines: styledLines,
+    startSeconds,
+    endSeconds,
+    baseY,
+    lineGapPx,
+    depthPx: Math.max(0, Math.round(ensureNumber(headlineConfig.depth_px, 8))),
+    depthSteps: Math.max(1, Math.round(ensureNumber(headlineConfig.depth_steps, 4))),
+    shadowColor: String(headlineConfig.shadow_color || 'black@0.7'),
+    shadowX: Math.round(ensureNumber(headlineConfig.shadow_x_px, 4)),
+    shadowY: Math.round(ensureNumber(headlineConfig.shadow_y_px, 6)),
+    fontPart,
+    textOutlineWidth,
+  });
 }
 
 function buildPromptSegments(text, template, textLayout, round, timerLayout = null) {
@@ -1383,19 +1487,31 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = grayOverlayLabel;
     });
 
-    const revealArtifacts = buildRevealArtifacts(
-      round.reveal_text,
-      template,
-      renderPlan.text_layout,
+    const finalPromptLabel = appendFinalPrompt(filters, currentLabel, {
+      roundIndex,
       round,
-    );
-    revealArtifacts.lines.forEach((line, lineIndex) => {
-      const revealLabel = `scene${roundIndex}reveal${lineIndex}`;
-      filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${line.font_size}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${revealLabel}]`,
-      );
-      currentLabel = revealLabel;
+      template,
+      timerLayout,
+      fontPart,
+      textOutlineWidth,
     });
+    if (finalPromptLabel) {
+      currentLabel = finalPromptLabel;
+    } else {
+      const revealArtifacts = buildRevealArtifacts(
+        round.reveal_text,
+        template,
+        renderPlan.text_layout,
+        round,
+      );
+      revealArtifacts.lines.forEach((line, lineIndex) => {
+        const revealLabel = `scene${roundIndex}reveal${lineIndex}`;
+        filters.push(
+          `[${currentLabel}]drawtext=text='${escapeDrawtextText(line.text)}'${fontPart}:fontcolor=white:fontsize=${line.font_size}:borderw=${textOutlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(line.y, round.local.reveal_visual_start_seconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${revealLabel}]`,
+        );
+        currentLabel = revealLabel;
+      });
+    }
 
     if (renderPlan.stat_value_layout?.enabled !== false) {
       for (const candidateValue of round.candidates) {

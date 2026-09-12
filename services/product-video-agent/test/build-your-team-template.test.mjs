@@ -150,15 +150,23 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.selection_rules.max_shiny_per_round, 1);
   assert.equal(template.selection_rules.pool_variants.length, 7);
   assert.equal(template.question_contract.hook_text, 'BUILD YOUR ULTIMATE TEAM!');
-  assert.equal(template.question_contract.final_prompt_text, 'Who did you choose?');
+  assert.equal(template.question_contract.final_prompt_text, 'Tell me your team');
+  assert.deepEqual(template.question_contract.final_prompt_text_variants, [
+    'Tell me your team',
+    "What's your team?",
+    'Which Pokemon did you choose?',
+    'Can your team beat Elite Four?',
+    'Who did you choose?',
+    'Share your team in the comments',
+  ]);
   assert.equal(template.layout.background.blur_sigma, 6);
-  assert.equal(template.layout.foreground_y_offset_px, 100);
+  assert.equal(template.layout.foreground_y_offset_px, 50);
   assert.equal(template.layout.background.motion.enabled, true);
   assert.equal(template.layout.background.motion.subpixel_scale, 2);
   assert.equal(template.reveal.shiny.enabled, true);
   assert.equal(template.layout.timer.countdown_from, 2.5);
   assert.equal(template.layout.timer.show_before_countdown, true);
-  assert.ok(template.layout.rounds.hook_hold_seconds >= 2.3);
+  assert.equal(template.layout.rounds.hook_hold_seconds, 2);
   assert.equal(template.layout.text.prompt_above_timer, true);
   assert.equal(template.layout.text.prompt_above_timer_gap_px, 28);
   assert.equal(template.layout.text.prompt_font_size, 68);
@@ -170,6 +178,16 @@ test('build-your-team config sanity aligns template identity and pool count', ()
       ['ULTIMATE TEAM!', '0xFFD60A'],
     ],
   );
+  assert.deepEqual(template.layout.text.final_prompt, {
+    enabled: true,
+    anchor: 'timer_center',
+    center_y_offset_px: 0,
+    font_size: 72,
+    max_lines: 2,
+    line_gap_px: 4,
+    uppercase: true,
+    single_line_style_index: 1,
+  });
   assert.match(template.layout.text.font_candidates[0], /Arial Black\.ttf$/u);
   assert.deepEqual(template.layout.sprite_grid.row_y_offsets_px, [-150, 0]);
   assert.equal(template.layout.text.show_counter, false);
@@ -272,6 +290,8 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
       [-1, -1, 1, 1],
     );
   }
+  assert.ok(plan.rounds.slice(0, -1).every((round) => round.reveal_text === ''));
+  assert.ok(template.question_contract.final_prompt_text_variants.includes(plan.rounds.at(-1).reveal_text));
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Build Your Team$/u);
 });
 
@@ -417,14 +437,14 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.equal(renderPlan.rounds.length, 6);
   assert.equal(renderPlan.intro_hook.text, 'BUILD YOUR ULTIMATE TEAM!');
   assert.equal(renderPlan.rounds[0].scene_start_seconds, 0);
-  assert.equal(renderPlan.text_layout.hook_y, 750);
-  assert.equal(renderPlan.text_layout.prompt_y, 250);
-  assert.equal(renderPlan.text_layout.reveal_y, 385);
-  assert.equal(renderPlan.timer_layout.center_y, 1110);
-  assert.equal(renderPlan.grid_layout.cells[0].center_y, 530);
-  assert.equal(renderPlan.grid_layout.cells[1].center_y, 530);
-  assert.equal(renderPlan.grid_layout.cells[2].center_y, 1250);
-  assert.equal(renderPlan.grid_layout.cells[3].center_y, 1250);
+  assert.equal(renderPlan.text_layout.hook_y, 700);
+  assert.equal(renderPlan.text_layout.prompt_y, 200);
+  assert.equal(renderPlan.text_layout.reveal_y, 335);
+  assert.equal(renderPlan.timer_layout.center_y, 1060);
+  assert.equal(renderPlan.grid_layout.cells[0].center_y, 480);
+  assert.equal(renderPlan.grid_layout.cells[1].center_y, 480);
+  assert.equal(renderPlan.grid_layout.cells[2].center_y, 1200);
+  assert.equal(renderPlan.grid_layout.cells[3].center_y, 1200);
   const narrationAdjustedRenderPlan = applyNarrationDurationsToRenderPlan(
     renderPlan,
     Array.from({ length: plan.narration.lines.length }, () => 1.2),
@@ -462,7 +482,10 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   }
   assert.match(visualFilter.script, /drawtext=text='ULTIMATE TEAM!'.*fontcolor=0xFFD60A.*shadowcolor=black@0\.72/u);
   assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0x2B6DA6/u);
-  assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0xF4FBFF.*:y='196\+/u);
+  assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0xF4FBFF.*:y='146\+/u);
+  assert.match(visualFilter.script, /fontcolor=0x(?:2B6DA6|C97900).*\[scene5finalprompt0depth5\]/u);
+  assert.match(visualFilter.script, /fontcolor=0x(?:F4FBFF|FFD60A).*fontsize=72.*:y='(?:986|1024)\+.*\[scene5finalprompt0face\]/u);
+  assert.doesNotMatch(visualFilter.script, /\[scene5reveal0\]/u);
   assert.match(visualFilter.script, /scene0platformv0/u);
   for (let roundIndex = 0; roundIndex < renderPlan.rounds.length; roundIndex += 1) {
     assert.match(visualFilter.script, new RegExp(`scene${roundIndex}pokeballhold0`, 'u'));
