@@ -145,14 +145,23 @@ const DEFAULT_STAT_CLASH_TITLE_BUILDERS = Object.freeze([
   () => 'Who has the Better Stat?',
   () => 'Highest Stat Challenge!',
   () => 'Who has the Highest Stat?',
-  () => 'Stat Clash! 📊',
+  () => 'Who has the Highest Stats? 🤔 💭',
 ]);
 
 const DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS = Object.freeze([
-  () => 'Build Your Pokemon Team!',
-  () => 'Pick Your Pokemon Team',
-  () => 'Choose Your Team!',
-  () => 'Pokemon Team Builder',
+  () => 'Build Your Ultimate Pokémon Team! 🔥',
+  () => 'Pick 1 Pokémon Every Round!',
+  () => 'Can You Build the Best Pokémon Team?',
+  () => '6 Rounds to Build Your Pokémon Team!',
+  () => 'Choose Your Pokémon Team! ⚡',
+  () => 'Pick Your Pokémon Team! ⚡',
+  () => 'You Have 6 Rounds to Build a Pokémon Team ✨',
+  () => 'Which Pokémon Are You Picking? 👀',
+  () => 'Build a Team of 6 Pokémon!',
+  () => 'Create Your Ultimate Team of 6!',
+  () => 'Pokémon Team Builder Challenge!',
+  () => 'Can You Build an OP Pokémon Team?',
+  () => 'Your Pokémon Team Depends on Your Choices!',
 ]);
 
 const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([

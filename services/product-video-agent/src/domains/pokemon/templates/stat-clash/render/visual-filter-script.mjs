@@ -663,7 +663,9 @@ function buildPromptSegments(text, template, textLayout, round, timerLayout = nu
     y: promptBaseY + (index * lineHeight),
     start_seconds: startSeconds,
     end_seconds: endSeconds,
-    color: 'white',
+    color: index > 0
+      ? String(round?.prompt_accent_color || 'white').trim() || 'white'
+      : 'white',
   }));
   const lastHeaderLine = headerLines.at(-1);
   const statBaseY = Number((

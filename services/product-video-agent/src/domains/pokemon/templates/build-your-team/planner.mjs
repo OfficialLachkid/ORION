@@ -411,6 +411,7 @@ function resolveBuildYourTeamPoolVariants(template = {}) {
       prompt_label: String(
         variant?.prompt_label || variant?.label || variant?.key || `Pool ${index + 1}`,
       ).trim(),
+      prompt_color: String(variant?.prompt_color || 'white').trim() || 'white',
       selector: String(variant?.selector || variant?.key || 'all').trim().toLowerCase(),
       weight: Math.max(1, ensurePositiveInteger(variant?.weight, 1)),
     }))
@@ -492,6 +493,7 @@ function buildRoundPoolSequence(template, eligibleSubjects, candidateCount, roun
       key: 'all',
       label: 'All Pokemon',
       prompt_label: 'Any',
+      prompt_color: 'white',
       selector: 'all',
       weight: 1,
       subjects: eligibleSubjects,
@@ -863,13 +865,13 @@ function selectRoundCandidates({
   return best;
 }
 
-function buildTimeline(rounds) {
+function buildTimeline(rounds, introNarrationText = '') {
   const timeline = [];
-  for (const round of rounds) {
+  for (const [roundIndex, round] of rounds.entries()) {
     timeline.push({
       phase: `round_${round.round_number}_prompt`,
       duration_seconds: round.scene_lead_seconds,
-      spoken_text: round.spoken_prompt_text || round.prompt_text,
+      spoken_text: roundIndex === 0 ? introNarrationText : '',
       on_screen_text: round.prompt_text,
     });
     timeline.push({
@@ -890,6 +892,9 @@ export async function planPokemonBuildYourTeamChallenge({
   selectionState = null,
 }) {
   const random = createPrng(seed);
+  const introNarrationText = String(template?.question_contract?.intro_spoken_text || '')
+    .replace(/\s+/gu, ' ')
+    .trim();
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
   const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
   const roundCount = ensurePositiveInteger(
@@ -1020,10 +1025,6 @@ export async function planPokemonBuildYourTeamChallenge({
         round: pool.prompt_label || pool.label,
       },
     );
-    const spokenPromptText = promptText
-      .replace(/\s+/gu, ' ')
-      .trim()
-      .replace(/\band\b/giu, 'and');
     const finalPromptText = roundIndex === roundCount - 1
       ? pickSeededQuestionText(
         template?.question_contract?.final_prompt_text,
@@ -1058,11 +1059,12 @@ export async function planPokemonBuildYourTeamChallenge({
       pool_key: pool.key,
       pool_label: pool.label,
       pool_prompt_label: pool.prompt_label || pool.label,
+      prompt_accent_color: pool.prompt_color || 'white',
       pool_selector: pool.selector,
       pool_fallback: pool.fallback === true,
       pool_original_subject_count: pool.fallback_subject_count ?? pool.subjects.length,
       prompt_text: promptText,
-      spoken_prompt_text: spokenPromptText,
+      spoken_prompt_text: '',
       reveal_text: finalPromptText,
       scene_lead_seconds: sceneLeadSeconds,
       countdown_from: countdownFrom,
@@ -1132,12 +1134,14 @@ export async function planPokemonBuildYourTeamChallenge({
     narration: {
       local_model_required: false,
       tts_provider: 'kokoro',
-      lines: rounds.map((round) => ({
-        role: `round-${round.round_number}-prompt`,
-        text: round.spoken_prompt_text || round.prompt_text,
-      })),
+      lines: introNarrationText
+        ? [{
+          role: 'round-1-prompt',
+          text: introNarrationText,
+        }]
+        : [],
     },
-    timeline: buildTimeline(rounds),
+    timeline: buildTimeline(rounds, introNarrationText),
     rounds,
     shiny_reveal: {
       active: shinyEffectsActive,

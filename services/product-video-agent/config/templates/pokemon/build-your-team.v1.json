@@ -35,6 +35,7 @@
         "key": "baby",
         "label": "Baby Pokemon",
         "prompt_label": "Baby",
+        "prompt_color": "0xFF6FAE",
         "selector": "baby_pokemon",
         "weight": 1
       },
@@ -42,6 +43,7 @@
         "key": "first_stage",
         "label": "First Stage Evolutions",
         "prompt_label": "First Stage",
+        "prompt_color": "0xFF9500",
         "selector": "first_stage_evolutions",
         "weight": 1
       },
@@ -49,6 +51,7 @@
         "key": "starter",
         "label": "Starter Pokemon",
         "prompt_label": "Starter",
+        "prompt_color": "0x4CD964",
         "selector": "starter_pokemon",
         "weight": 1
       },
@@ -56,6 +59,7 @@
         "key": "middle_stage",
         "label": "Middle Stage Evolutions",
         "prompt_label": "Middle Stage",
+        "prompt_color": "0x4D96FF",
         "selector": "middle_stage_evolutions",
         "weight": 1
       },
@@ -63,6 +67,7 @@
         "key": "final_stage",
         "label": "Final Stage Evolutions",
         "prompt_label": "Final Stage",
+        "prompt_color": "0xFFD60A",
         "selector": "final_stage_evolutions",
         "weight": 1
       },
@@ -70,6 +75,7 @@
         "key": "legendary_mythical",
         "label": "Legendary and Mythical Pokemon",
         "prompt_label": "Legendary or Mythical",
+        "prompt_color": "0xFF3B30",
         "selector": "legendary_mythical",
         "weight": 1
       },
@@ -77,6 +83,7 @@
         "key": "dynamax",
         "label": "Dynamax Pokemon",
         "prompt_label": "Dynamax",
+        "prompt_color": "0xAF52DE",
         "selector": "dynamax_pokemon",
         "weight": 1
       }
@@ -87,6 +94,7 @@
     "hook_text_variants": [
       "BUILD YOUR ULTIMATE TEAM!"
     ],
+    "intro_spoken_text": "Build your ultimate team",
     "prompt_text": "Pick your\n{round} Pokémon",
     "prompt_text_variants": [],
     "reveal_text": "",

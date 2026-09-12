@@ -34,6 +34,15 @@ const promptLabelByPoolKey = Object.freeze({
   legendary_mythical: 'Legendary or Mythical',
   dynamax: 'Dynamax',
 });
+const promptColorByPoolKey = Object.freeze({
+  baby: '0xFF6FAE',
+  first_stage: '0xFF9500',
+  starter: '0x4CD964',
+  middle_stage: '0x4D96FF',
+  final_stage: '0xFFD60A',
+  legendary_mythical: '0xFF3B30',
+  dynamax: '0xAF52DE',
+});
 
 const fixtureAssets = [
   'backgrounds-forest.png',
@@ -162,7 +171,12 @@ test('build-your-team config sanity aligns template identity and pool count', ()
     Object.fromEntries(template.selection_rules.pool_variants.map((pool) => [pool.key, pool.prompt_label])),
     promptLabelByPoolKey,
   );
+  assert.deepEqual(
+    Object.fromEntries(template.selection_rules.pool_variants.map((pool) => [pool.key, pool.prompt_color])),
+    promptColorByPoolKey,
+  );
   assert.equal(template.question_contract.hook_text, 'BUILD YOUR ULTIMATE TEAM!');
+  assert.equal(template.question_contract.intro_spoken_text, 'Build your ultimate team');
   assert.equal(template.question_contract.prompt_text, 'Pick your\n{round} Pokémon');
   assert.deepEqual(template.question_contract.prompt_text_variants, []);
   assert.equal(template.question_contract.final_prompt_text, 'Tell me your team');
@@ -291,8 +305,9 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
     assert.equal(round.candidates.length, 4);
     assert.equal(round.candidates.some((candidate) => candidate.is_correct), false);
     assert.equal(round.pool_prompt_label, promptLabelByPoolKey[round.pool_key]);
+    assert.equal(round.prompt_accent_color, promptColorByPoolKey[round.pool_key]);
     assert.equal(round.prompt_text, `Pick your\n${round.pool_prompt_label} Pokémon`);
-    assert.equal(round.spoken_prompt_text, `Pick your ${round.pool_prompt_label} Pokémon`);
+    assert.equal(round.spoken_prompt_text, '');
     assert.ok(round.candidates.every((candidate) => candidate.subject.render_sprite_path.endsWith('.gif')));
     assert.ok(round.candidates.every((candidate) => candidate.subject.cry_path.endsWith('.ogg')));
     assert.ok(round.candidates.every((candidate) => candidate.pokeball_sprite_path.endsWith('.png')));
@@ -311,6 +326,16 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
   }
   assert.ok(plan.rounds.slice(0, -1).every((round) => round.reveal_text === ''));
   assert.ok(template.question_contract.final_prompt_text_variants.includes(plan.rounds.at(-1).reveal_text));
+  assert.deepEqual(plan.narration.lines, [{
+    role: 'round-1-prompt',
+    text: 'Build your ultimate team',
+  }]);
+  assert.deepEqual(
+    plan.timeline
+      .filter((phase) => phase.phase.endsWith('_prompt'))
+      .map((phase) => phase.spoken_text),
+    ['Build your ultimate team', '', '', '', '', ''],
+  );
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Build Your Team$/u);
 });
 
@@ -518,7 +543,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
     );
     assert.match(
       visualFilter.script,
-      new RegExp(`drawtext=text='${round.pool_prompt_label} Pokémon'.*\\[scene${roundIndex}prompt1\\]`, 'u'),
+      new RegExp(`drawtext=text='${round.pool_prompt_label} Pokémon'.*fontcolor=${round.prompt_accent_color}.*\\[scene${roundIndex}prompt1\\]`, 'u'),
     );
   }
   assert.match(visualFilter.script, /fontcolor=0x(?:2B6DA6|C97900).*\[scene5finalprompt0depth5\]/u);
@@ -586,6 +611,8 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.equal(cryCues.length, 24);
   assert.ok(cryCues.every((cue) => cue.volume > 0));
   assert.match(audioFilter, /pokeballintro0/u);
+  assert.match(audioFilter, /\[0:a\]adelay=40\|40,volume=.*\[n0\]/u);
+  assert.doesNotMatch(audioFilter, /\[n1\]/u);
   assert.match(audioFilter, /asplit=24\[osrc0\]/u);
   assert.match(audioFilter, /cry0/u);
 });
