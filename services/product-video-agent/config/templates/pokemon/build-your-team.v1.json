@@ -149,7 +149,7 @@
       "final_prompt": {
         "enabled": true,
         "anchor": "timer_center",
-        "center_y_offset_px": 0,
+        "center_y_offset_px": -100,
         "font_size": 72,
         "max_lines": 2,
         "line_gap_px": 4,
@@ -210,7 +210,8 @@
     "rounds": {
       "hook_hold_seconds": 2.0,
       "hook_transition_duration_seconds": 0.42,
-      "pre_countdown_hold_seconds": 0.18,
+      "pre_countdown_hold_seconds": 0.06,
+      "narration_duration_padding_seconds": 0.06,
       "reveal_hold_seconds": 2.4,
       "transition_duration_seconds": 0.42,
       "final_hold_seconds": 1

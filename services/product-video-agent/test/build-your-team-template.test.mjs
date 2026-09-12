@@ -181,13 +181,15 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.deepEqual(template.layout.text.final_prompt, {
     enabled: true,
     anchor: 'timer_center',
-    center_y_offset_px: 0,
+    center_y_offset_px: -100,
     font_size: 72,
     max_lines: 2,
     line_gap_px: 4,
     uppercase: true,
     single_line_style_index: 1,
   });
+  assert.equal(template.layout.rounds.pre_countdown_hold_seconds, 0.06);
+  assert.equal(template.layout.rounds.narration_duration_padding_seconds, 0.06);
   assert.match(template.layout.text.font_candidates[0], /Arial Black\.ttf$/u);
   assert.deepEqual(template.layout.sprite_grid.row_y_offsets_px, [-150, 0]);
   assert.equal(template.layout.text.show_counter, false);
@@ -450,6 +452,15 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
     Array.from({ length: plan.narration.lines.length }, () => 1.2),
   );
   assert.equal(narrationAdjustedRenderPlan.rounds[0].scene_start_seconds, 0);
+  assert.equal(renderPlan.renderer.narration_duration_padding_seconds, 0.06);
+  assert.equal(
+    Number((
+      narrationAdjustedRenderPlan.rounds[0].local.countdown_start_seconds
+      - narrationAdjustedRenderPlan.rounds[0].local.prompt_start_seconds
+      - 1.2
+    ).toFixed(3)),
+    0.02,
+  );
   assert.ok(narrationAdjustedRenderPlan.rounds.every((round) => (
     round.candidates.every((candidate) => (
       candidate.pokeball_hold_start_seconds === round.activation_start_seconds
@@ -484,7 +495,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0x2B6DA6/u);
   assert.match(visualFilter.script, /drawtext=text='BUILD YOUR'.*fontcolor=0xF4FBFF.*:y='146\+/u);
   assert.match(visualFilter.script, /fontcolor=0x(?:2B6DA6|C97900).*\[scene5finalprompt0depth5\]/u);
-  assert.match(visualFilter.script, /fontcolor=0x(?:F4FBFF|FFD60A).*fontsize=72.*:y='(?:986|1024)\+.*\[scene5finalprompt0face\]/u);
+  assert.match(visualFilter.script, /fontcolor=0x(?:F4FBFF|FFD60A).*fontsize=72.*:y='(?:886|924)\+.*\[scene5finalprompt0face\]/u);
   assert.doesNotMatch(visualFilter.script, /\[scene5reveal0\]/u);
   assert.match(visualFilter.script, /scene0platformv0/u);
   for (let roundIndex = 0; roundIndex < renderPlan.rounds.length; roundIndex += 1) {

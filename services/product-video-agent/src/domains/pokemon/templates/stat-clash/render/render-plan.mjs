@@ -414,6 +414,10 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       0,
       ensureNumber(template?.renderer?.intro_pokeball_lead_seconds, 0.18),
     )),
+    narration_duration_padding_seconds: roundTime(Math.max(
+      0,
+      ensureNumber(template?.layout?.rounds?.narration_duration_padding_seconds, 0.18),
+    )),
     candidate_intro_anchor: resolveCandidateIntroAnchor(template),
     hold_pokeballs_until_reveal: template?.renderer?.hold_pokeballs_until_reveal === true,
     hook_overlay_first_round: template?.renderer?.hook_overlay_first_round === true,
@@ -458,12 +462,16 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
 
 export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDurations = []) {
   const rendererSettings = renderPlan?.renderer || {};
+  const narrationDurationPaddingSeconds = Math.max(
+    0,
+    ensureNumber(rendererSettings.narration_duration_padding_seconds, 0.18),
+  );
   const adjustedRounds = (Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : []).map((round, index) => {
     const narrationDuration = ensureNumber(narrationDurations[index], 0);
     const expandedLead = roundTime(Math.max(
       ensureNumber(round.base_scene_lead_seconds, round.scene_lead_seconds || 0),
       ensureNumber(round.minimum_scene_lead_seconds, round.scene_lead_seconds || 0),
-      narrationDuration > 0 ? narrationDuration + 0.18 : 0,
+      narrationDuration > 0 ? narrationDuration + narrationDurationPaddingSeconds : 0,
     ));
     return {
       ...round,
