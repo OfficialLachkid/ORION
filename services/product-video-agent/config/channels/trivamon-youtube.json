@@ -50,8 +50,8 @@
       "template_key": "build-your-team",
       "enabled": true,
       "manual_generate": true,
-      "night_shift": false,
-      "weight": 1,
+      "night_shift": true,
+      "weight": 2,
       "genre_label": "Build Your Team"
     },
     "pokemon.type-quiz.v1": {

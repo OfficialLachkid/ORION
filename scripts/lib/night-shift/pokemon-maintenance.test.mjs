@@ -11,6 +11,14 @@ import {
   summarizeReviewBacklogRuns,
   summarizeReviewRefreshRuns,
 } from './pokemon-maintenance.mjs';
+import { discoverNightShiftChannelRuntimes } from './pokemon-maintenance-runtime.mjs';
+
+const POKEMON_CHANNEL_SELECTORS = Object.freeze([
+  'poke-quizz-youtube',
+  'poke-guess-youtube',
+  'dexguess-youtube',
+  'trivamon-youtube',
+]);
 
 const channelProfile = normalizePublicationChannelProfile({
   id: 'video-channel-dexguess-youtube',
@@ -88,6 +96,27 @@ const previewUploadedNewest = {
   },
   created_at: '2026-08-11T08:00:00.000Z',
 };
+
+test('all Pokemon channel replenish pools include Build Your Team at weight 2', async () => {
+  const runtimes = await discoverNightShiftChannelRuntimes();
+  const runtimeByChannel = new Map(runtimes.map((runtime) => [runtime.channelSelector, runtime]));
+
+  for (const channelSelector of POKEMON_CHANNEL_SELECTORS) {
+    const runtime = runtimeByChannel.get(channelSelector);
+    assert.ok(runtime, `${channelSelector} must have a night-shift runtime`);
+    assert.ok(
+      runtime.nightShift.reviewBacklogTemplateIds.includes('pokemon.build-your-team.v1'),
+      `${channelSelector} must replenish Build Your Team`,
+    );
+    assert.equal(
+      runtime.nightShift.reviewBacklogTemplateWeights['pokemon.build-your-team.v1'],
+      2,
+      `${channelSelector} must weight Build Your Team at 2`,
+    );
+  }
+
+  assert.equal(runtimeByChannel.has('techy-gadgets-youtube'), false);
+});
 
 test('auto publication planning selects only the oldest preview uploads needed to fill the 3-day horizon', () => {
   const plan = planNightShiftAutoPublicationAutomation({

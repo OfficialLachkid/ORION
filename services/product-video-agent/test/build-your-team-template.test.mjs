@@ -217,7 +217,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
     uppercase: true,
     single_line_style_index: 1,
   });
-  assert.equal(template.layout.rounds.pre_countdown_hold_seconds, 1);
+  assert.equal(template.layout.rounds.pre_countdown_hold_seconds, 0.5);
   assert.equal(template.layout.rounds.narration_duration_padding_seconds, 0.06);
   assert.match(template.layout.text.font_candidates[0], /Arial Black\.ttf$/u);
   assert.deepEqual(template.layout.sprite_grid.row_y_offsets_px, [-150, 0]);
@@ -507,7 +507,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
     Number((
       round.local.countdown_start_seconds
       - round.local.activation_start_seconds
-    ).toFixed(3)) === 1
+    ).toFixed(3)) === 0.5
   )));
   assert.ok(narrationAdjustedRenderPlan.rounds.every((round) => (
     round.candidates.every((candidate) => (

@@ -221,7 +221,7 @@
     "rounds": {
       "hook_hold_seconds": 2.0,
       "hook_transition_duration_seconds": 0.42,
-      "pre_countdown_hold_seconds": 1,
+      "pre_countdown_hold_seconds": 0.5,
       "narration_duration_padding_seconds": 0.06,
       "reveal_hold_seconds": 2.4,
       "transition_duration_seconds": 0.42,
