@@ -83,6 +83,9 @@ function normalizeTemplateScopeValue(value) {
   if (normalized.includes('know-your-shiny')) {
     return 'know-your-shiny';
   }
+  if (normalized.includes('progressive-reveal')) {
+    return 'progressive-reveal';
+  }
   if (normalized.includes('stat-clash') || normalized.includes('stat-battle')) {
     return 'stat-clash';
   }

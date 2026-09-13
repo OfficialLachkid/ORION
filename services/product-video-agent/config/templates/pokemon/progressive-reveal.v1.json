@@ -1,0 +1,190 @@
+{
+  "template_id": "pokemon.progressive-reveal.v1",
+  "template_key": "progressive-reveal",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "progressive_reveal",
+    "answer",
+    "transition"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 120,
+      "bottom": 260,
+      "left": 120
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "require_truth_fields": [
+      "national_dex_number",
+      "name",
+      "sprite_path"
+    ],
+    "skip_subject_when_missing": [
+      "national_dex_number",
+      "name",
+      "sprite_path"
+    ],
+    "round_count": 3,
+    "mode": "random"
+  },
+  "question_contract": {
+    "hook_text": "Guess the Pokemon before it's fully revealed!",
+    "hook_text_variants": [
+      "Guess the Pokemon before it's fully revealed!",
+      "Can you name the Pokemon before the full reveal?"
+    ],
+    "headline_lines": [
+      "GUESS THE POKÉMON",
+      "BEFORE IT'S REVEALED"
+    ],
+    "answer_text": "{pokemon}",
+    "answer_text_variants": [
+      "{pokemon}"
+    ]
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_backgrounds",
+      "media_type": "looping_image_gif_or_video",
+      "fit": "cover",
+      "blur_sigma": 3,
+      "zoom": 1.12,
+      "drift_amplitude_px": 52,
+      "drift_speed": 0.18,
+      "darken_alpha": 0.24
+    },
+    "text": {
+      "hook_y": 150,
+      "hook_font_size": 102,
+      "hook_line_gap_px": 8,
+      "counter_x": 72,
+      "counter_y": 92,
+      "counter_font_size": 48,
+      "method_y": 1276,
+      "method_font_size": 42,
+      "answer_y": 1440,
+      "answer_font_size": 104,
+      "primary_color": "white",
+      "accent_color": "0xFFD60A",
+      "outline_width": 8,
+      "depth_px": 8,
+      "font_candidates": [
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Impact.ttf",
+        "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
+      ]
+    },
+    "reveal_box": {
+      "center_x": 540,
+      "center_y": 850,
+      "width_px": 760,
+      "height_px": 760,
+      "sprite_size_px": 650,
+      "background_color": "black@0.88",
+      "border_color": "white@0.92",
+      "border_width_px": 6,
+      "shadow_offset_px": 18
+    },
+    "progress_bar": {
+      "center_x": 540,
+      "center_y": 1360,
+      "width_px": 660,
+      "height_px": 30,
+      "fill_color": "0xFFD60A",
+      "track_color": "black@0.72",
+      "border_color": "white@0.82"
+    },
+    "rounds": {
+      "hook_hold_seconds": 1.7,
+      "pre_reveal_hold_seconds": 0.18,
+      "answer_hold_seconds": 1.45,
+      "transition_duration_seconds": 0.42,
+      "final_hold_seconds": 0.6
+    }
+  },
+  "reveal": {
+    "mode": "random_per_round",
+    "method": "wipe",
+    "methods": [
+      "wipe",
+      "fragments",
+      "strips",
+      "noise",
+      "particles"
+    ],
+    "duration_seconds": 4.2,
+    "difficulty": "normal",
+    "directions": [
+      "top_to_bottom",
+      "bottom_to_top",
+      "left_to_right",
+      "right_to_left"
+    ],
+    "method_config": {
+      "wipe": {
+        "boundary_roughness_px": 20
+      },
+      "fragments": {
+        "fragment_size_px": 72
+      },
+      "strips": {
+        "strip_count": 18,
+        "orientations": [
+          "horizontal",
+          "vertical"
+        ]
+      },
+      "noise": {
+        "noise_scale": 0.035
+      },
+      "particles": {
+        "particle_size_px": 9,
+        "density_exponent": 1.3
+      }
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "sound_effects": {
+      "reveal": {
+        "enabled": true,
+        "trigger": "sprite_complete",
+        "volume_multiplier": 0.85
+      }
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "preset": "medium",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true
+  }
+}

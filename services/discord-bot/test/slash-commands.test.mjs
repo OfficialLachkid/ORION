@@ -47,6 +47,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'find-the-shiny',
     'know-your-shiny',
     'memory',
+    'progressive-reveal',
     'stat-clash',
     'tournament',
     'type-speed-quiz',
