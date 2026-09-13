@@ -4,10 +4,7 @@ import {
   escapeFilterPath,
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
-import {
-  appendProgressiveRevealFilters,
-  buildProgressiveRevealProgressExpression,
-} from '../../shared/render/progressive-reveal-engine.mjs';
+import { appendProgressiveRevealFilters } from '../../shared/render/progressive-reveal-engine.mjs';
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -69,12 +66,7 @@ function appendProgressBar(filters, currentLabel, round, renderPlan, roundIndex)
   filters.push(
     `[${currentLabel}]drawbox=x=${progressBar.x}:y=${progressBar.y}:w=${progressBar.width}:h=${progressBar.height}:color=${progressBar.track_color}:t=fill:enable='${formatEnableBetween(start, end)}'[${trackLabel}]`,
   );
-  const progress = buildProgressiveRevealProgressExpression({
-    startSeconds: start,
-    durationSeconds: round.reveal_duration_seconds,
-    fps: canvas.fps,
-    difficulty: 'normal',
-  });
+  const progress = `clip((t-${start})/${round.reveal_duration_seconds},0,1)`;
   const barSourceLabel = `scene${roundIndex}progressSource`;
   const barScaledLabel = `scene${roundIndex}progressScaled`;
   filters.push(
