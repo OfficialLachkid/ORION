@@ -207,7 +207,7 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /overlay=x=540-w\/2:y=850-h\/2/u);
   assert.match(visualFilter.script, /trim=start=[0-9.]+:end=[0-9.]+/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft/u);
-  assert.match(visualFilter.script, /BEFORE IT\\'S REVEALED/u);
+  assert.match(visualFilter.script, /BEFORE IT IS REVEALED/u);
   assert.match(audioFilter, /reveal0/u);
   assert.match(audioFilter, /reveal2/u);
 });

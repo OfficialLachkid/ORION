@@ -55,7 +55,7 @@ function resolveHeadlineLines(template) {
     ? template.question_contract.headline_lines
     : [];
   const lines = configured.map((value) => String(value || '').trim()).filter(Boolean);
-  return lines.length > 0 ? lines.slice(0, 2) : ['GUESS THE POKEMON', "BEFORE IT'S REVEALED"];
+  return lines.length > 0 ? lines.slice(0, 2) : ['GUESS THE POKEMON', 'BEFORE IT IS REVEALED'];
 }
 
 function appendProgressBar(filters, currentLabel, round, renderPlan, roundIndex) {
