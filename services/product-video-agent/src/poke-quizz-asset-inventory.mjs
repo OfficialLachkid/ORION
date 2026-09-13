@@ -74,6 +74,10 @@ async function listPokeQuizzGifBackgroundFiles() {
   return listFiles(POKE_QUIZZ_ASSET_LAYOUT.gifBackgrounds, BACKGROUND_EXTENSIONS);
 }
 
+async function listPokeQuizzPixelBackgroundFiles() {
+  return listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.pixelBackgrounds, BACKGROUND_EXTENSIONS);
+}
+
 async function listPokeQuizzBattleBackgroundFiles() {
   return listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.battleBackgrounds, BACKGROUND_EXTENSIONS);
 }
@@ -262,6 +266,7 @@ export function selectOverlayPresets(overlays) {
 export async function scanPokeQuizzAssetInventory() {
   const [
     backgrounds,
+    pixelBackgrounds,
     gifBackgrounds,
     battleBackgrounds,
     music,
@@ -270,9 +275,11 @@ export async function scanPokeQuizzAssetInventory() {
     pixelTypes,
     threeDTypes,
     overlays,
+    pokeballSprites,
     transitions,
   ] = await Promise.all([
     listPokeQuizzBackgroundFiles(),
+    listPokeQuizzPixelBackgroundFiles(),
     listPokeQuizzGifBackgroundFiles(),
     listPokeQuizzBattleBackgroundFiles(),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, AUDIO_EXTENSIONS),
@@ -281,6 +288,7 @@ export async function scanPokeQuizzAssetInventory() {
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.pixelTypes, IMAGE_EXTENSIONS),
     listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.threeDTypes, new Set(['.png', '.webp'])),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.overlays, new Set(['.png', '.webp', '.gif', '.mov', '.mp4', '.webm'])),
+    listFiles(POKE_QUIZZ_ASSET_LAYOUT.pokeballSprites, new Set(['.png', '.webp'])),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.transitions, new Set(['.png', '.webp', '.gif', '.mov', '.mp4', '.webm'])),
   ]);
   const threeDTypeStyles = buildThreeDTypeStyleCatalog(threeDTypes);
@@ -288,6 +296,7 @@ export async function scanPokeQuizzAssetInventory() {
     scanned_at: new Date().toISOString(),
     directories: { ...POKE_QUIZZ_ASSET_LAYOUT },
     backgrounds,
+    pixel_backgrounds: pixelBackgrounds,
     gif_backgrounds: gifBackgrounds,
     battle_backgrounds: battleBackgrounds,
     music,
@@ -300,6 +309,7 @@ export async function scanPokeQuizzAssetInventory() {
     },
     overlay_presets: selectOverlayPresets(overlays),
     overlays,
+    pokeball_sprites: pokeballSprites,
     transitions,
   };
 }

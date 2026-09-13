@@ -95,6 +95,10 @@ for (const { templatePath, expectedGenreLabel } of [
     templatePath: 'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json',
     expectedGenreLabel: 'Type Quiz',
   },
+  {
+    templatePath: 'services/product-video-agent/config/templates/pokemon/build-your-team.v1.json',
+    expectedGenreLabel: 'Build Your Team',
+  },
 ]) {
   test(`resolveVideoTemplateRuntime remaps manual override ${expectedGenreLabel}`, async () => {
     const runtime = await resolveVideoTemplateRuntime({
@@ -173,6 +177,22 @@ for (const {
     templatePath: 'services/product-video-agent/config/templates/pokemon/cry-match.v1.json',
     channelSelector: 'poke-quizz-youtube',
     genreLabel: 'Cry Match',
+  },
+  {
+    label: 'Poke Quizz Build Your Team',
+    channelConfigPath: DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+    templateId: 'pokemon.build-your-team.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/build-your-team.v1.json',
+    channelSelector: 'poke-quizz-youtube',
+    genreLabel: 'Build Your Team',
+  },
+  {
+    label: 'DexGuess Build Your Team manual selection',
+    channelConfigPath: 'services/product-video-agent/config/channels/dexguess-youtube.json',
+    templateId: 'pokemon.build-your-team.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/build-your-team.v1.json',
+    channelSelector: 'dexguess-youtube',
+    genreLabel: 'Build Your Team',
   },
 ]) {
   test(`loadVideoTemplateContext resolves ${label} through the channel template map`, async () => {

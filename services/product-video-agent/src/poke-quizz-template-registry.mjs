@@ -41,6 +41,13 @@ import {
   renderPokeQuizzVideo as renderStatClashVideo,
 } from './domains/pokemon/templates/stat-clash/renderer.mjs';
 import {
+  planPokemonBuildYourTeamChallenge,
+} from './domains/pokemon/templates/build-your-team/planner.mjs';
+import {
+  buildPokeQuizzRenderPlan as buildBuildYourTeamRenderPlan,
+  renderPokeQuizzVideo as renderBuildYourTeamVideo,
+} from './domains/pokemon/templates/build-your-team/renderer.mjs';
+import {
   planPokemonTypeQuizChallenge,
 } from './domains/pokemon/templates/type-speed-quiz/planner.mjs';
 import {
@@ -85,6 +92,11 @@ const TEMPLATE_REGISTRY = Object.freeze({
     planner: planPokemonStatClashChallenge,
     buildRenderPlan: buildStatClashRenderPlan,
     renderVideo: renderStatClashVideo,
+  }),
+  'build-your-team': Object.freeze({
+    planner: planPokemonBuildYourTeamChallenge,
+    buildRenderPlan: buildBuildYourTeamRenderPlan,
+    renderVideo: renderBuildYourTeamVideo,
   }),
   'type-quiz': Object.freeze({
     planner: planPokemonTypeQuizChallenge,
@@ -131,6 +143,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   if (templateKey === 'stat-clash' || templateKey === 'stat-battle') {
     return 'stat-clash';
   }
+  if (templateKey === 'build-your-team' || templateKey === 'team-builder') {
+    return 'build-your-team';
+  }
   if (templateKey && TEMPLATE_REGISTRY[templateKey]) {
     return templateKey;
   }
@@ -148,6 +163,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   }
   if (templateId.includes('stat-clash') || templateId.includes('stat-battle')) {
     return 'stat-clash';
+  }
+  if (templateId.includes('build-your-team') || templateId.includes('team-builder')) {
+    return 'build-your-team';
   }
   if (templateId.includes('tournament') || templateId.includes('showdown')) {
     return 'tournament';

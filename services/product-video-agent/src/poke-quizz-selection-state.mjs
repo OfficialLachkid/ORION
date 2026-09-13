@@ -86,6 +86,9 @@ function normalizeTemplateScopeValue(value) {
   if (normalized.includes('stat-clash') || normalized.includes('stat-battle')) {
     return 'stat-clash';
   }
+  if (normalized.includes('build-your-team') || normalized.includes('team-builder')) {
+    return 'build-your-team';
+  }
   if (normalized.includes('tournament') || normalized.includes('showdown')) {
     return 'tournament';
   }

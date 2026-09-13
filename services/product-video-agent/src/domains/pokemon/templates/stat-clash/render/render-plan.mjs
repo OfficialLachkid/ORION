@@ -78,6 +78,7 @@ function buildCenteredGridLayout({
 
 function buildGridLayout(template, optionCount = 4) {
   const grid = template?.layout?.sprite_grid || {};
+  const foregroundYOffset = ensureNumber(template?.layout?.foreground_y_offset_px, 0);
   const columns = Math.max(1, ensureNumber(grid.columns, 2));
   const rows = Math.max(1, ensureNumber(grid.rows, Math.ceil(optionCount / columns)));
   const layout = buildCenteredGridLayout({
@@ -92,9 +93,19 @@ function buildGridLayout(template, optionCount = 4) {
     rowGapPx: grid.row_gap_px,
     spriteScaleMultiplier: grid.sprite_scale_multiplier,
   });
+  const rowYOffsets = Array.isArray(grid.row_y_offsets_px)
+    ? grid.row_y_offsets_px
+    : [];
   return {
     ...layout,
-    cells: layout.cells.slice(0, optionCount),
+    cells: layout.cells.slice(0, optionCount).map((cell) => {
+      const rowYOffset = ensureNumber(rowYOffsets[cell.row], 0) + foregroundYOffset;
+      return {
+        ...cell,
+        y: roundTime(cell.y + rowYOffset),
+        center_y: roundTime(cell.center_y + rowYOffset),
+      };
+    }),
   };
 }
 
@@ -106,10 +117,11 @@ function buildTimerBarLayout(template, gridLayout = { cells: [] }) {
   const configuredInset = ensureNumber(template?.layout?.timer?.bar_horizontal_inset_px, 56);
   const configuredHeight = ensureNumber(template?.layout?.timer?.bar_height_px, 34);
   const yOffset = ensureNumber(template?.layout?.timer?.bar_y_offset_px, 0);
+  const foregroundYOffset = ensureNumber(template?.layout?.foreground_y_offset_px, 0);
   const explicitCenterY = Number(template?.layout?.timer?.center_y);
   const hasExplicitCenterY = Number.isFinite(explicitCenterY);
   let centerX = canvasWidth / 2;
-  let centerY = (hasExplicitCenterY ? explicitCenterY : 1040) + yOffset;
+  let centerY = (hasExplicitCenterY ? explicitCenterY : 1040) + yOffset + foregroundYOffset;
   let width = canvasWidth - safeLeft - safeRight - (configuredInset * 2);
 
   if (cells.length > 0) {
@@ -144,19 +156,58 @@ function buildTimerBarLayout(template, gridLayout = { cells: [] }) {
 }
 
 function buildTextLayout(template) {
+  const foregroundYOffset = ensureNumber(template?.layout?.foreground_y_offset_px, 0);
   return {
-    prompt_y: ensureNumber(template?.layout?.text?.prompt_y, 170),
+    foreground_y_offset_px: foregroundYOffset,
+    hook_y: ensureNumber(template?.layout?.text?.hook_y, 650) + foregroundYOffset,
+    hook_font_size: ensureNumber(template?.layout?.text?.hook_font_size, 132),
+    prompt_y: ensureNumber(template?.layout?.text?.prompt_y, 170) + foregroundYOffset,
     prompt_font_size: ensureNumber(template?.layout?.text?.prompt_font_size, 100),
-    reveal_y: ensureNumber(template?.layout?.text?.reveal_y, 285),
+    reveal_y: ensureNumber(template?.layout?.text?.reveal_y, 285) + foregroundYOffset,
     reveal_font_size: ensureNumber(template?.layout?.text?.reveal_font_size, 92),
     counter_x: ensureNumber(template?.layout?.text?.counter_x, 72),
-    counter_y: ensureNumber(template?.layout?.text?.counter_y, 144),
+    counter_y: ensureNumber(template?.layout?.text?.counter_y, 144) + foregroundYOffset,
     counter_font_size: ensureNumber(template?.layout?.text?.counter_font_size, 96),
   };
 }
 
+function buildIntroHookScene(template) {
+  const hookText = String(template?.question_contract?.hook_text || '').trim();
+  if (!hookText) {
+    return null;
+  }
+  const holdSeconds = roundTime(Math.max(
+    0.3,
+    ensureNumber(template?.layout?.rounds?.hook_hold_seconds, 1.15),
+  ));
+  const transitionDurationSeconds = roundTime(Math.max(
+    0,
+    ensureNumber(template?.layout?.rounds?.hook_transition_duration_seconds, 0.42),
+  ));
+  return {
+    enabled: true,
+    text: hookText,
+    scene_start_seconds: 0,
+    round_start_seconds: holdSeconds,
+    scene_duration_seconds: roundTime(holdSeconds + transitionDurationSeconds),
+    transition_duration_seconds: transitionDurationSeconds,
+    pokeball_intro_start_seconds: 0.1,
+    text_start_seconds: 0.04,
+    text_end_seconds: roundTime(holdSeconds + transitionDurationSeconds),
+    overlay_first_round: template?.renderer?.hook_overlay_first_round === true,
+  };
+}
+
+function resolveCandidateIntroAnchor(template) {
+  const configuredAnchor = String(template?.renderer?.candidate_intro_anchor || 'activation')
+    .trim()
+    .toLowerCase();
+  return configuredAnchor === 'reveal' ? 'reveal' : 'activation';
+}
+
 function buildStatValueLayout(template) {
   return {
+    enabled: template?.layout?.stat_values?.enabled !== false,
     font_size: ensureNumber(template?.layout?.stat_values?.font_size, 84),
     top_row_y_offset_px: ensureNumber(template?.layout?.stat_values?.top_row_y_offset_px, -94),
     bottom_row_y_offset_px: ensureNumber(template?.layout?.stat_values?.bottom_row_y_offset_px, 130),
@@ -187,6 +238,14 @@ function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDe
     0,
     ensureNumber(round?.local?.activation_start_seconds, 0),
   ));
+  const candidateIntroAnchor = resolveCandidateIntroAnchor(template);
+  const holdPokeballsUntilReveal = template?.renderer?.hold_pokeballs_until_reveal === true;
+  const anchorStartLocal = candidateIntroAnchor === 'reveal'
+    ? roundTime(Math.max(
+      activationStartLocal,
+      ensureNumber(round?.local?.reveal_visual_start_seconds, round?.local?.reveal_start_seconds || activationStartLocal),
+    ))
+    : activationStartLocal;
   const introInitialDelay = Math.max(
     0,
     ensureNumber(template?.renderer?.candidate_intro_initial_delay_seconds, 0.1),
@@ -214,8 +273,11 @@ function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDe
 
   return (Array.isArray(round.candidates) ? round.candidates : []).map((candidate, index) => {
     const revealOrderIndex = orderMap.get(candidate.index) ?? index;
+    const pokeballHoldStartLocal = holdPokeballsUntilReveal
+      ? activationStartLocal
+      : roundTime(activationStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds));
     const pokeballStartLocal = roundTime(
-      activationStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds),
+      anchorStartLocal + introInitialDelay + (revealOrderIndex * introStaggerSeconds),
     );
     const introStartLocal = roundTime(pokeballStartLocal + pokeballLeadSeconds);
     const introEndLocal = roundTime(introStartLocal + introDurationSeconds);
@@ -227,6 +289,7 @@ function withCandidateTimings(round, template, sceneStartSeconds, revealVisualDe
       ...candidate,
       intro_start_seconds: roundTime(sceneStartSeconds + introStartLocal),
       intro_end_seconds: roundTime(sceneStartSeconds + introEndLocal),
+      pokeball_hold_start_seconds: roundTime(sceneStartSeconds + pokeballHoldStartLocal),
       pokeball_start_seconds: roundTime(sceneStartSeconds + pokeballStartLocal),
       pokeball_end_seconds: roundTime(sceneStartSeconds + pokeballEndLocal),
       reveal_start_seconds: roundTime(sceneStartSeconds + round.local.reveal_start_seconds + revealVisualDelaySeconds),
@@ -243,6 +306,7 @@ function buildRenderedRounds({ rounds, template, startingSceneStart = 0 }) {
     0,
     ensureNumber(template?.reveal?.visual_delay_seconds, DEFAULT_REVEAL_VISUAL_DELAY_SECONDS),
   ));
+  const candidateIntroAnchor = resolveCandidateIntroAnchor(template);
   let currentSceneStart = roundTime(startingSceneStart);
 
   return rounds.map((round, index) => {
@@ -299,13 +363,15 @@ function buildRenderedRounds({ rounds, template, startingSceneStart = 0 }) {
       renderedRound.scene_start_seconds,
       revealVisualDelaySeconds,
     );
-    renderedRound.minimum_scene_lead_seconds = roundTime(Math.max(
-      sceneLeadSeconds,
-      ...renderedRound.candidates.map((candidate) => Math.max(
-        candidate.intro_end_seconds,
-        candidate.pokeball_end_seconds,
-      ) - renderedRound.scene_start_seconds + 0.08),
-    ));
+    renderedRound.minimum_scene_lead_seconds = candidateIntroAnchor === 'reveal'
+      ? roundTime(sceneLeadSeconds)
+      : roundTime(Math.max(
+        sceneLeadSeconds,
+        ...renderedRound.candidates.map((candidate) => Math.max(
+          candidate.intro_end_seconds,
+          candidate.pokeball_end_seconds,
+        ) - renderedRound.scene_start_seconds + 0.08),
+      ));
     renderedRound.countdown_numbers = buildCountdownMoments(
       renderedRound,
       round.countdown_from,
@@ -322,6 +388,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const gridLayout = buildGridLayout(template, plan?.rounds?.[0]?.candidates?.length || 4);
   const timerLayout = buildTimerBarLayout(template, gridLayout);
   const statValueLayout = buildStatValueLayout(template);
+  const introHook = buildIntroHookScene(template);
   const rendererSettings = {
     candidate_intro_initial_delay_seconds: roundTime(Math.max(
       0,
@@ -347,10 +414,19 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       0,
       ensureNumber(template?.renderer?.intro_pokeball_lead_seconds, 0.18),
     )),
+    narration_duration_padding_seconds: roundTime(Math.max(
+      0,
+      ensureNumber(template?.layout?.rounds?.narration_duration_padding_seconds, 0.18),
+    )),
+    candidate_intro_anchor: resolveCandidateIntroAnchor(template),
+    hold_pokeballs_until_reveal: template?.renderer?.hold_pokeballs_until_reveal === true,
+    hook_overlay_first_round: template?.renderer?.hook_overlay_first_round === true,
   };
+  const hookOverlayFirstRound = introHook?.overlay_first_round === true;
   const renderedRounds = buildRenderedRounds({
     rounds,
     template,
+    startingSceneStart: hookOverlayFirstRound ? 0 : introHook?.round_start_seconds || 0,
   });
 
   return {
@@ -359,7 +435,11 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
       height: ensureNumber(template?.canvas?.height, 1920),
       fps: ensureNumber(template?.canvas?.fps, 30),
     },
-    total_duration_seconds: renderedRounds.at(-1)?.scene_end_seconds || 0,
+    total_duration_seconds: Math.max(
+      hookOverlayFirstRound ? 0 : introHook?.scene_duration_seconds || 0,
+      renderedRounds.at(-1)?.scene_end_seconds || 0,
+    ),
+    intro_hook: introHook,
     timer_layout: timerLayout,
     text_layout: textLayout,
     stat_value_layout: statValueLayout,
@@ -382,12 +462,16 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
 
 export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDurations = []) {
   const rendererSettings = renderPlan?.renderer || {};
+  const narrationDurationPaddingSeconds = Math.max(
+    0,
+    ensureNumber(rendererSettings.narration_duration_padding_seconds, 0.18),
+  );
   const adjustedRounds = (Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : []).map((round, index) => {
     const narrationDuration = ensureNumber(narrationDurations[index], 0);
     const expandedLead = roundTime(Math.max(
       ensureNumber(round.base_scene_lead_seconds, round.scene_lead_seconds || 0),
       ensureNumber(round.minimum_scene_lead_seconds, round.scene_lead_seconds || 0),
-      narrationDuration > 0 ? narrationDuration + 0.18 : 0,
+      narrationDuration > 0 ? narrationDuration + narrationDurationPaddingSeconds : 0,
     ));
     return {
       ...round,
@@ -432,8 +516,14 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
           rendererSettings.intro_pokeball_lead_seconds,
           0.18,
         ),
+        candidate_intro_anchor: rendererSettings.candidate_intro_anchor,
+        hold_pokeballs_until_reveal: rendererSettings.hold_pokeballs_until_reveal === true,
+        hook_overlay_first_round: rendererSettings.hook_overlay_first_round === true,
       },
     },
+    startingSceneStart: rendererSettings.hook_overlay_first_round === true
+      ? 0
+      : renderPlan.intro_hook?.round_start_seconds || 0,
   });
 
   return {

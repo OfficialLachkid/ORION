@@ -3,6 +3,7 @@ export const ORION_T7_ROOT = '/Volumes/T7/O.R.I.O.N. Video Generation';
 export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   root: `${ORION_T7_ROOT}/Pokemon/Poke Quizz`,
   backgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Backgrounds`,
+  pixelBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/pixel-backgrounds`,
   gifBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/type-quiz-backgrounds`,
   battleBackgrounds: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/battle-backgrounds`,
   sprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Sprites`,
@@ -14,6 +15,7 @@ export const POKE_QUIZZ_ASSET_LAYOUT = Object.freeze({
   threeDTypes: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/3D Types`,
   threeDTypeSources: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/3D Type Sources`,
   overlays: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Overlays`,
+  pokeballSprites: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Overlays/Pokeball Sprites`,
   transitions: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Transitions`,
   battleIntroMusic: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Music`,
   soundEffects: `${ORION_T7_ROOT}/Pokemon/Poke Quizz/Audio/Sound Effects`,
@@ -28,6 +30,7 @@ const POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES = Object.freeze({
   'find-the-shiny': 'Find the Shiny',
   'know-your-shiny': 'Know Your Shiny',
   'stat-clash': 'Stat Clash',
+  'build-your-team': 'Build Your Team',
   tournament: 'Tournament',
   memory: 'Memory',
   'type-quiz': 'Type Quiz',
@@ -77,6 +80,9 @@ export function resolvePokeQuizzPreviewTemplateKey(templateRef) {
   }
   if (candidates.some((value) => value.includes('stat-clash') || value.includes('stat-battle'))) {
     return 'stat-clash';
+  }
+  if (candidates.some((value) => value.includes('build-your-team') || value.includes('team-builder'))) {
+    return 'build-your-team';
   }
   if (candidates.some((value) => value.includes('tournament') || value.includes('showdown'))) {
     return 'tournament';
