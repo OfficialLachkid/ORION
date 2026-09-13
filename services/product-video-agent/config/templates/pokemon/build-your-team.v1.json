@@ -74,7 +74,7 @@
       {
         "key": "legendary_mythical",
         "label": "Legendary and Mythical Pokemon",
-        "prompt_label": "Legendary or Mythical",
+        "prompt_label": "Legendary",
         "prompt_color": "0xFF3B30",
         "selector": "legendary_mythical",
         "weight": 1
@@ -221,7 +221,7 @@
     "rounds": {
       "hook_hold_seconds": 2.0,
       "hook_transition_duration_seconds": 0.42,
-      "pre_countdown_hold_seconds": 0.06,
+      "pre_countdown_hold_seconds": 1,
       "narration_duration_padding_seconds": 0.06,
       "reveal_hold_seconds": 2.4,
       "transition_duration_seconds": 0.42,
