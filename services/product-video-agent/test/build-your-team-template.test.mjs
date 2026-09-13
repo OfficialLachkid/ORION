@@ -234,7 +234,7 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.renderer.pokeball_spawn_sfx_enabled, true);
   assert.equal(template.renderer.held_pokeball_source_start_seconds, 0.7);
   assert.equal(template.renderer.held_pokeball_scale_multiplier, 0.3328);
-  assert.equal(template.renderer.held_pokeball_intro_duration_seconds, 1.12);
+  assert.equal(template.renderer.held_pokeball_intro_duration_seconds, 0.56);
   assert.equal(template.renderer.held_pokeball_wiggle_amplitude_radians, 0.24);
   assert.equal(template.renderer.held_pokeball_wiggle_frequency_hz, 0.675);
   assert.equal(template.renderer.held_pokeball_wiggle_speed_variation_ratio, 0.12);
@@ -576,11 +576,11 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   }
   assert.match(
     visualFilter.script,
-    new RegExp(`rotate='if\\(lt\\(.*1\\.12\\),0,\\(\\(sin\\(.*\\*${firstPokeballFrequencyRadians}\\)\\)\\*\\(1\\+0\\.45\\*\\(1-abs\\(sin\\(.*\\*${firstPokeballFrequencyRadians}\\)\\)\\)\\)\\)\\*${firstPokeballDirection < 0 ? '-0\\.24' : '0\\.24'}\\)'`, 'u'),
+    new RegExp(`rotate='if\\(lt\\(.*0\\.56\\),0,\\(\\(sin\\(.*\\*${firstPokeballFrequencyRadians}\\)\\)\\*\\(1\\+0\\.45\\*\\(1-abs\\(sin\\(.*\\*${firstPokeballFrequencyRadians}\\)\\)\\)\\)\\)\\*${firstPokeballDirection < 0 ? '-0\\.24' : '0\\.24'}\\)'`, 'u'),
   );
   assert.match(
     visualFilter.script,
-    new RegExp(`overlay=x='335-w\\/2\\+\\(if\\(lt\\(\\(t\\),1\\.12\\),0,.*${firstPokeballFrequencyRadians}.*0\\.45.*${firstPokeballFrequencyRadians}.*\\*${firstPokeballDirection < 0 ? '-24' : '24'}\\)\\)'`, 'u'),
+    new RegExp(`overlay=x='335-w\\/2\\+\\(if\\(lt\\(\\(t\\),0\\.56\\),0,.*${firstPokeballFrequencyRadians}.*0\\.45.*${firstPokeballFrequencyRadians}.*\\*${firstPokeballDirection < 0 ? '-24' : '24'}\\)\\)'`, 'u'),
   );
   const firstPokeballY = Number((renderPlan.grid_layout.cells[0].center_y + 180).toFixed(3));
   assert.match(visualFilter.script, new RegExp(`y='${firstPokeballY}-h\\/2'`, 'u'));
