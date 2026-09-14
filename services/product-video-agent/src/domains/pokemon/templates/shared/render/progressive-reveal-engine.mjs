@@ -106,11 +106,41 @@ function buildFragmentMask(progress, seed, config) {
 
 function buildStripMask(progress, seed, config) {
   const count = Math.max(4, Math.round(ensureNumber(config?.strip_count, 18)));
+  const configuredWidth = ensureNumber(config?.strip_width_px, 0);
+  const stripWidth = Math.max(2, Math.round(configuredWidth));
   const orientation = normalizeOrientation(config?.orientation);
-  const stripIndex = orientation === 'vertical'
-    ? `floor(X/max(1,W/${count}))`
-    : `floor(Y/max(1,H/${count}))`;
-  return `lte(${buildHashExpression(stripIndex, seed, 23)},${progress})`;
+  const stripIndex = configuredWidth > 0
+    ? orientation === 'vertical' ? `floor(X/${stripWidth})` : `floor(Y/${stripWidth})`
+    : orientation === 'vertical'
+      ? `floor(X/max(1,W/${count}))`
+      : `floor(Y/max(1,H/${count}))`;
+  const travelPosition = orientation === 'vertical'
+    ? 'Y/max(1,H-1)'
+    : 'X/max(1,W-1)';
+  const revealDurationSeconds = Math.max(
+    0.05,
+    ensureNumber(config?.reveal_duration_seconds, 8.5),
+  );
+  const minimumLineSeconds = clamp(
+    ensureNumber(config?.line_reveal_min_seconds, 0.3),
+    0.05,
+    revealDurationSeconds,
+  );
+  const maximumLineSeconds = clamp(
+    ensureNumber(config?.line_reveal_max_seconds, 1),
+    minimumLineSeconds,
+    revealDurationSeconds,
+  );
+  const lineDurationRange = Number((maximumLineSeconds - minimumLineSeconds).toFixed(3));
+  const durationHash = buildHashExpression(stripIndex, seed, 29);
+  const startHash = buildHashExpression(stripIndex, seed, 31);
+  const lineDurationSeconds = lineDurationRange > 0
+    ? `(${minimumLineSeconds}+${durationHash}*${lineDurationRange})`
+    : String(minimumLineSeconds);
+  const normalizedLineDuration = `((${lineDurationSeconds})/${revealDurationSeconds})`;
+  const lineStart = `(${startHash})*(1-(${normalizedLineDuration}))`;
+  const lineProgress = `clip(((${progress})-(${lineStart}))/max(0.001,(${normalizedLineDuration})),0,1)`;
+  return `lte(${travelPosition},${lineProgress})`;
 }
 
 function buildNoiseMask(progress, seed, config) {
@@ -147,7 +177,7 @@ export function buildProgressiveRevealMaskExpression({
   return `if(lte(${progress},0),0,if(gte(${progress},0.999),255,if(${visibleExpression},255,0)))`;
 }
 
-export function appendProgressiveRevealFilters(filters, {
+function appendProgressiveAlphaFilters(filters, {
   inputLabel,
   outputLabel,
   method,
@@ -157,6 +187,7 @@ export function appendProgressiveRevealFilters(filters, {
   fps,
   difficulty = 'normal',
   config = {},
+  inverted = false,
 } = {}) {
   if (!Array.isArray(filters)) {
     throw new TypeError('Progressive Reveal filters must be an array.');
@@ -174,10 +205,16 @@ export function appendProgressiveRevealFilters(filters, {
     method,
     seed,
     progressExpression,
-    config,
+    config: {
+      ...config,
+      reveal_duration_seconds: durationSeconds,
+    },
   });
+  const alphaExpression = inverted
+    ? `alpha(X,Y)*(255-(${maskExpression}))/255`
+    : `alpha(X,Y)*(${maskExpression})/255`;
   filters.push(
-    `[${inputLabel}]format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*(${maskExpression})/255'[${outputLabel}]`,
+    `[${inputLabel}]format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${alphaExpression}'[${outputLabel}]`,
   );
   return {
     method: normalizeProgressiveRevealMethod(method),
@@ -185,4 +222,15 @@ export function appendProgressiveRevealFilters(filters, {
     maskExpression,
     outputLabel,
   };
+}
+
+export function appendProgressiveRevealFilters(filters, options = {}) {
+  return appendProgressiveAlphaFilters(filters, options);
+}
+
+export function appendProgressiveCoverFilters(filters, options = {}) {
+  return appendProgressiveAlphaFilters(filters, {
+    ...options,
+    inverted: true,
+  });
 }

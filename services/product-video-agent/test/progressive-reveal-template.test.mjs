@@ -21,6 +21,7 @@ import {
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/progressive-reveal/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/progressive-reveal/render/visual-inputs.mjs';
 import {
+  appendProgressiveCoverFilters,
   buildProgressiveRevealMaskExpression,
   buildProgressiveRevealProgressExpression,
   PROGRESSIVE_REVEAL_METHODS,
@@ -87,6 +88,11 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(runtime.channelTemplate.templateKey, 'progressive-reveal');
   assert.equal(runtime.genreLabel, 'Progressive Reveal');
   assert.equal(runtime.templatePath, 'services/product-video-agent/config/templates/pokemon/progressive-reveal.v1.json');
+  assert.match(template.layout.text.font_candidates[0], /Arial Black\.ttf$/u);
+  assert.equal(template.layout.reveal_box.background_color, 'white');
+  assert.equal(template.reveal.method_config.strips.strip_width_px, 6);
+  assert.equal(template.reveal.method_config.strips.line_reveal_min_seconds, 0.3);
+  assert.equal(template.reveal.method_config.strips.line_reveal_max_seconds, 1);
 });
 
 test('planner deterministically selects three Pokemon and seeded non-repeating reveal methods', async () => {
@@ -155,7 +161,10 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
       direction: 'left_to_right',
       orientation: 'vertical',
       fragment_size_px: 64,
-      strip_count: 16,
+      strip_width_px: 6,
+      line_reveal_min_seconds: 0.3,
+      line_reveal_max_seconds: 1,
+      reveal_duration_seconds: 8.5,
       noise_scale: 0.03,
       particle_size_px: 8,
     },
@@ -166,7 +175,10 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
     assert.doesNotMatch(expression, /random|Math\./u);
   }
   assert.match(expressions[1], /floor\(X\/64\)/u);
-  assert.match(expressions[2], /floor\(X\/max\(1,W\/16\)\)/u);
+  assert.match(expressions[2], /floor\(X\/6\)/u);
+  assert.match(expressions[2], /Y\/max\(1,H-1\)/u);
+  assert.match(expressions[2], /0\.3/u);
+  assert.match(expressions[2], /\/8\.5/u);
   assert.match(expressions[3], /sin\(\(X\+/u);
   assert.match(expressions[4], /floor\(X\/8\)\*197/u);
 });
@@ -209,12 +221,29 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /scale=1080:1920:flags=lanczos,gblur=sigma=6/u);
   assert.match(visualFilter.script, /geq=r='r\(X,Y\)'/u);
   assert.match(visualFilter.script, /alpha\(X,Y\)/u);
+  assert.match(visualFilter.script, /drawbox=x=160:y=470:w=760:h=760:color=white:t=fill/u);
+  assert.match(visualFilter.script, /color=c=black:s=748x748/u);
+  assert.match(visualFilter.script, /alpha\(X,Y\)\*\(255-\(if\(/u);
+  assert.doesNotMatch(visualFilter.script, /drawtext=text='\?'/u);
   assert.match(visualFilter.script, /overlay=x=540-w\/2:y=850-h\/2/u);
   assert.match(visualFilter.script, /trim=start=[0-9.]+:end=[0-9.]+/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft/u);
   assert.match(visualFilter.script, /BEFORE IT IS REVEALED/u);
   assert.match(audioFilter, /reveal0/u);
   assert.match(audioFilter, /reveal2/u);
+
+  const coverFilters = [];
+  appendProgressiveCoverFilters(coverFilters, {
+    inputLabel: 'cover',
+    outputLabel: 'covered',
+    method: 'strips',
+    seed: 'cover-seed',
+    startSeconds: 0.5,
+    durationSeconds: 8.5,
+    fps: 30,
+    config: template.reveal.method_config.strips,
+  });
+  assert.match(coverFilters[0], /a='alpha\(X,Y\)\*\(255-\(if\(/u);
 });
 
 test('fallback publication metadata describes the reveal mechanic without spoiling answers', async () => {

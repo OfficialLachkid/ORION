@@ -5,7 +5,7 @@ import {
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
 import { buildBackgroundPreparationFilter } from '../../shared/render/background-motion.mjs';
-import { appendProgressiveRevealFilters } from '../../shared/render/progressive-reveal-engine.mjs';
+import { appendProgressiveCoverFilters } from '../../shared/render/progressive-reveal-engine.mjs';
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -134,21 +134,27 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
     currentLabel = boxBorderLabel;
 
-    const questionLabel = `scene${roundIndex}question`;
-    filters.push(
-      `[${currentLabel}]drawtext=text='?'${fontPart}:fontcolor=white@0.2:fontsize=${Math.round(box.height * 0.46)}:borderw=0:fix_bounds=1:x=(w-text_w)/2:y=${roundTime(box.center_y - (box.height * 0.3))}:enable='${formatEnableBetween(0, round.local.reveal_start_seconds)}'[${questionLabel}]`,
-    );
-    currentLabel = questionLabel;
-
     const spriteInput = inputRefs.rounds[roundIndex].sprite;
     const spriteBaseLabel = `round${roundIndex}spriteBase`;
     filters.push(
       `[${spriteInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${spriteBaseLabel}]`,
     );
-    const revealedSpriteLabel = `round${roundIndex}spriteRevealed`;
-    appendProgressiveRevealFilters(filters, {
-      inputLabel: spriteBaseLabel,
-      outputLabel: revealedSpriteLabel,
+    const spriteSceneLabel = `scene${roundIndex}sprite`;
+    filters.push(
+      `[${currentLabel}][${spriteBaseLabel}]overlay=x=${box.center_x}-w/2:y=${box.center_y}-h/2:enable='${formatEnableBetween(0, round.local.scene_duration_seconds)}'[${spriteSceneLabel}]`,
+    );
+
+    const coverInset = box.border_width_px;
+    const coverWidth = Math.max(2, box.width - (coverInset * 2));
+    const coverHeight = Math.max(2, box.height - (coverInset * 2));
+    const coverSourceLabel = `round${roundIndex}coverSource`;
+    const progressiveCoverLabel = `round${roundIndex}coverProgressive`;
+    filters.push(
+      `color=c=black:s=${coverWidth}x${coverHeight}:r=${fps}:d=${round.scene_duration_seconds},format=rgba[${coverSourceLabel}]`,
+    );
+    appendProgressiveCoverFilters(filters, {
+      inputLabel: coverSourceLabel,
+      outputLabel: progressiveCoverLabel,
       method: round.reveal_method,
       seed: round.reveal_seed,
       startSeconds: round.local.reveal_start_seconds,
@@ -157,11 +163,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       difficulty: round.reveal_difficulty,
       config: round.reveal_config,
     });
-    const spriteSceneLabel = `scene${roundIndex}sprite`;
+    const coverSceneLabel = `scene${roundIndex}cover`;
     filters.push(
-      `[${currentLabel}][${revealedSpriteLabel}]overlay=x=${box.center_x}-w/2:y=${box.center_y}-h/2:enable='${formatEnableBetween(round.local.reveal_start_seconds, round.local.scene_duration_seconds)}'[${spriteSceneLabel}]`,
+      `[${spriteSceneLabel}][${progressiveCoverLabel}]overlay=x=${box.x + coverInset}:y=${box.y + coverInset}:enable='${formatEnableBetween(0, round.local.scene_duration_seconds)}'[${coverSceneLabel}]`,
     );
-    currentLabel = spriteSceneLabel;
+    currentLabel = coverSceneLabel;
 
     currentLabel = appendProgressBar(filters, currentLabel, round, renderPlan, roundIndex);
 

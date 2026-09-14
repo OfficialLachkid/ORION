@@ -82,9 +82,8 @@
       "outline_width": 8,
       "depth_px": 8,
       "font_candidates": [
-        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
         "/System/Library/Fonts/Supplemental/Arial Black.ttf",
-        "/System/Library/Fonts/Supplemental/Impact.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
         "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
       ]
     },
@@ -94,7 +93,7 @@
       "width_px": 760,
       "height_px": 760,
       "sprite_size_px": 650,
-      "background_color": "black@0.88",
+      "background_color": "white",
       "border_color": "white@0.92",
       "border_width_px": 6,
       "shadow_offset_px": 18
@@ -142,7 +141,9 @@
         "fragment_size_px": 72
       },
       "strips": {
-        "strip_count": 18,
+        "strip_width_px": 6,
+        "line_reveal_min_seconds": 0.3,
+        "line_reveal_max_seconds": 1,
         "orientations": [
           "horizontal",
           "vertical"
