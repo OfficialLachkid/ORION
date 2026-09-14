@@ -11,7 +11,7 @@ import {
 } from '../shared/render/progressive-reveal-engine.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
-const DEFAULT_REVEAL_DURATION_SECONDS = 4.2;
+const DEFAULT_REVEAL_DURATION_SECONDS = 8.4;
 const DEFAULT_ANSWER_HOLD_SECONDS = 1.45;
 const DEFAULT_HOOK_HOLD_SECONDS = 1.55;
 const DEFAULT_PRE_REVEAL_HOLD_SECONDS = 0.18;
@@ -131,6 +131,22 @@ function selectBackground(backgrounds, random, selectionState) {
   return pool[Math.floor(random() * pool.length)] || null;
 }
 
+function resolveBackgroundPool(inventory = {}) {
+  const pixelBackgrounds = Array.isArray(inventory.pixel_backgrounds)
+    ? inventory.pixel_backgrounds
+    : [];
+  if (pixelBackgrounds.length > 0) {
+    return {
+      backgrounds: pixelBackgrounds,
+      expected_directory: POKE_QUIZZ_ASSET_LAYOUT.pixelBackgrounds,
+    };
+  }
+  return {
+    backgrounds: inventory.backgrounds || [],
+    expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+  };
+}
+
 function resolveRevealMethods(template) {
   const configured = Array.isArray(template?.reveal?.methods)
     ? template.reveal.methods
@@ -247,8 +263,9 @@ export async function planPokemonProgressiveRevealChallenge({
   const renderedSubjects = await Promise.all(selectedSubjects.map(async (subject) => (
     buildSubjectRecord(subject, await resolveRenderSpritePath(subject))
   )));
+  const backgroundPool = resolveBackgroundPool(inventory);
   const selectedBackgroundPath = selectBackground(
-    inventory?.backgrounds,
+    backgroundPool.backgrounds,
     random,
     normalizedSelectionState,
   );
@@ -353,7 +370,7 @@ export async function planPokemonProgressiveRevealChallenge({
     rounds,
     assets: {
       background: {
-        expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+        expected_directory: backgroundPool.expected_directory,
         selected_path: selectedBackgroundPath,
       },
       overlays: {

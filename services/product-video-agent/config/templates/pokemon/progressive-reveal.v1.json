@@ -53,13 +53,17 @@
   },
   "layout": {
     "background": {
-      "source_policy": "local_t7_backgrounds",
+      "source_policy": "local_t7_pixel_backgrounds",
       "media_type": "looping_image_gif_or_video",
       "fit": "cover",
-      "blur_sigma": 3,
-      "zoom": 1.12,
-      "drift_amplitude_px": 52,
-      "drift_speed": 0.18,
+      "blur_sigma": 6,
+      "motion": {
+        "enabled": true,
+        "zoom_scale": 1.12,
+        "subpixel_scale": 2,
+        "pan_cycle_seconds": 18,
+        "vertical_pan_ratio": 0.72
+      },
       "darken_alpha": 0.24
     },
     "text": {
@@ -122,7 +126,7 @@
       "noise",
       "particles"
     ],
-    "duration_seconds": 4.2,
+    "duration_seconds": 8.5,
     "difficulty": "normal",
     "directions": [
       "top_to_bottom",

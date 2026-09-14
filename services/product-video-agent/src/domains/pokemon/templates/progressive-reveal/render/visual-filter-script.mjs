@@ -4,6 +4,7 @@ import {
   escapeFilterPath,
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
+import { buildBackgroundPreparationFilter } from '../../shared/render/background-motion.mjs';
 import { appendProgressiveRevealFilters } from '../../shared/render/progressive-reveal-engine.mjs';
 
 function buildFontPart(fontPath) {
@@ -91,13 +92,17 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const { width, height, fps } = renderPlan.canvas;
   const roundCount = Math.max(1, renderPlan.rounds.length);
   const background = renderPlan.background;
-  const zoomWidth = Math.max(width, Math.round(width * background.zoom));
-  const zoomHeight = Math.max(height, Math.round(height * background.zoom));
-  const amplitude = roundTime(background.drift_amplitude_px);
-  const speed = roundTime(background.drift_speed);
   const backgroundLabels = renderPlan.rounds.map((_, index) => `background${index}`);
+  const backgroundPreparationFilter = buildBackgroundPreparationFilter({
+    inputRef: inputRefs.background,
+    width,
+    height,
+    fps,
+    blurSigma: background.blur_sigma,
+    template,
+  });
   filters.push(
-    `[${inputRefs.background}:v]scale=${zoomWidth}:${zoomHeight}:force_original_aspect_ratio=increase,crop=${width}:${height}:x='(iw-ow)/2+min((iw-ow)/2,${amplitude})*sin(t*${speed})':y='(ih-oh)/2+min((ih-oh)/2,${amplitude})*cos(t*${roundTime(speed * 0.73)})',boxblur=${background.blur_sigma},eq=saturation=1.08:brightness=-0.035,fps=${fps},setsar=1,format=rgba,split=${roundCount}${backgroundLabels.map((label) => `[${label}]`).join('')}`,
+    `${backgroundPreparationFilter},eq=saturation=1.08:brightness=-0.035,format=rgba,split=${roundCount}${backgroundLabels.map((label) => `[${label}]`).join('')}`,
   );
 
   const fontPart = buildFontPart(fontPath);

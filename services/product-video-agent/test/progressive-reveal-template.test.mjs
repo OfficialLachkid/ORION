@@ -54,6 +54,7 @@ function buildAssetInventory() {
     scanned_at: '2026-09-13T00:00:00.000Z',
     directories: {},
     backgrounds: ['/fake/backgrounds/forest.png', '/fake/backgrounds/city.gif'],
+    pixel_backgrounds: ['/fake/pixel-backgrounds/forest.png', '/fake/pixel-backgrounds/city.gif'],
     music: ['/fake/audio/battle.mp3'],
     sound_effects: {
       all: ['/fake/audio/reveal.wav'],
@@ -95,7 +96,7 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
     pokedexRows: Array.from({ length: 12 }, (_, index) => buildFixtureSubject(index + 1)),
     seed: 'progressive-reveal-deterministic',
     assetInventory: buildAssetInventory(),
-    selectionState: { last_background_path: '/fake/backgrounds/forest.png' },
+    selectionState: { last_background_path: '/fake/pixel-backgrounds/forest.png' },
   };
   const first = await planPokemonProgressiveRevealChallenge(options);
   const second = await planPokemonProgressiveRevealChallenge(options);
@@ -104,7 +105,8 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
   assert.equal(first.template_id, 'pokemon.progressive-reveal.v1');
   assert.equal(first.rounds.length, 3);
   assert.equal(first.narration.lines.length, 1);
-  assert.equal(first.assets.background.selected_path, '/fake/backgrounds/city.gif');
+  assert.equal(first.assets.background.selected_path, '/fake/pixel-backgrounds/city.gif');
+  assert.match(first.assets.background.expected_directory, /pixel-backgrounds$/u);
   assert.match(first.assets.outputs.previews_directory, /\/Previews\/Progressive Reveal$/u);
   assert.equal(first.required_asset_gaps.length, 0);
   assert.deepEqual(
@@ -114,6 +116,7 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
   for (const [index, round] of first.rounds.entries()) {
     assert.ok(PROGRESSIVE_REVEAL_METHODS.includes(round.reveal_method));
     assert.equal(round.round_label, `${index + 1}/3`);
+    assert.equal(round.reveal_duration_seconds, 8.4);
     assert.equal(round.answer_text, round.subject.name);
     assert.ok(round.reveal_seed.includes(`round-${index + 1}`));
     if (index > 0) {
@@ -196,12 +199,14 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.equal(renderPlan.canvas.width, 1080);
   assert.equal(renderPlan.canvas.height, 1920);
   assert.equal(renderPlan.reveal_box.center_x, 540);
-  assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 5.9);
+  assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 10.1);
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
   assert.equal(visualInputs.length, 4);
   assert.equal(visualInputs[0].role, 'background');
   assert.equal(visualInputs[1].role, 'round-1-sprite');
   assert.match(visualFilter.script, /flags=neighbor/u);
+  assert.match(visualFilter.script, /crop=w=2160:h=3840:x='\(iw-2160\)\*\(0\.5\+0\.5\*sin\(t\*/u);
+  assert.match(visualFilter.script, /scale=1080:1920:flags=lanczos,gblur=sigma=6/u);
   assert.match(visualFilter.script, /geq=r='r\(X,Y\)'/u);
   assert.match(visualFilter.script, /alpha\(X,Y\)/u);
   assert.match(visualFilter.script, /overlay=x=540-w\/2:y=850-h\/2/u);

@@ -69,7 +69,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   let currentSceneStart = 0;
   const rounds = (Array.isArray(plan?.rounds) ? plan.rounds : []).map((round, index, sourceRounds) => {
     const sceneLeadSeconds = roundTime(Math.max(0, ensureNumber(round.scene_lead_seconds, 0)));
-    const revealDurationSeconds = roundTime(Math.max(0.05, ensureNumber(round.reveal_duration_seconds, 4.2)));
+    const revealDurationSeconds = roundTime(Math.max(0.05, ensureNumber(round.reveal_duration_seconds, 8.4)));
     const answerHoldSeconds = roundTime(Math.max(0.1, ensureNumber(round.answer_hold_seconds, 1.45)));
     const transitionDurationSeconds = roundTime(Math.max(0, ensureNumber(
       round.transition_duration_seconds,
@@ -119,10 +119,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     progress_bar: progressBar,
     text_layout: textLayout,
     background: {
-      blur_sigma: Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 3)),
-      zoom: Math.max(1, ensureNumber(template?.layout?.background?.zoom, 1.12)),
-      drift_amplitude_px: Math.max(0, ensureNumber(template?.layout?.background?.drift_amplitude_px, 52)),
-      drift_speed: Math.max(0, ensureNumber(template?.layout?.background?.drift_speed, 0.18)),
+      blur_sigma: Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 6)),
       darken_alpha: Math.min(0.85, Math.max(0, ensureNumber(template?.layout?.background?.darken_alpha, 0.24))),
     },
     audio_cues: {
