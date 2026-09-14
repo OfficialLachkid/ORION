@@ -121,11 +121,21 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
     ['pub-3', { publication_id: 'pub-3', captured_at: '2026-08-10T09:00:00.000Z', metrics: { views: 20000, likes: 300, comments: 22, shares: 15, avg_view_duration_sec: 26, avg_view_percentage: 79, subs_gained: 18, subs_lost: 2 } }],
     ['pub-0', { publication_id: 'pub-0', captured_at: '2026-08-10T09:00:00.000Z', metrics: { views: 700, likes: 10, comments: 1, shares: 0, avg_view_duration_sec: 12, avg_view_percentage: 52, subs_gained: 1, subs_lost: 0 } }],
   ]);
+  const analyticsSnapshotsByPublicationId = new Map([
+    ['pub-1', [latestSnapshotsByPublicationId.get('pub-1')]],
+    ['pub-2', [latestSnapshotsByPublicationId.get('pub-2')]],
+    ['pub-3', [
+      { publication_id: 'pub-3', captured_at: '2026-08-09T09:00:00.000Z', metrics: { views: 9000 } },
+      latestSnapshotsByPublicationId.get('pub-3'),
+    ]],
+    ['pub-0', [latestSnapshotsByPublicationId.get('pub-0')]],
+  ]);
 
   const digest = buildChannelVideoAnalyticsDigest({
     channelProfile,
     publications,
     latestSnapshotsByPublicationId,
+    analyticsSnapshotsByPublicationId,
     videoRowsById,
     asOf: '2026-08-12T09:00:00.000Z',
     windowDays: 7,
@@ -138,6 +148,10 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
 
   assert.equal(digest.new_videos_count, 3);
   assert.equal(digest.crossed_10k_views_count, 1);
+  assert.equal(digest.crossed_10k_views[0].publication_id, 'pub-3');
+  assert.equal(digest.crossed_10k_views[0].crossed_at, '2026-08-10T09:00:00.000Z');
+  assert.equal(digest.retention_metrics_pending_count, 0);
+  assert.equal(digest.latest_snapshot_at, '2026-08-10T09:00:00.000Z');
   assert.equal(digest.median_views, 5000);
   assert.equal(digest.total_views, 26000);
   assert.equal(digest.all_time_publications_count, 4);
@@ -163,4 +177,42 @@ test('buildChannelVideoAnalyticsDigest summarizes the latest snapshots inside th
   assert.equal(overview.total_new_videos_count, 3);
   assert.equal(overview.total_views, 26000);
   assert.equal(overview.total_all_time_views, 26700);
+});
+
+test('buildChannelVideoAnalyticsDigest counts crossings inside the window even for older uploads', () => {
+  const publications = [{
+    id: 'pub-boundary',
+    video_id: 'video-boundary',
+    status: 'published',
+    external_id: 'yt-boundary',
+    title: 'Boundary video',
+    published_at: '2026-09-07T06:00:00.000Z',
+  }];
+  const beforeCrossing = {
+    publication_id: 'pub-boundary',
+    captured_at: '2026-09-08T07:00:00.000Z',
+    metrics: { views: 9500 },
+  };
+  const afterCrossing = {
+    publication_id: 'pub-boundary',
+    captured_at: '2026-09-09T15:00:00.000Z',
+    metrics: { views: 17000 },
+  };
+
+  const digest = buildChannelVideoAnalyticsDigest({
+    channelProfile,
+    publications,
+    latestSnapshotsByPublicationId: new Map([['pub-boundary', afterCrossing]]),
+    analyticsSnapshotsByPublicationId: new Map([['pub-boundary', [afterCrossing, beforeCrossing]]]),
+    asOf: '2026-09-14T07:00:00.000Z',
+    windowDays: 7,
+  });
+
+  assert.equal(digest.new_videos_count, 0);
+  assert.equal(digest.crossed_10k_views_count, 1);
+  assert.equal(digest.crossed_10k_views[0].external_id, 'yt-boundary');
+  assert.equal(digest.crossed_10k_views[0].crossed_at, '2026-09-09T15:00:00.000Z');
+  assert.equal(digest.retention_metrics_pending_count, 0);
+  assert.equal(digest.median_avg_view_duration_sec, null);
+  assert.equal(digest.median_avg_view_percentage, null);
 });
