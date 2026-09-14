@@ -69,7 +69,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   let currentSceneStart = 0;
   const rounds = (Array.isArray(plan?.rounds) ? plan.rounds : []).map((round, index, sourceRounds) => {
     const sceneLeadSeconds = roundTime(Math.max(0, ensureNumber(round.scene_lead_seconds, 0)));
-    const revealDurationSeconds = roundTime(Math.max(0.05, ensureNumber(round.reveal_duration_seconds, 8.4)));
+    const revealDurationSeconds = roundTime(Math.max(0.05, ensureNumber(round.reveal_duration_seconds, 8.5)));
     const answerHoldSeconds = roundTime(Math.max(0.1, ensureNumber(round.answer_hold_seconds, 1.45)));
     const transitionDurationSeconds = roundTime(Math.max(0, ensureNumber(
       round.transition_duration_seconds,

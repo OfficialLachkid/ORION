@@ -11,7 +11,7 @@ import {
 } from '../shared/render/progressive-reveal-engine.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
-const DEFAULT_REVEAL_DURATION_SECONDS = 8.4;
+const DEFAULT_REVEAL_DURATION_SECONDS = 8.5;
 const DEFAULT_ANSWER_HOLD_SECONDS = 1.45;
 const DEFAULT_HOOK_HOLD_SECONDS = 1.55;
 const DEFAULT_PRE_REVEAL_HOLD_SECONDS = 0.18;

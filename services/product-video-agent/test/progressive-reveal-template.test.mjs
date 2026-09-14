@@ -116,7 +116,7 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
   for (const [index, round] of first.rounds.entries()) {
     assert.ok(PROGRESSIVE_REVEAL_METHODS.includes(round.reveal_method));
     assert.equal(round.round_label, `${index + 1}/3`);
-    assert.equal(round.reveal_duration_seconds, 8.4);
+    assert.equal(round.reveal_duration_seconds, 8.5);
     assert.equal(round.answer_text, round.subject.name);
     assert.ok(round.reveal_seed.includes(`round-${index + 1}`));
     if (index > 0) {
@@ -199,7 +199,7 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.equal(renderPlan.canvas.width, 1080);
   assert.equal(renderPlan.canvas.height, 1920);
   assert.equal(renderPlan.reveal_box.center_x, 540);
-  assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 10.1);
+  assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 10.2);
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
   assert.equal(visualInputs.length, 4);
   assert.equal(visualInputs[0].role, 'background');
