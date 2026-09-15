@@ -6,7 +6,11 @@ import { synthesizeNarrationTrack } from '../../dual-type-reveal/render/narratio
 import { DEFAULT_FONT_CANDIDATES, slugify } from '../../dual-type-reveal/render/constants.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
 import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
-import { buildAudioFilterScript, buildAudioInputs } from './audio-filter-script.mjs';
+import {
+  buildAudioFilterScript,
+  buildAudioInputs,
+  buildProgressiveRevealCryCues,
+} from './audio-filter-script.mjs';
 import { buildPokeQuizzRenderPlan } from './render-plan.mjs';
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
@@ -41,10 +45,12 @@ export async function renderPokeQuizzVideo({
   )));
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
   const revealSoundPath = plan.assets.audio.selected_sound_effects?.reveal || null;
+  const cryCues = buildProgressiveRevealCryCues({ plan, renderPlan, template });
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
     ...(revealSoundPath ? [revealSoundPath] : []),
+    ...cryCues.map((cue) => cue.path),
   ]);
 
   await mkdir(dirname(audioMixPath), { recursive: true });
@@ -52,6 +58,7 @@ export async function renderPokeQuizzVideo({
     narrationPaths,
     musicPath,
     revealSoundPath,
+    cryCues,
     revealSoundVolumeMultiplier: template?.audio?.sound_effects?.reveal?.volume_multiplier ?? 1,
     renderPlan,
   });
@@ -64,6 +71,7 @@ export async function renderPokeQuizzVideo({
         ...narrationPaths,
         ...(musicPath ? [musicPath] : []),
         ...(revealSoundPath ? [revealSoundPath] : []),
+        ...cryCues.map((cue) => cue.path),
       ]),
       '-/filter_complex',
       audioFilterScriptPath,

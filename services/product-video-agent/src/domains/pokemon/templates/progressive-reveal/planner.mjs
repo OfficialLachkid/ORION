@@ -10,6 +10,7 @@ import {
   normalizeProgressiveRevealMethod,
   PROGRESSIVE_REVEAL_METHODS,
 } from '../shared/render/progressive-reveal-engine.mjs';
+import { resolvePokemonCryPath } from '../shared/pokemon-cry-resolver.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
 const DEFAULT_REVEAL_DURATION_SECONDS = 8.5;
@@ -311,7 +312,7 @@ function resolveMethodConfig(template, method, random) {
       orientation: orientations[Math.floor(random() * orientations.length)] || 'horizontal',
     };
   }
-  if (method === 'diagonal') {
+  if (method === 'diagonal' || method === 'diagonal_particles') {
     const directions = Array.isArray(baseConfig.directions)
       ? baseConfig.directions
       : [
@@ -328,7 +329,7 @@ function resolveMethodConfig(template, method, random) {
   return { ...baseConfig };
 }
 
-function buildSubjectRecord(subject, renderSpritePath) {
+function buildSubjectRecord(subject, renderSpritePath, cryPath) {
   return {
     pokedex_id: subject.id,
     national_dex_number: subject.national_dex_number,
@@ -341,6 +342,8 @@ function buildSubjectRecord(subject, renderSpritePath) {
     animated_sprite_path: subject.animated_sprite_path || null,
     render_sprite_path: renderSpritePath,
     sprite_source_url: subject.sprite_source_url || null,
+    cry_path: cryPath,
+    cry_source_url: subject.cry_source_url || null,
   };
 }
 
@@ -392,9 +395,13 @@ export async function planPokemonProgressiveRevealChallenge({
   }
 
   const selectedSubjects = shuffle(eligibleSubjects, random).slice(0, roundCount);
-  const renderedSubjects = await Promise.all(selectedSubjects.map(async (subject) => (
-    buildSubjectRecord(subject, await resolveRenderSpritePath(subject))
-  )));
+  const renderedSubjects = await Promise.all(selectedSubjects.map(async (subject) => {
+    const [renderSpritePath, cryPath] = await Promise.all([
+      resolveRenderSpritePath(subject),
+      resolvePokemonCryPath(subject),
+    ]);
+    return buildSubjectRecord(subject, renderSpritePath, cryPath);
+  }));
   const backgroundPool = resolveBackgroundPool(inventory);
   const selectedBackgroundPath = selectBackground(
     backgroundPool.backgrounds,
@@ -526,6 +533,12 @@ export async function planPokemonProgressiveRevealChallenge({
   }
   if (renderedSubjects.some((subject) => !subject.render_sprite_path)) {
     requiredAssetGaps.push('pokemon_sprite_local_assets_missing');
+  }
+  if (
+    template?.audio?.cry_playback?.enabled !== false
+    && renderedSubjects.some((subject) => !subject.cry_path)
+  ) {
+    requiredAssetGaps.push('pokemon_cry_local_assets_missing');
   }
 
   return {

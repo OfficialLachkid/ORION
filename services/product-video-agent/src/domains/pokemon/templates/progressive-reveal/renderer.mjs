@@ -5,5 +5,8 @@ export {
   buildPokeQuizzRenderPlan,
 } from './render/render-plan.mjs';
 export { buildVisualFilterScript } from './render/visual-filter-script.mjs';
-export { buildAudioFilterScript } from './render/audio-filter-script.mjs';
+export {
+  buildAudioFilterScript,
+  buildProgressiveRevealCryCues,
+} from './render/audio-filter-script.mjs';
 export { renderPokeQuizzVideo, loadJson } from './render/render-executor.mjs';

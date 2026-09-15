@@ -97,15 +97,6 @@
       "border_width_px": 6,
       "shadow_offset_px": 18
     },
-    "progress_bar": {
-      "center_x": 540,
-      "center_y": 1360,
-      "width_px": 660,
-      "height_px": 30,
-      "fill_color": "0xFFD60A",
-      "track_color": "black@0.72",
-      "border_color": "white@0.82"
-    },
     "rounds": {
       "hook_hold_seconds": 1.7,
       "pre_reveal_hold_seconds": 0.18,
@@ -130,7 +121,9 @@
       "pathfinding",
       "spiral",
       "diamond",
-      "cross"
+      "cross",
+      "edge_particles",
+      "diagonal_particles"
     ],
     "duration_seconds": 8.5,
     "target_opaque_fraction": 0.6,
@@ -203,6 +196,20 @@
       },
       "cross": {
         "corner_fill_ratio": 0.18
+      },
+      "edge_particles": {
+        "particle_size_px": 10,
+        "edge_jitter": 0.22
+      },
+      "diagonal_particles": {
+        "particle_size_px": 10,
+        "path_jitter": 0.2,
+        "directions": [
+          "top_left_to_bottom_right",
+          "bottom_right_to_top_left",
+          "top_right_to_bottom_left",
+          "bottom_left_to_top_right"
+        ]
       }
     }
   },
@@ -228,6 +235,11 @@
         "trigger": "sprite_complete",
         "volume_multiplier": 0.85
       }
+    },
+    "cry_playback": {
+      "enabled": true,
+      "delay_after_ding_seconds": 0.3,
+      "volume_multiplier": 0.275
     }
   },
   "renderer": {

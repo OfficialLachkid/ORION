@@ -22,25 +22,6 @@ function buildRevealBoxLayout(template) {
   };
 }
 
-function buildProgressBarLayout(template, revealBox) {
-  const config = template?.layout?.progress_bar || {};
-  const width = Math.max(180, Math.round(ensureNumber(config.width_px, revealBox.width - 100)));
-  const height = Math.max(10, Math.round(ensureNumber(config.height_px, 30)));
-  const centerX = ensureNumber(config.center_x, revealBox.center_x);
-  const centerY = ensureNumber(config.center_y, revealBox.y + revealBox.height + 92);
-  return {
-    x: roundTime(centerX - (width / 2)),
-    y: roundTime(centerY - (height / 2)),
-    width,
-    height,
-    center_x: roundTime(centerX),
-    center_y: roundTime(centerY),
-    fill_color: String(config.fill_color || '0xFFD60A').trim() || '0xFFD60A',
-    track_color: String(config.track_color || 'black@0.72').trim() || 'black@0.72',
-    border_color: String(config.border_color || 'white@0.82').trim() || 'white@0.82',
-  };
-}
-
 function buildTextLayout(template) {
   const config = template?.layout?.text || {};
   return {
@@ -63,7 +44,6 @@ function buildTextLayout(template) {
 
 export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const revealBox = buildRevealBoxLayout(template);
-  const progressBar = buildProgressBarLayout(template, revealBox);
   const textLayout = buildTextLayout(template);
   const transitionFallback = ensureNumber(template?.layout?.rounds?.transition_duration_seconds, 0.42);
   let currentSceneStart = 0;
@@ -102,7 +82,6 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
         scene_duration_seconds: sceneDurationSeconds,
       },
       reveal_box: revealBox,
-      progress_bar: progressBar,
     };
     currentSceneStart = roundTime(sceneEndSeconds - transitionDurationSeconds);
     return renderedRound;
@@ -116,7 +95,6 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     },
     total_duration_seconds: rounds.at(-1)?.scene_end_seconds || 0,
     reveal_box: revealBox,
-    progress_bar: progressBar,
     text_layout: textLayout,
     background: {
       blur_sigma: Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 6)),

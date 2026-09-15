@@ -9,10 +9,32 @@ export function buildAudioInputs(assets) {
   return assets.flatMap((asset) => ['-i', asset]);
 }
 
+export function buildProgressiveRevealCryCues({ renderPlan, template } = {}) {
+  if (template?.audio?.cry_playback?.enabled === false) return [];
+  const delayAfterDing = Math.max(
+    0,
+    ensureNumber(template?.audio?.cry_playback?.delay_after_ding_seconds, 0.3),
+  );
+  const volume = Number((
+    DEFAULT_TIMER_END_VOLUME
+    * Math.max(0, ensureNumber(template?.audio?.cry_playback?.volume_multiplier, 0.275))
+  ).toFixed(3));
+  return (Array.isArray(renderPlan?.rounds) ? renderPlan.rounds : [])
+    .map((round) => ({
+      path: String(round?.subject?.cry_path || '').trim(),
+      start_seconds: Number((
+        ensureNumber(round?.answer_start_seconds, 0) + delayAfterDing
+      ).toFixed(3)),
+      volume,
+    }))
+    .filter((cue) => cue.path);
+}
+
 export function buildAudioFilterScript({
   narrationPaths,
   musicPath,
   revealSoundPath,
+  cryCues = [],
   renderPlan,
   revealSoundVolumeMultiplier = 1,
 }) {
@@ -45,7 +67,23 @@ export function buildAudioFilterScript({
       filters.push(`[rsrc${index}]adelay=${delayMs}|${delayMs},volume=${volume}[${label}]`);
       mixLabels.push(label);
     });
+    inputIndex += 1;
   }
+
+  const normalizedCryCues = (Array.isArray(cryCues) ? cryCues : [])
+    .map((cue) => ({
+      path: String(cue?.path || '').trim(),
+      start_seconds: ensureNumber(cue?.start_seconds, 0),
+      volume: Math.max(0, ensureNumber(cue?.volume, DEFAULT_TIMER_END_VOLUME * 0.275)),
+    }))
+    .filter((cue) => cue.path)
+    .sort((left, right) => left.start_seconds - right.start_seconds);
+  normalizedCryCues.forEach((cue, cueIndex) => {
+    const delayMs = Math.max(0, Math.round(cue.start_seconds * 1000));
+    const label = `cry${cueIndex}`;
+    filters.push(`[${inputIndex + cueIndex}:a]silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB,adelay=${delayMs}|${delayMs},volume=${cue.volume}[${label}]`);
+    mixLabels.push(label);
+  });
 
   if (mixLabels.length === 0) {
     filters.push(`anullsrc=r=48000:cl=stereo,atrim=0:${renderPlan.total_duration_seconds}[silence]`);

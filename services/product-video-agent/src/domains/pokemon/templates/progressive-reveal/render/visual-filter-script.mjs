@@ -59,6 +59,8 @@ function formatMethodLabel(method) {
     spiral: 'SPIRAL REVEAL',
     diamond: 'DIAMOND REVEAL',
     cross: 'CROSS REVEAL',
+    edge_particles: 'EDGE PARTICLES',
+    diagonal_particles: 'DIAGONAL PARTICLES',
   };
   return labels[method] || 'PROGRESSIVE REVEAL';
 }
@@ -69,38 +71,6 @@ function resolveHeadlineLines(template) {
     : [];
   const lines = configured.map((value) => String(value || '').trim()).filter(Boolean);
   return lines.length > 0 ? lines.slice(0, 2) : ['GUESS THE POKEMON', 'BEFORE IT IS REVEALED'];
-}
-
-function appendProgressBar(filters, currentLabel, round, renderPlan, roundIndex) {
-  const { progress_bar: progressBar, canvas } = renderPlan;
-  const start = round.local.reveal_start_seconds;
-  const end = round.local.reveal_complete_seconds;
-  const trackLabel = `scene${roundIndex}progressTrack`;
-  filters.push(
-    `[${currentLabel}]drawbox=x=${progressBar.x}:y=${progressBar.y}:w=${progressBar.width}:h=${progressBar.height}:color=${progressBar.track_color}:t=fill:enable='${formatEnableBetween(start, end)}'[${trackLabel}]`,
-  );
-  const targetOpaqueFraction = Math.min(
-    1,
-    Math.max(0.05, Number(round.reveal_target_opaque_fraction) || 0.6),
-  );
-  const progress = `clip((t-${start})/${round.reveal_duration_seconds},0,1)*${Number(targetOpaqueFraction.toFixed(4))}`;
-  const barSourceLabel = `scene${roundIndex}progressSource`;
-  const barScaledLabel = `scene${roundIndex}progressScaled`;
-  filters.push(
-    `color=c=${progressBar.fill_color}:s=${progressBar.width}x${progressBar.height}:r=${canvas.fps}:d=${round.scene_duration_seconds},format=rgba[${barSourceLabel}]`,
-  );
-  filters.push(
-    `[${barSourceLabel}]scale=w='max(2,${progressBar.width}*${progress})':h=${progressBar.height}:eval=frame[${barScaledLabel}]`,
-  );
-  const fillLabel = `scene${roundIndex}progressFill`;
-  filters.push(
-    `[${trackLabel}][${barScaledLabel}]overlay=x=${progressBar.x}:y=${progressBar.y}:enable='${formatEnableBetween(start, end)}'[${fillLabel}]`,
-  );
-  const borderLabel = `scene${roundIndex}progressBorder`;
-  filters.push(
-    `[${fillLabel}]drawbox=x=${progressBar.x}:y=${progressBar.y}:w=${progressBar.width}:h=${progressBar.height}:color=${progressBar.border_color}:t=3:enable='${formatEnableBetween(start, end)}'[${borderLabel}]`,
-  );
-  return borderLabel;
 }
 
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = null) {
@@ -228,8 +198,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       currentLabel = fallingSceneLabel;
     });
-
-    currentLabel = appendProgressBar(filters, currentLabel, round, renderPlan, roundIndex);
 
     const sceneTextEnd = round.local.scene_duration_seconds;
     currentLabel = appendLayeredText(filters, currentLabel, {

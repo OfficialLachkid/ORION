@@ -16,6 +16,7 @@ import { resolveVideoTemplateRuntime } from '../src/video-template-context.mjs';
 import { planPokemonProgressiveRevealChallenge } from '../src/domains/pokemon/templates/progressive-reveal/planner.mjs';
 import {
   buildAudioFilterScript,
+  buildProgressiveRevealCryCues,
   buildPokeQuizzRenderPlan,
 } from '../src/domains/pokemon/templates/progressive-reveal/renderer.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/progressive-reveal/render/visual-filter-script.mjs';
@@ -50,6 +51,7 @@ function buildFixtureSubject(index) {
     sprite_path: `/fake/sprites/${String(index).padStart(4, '0')}-fixture.png`,
     animated_sprite_path: '',
     sprite_source_url: `https://example.invalid/${index}.png`,
+    cry_path: TEMPLATE_PATH,
   };
 }
 
@@ -101,10 +103,15 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.deepEqual(template.question_contract.headline_lines, ['WHO IS THAT', 'POKEMON?']);
   assert.equal(template.reveal.target_opaque_fraction, 0.6);
   assert.deepEqual(template.reveal.methods, PROGRESSIVE_REVEAL_METHODS);
-  assert.deepEqual(template.reveal.methods.slice(-3), ['spiral', 'diamond', 'cross']);
+  assert.deepEqual(
+    template.reveal.methods.slice(-5),
+    ['spiral', 'diamond', 'cross', 'edge_particles', 'diagonal_particles'],
+  );
   assert.equal(template.layout.branding, undefined);
+  assert.equal(template.layout.progress_bar, undefined);
   assert.equal(template.reveal.method_config.cascade.fall_duration_seconds, 1.2);
   assert.equal(template.reveal.method_config.cascade.fall_step_count, 10);
+  assert.equal(template.audio.cry_playback.delay_after_ding_seconds, 0.3);
 });
 
 test('planner deterministically selects three Pokemon and seeded non-repeating reveal methods', async () => {
@@ -153,6 +160,7 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
     assert.equal(round.reveal_estimated_opaque_fraction, 0.6);
     assert.equal(round.reveal_config.progress_scale, 1);
     assert.equal(round.answer_text, round.subject.name);
+    assert.equal(round.subject.cry_path, TEMPLATE_PATH);
     assert.ok(round.reveal_seed.includes(`round-${index + 1}`));
     if (index > 0) {
       assert.notEqual(round.reveal_method, first.rounds[index - 1].reveal_method);
@@ -248,8 +256,11 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(expressions[8], /floor\(Y\/8\).*max\(1,H-1\)/u);
   assert.match(expressions[9], /abs\(.*floor\(X\/14\).*floor\(Y\/14\)/u);
   assert.match(expressions[10], /atan2\(Y-H\/2,X-W\/2\)/u);
-  assert.match(expressions[11], /abs\(X\/max\(1,W-1\)-0\.[0-9]+\)/u);
+  assert.match(expressions[11], /1-\(\(abs\(X\/max\(1,W-1\)-0\.[0-9]+\)/u);
   assert.match(expressions[12], /min\(abs\(X\/max\(1,W-1\)-0\.5\)\*2,abs\(Y\/max\(1,H-1\)-0\.5\)\*2\)/u);
+  assert.match(expressions[13], /min\(min\(floor\(X\/8\)\*8\/max\(1,W-1\)/u);
+  assert.match(expressions[13], /floor\(X\/8\)\*271\+floor\(Y\/8\)\*487/u);
+  assert.match(expressions[14], /floor\(X\/8\)\*307\+floor\(Y\/8\)\*503/u);
 });
 
 test('falling-particle phases descend in discrete sand steps before settling', () => {
@@ -330,10 +341,12 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
     plan,
     renderPlan,
   });
+  const cryCues = buildProgressiveRevealCryCues({ plan, renderPlan, template });
   const audioFilter = buildAudioFilterScript({
     narrationPaths: ['/tmp/hook.wav'],
     musicPath: '/tmp/music.mp3',
     revealSoundPath: '/tmp/reveal.wav',
+    cryCues,
     renderPlan,
   });
 
@@ -341,6 +354,8 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.equal(renderPlan.canvas.height, 1920);
   assert.equal(renderPlan.reveal_box.center_x, 540);
   assert.equal(renderPlan.branding, undefined);
+  assert.equal(renderPlan.progress_bar, undefined);
+  assert.equal(renderPlan.rounds[0].progress_bar, undefined);
   assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 6.8);
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
   assert.equal(visualInputs.length, 4);
@@ -363,10 +378,15 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /\*0\.6/u);
   assert.match(visualFilter.script, /split=11\[round0spriteBase\]\[round0fallSource0\]/u);
   assert.match(visualFilter.script, /pad=w=iw:h=ih\+[0-9]+:x=0:y=0:color=0x00000000,crop=w=748:h=748:x=0:y=[0-9]+/u);
+  assert.doesNotMatch(visualFilter.script, /progressTrack|progressFill|progressScaled/u);
   assert.match(watermarkedVisualFilter.script, /drawtext=text='@PokeGuesss'.*alpha='if\(lt\(t,1\.7\),0,if\(lt\(t,2\.15\),\(t-1\.7\)\/0\.45,1\)\)'.*enable='gte\(t,1\.7\)'.*fontcolor=0xFFE45C.*bordercolor=0x2446B8/u);
   assert.equal((watermarkedVisualFilter.script.match(/drawtext=text='@PokeGuesss'/gu) || []).length, 2);
   assert.match(audioFilter, /reveal0/u);
   assert.match(audioFilter, /reveal2/u);
+  assert.equal(cryCues.length, 3);
+  assert.equal(cryCues[0].start_seconds, renderPlan.rounds[0].answer_start_seconds + 0.3);
+  assert.match(audioFilter, /cry0/u);
+  assert.match(audioFilter, /cry2/u);
 
   const coverFilters = [];
   appendProgressiveCoverFilters(coverFilters, {
