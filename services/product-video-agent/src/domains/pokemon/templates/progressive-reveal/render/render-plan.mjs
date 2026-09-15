@@ -77,6 +77,7 @@ function buildBrandingLayout(plan, template) {
     border_color: String(config.border_color || '0x2446B8').trim() || '0x2446B8',
     outline_width: Math.max(1, Math.round(ensureNumber(config.outline_width, 6))),
     shadow_offset_px: Math.max(2, Math.round(ensureNumber(config.shadow_offset_px, 7))),
+    fade_in_seconds: Math.max(0, ensureNumber(config.fade_in_seconds, 0.45)),
   };
 }
 

@@ -5,7 +5,11 @@ import {
   roundTime,
 } from '../../dual-type-reveal/render/constants.mjs';
 import { buildBackgroundPreparationFilter } from '../../shared/render/background-motion.mjs';
-import { appendProgressiveCoverFilters } from '../../shared/render/progressive-reveal-engine.mjs';
+import {
+  appendProgressiveCoverFilters,
+  buildCascadeFallingParticlePhases,
+  buildProgressiveRevealProgressExpression,
+} from '../../shared/render/progressive-reveal-engine.mjs';
 
 function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
@@ -40,17 +44,22 @@ function appendLayeredText(filters, currentLabel, {
   return outputLabel;
 }
 
-function appendChannelBranding(filters, currentLabel, branding, fontPart, roundIndex) {
+function appendChannelBranding(filters, currentLabel, branding, fontPart, round, roundIndex) {
   if (!branding?.enabled || !branding.text) return currentLabel;
   const escapedText = escapeDrawtextText(branding.text);
   const offset = branding.shadow_offset_px;
+  const revealStart = roundIndex === 0 ? round.local.reveal_start_seconds : 0;
+  const fadeDuration = roundIndex === 0 ? branding.fade_in_seconds : 0;
+  const timingPart = revealStart > 0
+    ? `${fadeDuration > 0 ? `:alpha='clip((t-${revealStart})/${fadeDuration},0,1)'` : ''}:enable='gte(t,${revealStart})'`
+    : '';
   const shadowLabel = `scene${roundIndex}brandingShadow`;
   filters.push(
-    `[${currentLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=black@0.72:fontsize=${branding.font_size}:borderw=${branding.outline_width}:bordercolor=black@0.82:fix_bounds=1:x=(w-text_w)/2+${offset}:y=${roundTime(branding.y + offset)}[${shadowLabel}]`,
+    `[${currentLabel}]drawtext=text='${escapedText}'${fontPart}${timingPart}:fontcolor=black@0.72:fontsize=${branding.font_size}:borderw=${branding.outline_width}:bordercolor=black@0.82:fix_bounds=1:x=(w-text_w)/2+${offset}:y=${roundTime(branding.y + offset)}[${shadowLabel}]`,
   );
   const outputLabel = `scene${roundIndex}branding`;
   filters.push(
-    `[${shadowLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=${branding.color}:fontsize=${branding.font_size}:borderw=${branding.outline_width}:bordercolor=${branding.border_color}:fix_bounds=1:x=(w-text_w)/2:y=${roundTime(branding.y)}[${outputLabel}]`,
+    `[${shadowLabel}]drawtext=text='${escapedText}'${fontPart}${timingPart}:fontcolor=${branding.color}:fontsize=${branding.font_size}:borderw=${branding.outline_width}:bordercolor=${branding.border_color}:fix_bounds=1:x=(w-text_w)/2:y=${roundTime(branding.y)}[${outputLabel}]`,
   );
   return outputLabel;
 }
@@ -89,7 +98,7 @@ function appendProgressBar(filters, currentLabel, round, renderPlan, roundIndex)
   );
   const targetOpaqueFraction = Math.min(
     1,
-    Math.max(0.05, Number(round.reveal_target_opaque_fraction) || 0.75),
+    Math.max(0.05, Number(round.reveal_target_opaque_fraction) || 0.6),
   );
   const progress = `clip((t-${start})/${round.reveal_duration_seconds},0,1)*${Number(targetOpaqueFraction.toFixed(4))}`;
   const barSourceLabel = `scene${roundIndex}progressSource`;
@@ -158,19 +167,47 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
     currentLabel = boxBorderLabel;
 
-    const spriteInput = inputRefs.rounds[roundIndex].sprite;
-    const spriteBaseLabel = `round${roundIndex}spriteBase`;
-    filters.push(
-      `[${spriteInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${spriteBaseLabel}]`,
-    );
-    const spriteSceneLabel = `scene${roundIndex}sprite`;
-    filters.push(
-      `[${currentLabel}][${spriteBaseLabel}]overlay=x=${box.center_x}-w/2:y=${box.center_y}-h/2:enable='${formatEnableBetween(0, round.local.scene_duration_seconds)}'[${spriteSceneLabel}]`,
-    );
-
     const coverInset = box.border_width_px;
     const coverWidth = Math.max(2, box.width - (coverInset * 2));
     const coverHeight = Math.max(2, box.height - (coverInset * 2));
+    const coverX = box.x + coverInset;
+    const coverY = box.y + coverInset;
+    const spriteInput = inputRefs.rounds[roundIndex].sprite;
+    const spriteBaseLabel = `round${roundIndex}spriteBase`;
+    const fallingProgress = buildProgressiveRevealProgressExpression({
+      startSeconds: round.local.reveal_start_seconds,
+      durationSeconds: round.reveal_duration_seconds,
+      fps,
+      difficulty: round.reveal_difficulty,
+      completionProgress: round.reveal_completion_progress,
+    });
+    const fallingPhases = round.reveal_method === 'cascade'
+      ? buildCascadeFallingParticlePhases({
+        seed: round.reveal_seed,
+        progressExpression: fallingProgress,
+        completionProgress: round.reveal_completion_progress,
+        config: {
+          ...round.reveal_config,
+          reveal_duration_seconds: round.full_reveal_duration_seconds,
+          fall_distance_px: round.reveal_config?.fall_distance_px || coverHeight,
+        },
+      })
+      : [];
+    const spritePreparation = `[${spriteInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1`;
+    if (fallingPhases.length > 0) {
+      filters.push(
+        `${spritePreparation},pad=${coverWidth}:${coverHeight}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,split=${fallingPhases.length + 1}[${spriteBaseLabel}]${fallingPhases.map((phase) => `[round${roundIndex}fallSource${phase.index}]`).join('')}`,
+      );
+    } else {
+      filters.push(`${spritePreparation}[${spriteBaseLabel}]`);
+    }
+    const spriteSceneLabel = `scene${roundIndex}sprite`;
+    const spriteX = fallingPhases.length > 0 ? coverX : `${box.center_x}-w/2`;
+    const spriteY = fallingPhases.length > 0 ? coverY : `${box.center_y}-h/2`;
+    filters.push(
+      `[${currentLabel}][${spriteBaseLabel}]overlay=x=${spriteX}:y=${spriteY}:enable='${formatEnableBetween(0, round.local.scene_duration_seconds)}'[${spriteSceneLabel}]`,
+    );
+
     const coverSourceLabel = `round${roundIndex}coverSource`;
     const progressiveCoverLabel = `round${roundIndex}coverProgressive`;
     filters.push(
@@ -196,6 +233,18 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       `[${spriteSceneLabel}][${progressiveCoverLabel}]overlay=x=${box.x + coverInset}:y=${box.y + coverInset}:enable='${formatEnableBetween(0, round.local.answer_start_seconds)}'[${coverSceneLabel}]`,
     );
     currentLabel = coverSceneLabel;
+
+    fallingPhases.forEach((phase) => {
+      const fallingShiftedLabel = `round${roundIndex}fallShifted${phase.index}`;
+      filters.push(
+        `[round${roundIndex}fallSource${phase.index}]geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*(${phase.maskExpression})/255',pad=w=iw:h=ih+${phase.offsetPixels}:x=0:y=0:color=0x00000000,crop=w=${coverWidth}:h=${coverHeight}:x=0:y=${phase.offsetPixels}[${fallingShiftedLabel}]`,
+      );
+      const fallingSceneLabel = `scene${roundIndex}fall${phase.index}`;
+      filters.push(
+        `[${currentLabel}][${fallingShiftedLabel}]overlay=x=${coverX}:y=${coverY}:format=auto:enable='${formatEnableBetween(round.local.reveal_start_seconds, round.local.answer_start_seconds)}'[${fallingSceneLabel}]`,
+      );
+      currentLabel = fallingSceneLabel;
+    });
 
     currentLabel = appendProgressBar(filters, currentLabel, round, renderPlan, roundIndex);
 
@@ -255,6 +304,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel,
       renderPlan.branding,
       fontPart,
+      round,
       roundIndex,
     );
     filters.push(`[${currentLabel}]format=rgba[scene${roundIndex}]`);

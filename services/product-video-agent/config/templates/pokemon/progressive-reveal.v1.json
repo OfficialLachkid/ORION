@@ -113,7 +113,8 @@
       "color": "0xFFE45C",
       "border_color": "0x2446B8",
       "outline_width": 6,
-      "shadow_offset_px": 7
+      "shadow_offset_px": 7,
+      "fade_in_seconds": 0.45
     },
     "rounds": {
       "hook_hold_seconds": 1.7,
@@ -139,7 +140,7 @@
       "pathfinding"
     ],
     "duration_seconds": 8.5,
-    "target_opaque_fraction": 0.75,
+    "target_opaque_fraction": 0.6,
     "difficulty": "normal",
     "directions": [
       "top_to_bottom",
@@ -189,7 +190,10 @@
       },
       "cascade": {
         "particle_size_px": 12,
-        "fall_jitter": 0.28
+        "fall_jitter": 0.28,
+        "fall_duration_seconds": 1.2,
+        "fall_step_count": 10,
+        "fall_distance_px": 748
       },
       "pathfinding": {
         "cell_size_px": 14,

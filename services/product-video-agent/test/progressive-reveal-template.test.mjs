@@ -22,6 +22,7 @@ import { buildVisualFilterScript } from '../src/domains/pokemon/templates/progre
 import { buildVisualInputs } from '../src/domains/pokemon/templates/progressive-reveal/render/visual-inputs.mjs';
 import {
   appendProgressiveCoverFilters,
+  buildCascadeFallingParticlePhases,
   buildProgressiveRevealMaskExpression,
   buildProgressiveRevealProgressExpression,
   calculateOpaqueRevealCompletionProgress,
@@ -96,9 +97,12 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.method_config.strips.line_reveal_max_seconds, 1);
   assert.equal(template.question_contract.hook_text, 'Who is that Pokemon?');
   assert.deepEqual(template.question_contract.headline_lines, ['WHO IS THAT', 'POKEMON?']);
-  assert.equal(template.reveal.target_opaque_fraction, 0.75);
+  assert.equal(template.reveal.target_opaque_fraction, 0.6);
   assert.equal(template.reveal.methods.length, 10);
   assert.equal(template.layout.branding.enabled, true);
+  assert.equal(template.layout.branding.fade_in_seconds, 0.45);
+  assert.equal(template.reveal.method_config.cascade.fall_duration_seconds, 1.2);
+  assert.equal(template.reveal.method_config.cascade.fall_step_count, 10);
 });
 
 test('planner deterministically selects three Pokemon and seeded non-repeating reveal methods', async () => {
@@ -137,11 +141,11 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
   for (const [index, round] of first.rounds.entries()) {
     assert.ok(PROGRESSIVE_REVEAL_METHODS.includes(round.reveal_method));
     assert.equal(round.round_label, `${index + 1}/3`);
-    assert.equal(round.reveal_duration_seconds, 6.375);
+    assert.equal(round.reveal_duration_seconds, 5.1);
     assert.equal(round.full_reveal_duration_seconds, 8.5);
-    assert.equal(round.reveal_completion_progress, 0.75);
-    assert.equal(round.reveal_target_opaque_fraction, 0.75);
-    assert.equal(round.reveal_estimated_opaque_fraction, 0.75);
+    assert.equal(round.reveal_completion_progress, 0.6);
+    assert.equal(round.reveal_target_opaque_fraction, 0.6);
+    assert.equal(round.reveal_estimated_opaque_fraction, 0.6);
     assert.equal(round.reveal_config.progress_scale, 1);
     assert.equal(round.answer_text, round.subject.name);
     assert.ok(round.reveal_seed.includes(`round-${index + 1}`));
@@ -174,12 +178,12 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(progress, /pow\(clip\(\(\(N\/30\)-1\.5\)\/4\.2,0,1\),1\.42\)/u);
   const cappedProgress = buildProgressiveRevealProgressExpression({
     startSeconds: 1.5,
-    durationSeconds: 3.15,
+    durationSeconds: 5.1,
     fps: 30,
     difficulty: 'normal',
-    completionProgress: 0.75,
+    completionProgress: 0.6,
   });
-  assert.match(cappedProgress, /\(clip\(\(\(N\/30\)-1\.5\)\/3\.15,0,1\)\)\*0\.75/u);
+  assert.match(cappedProgress, /\(clip\(\(\(N\/30\)-1\.5\)\/5\.1,0,1\)\)\*0\.6/u);
 
   const expressions = PROGRESSIVE_REVEAL_METHODS.map((method) => buildProgressiveRevealMaskExpression({
     method,
@@ -216,6 +220,30 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(expressions[9], /abs\(.*floor\(X\/14\).*floor\(Y\/14\)/u);
 });
 
+test('falling-particle phases descend in discrete sand steps before settling', () => {
+  const phases = buildCascadeFallingParticlePhases({
+    seed: 'falling-sand',
+    progressExpression: 'p',
+    completionProgress: 0.6,
+    config: {
+      particle_size_px: 12,
+      fall_jitter: 0.28,
+      fall_duration_seconds: 1.2,
+      fall_step_count: 10,
+      fall_distance_px: 748,
+      reveal_duration_seconds: 8.5,
+      progress_scale: 1.1,
+    },
+  });
+
+  assert.equal(phases.length, 10);
+  assert.ok(phases[0].offsetPixels < phases.at(-1).offsetPixels);
+  assert.equal(phases.at(-1).offsetPixels, 711);
+  assert.match(phases[0].maskExpression, /gt\(.+,\(\(p\)\*1\.1\)\+/u);
+  assert.match(phases[0].maskExpression, /lte\(.+,min\(0\.66,/u);
+  assert.ok(new Set(phases.map((phase) => phase.maskExpression)).size === phases.length);
+});
+
 test('opaque coverage calibration ignores transparent box pixels', () => {
   const opaquePoints = [];
   for (let y = 260; y < 500; y += 6) {
@@ -230,17 +258,19 @@ test('opaque coverage calibration ignores transparent box pixels', () => {
     opaquePoints,
     width: 748,
     height: 748,
-    targetOpaqueFraction: 0.75,
+    targetOpaqueFraction: 0.6,
   });
-  assert.equal(coverage.completionProgress, 0.75);
+  assert.equal(coverage.completionProgress, 0.6);
   assert.ok(coverage.sampledOpaquePixelCount > 1000);
-  assert.ok(coverage.estimatedOpaqueFraction >= 0.75);
-  assert.ok(coverage.estimatedOpaqueFraction < 0.76);
+  assert.ok(coverage.estimatedOpaqueFraction >= 0.6);
+  assert.ok(coverage.estimatedOpaqueFraction < 0.61);
   assert.notEqual(coverage.progressScale, 1);
 });
 
 test('render plan and filters keep sprites centered, reach full reveal, and slide through rounds', async () => {
   const template = await loadTemplate();
+  template.reveal.mode = 'fixed_video';
+  template.reveal.method = 'cascade';
   const plan = await planPokemonProgressiveRevealChallenge({
     template,
     pokedexRows: Array.from({ length: 8 }, (_, index) => buildFixtureSubject(index + 1)),
@@ -274,7 +304,8 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.equal(renderPlan.canvas.height, 1920);
   assert.equal(renderPlan.reveal_box.center_x, 540);
   assert.equal(renderPlan.branding.text, '@PokeGuesss');
-  assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 8.075);
+  assert.equal(renderPlan.branding.fade_in_seconds, 0.45);
+  assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 6.8);
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
   assert.equal(visualInputs.length, 4);
   assert.equal(visualInputs[0].role, 'background');
@@ -288,14 +319,16 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /color=c=black:s=748x748/u);
   assert.match(visualFilter.script, /alpha\(X,Y\)\*\(255-\(if\(/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='\?'/u);
-  assert.match(visualFilter.script, /overlay=x=540-w\/2:y=850-h\/2/u);
+  assert.match(visualFilter.script, /overlay=x=166:y=476/u);
   assert.match(visualFilter.script, /trim=start=[0-9.]+:end=[0-9.]+/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft/u);
   assert.match(visualFilter.script, /WHO IS THAT/u);
   assert.match(visualFilter.script, /POKEMON\?/u);
-  assert.match(visualFilter.script, /\*0\.75/u);
-  assert.match(visualFilter.script, /enable='between\(t,0,8\.075\)'/u);
-  assert.match(visualFilter.script, /drawtext=text='@PokeGuesss'.*fontcolor=0xFFE45C.*bordercolor=0x2446B8/u);
+  assert.match(visualFilter.script, /\*0\.6/u);
+  assert.match(visualFilter.script, /split=11\[round0spriteBase\]\[round0fallSource0\]/u);
+  assert.match(visualFilter.script, /pad=w=iw:h=ih\+[0-9]+:x=0:y=0:color=0x00000000,crop=w=748:h=748:x=0:y=[0-9]+/u);
+  assert.match(visualFilter.script, /drawtext=text='@PokeGuesss'.*alpha='clip\(\(t-1\.7\)\/0\.45,0,1\)'.*enable='gte\(t,1\.7\)'.*fontcolor=0xFFE45C.*bordercolor=0x2446B8/u);
+  assert.match(visualFilter.script, /scene1brandingShadow.*drawtext=text='@PokeGuesss'/u);
   assert.match(audioFilter, /reveal0/u);
   assert.match(audioFilter, /reveal2/u);
 

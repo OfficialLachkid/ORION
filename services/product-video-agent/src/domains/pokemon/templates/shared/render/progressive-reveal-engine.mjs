@@ -252,7 +252,7 @@ function buildDiagonalMask(progress, seed, config) {
   return `lte(${coordinates[direction]}+${wave},${progress})`;
 }
 
-function buildCascadeMask(progress, seed, config) {
+function buildCascadeThresholdExpression(seed, config) {
   const size = Math.max(3, Math.round(ensureNumber(config?.particle_size_px, 12)));
   const jitter = clamp(ensureNumber(config?.fall_jitter, 0.28), 0.05, 0.6);
   const cellX = `floor(X/${size})`;
@@ -260,8 +260,57 @@ function buildCascadeMask(progress, seed, config) {
   const coordinates = `${cellX}*233+${cellY}*443`;
   const particleOrder = buildHashExpression(coordinates, seed, 47);
   const verticalProgress = `(${cellY}*${size})/max(1,H-1)`;
-  const threshold = `clip((${verticalProgress})*${Number((1 - jitter).toFixed(4))}+(${particleOrder})*${jitter},0,1)`;
-  return `lte(${threshold},${progress})`;
+  return `clip((${verticalProgress})*${Number((1 - jitter).toFixed(4))}+(${particleOrder})*${jitter},0,1)`;
+}
+
+function buildCascadeMask(progress, seed, config) {
+  return `lte(${buildCascadeThresholdExpression(seed, config)},${progress})`;
+}
+
+export function buildCascadeFallingParticlePhases({
+  seed = 'progressive-reveal',
+  progressExpression = '0',
+  completionProgress = 0.6,
+  config = {},
+} = {}) {
+  const numericSeed = hashSeed(seed) % 10000;
+  const progress = String(progressExpression || '0').trim() || '0';
+  const progressScale = clamp(ensureNumber(config?.progress_scale, 1), 0.05, 8);
+  const maskProgress = Math.abs(progressScale - 1) < 0.0001
+    ? `(${progress})`
+    : `((${progress})*${Number(progressScale.toFixed(4))})`;
+  const fullRevealDuration = Math.max(
+    0.05,
+    ensureNumber(config?.reveal_duration_seconds, 8.5),
+  );
+  const fallDuration = clamp(
+    ensureNumber(config?.fall_duration_seconds, 1.2),
+    0.1,
+    fullRevealDuration,
+  );
+  const stepCount = Math.round(clamp(ensureNumber(config?.fall_step_count, 10), 3, 16));
+  const fallDistance = Math.max(24, Math.round(ensureNumber(config?.fall_distance_px, 748)));
+  const targetMaskProgress = Number(clamp(
+    ensureNumber(completionProgress, 0.6) * progressScale,
+    0.001,
+    1,
+  ).toFixed(4));
+  const fallWindow = Number(clamp(
+    (fallDuration / fullRevealDuration) * progressScale,
+    0.005,
+    targetMaskProgress,
+  ).toFixed(4));
+  const threshold = buildCascadeThresholdExpression(numericSeed, config);
+
+  return Array.from({ length: stepCount }, (_, index) => {
+    const lowerBound = Number(((fallWindow * index) / stepCount).toFixed(4));
+    const upperBound = Number(((fallWindow * (index + 1)) / stepCount).toFixed(4));
+    return {
+      index,
+      offsetPixels: Math.round(fallDistance * ((index + 0.5) / stepCount)),
+      maskExpression: `if(and(gt(${threshold},${maskProgress}+${lowerBound}),lte(${threshold},min(${targetMaskProgress},${maskProgress}+${upperBound}))),255,0)`,
+    };
+  });
 }
 
 function buildPathfindingMask(progress, seed, config) {
@@ -429,9 +478,9 @@ export function calculateOpaqueRevealCompletionProgress({
   opaquePoints = [],
   width = 1,
   height = 1,
-  targetOpaqueFraction = 0.75,
+  targetOpaqueFraction = 0.6,
 } = {}) {
-  const target = clamp(ensureNumber(targetOpaqueFraction, 0.75), 0.05, 0.98);
+  const target = clamp(ensureNumber(targetOpaqueFraction, 0.6), 0.05, 0.98);
   const normalizedMethod = normalizeProgressiveRevealMethod(method);
   const numericSeed = hashSeed(seed) % 10000;
   const safeWidth = Math.max(1, ensureNumber(width, 1));
