@@ -4,6 +4,8 @@ export const ADDITIONAL_PROGRESSIVE_REVEAL_METHODS = Object.freeze([
   'cross',
   'edge_particles',
   'diagonal_particles',
+  'square_spiral',
+  'fluid_fill',
 ]);
 
 function ensureNumber(value, fallback) {
@@ -124,12 +126,47 @@ function buildDiagonalParticleMask(progress, seed, config) {
   return `lte(${threshold},${progress})`;
 }
 
+function buildSquareSpiralMask(progress, seed, config) {
+  const turns = clamp(ensureNumber(config?.turns, 3), 1, 7);
+  const radialWeight = clamp(ensureNumber(config?.radial_weight, 0.62), 0.3, 0.85);
+  const angularWeight = Number((1 - radialWeight).toFixed(4));
+  const phaseOffset = Number((hashSeed(`${seed}:square-spiral`) / 4294967295).toFixed(4));
+  const x = 'X/max(1,W-1)-0.5';
+  const y = 'Y/max(1,H-1)-0.5';
+  const radius = `max(abs(${x}),abs(${y}))`;
+  const safeRadius = `max(0.001,${radius})`;
+  const squarePhase = `if(lte(${y},-abs(${x})),((${x})/${safeRadius}+1)/8,if(gte(${x},abs(${y})),0.25+((${y})/${safeRadius}+1)/8,if(gte(${y},abs(${x})),0.5+(1-(${x})/${safeRadius})/8,0.75+(1-(${y})/${safeRadius})/8)))`;
+  const squareRadius = `${radius}*2`;
+  const threshold = `clip((${squareRadius})*${radialWeight}+mod(${squarePhase}+(${squareRadius})*${turns}+${phaseOffset},1)*${angularWeight},0,1)`;
+  return `lte(${threshold},${progress})`;
+}
+
+function buildFluidFillMask(progress, seed, config) {
+  const size = Math.max(3, Math.round(ensureNumber(config?.particle_size_px, 8)));
+  const particleJitter = clamp(ensureNumber(config?.particle_jitter, 0.16), 0, 0.4);
+  const waveAmplitude = clamp(ensureNumber(config?.surface_wave_amplitude, 0.055), 0, 0.2);
+  const waveFrequency = clamp(ensureNumber(config?.surface_wave_frequency, 0.045), 0.005, 0.15);
+  const baseWeight = Number((1 - particleJitter - waveAmplitude).toFixed(4));
+  const cellColumn = `floor(X/${size})`;
+  const cellRow = `floor(Y/${size})`;
+  const cellX = `${cellColumn}*${size}`;
+  const cellY = `${cellRow}*${size}`;
+  const risingFill = `(H-1-${cellY})/max(1,H-1)`;
+  const wavePhase = Number((((hashSeed(`${seed}:fluid-wave`) % 6284) / 1000)).toFixed(3));
+  const surfaceWave = `(sin((${cellX})*${waveFrequency}+${wavePhase})+1)/2`;
+  const particleOrder = buildHashExpression(`${cellColumn}*331+${cellRow}*521`, seed, 67);
+  const threshold = `clip((${risingFill})*${baseWeight}+(${surfaceWave})*${waveAmplitude}+(${particleOrder})*${particleJitter},0,1)`;
+  return `lte(${threshold},${progress})`;
+}
+
 const MASK_BUILDERS = Object.freeze({
   spiral: buildSpiralMask,
   diamond: buildDiamondMask,
   cross: buildCrossMask,
   edge_particles: buildEdgeParticleMask,
   diagonal_particles: buildDiagonalParticleMask,
+  square_spiral: buildSquareSpiralMask,
+  fluid_fill: buildFluidFillMask,
 });
 
 function calculateDiamondScore({ x, y, width, height }, seed, config) {
@@ -184,6 +221,51 @@ function calculateParticleCell(point, seed, config, mode) {
   );
 }
 
+function calculateSquareSpiralScore(point, seed, config) {
+  const turns = clamp(ensureNumber(config?.turns, 3), 1, 7);
+  const radialWeight = clamp(ensureNumber(config?.radial_weight, 0.62), 0.3, 0.85);
+  const x = (point.x / Math.max(1, point.width - 1)) - 0.5;
+  const y = (point.y / Math.max(1, point.height - 1)) - 0.5;
+  const radius = Math.max(Math.abs(x), Math.abs(y));
+  let squarePhase = 0;
+  if (radius > 0) {
+    if (y <= -Math.abs(x)) squarePhase = ((x / radius) + 1) / 8;
+    else if (x >= Math.abs(y)) squarePhase = 0.25 + (((y / radius) + 1) / 8);
+    else if (y >= Math.abs(x)) squarePhase = 0.5 + ((1 - (x / radius)) / 8);
+    else squarePhase = 0.75 + ((1 - (y / radius)) / 8);
+  }
+  const squareRadius = radius * 2;
+  const phaseOffset = hashSeed(`${seed}:square-spiral`) / 4294967295;
+  return clamp(
+    (squareRadius * radialWeight)
+      + (((squarePhase + (squareRadius * turns) + phaseOffset) % 1) * (1 - radialWeight)),
+    0,
+    1,
+  );
+}
+
+function calculateFluidFillScore(point, seed, config) {
+  const size = Math.max(3, Math.round(ensureNumber(config?.particle_size_px, 8)));
+  const particleJitter = clamp(ensureNumber(config?.particle_jitter, 0.16), 0, 0.4);
+  const waveAmplitude = clamp(ensureNumber(config?.surface_wave_amplitude, 0.055), 0, 0.2);
+  const waveFrequency = clamp(ensureNumber(config?.surface_wave_frequency, 0.045), 0.005, 0.15);
+  const cellColumn = Math.floor(point.x / size);
+  const cellRow = Math.floor(point.y / size);
+  const cellX = cellColumn * size;
+  const cellY = cellRow * size;
+  const risingFill = (point.height - 1 - cellY) / Math.max(1, point.height - 1);
+  const wavePhase = (hashSeed(`${seed}:fluid-wave`) % 6284) / 1000;
+  const surfaceWave = (Math.sin((cellX * waveFrequency) + wavePhase) + 1) / 2;
+  const particleOrder = buildHashValue((cellColumn * 331) + (cellRow * 521), seed, 67);
+  return clamp(
+    (risingFill * (1 - particleJitter - waveAmplitude))
+      + (surfaceWave * waveAmplitude)
+      + (particleOrder * particleJitter),
+    0,
+    1,
+  );
+}
+
 export function buildAdditionalProgressiveRevealMask(method, progress, seed, config = {}) {
   return MASK_BUILDERS[method]?.(progress, seed, config) || null;
 }
@@ -210,5 +292,7 @@ export function calculateAdditionalProgressiveRevealScore(method, point, seed, c
   }
   if (method === 'edge_particles') return calculateParticleCell(point, seed, config, 'edge');
   if (method === 'diagonal_particles') return calculateParticleCell(point, seed, config, 'diagonal');
+  if (method === 'square_spiral') return calculateSquareSpiralScore(point, seed, config);
+  if (method === 'fluid_fill') return calculateFluidFillScore(point, seed, config);
   return null;
 }

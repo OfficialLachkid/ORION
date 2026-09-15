@@ -61,6 +61,8 @@ function formatMethodLabel(method) {
     cross: 'CROSS REVEAL',
     edge_particles: 'EDGE PARTICLES',
     diagonal_particles: 'DIAGONAL PARTICLES',
+    square_spiral: 'SQUARE SPIRAL',
+    fluid_fill: 'FLUID PARTICLE FILL',
   };
   return labels[method] || 'PROGRESSIVE REVEAL';
 }

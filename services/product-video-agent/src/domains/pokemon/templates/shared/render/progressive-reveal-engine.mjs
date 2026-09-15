@@ -31,6 +31,10 @@ const REVEAL_METHOD_ALIASES = Object.freeze({
   edge_particle: 'edge_particles',
   all_sides_particles: 'edge_particles',
   diagonal_particle: 'diagonal_particles',
+  box_spiral: 'square_spiral',
+  straight_spiral: 'square_spiral',
+  liquid_fill: 'fluid_fill',
+  fluid_particles: 'fluid_fill',
 });
 
 const DIFFICULTY_PROGRESS_EXPONENTS = Object.freeze({
