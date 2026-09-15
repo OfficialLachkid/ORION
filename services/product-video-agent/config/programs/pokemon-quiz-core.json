@@ -16,6 +16,10 @@
       "path": "../templates/pokemon/know-your-shiny.v1.json"
     },
     {
+      "template_id": "pokemon.progressive-reveal.v1",
+      "path": "../templates/pokemon/progressive-reveal.v1.json"
+    },
+    {
       "template_id": "pokemon.stat-clash.v1",
       "path": "../templates/pokemon/stat-clash.v1.json"
     },

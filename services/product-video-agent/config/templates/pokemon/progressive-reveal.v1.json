@@ -1,0 +1,267 @@
+{
+  "template_id": "pokemon.progressive-reveal.v1",
+  "template_key": "progressive-reveal",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "progressive_reveal",
+    "answer",
+    "transition"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 120,
+      "bottom": 260,
+      "left": 120
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "require_truth_fields": [
+      "national_dex_number",
+      "name",
+      "sprite_path"
+    ],
+    "skip_subject_when_missing": [
+      "national_dex_number",
+      "name",
+      "sprite_path"
+    ],
+    "round_count": 3,
+    "mode": "random"
+  },
+  "question_contract": {
+    "hook_text": "Who is that Pokemon?",
+    "hook_text_variants": [
+      "Who is that Pokemon?"
+    ],
+    "headline_lines": [
+      "WHO IS THAT",
+      "POKEMON?"
+    ],
+    "answer_text": "{pokemon}",
+    "answer_text_variants": [
+      "{pokemon}"
+    ]
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_pixel_backgrounds",
+      "media_type": "looping_image_gif_or_video",
+      "fit": "cover",
+      "blur_sigma": 6,
+      "motion": {
+        "enabled": true,
+        "zoom_scale": 1.12,
+        "subpixel_scale": 2,
+        "pan_cycle_seconds": 18,
+        "vertical_pan_ratio": 0.72
+      },
+      "darken_alpha": 0.24
+    },
+    "text": {
+      "hook_y": 150,
+      "hook_font_size": 102,
+      "hook_line_gap_px": 8,
+      "counter_x": 72,
+      "counter_y": 92,
+      "counter_font_size": 48,
+      "method_y": 1276,
+      "method_font_size": 42,
+      "answer_y": 1440,
+      "answer_font_size": 104,
+      "primary_color": "white",
+      "accent_color": "0xFFD60A",
+      "outline_width": 8,
+      "depth_px": 8,
+      "font_candidates": [
+        "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
+      ]
+    },
+    "reveal_box": {
+      "center_x": 540,
+      "center_y": 850,
+      "width_px": 760,
+      "height_px": 760,
+      "sprite_size_px": 650,
+      "background_color": "white",
+      "border_color": "white@0.92",
+      "border_width_px": 6,
+      "shadow_offset_px": 18
+    },
+    "rounds": {
+      "hook_hold_seconds": 1.7,
+      "pre_reveal_hold_seconds": 0.18,
+      "answer_hold_seconds": 1.45,
+      "transition_duration_seconds": 0.42,
+      "final_hold_seconds": 0.6
+    }
+  },
+  "reveal": {
+    "mode": "random_per_round",
+    "method": "wipe",
+    "methods": [
+      "wipe",
+      "fragments",
+      "strips",
+      "noise",
+      "particles",
+      "radial",
+      "checkerboard",
+      "diagonal",
+      "cascade",
+      "pathfinding",
+      "spiral",
+      "diamond",
+      "cross",
+      "edge_particles",
+      "diagonal_particles",
+      "square_spiral",
+      "fluid_fill"
+    ],
+    "duration_seconds": 8.5,
+    "target_opaque_fraction": 0.6,
+    "difficulty": "normal",
+    "directions": [
+      "top_to_bottom",
+      "bottom_to_top",
+      "left_to_right",
+      "right_to_left"
+    ],
+    "method_config": {
+      "wipe": {
+        "boundary_roughness_px": 20
+      },
+      "fragments": {
+        "fragment_size_px": 72
+      },
+      "strips": {
+        "strip_width_px": 6,
+        "line_reveal_min_seconds": 0.3,
+        "line_reveal_max_seconds": 1,
+        "orientations": [
+          "horizontal",
+          "vertical"
+        ]
+      },
+      "noise": {
+        "noise_scale": 0.035
+      },
+      "particles": {
+        "particle_size_px": 9,
+        "density_exponent": 1.3
+      },
+      "radial": {
+        "origin_count": 4,
+        "maximum_radius_ratio": 0.42
+      },
+      "checkerboard": {
+        "cell_size_px": 56
+      },
+      "diagonal": {
+        "wave_amplitude": 0.055,
+        "wave_frequency": 0.028,
+        "directions": [
+          "top_left_to_bottom_right",
+          "bottom_right_to_top_left",
+          "top_right_to_bottom_left",
+          "bottom_left_to_top_right"
+        ]
+      },
+      "cascade": {
+        "particle_size_px": 12,
+        "fall_jitter": 0.28,
+        "fall_duration_seconds": 1.2,
+        "fall_step_count": 10,
+        "fall_distance_px": 748
+      },
+      "pathfinding": {
+        "cell_size_px": 14,
+        "origin_inset_ratio": 0.08,
+        "terrain_jitter": 0.18,
+        "distance_scale": 0.86
+      },
+      "spiral": {
+        "turns": 2.75,
+        "radial_weight": 0.58
+      },
+      "diamond": {
+        "center_jitter_ratio": 0.08
+      },
+      "cross": {
+        "corner_fill_ratio": 0.18
+      },
+      "edge_particles": {
+        "particle_size_px": 10,
+        "edge_jitter": 0.22
+      },
+      "diagonal_particles": {
+        "particle_size_px": 10,
+        "path_jitter": 0.2,
+        "directions": [
+          "top_left_to_bottom_right",
+          "bottom_right_to_top_left",
+          "top_right_to_bottom_left",
+          "bottom_left_to_top_right"
+        ]
+      },
+      "square_spiral": {
+        "turns": 3,
+        "radial_weight": 0.62
+      },
+      "fluid_fill": {
+        "particle_size_px": 8,
+        "particle_jitter": 0.16,
+        "surface_wave_amplitude": 0.055,
+        "surface_wave_frequency": 0.045
+      }
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "sound_effects": {
+      "reveal": {
+        "enabled": true,
+        "trigger": "sprite_complete",
+        "volume_multiplier": 0.85
+      }
+    },
+    "cry_playback": {
+      "enabled": true,
+      "delay_after_ding_seconds": 0.3,
+      "volume_multiplier": 0.275
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "preset": "medium",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true
+  }
+}

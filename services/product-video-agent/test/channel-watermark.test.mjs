@@ -14,6 +14,7 @@ const SHARED_RENDER_EXECUTORS = Object.freeze([
   'find-the-shiny',
   'know-your-shiny',
   'memory',
+  'progressive-reveal',
   'stat-clash',
   'tournament',
   'type-speed-quiz',

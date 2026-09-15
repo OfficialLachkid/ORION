@@ -23,6 +23,13 @@ export const PRODUCT_VIDEO_TEMPLATE_DEFINITIONS = Object.freeze([
     legacyConfigSlug: 'know-your-shiny',
   },
   {
+    templateKey: 'progressive-reveal',
+    templateId: 'pokemon.progressive-reveal.v1',
+    label: 'Progressive Reveal',
+    genreLabel: 'Progressive Reveal',
+    legacyConfigSlug: '',
+  },
+  {
     templateKey: 'stat-clash',
     templateId: 'pokemon.stat-clash.v1',
     label: 'Stat Clash',
@@ -100,6 +107,7 @@ export const PRODUCT_VIDEO_CHANNEL_DEFINITIONS = Object.freeze([
 ]);
 
 const TEMPLATE_KEY_ALIASES = Object.freeze({
+  'guess-before-revealed': 'progressive-reveal',
   showdown: 'tournament',
   'stat-battle': 'stat-clash',
   'team-builder': 'build-your-team',

@@ -30,6 +30,14 @@
       "weight": 2,
       "genre_label": "Know Your Shiny"
     },
+    "pokemon.progressive-reveal.v1": {
+      "template_key": "progressive-reveal",
+      "enabled": true,
+      "manual_generate": true,
+      "night_shift": false,
+      "weight": 1,
+      "genre_label": "Progressive Reveal"
+    },
     "pokemon.memory.v1": {
       "template_key": "memory",
       "enabled": true,

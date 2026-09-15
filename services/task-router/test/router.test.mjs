@@ -330,6 +330,26 @@ test('normalizeTaskMessage recognizes build-your-team generation commands as exp
   );
 });
 
+test('normalizeTaskMessage recognizes progressive-reveal generation commands as explicit runtime actions', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    channelKey: 'commands',
+    submittedAt: '2026-09-13T12:00:00.000Z',
+    content: 'generate video template: progressive-reveal channel: poke-quizz-youtube',
+    author: { id: 'operator-1', displayName: 'VBJ Services' },
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
+  assert.equal(result.task.summary, 'Generate Progressive Reveal review for Poke Quizz');
+  assert.equal(result.task.poke_quizz_generate_review.templateKey, 'progressive-reveal');
+  assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.progressive-reveal.v1');
+  assert.equal(result.task.poke_quizz_generate_review.channelSelector, 'poke-quizz-youtube');
+  assert.equal(
+    result.task.poke_quizz_generate_review.channelConfigPath,
+    'services/product-video-agent/config/channels/poke-quizz-youtube.json'
+  );
+});
+
 test('normalizeTaskMessage recognizes analytics digest commands as explicit runtime actions', () => {
   const config = loadRuntimeConfig();
   const result = normalizeTaskMessage({
