@@ -170,6 +170,7 @@ async function resolvePlan(
     seed: getStringOption(options, 'seed', defaultSeed),
     forcedTypePair,
     selectionState: effectiveSelectionState,
+    channelProfile: defaults.channelProfile || null,
   });
   await writeJson(outputPlanPath, plan);
   await writeJson(statePath, plan.selection_state || {});
@@ -242,7 +243,7 @@ async function generateAndReviewPokeQuizz(options) {
     options,
     liveSelectionState,
     submittedAt,
-    { templatePath },
+    { templatePath, channelProfile },
   );
   const typePairSlug = resolveTypePairSlug(plan) || 'pokemon-type-challenge';
   const seedSlug = slugify(plan.seed || 'preview');

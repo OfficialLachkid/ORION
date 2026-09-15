@@ -6,6 +6,7 @@ import {
 import { scanPokeQuizzAssetInventory, selectSeededFile } from '../../../../poke-quizz-asset-inventory.mjs';
 import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selection-state.mjs';
 import {
+  calculateOpaqueRevealCompletionProgress,
   normalizeProgressiveRevealMethod,
   PROGRESSIVE_REVEAL_METHODS,
 } from '../shared/render/progressive-reveal-engine.mjs';
@@ -17,7 +18,12 @@ const DEFAULT_HOOK_HOLD_SECONDS = 1.55;
 const DEFAULT_PRE_REVEAL_HOLD_SECONDS = 0.18;
 const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
 const DEFAULT_FINAL_HOLD_SECONDS = 0.6;
+const DEFAULT_TARGET_OPAQUE_FRACTION = 0.75;
+const MIN_VISIBLE_ALPHA = 8;
+const MAX_OPAQUE_ANALYSIS_POINTS = 18000;
 const spriteAvailabilityCache = new Map();
+const spriteOpaquePointsCache = new Map();
+let sharpModulePromise = null;
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -51,6 +57,37 @@ function ensurePositiveNumber(value, fallback) {
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
+}
+
+async function loadSharp() {
+  if (!sharpModulePromise) {
+    sharpModulePromise = import('sharp')
+      .then((module) => module.default || module)
+      .catch(() => null);
+  }
+  return sharpModulePromise;
+}
+
+function resolveChannelIdentity(channelProfile = {}) {
+  const name = String(channelProfile?.name || 'Poke Quizz').trim() || 'Poke Quizz';
+  const configuredHandle = String(
+    channelProfile?.metadata?.youtube_handle
+      || channelProfile?.metadata?.channel_handle
+      || '',
+  ).trim();
+  const fallbackHandle = `@${name.replace(/[^a-z0-9]+/giu, '')}`;
+  const handle = configuredHandle
+    ? `@${configuredHandle.replace(/^@+/u, '')}`
+    : fallbackHandle;
+  return {
+    id: String(channelProfile?.id || 'poke-quizz').trim() || 'poke-quizz',
+    name,
+    account_key: String(channelProfile?.account_key || 'poke-quizz-youtube').trim()
+      || 'poke-quizz-youtube',
+    niche: String(channelProfile?.niche || 'pokemon_quiz').trim() || 'pokemon_quiz',
+    content_lane: 'pokemon_progressive_reveal',
+    handle,
+  };
 }
 
 function shuffle(values, random) {
@@ -122,6 +159,74 @@ async function resolveRenderSpritePath(subject) {
     return animatedPath;
   }
   return String(subject?.sprite_path || '').trim();
+}
+
+function resolveRevealAnalysisLayout(template) {
+  const box = template?.layout?.reveal_box || {};
+  const width = Math.max(320, Math.round(ensurePositiveNumber(box.width_px, 760)));
+  const height = Math.max(320, Math.round(ensurePositiveNumber(box.height_px, 760)));
+  const border = Math.max(0, Math.round(Number(box.border_width_px) || 0));
+  return {
+    width: Math.max(2, width - (border * 2)),
+    height: Math.max(2, height - (border * 2)),
+    spriteSize: Math.max(240, Math.round(ensurePositiveNumber(box.sprite_size_px, 650))),
+  };
+}
+
+async function loadOpaqueSpriteAnalysis(spritePath, template) {
+  const normalizedPath = String(spritePath || '').trim();
+  const layout = resolveRevealAnalysisLayout(template);
+  if (!normalizedPath) {
+    return { ...layout, opaquePoints: [] };
+  }
+  const cacheKey = `${normalizedPath}:${layout.width}:${layout.height}:${layout.spriteSize}`;
+  if (spriteOpaquePointsCache.has(cacheKey)) {
+    return spriteOpaquePointsCache.get(cacheKey);
+  }
+  const analysisPromise = (async () => {
+    const sharp = await loadSharp();
+    if (!sharp) return { ...layout, opaquePoints: [] };
+    try {
+      const { data, info } = await sharp(normalizedPath, { page: 0 })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const sourceWidth = Number(info?.width || 0);
+      const sourceHeight = Number(info?.pageHeight || info?.height || 0);
+      const channels = Number(info?.channels || 4);
+      if (sourceWidth <= 0 || sourceHeight <= 0 || channels < 4 || !data?.length) {
+        return { ...layout, opaquePoints: [] };
+      }
+      const displayScale = Math.min(
+        layout.spriteSize / sourceWidth,
+        layout.spriteSize / sourceHeight,
+      );
+      const displayWidth = sourceWidth * displayScale;
+      const displayHeight = sourceHeight * displayScale;
+      const offsetX = (layout.width - displayWidth) / 2;
+      const offsetY = (layout.height - displayHeight) / 2;
+      const sampleStride = Math.max(
+        1,
+        Math.ceil(Math.sqrt((sourceWidth * sourceHeight) / MAX_OPAQUE_ANALYSIS_POINTS)),
+      );
+      const opaquePoints = [];
+      for (let y = 0; y < sourceHeight; y += sampleStride) {
+        for (let x = 0; x < sourceWidth; x += sampleStride) {
+          const alphaIndex = ((y * sourceWidth) + x) * channels + 3;
+          if ((data[alphaIndex] || 0) < MIN_VISIBLE_ALPHA) continue;
+          opaquePoints.push({
+            x: offsetX + ((x + 0.5) * displayScale),
+            y: offsetY + ((y + 0.5) * displayScale),
+          });
+        }
+      }
+      return { ...layout, opaquePoints };
+    } catch {
+      return { ...layout, opaquePoints: [] };
+    }
+  })();
+  spriteOpaquePointsCache.set(cacheKey, analysisPromise);
+  return analysisPromise;
 }
 
 function selectBackground(backgrounds, random, selectionState) {
@@ -264,6 +369,7 @@ export async function planPokemonProgressiveRevealChallenge({
   seed = 'progressive-reveal',
   assetInventory = null,
   selectionState = null,
+  channelProfile = null,
 }) {
   const random = createPrng(seed);
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
@@ -302,14 +408,14 @@ export async function planPokemonProgressiveRevealChallenge({
     template?.reveal?.duration_seconds,
     DEFAULT_REVEAL_DURATION_SECONDS,
   );
-  const revealCompletionProgress = clamp(
-    ensurePositiveNumber(template?.reveal?.completion_progress, 1),
+  const targetOpaqueFraction = clamp(
+    ensurePositiveNumber(
+      template?.reveal?.target_opaque_fraction,
+      DEFAULT_TARGET_OPAQUE_FRACTION,
+    ),
     0.05,
-    1,
+    0.98,
   );
-  const revealDurationSeconds = Number((
-    fullRevealDurationSeconds * revealCompletionProgress
-  ).toFixed(3));
   const answerHoldSeconds = ensurePositiveNumber(
     template?.layout?.rounds?.answer_hold_seconds,
     DEFAULT_ANSWER_HOLD_SECONDS,
@@ -332,8 +438,42 @@ export async function planPokemonProgressiveRevealChallenge({
   );
   const difficulty = String(template?.reveal?.difficulty || 'normal').trim().toLowerCase() || 'normal';
 
-  const rounds = renderedSubjects.map((subject, index) => {
+  const roundBlueprints = renderedSubjects.map((subject, index) => {
     const method = selectedMethods[index];
+    const revealSeed = `${seed}:round-${index + 1}:${subject.pokedex_id || subject.name}:${method}`;
+    const revealConfig = resolveMethodConfig(template, method, random);
+    return { subject, index, method, revealSeed, revealConfig };
+  });
+  const rounds = await Promise.all(roundBlueprints.map(async ({
+    subject,
+    index,
+    method,
+    revealSeed,
+    revealConfig,
+  }) => {
+    let opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.sprite_path, template);
+    if (
+      opaqueAnalysis.opaquePoints.length === 0
+      && subject.render_sprite_path
+      && subject.render_sprite_path !== subject.sprite_path
+    ) {
+      opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.render_sprite_path, template);
+    }
+    const coverage = calculateOpaqueRevealCompletionProgress({
+      method,
+      seed: revealSeed,
+      config: {
+        ...revealConfig,
+        reveal_duration_seconds: fullRevealDurationSeconds,
+      },
+      opaquePoints: opaqueAnalysis.opaquePoints,
+      width: opaqueAnalysis.width,
+      height: opaqueAnalysis.height,
+      targetOpaqueFraction,
+    });
+    const revealDurationSeconds = Number((
+      fullRevealDurationSeconds * targetOpaqueFraction
+    ).toFixed(3));
     return {
       round_number: index + 1,
       round_label: `${index + 1}/${roundCount}`,
@@ -343,17 +483,24 @@ export async function planPokemonProgressiveRevealChallenge({
         : transitionDurationSeconds + preRevealHoldSeconds,
       reveal_duration_seconds: revealDurationSeconds,
       full_reveal_duration_seconds: fullRevealDurationSeconds,
-      reveal_completion_progress: revealCompletionProgress,
+      reveal_completion_progress: targetOpaqueFraction,
+      reveal_target_opaque_fraction: targetOpaqueFraction,
+      reveal_estimated_opaque_fraction: coverage.estimatedOpaqueFraction,
+      reveal_mask_progress_at_completion: coverage.maskProgressAtCompletion,
+      reveal_sampled_opaque_pixel_count: coverage.sampledOpaquePixelCount,
       answer_hold_seconds: answerHoldSeconds,
       transition_duration_seconds: index === roundCount - 1 ? 0 : transitionDurationSeconds,
       final_hold_seconds: index === roundCount - 1 ? finalHoldSeconds : 0,
       reveal_method: method,
-      reveal_seed: `${seed}:round-${index + 1}:${subject.pokedex_id || subject.name}:${method}`,
+      reveal_seed: revealSeed,
       reveal_difficulty: difficulty,
-      reveal_config: resolveMethodConfig(template, method, random),
+      reveal_config: {
+        ...revealConfig,
+        progress_scale: coverage.progressScale,
+      },
       answer_text: answerTemplate.replaceAll('{pokemon}', subject.name),
     };
-  });
+  }));
 
   const revealSoundPath = inventory?.sound_effects?.reveal
     || inventory?.sound_effects?.timer_end
@@ -369,12 +516,7 @@ export async function planPokemonProgressiveRevealChallenge({
 
   return {
     schema_version: 'poke-quizz-progressive-reveal-plan-v1',
-    channel: {
-      id: 'poke-quizz',
-      name: 'Poke Quizz',
-      niche: 'pokemon_quiz',
-      content_lane: 'pokemon_progressive_reveal',
-    },
+    channel: resolveChannelIdentity(channelProfile),
     template_id: template.template_id,
     template_key: template.template_key,
     seed: String(seed),
@@ -386,7 +528,8 @@ export async function planPokemonProgressiveRevealChallenge({
       selected_subject_count: renderedSubjects.length,
       display_subject_count: renderedSubjects.length,
       reveal_method_mode: String(template?.reveal?.mode || 'random_per_round'),
-      reveal_completion_progress: revealCompletionProgress,
+      reveal_target_opaque_fraction: targetOpaqueFraction,
+      reveal_completion_progresses: rounds.map((round) => round.reveal_completion_progress),
       reveal_methods: selectedMethods,
       selected_subjects: renderedSubjects,
     },

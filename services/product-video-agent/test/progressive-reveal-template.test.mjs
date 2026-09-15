@@ -24,6 +24,7 @@ import {
   appendProgressiveCoverFilters,
   buildProgressiveRevealMaskExpression,
   buildProgressiveRevealProgressExpression,
+  calculateOpaqueRevealCompletionProgress,
   PROGRESSIVE_REVEAL_METHODS,
 } from '../src/domains/pokemon/templates/shared/render/progressive-reveal-engine.mjs';
 
@@ -95,8 +96,9 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.method_config.strips.line_reveal_max_seconds, 1);
   assert.equal(template.question_contract.hook_text, 'Who is that Pokemon?');
   assert.deepEqual(template.question_contract.headline_lines, ['WHO IS THAT', 'POKEMON?']);
-  assert.equal(template.reveal.completion_progress, 0.75);
-  assert.equal(template.reveal.methods.length, 8);
+  assert.equal(template.reveal.target_opaque_fraction, 0.75);
+  assert.equal(template.reveal.methods.length, 10);
+  assert.equal(template.layout.branding.enabled, true);
 });
 
 test('planner deterministically selects three Pokemon and seeded non-repeating reveal methods', async () => {
@@ -107,6 +109,13 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
     seed: 'progressive-reveal-deterministic',
     assetInventory: buildAssetInventory(),
     selectionState: { last_background_path: '/fake/pixel-backgrounds/forest.png' },
+    channelProfile: {
+      id: 'video-channel-dexguess-youtube',
+      name: 'DexGuess',
+      account_key: 'dexguess-youtube',
+      niche: 'pokemon_quiz',
+      metadata: { youtube_handle: '@DexGuess' },
+    },
   };
   const first = await planPokemonProgressiveRevealChallenge(options);
   const second = await planPokemonProgressiveRevealChallenge(options);
@@ -115,6 +124,8 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
   assert.equal(first.template_id, 'pokemon.progressive-reveal.v1');
   assert.equal(first.rounds.length, 3);
   assert.equal(first.narration.lines.length, 1);
+  assert.equal(first.channel.name, 'DexGuess');
+  assert.equal(first.channel.handle, '@DexGuess');
   assert.equal(first.assets.background.selected_path, '/fake/pixel-backgrounds/city.gif');
   assert.match(first.assets.background.expected_directory, /pixel-backgrounds$/u);
   assert.match(first.assets.outputs.previews_directory, /\/Previews\/Progressive Reveal$/u);
@@ -129,6 +140,9 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
     assert.equal(round.reveal_duration_seconds, 6.375);
     assert.equal(round.full_reveal_duration_seconds, 8.5);
     assert.equal(round.reveal_completion_progress, 0.75);
+    assert.equal(round.reveal_target_opaque_fraction, 0.75);
+    assert.equal(round.reveal_estimated_opaque_fraction, 0.75);
+    assert.equal(round.reveal_config.progress_scale, 1);
     assert.equal(round.answer_text, round.subject.name);
     assert.ok(round.reveal_seed.includes(`round-${index + 1}`));
     if (index > 0) {
@@ -198,6 +212,31 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(expressions[5], /min\(.*pow\(\(X-W\*0\.[0-9]+\)\/max\(1,W\),2\)/u);
   assert.match(expressions[6], /eq\(mod\(floor\(X\/56\)\+floor\(Y\/56\),2\),0\)/u);
   assert.match(expressions[7], /X\/max\(1,W-1\).*Y\/max\(1,H-1\).*sin/u);
+  assert.match(expressions[8], /floor\(Y\/8\).*max\(1,H-1\)/u);
+  assert.match(expressions[9], /abs\(.*floor\(X\/14\).*floor\(Y\/14\)/u);
+});
+
+test('opaque coverage calibration ignores transparent box pixels', () => {
+  const opaquePoints = [];
+  for (let y = 260; y < 500; y += 6) {
+    for (let x = 270; x < 490; x += 6) {
+      opaquePoints.push({ x, y });
+    }
+  }
+  const coverage = calculateOpaqueRevealCompletionProgress({
+    method: 'radial',
+    seed: 'radial-coverage',
+    config: { origin_count: 4, maximum_radius_ratio: 0.42 },
+    opaquePoints,
+    width: 748,
+    height: 748,
+    targetOpaqueFraction: 0.75,
+  });
+  assert.equal(coverage.completionProgress, 0.75);
+  assert.ok(coverage.sampledOpaquePixelCount > 1000);
+  assert.ok(coverage.estimatedOpaqueFraction >= 0.75);
+  assert.ok(coverage.estimatedOpaqueFraction < 0.76);
+  assert.notEqual(coverage.progressScale, 1);
 });
 
 test('render plan and filters keep sprites centered, reach full reveal, and slide through rounds', async () => {
@@ -207,6 +246,12 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
     pokedexRows: Array.from({ length: 8 }, (_, index) => buildFixtureSubject(index + 1)),
     seed: 'progressive-reveal-render',
     assetInventory: buildAssetInventory(),
+    channelProfile: {
+      id: 'video-channel-poke-guess-youtube',
+      name: 'Poke Guess',
+      account_key: 'poke-guess-youtube',
+      metadata: { youtube_handle: '@PokeGuesss' },
+    },
   });
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
@@ -228,6 +273,7 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.equal(renderPlan.canvas.width, 1080);
   assert.equal(renderPlan.canvas.height, 1920);
   assert.equal(renderPlan.reveal_box.center_x, 540);
+  assert.equal(renderPlan.branding.text, '@PokeGuesss');
   assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 8.075);
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
   assert.equal(visualInputs.length, 4);
@@ -249,6 +295,7 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /POKEMON\?/u);
   assert.match(visualFilter.script, /\*0\.75/u);
   assert.match(visualFilter.script, /enable='between\(t,0,8\.075\)'/u);
+  assert.match(visualFilter.script, /drawtext=text='@PokeGuesss'.*fontcolor=0xFFE45C.*bordercolor=0x2446B8/u);
   assert.match(audioFilter, /reveal0/u);
   assert.match(audioFilter, /reveal2/u);
 

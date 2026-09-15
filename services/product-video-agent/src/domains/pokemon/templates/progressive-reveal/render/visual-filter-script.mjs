@@ -40,6 +40,21 @@ function appendLayeredText(filters, currentLabel, {
   return outputLabel;
 }
 
+function appendChannelBranding(filters, currentLabel, branding, fontPart, roundIndex) {
+  if (!branding?.enabled || !branding.text) return currentLabel;
+  const escapedText = escapeDrawtextText(branding.text);
+  const offset = branding.shadow_offset_px;
+  const shadowLabel = `scene${roundIndex}brandingShadow`;
+  filters.push(
+    `[${currentLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=black@0.72:fontsize=${branding.font_size}:borderw=${branding.outline_width}:bordercolor=black@0.82:fix_bounds=1:x=(w-text_w)/2+${offset}:y=${roundTime(branding.y + offset)}[${shadowLabel}]`,
+  );
+  const outputLabel = `scene${roundIndex}branding`;
+  filters.push(
+    `[${shadowLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=${branding.color}:fontsize=${branding.font_size}:borderw=${branding.outline_width}:bordercolor=${branding.border_color}:fix_bounds=1:x=(w-text_w)/2:y=${roundTime(branding.y)}[${outputLabel}]`,
+  );
+  return outputLabel;
+}
+
 function formatMethodLabel(method) {
   const labels = {
     wipe: 'SCAN REVEAL',
@@ -50,6 +65,8 @@ function formatMethodLabel(method) {
     radial: 'RADIAL REVEAL',
     checkerboard: 'CHECKER REVEAL',
     diagonal: 'DIAGONAL REVEAL',
+    cascade: 'FALLING PARTICLES',
+    pathfinding: 'PATHFINDING REVEAL',
   };
   return labels[method] || 'PROGRESSIVE REVEAL';
 }
@@ -70,7 +87,11 @@ function appendProgressBar(filters, currentLabel, round, renderPlan, roundIndex)
   filters.push(
     `[${currentLabel}]drawbox=x=${progressBar.x}:y=${progressBar.y}:w=${progressBar.width}:h=${progressBar.height}:color=${progressBar.track_color}:t=fill:enable='${formatEnableBetween(start, end)}'[${trackLabel}]`,
   );
-  const progress = `clip((t-${start})/${round.reveal_duration_seconds},0,1)`;
+  const targetOpaqueFraction = Math.min(
+    1,
+    Math.max(0.05, Number(round.reveal_target_opaque_fraction) || 0.75),
+  );
+  const progress = `clip((t-${start})/${round.reveal_duration_seconds},0,1)*${Number(targetOpaqueFraction.toFixed(4))}`;
   const barSourceLabel = `scene${roundIndex}progressSource`;
   const barScaledLabel = `scene${roundIndex}progressScaled`;
   filters.push(
@@ -165,7 +186,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       fps,
       difficulty: round.reveal_difficulty,
       completionProgress: round.reveal_completion_progress,
-      config: round.reveal_config,
+      config: {
+        ...round.reveal_config,
+        reveal_duration_seconds: round.full_reveal_duration_seconds,
+      },
     });
     const coverSceneLabel = `scene${roundIndex}cover`;
     filters.push(
@@ -226,6 +250,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       startSeconds: round.local.answer_start_seconds,
       endSeconds: sceneTextEnd,
     });
+    currentLabel = appendChannelBranding(
+      filters,
+      currentLabel,
+      renderPlan.branding,
+      fontPart,
+      roundIndex,
+    );
     filters.push(`[${currentLabel}]format=rgba[scene${roundIndex}]`);
   });
 

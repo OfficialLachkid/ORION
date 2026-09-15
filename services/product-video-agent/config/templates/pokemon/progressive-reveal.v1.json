@@ -106,6 +106,15 @@
       "track_color": "black@0.72",
       "border_color": "white@0.82"
     },
+    "branding": {
+      "enabled": true,
+      "y": 1760,
+      "font_size": 54,
+      "color": "0xFFE45C",
+      "border_color": "0x2446B8",
+      "outline_width": 6,
+      "shadow_offset_px": 7
+    },
     "rounds": {
       "hook_hold_seconds": 1.7,
       "pre_reveal_hold_seconds": 0.18,
@@ -125,10 +134,12 @@
       "particles",
       "radial",
       "checkerboard",
-      "diagonal"
+      "diagonal",
+      "cascade",
+      "pathfinding"
     ],
     "duration_seconds": 8.5,
-    "completion_progress": 0.75,
+    "target_opaque_fraction": 0.75,
     "difficulty": "normal",
     "directions": [
       "top_to_bottom",
@@ -175,6 +186,16 @@
           "top_right_to_bottom_left",
           "bottom_left_to_top_right"
         ]
+      },
+      "cascade": {
+        "particle_size_px": 12,
+        "fall_jitter": 0.28
+      },
+      "pathfinding": {
+        "cell_size_px": 14,
+        "origin_inset_ratio": 0.08,
+        "terrain_jitter": 0.18,
+        "distance_scale": 0.86
       }
     }
   },
