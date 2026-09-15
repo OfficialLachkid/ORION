@@ -47,6 +47,9 @@ function formatMethodLabel(method) {
     strips: 'STRIP REVEAL',
     noise: 'NOISE REVEAL',
     particles: 'PIXEL REVEAL',
+    radial: 'RADIAL REVEAL',
+    checkerboard: 'CHECKER REVEAL',
+    diagonal: 'DIAGONAL REVEAL',
   };
   return labels[method] || 'PROGRESSIVE REVEAL';
 }
@@ -161,11 +164,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       durationSeconds: round.reveal_duration_seconds,
       fps,
       difficulty: round.reveal_difficulty,
+      completionProgress: round.reveal_completion_progress,
       config: round.reveal_config,
     });
     const coverSceneLabel = `scene${roundIndex}cover`;
     filters.push(
-      `[${spriteSceneLabel}][${progressiveCoverLabel}]overlay=x=${box.x + coverInset}:y=${box.y + coverInset}:enable='${formatEnableBetween(0, round.local.scene_duration_seconds)}'[${coverSceneLabel}]`,
+      `[${spriteSceneLabel}][${progressiveCoverLabel}]overlay=x=${box.x + coverInset}:y=${box.y + coverInset}:enable='${formatEnableBetween(0, round.local.answer_start_seconds)}'[${coverSceneLabel}]`,
     );
     currentLabel = coverSceneLabel;
 

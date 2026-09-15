@@ -49,6 +49,10 @@ function ensurePositiveNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
 function shuffle(values, random) {
   const items = [...values];
   for (let index = items.length - 1; index > 0; index -= 1) {
@@ -194,6 +198,20 @@ function resolveMethodConfig(template, method, random) {
       orientation: orientations[Math.floor(random() * orientations.length)] || 'horizontal',
     };
   }
+  if (method === 'diagonal') {
+    const directions = Array.isArray(baseConfig.directions)
+      ? baseConfig.directions
+      : [
+        'top_left_to_bottom_right',
+        'bottom_right_to_top_left',
+        'top_right_to_bottom_left',
+        'bottom_left_to_top_right',
+      ];
+    return {
+      ...baseConfig,
+      direction: directions[Math.floor(random() * directions.length)] || 'top_left_to_bottom_right',
+    };
+  }
   return { ...baseConfig };
 }
 
@@ -280,10 +298,18 @@ export async function planPokemonProgressiveRevealChallenge({
     template?.question_contract?.answer_text_variants,
     random,
   ) || '{pokemon}';
-  const revealDurationSeconds = ensurePositiveNumber(
+  const fullRevealDurationSeconds = ensurePositiveNumber(
     template?.reveal?.duration_seconds,
     DEFAULT_REVEAL_DURATION_SECONDS,
   );
+  const revealCompletionProgress = clamp(
+    ensurePositiveNumber(template?.reveal?.completion_progress, 1),
+    0.05,
+    1,
+  );
+  const revealDurationSeconds = Number((
+    fullRevealDurationSeconds * revealCompletionProgress
+  ).toFixed(3));
   const answerHoldSeconds = ensurePositiveNumber(
     template?.layout?.rounds?.answer_hold_seconds,
     DEFAULT_ANSWER_HOLD_SECONDS,
@@ -316,6 +342,8 @@ export async function planPokemonProgressiveRevealChallenge({
         ? hookHoldSeconds
         : transitionDurationSeconds + preRevealHoldSeconds,
       reveal_duration_seconds: revealDurationSeconds,
+      full_reveal_duration_seconds: fullRevealDurationSeconds,
+      reveal_completion_progress: revealCompletionProgress,
       answer_hold_seconds: answerHoldSeconds,
       transition_duration_seconds: index === roundCount - 1 ? 0 : transitionDurationSeconds,
       final_hold_seconds: index === roundCount - 1 ? finalHoldSeconds : 0,
@@ -358,6 +386,7 @@ export async function planPokemonProgressiveRevealChallenge({
       selected_subject_count: renderedSubjects.length,
       display_subject_count: renderedSubjects.length,
       reveal_method_mode: String(template?.reveal?.mode || 'random_per_round'),
+      reveal_completion_progress: revealCompletionProgress,
       reveal_methods: selectedMethods,
       selected_subjects: renderedSubjects,
     },

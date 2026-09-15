@@ -37,14 +37,13 @@
     "mode": "random"
   },
   "question_contract": {
-    "hook_text": "Guess the Pokemon before it's fully revealed!",
+    "hook_text": "Who is that Pokemon?",
     "hook_text_variants": [
-      "Guess the Pokemon before it's fully revealed!",
-      "Can you name the Pokemon before the full reveal?"
+      "Who is that Pokemon?"
     ],
     "headline_lines": [
-      "GUESS THE POKÉMON",
-      "BEFORE IT IS REVEALED"
+      "WHO IS THAT",
+      "POKEMON?"
     ],
     "answer_text": "{pokemon}",
     "answer_text_variants": [
@@ -123,9 +122,13 @@
       "fragments",
       "strips",
       "noise",
-      "particles"
+      "particles",
+      "radial",
+      "checkerboard",
+      "diagonal"
     ],
     "duration_seconds": 8.5,
+    "completion_progress": 0.75,
     "difficulty": "normal",
     "directions": [
       "top_to_bottom",
@@ -155,6 +158,23 @@
       "particles": {
         "particle_size_px": 9,
         "density_exponent": 1.3
+      },
+      "radial": {
+        "origin_count": 4,
+        "maximum_radius_ratio": 0.42
+      },
+      "checkerboard": {
+        "cell_size_px": 56
+      },
+      "diagonal": {
+        "wave_amplitude": 0.055,
+        "wave_frequency": 0.028,
+        "directions": [
+          "top_left_to_bottom_right",
+          "bottom_right_to_top_left",
+          "top_right_to_bottom_left",
+          "bottom_left_to_top_right"
+        ]
       }
     }
   },

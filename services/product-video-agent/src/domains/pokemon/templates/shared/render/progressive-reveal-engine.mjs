@@ -1,7 +1,13 @@
 const REVEAL_METHOD_ALIASES = Object.freeze({
+  checker: 'checkerboard',
+  circle: 'radial',
+  circular: 'radial',
+  diagonal_wave: 'diagonal',
+  diagonal_wipe: 'diagonal',
   fragment: 'fragments',
   fragment_grid: 'fragments',
   horizontal_strips: 'strips',
+  iris: 'radial',
   particle: 'particles',
   pixel_particles: 'particles',
   perlin: 'noise',
@@ -22,6 +28,9 @@ export const PROGRESSIVE_REVEAL_METHODS = Object.freeze([
   'strips',
   'noise',
   'particles',
+  'radial',
+  'checkerboard',
+  'diagonal',
 ]);
 
 function ensureNumber(value, fallback) {
@@ -59,6 +68,16 @@ function normalizeOrientation(value, fallback = 'horizontal') {
   return normalized === 'vertical' ? 'vertical' : 'horizontal';
 }
 
+function normalizeDiagonalDirection(value, fallback = 'top_left_to_bottom_right') {
+  const normalized = String(value || fallback).trim().toLowerCase().replaceAll('-', '_');
+  return [
+    'top_left_to_bottom_right',
+    'bottom_right_to_top_left',
+    'top_right_to_bottom_left',
+    'bottom_left_to_top_right',
+  ].includes(normalized) ? normalized : fallback;
+}
+
 export function normalizeProgressiveRevealMethod(value, fallback = 'wipe') {
   const normalized = String(value || fallback).trim().toLowerCase().replaceAll('-', '_');
   const resolved = REVEAL_METHOD_ALIASES[normalized] || normalized;
@@ -70,6 +89,7 @@ export function buildProgressiveRevealProgressExpression({
   durationSeconds = 1,
   fps = 30,
   difficulty = 'normal',
+  completionProgress = 1,
 } = {}) {
   const start = Math.max(0, ensureNumber(startSeconds, 0));
   const duration = Math.max(0.05, ensureNumber(durationSeconds, 1));
@@ -78,7 +98,11 @@ export function buildProgressiveRevealProgressExpression({
   const exponent = DIFFICULTY_PROGRESS_EXPONENTS[difficultyKey]
     || DIFFICULTY_PROGRESS_EXPONENTS.normal;
   const elapsedProgress = `clip(((N/${frameRate})-${start})/${duration},0,1)`;
-  return exponent === 1 ? elapsedProgress : `pow(${elapsedProgress},${exponent})`;
+  const curvedProgress = exponent === 1 ? elapsedProgress : `pow(${elapsedProgress},${exponent})`;
+  const completion = clamp(ensureNumber(completionProgress, 1), 0.05, 1);
+  return completion >= 0.999
+    ? curvedProgress
+    : `(${curvedProgress})*${Number(completion.toFixed(4))}`;
 }
 
 function buildWipeMask(progress, seed, config) {
@@ -157,6 +181,49 @@ function buildParticleMask(progress, seed, config) {
   return `lte(${buildHashExpression(coordinates, seed, 37)},pow(${progress},${densityExponent}))`;
 }
 
+function buildRadialMask(progress, seed, config) {
+  const originCount = Math.round(clamp(ensureNumber(config?.origin_count, 4), 1, 6));
+  const maximumRadius = clamp(ensureNumber(config?.maximum_radius_ratio, 0.42), 0.15, 0.8);
+  const distances = Array.from({ length: originCount }, (_, index) => {
+    const centerX = Number((0.14 + ((hashSeed(`${seed}:radial-x:${index}`) / 4294967295) * 0.72)).toFixed(4));
+    const centerY = Number((0.14 + ((hashSeed(`${seed}:radial-y:${index}`) / 4294967295) * 0.72)).toFixed(4));
+    return `pow((X-W*${centerX})/max(1,W),2)+pow((Y-H*${centerY})/max(1,H),2)`;
+  });
+  const nearestOriginDistance = distances.slice(1).reduce(
+    (nearest, distance) => `min(${nearest},${distance})`,
+    distances[0],
+  );
+  return `lte(${nearestOriginDistance},pow((${progress})*${maximumRadius},2))`;
+}
+
+function buildCheckerboardMask(progress, seed, config) {
+  const size = Math.max(12, Math.round(ensureNumber(config?.cell_size_px, 56)));
+  const cellX = `floor(X/${size})`;
+  const cellY = `floor(Y/${size})`;
+  const coordinates = `${cellX}*211+${cellY}*421`;
+  const cellOrder = buildHashExpression(coordinates, seed, 43);
+  const threshold = `if(eq(mod(${cellX}+${cellY},2),0),(${cellOrder})*0.5,0.5+(${cellOrder})*0.5)`;
+  return `lte(${threshold},${progress})`;
+}
+
+function buildDiagonalMask(progress, seed, config) {
+  const direction = normalizeDiagonalDirection(config?.direction);
+  const xForward = 'X/max(1,W-1)';
+  const xReverse = '(W-1-X)/max(1,W-1)';
+  const yForward = 'Y/max(1,H-1)';
+  const yReverse = '(H-1-Y)/max(1,H-1)';
+  const coordinates = {
+    top_left_to_bottom_right: `(${xForward}+${yForward})/2`,
+    bottom_right_to_top_left: `(${xReverse}+${yReverse})/2`,
+    top_right_to_bottom_left: `(${xReverse}+${yForward})/2`,
+    bottom_left_to_top_right: `(${xForward}+${yReverse})/2`,
+  };
+  const amplitude = clamp(ensureNumber(config?.wave_amplitude, 0.055), 0, 0.2);
+  const frequency = clamp(ensureNumber(config?.wave_frequency, 0.028), 0.005, 0.12);
+  const wave = `${amplitude}*sin((X-Y+${seed})*${frequency})`;
+  return `lte(${coordinates[direction]}+${wave},${progress})`;
+}
+
 export function buildProgressiveRevealMaskExpression({
   method = 'wipe',
   seed = 'progressive-reveal',
@@ -172,6 +239,9 @@ export function buildProgressiveRevealMaskExpression({
     strips: buildStripMask,
     noise: buildNoiseMask,
     particles: buildParticleMask,
+    radial: buildRadialMask,
+    checkerboard: buildCheckerboardMask,
+    diagonal: buildDiagonalMask,
   };
   const visibleExpression = builders[normalizedMethod](progress, numericSeed, config);
   return `if(lte(${progress},0),0,if(gte(${progress},0.999),255,if(${visibleExpression},255,0)))`;
@@ -186,6 +256,7 @@ function appendProgressiveAlphaFilters(filters, {
   durationSeconds,
   fps,
   difficulty = 'normal',
+  completionProgress = 1,
   config = {},
   inverted = false,
 } = {}) {
@@ -200,6 +271,7 @@ function appendProgressiveAlphaFilters(filters, {
     durationSeconds,
     fps,
     difficulty,
+    completionProgress,
   });
   const maskExpression = buildProgressiveRevealMaskExpression({
     method,

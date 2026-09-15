@@ -93,6 +93,10 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.method_config.strips.strip_width_px, 6);
   assert.equal(template.reveal.method_config.strips.line_reveal_min_seconds, 0.3);
   assert.equal(template.reveal.method_config.strips.line_reveal_max_seconds, 1);
+  assert.equal(template.question_contract.hook_text, 'Who is that Pokemon?');
+  assert.deepEqual(template.question_contract.headline_lines, ['WHO IS THAT', 'POKEMON?']);
+  assert.equal(template.reveal.completion_progress, 0.75);
+  assert.equal(template.reveal.methods.length, 8);
 });
 
 test('planner deterministically selects three Pokemon and seeded non-repeating reveal methods', async () => {
@@ -122,7 +126,9 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
   for (const [index, round] of first.rounds.entries()) {
     assert.ok(PROGRESSIVE_REVEAL_METHODS.includes(round.reveal_method));
     assert.equal(round.round_label, `${index + 1}/3`);
-    assert.equal(round.reveal_duration_seconds, 8.5);
+    assert.equal(round.reveal_duration_seconds, 6.375);
+    assert.equal(round.full_reveal_duration_seconds, 8.5);
+    assert.equal(round.reveal_completion_progress, 0.75);
     assert.equal(round.answer_text, round.subject.name);
     assert.ok(round.reveal_seed.includes(`round-${index + 1}`));
     if (index > 0) {
@@ -152,6 +158,14 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
     difficulty: 'hard',
   });
   assert.match(progress, /pow\(clip\(\(\(N\/30\)-1\.5\)\/4\.2,0,1\),1\.42\)/u);
+  const cappedProgress = buildProgressiveRevealProgressExpression({
+    startSeconds: 1.5,
+    durationSeconds: 3.15,
+    fps: 30,
+    difficulty: 'normal',
+    completionProgress: 0.75,
+  });
+  assert.match(cappedProgress, /\(clip\(\(\(N\/30\)-1\.5\)\/3\.15,0,1\)\)\*0\.75/u);
 
   const expressions = PROGRESSIVE_REVEAL_METHODS.map((method) => buildProgressiveRevealMaskExpression({
     method,
@@ -181,6 +195,9 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(expressions[2], /\/8\.5/u);
   assert.match(expressions[3], /sin\(\(X\+/u);
   assert.match(expressions[4], /floor\(X\/8\)\*197/u);
+  assert.match(expressions[5], /min\(.*pow\(\(X-W\*0\.[0-9]+\)\/max\(1,W\),2\)/u);
+  assert.match(expressions[6], /eq\(mod\(floor\(X\/56\)\+floor\(Y\/56\),2\),0\)/u);
+  assert.match(expressions[7], /X\/max\(1,W-1\).*Y\/max\(1,H-1\).*sin/u);
 });
 
 test('render plan and filters keep sprites centered, reach full reveal, and slide through rounds', async () => {
@@ -211,7 +228,7 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.equal(renderPlan.canvas.width, 1080);
   assert.equal(renderPlan.canvas.height, 1920);
   assert.equal(renderPlan.reveal_box.center_x, 540);
-  assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 10.2);
+  assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 8.075);
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
   assert.equal(visualInputs.length, 4);
   assert.equal(visualInputs[0].role, 'background');
@@ -228,7 +245,10 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /overlay=x=540-w\/2:y=850-h\/2/u);
   assert.match(visualFilter.script, /trim=start=[0-9.]+:end=[0-9.]+/u);
   assert.match(visualFilter.script, /xfade=transition=slideleft/u);
-  assert.match(visualFilter.script, /BEFORE IT IS REVEALED/u);
+  assert.match(visualFilter.script, /WHO IS THAT/u);
+  assert.match(visualFilter.script, /POKEMON\?/u);
+  assert.match(visualFilter.script, /\*0\.75/u);
+  assert.match(visualFilter.script, /enable='between\(t,0,8\.075\)'/u);
   assert.match(audioFilter, /reveal0/u);
   assert.match(audioFilter, /reveal2/u);
 
