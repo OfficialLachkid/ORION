@@ -117,6 +117,11 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
     ffmpegExecutable,
     kokoro,
     runtimeRoot,
+    channelProfile: {
+      id: templateRuntime.channelSelector,
+      name: templateRuntime.channelConfig.channel_name,
+      account_key: templateRuntime.channelSelector,
+    },
   });
 
   printInfo(`Rendered Poke Quizz preview to ${result.output_path}`);
