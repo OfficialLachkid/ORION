@@ -7,6 +7,7 @@ const POKEMON_CHANNEL_SELECTORS = Object.freeze([
   'poke-guess-youtube',
   'dexguess-youtube',
   'trivamon-youtube',
+  'proffmon-youtube',
 ]);
 
 test('all Pokemon channel replenish pools include Build Your Team at weight 2', async () => {
