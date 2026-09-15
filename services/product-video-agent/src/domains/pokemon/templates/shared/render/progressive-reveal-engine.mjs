@@ -6,6 +6,7 @@ const REVEAL_METHOD_ALIASES = Object.freeze({
   circular: 'radial',
   diagonal_wave: 'diagonal',
   diagonal_wipe: 'diagonal',
+  diamond_burst: 'diamond',
   fragment: 'fragments',
   fragment_grid: 'fragments',
   horizontal_strips: 'strips',
@@ -19,6 +20,8 @@ const REVEAL_METHOD_ALIASES = Object.freeze({
   perlin_noise: 'noise',
   scan: 'wipe',
   scanline: 'wipe',
+  spiral_wipe: 'spiral',
+  cross_wipe: 'cross',
 });
 
 const DIFFICULTY_PROGRESS_EXPONENTS = Object.freeze({
@@ -38,6 +41,9 @@ export const PROGRESSIVE_REVEAL_METHODS = Object.freeze([
   'diagonal',
   'cascade',
   'pathfinding',
+  'spiral',
+  'diamond',
+  'cross',
 ]);
 
 function ensureNumber(value, fallback) {
@@ -332,6 +338,45 @@ function buildPathfindingMask(progress, seed, config) {
   return `lte(${threshold},${progress})`;
 }
 
+function buildSpiralMask(progress, seed, config) {
+  const turns = clamp(ensureNumber(config?.turns, 2.75), 0.75, 6);
+  const radialWeight = clamp(ensureNumber(config?.radial_weight, 0.58), 0.25, 0.8);
+  const angularWeight = Number((1 - radialWeight).toFixed(4));
+  const phase = Number((hashSeed(`${seed}:spiral`) / 4294967295).toFixed(4));
+  const radius = 'sqrt(pow((X-W/2)/max(1,W/2),2)+pow((Y-H/2)/max(1,H/2),2))/1.4142';
+  const angle = '(atan2(Y-H/2,X-W/2)+PI)/(2*PI)';
+  const threshold = `clip((${radius})*${radialWeight}+mod(${angle}+(${radius})*${turns}+${phase},1)*${angularWeight},0,1)`;
+  return `lte(${threshold},${progress})`;
+}
+
+function resolveDiamondOrigin(seed, config) {
+  const jitter = clamp(ensureNumber(config?.center_jitter_ratio, 0.08), 0, 0.2);
+  const coordinate = (axis) => 0.5 + (
+    (((hashSeed(`${seed}:diamond-${axis}`) / 4294967295) * 2) - 1) * jitter
+  );
+  return { x: Number(coordinate('x').toFixed(4)), y: Number(coordinate('y').toFixed(4)) };
+}
+
+function buildDiamondMask(progress, seed, config) {
+  const origin = resolveDiamondOrigin(seed, config);
+  const maximumDistance = Math.max(
+    origin.x + origin.y,
+    origin.x + (1 - origin.y),
+    (1 - origin.x) + origin.y,
+    (1 - origin.x) + (1 - origin.y),
+  );
+  const distance = `(abs(X/max(1,W-1)-${origin.x})+abs(Y/max(1,H-1)-${origin.y}))/${Number(maximumDistance.toFixed(4))}`;
+  return `lte(${distance},${progress})`;
+}
+
+function buildCrossMask(progress, seed, config) {
+  const cornerWeight = clamp(ensureNumber(config?.corner_fill_ratio, 0.18), 0.05, 0.45);
+  const axisWeight = Number((1 - cornerWeight).toFixed(4));
+  const xDistance = 'abs(X/max(1,W-1)-0.5)*2';
+  const yDistance = 'abs(Y/max(1,H-1)-0.5)*2';
+  return `lte(min(${xDistance},${yDistance})*${axisWeight}+max(${xDistance},${yDistance})*${cornerWeight},${progress})`;
+}
+
 function calculateWipeRevealScore({ x, y, width, height, seed, config }) {
   const direction = normalizeDirection(config?.direction);
   const roughness = clamp(ensureNumber(config?.boundary_roughness_px, 20), 0, 80);
@@ -468,6 +513,35 @@ function calculateRevealScore(method, point, seed, config) {
     );
     return (nearestDistance * (1 - terrainJitter)) + (terrainCost * terrainJitter);
   }
+  if (method === 'spiral') {
+    const turns = clamp(ensureNumber(config?.turns, 2.75), 0.75, 6);
+    const radialWeight = clamp(ensureNumber(config?.radial_weight, 0.58), 0.25, 0.8);
+    const radius = Math.sqrt((((x - (width / 2)) / (width / 2)) ** 2)
+      + (((y - (height / 2)) / (height / 2)) ** 2)) / Math.SQRT2;
+    const angle = (Math.atan2(y - (height / 2), x - (width / 2)) + Math.PI) / (2 * Math.PI);
+    const phase = hashSeed(`${seed}:spiral`) / 4294967295;
+    return clamp((radius * radialWeight)
+      + (((angle + (radius * turns) + phase) % 1) * (1 - radialWeight)), 0, 1);
+  }
+  if (method === 'diamond') {
+    const origin = resolveDiamondOrigin(seed, config);
+    const normalizedX = x / Math.max(1, width - 1);
+    const normalizedY = y / Math.max(1, height - 1);
+    const maximumDistance = Math.max(
+      origin.x + origin.y,
+      origin.x + (1 - origin.y),
+      (1 - origin.x) + origin.y,
+      (1 - origin.x) + (1 - origin.y),
+    );
+    return (Math.abs(normalizedX - origin.x) + Math.abs(normalizedY - origin.y)) / maximumDistance;
+  }
+  if (method === 'cross') {
+    const cornerWeight = clamp(ensureNumber(config?.corner_fill_ratio, 0.18), 0.05, 0.45);
+    const xDistance = Math.abs((x / Math.max(1, width - 1)) - 0.5) * 2;
+    const yDistance = Math.abs((y / Math.max(1, height - 1)) - 0.5) * 2;
+    return (Math.min(xDistance, yDistance) * (1 - cornerWeight))
+      + (Math.max(xDistance, yDistance) * cornerWeight);
+  }
   return 1;
 }
 
@@ -544,6 +618,9 @@ export function buildProgressiveRevealMaskExpression({
     diagonal: buildDiagonalMask,
     cascade: buildCascadeMask,
     pathfinding: buildPathfindingMask,
+    spiral: buildSpiralMask,
+    diamond: buildDiamondMask,
+    cross: buildCrossMask,
   };
   const visibleExpression = builders[normalizedMethod](maskProgress, numericSeed, config);
   return `if(lte(${progress},0),0,if(gte(${progress},0.999),255,if(${visibleExpression},255,0)))`;

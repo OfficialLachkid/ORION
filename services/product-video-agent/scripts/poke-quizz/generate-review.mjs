@@ -156,13 +156,13 @@ async function resolvePlan(
   const statePath = getStringOption(
     options,
     'state',
-    resolvePokeQuizzSelectionStatePath(template),
+    resolvePokeQuizzSelectionStatePath(template, undefined, defaults.channelProfile),
   );
   const [pokedexRows, localSelectionState] = await Promise.all([
     loadJson(catalogJsonPath),
     loadOptionalJson(statePath),
   ]);
-  const effectiveSelectionState = mergePokeQuizzSelectionStates(selectionState, localSelectionState);
+  const effectiveSelectionState = mergePokeQuizzSelectionStates(localSelectionState, selectionState);
 
   const plan = await planPokemonTypeChallenge({
     template,

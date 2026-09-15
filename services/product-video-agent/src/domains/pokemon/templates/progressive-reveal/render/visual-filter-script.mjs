@@ -56,6 +56,9 @@ function formatMethodLabel(method) {
     diagonal: 'DIAGONAL REVEAL',
     cascade: 'FALLING PARTICLES',
     pathfinding: 'PATHFINDING REVEAL',
+    spiral: 'SPIRAL REVEAL',
+    diamond: 'DIAMOND REVEAL',
+    cross: 'CROSS REVEAL',
   };
   return labels[method] || 'PROGRESSIVE REVEAL';
 }

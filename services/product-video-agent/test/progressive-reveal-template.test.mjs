@@ -61,7 +61,8 @@ function buildAssetInventory() {
     pixel_backgrounds: ['/fake/pixel-backgrounds/forest.png', '/fake/pixel-backgrounds/city.gif'],
     music: ['/fake/audio/battle.mp3'],
     sound_effects: {
-      all: ['/fake/audio/reveal.wav'],
+      all: ['/fake/audio/reveal.wav', '/fake/audio/ding-sound.mp3'],
+      ding: '/fake/audio/ding-sound.mp3',
       reveal: '/fake/audio/reveal.wav',
       timer_end: '/fake/audio/reveal.wav',
     },
@@ -99,7 +100,8 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.question_contract.hook_text, 'Who is that Pokemon?');
   assert.deepEqual(template.question_contract.headline_lines, ['WHO IS THAT', 'POKEMON?']);
   assert.equal(template.reveal.target_opaque_fraction, 0.6);
-  assert.equal(template.reveal.methods.length, 10);
+  assert.deepEqual(template.reveal.methods, PROGRESSIVE_REVEAL_METHODS);
+  assert.deepEqual(template.reveal.methods.slice(-3), ['spiral', 'diamond', 'cross']);
   assert.equal(template.layout.branding, undefined);
   assert.equal(template.reveal.method_config.cascade.fall_duration_seconds, 1.2);
   assert.equal(template.reveal.method_config.cascade.fall_step_count, 10);
@@ -133,11 +135,14 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
   assert.equal(first.assets.background.selected_path, '/fake/pixel-backgrounds/city.gif');
   assert.match(first.assets.background.expected_directory, /pixel-backgrounds$/u);
   assert.match(first.assets.outputs.previews_directory, /\/Previews\/Progressive Reveal$/u);
+  assert.equal(first.assets.audio.selected_sound_effects.reveal, '/fake/audio/ding-sound.mp3');
   assert.equal(first.required_asset_gaps.length, 0);
   assert.deepEqual(
     first.selection.reveal_methods,
     first.rounds.map((round) => round.reveal_method),
   );
+  assert.deepEqual(first.selection_state.last_reveal_methods, first.selection.reveal_methods);
+  assert.equal(new Set(first.selection.reveal_methods).size, first.selection.reveal_methods.length);
   for (const [index, round] of first.rounds.entries()) {
     assert.ok(PROGRESSIVE_REVEAL_METHODS.includes(round.reveal_method));
     assert.equal(round.round_label, `${index + 1}/3`);
@@ -153,6 +158,30 @@ test('planner deterministically selects three Pokemon and seeded non-repeating r
       assert.notEqual(round.reveal_method, first.rounds[index - 1].reveal_method);
     }
   }
+});
+
+test('random reveal selection excludes the previous video methods for one channel', async () => {
+  const template = await loadTemplate();
+  const baseOptions = {
+    template,
+    pokedexRows: Array.from({ length: 12 }, (_, index) => buildFixtureSubject(index + 1)),
+    seed: 'progressive-reveal-channel-history',
+    assetInventory: buildAssetInventory(),
+  };
+  const first = await planPokemonProgressiveRevealChallenge(baseOptions);
+  const nextForSameChannel = await planPokemonProgressiveRevealChallenge({
+    ...baseOptions,
+    selectionState: first.selection_state,
+  });
+  const firstForAnotherChannel = await planPokemonProgressiveRevealChallenge(baseOptions);
+
+  assert.deepEqual(firstForAnotherChannel.selection.reveal_methods, first.selection.reveal_methods);
+  assert.deepEqual(
+    nextForSameChannel.selection.reveal_methods.filter((method) => (
+      first.selection.reveal_methods.includes(method)
+    )),
+    [],
+  );
 });
 
 test('fixed reveal mode uses one configured algorithm for the entire video', async () => {
@@ -218,6 +247,9 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(expressions[7], /X\/max\(1,W-1\).*Y\/max\(1,H-1\).*sin/u);
   assert.match(expressions[8], /floor\(Y\/8\).*max\(1,H-1\)/u);
   assert.match(expressions[9], /abs\(.*floor\(X\/14\).*floor\(Y\/14\)/u);
+  assert.match(expressions[10], /atan2\(Y-H\/2,X-W\/2\)/u);
+  assert.match(expressions[11], /abs\(X\/max\(1,W-1\)-0\.[0-9]+\)/u);
+  assert.match(expressions[12], /min\(abs\(X\/max\(1,W-1\)-0\.5\)\*2,abs\(Y\/max\(1,H-1\)-0\.5\)\*2\)/u);
 });
 
 test('falling-particle phases descend in discrete sand steps before settling', () => {

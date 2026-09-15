@@ -127,7 +127,10 @@
       "checkerboard",
       "diagonal",
       "cascade",
-      "pathfinding"
+      "pathfinding",
+      "spiral",
+      "diamond",
+      "cross"
     ],
     "duration_seconds": 8.5,
     "target_opaque_fraction": 0.6,
@@ -190,6 +193,16 @@
         "origin_inset_ratio": 0.08,
         "terrain_jitter": 0.18,
         "distance_scale": 0.86
+      },
+      "spiral": {
+        "turns": 2.75,
+        "radial_weight": 0.58
+      },
+      "diamond": {
+        "center_jitter_ratio": 0.08
+      },
+      "cross": {
+        "corner_fill_ratio": 0.18
       }
     }
   },

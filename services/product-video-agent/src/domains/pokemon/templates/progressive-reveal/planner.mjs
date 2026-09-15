@@ -266,18 +266,26 @@ function resolveRevealMethods(template) {
   return methods.length > 0 ? methods : [...PROGRESSIVE_REVEAL_METHODS];
 }
 
-function selectRoundMethods(template, roundCount, random) {
+function selectRoundMethods(template, roundCount, random, previousVideoMethods = []) {
   const methods = resolveRevealMethods(template);
   const mode = String(template?.reveal?.mode || 'random_per_round').trim().toLowerCase();
   const fixedMethod = normalizeProgressiveRevealMethod(template?.reveal?.method, methods[0]);
   if (mode === 'fixed' || mode === 'fixed_video' || mode === 'one_per_video') {
     return Array.from({ length: roundCount }, () => fixedMethod);
   }
+  const previousMethods = new Set(previousVideoMethods
+    .map((method) => normalizeProgressiveRevealMethod(method, ''))
+    .filter(Boolean));
+  const freshMethods = methods.filter((method) => !previousMethods.has(method));
   const selected = [];
   for (let index = 0; index < roundCount; index += 1) {
-    const pool = methods.length > 1
-      ? methods.filter((method) => method !== selected.at(-1))
-      : methods;
+    const freshPool = freshMethods.filter((method) => !selected.includes(method));
+    const uniquePool = methods.filter((method) => !selected.includes(method));
+    const pool = freshPool.length > 0
+      ? freshPool
+      : uniquePool.length > 0
+        ? uniquePool
+        : methods.filter((method) => method !== selected.at(-1));
     selected.push(pool[Math.floor(random() * pool.length)] || methods[0]);
   }
   return selected;
@@ -393,7 +401,12 @@ export async function planPokemonProgressiveRevealChallenge({
     random,
     normalizedSelectionState,
   );
-  const selectedMethods = selectRoundMethods(template, roundCount, random);
+  const selectedMethods = selectRoundMethods(
+    template,
+    roundCount,
+    random,
+    normalizedSelectionState.last_reveal_methods || [],
+  );
   const hookText = pickSeededText(
     template?.question_contract?.hook_text,
     template?.question_contract?.hook_text_variants,
@@ -502,7 +515,8 @@ export async function planPokemonProgressiveRevealChallenge({
     };
   }));
 
-  const revealSoundPath = inventory?.sound_effects?.reveal
+  const revealSoundPath = inventory?.sound_effects?.ding
+    || inventory?.sound_effects?.reveal
     || inventory?.sound_effects?.timer_end
     || null;
   const requiredAssetGaps = [];
@@ -565,6 +579,7 @@ export async function planPokemonProgressiveRevealChallenge({
     },
     selection_state: {
       last_background_path: selectedBackgroundPath || null,
+      last_reveal_methods: selectedMethods,
     },
     asset_inventory_snapshot: inventory,
     required_asset_gaps: [...new Set(requiredAssetGaps)],
