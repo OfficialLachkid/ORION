@@ -241,6 +241,7 @@ test('falling-particle phases descend in discrete sand steps before settling', (
   assert.equal(phases.at(-1).offsetPixels, 711);
   assert.match(phases[0].maskExpression, /gt\(.+,\(\(p\)\*1\.1\)\+/u);
   assert.match(phases[0].maskExpression, /lte\(.+,min\(0\.66,/u);
+  assert.doesNotMatch(phases[0].maskExpression, /and\(/u);
   assert.ok(new Set(phases.map((phase) => phase.maskExpression)).size === phases.length);
 });
 

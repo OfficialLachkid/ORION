@@ -308,7 +308,7 @@ export function buildCascadeFallingParticlePhases({
     return {
       index,
       offsetPixels: Math.round(fallDistance * ((index + 0.5) / stepCount)),
-      maskExpression: `if(and(gt(${threshold},${maskProgress}+${lowerBound}),lte(${threshold},min(${targetMaskProgress},${maskProgress}+${upperBound}))),255,0)`,
+      maskExpression: `if(gt(${threshold},${maskProgress}+${lowerBound})*lte(${threshold},min(${targetMaskProgress},${maskProgress}+${upperBound})),255,0)`,
     };
   });
 }
