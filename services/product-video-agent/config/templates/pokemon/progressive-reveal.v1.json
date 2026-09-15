@@ -106,16 +106,6 @@
       "track_color": "black@0.72",
       "border_color": "white@0.82"
     },
-    "branding": {
-      "enabled": true,
-      "y": 1760,
-      "font_size": 54,
-      "color": "0xFFE45C",
-      "border_color": "0x2446B8",
-      "outline_width": 6,
-      "shadow_offset_px": 7,
-      "fade_in_seconds": 0.45
-    },
     "rounds": {
       "hook_hold_seconds": 1.7,
       "pre_reveal_hold_seconds": 0.18,

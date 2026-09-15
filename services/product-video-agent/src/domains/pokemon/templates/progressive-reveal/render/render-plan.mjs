@@ -61,31 +61,10 @@ function buildTextLayout(template) {
   };
 }
 
-function buildBrandingLayout(plan, template) {
-  const config = template?.layout?.branding || {};
-  const channelName = String(plan?.channel?.name || 'Poke Quizz').trim() || 'Poke Quizz';
-  const configuredHandle = String(plan?.channel?.handle || '').trim();
-  const text = configuredHandle
-    ? `@${configuredHandle.replace(/^@+/u, '')}`
-    : `@${channelName.replace(/[^a-z0-9]+/giu, '')}`;
-  return {
-    enabled: config.enabled !== false,
-    text,
-    y: ensureNumber(config.y, 1760),
-    font_size: Math.max(28, Math.round(ensureNumber(config.font_size, 54))),
-    color: String(config.color || '0xFFE45C').trim() || '0xFFE45C',
-    border_color: String(config.border_color || '0x2446B8').trim() || '0x2446B8',
-    outline_width: Math.max(1, Math.round(ensureNumber(config.outline_width, 6))),
-    shadow_offset_px: Math.max(2, Math.round(ensureNumber(config.shadow_offset_px, 7))),
-    fade_in_seconds: Math.max(0, ensureNumber(config.fade_in_seconds, 0.45)),
-  };
-}
-
 export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const revealBox = buildRevealBoxLayout(template);
   const progressBar = buildProgressBarLayout(template, revealBox);
   const textLayout = buildTextLayout(template);
-  const branding = buildBrandingLayout(plan, template);
   const transitionFallback = ensureNumber(template?.layout?.rounds?.transition_duration_seconds, 0.42);
   let currentSceneStart = 0;
   const rounds = (Array.isArray(plan?.rounds) ? plan.rounds : []).map((round, index, sourceRounds) => {
@@ -139,7 +118,6 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     reveal_box: revealBox,
     progress_bar: progressBar,
     text_layout: textLayout,
-    branding,
     background: {
       blur_sigma: Math.max(0, ensureNumber(template?.layout?.background?.blur_sigma, 6)),
       darken_alpha: Math.min(0.85, Math.max(0, ensureNumber(template?.layout?.background?.darken_alpha, 0.24))),

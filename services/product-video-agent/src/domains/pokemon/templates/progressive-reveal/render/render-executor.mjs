@@ -5,6 +5,7 @@ import { verifyReadableFiles } from '../../dual-type-reveal/render/media-probe.m
 import { synthesizeNarrationTrack } from '../../dual-type-reveal/render/narration-synthesis.mjs';
 import { DEFAULT_FONT_CANDIDATES, slugify } from '../../dual-type-reveal/render/constants.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
+import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
 import { buildAudioFilterScript, buildAudioInputs } from './audio-filter-script.mjs';
 import { buildPokeQuizzRenderPlan } from './render-plan.mjs';
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
@@ -98,7 +99,11 @@ export async function renderPokeQuizzVideo({
     configuredFontCandidates.length > 0 ? configuredFontCandidates : fontCandidates,
   );
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);
-  await writeFile(videoFilterScriptPath, visualFilter.script, 'utf8');
+  await writeChannelWatermarkedVisualFilterScript(videoFilterScriptPath, visualFilter, {
+    plan,
+    renderPlan,
+    fontPath,
+  });
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
   await runLocalProcess({

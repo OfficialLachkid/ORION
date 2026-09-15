@@ -44,26 +44,6 @@ function appendLayeredText(filters, currentLabel, {
   return outputLabel;
 }
 
-function appendChannelBranding(filters, currentLabel, branding, fontPart, round, roundIndex) {
-  if (!branding?.enabled || !branding.text) return currentLabel;
-  const escapedText = escapeDrawtextText(branding.text);
-  const offset = branding.shadow_offset_px;
-  const revealStart = roundIndex === 0 ? round.local.reveal_start_seconds : 0;
-  const fadeDuration = roundIndex === 0 ? branding.fade_in_seconds : 0;
-  const timingPart = revealStart > 0
-    ? `${fadeDuration > 0 ? `:alpha='clip((t-${revealStart})/${fadeDuration},0,1)'` : ''}:enable='gte(t,${revealStart})'`
-    : '';
-  const shadowLabel = `scene${roundIndex}brandingShadow`;
-  filters.push(
-    `[${currentLabel}]drawtext=text='${escapedText}'${fontPart}${timingPart}:fontcolor=black@0.72:fontsize=${branding.font_size}:borderw=${branding.outline_width}:bordercolor=black@0.82:fix_bounds=1:x=(w-text_w)/2+${offset}:y=${roundTime(branding.y + offset)}[${shadowLabel}]`,
-  );
-  const outputLabel = `scene${roundIndex}branding`;
-  filters.push(
-    `[${shadowLabel}]drawtext=text='${escapedText}'${fontPart}${timingPart}:fontcolor=${branding.color}:fontsize=${branding.font_size}:borderw=${branding.outline_width}:bordercolor=${branding.border_color}:fix_bounds=1:x=(w-text_w)/2:y=${roundTime(branding.y)}[${outputLabel}]`,
-  );
-  return outputLabel;
-}
-
 function formatMethodLabel(method) {
   const labels = {
     wipe: 'SCAN REVEAL',
@@ -299,14 +279,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       startSeconds: round.local.answer_start_seconds,
       endSeconds: sceneTextEnd,
     });
-    currentLabel = appendChannelBranding(
-      filters,
-      currentLabel,
-      renderPlan.branding,
-      fontPart,
-      round,
-      roundIndex,
-    );
     filters.push(`[${currentLabel}]format=rgba[scene${roundIndex}]`);
   });
 

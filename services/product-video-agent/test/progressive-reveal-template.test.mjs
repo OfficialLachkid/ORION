@@ -28,6 +28,7 @@ import {
   calculateOpaqueRevealCompletionProgress,
   PROGRESSIVE_REVEAL_METHODS,
 } from '../src/domains/pokemon/templates/shared/render/progressive-reveal-engine.mjs';
+import { applyChannelWatermarkToVisualFilter } from '../src/domains/pokemon/templates/shared/render/channel-watermark.mjs';
 
 const HERE = resolve(fileURLToPath(import.meta.url), '..');
 const PROJECT_ROOT = resolve(HERE, '..', '..', '..');
@@ -99,8 +100,7 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.deepEqual(template.question_contract.headline_lines, ['WHO IS THAT', 'POKEMON?']);
   assert.equal(template.reveal.target_opaque_fraction, 0.6);
   assert.equal(template.reveal.methods.length, 10);
-  assert.equal(template.layout.branding.enabled, true);
-  assert.equal(template.layout.branding.fade_in_seconds, 0.45);
+  assert.equal(template.layout.branding, undefined);
   assert.equal(template.reveal.method_config.cascade.fall_duration_seconds, 1.2);
   assert.equal(template.reveal.method_config.cascade.fall_step_count, 10);
 });
@@ -294,6 +294,10 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
     background: 0,
     rounds: renderPlan.rounds.map((_, index) => ({ sprite: index + 1 })),
   });
+  const watermarkedVisualFilter = applyChannelWatermarkToVisualFilter(visualFilter, {
+    plan,
+    renderPlan,
+  });
   const audioFilter = buildAudioFilterScript({
     narrationPaths: ['/tmp/hook.wav'],
     musicPath: '/tmp/music.mp3',
@@ -304,8 +308,7 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.equal(renderPlan.canvas.width, 1080);
   assert.equal(renderPlan.canvas.height, 1920);
   assert.equal(renderPlan.reveal_box.center_x, 540);
-  assert.equal(renderPlan.branding.text, '@PokeGuesss');
-  assert.equal(renderPlan.branding.fade_in_seconds, 0.45);
+  assert.equal(renderPlan.branding, undefined);
   assert.equal(renderPlan.rounds[0].reveal_complete_seconds, 6.8);
   assert.equal(renderPlan.rounds[1].scene_start_seconds > 0, true);
   assert.equal(visualInputs.length, 4);
@@ -328,8 +331,8 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /\*0\.6/u);
   assert.match(visualFilter.script, /split=11\[round0spriteBase\]\[round0fallSource0\]/u);
   assert.match(visualFilter.script, /pad=w=iw:h=ih\+[0-9]+:x=0:y=0:color=0x00000000,crop=w=748:h=748:x=0:y=[0-9]+/u);
-  assert.match(visualFilter.script, /drawtext=text='@PokeGuesss'.*alpha='clip\(\(t-1\.7\)\/0\.45,0,1\)'.*enable='gte\(t,1\.7\)'.*fontcolor=0xFFE45C.*bordercolor=0x2446B8/u);
-  assert.match(visualFilter.script, /scene1brandingShadow.*drawtext=text='@PokeGuesss'/u);
+  assert.match(watermarkedVisualFilter.script, /drawtext=text='@PokeGuesss'.*alpha='if\(lt\(t,1\.7\),0,if\(lt\(t,2\.15\),\(t-1\.7\)\/0\.45,1\)\)'.*enable='gte\(t,1\.7\)'.*fontcolor=0xFFE45C.*bordercolor=0x2446B8/u);
+  assert.equal((watermarkedVisualFilter.script.match(/drawtext=text='@PokeGuesss'/gu) || []).length, 2);
   assert.match(audioFilter, /reveal0/u);
   assert.match(audioFilter, /reveal2/u);
 
