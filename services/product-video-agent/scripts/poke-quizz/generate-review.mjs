@@ -301,6 +301,7 @@ async function generateAndReviewPokeQuizz(options) {
           ffmpegExecutable,
           kokoro,
           runtimeRoot,
+          channelProfile,
         });
         break;
       } catch (error) {

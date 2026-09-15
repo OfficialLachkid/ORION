@@ -19,6 +19,7 @@ import {
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
+import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
 
 const MIN_SAFE_ANIMATED_SPRITE_DURATION_SECONDS = 0.2;
 
@@ -263,7 +264,11 @@ export async function renderPokeQuizzVideo({
     : fontCandidates;
   const fontPath = await resolveFontPath(effectiveFontCandidates);
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);
-  await writeFile(filterScriptPath, visualFilter.script, 'utf8');
+  await writeChannelWatermarkedVisualFilterScript(filterScriptPath, visualFilter, {
+    plan,
+    renderPlan,
+    fontPath,
+  });
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
   const expectedDurationSeconds = Number(renderPlan.total_duration_seconds || 0);

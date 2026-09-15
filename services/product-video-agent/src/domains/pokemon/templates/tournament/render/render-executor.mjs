@@ -22,6 +22,7 @@ import {
 } from './render-plan.mjs';
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
+import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
 
 export async function renderPokeQuizzVideo({
   plan,
@@ -147,7 +148,11 @@ export async function renderPokeQuizzVideo({
     : fontCandidates;
   const fontPath = await resolveFontPath(effectiveFontCandidates);
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);
-  await writeFile(filterScriptPath, visualFilter.script, 'utf8');
+  await writeChannelWatermarkedVisualFilterScript(filterScriptPath, visualFilter, {
+    plan,
+    renderPlan,
+    fontPath,
+  });
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
   await runLocalProcess({

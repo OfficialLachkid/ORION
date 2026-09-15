@@ -98,6 +98,12 @@ export const PRODUCT_VIDEO_CHANNEL_DEFINITIONS = Object.freeze([
     configSlug: 'dexguess',
     channelConfigPath: `${CHANNELS_CONFIG_DIR}/dexguess-youtube.json`,
   },
+  {
+    channelSelector: 'proffmon-youtube',
+    label: 'ProffMon',
+    configSlug: 'proffmon',
+    channelConfigPath: `${CHANNELS_CONFIG_DIR}/proffmon-youtube.json`,
+  },
 ]);
 
 const TEMPLATE_KEY_ALIASES = Object.freeze({

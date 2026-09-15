@@ -17,6 +17,7 @@ import {
   resolvePokeQuizzRenderPlanBuilder,
   resolvePokeQuizzRenderer,
 } from './poke-quizz-template-registry.mjs';
+import { resolvePokemonChannelIdentity } from './domains/pokemon/templates/shared/render/channel-watermark.mjs';
 
 export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const buildRenderPlan = resolvePokeQuizzRenderPlanBuilder(template);
@@ -29,5 +30,12 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
 
 export async function renderPokeQuizzVideo(options = {}) {
   const renderVideo = resolvePokeQuizzRenderer(options.template);
-  return renderVideo(options);
+  const channel = resolvePokemonChannelIdentity(options.channelProfile || options.plan?.channel);
+  return renderVideo({
+    ...options,
+    plan: {
+      ...(options.plan || {}),
+      channel,
+    },
+  });
 }

@@ -59,6 +59,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'dexguess-youtube',
     'poke-guess-youtube',
     'poke-quizz-youtube',
+    'proffmon-youtube',
     'trivamon-youtube',
   ]);
   const analyticsCommand = commands.find((command) => command.name === 'analytics');
@@ -70,6 +71,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'dexguess-youtube',
     'poke-guess-youtube',
     'poke-quizz-youtube',
+    'proffmon-youtube',
     'trivamon-youtube',
   ]);
 });
