@@ -197,7 +197,7 @@ export class SupabasePublicationStore {
 
     return this.request('video_analytics', {
       params: {
-        select: '*',
+        select: options.select || '*',
         publication_id: `in.(${ids.map((value) => `"${value}"`).join(',')})`,
         order: options.order || 'captured_at.desc',
         limit: options.limit || null,

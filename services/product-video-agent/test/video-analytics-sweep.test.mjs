@@ -158,6 +158,8 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     const state = JSON.parse(await readFile(statePath, 'utf8'));
 
     assert.equal(result.digest_posted, true);
+    assert.equal(result.digest_complete, true);
+    assert.equal(result.retry_recommended, false);
     assert.equal(result.analytics_channel_id, '1528783542195323061');
     assert.deepEqual(upserts, [
       {
@@ -185,7 +187,7 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     assert.equal(sendCalls[0].payload.embeds[0].title, 'Weekly YouTube Analytics Digest (7d) | 2026-08-10');
     assert.match(sendCalls[0].payload.embeds[0].description, /New videos \(7D\): \*\*1\*\*/u);
     assert.match(sendCalls[0].payload.embeds[0].description, /Videos with snapshots \(7D\): \*\*1\*\*/u);
-    assert.match(sendCalls[0].payload.embeds[0].description, /Crossed 10k views \(7D\): \*\*0\*\*/u);
+    assert.match(sendCalls[0].payload.embeds[0].description, /Reached 10k views \(7D\): \*\*0\*\*/u);
     assert.match(sendCalls[0].payload.embeds[0].description, /Combined views \(7D\): \*\*1,200\*\*/u);
     assert.match(sendCalls[0].payload.embeds[0].description, /Total views \(all time\): \*\*1,200\*\*/u);
     assert.match(sendCalls[0].payload.embeds[0].fields[0].value, /- Channel: \[Poke Quizz\]\(https:\/\/www\.youtube\.com\/channel\/UC-POKE-QUIZZ\)/u);
@@ -313,8 +315,8 @@ test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the c
           likes: 90,
           comments: 8,
           shares: 4,
-          avg_view_duration_sec: 20,
-          avg_view_percentage: 76,
+          avg_view_duration_sec: null,
+          avg_view_percentage: null,
           subs_gained: 5,
           subs_lost: 1,
         },
@@ -358,9 +360,11 @@ test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the c
     assert.equal(sendCalls[1].payload.embeds[0].title, 'YouTube Analytics Digest (3d) | 2026-08-10');
     assert.match(sendCalls[1].payload.embeds[0].description, /New videos \(3D\): \*\*1\*\*/u);
     assert.match(sendCalls[1].payload.embeds[0].description, /Combined views \(3D\): \*\*2,400\*\*/u);
+    assert.match(sendCalls[1].payload.embeds[0].description, /Retention metrics pending: \*\*1\*\*/u);
     assert.match(sendCalls[1].payload.embeds[0].fields[0].value, /- Channel: \[Poke Quizz\]\(https:\/\/www\.youtube\.com\/channel\/UC-POKE-QUIZZ\)/u);
     assert.match(sendCalls[1].payload.embeds[0].fields[0].value, /- New videos \(3D\): 1/u);
     assert.match(sendCalls[1].payload.embeds[0].fields[0].value, /- Views \(3D\): 2,400/u);
+    assert.match(sendCalls[1].payload.embeds[0].fields[0].value, /- Median AVD: n\/a/u);
     assert.match(sendCalls[1].payload.embeds[0].fields[0].value, /- Best performer \(3D\): \[Ghost Ground #shorts\]\(https:\/\/www\.youtube\.com\/watch\?v=yt-ondemand-123\) \(2,400 views\)/u);
     assert.equal(sendCalls[2].channelId, 'analytics-thread-poke-quizz');
     assert.equal(sendCalls[2].payload.embeds.length, 3);
@@ -377,6 +381,103 @@ test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the c
         created_at: state.analytics_threads['video-channel-poke-quizz-youtube'].created_at,
       },
     });
+  } finally {
+    await rm(statePath, { force: true });
+  }
+});
+
+test('runVideoAnalyticsSweep posts healthy channels and leaves weekly retry pending when one channel fails', async () => {
+  const statePath = resolve(tmpdir(), `orion-video-analytics-state-${Date.now()}-degraded.json`);
+  const healthyProfile = normalizePublicationChannelProfile({
+    ...analyticsChannelProfile,
+    id: 'video-channel-trivamon-youtube',
+    name: 'TrivaMon',
+    account_key: 'trivamon-youtube',
+    youtube: {
+      ...analyticsChannelProfile.youtube,
+      channel_id: 'UC-TRIVAMON',
+      oauth_refresh_token_env: 'YOUTUBE_TRIVAMON_REFRESH_TOKEN',
+    },
+  });
+  const sendCalls = [];
+  let failedChannelAttempts = 0;
+  const store = {
+    async fetchPublishedPublicationsByChannel({ accountKey }) {
+      if (accountKey === 'poke-quizz-youtube') {
+        failedChannelAttempts += 1;
+        throw new Error('Supabase video_publications request failed (504): Gateway Timeout');
+      }
+      return [{
+        id: 'pub-healthy',
+        video_id: 'video-healthy',
+        platform: 'youtube_shorts',
+        account_key: 'trivamon-youtube',
+        status: 'published',
+        external_id: 'yt-healthy',
+        title: 'Healthy video',
+        published_at: '2026-09-14T06:00:00.000Z',
+      }];
+    },
+    async fetchVideosByIds() {
+      return [{ id: 'video-healthy' }];
+    },
+    async fetchLatestAnalyticsSnapshot() {
+      return null;
+    },
+    async upsertVideoAnalyticsSnapshot(row) {
+      return row;
+    },
+  };
+
+  try {
+    const result = await runVideoAnalyticsSweep({
+      'as-of': '2026-09-14T09:00:00.000Z',
+      'post-discord': true,
+      'post-channel-threads': false,
+      'force-digest': true,
+      'request-attempts': 2,
+      'retry-base-delay-ms': 1,
+      'state-path': statePath,
+    }, {
+      runtimeConfig: {
+        env: {
+          DISCORD_BOT_TOKEN: 'discord-token',
+          YOUTUBE_POKE_QUIZZ_REFRESH_TOKEN: 'refresh-token',
+          YOUTUBE_TRIVAMON_REFRESH_TOKEN: 'refresh-token',
+        },
+        channelIds: { orionAnalytics: 'analytics-channel' },
+      },
+      store,
+      sleep: async () => {},
+      loadPublicationChannelProfiles: async () => [analyticsChannelProfile, healthyProfile],
+      loadYoutubeClientCredentials: async () => ({ clientId: 'client-id', clientSecret: 'client-secret' }),
+      createYoutubeAnalyticsAccessToken: async () => 'access-token',
+      fetchYoutubeVideoStatisticsMap: async () => ({
+        statisticsByVideoId: new Map([['yt-healthy', { statistics: { viewCount: '1200' } }]]),
+      }),
+      fetchYoutubePublicationMetrics: async () => ({
+        metrics: { views: 1200, avg_view_duration_sec: 15, avg_view_percentage: 60 },
+        raw_payload: { source: 'test' },
+      }),
+      sendDiscordChannelMessage: async (_config, channelId, payload) => {
+        sendCalls.push({ channelId, payload });
+        return { posted: true, messageId: 'message-overview', channelId };
+      },
+    });
+
+    const state = JSON.parse(await readFile(statePath, 'utf8'));
+    assert.equal(failedChannelAttempts, 2);
+    assert.equal(result.digest_posted, true);
+    assert.equal(result.digest_complete, false);
+    assert.equal(result.retry_recommended, true);
+    assert.equal(result.collection_warnings.length, 1);
+    assert.equal(result.results.some((entry) => entry.action === 'channel_failed'), true);
+    assert.equal(result.results.some((entry) => entry.action === 'captured'), true);
+    assert.equal(sendCalls.length, 1);
+    assert.match(sendCalls[0].payload.embeds[0].description, /Channels: \*\*1\*\*/u);
+    assert.match(sendCalls[0].payload.embeds[0].description, /Collection status: \*\*degraded - automatic retry pending\*\*/u);
+    assert.equal(sendCalls[0].payload.embeds[0].fields[0].name, 'Collection warnings');
+    assert.equal(state.last_weekly_digest_at, '');
   } finally {
     await rm(statePath, { force: true });
   }
