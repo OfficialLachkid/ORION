@@ -23,6 +23,7 @@ import {
 import { assembleMixedChallengeVideo } from '../src/domains/pokemon/long-form/mixed-challenge/renderer.mjs';
 import { buildLandscapeBackgroundCatalog } from '../src/domains/pokemon/long-form/media-catalog.mjs';
 import { renderSmoothLandscapeBackground } from '../src/domains/pokemon/long-form/smooth-background-renderer.mjs';
+import { probeMediaDurationSeconds } from '../src/domains/pokemon/templates/dual-type-reveal/render/media-probe.mjs';
 import { buildPokeQuizzRenderPlan, renderPokeQuizzVideo } from '../src/poke-quizz-renderer.mjs';
 import { scanPokeQuizzAssetInventory } from '../src/poke-quizz-asset-inventory.mjs';
 import { resolveManagedPokeQuizzPreviewOutputPath } from '../src/poke-quizz-preview-storage.mjs';
@@ -74,7 +75,7 @@ function resolveSectionState(selectionState, templateKey) {
   return selectionState?.sections?.[templateKey] || null;
 }
 
-function withLandscapeBackground(plan, backgroundPath) {
+function withLandscapeBackground(plan, backgroundPath, sourceBackgroundPath) {
   return {
     ...plan,
     content_format: 'long_form_section',
@@ -91,6 +92,7 @@ function withLandscapeBackground(plan, backgroundPath) {
       ...(plan?.assets || {}),
       background: {
         ...(plan?.assets?.background || {}),
+        source_path: sourceBackgroundPath,
         selected_path: backgroundPath,
       },
     },
@@ -214,6 +216,40 @@ export async function generatePokemonLongFormReview(options = {}) {
     const baseTemplate = baseTemplateByKey.get(spec.key);
     const sectionTemplate = adaptPokemonShortTemplateToLandscape(baseTemplate);
     const sectionSeed = `${seed}:section:${sectionIndex + 1}:${spec.key}`;
+    const segmentPath = resolve(
+      segmentRoot,
+      `${String(sectionIndex + 1).padStart(2, '0')}-${spec.key}.mp4`,
+    );
+    const sectionPlanCandidatePath = resolve(
+      planRoot,
+      `${String(sectionIndex + 1).padStart(2, '0')}-${spec.key}.plan.json`,
+    );
+    const resumedPlan = await loadOptionalJson(sectionPlanCandidatePath);
+    const resumedDuration = resumedPlan
+      ? await probeMediaDurationSeconds({
+          ffmpegExecutable,
+          mediaPath: segmentPath,
+          cwd: projectRoot,
+        })
+      : null;
+    if (resumedPlan && Number(resumedDuration) > 1) {
+      printInfo(`Reusing completed landscape section ${sectionIndex + 1}/${orderedSpecs.length}: ${spec.key}.`);
+      sectionPaths.push(segmentPath);
+      sectionSummaries.push(buildSectionSummary({
+        sectionIndex,
+        templateKey: spec.key,
+        plan: resumedPlan,
+        renderResult: { render_plan: { total_duration_seconds: resumedDuration } },
+        sourceBackground: {
+          path: resumedPlan?.assets?.background?.source_path || '',
+        },
+        renderedBackgroundPath: resumedPlan?.assets?.background?.selected_path || '',
+        segmentPath,
+        planPath: sectionPlanCandidatePath,
+      }));
+      nextSelectionState.sections[spec.key] = resumedPlan.selection_state || {};
+      continue;
+    }
     printInfo(`Planning landscape section ${sectionIndex + 1}/${orderedSpecs.length}: ${spec.key}.`);
     const plannedSection = await planPokemonTypeChallenge({
       template: sectionTemplate,
@@ -231,7 +267,7 @@ export async function generatePokemonLongFormReview(options = {}) {
     const initialRenderPlan = buildPokeQuizzRenderPlan({
       plan: plannedSection,
       template: sectionTemplate,
-      outputPath: resolve(segmentRoot, `${String(sectionIndex + 1).padStart(2, '0')}-${spec.key}.mp4`),
+      outputPath: segmentPath,
     });
     const backgroundDuration = Number((
       Math.max(1, Number(initialRenderPlan.total_duration_seconds || 1)) + 15
@@ -250,13 +286,9 @@ export async function generatePokemonLongFormReview(options = {}) {
       ffmpegExecutable,
       projectRoot,
     });
-    const plan = withLandscapeBackground(plannedSection, backgroundPath);
-    const segmentPath = resolve(
-      segmentRoot,
-      `${String(sectionIndex + 1).padStart(2, '0')}-${spec.key}.mp4`,
-    );
+    const plan = withLandscapeBackground(plannedSection, backgroundPath, sourceBackground.path);
     const sectionPlanPath = await writeJson(
-      resolve(planRoot, `${String(sectionIndex + 1).padStart(2, '0')}-${spec.key}.plan.json`),
+      sectionPlanCandidatePath,
       plan,
     );
     const kokoro = resolvePokeQuizzVoiceRuntime({
