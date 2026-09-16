@@ -20,7 +20,7 @@ The first production target is an 8–9 minute Ultimate Pokemon Quiz. Eight minu
 
 ## V1: Ultimate Pokemon Quiz
 
-Status: in progress
+Status: first 8:07 preview generated; awaiting visual and pacing review
 
 Target runtime: approximately 8:07
 
@@ -55,7 +55,8 @@ V1 presentation requirements:
 - [ ] Review the first full preview for pacing and legibility on desktop and mobile.
 - [ ] Tune question time, reveal hold, hook length, and outro length while preserving at least eight minutes.
 - [ ] Confirm music transitions and narration/music balance.
-- [ ] Confirm every selected background is landscape and remains sharp after cover cropping.
+- [x] Enforce landscape dimensions before selection; the first live scan found 11 eligible backgrounds.
+- [ ] Confirm the selected backgrounds remain sharp and composed well after cover cropping.
 - [ ] Confirm all question modes are understandable without narration on every round.
 - [ ] Add or replace weak question modes based on viewer experience.
 - [ ] Add custom 16:9 thumbnail generation and upload.
@@ -94,3 +95,4 @@ When enabled, long-form replenishment must have its own per-channel target and c
 - 2026-09-16: Chose an 8–9 minute V1 target to optimize for retention before expanding duration.
 - 2026-09-16: Chose Ultimate Pokemon Quiz as the first production format.
 - 2026-09-16: Kept long-form manual-only and isolated from the existing Shorts pools.
+- 2026-09-16: Generated the first 487-second Poke Quizz preview with seed `ultimate-quiz-v1-preview-20260916`; review task `TASK-ORION-PQ-PUBLISH-20260916141505-D3B739A8D6E7`.
