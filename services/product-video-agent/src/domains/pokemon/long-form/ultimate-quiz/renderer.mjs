@@ -8,7 +8,6 @@ import {
   slugify,
 } from '../../templates/dual-type-reveal/render/constants.mjs';
 import { resolveFontPath } from '../../templates/dual-type-reveal/render/drawtext-artifacts.mjs';
-import { writeChannelWatermarkedVisualFilterScript } from '../../templates/shared/render/channel-watermark.mjs';
 import {
   buildUltimateQuizAudioFilter,
   buildUltimateQuizAudioInputArgs,
@@ -97,17 +96,23 @@ export async function renderUltimatePokemonQuiz({
     renderPlan,
     inputRefs: {
       backgrounds: renderPlan.chapters.map((_, index) => roleIndex.get(`background-${index}`)),
-      rounds: renderPlan.rounds.map((round) => ({
-        sprite: roleIndex.get(`round-${round.round_number}-sprite`),
-      })),
+      rounds: renderPlan.rounds.map((round) => (
+        round.mode === 'type_clue' && round.type_board
+          ? {
+            typeIcons: (round.type_board.type_icons || []).map((_, index) => (
+              roleIndex.get(`round-${round.round_number}-type-${index}`)
+            )),
+            pokeball: roleIndex.get(`round-${round.round_number}-pokeball`),
+            boardSprites: (round.type_board.subjects || []).map((_, index) => (
+              roleIndex.get(`round-${round.round_number}-board-${index}`)
+            )),
+          }
+          : { sprite: roleIndex.get(`round-${round.round_number}-sprite`) }
+      )),
     },
     fontPath,
   });
-  await writeChannelWatermarkedVisualFilterScript(visualFilterPath, visualFilter, {
-    plan,
-    renderPlan,
-    fontPath,
-  });
+  await writeFile(visualFilterPath, visualFilter.script, 'utf8');
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
   await runLocalProcess({

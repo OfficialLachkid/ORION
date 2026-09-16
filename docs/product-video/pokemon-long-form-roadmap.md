@@ -4,7 +4,7 @@
 
 Build original, repeatable Pokemon watch-page videos without changing the established Shorts planners, renderers, template weights, or night-shift backlog.
 
-The first production target is an 8–9 minute Ultimate Pokemon Quiz. Eight minutes is the minimum target, not padding: a planned episode may run slightly longer when narration or a final challenge benefits from it.
+The first production target is a retention-focused Ultimate Pokemon Quiz. The first preview proved the native 16:9 pipeline at 8:07; V1.1 intentionally shortens the round loop while richer sections are developed.
 
 ## Guardrails
 
@@ -16,13 +16,13 @@ The first production target is an 8–9 minute Ultimate Pokemon Quiz. Eight minu
 - A long-form render must use a 16:9 media profile and landscape-eligible backgrounds.
 - Planning resolves all random choices before rendering so a seed reproduces the same episode.
 - Each generated episode must vary materially in subjects, round order, background program, music program, and supported prompt variants.
-- Reuse Pokemon data, approved media, TTS, cries, sound effects, watermarking, publication storage, and review workflow. Do not concatenate rendered Shorts or reuse their 9:16 layouts.
+- Reuse Pokemon data, approved media, TTS, cries, sound effects, animation primitives, publication storage, and review workflow. Do not concatenate rendered Shorts or reuse their 9:16 layouts.
 
 ## V1: Ultimate Pokemon Quiz
 
-Status: first 8:07 preview generated; awaiting visual and pacing review
+Status: first 8:07 preview reviewed; V1.1 visual and pacing refinement in progress
 
-Target runtime: approximately 8:07
+Current V1.1 runtime: approximately 3:07; new retention sections will be added after the core round loop is approved
 
 Episode structure:
 
@@ -32,10 +32,10 @@ Episode structure:
 4. Hard chapter: 8 questions
 5. 16-second score/result outro
 
-Each question lasts 18.5 seconds and uses one of the initial round modes:
+Each question lasts 6 seconds: 5 seconds to guess and 1 second for the answer reveal. It uses one of the initial round modes:
 
 - Silhouette: identify the Pokemon before the reveal.
-- Type clue: identify it from its type combination and silhouette.
+- Type clue: identify the matching Pokemon from an animated dual-type grid adapted from the Short template.
 - Cry clue: listen to the Pokemon cry before the reveal.
 
 V1 presentation requirements:
@@ -43,17 +43,21 @@ V1 presentation requirements:
 - Native 1920x1080 output at 30 fps
 - Three landscape backgrounds selected before render
 - Three background-music selections, changed at chapter boundaries
-- Background roaming and chapter crossfades
+- Full-range background scanning at a tighter crop, blur 6, and chapter crossfades without darkening or color adjustment
 - Persistent round/chapter progress and self-scored points
 - Ding at the answer reveal, followed by the Pokemon cry where appropriate
-- Channel-aware watermark after the intro
+- No watermark in this long-form format
 - Manual upload as an unlisted YouTube watch-page preview
 - Discord review card in the selected channel's existing review thread
 
 ## V1 Refinement Checklist
 
 - [ ] Review the first full preview for pacing and legibility on desktop and mobile.
-- [ ] Tune question time, reveal hold, hook length, and outro length while preserving at least eight minutes.
+- [x] Tune the core question loop to 5 seconds guessing plus a 1-second reveal.
+- [x] Prefer animated Pokemon GIFs and fall back to static sprites only when unavailable.
+- [x] Adapt the dual-type Short's icon, Pokeball-grid, and reveal animations to native 16:9.
+- [x] Remove the long-form watermark and background darkening; use blur 6 instead.
+- [ ] Add new retention-focused sections to build the approved core loop back toward eight minutes.
 - [ ] Confirm music transitions and narration/music balance.
 - [x] Enforce landscape dimensions before selection; the first live scan found 11 eligible backgrounds.
 - [ ] Confirm the selected backgrounds remain sharp and composed well after cover cropping.
@@ -96,3 +100,4 @@ When enabled, long-form replenishment must have its own per-channel target and c
 - 2026-09-16: Chose Ultimate Pokemon Quiz as the first production format.
 - 2026-09-16: Kept long-form manual-only and isolated from the existing Shorts pools.
 - 2026-09-16: Generated the first 487-second Poke Quizz preview with seed `ultimate-quiz-v1-preview-20260916`; review task `TASK-ORION-PQ-PUBLISH-20260916141505-D3B739A8D6E7`.
+- 2026-09-16: Shortened V1.1 to a 5-second guess and 1-second reveal, reused the dual-type grid language, removed the watermark, and changed background treatment to blur-only full-range scanning.

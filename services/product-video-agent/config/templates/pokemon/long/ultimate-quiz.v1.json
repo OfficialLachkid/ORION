@@ -14,8 +14,8 @@
   "episode": {
     "intro_duration_seconds": 12,
     "chapter_intro_duration_seconds": 5,
-    "question_duration_seconds": 18.5,
-    "answer_reveal_seconds": 12,
+    "question_duration_seconds": 6,
+    "answer_reveal_seconds": 5,
     "outro_duration_seconds": 16,
     "chapters": [
       {
@@ -70,12 +70,11 @@
     "background": {
       "motion": {
         "enabled": true,
-        "zoom_scale": 1.1,
+        "zoom_scale": 1.3,
         "subpixel_scale": 1,
-        "pan_cycle_seconds": 28,
-        "vertical_pan_ratio": 0.35
+        "scan_passes": 3
       },
-      "darken_alpha": 0.32
+      "blur_sigma": 6
     },
     "text": {
       "font_candidates": [

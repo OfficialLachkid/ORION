@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { planUltimatePokemonQuiz } from '../src/domains/pokemon/long-form/ultimate-quiz/planner.mjs';
 import { buildUltimateQuizRenderPlan } from '../src/domains/pokemon/long-form/ultimate-quiz/render-plan.mjs';
+import { buildUltimateQuizVisualFilter } from '../src/domains/pokemon/long-form/ultimate-quiz/visual-filter.mjs';
+import { buildUltimateQuizVisualInputs } from '../src/domains/pokemon/long-form/ultimate-quiz/visual-inputs.mjs';
 import { buildLandscapeBackgroundCatalog } from '../src/domains/pokemon/long-form/media-catalog.mjs';
 import { createPokeQuizzPublicationRegistration } from '../src/poke-quizz-publication-registration.mjs';
 import { buildYoutubeVideoUrl } from '../src/youtube-publication-executor.mjs';
@@ -33,22 +35,41 @@ function buildRows(root, count = 60) {
       slug: `pokemon-${number}`,
       generation: Math.min(9, Math.ceil(number / 7)),
       region: 'fixture',
-      types: number % 2 === 0 ? ['water'] : ['fire', 'flying'],
+      types: number % 2 === 0 ? ['water', 'ice'] : ['fire', 'flying'],
       sprite_path: join(root, `sprite-${number}.png`),
+      animated_sprite_path: join(root, `sprite-${number}.gif`),
       cry_path: join(root, `cry-${number}.ogg`),
       metadata: { pokemon_api: { is_default_form: true } },
     };
   });
 }
 
-test('Ultimate Pokemon Quiz plans a deterministic native 16:9 episode over eight minutes', async () => {
+test('Ultimate Pokemon Quiz plans a deterministic native 16:9 episode with Short-style type grids', async () => {
   const root = await mkdtemp(join(tmpdir(), 'orion-long-form-'));
   const rows = buildRows(root);
-  await Promise.all(rows.map((row) => writeFile(row.cry_path, 'fixture')));
+  await Promise.all(rows.flatMap((row) => [
+    writeFile(row.cry_path, 'fixture'),
+    writeFile(row.animated_sprite_path, 'fixture'),
+  ]));
   const template = await loadTemplate();
   const inventory = {
     music: ['/music/one.mp3', '/music/two.mp3', '/music/three.mp3', '/music/four.mp3'],
     sound_effects: { ding: '/sfx/ding.mp3' },
+    overlay_presets: { pokeball_primary: '/overlays/pokeball.gif' },
+    type_icons: {
+      three_d: [],
+      pixel: [],
+      three_d_styles: {
+        fixture: {
+          paths_by_type: {
+            fire: '/types/fire.png',
+            flying: '/types/flying.png',
+            water: '/types/water.png',
+            ice: '/types/ice.png',
+          },
+        },
+      },
+    },
     directories: { previews: '/previews' },
   };
   const landscapeBackgrounds = [1, 2, 3, 4].map((number) => ({
@@ -79,9 +100,17 @@ test('Ultimate Pokemon Quiz plans a deterministic native 16:9 episode over eight
   });
   assert.equal(first.rounds.length, 24);
   assert.equal(first.chapters.length, 3);
-  assert.ok(first.timing.total_duration_seconds >= 480);
-  assert.equal(first.timing.total_duration_seconds, 487);
+  assert.equal(first.timing.answer_reveal_seconds, 5);
+  assert.equal(first.timing.question_duration_seconds, 6);
+  assert.equal(first.timing.total_duration_seconds, 187);
   assert.equal(new Set(first.rounds.map((round) => round.subject.slug)).size, 24);
+  assert.equal(first.rounds.every((round) => round.subject.render_sprite_path.endsWith('.gif')), true);
+  const typeRounds = first.rounds.filter((round) => round.mode === 'type_clue');
+  assert.ok(typeRounds.length > 0);
+  assert.equal(typeRounds.every((round) => round.type_board.subjects.length >= 2), true);
+  assert.equal(typeRounds.every((round) => round.type_board.subjects.every(
+    (subject) => subject.render_sprite_path.endsWith('.gif'),
+  )), true);
   assert.deepEqual(first.rounds, second.rounds);
   assert.deepEqual(first.assets.backgrounds, second.assets.backgrounds);
   assert.equal(first.publication_policy.related_video_enabled, false);
@@ -89,7 +118,42 @@ test('Ultimate Pokemon Quiz plans a deterministic native 16:9 episode over eight
   const renderPlan = buildUltimateQuizRenderPlan({ plan: first, template, outputPath: '/tmp/out.mp4' });
   assert.equal(renderPlan.canvas.width, 1920);
   assert.equal(renderPlan.canvas.height, 1080);
-  assert.equal(renderPlan.total_duration_seconds, 487);
+  assert.equal(renderPlan.total_duration_seconds, 187);
+
+  const visualInputs = buildUltimateQuizVisualInputs(first, renderPlan);
+  const animatedSpriteInputs = visualInputs.filter((input) => (
+    input.role.includes('-sprite') || input.role.includes('-board-')
+  ));
+  assert.ok(animatedSpriteInputs.length > 24);
+  assert.equal(animatedSpriteInputs.every((input) => input.path.endsWith('.gif')), true);
+  assert.equal(animatedSpriteInputs.every((input) => input.args.includes('-ignore_loop')), true);
+  const roleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
+  const visualFilter = buildUltimateQuizVisualFilter({
+    plan: first,
+    template,
+    renderPlan,
+    inputRefs: {
+      backgrounds: renderPlan.chapters.map((_, index) => roleIndex.get(`background-${index}`)),
+      rounds: renderPlan.rounds.map((round) => (
+        round.mode === 'type_clue'
+          ? {
+            typeIcons: round.type_board.type_icons.map((_, index) => (
+              roleIndex.get(`round-${round.round_number}-type-${index}`)
+            )),
+            pokeball: roleIndex.get(`round-${round.round_number}-pokeball`),
+            boardSprites: round.type_board.subjects.map((_, index) => (
+              roleIndex.get(`round-${round.round_number}-board-${index}`)
+            )),
+          }
+          : { sprite: roleIndex.get(`round-${round.round_number}-sprite`) }
+      )),
+    },
+    fontPath: '',
+  });
+  assert.match(visualFilter.script, /gblur=sigma=6:steps=1/u);
+  assert.match(visualFilter.script, /acos\(cos\(3\*PI/u);
+  assert.match(visualFilter.script, /typeGridPokeball/u);
+  assert.doesNotMatch(visualFilter.script, /drawbox=/u);
 });
 
 test('landscape catalog excludes portrait, square, small, and overly narrow media', async () => {

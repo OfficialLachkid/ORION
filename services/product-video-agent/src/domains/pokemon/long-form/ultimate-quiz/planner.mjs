@@ -1,6 +1,12 @@
-import { scanPokeQuizzAssetInventory } from '../../../../poke-quizz-asset-inventory.mjs';
+import { access } from 'node:fs/promises';
+import {
+  scanPokeQuizzAssetInventory,
+  selectTypeIconSet,
+} from '../../../../poke-quizz-asset-inventory.mjs';
 import { resolvePokemonChannelIdentity } from '../../templates/shared/render/channel-watermark.mjs';
 import { resolvePokemonCryPath } from '../../templates/shared/pokemon-cry-resolver.mjs';
+
+const spriteAvailabilityCache = new Map();
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -110,7 +116,25 @@ function buildRoundMode(chapter, index, random) {
   return modes[(index + offset) % modes.length];
 }
 
-function normalizeSelectedSubject(subject, cryPath) {
+async function canAccessPath(filePath) {
+  const normalizedPath = String(filePath || '').trim();
+  if (!normalizedPath) return false;
+  if (!spriteAvailabilityCache.has(normalizedPath)) {
+    spriteAvailabilityCache.set(
+      normalizedPath,
+      access(normalizedPath).then(() => true).catch(() => false),
+    );
+  }
+  return spriteAvailabilityCache.get(normalizedPath);
+}
+
+async function resolveRenderSpritePath(subject) {
+  const animatedPath = String(subject?.animated_sprite_path || '').trim();
+  if (animatedPath && await canAccessPath(animatedPath)) return animatedPath;
+  return String(subject?.sprite_path || '').trim();
+}
+
+async function normalizeSelectedSubject(subject, cryPath = '') {
   return {
     id: subject.id || null,
     national_dex_number: Number(subject.national_dex_number),
@@ -120,7 +144,53 @@ function normalizeSelectedSubject(subject, cryPath) {
     region: String(subject.region || '').trim(),
     types: (Array.isArray(subject.types) ? subject.types : []).map(String),
     sprite_path: String(subject.sprite_path || '').trim(),
+    animated_sprite_path: String(subject.animated_sprite_path || '').trim(),
+    render_sprite_path: await resolveRenderSpritePath(subject),
     cry_path: String(cryPath || '').trim(),
+  };
+}
+
+function typePairKey(types = []) {
+  return (Array.isArray(types) ? types : [])
+    .map((type) => String(type || '').trim().toLowerCase())
+    .filter(Boolean)
+    .sort()
+    .join('|');
+}
+
+async function buildTypeClueBoard({ subject, subjects, random, inventory, maxSubjects = 6 }) {
+  const pair = (Array.isArray(subject?.types) ? subject.types : [])
+    .map((type) => String(type || '').trim().toLowerCase())
+    .filter(Boolean);
+  if (pair.length !== 2) return null;
+  const pairKey = typePairKey(pair);
+  const matches = subjects.filter((candidate) => typePairKey(candidate.types) === pairKey);
+  if (matches.length < 2) return null;
+
+  const subjectKey = normalizeSubjectKey(subject);
+  const otherMatches = shuffle(
+    matches.filter((candidate) => normalizeSubjectKey(candidate) !== subjectKey),
+    random,
+  );
+  const selected = shuffle(
+    [subject, ...otherMatches.slice(0, Math.max(1, maxSubjects - 1))],
+    random,
+  );
+  const typeIconSet = selectTypeIconSet(pair, inventory);
+  const typeIcons = pair.map((type, index) => ({
+    type,
+    local_path: String(typeIconSet.file_paths[index] || '').trim(),
+    style: typeIconSet.style,
+    style_variant: typeIconSet.style_variant,
+  }));
+  const pokeballPath = String(inventory?.overlay_presets?.pokeball_primary || '').trim();
+  if (!pokeballPath || typeIcons.some((icon) => !icon.local_path)) return null;
+
+  return {
+    type_pair: pair,
+    type_icons: typeIcons,
+    pokeball_path: pokeballPath,
+    subjects: await Promise.all(selected.map((candidate) => normalizeSelectedSubject(candidate))),
   };
 }
 
@@ -181,8 +251,8 @@ export async function planUltimatePokemonQuiz({
 
   const introDuration = Number(template?.episode?.intro_duration_seconds || 12);
   const chapterIntroDuration = Number(template?.episode?.chapter_intro_duration_seconds || 5);
-  const questionDuration = Number(template?.episode?.question_duration_seconds || 18.5);
-  const answerReveal = Number(template?.episode?.answer_reveal_seconds || 12);
+  const questionDuration = Number(template?.episode?.question_duration_seconds || 6);
+  const answerReveal = Number(template?.episode?.answer_reveal_seconds || 5);
   const outroDuration = Number(template?.episode?.outro_duration_seconds || 16);
   const recentKeys = new Set(selectionState?.recent_subject_keys || []);
   const usedKeys = new Set();
@@ -212,10 +282,17 @@ export async function planUltimatePokemonQuiz({
       const subject = selected[index];
       const requestedMode = buildRoundMode(chapterConfig, index, random);
       const cryPath = await resolvePokemonCryPath(subject);
-      const mode = requestedMode === 'cry_clue' && !cryPath ? 'silhouette' : requestedMode;
+      const typeBoard = requestedMode === 'type_clue'
+        ? await buildTypeClueBoard({ subject, subjects, random, inventory: assets })
+        : null;
+      const mode = requestedMode === 'cry_clue' && !cryPath
+        ? 'silhouette'
+        : requestedMode === 'type_clue' && !typeBoard
+          ? 'silhouette'
+          : requestedMode;
       const startSeconds = questionsStart + (index * questionDuration);
       const answerStartSeconds = startSeconds + answerReveal;
-      const normalizedSubject = normalizeSelectedSubject(subject, cryPath);
+      const normalizedSubject = await normalizeSelectedSubject(subject, cryPath);
       const round = {
         round_number: roundNumber,
         chapter_key: String(chapterConfig.key || `chapter-${chapterIndex + 1}`),
@@ -231,6 +308,7 @@ export async function planUltimatePokemonQuiz({
         answer_start_seconds: Number(answerStartSeconds.toFixed(3)),
         end_seconds: Number((startSeconds + questionDuration).toFixed(3)),
         subject: normalizedSubject,
+        type_board: mode === 'type_clue' ? typeBoard : null,
       };
       chapterRounds.push(round);
       rounds.push(round);
@@ -253,9 +331,7 @@ export async function planUltimatePokemonQuiz({
 
   const outroStart = cursor;
   const totalDuration = Number((outroStart + outroDuration).toFixed(3));
-  if (totalDuration < 480) {
-    throw new Error(`Long-form quiz runtime is ${totalDuration}s; V1 must remain at least 480s.`);
-  }
+  if (totalDuration <= 0) throw new Error('Long-form quiz runtime must be positive.');
   const introText = pick(template?.question_contract?.intro_spoken_variants, random);
   const outroText = pick(template?.question_contract?.outro_spoken_variants, random);
   const hookText = pick(template?.question_contract?.hook_variants, random, 'THE ULTIMATE POKEMON QUIZ');

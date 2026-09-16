@@ -23,14 +23,48 @@ export function buildUltimateQuizVisualInputs(plan, renderPlan) {
       renderPlan.canvas.fps,
     ),
   }));
-  const sprites = renderPlan.rounds.map((round) => ({
-    role: `round-${round.round_number}-sprite`,
-    path: String(round?.subject?.sprite_path || '').trim(),
-    args: buildLoopingInputArgs(
-      String(round?.subject?.sprite_path || '').trim(),
-      Number(round.end_seconds) - Number(round.start_seconds),
-      renderPlan.canvas.fps,
-    ),
-  }));
-  return [...backgrounds, ...sprites];
+  const roundInputs = renderPlan.rounds.flatMap((round) => {
+    const duration = Number(round.end_seconds) - Number(round.start_seconds);
+    if (round.mode === 'type_clue' && round.type_board) {
+      const typeIcons = (round.type_board.type_icons || []).map((icon, index) => ({
+        role: `round-${round.round_number}-type-${index}`,
+        path: String(icon.local_path || '').trim(),
+        args: buildLoopingInputArgs(
+          String(icon.local_path || '').trim(),
+          duration,
+          renderPlan.canvas.fps,
+        ),
+      }));
+      const pokeballPath = String(round.type_board.pokeball_path || '').trim();
+      const pokeball = {
+        role: `round-${round.round_number}-pokeball`,
+        path: pokeballPath,
+        args: buildLoopingInputArgs(pokeballPath, duration, renderPlan.canvas.fps),
+      };
+      const boardSprites = (round.type_board.subjects || []).map((subject, index) => {
+        const spritePath = String(
+          subject.render_sprite_path || subject.animated_sprite_path || subject.sprite_path || '',
+        ).trim();
+        return {
+          role: `round-${round.round_number}-board-${index}`,
+          path: spritePath,
+          args: buildLoopingInputArgs(spritePath, duration, renderPlan.canvas.fps),
+        };
+      });
+      return [...typeIcons, pokeball, ...boardSprites];
+    }
+
+    const spritePath = String(
+      round?.subject?.render_sprite_path
+      || round?.subject?.animated_sprite_path
+      || round?.subject?.sprite_path
+      || '',
+    ).trim();
+    return [{
+      role: `round-${round.round_number}-sprite`,
+      path: spritePath,
+      args: buildLoopingInputArgs(spritePath, duration, renderPlan.canvas.fps),
+    }];
+  });
+  return [...backgrounds, ...roundInputs];
 }

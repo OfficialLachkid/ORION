@@ -2,7 +2,11 @@ import {
   escapeDrawtextText,
   escapeFilterPath,
 } from '../../templates/dual-type-reveal/render/constants.mjs';
-import { buildBackgroundPreparationFilter } from '../../templates/shared/render/background-motion.mjs';
+import {
+  buildAnimatedPopSettleExpression,
+  buildScaleFilterTimeExpression,
+} from '../../templates/dual-type-reveal/render/animation-expressions.mjs';
+import { buildLongFormBackgroundPreparationFilter } from '../background-motion.mjs';
 
 function between(start, end) {
   return `between(t,${Number(start).toFixed(3)},${Number(end).toFixed(3)})`;
@@ -35,12 +39,115 @@ function appendFilter(filters, state, filter) {
 
 function modeLabel(round) {
   if (round.mode === 'cry_clue') return 'CRY CHALLENGE';
-  if (round.mode === 'type_clue') return 'TYPE CLUE';
+  if (round.mode === 'type_clue') return 'TYPE GRID';
   return 'SILHOUETTE';
 }
 
-function typeLabel(round) {
-  return (round?.subject?.types || []).map((type) => String(type).toUpperCase()).join('  +  ');
+function fixed(value, digits = 3) {
+  return Number(Number(value || 0).toFixed(digits));
+}
+
+function buildLandscapeGrid(itemCount) {
+  const count = Math.max(1, Math.min(6, Number(itemCount || 0)));
+  const columns = count <= 3 ? count : count === 4 ? 2 : 3;
+  const rows = Math.ceil(count / columns);
+  const itemSize = count <= 2 ? 300 : count <= 4 ? 240 : 210;
+  const columnGap = count <= 2 ? 125 : 85;
+  const rowGap = 42;
+  const gridHeight = (rows * itemSize) + ((rows - 1) * rowGap);
+  const originY = rows === 1 ? 415 : 350;
+  const cells = [];
+  for (let index = 0; index < count; index += 1) {
+    const row = Math.floor(index / columns);
+    const column = index % columns;
+    const itemsInRow = Math.min(columns, count - (row * columns));
+    const rowWidth = (itemsInRow * itemSize) + ((itemsInRow - 1) * columnGap);
+    const rowOriginX = Math.floor((1920 - rowWidth) / 2);
+    cells.push({
+      centerX: rowOriginX + (column * (itemSize + columnGap)) + (itemSize / 2),
+      centerY: originY + (row * (itemSize + rowGap)) + (itemSize / 2),
+      itemSize,
+    });
+  }
+  return { cells, itemSize, gridHeight };
+}
+
+function appendTypeClueBoard({ filters, state, round, inputRefs, fps, roundIndex }) {
+  const start = Number(round.start_seconds);
+  const answerStart = Number(round.answer_start_seconds);
+  const end = Number(round.end_seconds);
+  const duration = Math.max(0.5, end - start);
+  const revealDuration = Math.max(0.25, end - answerStart);
+  const transitionDuration = Math.min(0.38, Math.max(0.26, revealDuration * 0.38));
+  const transitionEnd = Math.min(end, answerStart + transitionDuration);
+  const timeExpression = buildScaleFilterTimeExpression({ fps, streamStartSeconds: start });
+  const iconSize = 150;
+  const iconGap = 44;
+  const iconCount = inputRefs.typeIcons.length;
+  const iconStartX = (1920 - ((iconCount * iconSize) + ((iconCount - 1) * iconGap))) / 2;
+
+  inputRefs.typeIcons.forEach((inputRef, iconIndex) => {
+    const pop = buildAnimatedPopSettleExpression(start, 0.42, 0.05, 1.12, 1, timeExpression);
+    const iconLabel = `typeGridIcon${roundIndex}_${iconIndex}`;
+    filters.push(
+      `[${inputRef}:v]fps=${fps},trim=duration=${duration},setpts=PTS-STARTPTS+${fixed(start)}/TB,scale=w='${iconSize}*(${pop})':h='${iconSize}*(${pop})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${iconLabel}]`,
+    );
+    const next = `typeGridIconStage${roundIndex}_${iconIndex}`;
+    filters.push(
+      `[${state.label}][${iconLabel}]overlay=x=${fixed(iconStartX + (iconIndex * (iconSize + iconGap)))}+((${iconSize}-w)/2):y=235+((${iconSize}-h)/2):enable='${between(start, end)}':eof_action=pass:shortest=0[${next}]`,
+    );
+    state.label = next;
+  });
+
+  const boardSubjects = Array.isArray(round?.type_board?.subjects) ? round.type_board.subjects : [];
+  const grid = buildLandscapeGrid(boardSubjects.length);
+  const pokeballBranches = grid.cells.map((_, index) => `typeGridPokeball${roundIndex}_${index}`);
+  filters.push(
+    `[${inputRefs.pokeball}:v]fps=${fps},trim=duration=${duration},setpts=PTS-STARTPTS+${fixed(start)}/TB,format=rgba,split=${pokeballBranches.length}${pokeballBranches.map((label) => `[${label}]`).join('')}`,
+  );
+  grid.cells.forEach((cell, cellIndex) => {
+    const pop = buildAnimatedPopSettleExpression(
+      start + (cellIndex * 0.045),
+      0.42,
+      0.04,
+      1.1,
+      1,
+      timeExpression,
+    );
+    const shrink = `if(lt(${timeExpression},${fixed(answerStart)}),1,max(0.02,1-((${timeExpression}-${fixed(answerStart)})/${fixed(transitionDuration)})))`;
+    const size = fixed(cell.itemSize * 1.08);
+    const scaledLabel = `typeGridPokeballScaled${roundIndex}_${cellIndex}`;
+    filters.push(
+      `[${pokeballBranches[cellIndex]}]scale=w='${size}*(${pop})*(${shrink})':h='${size}*(${pop})*(${shrink})':eval=frame:force_original_aspect_ratio=decrease,setsar=1[${scaledLabel}]`,
+    );
+    const next = `typeGridBallStage${roundIndex}_${cellIndex}`;
+    filters.push(
+      `[${state.label}][${scaledLabel}]overlay=x=${fixed(cell.centerX)}-w/2:y=${fixed(cell.centerY)}-h/2:enable='${between(start, transitionEnd)}':eof_action=pass:shortest=0[${next}]`,
+    );
+    state.label = next;
+  });
+
+  inputRefs.boardSprites.forEach((inputRef, cellIndex) => {
+    const cell = grid.cells[cellIndex];
+    if (!cell) return;
+    const pop = buildAnimatedPopSettleExpression(
+      answerStart + (cellIndex * 0.025),
+      transitionDuration,
+      0.03,
+      1.12,
+      1,
+      timeExpression,
+    );
+    const spriteLabel = `typeGridSprite${roundIndex}_${cellIndex}`;
+    filters.push(
+      `[${inputRef}:v]fps=${fps},trim=duration=${duration},setpts=PTS-STARTPTS+${fixed(start)}/TB,scale=w='${cell.itemSize}*(${pop})':h='${cell.itemSize}*(${pop})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${spriteLabel}]`,
+    );
+    const next = `typeGridRevealStage${roundIndex}_${cellIndex}`;
+    filters.push(
+      `[${state.label}][${spriteLabel}]overlay=x=${fixed(cell.centerX)}-w/2:y=${fixed(cell.centerY)}-h/2:enable='${between(answerStart, end)}':eof_action=pass:shortest=0[${next}]`,
+    );
+    state.label = next;
+  });
 }
 
 export function buildUltimateQuizVisualFilter({
@@ -54,13 +161,16 @@ export function buildUltimateQuizVisualFilter({
   const filters = [];
   const backgroundLabels = [];
   renderPlan.chapters.forEach((chapter, index) => {
-    const prepared = buildBackgroundPreparationFilter({
+    const prepared = buildLongFormBackgroundPreparationFilter({
       inputRef: inputRefs.backgrounds[index],
       width,
       height,
       fps,
-      blurSigma: 0,
+      blurSigma: Number(template?.layout?.background?.blur_sigma ?? 6),
       template,
+      chapterIndex: index,
+      startSeconds: index === 0 ? 0 : Number(chapter.start_seconds),
+      endSeconds: Number(chapter.end_seconds),
     });
     const label = `bg${index}`;
     const chapterStart = index === 0 ? 0 : Number(chapter.start_seconds);
@@ -77,11 +187,21 @@ export function buildUltimateQuizVisualFilter({
     filters.push(`[${backgroundBase}][${backgroundLabels[index]}]overlay=eof_action=pass:shortest=0[${output}]`);
     backgroundBase = output;
   }
-  const darkenAlpha = Math.min(0.75, Math.max(0, Number(template?.layout?.background?.darken_alpha || 0.32)));
-  filters.push(`[${backgroundBase}]drawbox=x=0:y=0:w=iw:h=ih:color=black@${darkenAlpha}:t=fill[base]`);
+  filters.push(`[${backgroundBase}]null[base]`);
 
   const state = { label: 'base', index: 0 };
   renderPlan.rounds.forEach((round, index) => {
+    if (round.mode === 'type_clue' && round.type_board) {
+      appendTypeClueBoard({
+        filters,
+        state,
+        round,
+        inputRefs: inputRefs.rounds[index],
+        fps,
+        roundIndex: index,
+      });
+      return;
+    }
     const inputRef = inputRefs.rounds[index].sprite;
     const localDuration = Number(round.end_seconds) - Number(round.start_seconds);
     filters.push(
@@ -141,7 +261,7 @@ export function buildUltimateQuizVisualFilter({
       enable: chapterEnable,
     }));
     appendFilter(filters, state, drawText({
-      text: '8 POKEMON  -  1 POINT EACH',
+      text: '8 QUESTIONS  -  1 POINT EACH',
       fontPath,
       size: 48,
       color: 'white',
@@ -175,39 +295,32 @@ export function buildUltimateQuizVisualFilter({
     appendFilter(filters, state, drawText({
       text: round.prompt,
       fontPath,
-      size: 58,
+      size: round.mode === 'type_clue' ? 48 : 58,
       color: 'white',
       borderWidth: 7,
-      y: 145,
+      y: round.mode === 'type_clue' ? 135 : 145,
       enable: questionEnable,
     }));
-    if (round.mode === 'type_clue') {
-      appendFilter(filters, state, drawText({
-        text: typeLabel(round),
-        fontPath,
-        size: 55,
-        color: round.accent_color,
-        borderWidth: 7,
-        y: 245,
-        enable: questionEnable,
-      }));
-    }
     appendFilter(
       filters,
       state,
       `drawtext=text='%{eif\\:ceil(${Number(round.answer_start_seconds).toFixed(3)}-t)\\:d}'${fontPart(fontPath)}:fontcolor=0xFFD60A:fontsize=74:borderw=7:bordercolor=black@0.9:fix_bounds=1:x=w-text_w-105:y=865:enable='${questionEnable}'`,
     );
     appendFilter(filters, state, drawText({
-      text: round.subject.name.toUpperCase(),
+      text: round.mode === 'type_clue'
+        ? 'WHO DID YOU FORGET?'
+        : round.subject.name.toUpperCase(),
       fontPath,
-      size: 78,
+      size: round.mode === 'type_clue' ? 52 : 78,
       color: round.accent_color,
       borderWidth: 8,
-      y: 850,
+      y: round.mode === 'type_clue' ? 875 : 850,
       enable: answerEnable,
     }));
     appendFilter(filters, state, drawText({
-      text: '+1 IF YOU GOT IT RIGHT',
+      text: round.mode === 'type_clue'
+        ? '+1 IF YOU GOT THEM ALL'
+        : '+1 IF YOU GOT IT RIGHT',
       fontPath,
       size: 34,
       color: 'white',
