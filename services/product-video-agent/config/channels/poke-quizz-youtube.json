@@ -34,8 +34,8 @@
       "template_key": "progressive-reveal",
       "enabled": true,
       "manual_generate": true,
-      "night_shift": false,
-      "weight": 1,
+      "night_shift": true,
+      "weight": 2,
       "genre_label": "Progressive Reveal"
     },
     "pokemon.memory.v1": {

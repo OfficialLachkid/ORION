@@ -41,7 +41,7 @@ test('ProffMon publication profile uses its own YouTube identity, OAuth token, a
   assert.equal(resolvePublicationReviewThreadId({}, profile), '1549355550553280542');
 });
 
-test('ProffMon uses every Poke Quizz template and weight, then enables automatic scheduling', async () => {
+test('ProffMon uses every Poke Quizz template with its Progressive Reveal weight override', async () => {
   const [proffmonConfig, pokeQuizzConfig, runtimes] = await Promise.all([
     loadJson(PROFFMON_CONFIG_PATH),
     loadJson(POKE_QUIZZ_CONFIG_PATH),
@@ -52,13 +52,16 @@ test('ProffMon uses every Poke Quizz template and weight, then enables automatic
     Object.keys(pokeQuizzConfig.templates),
   );
   for (const [templateId, proffmonTemplate] of Object.entries(proffmonConfig.templates)) {
+    const expectedWeight = templateId === 'pokemon.progressive-reveal.v1'
+      ? 3
+      : pokeQuizzConfig.templates[templateId].weight;
     assert.equal(proffmonTemplate.enabled, true, `${templateId} must be enabled`);
     assert.equal(proffmonTemplate.manual_generate, true, `${templateId} must support manual generation`);
     assert.equal(proffmonTemplate.night_shift, true, `${templateId} must participate in night shift`);
     assert.equal(
       proffmonTemplate.weight,
-      pokeQuizzConfig.templates[templateId].weight,
-      `${templateId} must use the Poke Quizz weight`,
+      expectedWeight,
+      `${templateId} must use its configured ProffMon weight`,
     );
   }
   assert.equal(proffmonConfig.night_shift.review_backlog.enabled, true);
@@ -75,7 +78,7 @@ test('ProffMon uses every Poke Quizz template and weight, then enables automatic
   assert.ok(proffmonRuntime);
   assert.deepEqual(
     proffmonRuntime.nightShift.reviewBacklogTemplateWeights,
-    Object.fromEntries(Object.entries(pokeQuizzConfig.templates).map(([templateId, template]) => (
+    Object.fromEntries(Object.entries(proffmonConfig.templates).map(([templateId, template]) => (
       [templateId, template.weight]
     ))),
   );
