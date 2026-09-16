@@ -8,6 +8,7 @@ import { buildBackgroundPreparationFilter } from '../../shared/render/background
 import {
   appendProgressiveCoverFilters,
   buildCascadeFallingParticlePhases,
+  buildFluidFallingParticlePhases,
   buildProgressiveRevealProgressExpression,
 } from '../../shared/render/progressive-reveal-engine.mjs';
 
@@ -62,6 +63,7 @@ function formatMethodLabel(method) {
     edge_particles: 'EDGE PARTICLES',
     diagonal_particles: 'DIAGONAL PARTICLES',
     square_spiral: 'SQUARE SPIRAL',
+    square_spiral_inward: 'INWARD SQUARE SPIRAL',
     fluid_fill: 'FLUID PARTICLE FILL',
   };
   return labels[method] || 'PROGRESSIVE REVEAL';
@@ -136,8 +138,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       difficulty: round.reveal_difficulty,
       completionProgress: round.reveal_completion_progress,
     });
-    const fallingPhases = round.reveal_method === 'cascade'
-      ? buildCascadeFallingParticlePhases({
+    const fallingPhaseBuilder = {
+      cascade: buildCascadeFallingParticlePhases,
+      fluid_fill: buildFluidFallingParticlePhases,
+    }[round.reveal_method];
+    const fallingPhases = fallingPhaseBuilder
+      ? fallingPhaseBuilder({
         seed: round.reveal_seed,
         progressExpression: fallingProgress,
         completionProgress: round.reveal_completion_progress,

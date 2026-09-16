@@ -24,6 +24,7 @@ import { buildVisualInputs } from '../src/domains/pokemon/templates/progressive-
 import {
   appendProgressiveCoverFilters,
   buildCascadeFallingParticlePhases,
+  buildFluidFallingParticlePhases,
   buildProgressiveRevealMaskExpression,
   buildProgressiveRevealProgressExpression,
   calculateOpaqueRevealCompletionProgress,
@@ -104,7 +105,7 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.target_opaque_fraction, 0.6);
   assert.deepEqual(template.reveal.methods, PROGRESSIVE_REVEAL_METHODS);
   assert.deepEqual(
-    template.reveal.methods.slice(-7),
+    template.reveal.methods.slice(-8),
     [
       'spiral',
       'diamond',
@@ -112,6 +113,7 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
       'edge_particles',
       'diagonal_particles',
       'square_spiral',
+      'square_spiral_inward',
       'fluid_fill',
     ],
   );
@@ -121,7 +123,9 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.method_config.cascade.fall_step_count, 10);
   assert.equal(template.audio.cry_playback.delay_after_ding_seconds, 0.3);
   assert.equal(template.reveal.method_config.square_spiral.turns, 3);
+  assert.equal(template.reveal.method_config.square_spiral_inward.turns, 3);
   assert.equal(template.reveal.method_config.fluid_fill.particle_size_px, 8);
+  assert.equal(template.reveal.method_config.fluid_fill.fall_step_count, 12);
 });
 
 test('planner deterministically selects three Pokemon and seeded non-repeating reveal methods', async () => {
@@ -273,9 +277,10 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(expressions[14], /floor\(X\/8\)\*307\+floor\(Y\/8\)\*503/u);
   assert.match(expressions[15], /max\(abs\(X\/max\(1,W-1\)-0\.5\),abs\(Y\/max\(1,H-1\)-0\.5\)\)\*2/u);
   assert.match(expressions[15], /if\(lte\(Y\/max\(1,H-1\)-0\.5,-abs\(X\/max\(1,W-1\)-0\.5\)\)/u);
-  assert.match(expressions[16], /\(H-1-floor\(Y\/8\)\*8\)\/max\(1,H-1\)/u);
-  assert.match(expressions[16], /sin\(\(floor\(X\/8\)\*8\)\*0\.045/u);
-  assert.match(expressions[16], /floor\(X\/8\)\*331\+floor\(Y\/8\)\*521/u);
+  assert.match(expressions[16], /lte\(\(1-\(clip\(/u);
+  assert.match(expressions[17], /\(H-1-floor\(Y\/8\)\*8\)\/max\(1,H-1\)/u);
+  assert.match(expressions[17], /sin\(\(floor\(X\/8\)\*8\)\*0\.045/u);
+  assert.match(expressions[17], /floor\(X\/8\)\*331\+floor\(Y\/8\)\*521/u);
 });
 
 test('falling-particle phases descend in discrete sand steps before settling', () => {
@@ -300,6 +305,32 @@ test('falling-particle phases descend in discrete sand steps before settling', (
   assert.match(phases[0].maskExpression, /gt\(.+,\(\(p\)\*1\.1\)\+/u);
   assert.match(phases[0].maskExpression, /lte\(.+,min\(0\.66,/u);
   assert.doesNotMatch(phases[0].maskExpression, /and\(/u);
+  assert.ok(new Set(phases.map((phase) => phase.maskExpression)).size === phases.length);
+});
+
+test('fluid-fill particles visibly fall from the top before joining the rising pool', () => {
+  const phases = buildFluidFallingParticlePhases({
+    seed: 'fluid-pour',
+    progressExpression: 'p',
+    completionProgress: 0.6,
+    config: {
+      particle_size_px: 8,
+      particle_jitter: 0.16,
+      surface_wave_amplitude: 0.055,
+      surface_wave_frequency: 0.045,
+      fall_duration_seconds: 1.4,
+      fall_step_count: 12,
+      fall_distance_px: 748,
+      reveal_duration_seconds: 8.5,
+      progress_scale: 1.1,
+    },
+  });
+
+  assert.equal(phases.length, 12);
+  assert.equal(phases.at(-1).offsetPixels, 717);
+  assert.match(phases[0].maskExpression, /H-1-floor\(Y\/8\)\*8/u);
+  assert.match(phases[0].maskExpression, /floor\(X\/8\)\*331\+floor\(Y\/8\)\*521/u);
+  assert.match(phases[0].maskExpression, /gt\(.+,\(\(p\)\*1\.1\)\+/u);
   assert.ok(new Set(phases.map((phase) => phase.maskExpression)).size === phases.length);
 });
 
@@ -402,6 +433,25 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.equal(cryCues[0].start_seconds, renderPlan.rounds[0].answer_start_seconds + 0.3);
   assert.match(audioFilter, /cry0/u);
   assert.match(audioFilter, /cry2/u);
+
+  const fluidPlan = structuredClone(plan);
+  fluidPlan.rounds = fluidPlan.rounds.map((round) => ({
+    ...round,
+    reveal_method: 'fluid_fill',
+    reveal_config: { ...template.reveal.method_config.fluid_fill, progress_scale: 1 },
+  }));
+  const fluidRenderPlan = buildPokeQuizzRenderPlan({
+    plan: fluidPlan,
+    template,
+    outputPath: '/tmp/progressive-reveal-fluid.mp4',
+  });
+  const fluidVisualFilter = buildVisualFilterScript(fluidPlan, template, fluidRenderPlan, {
+    background: 0,
+    rounds: fluidRenderPlan.rounds.map((_, index) => ({ sprite: index + 1 })),
+  });
+  assert.match(fluidVisualFilter.script, /split=13\[round0spriteBase\]\[round0fallSource0\]/u);
+  assert.match(fluidVisualFilter.script, /round0fallSource11/u);
+  assert.match(fluidVisualFilter.script, /crop=w=748:h=748:x=0:y=[0-9]+/u);
 
   const coverFilters = [];
   appendProgressiveCoverFilters(coverFilters, {

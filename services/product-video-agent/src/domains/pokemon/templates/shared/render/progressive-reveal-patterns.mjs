@@ -5,6 +5,7 @@ export const ADDITIONAL_PROGRESSIVE_REVEAL_METHODS = Object.freeze([
   'edge_particles',
   'diagonal_particles',
   'square_spiral',
+  'square_spiral_inward',
   'fluid_fill',
 ]);
 
@@ -126,7 +127,7 @@ function buildDiagonalParticleMask(progress, seed, config) {
   return `lte(${threshold},${progress})`;
 }
 
-function buildSquareSpiralMask(progress, seed, config) {
+function buildSquareSpiralThreshold(seed, config) {
   const turns = clamp(ensureNumber(config?.turns, 3), 1, 7);
   const radialWeight = clamp(ensureNumber(config?.radial_weight, 0.62), 0.3, 0.85);
   const angularWeight = Number((1 - radialWeight).toFixed(4));
@@ -137,11 +138,18 @@ function buildSquareSpiralMask(progress, seed, config) {
   const safeRadius = `max(0.001,${radius})`;
   const squarePhase = `if(lte(${y},-abs(${x})),((${x})/${safeRadius}+1)/8,if(gte(${x},abs(${y})),0.25+((${y})/${safeRadius}+1)/8,if(gte(${y},abs(${x})),0.5+(1-(${x})/${safeRadius})/8,0.75+(1-(${y})/${safeRadius})/8)))`;
   const squareRadius = `${radius}*2`;
-  const threshold = `clip((${squareRadius})*${radialWeight}+mod(${squarePhase}+(${squareRadius})*${turns}+${phaseOffset},1)*${angularWeight},0,1)`;
-  return `lte(${threshold},${progress})`;
+  return `clip((${squareRadius})*${radialWeight}+mod(${squarePhase}+(${squareRadius})*${turns}+${phaseOffset},1)*${angularWeight},0,1)`;
 }
 
-function buildFluidFillMask(progress, seed, config) {
+function buildSquareSpiralMask(progress, seed, config) {
+  return `lte(${buildSquareSpiralThreshold(seed, config)},${progress})`;
+}
+
+function buildSquareSpiralInwardMask(progress, seed, config) {
+  return `lte((1-(${buildSquareSpiralThreshold(seed, config)})),${progress})`;
+}
+
+export function buildFluidFillThresholdExpression(seed, config = {}) {
   const size = Math.max(3, Math.round(ensureNumber(config?.particle_size_px, 8)));
   const particleJitter = clamp(ensureNumber(config?.particle_jitter, 0.16), 0, 0.4);
   const waveAmplitude = clamp(ensureNumber(config?.surface_wave_amplitude, 0.055), 0, 0.2);
@@ -155,8 +163,11 @@ function buildFluidFillMask(progress, seed, config) {
   const wavePhase = Number((((hashSeed(`${seed}:fluid-wave`) % 6284) / 1000)).toFixed(3));
   const surfaceWave = `(sin((${cellX})*${waveFrequency}+${wavePhase})+1)/2`;
   const particleOrder = buildHashExpression(`${cellColumn}*331+${cellRow}*521`, seed, 67);
-  const threshold = `clip((${risingFill})*${baseWeight}+(${surfaceWave})*${waveAmplitude}+(${particleOrder})*${particleJitter},0,1)`;
-  return `lte(${threshold},${progress})`;
+  return `clip((${risingFill})*${baseWeight}+(${surfaceWave})*${waveAmplitude}+(${particleOrder})*${particleJitter},0,1)`;
+}
+
+function buildFluidFillMask(progress, seed, config) {
+  return `lte(${buildFluidFillThresholdExpression(seed, config)},${progress})`;
 }
 
 const MASK_BUILDERS = Object.freeze({
@@ -166,6 +177,7 @@ const MASK_BUILDERS = Object.freeze({
   edge_particles: buildEdgeParticleMask,
   diagonal_particles: buildDiagonalParticleMask,
   square_spiral: buildSquareSpiralMask,
+  square_spiral_inward: buildSquareSpiralInwardMask,
   fluid_fill: buildFluidFillMask,
 });
 
@@ -293,6 +305,9 @@ export function calculateAdditionalProgressiveRevealScore(method, point, seed, c
   if (method === 'edge_particles') return calculateParticleCell(point, seed, config, 'edge');
   if (method === 'diagonal_particles') return calculateParticleCell(point, seed, config, 'diagonal');
   if (method === 'square_spiral') return calculateSquareSpiralScore(point, seed, config);
+  if (method === 'square_spiral_inward') {
+    return 1 - calculateSquareSpiralScore(point, seed, config);
+  }
   if (method === 'fluid_fill') return calculateFluidFillScore(point, seed, config);
   return null;
 }

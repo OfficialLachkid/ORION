@@ -125,6 +125,7 @@
       "edge_particles",
       "diagonal_particles",
       "square_spiral",
+      "square_spiral_inward",
       "fluid_fill"
     ],
     "duration_seconds": 8.5,
@@ -217,11 +218,18 @@
         "turns": 3,
         "radial_weight": 0.62
       },
+      "square_spiral_inward": {
+        "turns": 3,
+        "radial_weight": 0.62
+      },
       "fluid_fill": {
         "particle_size_px": 8,
         "particle_jitter": 0.16,
         "surface_wave_amplitude": 0.055,
-        "surface_wave_frequency": 0.045
+        "surface_wave_frequency": 0.045,
+        "fall_duration_seconds": 1.4,
+        "fall_step_count": 12,
+        "fall_distance_px": 748
       }
     }
   },

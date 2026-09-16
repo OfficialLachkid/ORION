@@ -1,6 +1,7 @@
 import {
   ADDITIONAL_PROGRESSIVE_REVEAL_METHODS,
   buildAdditionalProgressiveRevealMask,
+  buildFluidFillThresholdExpression,
   calculateAdditionalProgressiveRevealScore,
 } from './progressive-reveal-patterns.mjs';
 
@@ -33,6 +34,8 @@ const REVEAL_METHOD_ALIASES = Object.freeze({
   diagonal_particle: 'diagonal_particles',
   box_spiral: 'square_spiral',
   straight_spiral: 'square_spiral',
+  inward_square_spiral: 'square_spiral_inward',
+  reverse_square_spiral: 'square_spiral_inward',
   liquid_fill: 'fluid_fill',
   fluid_particles: 'fluid_fill',
 });
@@ -284,12 +287,16 @@ function buildCascadeMask(progress, seed, config) {
   return `lte(${buildCascadeThresholdExpression(seed, config)},${progress})`;
 }
 
-export function buildCascadeFallingParticlePhases({
+function buildFallingParticlePhases({
   seed = 'progressive-reveal',
   progressExpression = '0',
   completionProgress = 0.6,
   config = {},
-} = {}) {
+} = {}, {
+  defaultFallDurationSeconds,
+  defaultStepCount,
+  buildThreshold,
+}) {
   const numericSeed = hashSeed(seed) % 10000;
   const progress = String(progressExpression || '0').trim() || '0';
   const progressScale = clamp(ensureNumber(config?.progress_scale, 1), 0.05, 8);
@@ -301,11 +308,15 @@ export function buildCascadeFallingParticlePhases({
     ensureNumber(config?.reveal_duration_seconds, 8.5),
   );
   const fallDuration = clamp(
-    ensureNumber(config?.fall_duration_seconds, 1.2),
+    ensureNumber(config?.fall_duration_seconds, defaultFallDurationSeconds),
     0.1,
     fullRevealDuration,
   );
-  const stepCount = Math.round(clamp(ensureNumber(config?.fall_step_count, 10), 3, 16));
+  const stepCount = Math.round(clamp(
+    ensureNumber(config?.fall_step_count, defaultStepCount),
+    3,
+    16,
+  ));
   const fallDistance = Math.max(24, Math.round(ensureNumber(config?.fall_distance_px, 748)));
   const targetMaskProgress = Number(clamp(
     ensureNumber(completionProgress, 0.6) * progressScale,
@@ -317,7 +328,7 @@ export function buildCascadeFallingParticlePhases({
     0.005,
     targetMaskProgress,
   ).toFixed(4));
-  const threshold = buildCascadeThresholdExpression(numericSeed, config);
+  const threshold = buildThreshold(numericSeed, config);
 
   return Array.from({ length: stepCount }, (_, index) => {
     const lowerBound = Number(((fallWindow * index) / stepCount).toFixed(4));
@@ -327,6 +338,22 @@ export function buildCascadeFallingParticlePhases({
       offsetPixels: Math.round(fallDistance * ((index + 0.5) / stepCount)),
       maskExpression: `if(gt(${threshold},${maskProgress}+${lowerBound})*lte(${threshold},min(${targetMaskProgress},${maskProgress}+${upperBound})),255,0)`,
     };
+  });
+}
+
+export function buildCascadeFallingParticlePhases(options = {}) {
+  return buildFallingParticlePhases(options, {
+    defaultFallDurationSeconds: 1.2,
+    defaultStepCount: 10,
+    buildThreshold: buildCascadeThresholdExpression,
+  });
+}
+
+export function buildFluidFallingParticlePhases(options = {}) {
+  return buildFallingParticlePhases(options, {
+    defaultFallDurationSeconds: 1.4,
+    defaultStepCount: 12,
+    buildThreshold: buildFluidFillThresholdExpression,
   });
 }
 
