@@ -10,12 +10,13 @@ const POKEMON_CHANNEL_SELECTORS = Object.freeze([
   'proffmon-youtube',
 ]);
 
-test('all Pokemon channel replenish pools include Build Your Team at weight 2', async () => {
+test('all Pokemon channel replenish pools include Build Your Team with channel-specific weights', async () => {
   const runtimes = await discoverNightShiftChannelRuntimes();
   const runtimeByChannel = new Map(runtimes.map((runtime) => [runtime.channelSelector, runtime]));
 
   for (const channelSelector of POKEMON_CHANNEL_SELECTORS) {
     const runtime = runtimeByChannel.get(channelSelector);
+    const expectedWeight = channelSelector === 'proffmon-youtube' ? 3 : 2;
     assert.ok(runtime, `${channelSelector} must have a night-shift runtime`);
     assert.ok(
       runtime.nightShift.reviewBacklogTemplateIds.includes('pokemon.build-your-team.v1'),
@@ -23,8 +24,8 @@ test('all Pokemon channel replenish pools include Build Your Team at weight 2', 
     );
     assert.equal(
       runtime.nightShift.reviewBacklogTemplateWeights['pokemon.build-your-team.v1'],
-      2,
-      `${channelSelector} must weight Build Your Team at 2`,
+      expectedWeight,
+      `${channelSelector} must weight Build Your Team at ${expectedWeight}`,
     );
   }
 

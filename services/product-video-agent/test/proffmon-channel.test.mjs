@@ -23,6 +23,12 @@ const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 const CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 const PROFFMON_CONFIG_PATH = 'services/product-video-agent/config/channels/proffmon-youtube.json';
 const POKE_QUIZZ_CONFIG_PATH = 'services/product-video-agent/config/channels/poke-quizz-youtube.json';
+const PROFFMON_WEIGHT_THREE_TEMPLATE_IDS = new Set([
+  'pokemon.progressive-reveal.v1',
+  'pokemon.stat-clash.v1',
+  'pokemon.build-your-team.v1',
+  'pokemon.cry-match.v1',
+]);
 
 async function loadJson(projectRelativePath) {
   return JSON.parse(await readFile(resolve(PROJECT_ROOT, projectRelativePath), 'utf8'));
@@ -41,7 +47,7 @@ test('ProffMon publication profile uses its own YouTube identity, OAuth token, a
   assert.equal(resolvePublicationReviewThreadId({}, profile), '1549355550553280542');
 });
 
-test('ProffMon uses every Poke Quizz template with its Progressive Reveal weight override', async () => {
+test('ProffMon uses every Poke Quizz template with its selected weight overrides', async () => {
   const [proffmonConfig, pokeQuizzConfig, runtimes] = await Promise.all([
     loadJson(PROFFMON_CONFIG_PATH),
     loadJson(POKE_QUIZZ_CONFIG_PATH),
@@ -52,7 +58,7 @@ test('ProffMon uses every Poke Quizz template with its Progressive Reveal weight
     Object.keys(pokeQuizzConfig.templates),
   );
   for (const [templateId, proffmonTemplate] of Object.entries(proffmonConfig.templates)) {
-    const expectedWeight = templateId === 'pokemon.progressive-reveal.v1'
+    const expectedWeight = PROFFMON_WEIGHT_THREE_TEMPLATE_IDS.has(templateId)
       ? 3
       : pokeQuizzConfig.templates[templateId].weight;
     assert.equal(proffmonTemplate.enabled, true, `${templateId} must be enabled`);

@@ -51,7 +51,7 @@
       "enabled": true,
       "manual_generate": true,
       "night_shift": true,
-      "weight": 2,
+      "weight": 3,
       "genre_label": "Stat Clash"
     },
     "pokemon.build-your-team.v1": {
@@ -59,7 +59,7 @@
       "enabled": true,
       "manual_generate": true,
       "night_shift": true,
-      "weight": 2,
+      "weight": 3,
       "genre_label": "Build Your Team"
     },
     "pokemon.type-quiz.v1": {
@@ -83,7 +83,7 @@
       "enabled": true,
       "manual_generate": true,
       "night_shift": true,
-      "weight": 2,
+      "weight": 3,
       "genre_label": "Cry Match"
     }
   },
