@@ -320,6 +320,8 @@ export function buildPokeQuizzPublicationReviewTask({
     catalogJsonPath: String(catalogJsonPath || '').trim(),
     templatePath: String(templatePath || DEFAULT_TEMPLATE_PATH).trim(),
     configPath: String(configPath || DEFAULT_CONFIG_PATH).trim(),
+    contentFormat: String(publication?.metadata?.content_format || 'short_form').trim(),
+    contentSurface: String(publication?.metadata?.content_surface || 'youtube_shorts').trim(),
     genreLabel: effectiveReviewPresentation.genre_label,
     reviewPresentation: effectiveReviewPresentation,
     channelName: String(channelProfile?.name || '').trim(),
@@ -337,6 +339,7 @@ export function buildPokeQuizzPublicationReviewTask({
     // video would be attached). Reads from channel_profile.metadata.
     ...(
       channelProfile?.metadata?.related_video?.enabled === true
+        && String(publication?.metadata?.content_surface || 'youtube_shorts').trim() === 'youtube_shorts'
         ? {
           relatedVideoLabel: formatRelatedVideoLabel(publication?.metadata?.related_video || {}),
           relatedVideoUrl: String(publication?.metadata?.related_video?.target_url || '').trim(),
@@ -399,6 +402,8 @@ export function buildPokeQuizzFeedbackRegenerationTask({
     actorId: String(actorId || '').trim(),
     typePair: normalizeTypePair(review.typePair || []),
     seed: String(review.seed || '').trim(),
+    contentFormat: String(review.contentFormat || 'short_form').trim(),
+    contentSurface: String(review.contentSurface || 'youtube_shorts').trim(),
     ...normalizeReviewPaths(review),
     priorReviewTaskId: reviewTask?.task_id || '',
   };

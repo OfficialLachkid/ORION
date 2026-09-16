@@ -1,0 +1,113 @@
+{
+  "template_id": "pokemon.long.ultimate-quiz.v1",
+  "template_key": "long-ultimate-quiz",
+  "domain": "pokemon",
+  "content_format": "long_form",
+  "content_surface": "youtube_watch",
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "aspect_ratio": "16:9"
+  },
+  "episode": {
+    "intro_duration_seconds": 12,
+    "chapter_intro_duration_seconds": 5,
+    "question_duration_seconds": 18.5,
+    "answer_reveal_seconds": 12,
+    "outro_duration_seconds": 16,
+    "chapters": [
+      {
+        "key": "easy",
+        "label": "EASY ROUND",
+        "question_count": 8,
+        "accent_color": "0x4CD964",
+        "generation_scope": [1, 2, 3],
+        "modes": ["silhouette", "type_clue"]
+      },
+      {
+        "key": "medium",
+        "label": "MEDIUM ROUND",
+        "question_count": 8,
+        "accent_color": "0x4D96FF",
+        "generation_scope": [1, 2, 3, 4, 5, 6],
+        "modes": ["type_clue", "cry_clue", "silhouette"]
+      },
+      {
+        "key": "hard",
+        "label": "HARD ROUND",
+        "question_count": 8,
+        "accent_color": "0xFF3B30",
+        "generation_scope": [],
+        "modes": ["cry_clue", "silhouette", "type_clue"]
+      }
+    ]
+  },
+  "question_contract": {
+    "hook_variants": [
+      "THE ULTIMATE POKEMON QUIZ",
+      "HOW WELL DO YOU KNOW POKEMON?",
+      "24 POKEMON. THREE DIFFICULTIES."
+    ],
+    "intro_spoken_variants": [
+      "Welcome to the ultimate Pokemon quiz. You have twenty four Pokemon to identify across three difficulty levels. Keep track of your score, and let's begin.",
+      "Think you know Pokemon? Prove it across twenty four questions, from easy to hard. Give yourself one point for every correct answer."
+    ],
+    "outro_spoken_variants": [
+      "How many did you get right? Share your score in the comments and challenge another Pokemon fan.",
+      "That is the end of the quiz. Tell us your score in the comments, and subscribe for the next challenge."
+    ]
+  },
+  "assets": {
+    "background_count": 3,
+    "music_count": 3,
+    "minimum_background_width": 1280,
+    "minimum_background_height": 720,
+    "minimum_background_aspect_ratio": 1.4
+  },
+  "layout": {
+    "background": {
+      "motion": {
+        "enabled": true,
+        "zoom_scale": 1.1,
+        "subpixel_scale": 1,
+        "pan_cycle_seconds": 28,
+        "vertical_pan_ratio": 0.35
+      },
+      "darken_alpha": 0.32
+    },
+    "text": {
+      "font_candidates": [
+        "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
+      ]
+    }
+  },
+  "audio": {
+    "music_volume": 0.12,
+    "voice_volume": 1,
+    "ding_volume": 0.72,
+    "cry_volume": 0.28,
+    "cry_delay_after_ding_seconds": 0.3,
+    "music_crossfade_seconds": 2
+  },
+  "renderer": {
+    "video_codec": "libx264",
+    "preset": "fast",
+    "crf": 21,
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "faststart": true
+  },
+  "publication_policy": {
+    "manual_review_required": true,
+    "night_shift_enabled": false,
+    "related_video_enabled": false,
+    "auto_comment_enabled": false,
+    "custom_thumbnail_required": false,
+    "playlist_enabled": false
+  }
+}
