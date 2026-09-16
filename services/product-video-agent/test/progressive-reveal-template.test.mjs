@@ -119,6 +119,8 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   );
   assert.equal(template.layout.branding, undefined);
   assert.equal(template.layout.progress_bar, undefined);
+  assert.equal(template.layout.text.method_y, undefined);
+  assert.equal(template.layout.text.method_font_size, undefined);
   assert.equal(template.reveal.method_config.cascade.fall_duration_seconds, 1.2);
   assert.equal(template.reveal.method_config.cascade.fall_step_count, 10);
   assert.equal(template.audio.cry_playback.delay_after_ding_seconds, 0.3);
@@ -421,11 +423,12 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /xfade=transition=slideleft/u);
   assert.match(visualFilter.script, /WHO IS THAT/u);
   assert.match(visualFilter.script, /POKEMON\?/u);
+  assert.doesNotMatch(visualFilter.script, /FALLING PARTICLES|scene0method/u);
   assert.match(visualFilter.script, /\*0\.6/u);
   assert.match(visualFilter.script, /split=11\[round0spriteBase\]\[round0fallSource0\]/u);
   assert.match(visualFilter.script, /pad=w=iw:h=ih\+[0-9]+:x=0:y=0:color=0x00000000,crop=w=748:h=748:x=0:y=[0-9]+/u);
   assert.doesNotMatch(visualFilter.script, /progressTrack|progressFill|progressScaled/u);
-  assert.match(watermarkedVisualFilter.script, /drawtext=text='@PokeGuesss'.*alpha='if\(lt\(t,1\.7\),0,if\(lt\(t,2\.15\),\(t-1\.7\)\/0\.45,1\)\)'.*enable='gte\(t,1\.7\)'.*fontcolor=0xFFE45C.*bordercolor=0x2446B8/u);
+  assert.match(watermarkedVisualFilter.script, /drawtext=text='@PokeGuesss'.*alpha='if\(lt\(t,1\.7\),0,if\(lt\(t,2\.15\),\(\(t-1\.7\)\/0\.45\)\*0\.5,0\.5\)\)'.*enable='gte\(t,1\.7\)'.*fontcolor=0xFFE45C.*bordercolor=0x2446B8.*y=1610/u);
   assert.equal((watermarkedVisualFilter.script.match(/drawtext=text='@PokeGuesss'/gu) || []).length, 2);
   assert.match(audioFilter, /reveal0/u);
   assert.match(audioFilter, /reveal2/u);

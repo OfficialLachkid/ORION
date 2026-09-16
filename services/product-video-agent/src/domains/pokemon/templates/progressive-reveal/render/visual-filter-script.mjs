@@ -45,30 +45,6 @@ function appendLayeredText(filters, currentLabel, {
   return outputLabel;
 }
 
-function formatMethodLabel(method) {
-  const labels = {
-    wipe: 'SCAN REVEAL',
-    fragments: 'FRAGMENT REVEAL',
-    strips: 'STRIP REVEAL',
-    noise: 'NOISE REVEAL',
-    particles: 'PIXEL REVEAL',
-    radial: 'RADIAL REVEAL',
-    checkerboard: 'CHECKER REVEAL',
-    diagonal: 'DIAGONAL REVEAL',
-    cascade: 'FALLING PARTICLES',
-    pathfinding: 'PATHFINDING REVEAL',
-    spiral: 'SPIRAL REVEAL',
-    diamond: 'DIAMOND REVEAL',
-    cross: 'CROSS REVEAL',
-    edge_particles: 'EDGE PARTICLES',
-    diagonal_particles: 'DIAGONAL PARTICLES',
-    square_spiral: 'SQUARE SPIRAL',
-    square_spiral_inward: 'INWARD SQUARE SPIRAL',
-    fluid_fill: 'FLUID PARTICLE FILL',
-  };
-  return labels[method] || 'PROGRESSIVE REVEAL';
-}
-
 function resolveHeadlineLines(template) {
   const configured = Array.isArray(template?.question_contract?.headline_lines)
     ? template.question_contract.headline_lines
@@ -240,12 +216,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.round_label)}'${fontPart}:fontcolor=white:fontsize=${textLayout.counter_font_size}:borderw=5:bordercolor=black:fix_bounds=1:x=${textLayout.counter_x}:y=${textLayout.counter_y}[${counterLabel}]`,
     );
     currentLabel = counterLabel;
-    const methodLabel = `scene${roundIndex}method`;
-    filters.push(
-      `[${currentLabel}]drawtext=text='${formatMethodLabel(round.reveal_method)}'${fontPart}:fontcolor=white@0.9:fontsize=${textLayout.method_font_size}:borderw=4:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${textLayout.method_y}:enable='${formatEnableBetween(round.local.reveal_start_seconds, round.local.reveal_complete_seconds)}'[${methodLabel}]`,
-    );
-    currentLabel = methodLabel;
-
     currentLabel = appendLayeredText(filters, currentLabel, {
       labelPrefix: `scene${roundIndex}answer`,
       text: String(round.answer_text || round.subject.name || '').toUpperCase(),

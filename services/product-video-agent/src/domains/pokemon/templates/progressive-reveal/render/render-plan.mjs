@@ -31,8 +31,6 @@ function buildTextLayout(template) {
     counter_x: ensureNumber(config.counter_x, 72),
     counter_y: ensureNumber(config.counter_y, 92),
     counter_font_size: Math.max(30, Math.round(ensureNumber(config.counter_font_size, 48))),
-    method_y: ensureNumber(config.method_y, 1340),
-    method_font_size: Math.max(24, Math.round(ensureNumber(config.method_font_size, 42))),
     answer_y: ensureNumber(config.answer_y, 1480),
     answer_font_size: Math.max(52, Math.round(ensureNumber(config.answer_font_size, 104))),
     primary_color: String(config.primary_color || 'white').trim() || 'white',
