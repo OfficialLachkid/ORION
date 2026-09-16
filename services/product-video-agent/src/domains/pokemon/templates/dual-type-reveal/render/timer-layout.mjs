@@ -19,7 +19,8 @@ export function buildTimerLayout(template, gridLayout = null) {
     gridLayout?.stage_bounds_px?.top,
     ensureNumber(template?.layout?.pokeball_grid?.stage_bounds_px?.top, 760),
   );
-  const timerZoneTop = Math.max(safeTop, DEFAULT_TYPE_ICON_Y + iconSize + 24);
+  const iconY = ensureNumber(template?.layout?.type_icons?.y, DEFAULT_TYPE_ICON_Y);
+  const timerZoneTop = Math.max(safeTop, iconY + iconSize + 24);
   const timerZoneBottom = Math.min(
     gridTop - 24,
     ensureNumber(template?.canvas?.height, 1920) - safeBottom,

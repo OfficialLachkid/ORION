@@ -27,14 +27,15 @@ export function buildLongFormBackgroundPreparationFilter({
   }
 
   const zoomScale = Math.max(1.05, ensureNumber(motionConfig.zoom_scale, 1.3));
-  const scanPasses = Math.max(1, Math.round(ensureNumber(motionConfig.scan_passes, 3)));
   const scaledWidth = Math.ceil(width * zoomScale);
   const scaledHeight = Math.ceil(height * zoomScale);
   const duration = Math.max(1, ensureNumber(endSeconds, startSeconds + 1) - startSeconds);
   const progress = `((t-${fixed(startSeconds, 3)})/${fixed(duration, 3)})`;
-  const scan = `acos(cos(${scanPasses}*PI*${progress}))/PI`;
-  const horizontalProgress = chapterIndex % 2 === 0 ? scan : `(1-${scan})`;
-  const verticalProgress = chapterIndex % 2 === 0 ? progress : `(1-${progress})`;
+  const direction = chapterIndex % 2 === 0 ? 1 : -1;
+  const phaseX = fixed((chapterIndex * 1.137) % (Math.PI * 2), 6);
+  const phaseY = fixed(((chapterIndex * 0.731) + 1.047) % (Math.PI * 2), 6);
+  const horizontalProgress = `(0.5+0.49*sin(2*PI*(0.72*${progress}*${direction})+${phaseX}))`;
+  const verticalProgress = `(0.5+0.49*sin(2*PI*(0.43*${progress}*${direction})+${phaseY}))`;
   const xExpression = `(iw-${width})*${horizontalProgress}`;
   const yExpression = `(ih-${height})*${verticalProgress}`;
 

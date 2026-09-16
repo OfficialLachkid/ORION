@@ -11,12 +11,23 @@ import {
   printUsage,
   projectRoot,
 } from '../../../scripts/lib/ruflo-wrapper-utils.mjs';
-import { planUltimatePokemonQuiz } from '../src/domains/pokemon/long-form/ultimate-quiz/planner.mjs';
-import { renderUltimatePokemonQuiz } from '../src/domains/pokemon/long-form/ultimate-quiz/renderer.mjs';
+import {
+  adaptPokemonShortTemplateToLandscape,
+  LANDSCAPE_POKEMON_TEMPLATE_SPECS,
+} from '../src/domains/pokemon/long-form/landscape-template-adapter.mjs';
+import {
+  buildMixedChallengePlan,
+  orderLandscapeTemplateSpecs,
+  selectLandscapeBackground,
+} from '../src/domains/pokemon/long-form/mixed-challenge/planner.mjs';
+import { assembleMixedChallengeVideo } from '../src/domains/pokemon/long-form/mixed-challenge/renderer.mjs';
 import { buildLandscapeBackgroundCatalog } from '../src/domains/pokemon/long-form/media-catalog.mjs';
+import { renderSmoothLandscapeBackground } from '../src/domains/pokemon/long-form/smooth-background-renderer.mjs';
+import { buildPokeQuizzRenderPlan, renderPokeQuizzVideo } from '../src/poke-quizz-renderer.mjs';
 import { scanPokeQuizzAssetInventory } from '../src/poke-quizz-asset-inventory.mjs';
 import { resolveManagedPokeQuizzPreviewOutputPath } from '../src/poke-quizz-preview-storage.mjs';
 import { ensurePreferredPokeQuizzCatalogJsonPath } from '../src/poke-quizz-review-paths.mjs';
+import { planPokemonTypeChallenge } from '../src/pokemon-type-challenge-planner.mjs';
 import {
   findPublicationChannelProfile,
   loadPublicationChannelProfiles,
@@ -27,7 +38,7 @@ import { resolveFfmpegExecutable } from '../src/runtime-executables.mjs';
 import { resolvePokeQuizzVoiceRuntime } from '../src/poke-quizz-voice-runtime.mjs';
 import { reviewPokeQuizzPublication } from './poke-quizz/review-publication.mjs';
 
-const DEFAULT_TEMPLATE_PATH = 'services/product-video-agent/config/templates/pokemon/long/ultimate-quiz.v1.json';
+const DEFAULT_TEMPLATE_PATH = 'services/product-video-agent/config/templates/pokemon/long/mixed-challenge.v1.json';
 const DEFAULT_CONFIG_PATH = 'services/product-video-agent/config.example.json';
 const DEFAULT_CHANNEL_SELECTOR = 'poke-quizz-youtube';
 
@@ -59,6 +70,58 @@ function slugify(value) {
     .replace(/^-+|-+$/gu, '');
 }
 
+function resolveSectionState(selectionState, templateKey) {
+  return selectionState?.sections?.[templateKey] || null;
+}
+
+function withLandscapeBackground(plan, backgroundPath) {
+  return {
+    ...plan,
+    content_format: 'long_form_section',
+    content_surface: 'youtube_watch',
+    presentation: {
+      ...(plan?.presentation || {}),
+      watermark_enabled: false,
+    },
+    publication_policy: {
+      ...(plan?.publication_policy || {}),
+      watermark_enabled: false,
+    },
+    assets: {
+      ...(plan?.assets || {}),
+      background: {
+        ...(plan?.assets?.background || {}),
+        selected_path: backgroundPath,
+      },
+    },
+  };
+}
+
+function buildSectionSummary({
+  sectionIndex,
+  templateKey,
+  plan,
+  renderResult,
+  sourceBackground,
+  renderedBackgroundPath,
+  segmentPath,
+  planPath,
+}) {
+  return {
+    section_number: sectionIndex + 1,
+    template_key: templateKey,
+    source_template_id: String(plan?.template_id || ''),
+    seed: String(plan?.seed || ''),
+    duration_seconds: Number(renderResult?.render_plan?.total_duration_seconds || 0),
+    selected_subjects: plan?.selection?.selected_subjects || [],
+    background_source_path: sourceBackground?.path || '',
+    background_render_path: renderedBackgroundPath,
+    segment_path: segmentPath,
+    plan_path: planPath,
+    previews_directory: String(plan?.assets?.outputs?.previews_directory || ''),
+  };
+}
+
 export async function generatePokemonLongFormReview(options = {}) {
   const channelSelector = getStringOption(options, 'channel', DEFAULT_CHANNEL_SELECTOR);
   const templatePath = getStringOption(options, 'template', DEFAULT_TEMPLATE_PATH);
@@ -83,12 +146,16 @@ export async function generatePokemonLongFormReview(options = {}) {
   if (!catalogJsonPath) throw new Error('No localized Pokemon catalog JSON could be found.');
 
   const runtimeConfig = loadRuntimeConfig();
-  const [template, config, pokedexRows, profiles, inventory] = await Promise.all([
+  const [template, config, pokedexRows, profiles, inventory, baseTemplates] = await Promise.all([
     loadJson(templatePath),
     loadJson(configPath),
     loadJson(catalogJsonPath),
     loadPublicationChannelProfiles(channelsPath, { projectRoot }),
     scanPokeQuizzAssetInventory(),
+    Promise.all(LANDSCAPE_POKEMON_TEMPLATE_SPECS.map(async (spec) => ({
+      spec,
+      template: await loadJson(spec.path),
+    }))),
   ]);
   const channelProfile = findPublicationChannelProfile(profiles, channelSelector);
   const reviewThreadId = getStringOption(
@@ -112,22 +179,127 @@ export async function generatePokemonLongFormReview(options = {}) {
     minimumHeight: Number(template?.assets?.minimum_background_height || 720),
     minimumAspectRatio: Number(template?.assets?.minimum_background_aspect_ratio || 1.4),
   });
+  if (landscapeCatalog.eligible.length === 0) {
+    throw new Error('No eligible landscape Pokemon backgrounds were found.');
+  }
   printInfo(`Found ${landscapeCatalog.eligible.length} eligible landscape background(s).`);
 
   const statePath = getStringOption(
     options,
     'state',
-    `data/runtime/product-video-agent/pokemon-long-form/${slugify(channelSelector)}-ultimate-quiz.state.json`,
+    `data/runtime/product-video-agent/pokemon-long-form/${slugify(channelSelector)}-mixed-challenge.state.json`,
   );
-  const selectionState = await loadOptionalJson(statePath);
-  const plan = await planUltimatePokemonQuiz({
+  const selectionState = await loadOptionalJson(statePath) || { sections: {} };
+  const runtimeRoot = resolve(
+    projectRoot,
+    'data/runtime/product-video-agent/pokemon-long-form/mixed-challenge',
+    slugify(seed),
+  );
+  const segmentRoot = resolve(runtimeRoot, 'segments');
+  const backgroundRoot = resolve(runtimeRoot, 'backgrounds');
+  const planRoot = resolve(runtimeRoot, 'plans');
+  const orderedSpecs = orderLandscapeTemplateSpecs(
+    LANDSCAPE_POKEMON_TEMPLATE_SPECS,
+    seed,
+    template?.episode?.shuffle_sections !== false,
+  );
+  const baseTemplateByKey = new Map(baseTemplates.map((entry) => [entry.spec.key, entry.template]));
+  const nextSelectionState = { sections: {} };
+  const sectionSummaries = [];
+  const sectionPaths = [];
+  const generationStartedAt = Date.now();
+
+  for (let sectionIndex = 0; sectionIndex < orderedSpecs.length; sectionIndex += 1) {
+    const spec = orderedSpecs[sectionIndex];
+    const baseTemplate = baseTemplateByKey.get(spec.key);
+    const sectionTemplate = adaptPokemonShortTemplateToLandscape(baseTemplate);
+    const sectionSeed = `${seed}:section:${sectionIndex + 1}:${spec.key}`;
+    printInfo(`Planning landscape section ${sectionIndex + 1}/${orderedSpecs.length}: ${spec.key}.`);
+    const plannedSection = await planPokemonTypeChallenge({
+      template: sectionTemplate,
+      pokedexRows,
+      seed: sectionSeed,
+      assetInventory: inventory,
+      selectionState: resolveSectionState(selectionState, spec.key),
+      channelProfile,
+    });
+    const sourceBackground = selectLandscapeBackground(
+      landscapeCatalog.eligible,
+      seed,
+      sectionIndex,
+    );
+    const initialRenderPlan = buildPokeQuizzRenderPlan({
+      plan: plannedSection,
+      template: sectionTemplate,
+      outputPath: resolve(segmentRoot, `${String(sectionIndex + 1).padStart(2, '0')}-${spec.key}.mp4`),
+    });
+    const backgroundDuration = Number((
+      Math.max(1, Number(initialRenderPlan.total_duration_seconds || 1)) + 15
+    ).toFixed(3));
+    const backgroundPath = resolve(
+      backgroundRoot,
+      `${String(sectionIndex + 1).padStart(2, '0')}-${spec.key}.mp4`,
+    );
+    printInfo(`Rendering smooth background for ${spec.key} (${backgroundDuration}s).`);
+    await renderSmoothLandscapeBackground({
+      sourcePath: sourceBackground.path,
+      outputPath: backgroundPath,
+      durationSeconds: backgroundDuration,
+      template,
+      sectionIndex,
+      ffmpegExecutable,
+      projectRoot,
+    });
+    const plan = withLandscapeBackground(plannedSection, backgroundPath);
+    const segmentPath = resolve(
+      segmentRoot,
+      `${String(sectionIndex + 1).padStart(2, '0')}-${spec.key}.mp4`,
+    );
+    const sectionPlanPath = await writeJson(
+      resolve(planRoot, `${String(sectionIndex + 1).padStart(2, '0')}-${spec.key}.plan.json`),
+      plan,
+    );
+    const kokoro = resolvePokeQuizzVoiceRuntime({
+      config,
+      template: sectionTemplate,
+      plan,
+      projectRoot,
+      voiceProfileId: getStringOption(options, 'voice-profile-id', ''),
+      voicePython: getStringOption(options, 'voice-python', ''),
+      voiceScript: getStringOption(options, 'voice-script', ''),
+      voiceCacheDir: getStringOption(options, 'voice-cache-dir', ''),
+    });
+    printInfo(`Rendering native ${spec.key} section in 1920x1080.`);
+    const renderResult = await renderPokeQuizzVideo({
+      plan,
+      template: sectionTemplate,
+      outputPath: segmentPath,
+      projectRoot,
+      ffmpegExecutable,
+      kokoro,
+      runtimeRoot: resolve(runtimeRoot, 'render', spec.key),
+      channelProfile,
+    });
+    sectionPaths.push(renderResult.output_path);
+    sectionSummaries.push(buildSectionSummary({
+      sectionIndex,
+      templateKey: spec.key,
+      plan,
+      renderResult,
+      sourceBackground,
+      renderedBackgroundPath: backgroundPath,
+      segmentPath: renderResult.output_path,
+      planPath: sectionPlanPath,
+    }));
+    nextSelectionState.sections[spec.key] = plannedSection.selection_state || {};
+  }
+
+  const plan = buildMixedChallengePlan({
     template,
-    pokedexRows,
     seed,
     channelProfile,
-    inventory,
-    landscapeBackgrounds: landscapeCatalog.eligible,
-    selectionState,
+    sections: sectionSummaries,
+    selectionState: nextSelectionState,
   });
   const planPath = getStringOption(
     options,
@@ -135,36 +307,26 @@ export async function generatePokemonLongFormReview(options = {}) {
     `data/runtime/product-video-agent/pokemon-long-form/${slugify(channelSelector)}-${slugify(seed)}.plan.json`,
   );
   await writeJson(planPath, plan);
-  await writeJson(statePath, plan.selection_state);
+  await writeJson(statePath, nextSelectionState);
 
-  const defaultOutput = `${plan.assets.outputs.previews_directory}/${slugify(seed)}.mp4`;
+  const defaultOutput = sectionSummaries[0]?.previews_directory
+    ? `${sectionSummaries[0].previews_directory}/${slugify(seed)}-long-form.mp4`
+    : resolve(runtimeRoot, `${slugify(seed)}-long-form.mp4`);
   const resolvedOutput = await resolveManagedPokeQuizzPreviewOutputPath(
     getStringOption(options, 'output', defaultOutput),
   );
-  const kokoro = resolvePokeQuizzVoiceRuntime({
-    config,
-    template,
-    plan,
-    projectRoot,
-    voiceProfileId: getStringOption(options, 'voice-profile-id', ''),
-    voicePython: getStringOption(options, 'voice-python', ''),
-    voiceScript: getStringOption(options, 'voice-script', ''),
-    voiceCacheDir: getStringOption(options, 'voice-cache-dir', ''),
-  });
-  printInfo(`Rendering ${plan.timing.total_duration_seconds}s Ultimate Pokemon Quiz.`);
+  printInfo(`Assembling ${sectionPaths.length} native landscape sections (${plan.timing.total_duration_seconds}s).`);
   printInfo(`Output: ${resolvedOutput.outputPath}`);
-  const startedAt = Date.now();
-  const renderResult = await renderUltimatePokemonQuiz({
-    plan,
-    template,
+  const renderResult = await assembleMixedChallengeVideo({
+    sectionPaths,
     outputPath: resolvedOutput.outputPath,
-    projectRoot,
+    template,
     ffmpegExecutable,
-    kokoro,
-    runtimeRoot: resolve(projectRoot, 'data/runtime/product-video-agent/pokemon-long-form/render'),
+    projectRoot,
+    runtimeRoot: resolve(runtimeRoot, 'assembly'),
   });
-  const generationDurationMinutes = (Date.now() - startedAt) / 60_000;
-  printInfo(`Rendered long-form preview to ${renderResult.output_path}`);
+  const generationDurationMinutes = (Date.now() - generationStartedAt) / 60_000;
+  printInfo(`Rendered mixed long-form preview to ${renderResult.output_path}`);
 
   const reviewResult = await reviewPokeQuizzPublication({
     planPath,
@@ -176,7 +338,7 @@ export async function generatePokemonLongFormReview(options = {}) {
     configPath,
     templatePath,
     channelSelector,
-    genreLabel: 'Long-form Ultimate Quiz',
+    genreLabel: 'Long-form Pokemon Challenge Compilation',
     submittedAt: new Date().toISOString(),
     title: getStringOption(options, 'title', plan.publication.title),
     description: getStringOption(options, 'description', plan.publication.description),
@@ -190,6 +352,7 @@ export async function generatePokemonLongFormReview(options = {}) {
     state_path: statePath,
     output_path: renderResult.output_path,
     duration_seconds: plan.timing.total_duration_seconds,
+    section_template_keys: plan.selection.template_keys,
     content_surface: plan.content_surface,
   };
 }
@@ -200,12 +363,15 @@ async function main() {
     printUsage([
       'Usage: node services/product-video-agent/scripts/generate-pokemon-long-form-review.mjs [options]',
       '',
+      'Builds one native 16:9 section from every Pokemon Short template except Tournament,',
+      'then assembles the sections into one YouTube watch-page review video.',
+      '',
       'Options:',
       '  --channel <selector>       Pokemon channel. Default: poke-quizz-youtube',
       '  --thread-id <id>           Optional Discord review thread override.',
       '  --seed <text>              Deterministic episode seed. Default: current timestamp.',
       '  --catalog-json <path>      Localized Pokedex JSON override.',
-      '  --template <path>          Long-form template JSON override.',
+      '  --template <path>          Long-form compilation template JSON override.',
       '  --plan-output <path>       Episode plan JSON output.',
       '  --state <path>             Per-channel long-form selection state.',
       '  --output <path>            Rendered MP4 output.',

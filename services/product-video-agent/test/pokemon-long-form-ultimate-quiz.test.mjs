@@ -151,7 +151,8 @@ test('Ultimate Pokemon Quiz plans a deterministic native 16:9 episode with Short
     fontPath: '',
   });
   assert.match(visualFilter.script, /gblur=sigma=6:steps=1/u);
-  assert.match(visualFilter.script, /acos\(cos\(3\*PI/u);
+  assert.match(visualFilter.script, /0\.49\*sin\(2\*PI/u);
+  assert.doesNotMatch(visualFilter.script, /acos\(cos/u);
   assert.match(visualFilter.script, /typeGridPokeball/u);
   assert.doesNotMatch(visualFilter.script, /drawbox=/u);
 });
