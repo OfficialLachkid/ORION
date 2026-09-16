@@ -7,10 +7,11 @@ import {
 const DEFAULT_CHANNEL_NAME = 'Poke Quizz';
 const DEFAULT_FADE_SECONDS = 0.45;
 const DEFAULT_START_SECONDS = 1.5;
-const WATERMARK_BOTTOM_OFFSET_PX = 160;
+const WATERMARK_BOTTOM_OFFSET_PX = 310;
 const WATERMARK_FONT_SIZE = 54;
 const WATERMARK_OUTLINE_WIDTH = 6;
 const WATERMARK_SHADOW_OFFSET_PX = 7;
+const WATERMARK_OPACITY = 0.5;
 
 function finiteNonNegative(value) {
   if (value == null || value === '') return null;
@@ -64,7 +65,7 @@ export function resolveWatermarkStartSeconds(renderPlan = {}) {
 function buildTimingPart(startSeconds) {
   const start = Number(startSeconds.toFixed(3));
   const fadeEnd = Number((start + DEFAULT_FADE_SECONDS).toFixed(3));
-  return `:alpha='if(lt(t,${start}),0,if(lt(t,${fadeEnd}),(t-${start})/${DEFAULT_FADE_SECONDS},1))':enable='gte(t,${start})'`;
+  return `:alpha='if(lt(t,${start}),0,if(lt(t,${fadeEnd}),((t-${start})/${DEFAULT_FADE_SECONDS})*${WATERMARK_OPACITY},${WATERMARK_OPACITY}))':enable='gte(t,${start})'`;
 }
 
 export function applyChannelWatermarkToVisualFilter(visualFilter = {}, {

@@ -38,6 +38,7 @@ const plan = {
     type_pair: ['psychic', 'water'],
     catalog_match_count: 4,
     compatible_display_count: 4,
+    reveal_methods: ['spiral', 'diamond', 'cross'],
     selected_subjects: [
       { name: 'Slowpoke', types: ['psychic', 'water'] },
       { name: 'Starmie', types: ['psychic', 'water'] },
@@ -84,6 +85,7 @@ test('Poke Quizz publication registration creates pending preview-upload rows', 
   assert.equal(registration.publicationRow.visibility, 'unlisted');
   assert.equal(registration.publicationRow.metadata.workflow_state, 'preview_upload_pending');
   assert.deepEqual(registration.publicationRow.metadata.type_pair, ['psychic', 'water']);
+  assert.deepEqual(registration.videoRow.source_data.reveal_methods, ['spiral', 'diamond', 'cross']);
   assert.match(registration.publicationRow.metadata.background_path || '', /beach-backgrounds/u);
 });
 

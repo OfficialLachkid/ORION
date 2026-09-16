@@ -14,6 +14,7 @@ const SHARED_RENDER_EXECUTORS = Object.freeze([
   'find-the-shiny',
   'know-your-shiny',
   'memory',
+  'progressive-reveal',
   'stat-clash',
   'tournament',
   'type-speed-quiz',
@@ -72,7 +73,11 @@ test('shared filter injection adds one dynamic layered watermark after the hook'
   assert.match(transformed.script, /drawtext=text='@ProffMon'/u);
   assert.match(transformed.script, /fontcolor=0xFFE45C/u);
   assert.match(transformed.script, /bordercolor=0x2446B8/u);
-  assert.match(transformed.script, /y=1760/u);
+  assert.match(transformed.script, /y=1610/u);
+  assert.match(
+    transformed.script,
+    /alpha='if\(lt\(t,1\.8\),0,if\(lt\(t,2\.25\),\(\(t-1\.8\)\/0\.45\)\*0\.5,0\.5\)\)'/u,
+  );
   assert.match(transformed.script, /enable='gte\(t,1\.8\)'/u);
   assert.equal((transformed.script.match(/\[vout\]/gu) || []).length, 1);
 });

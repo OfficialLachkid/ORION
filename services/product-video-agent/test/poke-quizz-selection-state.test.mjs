@@ -17,6 +17,7 @@ test('normalizePokeQuizzSelectionState folds the last video into the used signat
     type_pair_usage_counts: {
       'water|psychic': 3,
     },
+    last_reveal_methods: ['Spiral', 'diamond', 'spiral'],
   });
 
   assert.equal(state.last_type_pair_key, 'psychic|water');
@@ -25,6 +26,7 @@ test('normalizePokeQuizzSelectionState folds the last video into the used signat
   assert.deepEqual(state.type_pair_usage_counts, {
     'psychic|water': 3,
   });
+  assert.deepEqual(state.last_reveal_methods, ['spiral', 'diamond']);
 });
 
 test('mergePokeQuizzSelectionStates prefers the first recent state and unions signature history', () => {
@@ -37,6 +39,7 @@ test('mergePokeQuizzSelectionStates prefers the first recent state and unions si
         'fighting|flying': 2,
         'grass|poison': 1,
       },
+      last_reveal_methods: ['cross', 'spiral'],
     },
     {
       last_type_pair_key: 'grass|poison',
@@ -45,6 +48,7 @@ test('mergePokeQuizzSelectionStates prefers the first recent state and unions si
       type_pair_usage_counts: {
         'grass|poison': 4,
       },
+      last_reveal_methods: ['wipe'],
     },
   );
 
@@ -58,6 +62,7 @@ test('mergePokeQuizzSelectionStates prefers the first recent state and unions si
     'fighting|flying': 2,
     'grass|poison': 4,
   });
+  assert.deepEqual(merged.last_reveal_methods, ['cross', 'spiral']);
 });
 
 test('buildPokeQuizzSelectionStateFromHistory captures the latest pair, background, and exact signatures', () => {
@@ -72,6 +77,7 @@ test('buildPokeQuizzSelectionStateFromHistory captures the latest pair, backgrou
         source_data: {
           type_pair: ['fighting', 'flying'],
           background_path: '/tmp/background-2.png',
+          reveal_methods: ['diamond', 'cross', 'spiral'],
         },
       },
     },
@@ -105,6 +111,7 @@ test('buildPokeQuizzSelectionStateFromHistory captures the latest pair, backgrou
     'fighting|flying': 1,
     'grass|poison': 1,
   });
+  assert.deepEqual(state.last_reveal_methods, ['diamond', 'cross', 'spiral']);
 });
 
 test('loadPokeQuizzSelectionStateFromStore derives history from recent channel publications', async () => {
@@ -180,6 +187,14 @@ test('resolvePokeQuizzSelectionStatePath scopes runtime state by template', () =
   assert.equal(
     resolvePokeQuizzSelectionStatePath({ template_id: 'pokemon.type-speed-quiz.v1' }),
     'data/runtime/product-video-agent/poke-quizz/selection-state-type-quiz.json',
+  );
+  assert.equal(
+    resolvePokeQuizzSelectionStatePath(
+      { template_id: 'pokemon.progressive-reveal.v1' },
+      'data/runtime/product-video-agent/poke-quizz',
+      { account_key: 'proffmon-youtube' },
+    ),
+    'data/runtime/product-video-agent/poke-quizz/selection-state-progressive-reveal-proffmon-youtube.json',
   );
 });
 

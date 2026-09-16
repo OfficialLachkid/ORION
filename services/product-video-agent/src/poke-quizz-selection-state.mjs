@@ -2,6 +2,7 @@ import { createTypePairKey, normalizeTypePair } from './pokemon-type-pairs.mjs';
 
 const MAX_USED_VIDEO_SIGNATURES = 160;
 const MAX_TYPE_PAIR_USAGE_KEYS = 256;
+const MAX_LAST_REVEAL_METHODS = 32;
 const DEFAULT_SELECTION_STATE_SCOPE = 'dual-type-reveal';
 
 const NON_COUNTING_PUBLICATION_STATUSES = new Set([
@@ -29,6 +30,23 @@ function normalizeSignatureList(signatureList) {
       .map((signature) => normalizeVideoSignature(signature))
       .filter(Boolean),
   )].slice(0, MAX_USED_VIDEO_SIGNATURES);
+}
+
+function normalizeRevealMethodList(methods) {
+  if (!Array.isArray(methods)) return [];
+  return [...new Set(methods
+    .map((method) => String(method || '').trim().toLowerCase().replaceAll('-', '_'))
+    .filter(Boolean))]
+    .slice(0, MAX_LAST_REVEAL_METHODS);
+}
+
+function normalizeChannelStateScope(channelProfile) {
+  const value = typeof channelProfile === 'string'
+    ? channelProfile
+    : channelProfile?.account_key || channelProfile?.id || '';
+  return String(value || '').trim().toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-+|-+$/gu, '');
 }
 
 function normalizeTypePairUsageCounts(typePairUsageCounts) {
@@ -82,6 +100,9 @@ function normalizeTemplateScopeValue(value) {
   }
   if (normalized.includes('know-your-shiny')) {
     return 'know-your-shiny';
+  }
+  if (normalized.includes('progressive-reveal')) {
+    return 'progressive-reveal';
   }
   if (normalized.includes('stat-clash') || normalized.includes('stat-battle')) {
     return 'stat-clash';
@@ -154,6 +175,14 @@ function extractHistoryBackgroundPath(entry = {}) {
   return normalized || null;
 }
 
+function extractHistoryRevealMethods(entry = {}) {
+  return normalizeRevealMethodList(
+    entry?.video?.source_data?.reveal_methods
+      || entry?.video?.render?.reveal_methods
+      || entry?.publication?.metadata?.reveal_methods,
+  );
+}
+
 function extractHistoryPublicationStatus(entry = {}) {
   return String(entry?.publication?.status || '').trim().toLowerCase();
 }
@@ -184,12 +213,15 @@ export function resolvePokeQuizzSelectionStateScope(
 export function resolvePokeQuizzSelectionStatePath(
   template = {},
   runtimeRoot = 'data/runtime/product-video-agent/poke-quizz',
+  channelProfile = null,
 ) {
   const scope = resolvePokeQuizzSelectionStateScope(template, DEFAULT_SELECTION_STATE_SCOPE);
+  const channelScope = normalizeChannelStateScope(channelProfile);
   const normalizedRuntimeRoot = String(runtimeRoot || 'data/runtime/product-video-agent/poke-quizz')
     .trim()
     .replace(/\/+$/u, '');
-  return `${normalizedRuntimeRoot}/selection-state-${scope}.json`;
+  const channelSuffix = channelScope ? `-${channelScope}` : '';
+  return `${normalizedRuntimeRoot}/selection-state-${scope}${channelSuffix}.json`;
 }
 
 export function normalizePokeQuizzSelectionState(selectionState) {
@@ -197,12 +229,13 @@ export function normalizePokeQuizzSelectionState(selectionState) {
   const lastBackgroundPath = normalizeBackgroundPath(selectionState?.last_background_path);
   const usedVideoSignatures = normalizeSignatureList(selectionState?.used_video_signatures);
   const typePairUsageCounts = normalizeTypePairUsageCounts(selectionState?.type_pair_usage_counts);
+  const lastRevealMethods = normalizeRevealMethodList(selectionState?.last_reveal_methods);
   const lastVideoSignature = createPokeQuizzVideoSignatureKey(
     lastTypePairKey,
     lastBackgroundPath,
   );
 
-  return {
+  const normalized = {
     last_type_pair_key: lastTypePairKey,
     last_background_path: lastBackgroundPath || null,
     used_video_signatures: normalizeSignatureList([
@@ -211,6 +244,9 @@ export function normalizePokeQuizzSelectionState(selectionState) {
     ]),
     type_pair_usage_counts: typePairUsageCounts,
   };
+  return lastRevealMethods.length > 0
+    ? { ...normalized, last_reveal_methods: lastRevealMethods }
+    : normalized;
 }
 
 export function mergePokeQuizzSelectionStates(...states) {
@@ -218,8 +254,9 @@ export function mergePokeQuizzSelectionStates(...states) {
     .map((state) => normalizePokeQuizzSelectionState(state))
     .filter(Boolean);
   const preferredState = normalizedStates.find((state) => state.last_type_pair_key || state.last_background_path) || {};
+  const previousRevealState = normalizedStates.find((state) => state.last_reveal_methods?.length > 0) || {};
 
-  return {
+  const merged = {
     last_type_pair_key: preferredState.last_type_pair_key || null,
     last_background_path: preferredState.last_background_path || null,
     used_video_signatures: normalizeSignatureList(
@@ -233,12 +270,16 @@ export function mergePokeQuizzSelectionStates(...states) {
       return mergedCounts;
     }, {}),
   };
+  return previousRevealState.last_reveal_methods?.length > 0
+    ? { ...merged, last_reveal_methods: previousRevealState.last_reveal_methods }
+    : merged;
 }
 
 export function buildPokeQuizzSelectionStateFromHistory(historyEntries = []) {
   const [latestEntry] = historyEntries;
   const latestTypePairKey = latestEntry ? extractHistoryTypePairKey(latestEntry) : null;
   const latestBackgroundPath = latestEntry ? extractHistoryBackgroundPath(latestEntry) : null;
+  const latestRevealMethods = latestEntry ? extractHistoryRevealMethods(latestEntry) : [];
   const usedVideoSignatures = normalizeSignatureList(
     historyEntries.map((entry) => createPokeQuizzVideoSignatureKey(
       extractHistoryTypePairKey(entry),
@@ -257,12 +298,15 @@ export function buildPokeQuizzSelectionStateFromHistory(historyEntries = []) {
     typePairUsageCounts[typePairKey] = (typePairUsageCounts[typePairKey] || 0) + 1;
   }
 
-  return {
+  const state = {
     last_type_pair_key: latestTypePairKey,
     last_background_path: latestBackgroundPath,
     used_video_signatures: usedVideoSignatures,
     type_pair_usage_counts: normalizeTypePairUsageCounts(typePairUsageCounts),
   };
+  return latestRevealMethods.length > 0
+    ? { ...state, last_reveal_methods: latestRevealMethods }
+    : state;
 }
 
 export async function loadPokeQuizzSelectionStateFromStore({

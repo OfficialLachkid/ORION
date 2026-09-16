@@ -110,6 +110,9 @@ export async function createPokeQuizzPublicationRegistration({
       seed: plan?.seed || '',
       type_pair: typePair,
       background_path: plan?.assets?.background?.selected_path || null,
+      reveal_methods: Array.isArray(plan?.selection?.reveal_methods)
+        ? plan.selection.reveal_methods
+        : [],
     },
     score: {
       catalog_match_count: Number(plan?.selection?.catalog_match_count || 0),
@@ -136,6 +139,9 @@ export async function createPokeQuizzPublicationRegistration({
       template_id: plan?.template_id || '',
       seed: plan?.seed || '',
       type_pair: typePair,
+      reveal_methods: Array.isArray(plan?.selection?.reveal_methods)
+        ? plan.selection.reveal_methods
+        : [],
       selected_subjects: selectedSubjects,
     },
     approvals: {

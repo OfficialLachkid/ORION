@@ -130,6 +130,7 @@ test('timer_finished stays the shared timer-end default when a ding file is also
   ]);
 
   assert.match(soundEffectPresets.countdown_tick || '', /countdown\.mp3$/u);
+  assert.match(soundEffectPresets.ding || '', /ding-sound\.mp3$/u);
   assert.match(soundEffectPresets.timer_end || '', /timer_finished\.mp3$/u);
   assert.match(soundEffectPresets.reveal || '', /timer_finished\.mp3$/u);
   assert.match(soundEffectPresets.shiny || '', /shiny-sound\.mp3$/u);

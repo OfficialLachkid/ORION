@@ -76,6 +76,9 @@ function resolveTemplateFlavor(plan = {}) {
   if (templateKey.includes('memory') || templateId.includes('memory')) {
     return 'memory';
   }
+  if (templateKey.includes('progressive-reveal') || templateId.includes('progressive-reveal')) {
+    return 'progressive-reveal';
+  }
   if (templateKey.includes('stat-clash') || templateId.includes('stat-clash') || templateKey.includes('stat-battle') || templateId.includes('stat-battle')) {
     return 'stat-clash';
   }
@@ -146,6 +149,14 @@ const DEFAULT_STAT_CLASH_TITLE_BUILDERS = Object.freeze([
   () => 'Highest Stat Challenge!',
   () => 'Who has the Highest Stat?',
   () => 'Who has the Highest Stats? 🤔 💭',
+]);
+
+const DEFAULT_PROGRESSIVE_REVEAL_TITLE_BUILDERS = Object.freeze([
+  () => "Guess the Pokemon Before It's Revealed!",
+  () => 'Can You Name It Before the Full Reveal?',
+  () => 'Pokemon Progressive Reveal Challenge!',
+  () => 'How Fast Can You Guess This Pokemon?',
+  () => 'Guess 3 Pokemon Before They Appear!',
 ]);
 
 const DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS = Object.freeze([
@@ -249,6 +260,13 @@ function buildMetadataPrompt(plan) {
 
 function buildTemplateAwareDefaultTitle(plan) {
   const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'progressive-reveal') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|progressive-reveal`) % DEFAULT_PROGRESSIVE_REVEAL_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_PROGRESSIVE_REVEAL_TITLE_BUILDERS[templateIndex]();
+  }
   if (flavor === 'memory') {
     const seed = String(plan?.seed || '').trim();
     const templateIndex = seed
@@ -313,6 +331,13 @@ function buildTemplateAwareDefaultTitle(plan) {
 function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
   const flavor = resolveTemplateFlavor(plan);
   const channelName = resolveMetadataChannelName(channelProfile);
+  if (flavor === 'progressive-reveal') {
+    const roundCount = Number(plan?.selection?.round_count || 0) || 3;
+    return joinDescriptionParagraphs(
+      `Guess ${roundCount} Pokemon while each sprite is slowly revealed. Lock in every answer before the full image appears.`,
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
+  }
   if (flavor === 'memory') {
     const displayedCount = Number(plan?.selection?.display_subject_count || 0) || 6;
     return joinDescriptionParagraphs(
@@ -380,6 +405,27 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
 
 function buildTemplateAwareMetadataPrompt(plan) {
   const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'progressive-reveal') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    const revealMethods = Array.isArray(plan?.selection?.reveal_methods)
+      ? plan.selection.reveal_methods
+      : [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a progressive Pokemon reveal challenge.',
+      `Round count: ${Number(plan?.selection?.round_count || 0) || 3}`,
+      `Reveal methods: ${revealMethods.join(', ')}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil the Pokemon names in the title.',
+      '- Explain that each sprite becomes progressively more visible while the viewer guesses.',
+      '- Mention that the viewer should answer before the full reveal.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
   if (flavor === 'memory') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     const questionText = String(plan?.question?.question_text || '').trim();
@@ -539,6 +585,15 @@ function buildTemplateAwareHashtags(plan) {
   const flavor = resolveTemplateFlavor(plan);
   const typePair = plan?.selection?.type_pair || [];
   const typeHashtags = buildTypeHashtags(typePair);
+  if (flavor === 'progressive-reveal') {
+    return normalizeHashtags([
+      'pokemon',
+      'guessthepokemon',
+      'pokemonreveal',
+      'pokemonquiz',
+      'shorts',
+    ]);
+  }
   if (flavor === 'memory') {
     return normalizeHashtags([
       'pokemon',

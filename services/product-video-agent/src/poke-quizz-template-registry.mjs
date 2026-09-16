@@ -34,6 +34,13 @@ import {
   renderPokeQuizzVideo as renderKnowYourShinyVideo,
 } from './domains/pokemon/templates/know-your-shiny/renderer.mjs';
 import {
+  planPokemonProgressiveRevealChallenge,
+} from './domains/pokemon/templates/progressive-reveal/planner.mjs';
+import {
+  buildPokeQuizzRenderPlan as buildProgressiveRevealRenderPlan,
+  renderPokeQuizzVideo as renderProgressiveRevealVideo,
+} from './domains/pokemon/templates/progressive-reveal/renderer.mjs';
+import {
   planPokemonStatClashChallenge,
 } from './domains/pokemon/templates/stat-clash/planner.mjs';
 import {
@@ -88,6 +95,11 @@ const TEMPLATE_REGISTRY = Object.freeze({
     buildRenderPlan: buildKnowYourShinyRenderPlan,
     renderVideo: renderKnowYourShinyVideo,
   }),
+  'progressive-reveal': Object.freeze({
+    planner: planPokemonProgressiveRevealChallenge,
+    buildRenderPlan: buildProgressiveRevealRenderPlan,
+    renderVideo: renderProgressiveRevealVideo,
+  }),
   'stat-clash': Object.freeze({
     planner: planPokemonStatClashChallenge,
     buildRenderPlan: buildStatClashRenderPlan,
@@ -137,6 +149,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   if (templateKey === 'know-your-shiny') {
     return 'know-your-shiny';
   }
+  if (templateKey === 'progressive-reveal' || templateKey === 'guess-before-revealed') {
+    return 'progressive-reveal';
+  }
   if (templateKey === 'cry-match') {
     return 'cry-match';
   }
@@ -157,6 +172,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   }
   if (templateId.includes('know-your-shiny')) {
     return 'know-your-shiny';
+  }
+  if (templateId.includes('progressive-reveal')) {
+    return 'progressive-reveal';
   }
   if (templateId.includes('cry-match')) {
     return 'cry-match';
