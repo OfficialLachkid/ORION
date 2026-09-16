@@ -3,6 +3,7 @@ import {
   scanPokeQuizzAssetInventory,
   selectTypeIconSet,
 } from '../../../../poke-quizz-asset-inventory.mjs';
+import { buildPokeQuizzAnimatedSpritePath } from '../../../../poke-quizz-asset-layout.mjs';
 import { resolvePokemonChannelIdentity } from '../../templates/shared/render/channel-watermark.mjs';
 import { resolvePokemonCryPath } from '../../templates/shared/pokemon-cry-resolver.mjs';
 
@@ -131,6 +132,8 @@ async function canAccessPath(filePath) {
 async function resolveRenderSpritePath(subject) {
   const animatedPath = String(subject?.animated_sprite_path || '').trim();
   if (animatedPath && await canAccessPath(animatedPath)) return animatedPath;
+  const derivedAnimatedPath = buildPokeQuizzAnimatedSpritePath(subject);
+  if (derivedAnimatedPath && await canAccessPath(derivedAnimatedPath)) return derivedAnimatedPath;
   return String(subject?.sprite_path || '').trim();
 }
 
