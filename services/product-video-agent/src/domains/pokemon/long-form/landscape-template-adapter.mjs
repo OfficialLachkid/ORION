@@ -57,6 +57,12 @@ const COMMON_LAYOUT = Object.freeze({
     darken_alpha: 0,
     motion: Object.freeze({ enabled: false }),
   }),
+  text: Object.freeze({
+    show_counter: false,
+  }),
+  sprite_platform: Object.freeze({
+    alpha_grounding_enabled: true,
+  }),
 });
 
 const FOUR_OPTION_GRID = Object.freeze({
@@ -147,16 +153,25 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
       counter_x: 56,
       counter_y: 42,
       counter_font_size: 54,
+      highlight_keywords: Object.freeze([]),
     }),
-    sprite_grid: FOUR_OPTION_GRID,
+    sprite_grid: Object.freeze({
+      ...FOUR_OPTION_GRID,
+      stage_bounds_px: Object.freeze({
+        left: 150,
+        top: 350,
+        width: 1620,
+        height: 430,
+      }),
+    }),
     reveal_sprite: Object.freeze({
       center_x: 960,
       center_y: 560,
       item_size_px: 330,
     }),
     timer: Object.freeze({
-      center_y: 920,
-      bar_horizontal_inset_px: 260,
+      center_y: 272,
+      bar_horizontal_inset_px: 500,
     }),
   }),
   'progressive-reveal': Object.freeze({
@@ -232,10 +247,16 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     sprite_grid: Object.freeze({
       ...FOUR_OPTION_GRID,
       row_y_offsets_px: Object.freeze([0]),
+      stage_bounds_px: Object.freeze({
+        left: 150,
+        top: 390,
+        width: 1620,
+        height: 430,
+      }),
     }),
     timer: Object.freeze({
-      center_y: 920,
-      bar_horizontal_inset_px: 250,
+      center_y: 300,
+      bar_horizontal_inset_px: 500,
     }),
   }),
   memory: Object.freeze({
@@ -296,6 +317,9 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
       hp_bar_width_px: 1180,
       hp_bar_top_gap_px: 170,
     }),
+    rounds: Object.freeze({
+      reveal_hold_seconds: 2.1,
+    }),
   }),
   'type-quiz': Object.freeze({
     text: Object.freeze({
@@ -324,6 +348,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
       label_gap_px: 50,
     }),
     timer: Object.freeze({
+      enabled: false,
       size_px: 190,
       center_x: 960,
       center_y: 245,

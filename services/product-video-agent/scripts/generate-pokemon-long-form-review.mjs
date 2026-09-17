@@ -351,6 +351,7 @@ export async function generatePokemonLongFormReview(options = {}) {
   printInfo(`Output: ${resolvedOutput.outputPath}`);
   const renderResult = await assembleMixedChallengeVideo({
     sectionPaths,
+    sections: plan.sections,
     outputPath: resolvedOutput.outputPath,
     template,
     ffmpegExecutable,

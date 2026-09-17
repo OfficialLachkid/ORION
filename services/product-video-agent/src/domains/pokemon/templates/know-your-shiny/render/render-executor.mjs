@@ -14,6 +14,7 @@ import { buildVisualInputs } from './visual-inputs.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
 import { createLocalizedColorVariantAssets } from '../../shared/render/localized-color-mutation.mjs';
 import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
+import { buildVisualInputGroundingRatios } from '../../shared/render/sprite-alpha-grounding.mjs';
 
 export function applyLocalizedDecoyAssetsToRound(round, sourceSpritePath, generated) {
   if (!Array.isArray(generated?.created) || generated.created.length === 0) {
@@ -230,12 +231,20 @@ export async function renderPokeQuizzVideo({
   const visualInputs = buildVisualInputs(plan, renderPlan);
   await verifyReadableFiles(visualInputs.map((input) => input.path));
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
+  const groundingRatios = await buildVisualInputGroundingRatios(visualInputs, {
+    enabled: template?.layout?.sprite_platform?.alpha_grounding_enabled === true,
+    rolePattern: /candidate/iu,
+  });
   const inputRefs = {
     background: inputRoleIndex.get('background'),
     rounds: renderPlan.rounds.map((round) => ({
       candidates: round.candidates.map((candidate) => (
         inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`)
       )),
+      bottom_transparent_ratios: round.candidates.map((candidate) => {
+        const inputIndex = inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`);
+        return groundingRatios.get(inputIndex) || 0;
+      }),
     })),
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,

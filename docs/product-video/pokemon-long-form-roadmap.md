@@ -22,7 +22,7 @@ The first production target is a retention-focused mixed Pokemon challenge compi
 
 ## V1.2: Mixed Landscape Challenge Compilation
 
-Status: implementation complete; first nine-template landscape preview pending review
+Status: first nine-template landscape preview reviewed; V1.3 refinement pass in progress
 
 The episode renders one native landscape edition of every existing Pokemon Short template except Tournament:
 
@@ -47,10 +47,13 @@ V1 presentation requirements:
 - No watermark in this long-form format
 - Manual upload as an unlisted YouTube watch-page preview
 - Discord review card in the selected channel's existing review thread
+- Branded intro and outro cards, plus Easy, Medium, and Hard chapter pauses
+- One compilation-level difficulty/round label replaces each Short template's local `x/x` counter
+- Alpha-aware sprite grounding removes transparent bottom padding before aligning Pokemon to grass platforms
 
 ## V1 Refinement Checklist
 
-- [ ] Review the first full preview for pacing and legibility on desktop and mobile.
+- [x] Review the first full preview for pacing and legibility on desktop and mobile.
 - [x] Add isolated 1920x1080 layout adapters for all nine supported Short templates.
 - [x] Reuse the original planner and renderer contract for each landscape section.
 - [x] Keep Tournament out of the compilation.
@@ -63,6 +66,11 @@ V1 presentation requirements:
 - [ ] Add new retention-focused sections to build the approved core loop back toward eight minutes.
 - [ ] Confirm music transitions and narration/music balance.
 - [x] Enforce landscape dimensions before selection; the first live scan found 11 eligible backgrounds.
+- [x] Restore intro, difficulty chapter pauses, outro, and compilation-level round labels.
+- [x] Center Type Quiz type badges from the active canvas instead of the portrait midpoint.
+- [x] Add reusable alpha-aware sprite grounding for grass-platform layouts.
+- [x] Move Know Your Shiny and Build Your Team timers between their prompt and Pokemon grid.
+- [x] Remove the Type Quiz timer in long-form while preserving the Short default.
 - [ ] Confirm the selected backgrounds remain sharp and composed well after cover cropping.
 - [ ] Confirm all question modes are understandable without narration on every round.
 - [ ] Add or replace weak question modes based on viewer experience.
@@ -107,3 +115,4 @@ When enabled, long-form replenishment must have its own per-channel target and c
 - 2026-09-17: Replaced the simplified quiz-only direction with native 16:9 editions of all existing Pokemon Short templates except Tournament.
 - 2026-09-17: Kept the original planners and renderers as the behavior source, added cloned landscape-only layout adapters, and assembled their 16:9 outputs into one watch-page video.
 - 2026-09-17: Changed background roaming to continuous sinusoidal motion so direction changes remain smooth to the eye.
+- 2026-09-17: Added branded program cards, Easy/Medium/Hard chapter pauses, global challenge labels, and alpha-aware grass-platform grounding after reviewing the first mixed-template preview.

@@ -211,11 +211,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       });
     }
 
-    const counterLabel = `scene${roundIndex}counter`;
-    filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.round_label)}'${fontPart}:fontcolor=white:fontsize=${textLayout.counter_font_size}:borderw=5:bordercolor=black:fix_bounds=1:x=${textLayout.counter_x}:y=${textLayout.counter_y}[${counterLabel}]`,
-    );
-    currentLabel = counterLabel;
+    if (template?.layout?.text?.show_counter !== false) {
+      const counterLabel = `scene${roundIndex}counter`;
+      filters.push(
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.round_label)}'${fontPart}:fontcolor=white:fontsize=${textLayout.counter_font_size}:borderw=5:bordercolor=black:fix_bounds=1:x=${textLayout.counter_x}:y=${textLayout.counter_y}[${counterLabel}]`,
+      );
+      currentLabel = counterLabel;
+    }
     currentLabel = appendLayeredText(filters, currentLabel, {
       labelPrefix: `scene${roundIndex}answer`,
       text: String(round.answer_text || round.subject.name || '').toUpperCase(),

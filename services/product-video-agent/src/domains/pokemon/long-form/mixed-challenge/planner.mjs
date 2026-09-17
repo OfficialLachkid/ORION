@@ -50,6 +50,33 @@ export function selectLandscapeBackground(backgrounds = [], seed = '', sectionIn
   return backgrounds[index] || backgrounds[0];
 }
 
+export function assignMixedChallengeDifficulty(sections = [], template = {}) {
+  const configuredLevels = Array.isArray(template?.episode?.difficulty_levels)
+    ? template.episode.difficulty_levels
+    : [];
+  const levels = configuredLevels.length > 0
+    ? configuredLevels
+    : [
+      { key: 'easy', label: 'EASY ROUND', accent_color: '0x45D483' },
+      { key: 'medium', label: 'MEDIUM ROUND', accent_color: '0xFFD60A' },
+      { key: 'hard', label: 'HARD ROUND', accent_color: '0xFF5B62' },
+    ];
+  const groupSize = Math.max(1, Math.ceil(sections.length / levels.length));
+  return sections.map((section, index) => {
+    const level = levels[Math.min(levels.length - 1, Math.floor(index / groupSize))];
+    return {
+      ...section,
+      long_form_round_number: index + 1,
+      long_form_round_total: sections.length,
+      difficulty: {
+        key: String(level?.key || `level-${index + 1}`),
+        label: String(level?.label || 'ROUND'),
+        accent_color: String(level?.accent_color || '0xFFD60A'),
+      },
+    };
+  });
+}
+
 export function buildMixedChallengePlan({
   template,
   seed,
@@ -57,9 +84,10 @@ export function buildMixedChallengePlan({
   sections = [],
   selectionState = {},
 }) {
+  const arrangedSections = assignMixedChallengeDifficulty(sections, template);
   const selectedSubjects = [];
   const seenSubjects = new Set();
-  for (const section of sections) {
+  for (const section of arrangedSections) {
     for (const subject of section?.selected_subjects || []) {
       const key = subjectKey(subject);
       if (!key || seenSubjects.has(key)) continue;
@@ -67,9 +95,19 @@ export function buildMixedChallengePlan({
       selectedSubjects.push(subject);
     }
   }
-  const totalDurationSeconds = Number(sections.reduce(
+  const sectionsDurationSeconds = Number(arrangedSections.reduce(
     (sum, section) => sum + Number(section?.duration_seconds || 0),
     0,
+  ).toFixed(3));
+  const introDurationSeconds = Math.max(0, Number(template?.episode?.intro_duration_seconds || 0));
+  const chapterIntroDurationSeconds = Math.max(0, Number(template?.episode?.chapter_intro_duration_seconds || 0));
+  const outroDurationSeconds = Math.max(0, Number(template?.episode?.outro_duration_seconds || 0));
+  const chapterCount = new Set(arrangedSections.map((section) => section?.difficulty?.key).filter(Boolean)).size;
+  const totalDurationSeconds = Number((
+    sectionsDurationSeconds
+    + introDurationSeconds
+    + (chapterIntroDurationSeconds * chapterCount)
+    + outroDurationSeconds
   ).toFixed(3));
   const publication = template?.publication || {};
 
@@ -95,22 +133,26 @@ export function buildMixedChallengePlan({
     },
     selection: {
       mode: 'mixed_landscape_challenges',
-      section_count: sections.length,
-      template_keys: sections.map((section) => section.template_key),
+      section_count: arrangedSections.length,
+      template_keys: arrangedSections.map((section) => section.template_key),
       selected_subject_count: selectedSubjects.length,
       selected_subjects: selectedSubjects,
     },
-    sections,
+    sections: arrangedSections,
     timing: {
+      sections_duration_seconds: sectionsDurationSeconds,
+      intro_duration_seconds: introDurationSeconds,
+      chapter_intro_duration_seconds: chapterIntroDurationSeconds,
+      outro_duration_seconds: outroDurationSeconds,
       total_duration_seconds: totalDurationSeconds,
     },
     assets: {
       background: {
-        selected_path: sections[0]?.background_source_path || null,
-        selected_paths: sections.map((section) => section.background_source_path).filter(Boolean),
+        selected_path: arrangedSections[0]?.background_source_path || null,
+        selected_paths: arrangedSections.map((section) => section.background_source_path).filter(Boolean),
       },
       outputs: {
-        previews_directory: sections[0]?.previews_directory || '',
+        previews_directory: arrangedSections[0]?.previews_directory || '',
       },
     },
     narration: {

@@ -13,6 +13,26 @@
   },
   "episode": {
     "shuffle_sections": true,
+    "intro_duration_seconds": 6,
+    "chapter_intro_duration_seconds": 3.5,
+    "outro_duration_seconds": 7,
+    "difficulty_levels": [
+      {
+        "key": "easy",
+        "label": "EASY ROUND",
+        "accent_color": "0x45D483"
+      },
+      {
+        "key": "medium",
+        "label": "MEDIUM ROUND",
+        "accent_color": "0xFFD60A"
+      },
+      {
+        "key": "hard",
+        "label": "HARD ROUND",
+        "accent_color": "0xFF5B62"
+      }
+    ],
     "excluded_template_keys": [
       "tournament"
     ]

@@ -9,11 +9,16 @@ import {
 } from '../src/domains/pokemon/long-form/landscape-template-adapter.mjs';
 import { buildLongFormBackgroundPreparationFilter } from '../src/domains/pokemon/long-form/background-motion.mjs';
 import {
+  assignMixedChallengeDifficulty,
   buildMixedChallengePlan,
   orderLandscapeTemplateSpecs,
   selectLandscapeBackground,
 } from '../src/domains/pokemon/long-form/mixed-challenge/planner.mjs';
-import { buildMixedChallengeConcatFilter } from '../src/domains/pokemon/long-form/mixed-challenge/renderer.mjs';
+import {
+  buildMixedChallengeConcatFilter,
+  buildMixedChallengeProgramFilter,
+} from '../src/domains/pokemon/long-form/mixed-challenge/renderer.mjs';
+import { calculateTransparentBottomRatio } from '../src/domains/pokemon/templates/shared/render/sprite-alpha-grounding.mjs';
 
 const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
@@ -64,7 +69,25 @@ test('landscape adapters clone source templates and preserve native renderer con
   ));
   assert.equal(buildTeam.layout.sprite_grid.rows, 1);
   assert.equal(buildTeam.layout.sprite_grid.columns, 4);
-  assert.equal(buildTeam.layout.timer.center_y, 920);
+  assert.equal(buildTeam.layout.timer.center_y, 300);
+  assert.equal(buildTeam.layout.text.show_counter, false);
+  assert.equal(buildTeam.layout.sprite_platform.alpha_grounding_enabled, true);
+
+  const typeQuiz = adaptPokemonShortTemplateToLandscape(await loadJson(
+    'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json',
+  ));
+  assert.equal(typeQuiz.layout.timer.enabled, false);
+
+  const knowYourShiny = adaptPokemonShortTemplateToLandscape(await loadJson(
+    'services/product-video-agent/config/templates/pokemon/know-your-shiny.v1.json',
+  ));
+  assert.equal(knowYourShiny.question_contract.prompt_text, 'Which one is the Real Shiny?');
+  assert.equal(knowYourShiny.layout.timer.center_y, 272);
+
+  const memory = adaptPokemonShortTemplateToLandscape(await loadJson(
+    'services/product-video-agent/config/templates/pokemon/memory.v1.json',
+  ));
+  assert.equal(memory.layout.rounds.reveal_hold_seconds, 2.1);
 });
 
 test('long-form background motion is smooth and does not use sharp triangle-wave reversals', () => {
@@ -123,8 +146,11 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
   });
   assert.equal(plan.content_format, 'long_form');
   assert.equal(plan.content_surface, 'youtube_watch');
-  assert.equal(plan.timing.total_duration_seconds, 54.75);
+  assert.equal(plan.timing.sections_duration_seconds, 54.75);
+  assert.equal(plan.timing.total_duration_seconds, 74.75);
   assert.equal(plan.selection.selected_subjects.length, 2);
+  assert.equal(plan.sections[0].difficulty.label, 'EASY ROUND');
+  assert.equal(plan.sections[1].difficulty.label, 'MEDIUM ROUND');
   assert.equal(plan.publication_policy.related_video_enabled, false);
   assert.equal(plan.publication_policy.watermark_enabled, false);
 
@@ -132,4 +158,34 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
   assert.match(concatFilter, /\[0:v\]setpts=PTS-STARTPTS\[v0\]/u);
   assert.match(concatFilter, /\[1:a\]aresample=48000/u);
   assert.match(concatFilter, /concat=n=2:v=1:a=1\[vout\]\[aout\]/u);
+
+  const programFilter = buildMixedChallengeProgramFilter(2, {
+    template,
+    sections: assignMixedChallengeDifficulty(sections, template),
+    fontPath: '/tmp/font.ttf',
+  });
+  assert.match(programFilter, /THE ULTIMATE POKEMON CHALLENGE/u);
+  assert.match(programFilter, /CURRENT DIFFICULTY/u);
+  assert.equal(programFilter.includes('EASY ROUND  |  1 / 2'), true);
+  assert.match(programFilter, /HOW DID YOU DO/u);
+});
+
+test('transparent bottom padding is measured independently of animation frame stacking', () => {
+  const width = 2;
+  const pageHeight = 4;
+  const frameCount = 2;
+  const channels = 4;
+  const data = Buffer.alloc(width * pageHeight * frameCount * channels);
+  const setAlpha = (frame, x, y, alpha) => {
+    const stackedY = (frame * pageHeight) + y;
+    data[((stackedY * width + x) * channels) + 3] = alpha;
+  };
+  setAlpha(0, 0, 1, 255);
+  setAlpha(1, 1, 2, 255);
+  assert.equal(calculateTransparentBottomRatio(data, {
+    width,
+    height: pageHeight * frameCount,
+    channels,
+    pageHeight,
+  }), 0.25);
 });
