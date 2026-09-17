@@ -50,6 +50,15 @@ export function selectLandscapeBackground(backgrounds = [], seed = '', sectionIn
   return backgrounds[index] || backgrounds[0];
 }
 
+export function selectMixedChallengeIntroMusic(musicPaths = [], firstSectionMusicPath = '', seed = '') {
+  const normalizedFirstPath = String(firstSectionMusicPath || '').trim();
+  const candidates = [...new Set(musicPaths.map((value) => String(value || '').trim()).filter(Boolean))];
+  const alternatives = candidates.filter((value) => value !== normalizedFirstPath);
+  const pool = alternatives.length > 0 ? alternatives : candidates;
+  if (pool.length === 0) return null;
+  return pool[hashSeed(`${seed}:intro-music`) % pool.length];
+}
+
 export function assignMixedChallengeDifficulty(sections = [], template = {}) {
   const configuredLevels = Array.isArray(template?.episode?.difficulty_levels)
     ? template.episode.difficulty_levels
@@ -83,6 +92,7 @@ export function buildMixedChallengePlan({
   channelProfile,
   sections = [],
   selectionState = {},
+  programAssets = {},
 }) {
   const arrangedSections = assignMixedChallengeDifficulty(sections, template);
   const selectedSubjects = [];
@@ -150,6 +160,12 @@ export function buildMixedChallengePlan({
       background: {
         selected_path: arrangedSections[0]?.background_source_path || null,
         selected_paths: arrangedSections.map((section) => section.background_source_path).filter(Boolean),
+      },
+      program: {
+        intro_music_path: String(programAssets?.intro_music_path || '').trim() || null,
+        intro_pokeballs: Array.isArray(programAssets?.intro_pokeballs)
+          ? programAssets.intro_pokeballs
+          : [],
       },
       outputs: {
         previews_directory: arrangedSections[0]?.previews_directory || '',

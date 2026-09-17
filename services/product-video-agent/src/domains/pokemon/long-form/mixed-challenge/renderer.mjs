@@ -1,10 +1,13 @@
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { runLocalProcess } from '../../../../process-runner.mjs';
+import { buildAnimatedPopSettleExpression } from '../../templates/dual-type-reveal/render/animation-expressions.mjs';
 import {
   DEFAULT_FONT_CANDIDATES,
   escapeDrawtextText,
   escapeFilterPath,
+  ensureNumber,
+  roundTime,
 } from '../../templates/dual-type-reveal/render/constants.mjs';
 import { resolveFontPath } from '../../templates/dual-type-reveal/render/drawtext-artifacts.mjs';
 
@@ -47,6 +50,225 @@ function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
 }
 
+function buildPokeballWiggleExpression({
+  startSeconds,
+  amplitude,
+  frequencyHz,
+  momentumStrength,
+  directionMultiplier,
+}) {
+  const start = roundTime(startSeconds);
+  const normalizedAmplitude = roundTime(Math.max(0, amplitude));
+  if (normalizedAmplitude <= 0) return '0';
+  const frequencyRadians = roundTime(Math.max(0.1, frequencyHz) * 6.283185307);
+  const momentum = roundTime(Math.max(0, momentumStrength));
+  const direction = ensureNumber(directionMultiplier, 1) < 0 ? -1 : 1;
+  const sine = `sin((t-${start})*${frequencyRadians})`;
+  const weighted = momentum > 0
+    ? `(${sine})*(1+${momentum}*(1-abs(${sine})))`
+    : sine;
+  return `if(lt(t,${start}),0,(${weighted})*${roundTime(normalizedAmplitude * direction)})`;
+}
+
+function appendTypedText(filters, currentLabel, {
+  labelPrefix,
+  text,
+  fontPart,
+  fontColor,
+  fontSize,
+  borderWidth,
+  borderColor,
+  shadowX = 0,
+  shadowY = 0,
+  shadowColor = 'black@0',
+  x,
+  y,
+  startSeconds,
+  secondsPerCharacter,
+  endSeconds,
+}) {
+  const value = String(text || '');
+  const visibleCharacterIndexes = [...value]
+    .map((character, index) => ({ character, index }))
+    .filter(({ character }) => character !== ' ')
+    .map(({ index }) => index);
+  let outputLabel = currentLabel;
+  visibleCharacterIndexes.forEach((characterIndex, stageIndex) => {
+    const stageStart = Number((startSeconds + (characterIndex * secondsPerCharacter)).toFixed(3));
+    const nextCharacterIndex = visibleCharacterIndexes[stageIndex + 1];
+    const stageEnd = nextCharacterIndex == null
+      ? endSeconds
+      : Math.min(endSeconds, Number((startSeconds + (nextCharacterIndex * secondsPerCharacter)).toFixed(3)));
+    if (stageStart >= endSeconds || stageEnd <= stageStart) return;
+    const nextLabel = `${labelPrefix}${stageIndex}`;
+    const prefix = value.slice(0, characterIndex + 1);
+    filters.push(
+      `[${outputLabel}]drawtext=text='${escapeDrawtextText(prefix)}'${fontPart}:fontcolor=${fontColor}:fontsize=${fontSize}:borderw=${borderWidth}:bordercolor=${borderColor}:shadowx=${shadowX}:shadowy=${shadowY}:shadowcolor=${shadowColor}:x=${x}:y=${y}:enable='between(t,${stageStart},${stageEnd})'[${nextLabel}]`,
+    );
+    outputLabel = nextLabel;
+  });
+  return outputLabel;
+}
+
+function appendIntroAudio(filters, {
+  audioLabel,
+  audioInputRef,
+  duration,
+  fadeOutStart,
+  volume,
+}) {
+  if (audioInputRef == null) {
+    filters.push(
+      `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${duration},asetpts=PTS-STARTPTS[${audioLabel}]`,
+    );
+    return;
+  }
+  filters.push(
+    `[${audioInputRef}:a]aresample=48000,atrim=duration=${duration},asetpts=PTS-STARTPTS,volume=${volume},afade=t=in:st=0:d=0.35,afade=t=out:st=${fadeOutStart}:d=0.45[${audioLabel}]`,
+  );
+}
+
+function appendAnimatedIntroCard(filters, programInputs, {
+  width,
+  height,
+  fps,
+  durationSeconds,
+  sectionCount,
+  fontPath,
+  template,
+  introPokeballs = [],
+  introMusicInputRef = null,
+}) {
+  const duration = Math.max(0.5, durationSeconds);
+  const fadeOutStart = Math.max(0, Number((duration - 0.45).toFixed(3)));
+  const fontPart = buildFontPart(fontPath);
+  const accentColor = '0xFFD60A';
+  const boxX = 120;
+  const boxY = 155;
+  const boxWidth = width - 240;
+  const boxHeight = height - 310;
+  filters.push(`color=c=0x071426:s=${width}x${height}:r=${fps}:d=${duration},format=rgba[introbase]`);
+  let currentLabel = 'introbase';
+  const boxLayers = [
+    `drawbox=x=${boxX}:y=${boxY}:w=${boxWidth}:h=${boxHeight}:color=0x020813@0.58:t=fill:enable='gte(t,0.1)'`,
+    `drawbox=x=${boxX}:y=${boxY}:w=${boxWidth}:h=5:color=${accentColor}@0.9:t=fill:enable='gte(t,0.22)'`,
+    `drawbox=x=${boxX + boxWidth - 5}:y=${boxY}:w=5:h=${boxHeight}:color=${accentColor}@0.9:t=fill:enable='gte(t,0.38)'`,
+    `drawbox=x=${boxX}:y=${boxY + boxHeight - 5}:w=${boxWidth}:h=5:color=${accentColor}@0.9:t=fill:enable='gte(t,0.54)'`,
+    `drawbox=x=${boxX}:y=${boxY}:w=5:h=${boxHeight}:color=${accentColor}@0.9:t=fill:enable='gte(t,0.7)'`,
+  ];
+  boxLayers.forEach((filter, index) => {
+    const nextLabel = `introbox${index}`;
+    filters.push(`[${currentLabel}]${filter}[${nextLabel}]`);
+    currentLabel = nextLabel;
+  });
+  currentLabel = appendTypedText(filters, currentLabel, {
+    labelPrefix: 'introeyebrow',
+    text: 'GET READY TO PLAY',
+    fontPart,
+    fontColor: accentColor,
+    fontSize: 46,
+    borderWidth: 3,
+    borderColor: 'black',
+    x: '(w-text_w)/2',
+    y: 285,
+    startSeconds: 0.78,
+    secondsPerCharacter: 0.038,
+    endSeconds: duration,
+  });
+  currentLabel = appendTypedText(filters, currentLabel, {
+    labelPrefix: 'introtitle',
+    text: 'THE ULTIMATE POKEMON CHALLENGE',
+    fontPart,
+    fontColor: 'white',
+    fontSize: 88,
+    borderWidth: 7,
+    borderColor: 'black',
+    shadowX: 7,
+    shadowY: 9,
+    shadowColor: `${accentColor}@0.7`,
+    x: '(w-text_w)/2',
+    y: 420,
+    startSeconds: 1.45,
+    secondsPerCharacter: 0.032,
+    endSeconds: duration,
+  });
+  currentLabel = appendTypedText(filters, currentLabel, {
+    labelPrefix: 'introsubtitle',
+    text: `${sectionCount} CHALLENGES  |  3 DIFFICULTY LEVELS`,
+    fontPart,
+    fontColor: '0xDCEBFF',
+    fontSize: 42,
+    borderWidth: 3,
+    borderColor: 'black',
+    x: '(w-text_w)/2',
+    y: 610,
+    startSeconds: 2.55,
+    secondsPerCharacter: 0.026,
+    endSeconds: duration,
+  });
+
+  const pokeballCount = Math.min(
+    Math.max(0, Math.round(ensureNumber(template?.episode?.intro_pokeball_count, 4))),
+    introPokeballs.length,
+  );
+  const pokeballSize = Math.max(48, Math.round(ensureNumber(template?.episode?.intro_pokeball_size_px, 126)));
+  const pokeballCanvasSize = Math.ceil(pokeballSize * 1.5);
+  const pokeballCenterY = ensureNumber(template?.episode?.intro_pokeball_center_y, 835);
+  const pokeballGap = Math.round(pokeballSize * 0.62);
+  const rowWidth = (pokeballCount * pokeballSize) + (Math.max(0, pokeballCount - 1) * pokeballGap);
+  const rowLeft = (width - rowWidth) / 2;
+  const appearStart = Math.min(Math.max(0.4, duration - 2.65), duration - 0.8);
+  const appearDuration = 0.56;
+  const wiggleStart = Number((appearStart + appearDuration).toFixed(3));
+  introPokeballs.slice(0, pokeballCount).forEach((pokeball, index) => {
+    const centerX = rowLeft + (pokeballSize / 2) + (index * (pokeballSize + pokeballGap));
+    const speedMultiplier = Math.max(0.5, Math.min(1.5, ensureNumber(pokeball.speed_multiplier, 1)));
+    const frequencyHz = 0.675 * speedMultiplier;
+    const rotationExpression = buildPokeballWiggleExpression({
+      startSeconds: wiggleStart,
+      amplitude: 0.24,
+      frequencyHz,
+      momentumStrength: 0.45,
+      directionMultiplier: pokeball.direction_multiplier,
+    });
+    const horizontalExpression = buildPokeballWiggleExpression({
+      startSeconds: wiggleStart,
+      amplitude: 24,
+      frequencyHz,
+      momentumStrength: 0.45,
+      directionMultiplier: pokeball.direction_multiplier,
+    });
+    const scaleExpression = buildAnimatedPopSettleExpression(
+      appearStart,
+      appearDuration,
+      0.02,
+      1.08,
+      1,
+      't',
+    );
+    const sourceLabel = `intropokeball${index}`;
+    const overlayLabel = `intropokeballv${index}`;
+    filters.push(
+      `[${pokeball.input_ref}:v]fps=${fps},trim=duration=${duration},setpts=PTS-STARTPTS,scale=w='${pokeballSize}*(${scaleExpression})':h='${pokeballSize}*(${scaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,pad=${pokeballCanvasSize}:${pokeballCanvasSize}:(ow-iw)/2:(oh-ih)/2:color=black@0:eval=frame,rotate='${rotationExpression}':ow=iw:oh=ih:c=none,setsar=1[${sourceLabel}]`,
+    );
+    filters.push(
+      `[${currentLabel}][${sourceLabel}]overlay=x='${roundTime(centerX)}-w/2+(${horizontalExpression})':y='${roundTime(pokeballCenterY)}-h/2':enable='between(t,${appearStart},${duration})'[${overlayLabel}]`,
+    );
+    currentLabel = overlayLabel;
+  });
+  filters.push(
+    `[${currentLabel}]fade=t=in:st=0:d=0.35,fade=t=out:st=${fadeOutStart}:d=0.45,format=yuv420p[cardv0]`,
+  );
+  appendIntroAudio(filters, {
+    audioLabel: 'carda0',
+    audioInputRef: introMusicInputRef,
+    duration,
+    fadeOutStart,
+    volume: Math.max(0, ensureNumber(template?.episode?.intro_music_volume, 0.24)),
+  });
+  programInputs.push('[cardv0][carda0]');
+}
+
 function appendProgramCard(filters, programInputs, {
   index,
   width,
@@ -78,6 +300,7 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
   sections = [],
   template = {},
   fontPath = null,
+  programAssets = {},
 } = {}) {
   const count = Math.max(1, Number.parseInt(String(sectionCount), 10) || 1);
   const width = Number(template?.canvas?.width || 1920);
@@ -94,18 +317,16 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
     difficulty: resolveDifficulty(sections[index], index, count),
   }));
 
-  appendProgramCard(filters, programInputs, {
-    index: 0,
+  appendAnimatedIntroCard(filters, programInputs, {
     width,
     height,
     fps,
     durationSeconds: introDuration,
-    eyebrow: 'GET READY TO PLAY',
-    title: 'THE ULTIMATE POKEMON CHALLENGE',
-    subtitle: `${count} CHALLENGES  |  3 DIFFICULTY LEVELS`,
-    accentColor: '0xFFD60A',
-    titleFontSize: 88,
+    sectionCount: count,
     fontPath,
+    template,
+    introPokeballs: programAssets.intro_pokeballs || [],
+    introMusicInputRef: programAssets.intro_music_input_ref,
   });
 
   let cardIndex = 1;
@@ -161,6 +382,7 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
 export async function assembleMixedChallengeVideo({
   sectionPaths,
   sections = [],
+  programAssets = {},
   outputPath,
   template,
   ffmpegExecutable = 'ffmpeg',
@@ -176,16 +398,76 @@ export async function assembleMixedChallengeVideo({
   await mkdir(dirname(filterPath), { recursive: true });
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
   const fontPath = await resolveFontPath(DEFAULT_FONT_CANDIDATES);
+  const fps = Number(template?.canvas?.fps || 30);
+  const introDuration = normalizeDuration(template?.episode?.intro_duration_seconds, 6);
+  const requestedPokeballs = Array.isArray(programAssets?.intro_pokeballs)
+    ? programAssets.intro_pokeballs.slice(0, Math.max(
+        0,
+        Math.round(ensureNumber(template?.episode?.intro_pokeball_count, 4)),
+      ))
+    : [];
+  const introPokeballs = [];
+  const extraInputArgs = [];
+  let nextInputRef = sectionPaths.length;
+  for (const pokeball of requestedPokeballs) {
+    const requestedPokeballPath = String(pokeball?.path || '').trim();
+    if (!requestedPokeballPath) continue;
+    const pokeballPath = resolve(projectRoot, requestedPokeballPath);
+    try {
+      await access(pokeballPath);
+    } catch {
+      continue;
+    }
+    extraInputArgs.push(
+      '-loop',
+      '1',
+      '-framerate',
+      String(fps),
+      '-t',
+      String(introDuration),
+      '-i',
+      pokeballPath,
+    );
+    introPokeballs.push({
+      ...pokeball,
+      input_ref: nextInputRef,
+    });
+    nextInputRef += 1;
+  }
+  let introMusicInputRef = null;
+  const requestedMusicPath = String(programAssets?.intro_music_path || '').trim();
+  if (requestedMusicPath) {
+    const introMusicPath = resolve(projectRoot, requestedMusicPath);
+    try {
+      await access(introMusicPath);
+      extraInputArgs.push(
+        '-stream_loop',
+        '-1',
+        '-t',
+        String(introDuration),
+        '-i',
+        introMusicPath,
+      );
+      introMusicInputRef = nextInputRef;
+    } catch {
+      introMusicInputRef = null;
+    }
+  }
   await writeFile(filterPath, buildMixedChallengeProgramFilter(sectionPaths.length, {
     sections,
     template,
     fontPath,
+    programAssets: {
+      intro_pokeballs: introPokeballs,
+      intro_music_input_ref: introMusicInputRef,
+    },
   }), 'utf8');
   await runProcess({
     executable: ffmpegExecutable,
     args: [
       '-y',
       ...sectionPaths.flatMap((sectionPath) => ['-i', sectionPath]),
+      ...extraInputArgs,
       '-/filter_complex',
       filterPath,
       '-map',

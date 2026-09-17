@@ -13,6 +13,7 @@ import {
   buildMixedChallengePlan,
   orderLandscapeTemplateSpecs,
   selectLandscapeBackground,
+  selectMixedChallengeIntroMusic,
 } from '../src/domains/pokemon/long-form/mixed-challenge/planner.mjs';
 import {
   buildMixedChallengeConcatFilter,
@@ -69,9 +70,21 @@ test('landscape adapters clone source templates and preserve native renderer con
   ));
   assert.equal(buildTeam.layout.sprite_grid.rows, 1);
   assert.equal(buildTeam.layout.sprite_grid.columns, 4);
-  assert.equal(buildTeam.layout.timer.center_y, 300);
+  assert.equal(buildTeam.layout.sprite_grid.sprite_center_y_offset_px, 134);
+  assert.equal(buildTeam.layout.timer.center_y, 500);
+  assert.equal(buildTeam.layout.timer.bar_horizontal_inset_px, 250);
   assert.equal(buildTeam.layout.text.show_counter, false);
   assert.equal(buildTeam.layout.sprite_platform.alpha_grounding_enabled, true);
+
+  const statClash = adaptPokemonShortTemplateToLandscape(await loadJson(
+    'services/product-video-agent/config/templates/pokemon/stat-clash.v1.json',
+  ));
+  assert.equal(statClash.layout.sprite_grid.sprite_center_y_offset_px, 134);
+
+  const cryMatch = adaptPokemonShortTemplateToLandscape(await loadJson(
+    'services/product-video-agent/config/templates/pokemon/cry-match.v1.json',
+  ));
+  assert.equal(cryMatch.layout.sprite_grid.sprite_center_y_offset_px, 134);
 
   const typeQuiz = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json',
@@ -83,6 +96,7 @@ test('landscape adapters clone source templates and preserve native renderer con
   ));
   assert.equal(knowYourShiny.question_contract.prompt_text, 'Which one is the Real Shiny?');
   assert.equal(knowYourShiny.layout.timer.center_y, 272);
+  assert.equal(knowYourShiny.layout.timer.bar_horizontal_inset_px, 190);
 
   const memory = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/memory.v1.json',
@@ -109,6 +123,8 @@ test('long-form background motion is smooth and does not use sharp triangle-wave
     endSeconds: 40,
   });
   assert.match(filter, /sin\(2\*PI/u);
+  assert.match(filter, /crop=w=2496:h=1404:x='\(iw-ow\)\/2'/u);
+  assert.match(filter, /flags=lanczos/u);
   assert.match(filter, /gblur=sigma=6/u);
   assert.doesNotMatch(filter, /acos\(cos/u);
   assert.doesNotMatch(filter, /eq=/u);
@@ -143,6 +159,10 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
     channelProfile: { id: 'channel', name: 'Poke Quizz', account_key: 'poke-quizz-youtube' },
     sections,
     selectionState: { sections: {} },
+    programAssets: {
+      intro_music_path: '/music/intro.mp3',
+      intro_pokeballs: [{ path: '/overlays/pokeball.png' }],
+    },
   });
   assert.equal(plan.content_format, 'long_form');
   assert.equal(plan.content_surface, 'youtube_watch');
@@ -153,6 +173,12 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
   assert.equal(plan.sections[1].difficulty.label, 'MEDIUM ROUND');
   assert.equal(plan.publication_policy.related_video_enabled, false);
   assert.equal(plan.publication_policy.watermark_enabled, false);
+  assert.equal(plan.assets.program.intro_music_path, '/music/intro.mp3');
+  assert.equal(plan.assets.program.intro_pokeballs.length, 1);
+  assert.equal(
+    selectMixedChallengeIntroMusic(['/music/one.mp3', '/music/two.mp3'], '/music/one.mp3', 'seed'),
+    '/music/two.mp3',
+  );
 
   const concatFilter = buildMixedChallengeConcatFilter(2);
   assert.match(concatFilter, /\[0:v\]setpts=PTS-STARTPTS\[v0\]/u);
@@ -165,9 +191,24 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
     fontPath: '/tmp/font.ttf',
   });
   assert.match(programFilter, /THE ULTIMATE POKEMON CHALLENGE/u);
+  assert.match(programFilter, /introtitle/u);
+  assert.match(programFilter, /enable='gte\(t,0\.22\)'/u);
   assert.match(programFilter, /CURRENT DIFFICULTY/u);
   assert.equal(programFilter.includes('EASY ROUND  |  1 / 2'), true);
   assert.match(programFilter, /HOW DID YOU DO/u);
+
+  const animatedProgramFilter = buildMixedChallengeProgramFilter(2, {
+    template,
+    sections: assignMixedChallengeDifficulty(sections, template),
+    fontPath: '/tmp/font.ttf',
+    programAssets: {
+      intro_music_input_ref: 3,
+      intro_pokeballs: [{ input_ref: 2, speed_multiplier: 1.05, direction_multiplier: -1 }],
+    },
+  });
+  assert.match(animatedProgramFilter, /\[2:v\].*rotate=/u);
+  assert.match(animatedProgramFilter, /\[3:a\].*volume=0\.24/u);
+  assert.match(animatedProgramFilter, /1\+0\.45\*\(1-abs/u);
 });
 
 test('transparent bottom padding is measured independently of animation frame stacking', () => {

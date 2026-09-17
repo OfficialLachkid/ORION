@@ -19,6 +19,7 @@ import {
   buildMixedChallengePlan,
   orderLandscapeTemplateSpecs,
   selectLandscapeBackground,
+  selectMixedChallengeIntroMusic,
 } from '../src/domains/pokemon/long-form/mixed-challenge/planner.mjs';
 import { assembleMixedChallengeVideo } from '../src/domains/pokemon/long-form/mixed-challenge/renderer.mjs';
 import { buildLandscapeBackgroundCatalog } from '../src/domains/pokemon/long-form/media-catalog.mjs';
@@ -109,6 +110,13 @@ function buildSectionSummary({
   segmentPath,
   planPath,
 }) {
+  const introPokeballs = templateKey === 'build-your-team'
+    ? (plan?.rounds?.[0]?.candidates || []).map((candidate) => ({
+        path: String(candidate?.pokeball_sprite_path || '').trim(),
+        speed_multiplier: Number(candidate?.pokeball_wiggle_speed_multiplier || 1),
+        direction_multiplier: Number(candidate?.pokeball_wiggle_direction_multiplier || 1),
+      })).filter((entry) => entry.path)
+    : [];
   return {
     section_number: sectionIndex + 1,
     template_key: templateKey,
@@ -121,6 +129,8 @@ function buildSectionSummary({
     segment_path: segmentPath,
     plan_path: planPath,
     previews_directory: String(plan?.assets?.outputs?.previews_directory || ''),
+    selected_music_path: String(plan?.assets?.audio?.selected_battle_intro_music_path || ''),
+    intro_pokeballs: introPokeballs,
   };
 }
 
@@ -326,12 +336,25 @@ export async function generatePokemonLongFormReview(options = {}) {
     nextSelectionState.sections[spec.key] = plannedSection.selection_state || {};
   }
 
+  const firstSectionMusicPath = sectionSummaries[0]?.selected_music_path || '';
+  const introMusicPath = selectMixedChallengeIntroMusic(
+    inventory.music,
+    firstSectionMusicPath,
+    seed,
+  );
+  const introPokeballs = sectionSummaries
+    .find((section) => section.template_key === 'build-your-team')
+    ?.intro_pokeballs || [];
   const plan = buildMixedChallengePlan({
     template,
     seed,
     channelProfile,
     sections: sectionSummaries,
     selectionState: nextSelectionState,
+    programAssets: {
+      intro_music_path: introMusicPath,
+      intro_pokeballs: introPokeballs,
+    },
   });
   const planPath = getStringOption(
     options,
@@ -352,6 +375,7 @@ export async function generatePokemonLongFormReview(options = {}) {
   const renderResult = await assembleMixedChallengeVideo({
     sectionPaths,
     sections: plan.sections,
+    programAssets: plan.assets.program,
     outputPath: resolvedOutput.outputPath,
     template,
     ffmpegExecutable,

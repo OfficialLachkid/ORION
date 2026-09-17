@@ -171,7 +171,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     }),
     timer: Object.freeze({
       center_y: 272,
-      bar_horizontal_inset_px: 500,
+      bar_horizontal_inset_px: 190,
     }),
   }),
   'progressive-reveal': Object.freeze({
@@ -203,7 +203,10 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
       counter_y: 42,
       counter_font_size: 54,
     }),
-    sprite_grid: FOUR_OPTION_GRID,
+    sprite_grid: Object.freeze({
+      ...FOUR_OPTION_GRID,
+      sprite_center_y_offset_px: 134,
+    }),
     timer: Object.freeze({
       center_y: 920,
       bar_horizontal_inset_px: 250,
@@ -246,6 +249,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     }),
     sprite_grid: Object.freeze({
       ...FOUR_OPTION_GRID,
+      sprite_center_y_offset_px: 134,
       row_y_offsets_px: Object.freeze([0]),
       stage_bounds_px: Object.freeze({
         left: 150,
@@ -255,8 +259,8 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
       }),
     }),
     timer: Object.freeze({
-      center_y: 300,
-      bar_horizontal_inset_px: 500,
+      center_y: 500,
+      bar_horizontal_inset_px: 250,
     }),
   }),
   memory: Object.freeze({
@@ -364,7 +368,10 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
       counter_y: 42,
       counter_font_size: 54,
     }),
-    sprite_grid: FOUR_OPTION_GRID,
+    sprite_grid: Object.freeze({
+      ...FOUR_OPTION_GRID,
+      sprite_center_y_offset_px: 134,
+    }),
     timer: Object.freeze({
       center_y: 930,
       bar_horizontal_inset_px: 250,

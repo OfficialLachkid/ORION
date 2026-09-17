@@ -38,6 +38,7 @@ export async function renderSmoothLandscapeBackground({
         motion: {
           enabled: true,
           zoom_scale: Number(template?.layout?.background?.motion?.zoom_scale || 1.3),
+          subpixel_scale: Number(template?.layout?.background?.motion?.subpixel_scale || 1),
         },
       },
     },

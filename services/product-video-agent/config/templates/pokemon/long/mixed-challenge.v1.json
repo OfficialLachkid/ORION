@@ -14,6 +14,10 @@
   "episode": {
     "shuffle_sections": true,
     "intro_duration_seconds": 6,
+    "intro_music_volume": 0.24,
+    "intro_pokeball_count": 4,
+    "intro_pokeball_size_px": 126,
+    "intro_pokeball_center_y": 835,
     "chapter_intro_duration_seconds": 3.5,
     "outro_duration_seconds": 7,
     "difficulty_levels": [
@@ -47,7 +51,8 @@
       "blur_sigma": 6,
       "motion": {
         "enabled": true,
-        "zoom_scale": 1.3
+        "zoom_scale": 1.3,
+        "subpixel_scale": 1.5
       }
     }
   },
