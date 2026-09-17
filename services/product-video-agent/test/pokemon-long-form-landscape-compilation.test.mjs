@@ -70,7 +70,7 @@ test('landscape adapters clone source templates and preserve native renderer con
   ));
   assert.equal(buildTeam.layout.sprite_grid.rows, 1);
   assert.equal(buildTeam.layout.sprite_grid.columns, 4);
-  assert.equal(buildTeam.layout.sprite_grid.sprite_center_y_offset_px, 134);
+  assert.equal(buildTeam.layout.sprite_grid.sprite_center_y_offset_px, 184);
   assert.equal(buildTeam.layout.timer.center_y, 500);
   assert.equal(buildTeam.layout.timer.bar_horizontal_inset_px, 250);
   assert.equal(buildTeam.layout.text.show_counter, false);
@@ -79,12 +79,12 @@ test('landscape adapters clone source templates and preserve native renderer con
   const statClash = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/stat-clash.v1.json',
   ));
-  assert.equal(statClash.layout.sprite_grid.sprite_center_y_offset_px, 134);
+  assert.equal(statClash.layout.sprite_grid.sprite_center_y_offset_px, 184);
 
   const cryMatch = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/cry-match.v1.json',
   ));
-  assert.equal(cryMatch.layout.sprite_grid.sprite_center_y_offset_px, 134);
+  assert.equal(cryMatch.layout.sprite_grid.sprite_center_y_offset_px, 184);
 
   const typeQuiz = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json',
@@ -102,6 +102,11 @@ test('landscape adapters clone source templates and preserve native renderer con
     'services/product-video-agent/config/templates/pokemon/memory.v1.json',
   ));
   assert.equal(memory.layout.rounds.reveal_hold_seconds, 2.1);
+  assert.equal(memory.layout.sprite_grid.column_gap_px, 90);
+  assert.equal(memory.layout.sprite_grid.sprite_scale_multiplier, 1.32);
+  assert.equal(memory.layout.option_grid.column_gap_px, 160);
+  assert.equal(memory.layout.option_grid.sprite_scale_multiplier, 1.4);
+  assert.equal(memory.layout.option_grid.stage_bounds_px.width, 1760);
 });
 
 test('long-form background motion is smooth and does not use sharp triangle-wave reversals', () => {

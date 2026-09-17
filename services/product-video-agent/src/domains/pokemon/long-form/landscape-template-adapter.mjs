@@ -205,7 +205,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     }),
     sprite_grid: Object.freeze({
       ...FOUR_OPTION_GRID,
-      sprite_center_y_offset_px: 134,
+      sprite_center_y_offset_px: 184,
     }),
     timer: Object.freeze({
       center_y: 920,
@@ -249,7 +249,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     }),
     sprite_grid: Object.freeze({
       ...FOUR_OPTION_GRID,
-      sprite_center_y_offset_px: 134,
+      sprite_center_y_offset_px: 184,
       row_y_offsets_px: Object.freeze([0]),
       stage_bounds_px: Object.freeze({
         left: 150,
@@ -276,8 +276,9 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     sprite_grid: Object.freeze({
       item_size_px: 190,
       min_item_size_px: 145,
-      column_gap_px: 65,
-      row_gap_px: 54,
+      column_gap_px: 90,
+      row_gap_px: 75,
+      sprite_scale_multiplier: 1.32,
       stage_bounds_px: Object.freeze({
         left: 170,
         top: 250,
@@ -302,11 +303,14 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     }),
     option_grid: Object.freeze({
       ...FOUR_OPTION_GRID,
-      item_size_px: 280,
+      item_size_px: 260,
+      min_item_size_px: 220,
+      column_gap_px: 160,
+      sprite_scale_multiplier: 1.4,
       stage_bounds_px: Object.freeze({
-        left: 130,
+        left: 80,
         top: 250,
-        width: 1660,
+        width: 1760,
         height: 520,
       }),
     }),
@@ -370,7 +374,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     }),
     sprite_grid: Object.freeze({
       ...FOUR_OPTION_GRID,
-      sprite_center_y_offset_px: 134,
+      sprite_center_y_offset_px: 184,
     }),
     timer: Object.freeze({
       center_y: 930,
