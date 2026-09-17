@@ -251,6 +251,7 @@ function resolvePlatformLayout(template) {
   const config = template?.layout?.sprite_platform || {};
   return {
     enabled: config.option_enabled !== false,
+    visible_bottom_alignment_enabled: config.visible_bottom_alignment_enabled === true,
     width_multiplier: ensureNumber(config.option_width_multiplier, 0.9),
     center_y_offset_multiplier: ensureNumber(config.center_y_offset_multiplier, 0.34),
     center_y_offset_px: ensureNumber(config.option_center_y_offset_px, ensureNumber(config.center_y_offset_px, 0)),
@@ -381,9 +382,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         0,
         ensureNumber(roundInputRefs.bottom_transparent_ratios?.[candidate.index], 0),
       );
-      const groundedYExpression = bottomTransparentRatio > 0
-        ? `${candidateCenterY}-h/2+h*${bottomTransparentRatio}`
-        : `${candidateCenterY}-h/2`;
+      const candidateBottomY = Number((candidateCenterY + (baseSpriteSize / 2)).toFixed(3));
+      const groundedYExpression = platformLayout.visible_bottom_alignment_enabled
+        ? `${candidateBottomY}-h${bottomTransparentRatio > 0 ? `+h*${bottomTransparentRatio}` : ''}`
+        : `${candidateCenterY}-h/2${bottomTransparentRatio > 0 ? `+h*${bottomTransparentRatio}` : ''}`;
       const candidateSourceLabel = `r${roundIndex}src${candidate.index}`;
       const graySourceLabel = `r${roundIndex}gray${candidate.index}`;
       filters.push(

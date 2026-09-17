@@ -140,7 +140,10 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
       prompt_font_size: 72,
       reveal_y: 65,
     }),
-    timer: Object.freeze({ hp_bar_max_height_px: 120 }),
+    timer: Object.freeze({
+      hp_bar_max_height_px: 120,
+      hp_bar_y_offset_px: -150,
+    }),
   }),
   'know-your-shiny': Object.freeze({
     text: Object.freeze({
@@ -163,6 +166,9 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
         width: 1620,
         height: 430,
       }),
+    }),
+    sprite_platform: Object.freeze({
+      visible_bottom_alignment_enabled: true,
     }),
     reveal_sprite: Object.freeze({
       center_x: 960,
@@ -205,7 +211,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     }),
     sprite_grid: Object.freeze({
       ...FOUR_OPTION_GRID,
-      sprite_center_y_offset_px: 184,
+      sprite_center_y_offset_px: 84,
     }),
     timer: Object.freeze({
       center_y: 920,
@@ -249,7 +255,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     }),
     sprite_grid: Object.freeze({
       ...FOUR_OPTION_GRID,
-      sprite_center_y_offset_px: 184,
+      sprite_center_y_offset_px: 84,
       row_y_offsets_px: Object.freeze([0]),
       stage_bounds_px: Object.freeze({
         left: 150,
@@ -374,7 +380,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
     }),
     sprite_grid: Object.freeze({
       ...FOUR_OPTION_GRID,
-      sprite_center_y_offset_px: 184,
+      sprite_center_y_offset_px: 84,
     }),
     timer: Object.freeze({
       center_y: 930,

@@ -267,6 +267,22 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
     },
     null,
   );
+  const visibleBottomTemplate = structuredClone(template);
+  visibleBottomTemplate.layout.sprite_platform.visible_bottom_alignment_enabled = true;
+  const visibleBottomVisualFilter = buildVisualFilterScript(
+    plan,
+    visibleBottomTemplate,
+    renderPlan,
+    {
+      background: 0,
+      rounds: renderPlan.rounds.map((round, roundIndex) => ({
+        candidates: round.candidates.map((_, candidateIndex) => 1 + (roundIndex * 4) + candidateIndex),
+      })),
+      grassPlatform: 13,
+      shinySparkle: 14,
+    },
+    null,
+  );
   const audioFilter = buildAudioFilterScript({
     narrationPaths: [],
     musicPath: '/tmp/music.mp3',
@@ -291,6 +307,7 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(visualFilter.script, /enable='between\(t,4\.34,5\.34\)'/u);
   assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
   assert.match(visualFilter.script, /647-h\/2/u);
+  assert.match(visibleBottomVisualFilter.script, /838\.25-h/u);
   assert.match(visualFilter.script, /colorchannelmixer=/u);
   assert.match(visualFilter.script, /fontcolor=0xFFD60A/u);
   assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);

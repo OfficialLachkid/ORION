@@ -70,7 +70,7 @@ test('landscape adapters clone source templates and preserve native renderer con
   ));
   assert.equal(buildTeam.layout.sprite_grid.rows, 1);
   assert.equal(buildTeam.layout.sprite_grid.columns, 4);
-  assert.equal(buildTeam.layout.sprite_grid.sprite_center_y_offset_px, 184);
+  assert.equal(buildTeam.layout.sprite_grid.sprite_center_y_offset_px, 84);
   assert.equal(buildTeam.layout.timer.center_y, 500);
   assert.equal(buildTeam.layout.timer.bar_horizontal_inset_px, 250);
   assert.equal(buildTeam.layout.text.show_counter, false);
@@ -79,12 +79,17 @@ test('landscape adapters clone source templates and preserve native renderer con
   const statClash = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/stat-clash.v1.json',
   ));
-  assert.equal(statClash.layout.sprite_grid.sprite_center_y_offset_px, 184);
+  assert.equal(statClash.layout.sprite_grid.sprite_center_y_offset_px, 84);
 
   const cryMatch = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/cry-match.v1.json',
   ));
-  assert.equal(cryMatch.layout.sprite_grid.sprite_center_y_offset_px, 184);
+  assert.equal(cryMatch.layout.sprite_grid.sprite_center_y_offset_px, 84);
+
+  const findTheShiny = adaptPokemonShortTemplateToLandscape(await loadJson(
+    'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json',
+  ));
+  assert.equal(findTheShiny.layout.timer.hp_bar_y_offset_px, -150);
 
   const typeQuiz = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/type-quiz.v1.json',
@@ -97,6 +102,7 @@ test('landscape adapters clone source templates and preserve native renderer con
   assert.equal(knowYourShiny.question_contract.prompt_text, 'Which one is the Real Shiny?');
   assert.equal(knowYourShiny.layout.timer.center_y, 272);
   assert.equal(knowYourShiny.layout.timer.bar_horizontal_inset_px, 190);
+  assert.equal(knowYourShiny.layout.sprite_platform.visible_bottom_alignment_enabled, true);
 
   const memory = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/memory.v1.json',
