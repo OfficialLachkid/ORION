@@ -3,6 +3,27 @@ import {
   roundTime,
 } from '../../templates/dual-type-reveal/render/constants.mjs';
 
+function appendFrozenBackground(filters, {
+  inputLabel,
+  outputLabel,
+  width,
+  height,
+  fps,
+  durationSeconds,
+  fallbackColor = '0x071426',
+}) {
+  const duration = roundTime(durationSeconds);
+  if (!inputLabel) {
+    filters.push(
+      `color=c=${fallbackColor}:s=${width}x${height}:r=${fps}:d=${duration},format=rgba[${outputLabel}]`,
+    );
+    return;
+  }
+  filters.push(
+    `[${inputLabel}]trim=end_frame=1,setpts=PTS-STARTPTS,scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,tpad=stop_mode=clone:stop_duration=${duration},trim=duration=${duration},fps=${fps},format=rgba[${outputLabel}]`,
+  );
+}
+
 export function appendSubscribeReminderOverlay(filters, currentLabel, {
   cardIndex,
   inputRef,
@@ -33,6 +54,7 @@ export function appendSubscribeReminderOverlay(filters, currentLabel, {
 export function appendPokeballStingerCard(filters, programInputs, {
   index,
   inputRef,
+  backgroundInputLabel = null,
   directionMultiplier = 1,
   width,
   height,
@@ -57,14 +79,63 @@ export function appendPokeballStingerCard(filters, programInputs, {
   const audioLabel = `carda${index}`;
   const baseLabel = `stingerbase${index}`;
   const ballLabel = `stingerball${index}`;
+  const frozenBaseLabel = `stingerfrozen${index}`;
+  appendFrozenBackground(filters, {
+    inputLabel: backgroundInputLabel,
+    outputLabel: frozenBaseLabel,
+    width,
+    height,
+    fps,
+    durationSeconds: duration,
+  });
   filters.push(
-    `color=c=0x071426:s=${width}x${height}:r=${fps}:d=${roundTime(duration)},format=rgba,drawbox=x=0:y=0:w=${width}:h=${height}:color=${accentColor}@0.14:t=fill[${baseLabel}]`,
+    `[${frozenBaseLabel}]drawbox=x=0:y=0:w=${width}:h=${height}:color=${accentColor}@0.08:t=fill[${baseLabel}]`,
   );
   filters.push(
     `[${inputRef}:v]fps=${fps},trim=duration=${roundTime(duration)},setpts=PTS-STARTPTS,scale=${ballSize}:${ballSize}:force_original_aspect_ratio=decrease,format=rgba,pad=${canvasSize}:${canvasSize}:(ow-iw)/2:(oh-ih)/2:color=black@0,rotate='${rotationExpression}':ow=iw:oh=ih:c=none,scale=w='${canvasSize}*(${scaleExpression})':h='${canvasSize}*(${scaleExpression})':eval=frame,setsar=1[${ballLabel}]`,
   );
   filters.push(
     `[${baseLabel}][${ballLabel}]overlay=x='(W-w)/2':y='(H-h)/2':shortest=1,format=yuv420p[${videoLabel}]`,
+  );
+  filters.push(
+    `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${roundTime(duration)},asetpts=PTS-STARTPTS[${audioLabel}]`,
+  );
+  programInputs.push(`[${videoLabel}][${audioLabel}]`);
+  return true;
+}
+
+export function appendKeyedTransitionCard(filters, programInputs, {
+  index,
+  inputRef,
+  backgroundInputLabel,
+  width,
+  height,
+  fps,
+  durationSeconds,
+  keyColor,
+  similarity,
+  blend,
+  config = {},
+}) {
+  if (inputRef == null || !backgroundInputLabel || config?.enabled === false) return false;
+  const duration = Math.max(0.5, ensureNumber(durationSeconds, 3));
+  const baseLabel = `transitionbase${index}`;
+  const sourceLabel = `transitionsource${index}`;
+  const videoLabel = `cardv${index}`;
+  const audioLabel = `carda${index}`;
+  appendFrozenBackground(filters, {
+    inputLabel: backgroundInputLabel,
+    outputLabel: baseLabel,
+    width,
+    height,
+    fps,
+    durationSeconds: duration,
+  });
+  filters.push(
+    `[${inputRef}:v]fps=${fps},setpts=PTS-STARTPTS,scale=${width}:${height}:flags=lanczos,setsar=1,format=rgba,colorkey=${String(keyColor || '0x00FF00')}:${roundTime(Math.max(0.01, ensureNumber(similarity, 0.22)))}:${roundTime(Math.max(0, ensureNumber(blend, 0.08)))},tpad=stop_mode=clone:stop_duration=${roundTime(duration)},trim=duration=${roundTime(duration)}[${sourceLabel}]`,
+  );
+  filters.push(
+    `[${baseLabel}][${sourceLabel}]overlay=x=0:y=0:eof_action=pass:shortest=1,format=yuv420p[${videoLabel}]`,
   );
   filters.push(
     `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${roundTime(duration)},asetpts=PTS-STARTPTS[${audioLabel}]`,

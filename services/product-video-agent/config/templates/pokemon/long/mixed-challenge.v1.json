@@ -78,6 +78,11 @@
     "round_transition": {
       "enabled": true,
       "duration_seconds": 1.15,
+      "external_duration_seconds": 3,
+      "green_key_similarity": 0.22,
+      "green_key_blend": 0.08,
+      "black_key_similarity": 0.08,
+      "black_key_blend": 0.04,
       "pokeball_size_px": 340,
       "start_scale": 0.08,
       "cover_scale": 7.2,

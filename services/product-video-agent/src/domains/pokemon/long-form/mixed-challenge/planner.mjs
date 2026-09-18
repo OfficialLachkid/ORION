@@ -27,6 +27,87 @@ function shuffle(values, random) {
   return items;
 }
 
+function transitionFileName(path) {
+  return String(path || '').trim().split(/[\\/]/u).pop()?.toLowerCase() || '';
+}
+
+function resolveTransitionKeyProfile(path, config = {}) {
+  const key = transitionFileName(path);
+  if (/^transition-0[1-3]\.mp4$/u.test(key)) {
+    return {
+      key,
+      key_color: '0x00FF00',
+      similarity: Number(config.green_key_similarity ?? 0.22),
+      blend: Number(config.green_key_blend ?? 0.08),
+    };
+  }
+  if (/^(transition-04|transition1-0[1-3])\.mp4$/u.test(key)) {
+    return {
+      key,
+      key_color: '0x000000',
+      similarity: Number(config.black_key_similarity ?? 0.08),
+      blend: Number(config.black_key_blend ?? 0.04),
+    };
+  }
+  return null;
+}
+
+export function selectMixedChallengeRoundTransitions(
+  transitionPaths = [],
+  seed = '',
+  requestedCount = 0,
+  previousTransitionKey = '',
+  config = {},
+) {
+  const count = Math.max(0, Math.round(Number(requestedCount) || 0));
+  if (count === 0 || config?.enabled === false) return [];
+  const pokeballDuration = Math.max(0.5, Number(config.duration_seconds || 1.15));
+  const externalDuration = Math.max(0.5, Number(config.external_duration_seconds || 3));
+  const candidates = [...new Map(
+    (Array.isArray(transitionPaths) ? transitionPaths : [])
+      .map((path) => ({ path: String(path || '').trim(), profile: resolveTransitionKeyProfile(path, config) }))
+      .filter((entry) => entry.path && entry.profile)
+      .map((entry) => [entry.profile.key, entry]),
+  ).values()];
+  const selected = [{
+    key: 'pokeball',
+    kind: 'pokeball',
+    duration_seconds: pokeballDuration,
+    direction_multiplier: hashSeed(`${seed}:first-pokeball-direction`) % 2 === 0 ? -1 : 1,
+  }];
+  let lastKey = String(previousTransitionKey || '').trim().toLowerCase();
+  let bagIndex = 0;
+  while (selected.length < count && candidates.length > 0) {
+    const bag = shuffle(candidates, createPrng(`${seed}:round-transition-bag:${bagIndex}`));
+    if (bag.length > 1 && bag[0].profile.key === lastKey) {
+      [bag[0], bag[1]] = [bag[1], bag[0]];
+    }
+    for (const candidate of bag) {
+      if (selected.length >= count) break;
+      selected.push({
+        key: candidate.profile.key,
+        kind: 'keyed_overlay',
+        path: candidate.path,
+        duration_seconds: externalDuration,
+        chroma_key_color: candidate.profile.key_color,
+        chroma_similarity: candidate.profile.similarity,
+        chroma_blend: candidate.profile.blend,
+      });
+      lastKey = candidate.profile.key;
+    }
+    bagIndex += 1;
+  }
+  while (selected.length < count) {
+    selected.push({
+      key: 'pokeball',
+      kind: 'pokeball',
+      duration_seconds: pokeballDuration,
+      direction_multiplier: selected.length % 2 === 0 ? -1 : 1,
+    });
+  }
+  return selected;
+}
+
 function subjectKey(subject = {}) {
   return String(
     subject.id
@@ -143,14 +224,16 @@ export function buildMixedChallengePlan({
   const chapterIntroDurationSeconds = Math.max(0, Number(template?.episode?.chapter_intro_duration_seconds || 0));
   const outroDurationSeconds = Math.max(0, Number(template?.episode?.outro_duration_seconds || 0));
   const chapterCount = new Set(arrangedSections.map((section) => section?.difficulty?.key).filter(Boolean)).size;
-  const hasRoundTransitionAssets = Array.isArray(programAssets?.intro_pokeballs)
-    && programAssets.intro_pokeballs.length > 0;
-  const roundTransitionDurationSeconds = template?.layout?.round_transition?.enabled !== false
-    && hasRoundTransitionAssets
-    ? Math.max(0, Number(template?.layout?.round_transition?.duration_seconds || 0))
-    : 0;
-  const roundTransitionsDurationSeconds = Number((
-    roundTransitionDurationSeconds * arrangedSections.length
+  const roundTransitions = Array.isArray(programAssets?.round_transitions)
+    ? programAssets.round_transitions
+    : [];
+  const roundTransitionDurationSeconds = Math.max(
+    0,
+    Number(template?.layout?.round_transition?.duration_seconds || 0),
+  );
+  const roundTransitionsDurationSeconds = Number(roundTransitions.reduce(
+    (sum, transition) => sum + Math.max(0, Number(transition?.duration_seconds || 0)),
+    0,
   ).toFixed(3));
   const totalDurationSeconds = Number((
     sectionsDurationSeconds
@@ -209,6 +292,7 @@ export function buildMixedChallengePlan({
           ? programAssets.intro_pokeballs
           : [],
         subscribe_reminder_path: String(programAssets?.subscribe_reminder_path || '').trim() || null,
+        round_transitions: roundTransitions,
       },
       outputs: {
         previews_directory: arrangedSections[0]?.previews_directory || '',

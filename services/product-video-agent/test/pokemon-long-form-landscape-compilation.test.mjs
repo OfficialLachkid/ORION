@@ -15,6 +15,7 @@ import {
   selectLandscapeBackground,
   selectMixedChallengeIntroMusic,
   selectMixedChallengeIntroPokeballs,
+  selectMixedChallengeRoundTransitions,
 } from '../src/domains/pokemon/long-form/mixed-challenge/planner.mjs';
 import {
   buildMixedChallengeConcatFilter,
@@ -61,6 +62,7 @@ test('landscape compilation supports every Pokemon Short template except Tournam
   assert.equal(longTemplate.layout.progress_tracker.marker_size_px, 42);
   assert.equal(longTemplate.layout.subscribe_reminder.enabled, true);
   assert.equal(longTemplate.layout.round_transition.duration_seconds, 1.15);
+  assert.equal(longTemplate.layout.round_transition.external_duration_seconds, 3);
   const backgrounds = [{ path: 'one' }, { path: 'two' }, { path: 'three' }];
   const selected = [0, 1, 2].map((index) => (
     selectLandscapeBackground(backgrounds, 'same-seed', index).path
@@ -154,6 +156,40 @@ test('long-form intro Pokeballs remain deterministic without a Build Your Team s
   assert.equal(first.every((entry) => [-1, 1].includes(entry.direction_multiplier)), true);
 });
 
+test('long-form transition pool starts with Pokeball and avoids repeated keyed clips', () => {
+  const paths = [
+    '/transitions/transition-01.mp4',
+    '/transitions/transition-02.mp4',
+    '/transitions/transition-03.mp4',
+    '/transitions/transition-04.mp4',
+    '/transitions/transition1-01.mp4',
+    '/transitions/transition1-02.mp4',
+    '/transitions/transition1-03.mp4',
+    '/transitions/unsupported.mov',
+  ];
+  const selected = selectMixedChallengeRoundTransitions(
+    paths,
+    'transition-seed',
+    8,
+    'transition-02.mp4',
+    { duration_seconds: 1.15, external_duration_seconds: 3 },
+  );
+  assert.equal(selected[0].kind, 'pokeball');
+  assert.equal(selected[0].duration_seconds, 1.15);
+  assert.equal(selected.slice(1).length, 7);
+  assert.equal(new Set(selected.slice(1).map((entry) => entry.key)).size, 7);
+  assert.notEqual(selected[1].key, 'transition-02.mp4');
+  assert.equal(
+    selected.find((entry) => entry.key === 'transition-02.mp4').chroma_key_color,
+    '0x00FF00',
+  );
+  assert.equal(
+    selected.find((entry) => entry.key === 'transition-04.mp4').chroma_key_color,
+    '0x000000',
+  );
+  assert.equal(selected.some((entry) => entry.key === 'unsupported.mov'), false);
+});
+
 test('long-form background motion is smooth and does not use sharp triangle-wave reversals', () => {
   const filter = buildLongFormBackgroundPreparationFilter({
     inputRef: 0,
@@ -213,13 +249,23 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
       intro_music_path: '/music/intro.mp3',
       intro_pokeballs: [{ path: '/overlays/pokeball.png' }],
       subscribe_reminder_path: '/overlays/subscribe-reminder-greenscreen.mp4',
+      round_transitions: [
+        { key: 'pokeball', kind: 'pokeball', duration_seconds: 1.15 },
+        {
+          key: 'transition-01.mp4',
+          kind: 'keyed_overlay',
+          path: '/transitions/transition-01.mp4',
+          duration_seconds: 3,
+          chroma_key_color: '0x00FF00',
+        },
+      ],
     },
   });
   assert.equal(plan.content_format, 'long_form');
   assert.equal(plan.content_surface, 'youtube_watch');
   assert.equal(plan.timing.sections_duration_seconds, 54.75);
-  assert.equal(plan.timing.round_transitions_duration_seconds, 2.3);
-  assert.equal(plan.timing.total_duration_seconds, 77.05);
+  assert.equal(plan.timing.round_transitions_duration_seconds, 4.15);
+  assert.equal(plan.timing.total_duration_seconds, 78.9);
   assert.equal(plan.selection.selected_subjects.length, 2);
   assert.equal(plan.sections[0].difficulty.label, 'EASY ROUND');
   assert.equal(plan.sections[1].difficulty.label, 'MEDIUM ROUND');
@@ -227,6 +273,7 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
   assert.equal(plan.publication_policy.watermark_enabled, false);
   assert.equal(plan.assets.program.intro_music_path, '/music/intro.mp3');
   assert.equal(plan.assets.program.intro_pokeballs.length, 1);
+  assert.equal(plan.assets.program.round_transitions.length, 2);
   assert.equal(
     plan.assets.program.subscribe_reminder_path,
     '/overlays/subscribe-reminder-greenscreen.mp4',
@@ -266,9 +313,21 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
       intro_music_input_ref: 3,
       intro_pokeballs: [{ input_ref: 2, speed_multiplier: 1.05, direction_multiplier: -1 }],
       subscribe_reminder_input_refs: [4, 5],
-      round_transition_pokeballs: [
-        { input_ref: 6, direction_multiplier: -1 },
-        { input_ref: 7, direction_multiplier: 1 },
+      round_transitions: [
+        {
+          input_ref: 6,
+          kind: 'pokeball',
+          duration_seconds: 1.15,
+          direction_multiplier: -1,
+        },
+        {
+          input_ref: 7,
+          kind: 'keyed_overlay',
+          duration_seconds: 3,
+          chroma_key_color: '0x000000',
+          chroma_similarity: 0.08,
+          chroma_blend: 0.04,
+        },
       ],
     },
   });
@@ -277,6 +336,8 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
   assert.match(animatedProgramFilter, /1\+0\.45\*\(1-abs/u);
   assert.match(animatedProgramFilter, /\[4:v\].*colorkey=0x00FF00:0\.22:0\.08/u);
   assert.match(animatedProgramFilter, /\[6:v\].*rotate=/u);
+  assert.match(animatedProgramFilter, /\[7:v\].*colorkey=0x000000:0\.08:0\.04/u);
+  assert.match(animatedProgramFilter, /\[0:v\]split=2\[sectiontransition0\]\[sectionmain0\]/u);
   assert.match(animatedProgramFilter, /concat=n=8:v=1:a=1\[vout\]\[aout\]/u);
 });
 

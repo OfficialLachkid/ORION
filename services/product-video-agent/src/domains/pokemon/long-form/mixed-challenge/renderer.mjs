@@ -11,6 +11,7 @@ import {
 } from '../../templates/dual-type-reveal/render/constants.mjs';
 import { resolveFontPath } from '../../templates/dual-type-reveal/render/drawtext-artifacts.mjs';
 import {
+  appendKeyedTransitionCard,
   appendPokeballStingerCard,
   appendSubscribeReminderOverlay,
 } from './checkpoint-overlays.mjs';
@@ -443,24 +444,48 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
       previousDifficultyKey = difficulty.key;
     }
 
-    const transitionPokeball = programAssets.round_transition_pokeballs?.[index];
-    if (appendPokeballStingerCard(filters, programInputs, {
-      index: cardIndex,
-      inputRef: transitionPokeball?.input_ref,
-      directionMultiplier: transitionPokeball?.direction_multiplier,
-      width,
-      height,
-      fps,
-      durationSeconds: template?.layout?.round_transition?.duration_seconds,
-      accentColor: difficulty.accent_color,
-      config: template?.layout?.round_transition,
-    })) {
+    const roundTransition = programAssets.round_transitions?.[index];
+    const hasRoundTransition = roundTransition?.input_ref != null
+      && template?.layout?.round_transition?.enabled !== false;
+    const sectionVideoInputLabel = hasRoundTransition ? `sectionmain${index}` : `${index}:v`;
+    if (hasRoundTransition) {
+      filters.push(
+        `[${index}:v]split=2[sectiontransition${index}][${sectionVideoInputLabel}]`,
+      );
+    }
+    const transitionAppended = roundTransition?.kind === 'keyed_overlay'
+      ? appendKeyedTransitionCard(filters, programInputs, {
+          index: cardIndex,
+          inputRef: roundTransition.input_ref,
+          backgroundInputLabel: `sectiontransition${index}`,
+          width,
+          height,
+          fps,
+          durationSeconds: roundTransition.duration_seconds,
+          keyColor: roundTransition.chroma_key_color,
+          similarity: roundTransition.chroma_similarity,
+          blend: roundTransition.chroma_blend,
+          config: template?.layout?.round_transition,
+        })
+      : appendPokeballStingerCard(filters, programInputs, {
+          index: cardIndex,
+          inputRef: roundTransition?.input_ref,
+          backgroundInputLabel: hasRoundTransition ? `sectiontransition${index}` : null,
+          directionMultiplier: roundTransition?.direction_multiplier,
+          width,
+          height,
+          fps,
+          durationSeconds: roundTransition?.duration_seconds,
+          accentColor: difficulty.accent_color,
+          config: template?.layout?.round_transition,
+        });
+    if (transitionAppended) {
       cardIndex += 1;
     }
 
     const label = `${difficulty.label}  |  ${index + 1} / ${count}`;
     filters.push(
-      `[${index}:v]setpts=PTS-STARTPTS,drawtext=text='${escapeDrawtextText(label)}'${fontPart}:fontcolor=${difficulty.accent_color}:fontsize=44:borderw=4:bordercolor=black:box=1:boxcolor=black@0.5:boxborderw=14:x=52:y=42[v${index}]`,
+      `[${sectionVideoInputLabel}]setpts=PTS-STARTPTS,drawtext=text='${escapeDrawtextText(label)}'${fontPart}:fontcolor=${difficulty.accent_color}:fontsize=44:borderw=4:bordercolor=black:box=1:boxcolor=black@0.5:boxborderw=14:x=52:y=42[v${index}]`,
     );
     filters.push(`[${index}:a]aresample=48000,asetpts=PTS-STARTPTS[a${index}]`);
     programInputs.push(`[v${index}][a${index}]`);
@@ -505,10 +530,6 @@ export async function assembleMixedChallengeVideo({
   const fps = Number(template?.canvas?.fps || 30);
   const introDuration = normalizeDuration(template?.episode?.intro_duration_seconds, 6);
   const chapterDuration = normalizeDuration(template?.episode?.chapter_intro_duration_seconds, 3.5);
-  const transitionDuration = normalizeDuration(
-    template?.layout?.round_transition?.duration_seconds,
-    1.15,
-  );
   const requestedPokeballs = Array.isArray(programAssets?.intro_pokeballs)
     ? programAssets.intro_pokeballs.slice(0, Math.max(
         0,
@@ -588,26 +609,32 @@ export async function assembleMixedChallengeVideo({
       subscribeReminderInputRefs.length = 0;
     }
   }
-  const roundTransitionPokeballs = [];
-  if (template?.layout?.round_transition?.enabled !== false && introPokeballs.length > 0) {
-    for (let index = 0; index < sectionPaths.length; index += 1) {
-      const pokeball = introPokeballs[index % introPokeballs.length];
-      extraInputArgs.push(
-        '-loop',
-        '1',
-        '-framerate',
-        String(fps),
-        '-t',
-        String(transitionDuration),
-        '-i',
-        resolve(projectRoot, pokeball.path),
-      );
-      roundTransitionPokeballs.push({
-        ...pokeball,
-        input_ref: nextInputRef,
-      });
-      nextInputRef += 1;
+  const roundTransitions = [];
+  const requestedRoundTransitions = Array.isArray(programAssets?.round_transitions)
+    ? programAssets.round_transitions.slice(0, sectionPaths.length)
+    : [];
+  for (let index = 0; index < requestedRoundTransitions.length; index += 1) {
+    const transition = requestedRoundTransitions[index];
+    const fallbackPokeball = introPokeballs[index % Math.max(1, introPokeballs.length)];
+    const requestedPath = String(transition?.path || fallbackPokeball?.path || '').trim();
+    const prepared = { ...transition, input_ref: null };
+    if (requestedPath && template?.layout?.round_transition?.enabled !== false) {
+      const transitionPath = resolve(projectRoot, requestedPath);
+      try {
+        await access(transitionPath);
+        if (transition?.kind === 'pokeball') {
+          extraInputArgs.push('-loop', '1', '-framerate', String(fps), '-i', transitionPath);
+        } else {
+          extraInputArgs.push('-i', transitionPath);
+        }
+        prepared.path = requestedPath;
+        prepared.input_ref = nextInputRef;
+        nextInputRef += 1;
+      } catch {
+        prepared.input_ref = null;
+      }
     }
+    roundTransitions.push(prepared);
   }
   await writeFile(filterPath, buildMixedChallengeProgramFilter(sectionPaths.length, {
     sections,
@@ -617,7 +644,7 @@ export async function assembleMixedChallengeVideo({
       intro_pokeballs: introPokeballs,
       intro_music_input_ref: introMusicInputRef,
       subscribe_reminder_input_refs: subscribeReminderInputRefs,
-      round_transition_pokeballs: roundTransitionPokeballs,
+      round_transitions: roundTransitions,
     },
   }), 'utf8');
   await runProcess({

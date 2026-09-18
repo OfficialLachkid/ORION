@@ -21,6 +21,7 @@ import {
   selectLandscapeBackground,
   selectMixedChallengeIntroMusic,
   selectMixedChallengeIntroPokeballs,
+  selectMixedChallengeRoundTransitions,
 } from '../src/domains/pokemon/long-form/mixed-challenge/planner.mjs';
 import { assembleMixedChallengeVideo } from '../src/domains/pokemon/long-form/mixed-challenge/renderer.mjs';
 import { buildLandscapeBackgroundCatalog } from '../src/domains/pokemon/long-form/media-catalog.mjs';
@@ -210,7 +211,7 @@ export async function generatePokemonLongFormReview(options = {}) {
     template?.episode?.excluded_template_keys,
   );
   const baseTemplateByKey = new Map(baseTemplates.map((entry) => [entry.spec.key, entry.template]));
-  const nextSelectionState = { sections: {} };
+  const nextSelectionState = { ...selectionState, sections: {} };
   const sectionSummaries = [];
   const sectionPaths = [];
   const generationStartedAt = Date.now();
@@ -341,6 +342,26 @@ export async function generatePokemonLongFormReview(options = {}) {
     seed,
     template?.episode?.intro_pokeball_count,
   );
+  const selectedRoundTransitions = selectMixedChallengeRoundTransitions(
+    inventory.transitions,
+    seed,
+    sectionSummaries.length,
+    selectionState?.last_round_transition_key,
+    template?.layout?.round_transition,
+  );
+  const roundTransitions = selectedRoundTransitions.map((transition, index) => {
+    if (transition.kind !== 'pokeball') return transition;
+    const pokeball = introPokeballs[index % Math.max(1, introPokeballs.length)];
+    return {
+      ...transition,
+      path: pokeball?.path || null,
+      direction_multiplier: pokeball?.direction_multiplier || transition.direction_multiplier,
+    };
+  });
+  const lastExternalTransition = [...roundTransitions]
+    .reverse()
+    .find((transition) => transition.kind === 'keyed_overlay');
+  nextSelectionState.last_round_transition_key = lastExternalTransition?.key || null;
   const plan = buildMixedChallengePlan({
     template,
     seed,
@@ -351,6 +372,7 @@ export async function generatePokemonLongFormReview(options = {}) {
       intro_music_path: introMusicPath,
       intro_pokeballs: introPokeballs,
       subscribe_reminder_path: inventory.overlay_presets?.subscribe_reminder || null,
+      round_transitions: roundTransitions,
     },
   });
   const planPath = getStringOption(
