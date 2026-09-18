@@ -57,6 +57,8 @@ test('landscape compilation supports every Pokemon Short template except Tournam
   assert.equal(episodeSpecs.length, 8);
   assert.equal(episodeSpecs.some((entry) => entry.key === 'build-your-team'), false);
   assert.equal(longTemplate.layout.background.blur_sigma, 8);
+  assert.equal(longTemplate.layout.progress_tracker.enabled, true);
+  assert.equal(longTemplate.layout.progress_tracker.marker_size_px, 42);
   const backgrounds = [{ path: 'one' }, { path: 'two' }, { path: 'three' }];
   const selected = [0, 1, 2].map((index) => (
     selectLandscapeBackground(backgrounds, 'same-seed', index).path
@@ -129,7 +131,7 @@ test('landscape adapters clone source templates and preserve native renderer con
   assert.equal(memory.layout.option_grid.column_gap_px, 160);
   assert.equal(memory.layout.option_grid.sprite_scale_multiplier, 1.4);
   assert.equal(memory.layout.option_grid.stage_bounds_px.width, 1760);
-  assert.equal(memory.layout.timer.hp_bar_title_gap_px, 150);
+  assert.equal(memory.layout.timer.hp_bar_title_gap_px, 50);
 });
 
 test('long-form intro Pokeballs remain deterministic without a Build Your Team section', () => {
@@ -241,6 +243,11 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
   assert.match(programFilter, /enable='gte\(t,0\.22\)'/u);
   assert.match(programFilter, /CURRENT DIFFICULTY/u);
   assert.equal(programFilter.includes('EASY ROUND  |  1 / 2'), true);
+  assert.equal((programFilter.match(/color=0x0A1726@0\.82:t=fill/gu) || []).length, 4);
+  assert.match(
+    programFilter,
+    /color=0x45D483@0\.96:t=fill:enable='gte\(t,0\.55\)'/u,
+  );
   assert.match(programFilter, /HOW DID YOU DO/u);
 
   const animatedProgramFilter = buildMixedChallengeProgramFilter(2, {

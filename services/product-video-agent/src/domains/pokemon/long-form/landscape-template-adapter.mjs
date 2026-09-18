@@ -332,7 +332,7 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
       center_y: 900,
       hp_bar_width_px: 1180,
       hp_bar_top_gap_px: 170,
-      hp_bar_title_gap_px: 150,
+      hp_bar_title_gap_px: 50,
     }),
     rounds: Object.freeze({
       reveal_hold_seconds: 2.1,

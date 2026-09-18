@@ -55,6 +55,16 @@
         "zoom_scale": 1.3,
         "subpixel_scale": 1.5
       }
+    },
+    "progress_tracker": {
+      "enabled": true,
+      "left_px": 160,
+      "bottom_px": 160,
+      "marker_size_px": 42,
+      "marker_gap_px": 16,
+      "border_width_px": 3,
+      "fill_start_seconds": 0.55,
+      "fill_stagger_seconds": 0.16
     }
   },
   "renderer": {

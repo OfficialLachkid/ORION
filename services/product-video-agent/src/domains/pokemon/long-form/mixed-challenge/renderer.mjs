@@ -281,19 +281,79 @@ function appendProgramCard(filters, programInputs, {
   accentColor,
   titleFontSize = 108,
   fontPath,
+  progressTracker = null,
+  progressTrackerConfig = {},
 }) {
   const duration = Math.max(0.5, durationSeconds);
   const fadeOutStart = Math.max(0, Number((duration - 0.45).toFixed(3)));
   const fontPart = buildFontPart(fontPath);
   const videoLabel = `cardv${index}`;
   const audioLabel = `carda${index}`;
+  const trackerFilters = buildProgressTrackerFilters({
+    width,
+    height,
+    durationSeconds: duration,
+    tracker: progressTracker,
+    config: progressTrackerConfig,
+  });
+  const trackerFilterPart = trackerFilters.length > 0
+    ? `,${trackerFilters.join(',')}`
+    : '';
   filters.push(
-    `color=c=0x071426:s=${width}x${height}:r=${fps}:d=${duration},format=rgba,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=0x020813@0.58:t=fill,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=${accentColor}@0.85:t=5,drawtext=text='${escapeDrawtextText(eyebrow)}'${fontPart}:fontcolor=${accentColor}:fontsize=46:borderw=3:bordercolor=black:x=(w-text_w)/2:y=285,drawtext=text='${escapeDrawtextText(title)}'${fontPart}:fontcolor=white:fontsize=${titleFontSize}:borderw=7:bordercolor=black:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=(w-text_w)/2:y=420,drawtext=text='${escapeDrawtextText(subtitle)}'${fontPart}:fontcolor=0xDCEBFF:fontsize=42:borderw=3:bordercolor=black:x=(w-text_w)/2:y=610,fade=t=in:st=0:d=0.35,fade=t=out:st=${fadeOutStart}:d=0.45,format=yuv420p[${videoLabel}]`,
+    `color=c=0x071426:s=${width}x${height}:r=${fps}:d=${duration},format=rgba,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=0x020813@0.58:t=fill,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=${accentColor}@0.85:t=5,drawtext=text='${escapeDrawtextText(eyebrow)}'${fontPart}:fontcolor=${accentColor}:fontsize=46:borderw=3:bordercolor=black:x=(w-text_w)/2:y=285,drawtext=text='${escapeDrawtextText(title)}'${fontPart}:fontcolor=white:fontsize=${titleFontSize}:borderw=7:bordercolor=black:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=(w-text_w)/2:y=420,drawtext=text='${escapeDrawtextText(subtitle)}'${fontPart}:fontcolor=0xDCEBFF:fontsize=42:borderw=3:bordercolor=black:x=(w-text_w)/2:y=610${trackerFilterPart},fade=t=in:st=0:d=0.35,fade=t=out:st=${fadeOutStart}:d=0.45,format=yuv420p[${videoLabel}]`,
   );
   filters.push(
     `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${duration},asetpts=PTS-STARTPTS[${audioLabel}]`,
   );
   programInputs.push(`[${videoLabel}][${audioLabel}]`);
+}
+
+function buildProgressTrackerFilters({
+  width,
+  height,
+  durationSeconds,
+  tracker,
+  config = {},
+}) {
+  if (config?.enabled === false || !tracker) return [];
+  const totalCount = Math.max(0, Number.parseInt(String(tracker.total_count), 10) || 0);
+  if (totalCount === 0) return [];
+  const completedCount = Math.min(
+    totalCount,
+    Math.max(0, Number.parseInt(String(tracker.completed_count), 10) || 0),
+  );
+  const markerSize = Math.max(12, Math.round(ensureNumber(config.marker_size_px, 42)));
+  const markerGap = Math.max(0, Math.round(ensureNumber(config.marker_gap_px, 16)));
+  const borderWidth = Math.max(1, Math.round(ensureNumber(config.border_width_px, 3)));
+  const rowWidth = (totalCount * markerSize) + (Math.max(0, totalCount - 1) * markerGap);
+  const requestedLeft = Math.round(ensureNumber(config.left_px, 160));
+  const left = Math.max(0, Math.min(width - rowWidth, requestedLeft));
+  const bottom = Math.max(0, Math.round(ensureNumber(config.bottom_px, 160)));
+  const top = Math.max(0, Math.min(height - markerSize, height - bottom - markerSize));
+  const fillStart = Math.max(0, ensureNumber(config.fill_start_seconds, 0.55));
+  const fillStagger = Math.max(0, ensureNumber(config.fill_stagger_seconds, 0.16));
+  const markerColors = Array.isArray(tracker.marker_colors) ? tracker.marker_colors : [];
+  const filters = [];
+  for (let markerIndex = 0; markerIndex < totalCount; markerIndex += 1) {
+    const markerX = left + (markerIndex * (markerSize + markerGap));
+    filters.push(
+      `drawbox=x=${markerX}:y=${top}:w=${markerSize}:h=${markerSize}:color=0x0A1726@0.82:t=fill`,
+    );
+    if (markerIndex < completedCount) {
+      const fillAt = Math.min(
+        Math.max(0, durationSeconds - 0.5),
+        fillStart + (markerIndex * fillStagger),
+      );
+      const markerColor = String(markerColors[markerIndex] || '0x56C7FF');
+      filters.push(
+        `drawbox=x=${markerX}:y=${top}:w=${markerSize}:h=${markerSize}:color=${markerColor}@0.96:t=fill:enable='gte(t,${roundTime(fillAt)})'`,
+      );
+    }
+    filters.push(
+      `drawbox=x=${markerX}:y=${top}:w=${markerSize}:h=${markerSize}:color=white@0.92:t=${borderWidth}`,
+    );
+  }
+  return filters;
 }
 
 export function buildMixedChallengeProgramFilter(sectionCount, {
@@ -349,6 +409,12 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
         subtitle: `CHALLENGES ${index + 1}-${endIndex} OF ${count}`,
         accentColor: difficulty.accent_color,
         fontPath,
+        progressTracker: {
+          total_count: count,
+          completed_count: index,
+          marker_colors: normalizedSections.map((candidate) => candidate.difficulty.accent_color),
+        },
+        progressTrackerConfig: template?.layout?.progress_tracker,
       });
       cardIndex += 1;
       previousDifficultyKey = difficulty.key;
