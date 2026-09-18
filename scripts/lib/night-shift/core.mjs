@@ -115,6 +115,59 @@ export async function runNightShift(argv = process.argv, deps = {}) {
   }
 
   const label = isFallback ? 'Night Shift (07:00 fallback)' : 'Night Shift';
+
+  // Phase ordering (2026-09-18 rework, operator ask): all three Claude-quota
+  // steps share ONE weekly usage cap. If the fresh-lead qualifier drained
+  // that cap first (as it did prior to this rework), the operator-feedback
+  // rewrites and follow-ups either got skipped entirely (systemicFailure
+  // gate) or ran against a nearly-empty budget and silently errored — in
+  // both cases the affected drafts stayed in their prior status and got
+  // re-picked-up next cycle, an infinite loop for feedback rewrites.
+  //
+  // New priority order for the Claude-quota-consuming phases:
+  //   1. detectReplies             — Gmail only, no Claude quota; runs
+  //                                   first so runFollowUps can skip any
+  //                                   leads that replied.
+  //   2. runRedraftRejected         — HIGH priority; operator gave explicit
+  //                                   feedback, must never be starved.
+  //   3. runFollowUps               — MEDIUM priority; keeps existing
+  //                                   threads warm.
+  //   4. runQualification           — LOWEST priority; fresh drafts are
+  //                                   retry-able tomorrow, everything else
+  //                                   is not.
+  //   5. reconcileDrafts            — Gmail sync, no Claude quota; runs
+  //                                   last so it picks up anything the
+  //                                   Claude phases just produced.
+  //
+  // Each Claude-quota phase runs in its own try/catch; a limit hit in one
+  // no longer blocks the others. Only runQualification's outcome drives
+  // the day-marker / systemicFailure / postLeadNightShiftDigest gating.
+  let replyResult = { available: false, replies: 0, bounces: 0, autoReplies: 0, checked: 0 };
+  let redrafted = 0;
+  let followedUp = 0;
+  let reconciled = 0;
+  let editedInGmail = 0;
+  let repointedInGmail = 0;
+
+  try {
+    replyResult = await runtime.detectReplies(config);
+  } catch (error) {
+    runtime.stderr.write(`Reply-detection step failed (non-fatal): ${error.message}\n`);
+  }
+
+  try {
+    const redraft = runtime.runRedraftRejected(limit);
+    redrafted = redraft.outcomes.filter((outcome) => outcome.approvalTaskId).length;
+  } catch (error) {
+    runtime.stderr.write(`Redraft-rejected step failed (non-fatal): ${error.message}\n`);
+  }
+
+  try {
+    followedUp = runtime.runFollowUps(limit);
+  } catch (error) {
+    runtime.stderr.write(`Follow-up step failed (non-fatal): ${error.message}\n`);
+  }
+
   const { outcomes, systemicFailure, rateLimited, exitCode, stderr } = runtime.runQualification(limit);
 
   runtime.recordOpsMetric(config, 'night_shift_run', {
@@ -136,41 +189,13 @@ export async function runNightShift(argv = process.argv, deps = {}) {
     runtime.setExitCode(1);
   }
 
-  let replyResult = { available: false, replies: 0, bounces: 0, autoReplies: 0, checked: 0 };
-  let redrafted = 0;
-  let followedUp = 0;
-  let reconciled = 0;
-  let editedInGmail = 0;
-  let repointedInGmail = 0;
-
-  if (!systemicFailure) {
-    try {
-      replyResult = await runtime.detectReplies(config);
-    } catch (error) {
-      runtime.stderr.write(`Reply-detection step failed (non-fatal): ${error.message}\n`);
-    }
-
-    try {
-      const redraft = runtime.runRedraftRejected(limit);
-      redrafted = redraft.outcomes.filter((outcome) => outcome.approvalTaskId).length;
-    } catch (error) {
-      runtime.stderr.write(`Redraft-rejected step failed (non-fatal): ${error.message}\n`);
-    }
-
-    try {
-      followedUp = runtime.runFollowUps(limit);
-    } catch (error) {
-      runtime.stderr.write(`Follow-up step failed (non-fatal): ${error.message}\n`);
-    }
-
-    try {
-      const result = await runtime.reconcileDrafts(config);
-      reconciled = result.sent;
-      editedInGmail = result.edited;
-      repointedInGmail = result.repointed;
-    } catch (error) {
-      runtime.stderr.write(`Draft reconcile step failed (non-fatal): ${error.message}\n`);
-    }
+  try {
+    const result = await runtime.reconcileDrafts(config);
+    reconciled = result.sent;
+    editedInGmail = result.edited;
+    repointedInGmail = result.repointed;
+  } catch (error) {
+    runtime.stderr.write(`Draft reconcile step failed (non-fatal): ${error.message}\n`);
   }
 
   let previewFallback = null;
