@@ -10,6 +10,7 @@ function appendFrozenBackground(filters, {
   height,
   fps,
   durationSeconds,
+  snapshotSeconds = 0,
   fallbackColor = '0x071426',
 }) {
   const duration = roundTime(durationSeconds);
@@ -19,9 +20,49 @@ function appendFrozenBackground(filters, {
     );
     return;
   }
+  const snapshotStart = Math.max(0, ensureNumber(snapshotSeconds, 0));
   filters.push(
-    `[${inputLabel}]trim=end_frame=1,setpts=PTS-STARTPTS,scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,tpad=stop_mode=clone:stop_duration=${duration},trim=duration=${duration},fps=${fps},format=rgba[${outputLabel}]`,
+    `[${inputLabel}]trim=start=${roundTime(snapshotStart)},setpts=PTS-STARTPTS,trim=end_frame=1,scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,tpad=stop_mode=clone:stop_duration=${duration},trim=duration=${duration},fps=${fps},format=rgba[${outputLabel}]`,
   );
+}
+
+function appendTransitionBridgeBackground(filters, {
+  index,
+  fromInputLabel,
+  fromSnapshotSeconds,
+  toInputLabel,
+  width,
+  height,
+  fps,
+  durationSeconds,
+}) {
+  const duration = Math.max(0.5, ensureNumber(durationSeconds, 1));
+  const firstDuration = roundTime(duration / 2);
+  const secondDuration = roundTime(duration - firstDuration);
+  const fromLabel = `transitionfrom${index}`;
+  const toLabel = `transitionto${index}`;
+  const outputLabel = `transitionbridge${index}`;
+  appendFrozenBackground(filters, {
+    inputLabel: fromInputLabel,
+    outputLabel: fromLabel,
+    width,
+    height,
+    fps,
+    durationSeconds: firstDuration,
+    snapshotSeconds: fromSnapshotSeconds,
+  });
+  appendFrozenBackground(filters, {
+    inputLabel: toInputLabel,
+    outputLabel: toLabel,
+    width,
+    height,
+    fps,
+    durationSeconds: secondDuration,
+  });
+  filters.push(
+    `[${fromLabel}][${toLabel}]concat=n=2:v=1:a=0,format=rgba[${outputLabel}]`,
+  );
+  return outputLabel;
 }
 
 export function appendSubscribeReminderOverlay(filters, currentLabel, {
@@ -51,10 +92,60 @@ export function appendSubscribeReminderOverlay(filters, currentLabel, {
   return outputLabel;
 }
 
+export function buildProgressTrackerFilters({
+  width,
+  height,
+  durationSeconds,
+  tracker,
+  config = {},
+}) {
+  if (config?.enabled === false || !tracker) return [];
+  const totalCount = Math.max(0, Number.parseInt(String(tracker.total_count), 10) || 0);
+  if (totalCount === 0) return [];
+  const completedCount = Math.min(
+    totalCount,
+    Math.max(0, Number.parseInt(String(tracker.completed_count), 10) || 0),
+  );
+  const markerSize = Math.max(12, Math.round(ensureNumber(config.marker_size_px, 42)));
+  const markerGap = Math.max(0, Math.round(ensureNumber(config.marker_gap_px, 16)));
+  const borderWidth = Math.max(1, Math.round(ensureNumber(config.border_width_px, 3)));
+  const rowWidth = (totalCount * markerSize) + (Math.max(0, totalCount - 1) * markerGap);
+  const requestedLeft = Math.round(ensureNumber(config.left_px, 160));
+  const left = Math.max(0, Math.min(width - rowWidth, requestedLeft));
+  const bottom = Math.max(0, Math.round(ensureNumber(config.bottom_px, 160)));
+  const top = Math.max(0, Math.min(height - markerSize, height - bottom - markerSize));
+  const fillStart = Math.max(0, ensureNumber(config.fill_start_seconds, 0.55));
+  const fillStagger = Math.max(0, ensureNumber(config.fill_stagger_seconds, 0.16));
+  const markerColors = Array.isArray(tracker.marker_colors) ? tracker.marker_colors : [];
+  const filters = [];
+  for (let markerIndex = 0; markerIndex < totalCount; markerIndex += 1) {
+    const markerX = left + (markerIndex * (markerSize + markerGap));
+    filters.push(
+      `drawbox=x=${markerX}:y=${top}:w=${markerSize}:h=${markerSize}:color=0x0A1726@0.82:t=fill`,
+    );
+    if (markerIndex < completedCount) {
+      const fillAt = Math.min(
+        Math.max(0, durationSeconds - 0.5),
+        fillStart + (markerIndex * fillStagger),
+      );
+      const markerColor = String(markerColors[markerIndex] || '0x56C7FF');
+      filters.push(
+        `drawbox=x=${markerX}:y=${top}:w=${markerSize}:h=${markerSize}:color=${markerColor}@0.96:t=fill:enable='gte(t,${roundTime(fillAt)})'`,
+      );
+    }
+    filters.push(
+      `drawbox=x=${markerX}:y=${top}:w=${markerSize}:h=${markerSize}:color=white@0.92:t=${borderWidth}`,
+    );
+  }
+  return filters;
+}
+
 export function appendPokeballStingerCard(filters, programInputs, {
   index,
   inputRef,
-  backgroundInputLabel = null,
+  fromBackgroundInputLabel = null,
+  fromSnapshotSeconds = 0,
+  toBackgroundInputLabel = null,
   directionMultiplier = 1,
   width,
   height,
@@ -79,10 +170,11 @@ export function appendPokeballStingerCard(filters, programInputs, {
   const audioLabel = `carda${index}`;
   const baseLabel = `stingerbase${index}`;
   const ballLabel = `stingerball${index}`;
-  const frozenBaseLabel = `stingerfrozen${index}`;
-  appendFrozenBackground(filters, {
-    inputLabel: backgroundInputLabel,
-    outputLabel: frozenBaseLabel,
+  const frozenBaseLabel = appendTransitionBridgeBackground(filters, {
+    index,
+    fromInputLabel: fromBackgroundInputLabel,
+    fromSnapshotSeconds,
+    toInputLabel: toBackgroundInputLabel,
     width,
     height,
     fps,
@@ -107,7 +199,9 @@ export function appendPokeballStingerCard(filters, programInputs, {
 export function appendKeyedTransitionCard(filters, programInputs, {
   index,
   inputRef,
-  backgroundInputLabel,
+  fromBackgroundInputLabel,
+  fromSnapshotSeconds = 0,
+  toBackgroundInputLabel,
   width,
   height,
   fps,
@@ -117,20 +211,28 @@ export function appendKeyedTransitionCard(filters, programInputs, {
   blend,
   config = {},
 }) {
-  if (inputRef == null || !backgroundInputLabel || config?.enabled === false) return false;
+  if (
+    inputRef == null
+    || !fromBackgroundInputLabel
+    || !toBackgroundInputLabel
+    || config?.enabled === false
+  ) return false;
   const duration = Math.max(0.5, ensureNumber(durationSeconds, 3));
   const baseLabel = `transitionbase${index}`;
   const sourceLabel = `transitionsource${index}`;
   const videoLabel = `cardv${index}`;
   const audioLabel = `carda${index}`;
-  appendFrozenBackground(filters, {
-    inputLabel: backgroundInputLabel,
-    outputLabel: baseLabel,
+  const bridgeLabel = appendTransitionBridgeBackground(filters, {
+    index,
+    fromInputLabel: fromBackgroundInputLabel,
+    fromSnapshotSeconds,
+    toInputLabel: toBackgroundInputLabel,
     width,
     height,
     fps,
     durationSeconds: duration,
   });
+  filters.push(`[${bridgeLabel}]null[${baseLabel}]`);
   filters.push(
     `[${inputRef}:v]fps=${fps},setpts=PTS-STARTPTS,scale=${width}:${height}:flags=lanczos,setsar=1,format=rgba,colorkey=${String(keyColor || '0x00FF00')}:${roundTime(Math.max(0.01, ensureNumber(similarity, 0.22)))}:${roundTime(Math.max(0, ensureNumber(blend, 0.08)))},tpad=stop_mode=clone:stop_duration=${roundTime(duration)},trim=duration=${roundTime(duration)}[${sourceLabel}]`,
   );

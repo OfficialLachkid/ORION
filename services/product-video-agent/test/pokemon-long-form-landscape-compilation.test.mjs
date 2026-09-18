@@ -338,7 +338,47 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
   assert.match(animatedProgramFilter, /\[6:v\].*rotate=/u);
   assert.match(animatedProgramFilter, /\[7:v\].*colorkey=0x000000:0\.08:0\.04/u);
   assert.match(animatedProgramFilter, /\[0:v\]split=2\[sectiontransition0\]\[sectionmain0\]/u);
+  assert.match(
+    animatedProgramFilter,
+    /\[checkpointtransition0\]trim=start=3\.467.*\[transitionfrom2\]/u,
+  );
+  assert.match(
+    animatedProgramFilter,
+    /\[sectiontransition0\]trim=start=0.*\[transitionto2\]/u,
+  );
+  assert.match(
+    animatedProgramFilter,
+    /\[transitionfrom2\]\[transitionto2\]concat=n=2:v=1:a=0/u,
+  );
   assert.match(animatedProgramFilter, /concat=n=8:v=1:a=1\[vout\]\[aout\]/u);
+
+  const fourSections = assignMixedChallengeDifficulty([
+    sections[0],
+    sections[1],
+    { ...sections[0], template_key: 'stat-clash' },
+    { ...sections[1], template_key: 'know-your-shiny' },
+  ], template);
+  const consecutiveRoundFilter = buildMixedChallengeProgramFilter(4, {
+    template,
+    sections: fourSections,
+    fontPath: '/tmp/font.ttf',
+    programAssets: {
+      round_transitions: Array.from({ length: 4 }, (_, index) => ({
+        input_ref: 20 + index,
+        kind: index === 0 ? 'pokeball' : 'keyed_overlay',
+        duration_seconds: index === 0 ? 1.15 : 3,
+        chroma_key_color: '0x00FF00',
+      })),
+    },
+  });
+  assert.match(
+    consecutiveRoundFilter,
+    /\[sectionlabeled0\]split=2\[v0\]\[sectionoutgoing0\]/u,
+  );
+  assert.match(
+    consecutiveRoundFilter,
+    /\[sectionoutgoing0\]trim=start=30\.467.*\[transitionfrom3\]/u,
+  );
 });
 
 test('transparent bottom padding is measured independently of animation frame stacking', () => {

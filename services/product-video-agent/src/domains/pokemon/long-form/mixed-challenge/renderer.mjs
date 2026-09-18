@@ -14,6 +14,7 @@ import {
   appendKeyedTransitionCard,
   appendPokeballStingerCard,
   appendSubscribeReminderOverlay,
+  buildProgressTrackerFilters,
 } from './checkpoint-overlays.mjs';
 
 export function buildMixedChallengeConcatFilter(sectionCount) {
@@ -290,6 +291,7 @@ function appendProgramCard(filters, programInputs, {
   progressTrackerConfig = {},
   subscribeReminderInputRef = null,
   subscribeReminderConfig = {},
+  transitionOutputLabel = null,
 }) {
   const duration = Math.max(0.5, durationSeconds);
   const fadeOutStart = Math.max(0, Number((duration - 0.45).toFixed(3)));
@@ -319,61 +321,20 @@ function appendProgramCard(filters, programInputs, {
     durationSeconds: duration,
     config: subscribeReminderConfig,
   });
+  const fadeOutFilter = transitionOutputLabel
+    ? ''
+    : `,fade=t=out:st=${fadeOutStart}:d=0.45`;
   filters.push(
-    `[${cardContentLabel}]fade=t=in:st=0:d=0.35,fade=t=out:st=${fadeOutStart}:d=0.45,format=yuv420p[${videoLabel}]`,
+    `[${cardContentLabel}]fade=t=in:st=0:d=0.35${fadeOutFilter},format=yuv420p[${videoLabel}]`,
   );
+  const programVideoLabel = transitionOutputLabel ? `${videoLabel}program` : videoLabel;
+  if (transitionOutputLabel) {
+    filters.push(`[${videoLabel}]split=2[${programVideoLabel}][${transitionOutputLabel}]`);
+  }
   filters.push(
     `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${duration},asetpts=PTS-STARTPTS[${audioLabel}]`,
   );
-  programInputs.push(`[${videoLabel}][${audioLabel}]`);
-}
-
-function buildProgressTrackerFilters({
-  width,
-  height,
-  durationSeconds,
-  tracker,
-  config = {},
-}) {
-  if (config?.enabled === false || !tracker) return [];
-  const totalCount = Math.max(0, Number.parseInt(String(tracker.total_count), 10) || 0);
-  if (totalCount === 0) return [];
-  const completedCount = Math.min(
-    totalCount,
-    Math.max(0, Number.parseInt(String(tracker.completed_count), 10) || 0),
-  );
-  const markerSize = Math.max(12, Math.round(ensureNumber(config.marker_size_px, 42)));
-  const markerGap = Math.max(0, Math.round(ensureNumber(config.marker_gap_px, 16)));
-  const borderWidth = Math.max(1, Math.round(ensureNumber(config.border_width_px, 3)));
-  const rowWidth = (totalCount * markerSize) + (Math.max(0, totalCount - 1) * markerGap);
-  const requestedLeft = Math.round(ensureNumber(config.left_px, 160));
-  const left = Math.max(0, Math.min(width - rowWidth, requestedLeft));
-  const bottom = Math.max(0, Math.round(ensureNumber(config.bottom_px, 160)));
-  const top = Math.max(0, Math.min(height - markerSize, height - bottom - markerSize));
-  const fillStart = Math.max(0, ensureNumber(config.fill_start_seconds, 0.55));
-  const fillStagger = Math.max(0, ensureNumber(config.fill_stagger_seconds, 0.16));
-  const markerColors = Array.isArray(tracker.marker_colors) ? tracker.marker_colors : [];
-  const filters = [];
-  for (let markerIndex = 0; markerIndex < totalCount; markerIndex += 1) {
-    const markerX = left + (markerIndex * (markerSize + markerGap));
-    filters.push(
-      `drawbox=x=${markerX}:y=${top}:w=${markerSize}:h=${markerSize}:color=0x0A1726@0.82:t=fill`,
-    );
-    if (markerIndex < completedCount) {
-      const fillAt = Math.min(
-        Math.max(0, durationSeconds - 0.5),
-        fillStart + (markerIndex * fillStagger),
-      );
-      const markerColor = String(markerColors[markerIndex] || '0x56C7FF');
-      filters.push(
-        `drawbox=x=${markerX}:y=${top}:w=${markerSize}:h=${markerSize}:color=${markerColor}@0.96:t=fill:enable='gte(t,${roundTime(fillAt)})'`,
-      );
-    }
-    filters.push(
-      `drawbox=x=${markerX}:y=${top}:w=${markerSize}:h=${markerSize}:color=white@0.92:t=${borderWidth}`,
-    );
-  }
-  return filters;
+  programInputs.push(`[${programVideoLabel}][${audioLabel}]`);
 }
 
 export function buildMixedChallengeProgramFilter(sectionCount, {
@@ -412,13 +373,20 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
   let cardIndex = 1;
   let checkpointIndex = 0;
   let previousDifficultyKey = null;
+  let previousTransitionSource = null;
   normalizedSections.forEach((section, index) => {
     const difficulty = section.difficulty;
+    const roundTransition = programAssets.round_transitions?.[index];
+    const hasRoundTransition = roundTransition?.input_ref != null
+      && template?.layout?.round_transition?.enabled !== false;
     if (difficulty.key !== previousDifficultyKey) {
       const remainingInDifficulty = normalizedSections
         .slice(index)
         .findIndex((candidate) => candidate.difficulty.key !== difficulty.key);
       const endIndex = remainingInDifficulty < 0 ? count : index + remainingInDifficulty;
+      const checkpointTransitionLabel = hasRoundTransition
+        ? `checkpointtransition${index}`
+        : null;
       appendProgramCard(filters, programInputs, {
         index: cardIndex,
         width,
@@ -438,15 +406,19 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
         progressTrackerConfig: template?.layout?.progress_tracker,
         subscribeReminderInputRef: programAssets.subscribe_reminder_input_refs?.[checkpointIndex],
         subscribeReminderConfig: template?.layout?.subscribe_reminder,
+        transitionOutputLabel: checkpointTransitionLabel,
       });
+      if (checkpointTransitionLabel) {
+        previousTransitionSource = {
+          input_label: checkpointTransitionLabel,
+          snapshot_seconds: Math.max(0, chapterDuration - (1 / fps)),
+        };
+      }
       cardIndex += 1;
       checkpointIndex += 1;
       previousDifficultyKey = difficulty.key;
     }
 
-    const roundTransition = programAssets.round_transitions?.[index];
-    const hasRoundTransition = roundTransition?.input_ref != null
-      && template?.layout?.round_transition?.enabled !== false;
     const sectionVideoInputLabel = hasRoundTransition ? `sectionmain${index}` : `${index}:v`;
     if (hasRoundTransition) {
       filters.push(
@@ -457,7 +429,9 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
       ? appendKeyedTransitionCard(filters, programInputs, {
           index: cardIndex,
           inputRef: roundTransition.input_ref,
-          backgroundInputLabel: `sectiontransition${index}`,
+          fromBackgroundInputLabel: previousTransitionSource?.input_label,
+          fromSnapshotSeconds: previousTransitionSource?.snapshot_seconds,
+          toBackgroundInputLabel: `sectiontransition${index}`,
           width,
           height,
           fps,
@@ -470,7 +444,9 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
       : appendPokeballStingerCard(filters, programInputs, {
           index: cardIndex,
           inputRef: roundTransition?.input_ref,
-          backgroundInputLabel: hasRoundTransition ? `sectiontransition${index}` : null,
+          fromBackgroundInputLabel: previousTransitionSource?.input_label,
+          fromSnapshotSeconds: previousTransitionSource?.snapshot_seconds,
+          toBackgroundInputLabel: hasRoundTransition ? `sectiontransition${index}` : null,
           directionMultiplier: roundTransition?.direction_multiplier,
           width,
           height,
@@ -484,9 +460,23 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
     }
 
     const label = `${difficulty.label}  |  ${index + 1} / ${count}`;
+    const labeledSection = `sectionlabeled${index}`;
     filters.push(
-      `[${sectionVideoInputLabel}]setpts=PTS-STARTPTS,drawtext=text='${escapeDrawtextText(label)}'${fontPart}:fontcolor=${difficulty.accent_color}:fontsize=44:borderw=4:bordercolor=black:box=1:boxcolor=black@0.5:boxborderw=14:x=52:y=42[v${index}]`,
+      `[${sectionVideoInputLabel}]setpts=PTS-STARTPTS,drawtext=text='${escapeDrawtextText(label)}'${fontPart}:fontcolor=${difficulty.accent_color}:fontsize=44:borderw=4:bordercolor=black:box=1:boxcolor=black@0.5:boxborderw=14:x=52:y=42[${labeledSection}]`,
     );
+    const nextSection = normalizedSections[index + 1];
+    const nextHasTransition = programAssets.round_transitions?.[index + 1]?.input_ref != null;
+    const needsOutgoingSnapshot = nextHasTransition
+      && nextSection?.difficulty?.key === difficulty.key;
+    if (needsOutgoingSnapshot) {
+      filters.push(`[${labeledSection}]split=2[v${index}][sectionoutgoing${index}]`);
+      previousTransitionSource = {
+        input_label: `sectionoutgoing${index}`,
+        snapshot_seconds: Math.max(0, Number(section?.duration_seconds || 0) - (1 / fps)),
+      };
+    } else {
+      filters.push(`[${labeledSection}]null[v${index}]`);
+    }
     filters.push(`[${index}:a]aresample=48000,asetpts=PTS-STARTPTS[a${index}]`);
     programInputs.push(`[v${index}][a${index}]`);
   });
