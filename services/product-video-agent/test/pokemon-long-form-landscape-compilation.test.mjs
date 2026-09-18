@@ -14,6 +14,7 @@ import {
   orderLandscapeTemplateSpecs,
   selectLandscapeBackground,
   selectMixedChallengeIntroMusic,
+  selectMixedChallengeIntroPokeballs,
 } from '../src/domains/pokemon/long-form/mixed-challenge/planner.mjs';
 import {
   buildMixedChallengeConcatFilter,
@@ -27,7 +28,7 @@ async function loadJson(relativePath) {
   return JSON.parse(await readFile(resolve(PROJECT_ROOT, relativePath), 'utf8'));
 }
 
-test('landscape compilation includes every Pokemon Short template except Tournament', () => {
+test('landscape compilation supports every Pokemon Short template except Tournament', async () => {
   assert.deepEqual(listLandscapePokemonTemplateKeys(), [
     'dual-type-reveal',
     'find-the-shiny',
@@ -44,6 +45,18 @@ test('landscape compilation includes every Pokemon Short template except Tournam
   const second = orderLandscapeTemplateSpecs(LANDSCAPE_POKEMON_TEMPLATE_SPECS, 'same-seed');
   assert.deepEqual(first, second);
   assert.equal(new Set(first.map((entry) => entry.key)).size, 9);
+  const longTemplate = await loadJson(
+    'services/product-video-agent/config/templates/pokemon/long/mixed-challenge.v1.json',
+  );
+  const episodeSpecs = orderLandscapeTemplateSpecs(
+    LANDSCAPE_POKEMON_TEMPLATE_SPECS,
+    'same-seed',
+    false,
+    longTemplate.episode.excluded_template_keys,
+  );
+  assert.equal(episodeSpecs.length, 8);
+  assert.equal(episodeSpecs.some((entry) => entry.key === 'build-your-team'), false);
+  assert.equal(longTemplate.layout.background.blur_sigma, 8);
   const backgrounds = [{ path: 'one' }, { path: 'two' }, { path: 'three' }];
   const selected = [0, 1, 2].map((index) => (
     selectLandscapeBackground(backgrounds, 'same-seed', index).path
@@ -80,11 +93,13 @@ test('landscape adapters clone source templates and preserve native renderer con
     'services/product-video-agent/config/templates/pokemon/stat-clash.v1.json',
   ));
   assert.equal(statClash.layout.sprite_grid.sprite_center_y_offset_px, 84);
+  assert.equal(statClash.layout.sprite_grid.column_gap_px, 150);
 
   const cryMatch = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/cry-match.v1.json',
   ));
   assert.equal(cryMatch.layout.sprite_grid.sprite_center_y_offset_px, 84);
+  assert.equal(cryMatch.layout.sprite_grid.column_gap_px, 150);
 
   const findTheShiny = adaptPokemonShortTemplateToLandscape(await loadJson(
     'services/product-video-agent/config/templates/pokemon/find-the-shiny.v1.json',
@@ -102,6 +117,7 @@ test('landscape adapters clone source templates and preserve native renderer con
   assert.equal(knowYourShiny.question_contract.prompt_text, 'Which one is the Real Shiny?');
   assert.equal(knowYourShiny.layout.timer.center_y, 272);
   assert.equal(knowYourShiny.layout.timer.bar_horizontal_inset_px, 190);
+  assert.equal(knowYourShiny.layout.sprite_grid.column_gap_px, 150);
   assert.equal(knowYourShiny.layout.sprite_platform.visible_bottom_alignment_enabled, true);
 
   const memory = adaptPokemonShortTemplateToLandscape(await loadJson(
@@ -113,6 +129,25 @@ test('landscape adapters clone source templates and preserve native renderer con
   assert.equal(memory.layout.option_grid.column_gap_px, 160);
   assert.equal(memory.layout.option_grid.sprite_scale_multiplier, 1.4);
   assert.equal(memory.layout.option_grid.stage_bounds_px.width, 1760);
+  assert.equal(memory.layout.timer.hp_bar_title_gap_px, 150);
+});
+
+test('long-form intro Pokeballs remain deterministic without a Build Your Team section', () => {
+  const paths = [
+    '/overlays/pokeball-01.png',
+    '/overlays/pokeball-02.png',
+    '/overlays/pokeball-03.png',
+    '/overlays/pokeball-04.png',
+    '/overlays/pokeball-05.png',
+  ];
+  const first = selectMixedChallengeIntroPokeballs(paths, 'intro-seed', 4);
+  const second = selectMixedChallengeIntroPokeballs(paths, 'intro-seed', 4);
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 4);
+  assert.equal(new Set(first.map((entry) => entry.path)).size, 4);
+  assert.equal(first.every((entry) => entry.speed_multiplier >= 0.92), true);
+  assert.equal(first.every((entry) => entry.speed_multiplier <= 1.08), true);
+  assert.equal(first.every((entry) => [-1, 1].includes(entry.direction_multiplier)), true);
 });
 
 test('long-form background motion is smooth and does not use sharp triangle-wave reversals', () => {

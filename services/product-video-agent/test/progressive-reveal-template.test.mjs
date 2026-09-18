@@ -123,6 +123,7 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.layout.text.method_font_size, undefined);
   assert.equal(template.reveal.method_config.cascade.fall_duration_seconds, 1.2);
   assert.equal(template.reveal.method_config.cascade.fall_step_count, 10);
+  assert.equal(template.reveal.method_config.micro_checkerboard.cell_size_px, 24);
   assert.equal(template.audio.cry_playback.delay_after_ding_seconds, 0.3);
   assert.equal(template.reveal.method_config.square_spiral.turns, 3);
   assert.equal(template.reveal.method_config.square_spiral_inward.turns, 3);
@@ -268,21 +269,22 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(expressions[4], /floor\(X\/8\)\*197/u);
   assert.match(expressions[5], /min\(.*pow\(\(X-W\*0\.[0-9]+\)\/max\(1,W\),2\)/u);
   assert.match(expressions[6], /eq\(mod\(floor\(X\/56\)\+floor\(Y\/56\),2\),0\)/u);
-  assert.match(expressions[7], /X\/max\(1,W-1\).*Y\/max\(1,H-1\).*sin/u);
-  assert.match(expressions[8], /floor\(Y\/8\).*max\(1,H-1\)/u);
-  assert.match(expressions[9], /abs\(.*floor\(X\/14\).*floor\(Y\/14\)/u);
-  assert.match(expressions[10], /atan2\(Y-H\/2,X-W\/2\)/u);
-  assert.match(expressions[11], /1-\(\(abs\(X\/max\(1,W-1\)-0\.[0-9]+\)/u);
-  assert.match(expressions[12], /min\(abs\(X\/max\(1,W-1\)-0\.5\)\*2,abs\(Y\/max\(1,H-1\)-0\.5\)\*2\)/u);
-  assert.match(expressions[13], /min\(min\(floor\(X\/8\)\*8\/max\(1,W-1\)/u);
-  assert.match(expressions[13], /floor\(X\/8\)\*271\+floor\(Y\/8\)\*487/u);
-  assert.match(expressions[14], /floor\(X\/8\)\*307\+floor\(Y\/8\)\*503/u);
-  assert.match(expressions[15], /max\(abs\(X\/max\(1,W-1\)-0\.5\),abs\(Y\/max\(1,H-1\)-0\.5\)\)\*2/u);
-  assert.match(expressions[15], /if\(lte\(Y\/max\(1,H-1\)-0\.5,-abs\(X\/max\(1,W-1\)-0\.5\)\)/u);
-  assert.match(expressions[16], /lte\(\(1-\(clip\(/u);
-  assert.match(expressions[17], /\(H-1-floor\(Y\/8\)\*8\)\/max\(1,H-1\)/u);
-  assert.match(expressions[17], /sin\(\(floor\(X\/8\)\*8\)\*0\.045/u);
-  assert.match(expressions[17], /floor\(X\/8\)\*331\+floor\(Y\/8\)\*521/u);
+  assert.match(expressions[7], /eq\(mod\(floor\(X\/24\)\+floor\(Y\/24\),2\),0\)/u);
+  assert.match(expressions[8], /X\/max\(1,W-1\).*Y\/max\(1,H-1\).*sin/u);
+  assert.match(expressions[9], /floor\(Y\/8\).*max\(1,H-1\)/u);
+  assert.match(expressions[10], /abs\(.*floor\(X\/14\).*floor\(Y\/14\)/u);
+  assert.match(expressions[11], /atan2\(Y-H\/2,X-W\/2\)/u);
+  assert.match(expressions[12], /1-\(\(abs\(X\/max\(1,W-1\)-0\.[0-9]+\)/u);
+  assert.match(expressions[13], /min\(abs\(X\/max\(1,W-1\)-0\.5\)\*2,abs\(Y\/max\(1,H-1\)-0\.5\)\*2\)/u);
+  assert.match(expressions[14], /min\(min\(floor\(X\/8\)\*8\/max\(1,W-1\)/u);
+  assert.match(expressions[14], /floor\(X\/8\)\*271\+floor\(Y\/8\)\*487/u);
+  assert.match(expressions[15], /floor\(X\/8\)\*307\+floor\(Y\/8\)\*503/u);
+  assert.match(expressions[16], /max\(abs\(X\/max\(1,W-1\)-0\.5\),abs\(Y\/max\(1,H-1\)-0\.5\)\)\*2/u);
+  assert.match(expressions[16], /if\(lte\(Y\/max\(1,H-1\)-0\.5,-abs\(X\/max\(1,W-1\)-0\.5\)\)/u);
+  assert.match(expressions[17], /lte\(\(1-\(clip\(/u);
+  assert.match(expressions[18], /\(H-1-floor\(Y\/8\)\*8\)\/max\(1,H-1\)/u);
+  assert.match(expressions[18], /sin\(\(floor\(X\/8\)\*8\)\*0\.045/u);
+  assert.match(expressions[18], /floor\(X\/8\)\*331\+floor\(Y\/8\)\*521/u);
 });
 
 test('falling-particle phases descend in discrete sand steps before settling', () => {

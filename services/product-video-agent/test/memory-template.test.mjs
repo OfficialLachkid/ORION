@@ -372,6 +372,18 @@ test('memory render plan keeps memorize, question, countdown, and reveal timing 
   assert.equal(renderPlan.grid.cells.length, 6);
   assert.equal(renderPlan.question.options.length, 4);
   assert.equal(renderPlan.output_path, '/tmp/memory.mp4');
+
+  const titleAnchoredTemplate = structuredClone(template);
+  titleAnchoredTemplate.layout.timer.hp_bar_title_gap_px = 150;
+  const titleAnchoredRenderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template: titleAnchoredTemplate,
+    outputPath: '/tmp/memory-title-anchored.mp4',
+  });
+  assert.equal(
+    titleAnchoredRenderPlan.timer_layout.y,
+    titleAnchoredTemplate.layout.text.question_y + 150,
+  );
 });
 
 test('memory visual inputs include study sprites, question-option sprites, and the reveal sprite', async () => {

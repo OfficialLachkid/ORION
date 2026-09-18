@@ -20,6 +20,7 @@ import {
   orderLandscapeTemplateSpecs,
   selectLandscapeBackground,
   selectMixedChallengeIntroMusic,
+  selectMixedChallengeIntroPokeballs,
 } from '../src/domains/pokemon/long-form/mixed-challenge/planner.mjs';
 import { assembleMixedChallengeVideo } from '../src/domains/pokemon/long-form/mixed-challenge/renderer.mjs';
 import { buildLandscapeBackgroundCatalog } from '../src/domains/pokemon/long-form/media-catalog.mjs';
@@ -110,13 +111,6 @@ function buildSectionSummary({
   segmentPath,
   planPath,
 }) {
-  const introPokeballs = templateKey === 'build-your-team'
-    ? (plan?.rounds?.[0]?.candidates || []).map((candidate) => ({
-        path: String(candidate?.pokeball_sprite_path || '').trim(),
-        speed_multiplier: Number(candidate?.pokeball_wiggle_speed_multiplier || 1),
-        direction_multiplier: Number(candidate?.pokeball_wiggle_direction_multiplier || 1),
-      })).filter((entry) => entry.path)
-    : [];
   return {
     section_number: sectionIndex + 1,
     template_key: templateKey,
@@ -130,7 +124,6 @@ function buildSectionSummary({
     plan_path: planPath,
     previews_directory: String(plan?.assets?.outputs?.previews_directory || ''),
     selected_music_path: String(plan?.assets?.audio?.selected_battle_intro_music_path || ''),
-    intro_pokeballs: introPokeballs,
   };
 }
 
@@ -214,6 +207,7 @@ export async function generatePokemonLongFormReview(options = {}) {
     LANDSCAPE_POKEMON_TEMPLATE_SPECS,
     seed,
     template?.episode?.shuffle_sections !== false,
+    template?.episode?.excluded_template_keys,
   );
   const baseTemplateByKey = new Map(baseTemplates.map((entry) => [entry.spec.key, entry.template]));
   const nextSelectionState = { sections: {} };
@@ -342,9 +336,11 @@ export async function generatePokemonLongFormReview(options = {}) {
     firstSectionMusicPath,
     seed,
   );
-  const introPokeballs = sectionSummaries
-    .find((section) => section.template_key === 'build-your-team')
-    ?.intro_pokeballs || [];
+  const introPokeballs = selectMixedChallengeIntroPokeballs(
+    inventory.pokeball_sprites,
+    seed,
+    template?.episode?.intro_pokeball_count,
+  );
   const plan = buildMixedChallengePlan({
     template,
     seed,

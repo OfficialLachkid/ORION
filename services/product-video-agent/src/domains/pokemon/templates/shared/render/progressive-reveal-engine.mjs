@@ -9,6 +9,8 @@ const REVEAL_METHOD_ALIASES = Object.freeze({
   falling: 'cascade',
   falling_particles: 'cascade',
   checker: 'checkerboard',
+  fine_checkerboard: 'micro_checkerboard',
+  small_checkerboard: 'micro_checkerboard',
   circle: 'radial',
   circular: 'radial',
   diagonal_wave: 'diagonal',
@@ -54,6 +56,7 @@ export const PROGRESSIVE_REVEAL_METHODS = Object.freeze([
   'particles',
   'radial',
   'checkerboard',
+  'micro_checkerboard',
   'diagonal',
   'cascade',
   'pathfinding',
@@ -341,6 +344,13 @@ function buildFallingParticlePhases({
   });
 }
 
+function buildMicroCheckerboardMask(progress, seed, config) {
+  return buildCheckerboardMask(progress, seed, {
+    ...config,
+    cell_size_px: ensureNumber(config?.cell_size_px, 24),
+  });
+}
+
 export function buildCascadeFallingParticlePhases(options = {}) {
   return buildFallingParticlePhases(options, {
     defaultFallDurationSeconds: 1.2,
@@ -471,8 +481,9 @@ function calculateRevealScore(method, point, seed, config) {
     )));
     return Math.sqrt(nearestDistanceSquared) / maximumRadius;
   }
-  if (method === 'checkerboard') {
-    const size = Math.max(12, Math.round(ensureNumber(config?.cell_size_px, 56)));
+  if (method === 'checkerboard' || method === 'micro_checkerboard') {
+    const defaultSize = method === 'micro_checkerboard' ? 24 : 56;
+    const size = Math.max(12, Math.round(ensureNumber(config?.cell_size_px, defaultSize)));
     const cellX = Math.floor(x / size);
     const cellY = Math.floor(y / size);
     const order = buildHashValue((cellX * 211) + (cellY * 421), seed, 43);
@@ -592,6 +603,7 @@ export function buildProgressiveRevealMaskExpression({
     particles: buildParticleMask,
     radial: buildRadialMask,
     checkerboard: buildCheckerboardMask,
+    micro_checkerboard: buildMicroCheckerboardMask,
     diagonal: buildDiagonalMask,
     cascade: buildCascadeMask,
     pathfinding: buildPathfindingMask,

@@ -38,8 +38,19 @@ function subjectKey(subject = {}) {
   ).trim().toLowerCase();
 }
 
-export function orderLandscapeTemplateSpecs(specs = [], seed = '', shuffleEnabled = true) {
-  const eligible = specs.filter((entry) => String(entry?.key || '').trim() !== 'tournament');
+export function orderLandscapeTemplateSpecs(
+  specs = [],
+  seed = '',
+  shuffleEnabled = true,
+  excludedTemplateKeys = [],
+) {
+  const excludedKeys = new Set([
+    'tournament',
+    ...(Array.isArray(excludedTemplateKeys) ? excludedTemplateKeys : []),
+  ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean));
+  const eligible = specs.filter((entry) => !excludedKeys.has(
+    String(entry?.key || '').trim().toLowerCase(),
+  ));
   return shuffleEnabled ? shuffle(eligible, createPrng(`${seed}:section-order`)) : [...eligible];
 }
 
@@ -57,6 +68,25 @@ export function selectMixedChallengeIntroMusic(musicPaths = [], firstSectionMusi
   const pool = alternatives.length > 0 ? alternatives : candidates;
   if (pool.length === 0) return null;
   return pool[hashSeed(`${seed}:intro-music`) % pool.length];
+}
+
+export function selectMixedChallengeIntroPokeballs(
+  pokeballPaths = [],
+  seed = '',
+  requestedCount = 4,
+) {
+  const count = Math.max(0, Math.round(Number(requestedCount) || 0));
+  const candidates = [...new Set(
+    (Array.isArray(pokeballPaths) ? pokeballPaths : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  )];
+  const random = createPrng(`${seed}:intro-pokeballs`);
+  return shuffle(candidates, random).slice(0, count).map((path) => ({
+    path,
+    speed_multiplier: Number((0.92 + (random() * 0.16)).toFixed(3)),
+    direction_multiplier: random() < 0.5 ? -1 : 1,
+  }));
 }
 
 export function assignMixedChallengeDifficulty(sections = [], template = {}) {
