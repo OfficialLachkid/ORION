@@ -10,6 +10,10 @@ import {
   roundTime,
 } from '../../templates/dual-type-reveal/render/constants.mjs';
 import { resolveFontPath } from '../../templates/dual-type-reveal/render/drawtext-artifacts.mjs';
+import {
+  appendPokeballStingerCard,
+  appendSubscribeReminderOverlay,
+} from './checkpoint-overlays.mjs';
 
 export function buildMixedChallengeConcatFilter(sectionCount) {
   const count = Math.max(1, Number.parseInt(String(sectionCount), 10) || 1);
@@ -283,12 +287,15 @@ function appendProgramCard(filters, programInputs, {
   fontPath,
   progressTracker = null,
   progressTrackerConfig = {},
+  subscribeReminderInputRef = null,
+  subscribeReminderConfig = {},
 }) {
   const duration = Math.max(0.5, durationSeconds);
   const fadeOutStart = Math.max(0, Number((duration - 0.45).toFixed(3)));
   const fontPart = buildFontPart(fontPath);
   const videoLabel = `cardv${index}`;
   const audioLabel = `carda${index}`;
+  const baseLabel = `cardbase${index}`;
   const trackerFilters = buildProgressTrackerFilters({
     width,
     height,
@@ -300,7 +307,19 @@ function appendProgramCard(filters, programInputs, {
     ? `,${trackerFilters.join(',')}`
     : '';
   filters.push(
-    `color=c=0x071426:s=${width}x${height}:r=${fps}:d=${duration},format=rgba,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=0x020813@0.58:t=fill,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=${accentColor}@0.85:t=5,drawtext=text='${escapeDrawtextText(eyebrow)}'${fontPart}:fontcolor=${accentColor}:fontsize=46:borderw=3:bordercolor=black:x=(w-text_w)/2:y=285,drawtext=text='${escapeDrawtextText(title)}'${fontPart}:fontcolor=white:fontsize=${titleFontSize}:borderw=7:bordercolor=black:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=(w-text_w)/2:y=420,drawtext=text='${escapeDrawtextText(subtitle)}'${fontPart}:fontcolor=0xDCEBFF:fontsize=42:borderw=3:bordercolor=black:x=(w-text_w)/2:y=610${trackerFilterPart},fade=t=in:st=0:d=0.35,fade=t=out:st=${fadeOutStart}:d=0.45,format=yuv420p[${videoLabel}]`,
+    `color=c=0x071426:s=${width}x${height}:r=${fps}:d=${duration},format=rgba,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=0x020813@0.58:t=fill,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=${accentColor}@0.85:t=5,drawtext=text='${escapeDrawtextText(eyebrow)}'${fontPart}:fontcolor=${accentColor}:fontsize=46:borderw=3:bordercolor=black:x=(w-text_w)/2:y=285,drawtext=text='${escapeDrawtextText(title)}'${fontPart}:fontcolor=white:fontsize=${titleFontSize}:borderw=7:bordercolor=black:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=(w-text_w)/2:y=420,drawtext=text='${escapeDrawtextText(subtitle)}'${fontPart}:fontcolor=0xDCEBFF:fontsize=42:borderw=3:bordercolor=black:x=(w-text_w)/2:y=610${trackerFilterPart}[${baseLabel}]`,
+  );
+  const cardContentLabel = appendSubscribeReminderOverlay(filters, baseLabel, {
+    cardIndex: index,
+    inputRef: subscribeReminderInputRef,
+    width,
+    height,
+    fps,
+    durationSeconds: duration,
+    config: subscribeReminderConfig,
+  });
+  filters.push(
+    `[${cardContentLabel}]fade=t=in:st=0:d=0.35,fade=t=out:st=${fadeOutStart}:d=0.45,format=yuv420p[${videoLabel}]`,
   );
   filters.push(
     `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${duration},asetpts=PTS-STARTPTS[${audioLabel}]`,
@@ -390,6 +409,7 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
   });
 
   let cardIndex = 1;
+  let checkpointIndex = 0;
   let previousDifficultyKey = null;
   normalizedSections.forEach((section, index) => {
     const difficulty = section.difficulty;
@@ -415,9 +435,27 @@ export function buildMixedChallengeProgramFilter(sectionCount, {
           marker_colors: normalizedSections.map((candidate) => candidate.difficulty.accent_color),
         },
         progressTrackerConfig: template?.layout?.progress_tracker,
+        subscribeReminderInputRef: programAssets.subscribe_reminder_input_refs?.[checkpointIndex],
+        subscribeReminderConfig: template?.layout?.subscribe_reminder,
       });
       cardIndex += 1;
+      checkpointIndex += 1;
       previousDifficultyKey = difficulty.key;
+    }
+
+    const transitionPokeball = programAssets.round_transition_pokeballs?.[index];
+    if (appendPokeballStingerCard(filters, programInputs, {
+      index: cardIndex,
+      inputRef: transitionPokeball?.input_ref,
+      directionMultiplier: transitionPokeball?.direction_multiplier,
+      width,
+      height,
+      fps,
+      durationSeconds: template?.layout?.round_transition?.duration_seconds,
+      accentColor: difficulty.accent_color,
+      config: template?.layout?.round_transition,
+    })) {
+      cardIndex += 1;
     }
 
     const label = `${difficulty.label}  |  ${index + 1} / ${count}`;
@@ -466,6 +504,11 @@ export async function assembleMixedChallengeVideo({
   const fontPath = await resolveFontPath(DEFAULT_FONT_CANDIDATES);
   const fps = Number(template?.canvas?.fps || 30);
   const introDuration = normalizeDuration(template?.episode?.intro_duration_seconds, 6);
+  const chapterDuration = normalizeDuration(template?.episode?.chapter_intro_duration_seconds, 3.5);
+  const transitionDuration = normalizeDuration(
+    template?.layout?.round_transition?.duration_seconds,
+    1.15,
+  );
   const requestedPokeballs = Array.isArray(programAssets?.intro_pokeballs)
     ? programAssets.intro_pokeballs.slice(0, Math.max(
         0,
@@ -515,8 +558,55 @@ export async function assembleMixedChallengeVideo({
         introMusicPath,
       );
       introMusicInputRef = nextInputRef;
+      nextInputRef += 1;
     } catch {
       introMusicInputRef = null;
+    }
+  }
+  const subscribeReminderInputRefs = [];
+  const requestedSubscribePath = String(programAssets?.subscribe_reminder_path || '').trim();
+  const chapterCount = new Set(
+    sections.map((section) => String(section?.difficulty?.key || '').trim()).filter(Boolean),
+  ).size || Math.min(3, sectionPaths.length);
+  if (requestedSubscribePath && template?.layout?.subscribe_reminder?.enabled !== false) {
+    const subscribePath = resolve(projectRoot, requestedSubscribePath);
+    try {
+      await access(subscribePath);
+      for (let index = 0; index < chapterCount; index += 1) {
+        extraInputArgs.push(
+          '-stream_loop',
+          '-1',
+          '-t',
+          String(chapterDuration),
+          '-i',
+          subscribePath,
+        );
+        subscribeReminderInputRefs.push(nextInputRef);
+        nextInputRef += 1;
+      }
+    } catch {
+      subscribeReminderInputRefs.length = 0;
+    }
+  }
+  const roundTransitionPokeballs = [];
+  if (template?.layout?.round_transition?.enabled !== false && introPokeballs.length > 0) {
+    for (let index = 0; index < sectionPaths.length; index += 1) {
+      const pokeball = introPokeballs[index % introPokeballs.length];
+      extraInputArgs.push(
+        '-loop',
+        '1',
+        '-framerate',
+        String(fps),
+        '-t',
+        String(transitionDuration),
+        '-i',
+        resolve(projectRoot, pokeball.path),
+      );
+      roundTransitionPokeballs.push({
+        ...pokeball,
+        input_ref: nextInputRef,
+      });
+      nextInputRef += 1;
     }
   }
   await writeFile(filterPath, buildMixedChallengeProgramFilter(sectionPaths.length, {
@@ -526,6 +616,8 @@ export async function assembleMixedChallengeVideo({
     programAssets: {
       intro_pokeballs: introPokeballs,
       intro_music_input_ref: introMusicInputRef,
+      subscribe_reminder_input_refs: subscribeReminderInputRefs,
+      round_transition_pokeballs: roundTransitionPokeballs,
     },
   }), 'utf8');
   await runProcess({

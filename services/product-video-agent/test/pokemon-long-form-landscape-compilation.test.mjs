@@ -59,6 +59,8 @@ test('landscape compilation supports every Pokemon Short template except Tournam
   assert.equal(longTemplate.layout.background.blur_sigma, 8);
   assert.equal(longTemplate.layout.progress_tracker.enabled, true);
   assert.equal(longTemplate.layout.progress_tracker.marker_size_px, 42);
+  assert.equal(longTemplate.layout.subscribe_reminder.enabled, true);
+  assert.equal(longTemplate.layout.round_transition.duration_seconds, 1.15);
   const backgrounds = [{ path: 'one' }, { path: 'two' }, { path: 'three' }];
   const selected = [0, 1, 2].map((index) => (
     selectLandscapeBackground(backgrounds, 'same-seed', index).path
@@ -210,12 +212,14 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
     programAssets: {
       intro_music_path: '/music/intro.mp3',
       intro_pokeballs: [{ path: '/overlays/pokeball.png' }],
+      subscribe_reminder_path: '/overlays/subscribe-reminder-greenscreen.mp4',
     },
   });
   assert.equal(plan.content_format, 'long_form');
   assert.equal(plan.content_surface, 'youtube_watch');
   assert.equal(plan.timing.sections_duration_seconds, 54.75);
-  assert.equal(plan.timing.total_duration_seconds, 74.75);
+  assert.equal(plan.timing.round_transitions_duration_seconds, 2.3);
+  assert.equal(plan.timing.total_duration_seconds, 77.05);
   assert.equal(plan.selection.selected_subjects.length, 2);
   assert.equal(plan.sections[0].difficulty.label, 'EASY ROUND');
   assert.equal(plan.sections[1].difficulty.label, 'MEDIUM ROUND');
@@ -223,6 +227,10 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
   assert.equal(plan.publication_policy.watermark_enabled, false);
   assert.equal(plan.assets.program.intro_music_path, '/music/intro.mp3');
   assert.equal(plan.assets.program.intro_pokeballs.length, 1);
+  assert.equal(
+    plan.assets.program.subscribe_reminder_path,
+    '/overlays/subscribe-reminder-greenscreen.mp4',
+  );
   assert.equal(
     selectMixedChallengeIntroMusic(['/music/one.mp3', '/music/two.mp3'], '/music/one.mp3', 'seed'),
     '/music/two.mp3',
@@ -257,11 +265,19 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
     programAssets: {
       intro_music_input_ref: 3,
       intro_pokeballs: [{ input_ref: 2, speed_multiplier: 1.05, direction_multiplier: -1 }],
+      subscribe_reminder_input_refs: [4, 5],
+      round_transition_pokeballs: [
+        { input_ref: 6, direction_multiplier: -1 },
+        { input_ref: 7, direction_multiplier: 1 },
+      ],
     },
   });
   assert.match(animatedProgramFilter, /\[2:v\].*rotate=/u);
   assert.match(animatedProgramFilter, /\[3:a\].*volume=0\.24/u);
   assert.match(animatedProgramFilter, /1\+0\.45\*\(1-abs/u);
+  assert.match(animatedProgramFilter, /\[4:v\].*colorkey=0x00FF00:0\.22:0\.08/u);
+  assert.match(animatedProgramFilter, /\[6:v\].*rotate=/u);
+  assert.match(animatedProgramFilter, /concat=n=8:v=1:a=1\[vout\]\[aout\]/u);
 });
 
 test('transparent bottom padding is measured independently of animation frame stacking', () => {

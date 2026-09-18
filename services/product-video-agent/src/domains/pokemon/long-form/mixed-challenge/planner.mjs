@@ -143,10 +143,20 @@ export function buildMixedChallengePlan({
   const chapterIntroDurationSeconds = Math.max(0, Number(template?.episode?.chapter_intro_duration_seconds || 0));
   const outroDurationSeconds = Math.max(0, Number(template?.episode?.outro_duration_seconds || 0));
   const chapterCount = new Set(arrangedSections.map((section) => section?.difficulty?.key).filter(Boolean)).size;
+  const hasRoundTransitionAssets = Array.isArray(programAssets?.intro_pokeballs)
+    && programAssets.intro_pokeballs.length > 0;
+  const roundTransitionDurationSeconds = template?.layout?.round_transition?.enabled !== false
+    && hasRoundTransitionAssets
+    ? Math.max(0, Number(template?.layout?.round_transition?.duration_seconds || 0))
+    : 0;
+  const roundTransitionsDurationSeconds = Number((
+    roundTransitionDurationSeconds * arrangedSections.length
+  ).toFixed(3));
   const totalDurationSeconds = Number((
     sectionsDurationSeconds
     + introDurationSeconds
     + (chapterIntroDurationSeconds * chapterCount)
+    + roundTransitionsDurationSeconds
     + outroDurationSeconds
   ).toFixed(3));
   const publication = template?.publication || {};
@@ -183,6 +193,8 @@ export function buildMixedChallengePlan({
       sections_duration_seconds: sectionsDurationSeconds,
       intro_duration_seconds: introDurationSeconds,
       chapter_intro_duration_seconds: chapterIntroDurationSeconds,
+      round_transition_duration_seconds: roundTransitionDurationSeconds,
+      round_transitions_duration_seconds: roundTransitionsDurationSeconds,
       outro_duration_seconds: outroDurationSeconds,
       total_duration_seconds: totalDurationSeconds,
     },
@@ -196,6 +208,7 @@ export function buildMixedChallengePlan({
         intro_pokeballs: Array.isArray(programAssets?.intro_pokeballs)
           ? programAssets.intro_pokeballs
           : [],
+        subscribe_reminder_path: String(programAssets?.subscribe_reminder_path || '').trim() || null,
       },
       outputs: {
         previews_directory: arrangedSections[0]?.previews_directory || '',

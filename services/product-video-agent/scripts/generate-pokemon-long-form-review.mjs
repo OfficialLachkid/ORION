@@ -350,6 +350,7 @@ export async function generatePokemonLongFormReview(options = {}) {
     programAssets: {
       intro_music_path: introMusicPath,
       intro_pokeballs: introPokeballs,
+      subscribe_reminder_path: inventory.overlay_presets?.subscribe_reminder || null,
     },
   });
   const planPath = getStringOption(

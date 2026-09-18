@@ -65,6 +65,23 @@
       "border_width_px": 3,
       "fill_start_seconds": 0.55,
       "fill_stagger_seconds": 0.16
+    },
+    "subscribe_reminder": {
+      "enabled": true,
+      "width_px": 960,
+      "center_x": 1460,
+      "center_y": 830,
+      "chroma_key_color": "0x00FF00",
+      "chroma_similarity": 0.22,
+      "chroma_blend": 0.08
+    },
+    "round_transition": {
+      "enabled": true,
+      "duration_seconds": 1.15,
+      "pokeball_size_px": 340,
+      "start_scale": 0.08,
+      "cover_scale": 7.2,
+      "rotation_turns": 1.25
     }
   },
   "renderer": {

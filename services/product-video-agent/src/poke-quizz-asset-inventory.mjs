@@ -243,6 +243,8 @@ export function selectOverlayPresets(overlays) {
   const disappear = matchOverlay(overlays, ['disappear'])
     || matchOverlay(overlays, ['vanish'])
     || matchOverlay(overlays, ['poof']);
+  const subscribeReminder = matchOverlay(overlayVideos, ['subscribe', 'reminder'])
+    || matchOverlay(overlayVideos, ['subscribe']);
   const pokeballOpenClose = matchOverlay(overlays, ['open', 'close', 'pokeball']);
   const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
@@ -258,6 +260,7 @@ export function selectOverlayPresets(overlays) {
     versus,
     type_placeholder: typePlaceholder,
     disappear,
+    subscribe_reminder: subscribeReminder,
     pokeball_open_close: pokeballOpenClose,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
