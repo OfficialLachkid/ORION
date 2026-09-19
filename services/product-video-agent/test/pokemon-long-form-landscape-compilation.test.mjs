@@ -62,6 +62,8 @@ test('landscape compilation supports every Pokemon Short template except Tournam
   assert.equal(longTemplate.layout.progress_tracker.marker_size_px, 42);
   assert.equal(longTemplate.layout.subscribe_reminder.enabled, true);
   assert.equal(longTemplate.layout.round_transition.duration_seconds, 1.15);
+  assert.equal(longTemplate.layout.round_transition.overlap_mode, true);
+  assert.equal(longTemplate.layout.round_transition.external_enabled, false);
   assert.equal(longTemplate.layout.round_transition.external_duration_seconds, 3);
   const backgrounds = [{ path: 'one' }, { path: 'two' }, { path: 'three' }];
   const selected = [0, 1, 2].map((index) => (
@@ -188,6 +190,14 @@ test('long-form transition pool starts with Pokeball and avoids repeated keyed c
     '0x000000',
   );
   assert.equal(selected.some((entry) => entry.key === 'unsupported.mov'), false);
+  const pokeballOnly = selectMixedChallengeRoundTransitions(
+    paths,
+    'transition-seed',
+    8,
+    '',
+    { duration_seconds: 1.15, external_enabled: false },
+  );
+  assert.equal(pokeballOnly.every((entry) => entry.kind === 'pokeball'), true);
 });
 
 test('long-form background motion is smooth and does not use sharp triangle-wave reversals', () => {
@@ -251,21 +261,15 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
       subscribe_reminder_path: '/overlays/subscribe-reminder-greenscreen.mp4',
       round_transitions: [
         { key: 'pokeball', kind: 'pokeball', duration_seconds: 1.15 },
-        {
-          key: 'transition-01.mp4',
-          kind: 'keyed_overlay',
-          path: '/transitions/transition-01.mp4',
-          duration_seconds: 3,
-          chroma_key_color: '0x00FF00',
-        },
+        { key: 'pokeball', kind: 'pokeball', duration_seconds: 1.15 },
       ],
     },
   });
   assert.equal(plan.content_format, 'long_form');
   assert.equal(plan.content_surface, 'youtube_watch');
   assert.equal(plan.timing.sections_duration_seconds, 54.75);
-  assert.equal(plan.timing.round_transitions_duration_seconds, 4.15);
-  assert.equal(plan.timing.total_duration_seconds, 78.9);
+  assert.equal(plan.timing.round_transitions_duration_seconds, 0);
+  assert.equal(plan.timing.total_duration_seconds, 74.75);
   assert.equal(plan.selection.selected_subjects.length, 2);
   assert.equal(plan.sections[0].difficulty.label, 'EASY ROUND');
   assert.equal(plan.sections[1].difficulty.label, 'MEDIUM ROUND');
@@ -322,11 +326,9 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
         },
         {
           input_ref: 7,
-          kind: 'keyed_overlay',
-          duration_seconds: 3,
-          chroma_key_color: '0x000000',
-          chroma_similarity: 0.08,
-          chroma_blend: 0.04,
+          kind: 'pokeball',
+          duration_seconds: 1.15,
+          direction_multiplier: 1,
         },
       ],
     },
@@ -336,21 +338,20 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
   assert.match(animatedProgramFilter, /1\+0\.45\*\(1-abs/u);
   assert.match(animatedProgramFilter, /\[4:v\].*colorkey=0x00FF00:0\.22:0\.08/u);
   assert.match(animatedProgramFilter, /\[6:v\].*rotate=/u);
-  assert.match(animatedProgramFilter, /\[7:v\].*colorkey=0x000000:0\.08:0\.04/u);
-  assert.match(animatedProgramFilter, /\[0:v\]split=2\[sectiontransition0\]\[sectionmain0\]/u);
   assert.match(
     animatedProgramFilter,
-    /\[checkpointtransition0\]trim=start=3\.467.*\[transitionfrom2\]/u,
+    /\[6:v\].*setpts=PTS\+8\.925\/TB\[transitionball0\]/u,
   );
   assert.match(
     animatedProgramFilter,
-    /\[sectiontransition0\]trim=start=0.*\[transitionto2\]/u,
+    /overlay=.*enable='between\(t,8\.925,10\.075\)'/u,
   );
   assert.match(
     animatedProgramFilter,
-    /\[transitionfrom2\]\[transitionto2\]concat=n=2:v=1:a=0/u,
+    /\[7:v\].*setpts=PTS\+42\.925\/TB\[transitionball1\]/u,
   );
-  assert.match(animatedProgramFilter, /concat=n=8:v=1:a=1\[vout\]\[aout\]/u);
+  assert.doesNotMatch(animatedProgramFilter, /transitionbridge|colorkey=0x000000/u);
+  assert.match(animatedProgramFilter, /concat=n=6:v=1:a=1\[programbase\]\[aout\]/u);
 
   const fourSections = assignMixedChallengeDifficulty([
     sections[0],
@@ -365,19 +366,15 @@ test('mixed compilation plan and concat filter keep watch-page semantics', async
     programAssets: {
       round_transitions: Array.from({ length: 4 }, (_, index) => ({
         input_ref: 20 + index,
-        kind: index === 0 ? 'pokeball' : 'keyed_overlay',
-        duration_seconds: index === 0 ? 1.15 : 3,
-        chroma_key_color: '0x00FF00',
+        kind: 'pokeball',
+        duration_seconds: 1.15,
+        direction_multiplier: index % 2 === 0 ? -1 : 1,
       })),
     },
   });
   assert.match(
     consecutiveRoundFilter,
-    /\[sectionlabeled0\]split=2\[v0\]\[sectionoutgoing0\]/u,
-  );
-  assert.match(
-    consecutiveRoundFilter,
-    /\[sectionoutgoing0\]trim=start=30\.467.*\[transitionfrom3\]/u,
+    /\[21:v\].*setpts=PTS\+39\.425\/TB\[transitionball1\]/u,
   );
 });
 

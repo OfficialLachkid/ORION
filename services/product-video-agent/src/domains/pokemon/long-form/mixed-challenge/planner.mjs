@@ -63,7 +63,7 @@ export function selectMixedChallengeRoundTransitions(
   if (count === 0 || config?.enabled === false) return [];
   const pokeballDuration = Math.max(0.5, Number(config.duration_seconds || 1.15));
   const externalDuration = Math.max(0.5, Number(config.external_duration_seconds || 3));
-  const candidates = [...new Map(
+  const candidates = config?.external_enabled === false ? [] : [...new Map(
     (Array.isArray(transitionPaths) ? transitionPaths : [])
       .map((path) => ({ path: String(path || '').trim(), profile: resolveTransitionKeyProfile(path, config) }))
       .filter((entry) => entry.path && entry.profile)
@@ -231,10 +231,12 @@ export function buildMixedChallengePlan({
     0,
     Number(template?.layout?.round_transition?.duration_seconds || 0),
   );
-  const roundTransitionsDurationSeconds = Number(roundTransitions.reduce(
-    (sum, transition) => sum + Math.max(0, Number(transition?.duration_seconds || 0)),
-    0,
-  ).toFixed(3));
+  const roundTransitionsDurationSeconds = template?.layout?.round_transition?.overlap_mode === true
+    ? 0
+    : Number(roundTransitions.reduce(
+        (sum, transition) => sum + Math.max(0, Number(transition?.duration_seconds || 0)),
+        0,
+      ).toFixed(3));
   const totalDurationSeconds = Number((
     sectionsDurationSeconds
     + introDurationSeconds

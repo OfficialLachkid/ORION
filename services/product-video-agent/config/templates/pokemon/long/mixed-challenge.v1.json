@@ -77,6 +77,8 @@
     },
     "round_transition": {
       "enabled": true,
+      "overlap_mode": true,
+      "external_enabled": false,
       "duration_seconds": 1.15,
       "external_duration_seconds": 3,
       "green_key_similarity": 0.22,

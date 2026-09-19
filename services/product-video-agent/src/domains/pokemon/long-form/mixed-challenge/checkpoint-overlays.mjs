@@ -3,68 +3,6 @@ import {
   roundTime,
 } from '../../templates/dual-type-reveal/render/constants.mjs';
 
-function appendFrozenBackground(filters, {
-  inputLabel,
-  outputLabel,
-  width,
-  height,
-  fps,
-  durationSeconds,
-  snapshotSeconds = 0,
-  fallbackColor = '0x071426',
-}) {
-  const duration = roundTime(durationSeconds);
-  if (!inputLabel) {
-    filters.push(
-      `color=c=${fallbackColor}:s=${width}x${height}:r=${fps}:d=${duration},format=rgba[${outputLabel}]`,
-    );
-    return;
-  }
-  const snapshotStart = Math.max(0, ensureNumber(snapshotSeconds, 0));
-  filters.push(
-    `[${inputLabel}]trim=start=${roundTime(snapshotStart)},setpts=PTS-STARTPTS,trim=end_frame=1,scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height},setsar=1,tpad=stop_mode=clone:stop_duration=${duration},trim=duration=${duration},fps=${fps},format=rgba[${outputLabel}]`,
-  );
-}
-
-function appendTransitionBridgeBackground(filters, {
-  index,
-  fromInputLabel,
-  fromSnapshotSeconds,
-  toInputLabel,
-  width,
-  height,
-  fps,
-  durationSeconds,
-}) {
-  const duration = Math.max(0.5, ensureNumber(durationSeconds, 1));
-  const firstDuration = roundTime(duration / 2);
-  const secondDuration = roundTime(duration - firstDuration);
-  const fromLabel = `transitionfrom${index}`;
-  const toLabel = `transitionto${index}`;
-  const outputLabel = `transitionbridge${index}`;
-  appendFrozenBackground(filters, {
-    inputLabel: fromInputLabel,
-    outputLabel: fromLabel,
-    width,
-    height,
-    fps,
-    durationSeconds: firstDuration,
-    snapshotSeconds: fromSnapshotSeconds,
-  });
-  appendFrozenBackground(filters, {
-    inputLabel: toInputLabel,
-    outputLabel: toLabel,
-    width,
-    height,
-    fps,
-    durationSeconds: secondDuration,
-  });
-  filters.push(
-    `[${fromLabel}][${toLabel}]concat=n=2:v=1:a=0,format=rgba[${outputLabel}]`,
-  );
-  return outputLabel;
-}
-
 export function appendSubscribeReminderOverlay(filters, currentLabel, {
   cardIndex,
   inputRef,
@@ -140,23 +78,20 @@ export function buildProgressTrackerFilters({
   return filters;
 }
 
-export function appendPokeballStingerCard(filters, programInputs, {
+export function appendPokeballTransitionOverlay(filters, currentLabel, {
   index,
   inputRef,
-  fromBackgroundInputLabel = null,
-  fromSnapshotSeconds = 0,
-  toBackgroundInputLabel = null,
+  cutSeconds,
   directionMultiplier = 1,
-  width,
-  height,
   fps,
   durationSeconds,
-  accentColor,
   config = {},
 }) {
-  if (inputRef == null || config?.enabled === false) return false;
+  if (inputRef == null || config?.enabled === false) return currentLabel;
   const duration = Math.max(0.5, ensureNumber(durationSeconds, 1.15));
   const halfDuration = roundTime(duration / 2);
+  const startSeconds = roundTime(Math.max(0, ensureNumber(cutSeconds, 0) - halfDuration));
+  const endSeconds = roundTime(startSeconds + duration);
   const ballSize = Math.max(96, Math.round(ensureNumber(config.pokeball_size_px, 340)));
   const canvasSize = Math.ceil(ballSize * 1.36);
   const startScale = Math.max(0.01, ensureNumber(config.start_scale, 0.08));
@@ -166,82 +101,13 @@ export function appendPokeballStingerCard(filters, programInputs, {
   const phaseExpression = `if(lt(t,${halfDuration}),(1-cos(PI*t/${halfDuration}))/2,(1+cos(PI*(t-${halfDuration})/${roundTime(duration - halfDuration)}))/2)`;
   const scaleExpression = `${roundTime(startScale)}+${roundTime(coverScale - startScale)}*(${phaseExpression})`;
   const rotationExpression = `${direction * rotationTurns}*2*PI*t/${roundTime(duration)}`;
-  const videoLabel = `cardv${index}`;
-  const audioLabel = `carda${index}`;
-  const baseLabel = `stingerbase${index}`;
-  const ballLabel = `stingerball${index}`;
-  const frozenBaseLabel = appendTransitionBridgeBackground(filters, {
-    index,
-    fromInputLabel: fromBackgroundInputLabel,
-    fromSnapshotSeconds,
-    toInputLabel: toBackgroundInputLabel,
-    width,
-    height,
-    fps,
-    durationSeconds: duration,
-  });
+  const ballLabel = `transitionball${index}`;
+  const outputLabel = `programtransition${index}`;
   filters.push(
-    `[${frozenBaseLabel}]drawbox=x=0:y=0:w=${width}:h=${height}:color=${accentColor}@0.08:t=fill[${baseLabel}]`,
+    `[${inputRef}:v]fps=${fps},trim=duration=${roundTime(duration)},setpts=PTS-STARTPTS,scale=${ballSize}:${ballSize}:force_original_aspect_ratio=decrease,format=rgba,pad=${canvasSize}:${canvasSize}:(ow-iw)/2:(oh-ih)/2:color=black@0,rotate='${rotationExpression}':ow=iw:oh=ih:c=none,scale=w='${canvasSize}*(${scaleExpression})':h='${canvasSize}*(${scaleExpression})':eval=frame,setsar=1,setpts=PTS+${startSeconds}/TB[${ballLabel}]`,
   );
   filters.push(
-    `[${inputRef}:v]fps=${fps},trim=duration=${roundTime(duration)},setpts=PTS-STARTPTS,scale=${ballSize}:${ballSize}:force_original_aspect_ratio=decrease,format=rgba,pad=${canvasSize}:${canvasSize}:(ow-iw)/2:(oh-ih)/2:color=black@0,rotate='${rotationExpression}':ow=iw:oh=ih:c=none,scale=w='${canvasSize}*(${scaleExpression})':h='${canvasSize}*(${scaleExpression})':eval=frame,setsar=1[${ballLabel}]`,
+    `[${currentLabel}][${ballLabel}]overlay=x='(W-w)/2':y='(H-h)/2':enable='between(t,${startSeconds},${endSeconds})':eof_action=pass[${outputLabel}]`,
   );
-  filters.push(
-    `[${baseLabel}][${ballLabel}]overlay=x='(W-w)/2':y='(H-h)/2':shortest=1,format=yuv420p[${videoLabel}]`,
-  );
-  filters.push(
-    `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${roundTime(duration)},asetpts=PTS-STARTPTS[${audioLabel}]`,
-  );
-  programInputs.push(`[${videoLabel}][${audioLabel}]`);
-  return true;
-}
-
-export function appendKeyedTransitionCard(filters, programInputs, {
-  index,
-  inputRef,
-  fromBackgroundInputLabel,
-  fromSnapshotSeconds = 0,
-  toBackgroundInputLabel,
-  width,
-  height,
-  fps,
-  durationSeconds,
-  keyColor,
-  similarity,
-  blend,
-  config = {},
-}) {
-  if (
-    inputRef == null
-    || !fromBackgroundInputLabel
-    || !toBackgroundInputLabel
-    || config?.enabled === false
-  ) return false;
-  const duration = Math.max(0.5, ensureNumber(durationSeconds, 3));
-  const baseLabel = `transitionbase${index}`;
-  const sourceLabel = `transitionsource${index}`;
-  const videoLabel = `cardv${index}`;
-  const audioLabel = `carda${index}`;
-  const bridgeLabel = appendTransitionBridgeBackground(filters, {
-    index,
-    fromInputLabel: fromBackgroundInputLabel,
-    fromSnapshotSeconds,
-    toInputLabel: toBackgroundInputLabel,
-    width,
-    height,
-    fps,
-    durationSeconds: duration,
-  });
-  filters.push(`[${bridgeLabel}]null[${baseLabel}]`);
-  filters.push(
-    `[${inputRef}:v]fps=${fps},setpts=PTS-STARTPTS,scale=${width}:${height}:flags=lanczos,setsar=1,format=rgba,colorkey=${String(keyColor || '0x00FF00')}:${roundTime(Math.max(0.01, ensureNumber(similarity, 0.22)))}:${roundTime(Math.max(0, ensureNumber(blend, 0.08)))},tpad=stop_mode=clone:stop_duration=${roundTime(duration)},trim=duration=${roundTime(duration)}[${sourceLabel}]`,
-  );
-  filters.push(
-    `[${baseLabel}][${sourceLabel}]overlay=x=0:y=0:eof_action=pass:shortest=1,format=yuv420p[${videoLabel}]`,
-  );
-  filters.push(
-    `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${roundTime(duration)},asetpts=PTS-STARTPTS[${audioLabel}]`,
-  );
-  programInputs.push(`[${videoLabel}][${audioLabel}]`);
-  return true;
+  return outputLabel;
 }

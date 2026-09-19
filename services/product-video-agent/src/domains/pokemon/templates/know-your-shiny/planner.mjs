@@ -333,8 +333,12 @@ export async function planKnowYourShinyChallenge({
   }
 
   const selectedSubjects = shuffle(eligibleSubjects, random).slice(0, roundCount);
+  const backgroundCandidates = [...new Set([
+    ...(Array.isArray(inventory.backgrounds) ? inventory.backgrounds : []),
+    ...(Array.isArray(inventory.pixel_backgrounds) ? inventory.pixel_backgrounds : []),
+  ])];
   const selectedBackgroundPath = selectBackground(
-    inventory.backgrounds,
+    backgroundCandidates,
     random,
     normalizedSelectionState,
   );
@@ -446,6 +450,10 @@ export async function planKnowYourShinyChallenge({
     assets: {
       background: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+        expected_directories: [
+          POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+          POKE_QUIZZ_ASSET_LAYOUT.pixelBackgrounds,
+        ],
         selected_path: selectedBackgroundPath,
       },
       overlays: {
