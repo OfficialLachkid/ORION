@@ -56,12 +56,12 @@ function resolveHeadlineLines(template) {
 
 function buildPixelatedResolutionExpression(progressExpression, configuredSteps = []) {
   const steps = (Array.isArray(configuredSteps) ? configuredSteps : [])
-    .map((value) => Math.max(8, Math.round(Number(value) || 0)))
+    .map((value) => Math.max(4, Math.round(Number(value) || 0)))
     .filter((value, index, values) => value > 0 && values.indexOf(value) === index)
     .sort((left, right) => left - right);
   const resolutions = steps.length >= 2
     ? steps
-    : [18, 26, 38, 56, 82, 120, 176, 258, 378, 520];
+    : [4, 8, 12, 16, 21, 27, 34, 43, 54, 69, 88, 112, 142, 180, 229, 291, 370, 417, 444, 470, 520];
   let expression = String(resolutions.at(-1));
   for (let index = resolutions.length - 2; index >= 0; index -= 1) {
     const threshold = Number(((index + 1) / resolutions.length).toFixed(4));
