@@ -28,6 +28,7 @@ const template = {
     round_count: 5,
     mode: 'random',
     type_cardinality: 'any',
+    minimum_dual_type_rounds_between_single_type_rounds: 3,
   },
   question_contract: {
     hook_text: 'Can you guess the typing?',
@@ -265,14 +266,13 @@ test('generic planner dispatch builds a random type quiz plan from localized row
   assert.equal(plan.rounds.length, 5);
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 1), true);
   assert.equal(plan.rounds.some((round) => round.subject.types.length === 2), true);
-  for (let index = 1; index < plan.rounds.length; index += 1) {
-    const previousRound = plan.rounds[index - 1];
-    const currentRound = plan.rounds[index];
-    assert.notEqual(
-      previousRound.subject.types.length === 1 && currentRound.subject.types.length === 1,
-      true,
-    );
+  const singleTypeRoundIndexes = plan.rounds
+    .map((round, index) => (round.subject.types.length === 1 ? index : -1))
+    .filter((index) => index >= 0);
+  for (let index = 1; index < singleTypeRoundIndexes.length; index += 1) {
+    assert.ok(singleTypeRoundIndexes[index] - singleTypeRoundIndexes[index - 1] > 3);
   }
+  assert.equal(plan.selection.minimum_dual_type_rounds_between_single_type_rounds, 3);
   assert.equal(plan.rounds.every((round) => round.type_icons.length === round.subject.types.length), true);
   assert.equal(plan.rounds.filter((round) => round.subject.is_shiny_reveal).length, 1);
   assert.equal(plan.shiny_reveal.active, true);

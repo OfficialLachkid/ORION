@@ -1,5 +1,6 @@
 import { formatEnableBetween } from '../../dual-type-reveal/render/animation-expressions.mjs';
 import {
+  ensureNumber,
   escapeDrawtextText,
   escapeFilterPath,
   roundTime,
@@ -151,7 +152,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       // The scale filter exposes the per-frame variable as lowercase `n`.
       // Progressive alpha masks use uppercase `N`, so their shared helper
       // cannot be reused for this dynamic scale expression.
-      const pixelProgress = `clip(((n/${fps})-${round.local.reveal_start_seconds})/${round.reveal_duration_seconds},0,1)`;
+      const pixelAnswerClarity = Math.min(
+        1,
+        Math.max(0.05, ensureNumber(round.reveal_config?.answer_clarity_progress, 1)),
+      );
+      const pixelFullSharpenDuration = Number((
+        round.reveal_duration_seconds / pixelAnswerClarity
+      ).toFixed(3));
+      const pixelProgress = `clip(((n/${fps})-${round.local.reveal_start_seconds})/${pixelFullSharpenDuration},0,${pixelAnswerClarity})`;
       const pixelResolution = buildPixelatedResolutionExpression(
         pixelProgress,
         round.reveal_config?.resolution_steps_px,

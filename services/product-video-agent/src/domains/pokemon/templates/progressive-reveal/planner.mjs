@@ -535,12 +535,24 @@ export async function planPokemonProgressiveRevealChallenge({
     revealSeed,
     revealConfig,
   }) => {
+    const configuredPixelProgressSpeed = Number(revealConfig?.progress_speed_multiplier);
+    const configuredPixelAnswerClarity = Number(revealConfig?.answer_clarity_progress);
+    const pixelProgressSpeed = method === 'pixelated'
+      && Number.isFinite(configuredPixelProgressSpeed)
+      && configuredPixelProgressSpeed > 0
+      ? clamp(configuredPixelProgressSpeed, 0.01, 1)
+      : 1;
+    const pixelAnswerClarity = method === 'pixelated'
+      && Number.isFinite(configuredPixelAnswerClarity)
+      && configuredPixelAnswerClarity > 0
+      ? clamp(configuredPixelAnswerClarity, 0.05, 1)
+      : 1;
     let coverage;
     if (method === 'pixelated') {
       coverage = {
-        completionProgress: targetOpaqueFraction,
-        estimatedOpaqueFraction: targetOpaqueFraction,
-        maskProgressAtCompletion: targetOpaqueFraction,
+        completionProgress: pixelAnswerClarity,
+        estimatedOpaqueFraction: pixelAnswerClarity,
+        maskProgressAtCompletion: pixelAnswerClarity,
         progressScale: 1,
         sampledOpaquePixelCount: 0,
       };
@@ -566,8 +578,10 @@ export async function planPokemonProgressiveRevealChallenge({
         targetOpaqueFraction,
       });
     }
-    const revealDurationSeconds = Number((
-      fullRevealDurationSeconds * targetOpaqueFraction
+    const baseRevealDurationSeconds = fullRevealDurationSeconds * targetOpaqueFraction;
+    const revealDurationSeconds = Number((method === 'pixelated'
+      ? baseRevealDurationSeconds * (pixelAnswerClarity / pixelProgressSpeed)
+      : baseRevealDurationSeconds
     ).toFixed(3));
     return {
       round_number: index + 1,
@@ -578,7 +592,7 @@ export async function planPokemonProgressiveRevealChallenge({
         : transitionDurationSeconds + preRevealHoldSeconds,
       reveal_duration_seconds: revealDurationSeconds,
       full_reveal_duration_seconds: fullRevealDurationSeconds,
-      reveal_completion_progress: targetOpaqueFraction,
+      reveal_completion_progress: coverage.completionProgress,
       reveal_target_opaque_fraction: targetOpaqueFraction,
       reveal_estimated_opaque_fraction: coverage.estimatedOpaqueFraction,
       reveal_mask_progress_at_completion: coverage.maskProgressAtCompletion,

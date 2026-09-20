@@ -130,6 +130,8 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.method_config.square_spiral_inward.turns, 3);
   assert.equal(template.reveal.method_config.fluid_fill.particle_size_px, 8);
   assert.equal(template.reveal.method_config.fluid_fill.fall_step_count, 12);
+  assert.equal(template.reveal.method_config.pixelated.progress_speed_multiplier, 0.2);
+  assert.equal(template.reveal.method_config.pixelated.answer_clarity_progress, 0.5);
   assert.equal(template.reveal.method_config.pixelated.resolution_steps_px[0], 18);
   assert.equal(template.reveal.method_config.pixelated.resolution_steps_px.at(-1), 520);
 });
@@ -259,10 +261,13 @@ test('pixelated reveal requires animated GIFs and sharpens them in stepped resol
 
   assert.deepEqual(plan.selection.reveal_methods, ['pixelated', 'pixelated', 'pixelated']);
   assert.equal(plan.rounds.every((round) => round.subject.render_sprite_path === animatedGifPath), true);
+  assert.equal(plan.rounds.every((round) => round.reveal_duration_seconds === 12.75), true);
+  assert.equal(plan.rounds.every((round) => round.reveal_completion_progress === 0.5), true);
   assert.equal(visualInputs.slice(1).every((input) => input.path === animatedGifPath), true);
   assert.equal(visualInputs.slice(1).every((input) => input.args.includes('-ignore_loop')), true);
   assert.match(visualFilter.script, /round0pixelSource/u);
   assert.match(visualFilter.script, /scale=w='if\(lt\(clip\(\(\(n\/30\)/u);
+  assert.match(visualFilter.script, /\/25\.5,0,0\.5\)/u);
   assert.doesNotMatch(visualFilter.script, /scale=w='[^']*N\/30/u);
   assert.match(visualFilter.script, /round0sharpAnswer/u);
   assert.match(visualFilter.script, /scene0pixelPreCover/u);
