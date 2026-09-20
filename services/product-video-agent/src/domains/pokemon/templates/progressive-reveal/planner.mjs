@@ -395,7 +395,7 @@ function buildTimeline(hookText, rounds) {
   if (hookText) {
     timeline.push({
       phase: 'hook',
-      duration_seconds: rounds[0]?.scene_lead_seconds || DEFAULT_HOOK_HOLD_SECONDS,
+      duration_seconds: rounds[0]?.scene_lead_seconds ?? DEFAULT_HOOK_HOLD_SECONDS,
       spoken_text: hookText,
       on_screen_text: hookText,
     });
@@ -547,6 +547,7 @@ export async function planPokemonProgressiveRevealChallenge({
     template?.layout?.rounds?.final_hold_seconds,
     DEFAULT_FINAL_HOLD_SECONDS,
   );
+  const showFirstRevealImmediately = template?.layout?.rounds?.show_first_reveal_immediately === true;
   const difficulty = String(template?.reveal?.difficulty || 'normal').trim().toLowerCase() || 'normal';
 
   const roundBlueprints = renderedSubjects.map((subject, index) => {
@@ -622,7 +623,7 @@ export async function planPokemonProgressiveRevealChallenge({
       round_label: `${index + 1}/${roundCount}`,
       subject,
       scene_lead_seconds: index === 0
-        ? hookHoldSeconds
+        ? (showFirstRevealImmediately ? 0 : hookHoldSeconds)
         : transitionDurationSeconds + preRevealHoldSeconds,
       reveal_duration_seconds: revealDurationSeconds,
       full_reveal_duration_seconds: fullRevealDurationSeconds,

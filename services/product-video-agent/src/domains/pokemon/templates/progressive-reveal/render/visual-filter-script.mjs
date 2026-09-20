@@ -17,6 +17,33 @@ function buildFontPart(fontPath) {
   return fontPath ? `:fontfile='${escapeFilterPath(fontPath)}'` : '';
 }
 
+function estimateTextWidth(text, fontSize) {
+  return [...String(text || '')].reduce((width, character) => {
+    if (character === ' ') return width + (fontSize * 0.34);
+    if (/[MW@]/u.test(character)) return width + (fontSize * 0.86);
+    if (/[I1.'-]/u.test(character)) return width + (fontSize * 0.38);
+    return width + (fontSize * 0.66);
+  }, 0);
+}
+
+function wrapTextToWidth(text, fontSize, maxWidth) {
+  const words = String(text || '').trim().split(/\s+/u).filter(Boolean);
+  if (words.length < 2 || maxWidth <= 0) return words.join(' ');
+  const lines = [];
+  let currentLine = '';
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (currentLine && estimateTextWidth(candidate, fontSize) > maxWidth) {
+      lines.push(currentLine);
+      currentLine = word;
+    } else {
+      currentLine = candidate;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines.join('\n');
+}
+
 function appendLayeredText(filters, currentLabel, {
   labelPrefix,
   text,
@@ -28,20 +55,29 @@ function appendLayeredText(filters, currentLabel, {
   depthPx,
   startSeconds,
   endSeconds,
+  maxWidth = 0,
+  lineSpacing = 0,
+  centerMultiline = false,
 }) {
-  const escapedText = escapeDrawtextText(text);
+  const displayText = wrapTextToWidth(text, fontSize, maxWidth);
+  const lineCount = displayText.split('\n').length;
+  const adjustedY = centerMultiline
+    ? y - (((lineCount - 1) * (fontSize + lineSpacing)) / 2)
+    : y;
+  const escapedText = escapeDrawtextText(displayText).replaceAll('\n', '\\n');
   const enable = formatEnableBetween(startSeconds, endSeconds);
+  const lineSpacingPart = lineSpacing > 0 ? `:line_spacing=${lineSpacing}` : '';
   const shadowLabel = `${labelPrefix}shadow`;
   filters.push(
-    `[${currentLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=black@0.68:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=black@0.8:fix_bounds=1:x=(w-text_w)/2+${Math.max(3, depthPx)}:y=${roundTime(y + Math.max(5, depthPx + 2))}:enable='${enable}'[${shadowLabel}]`,
+    `[${currentLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=black@0.68:fontsize=${fontSize}${lineSpacingPart}:borderw=${outlineWidth}:bordercolor=black@0.8:fix_bounds=1:x=(w-text_w)/2+${Math.max(3, depthPx)}:y=${roundTime(adjustedY + Math.max(5, depthPx + 2))}:enable='${enable}'[${shadowLabel}]`,
   );
   const depthLabel = `${labelPrefix}depth`;
   filters.push(
-    `[${shadowLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=0x7A6210:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2+${Math.max(2, Math.floor(depthPx / 2))}:y=${roundTime(y + Math.max(2, Math.floor(depthPx / 2)))}:enable='${enable}'[${depthLabel}]`,
+    `[${shadowLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=0x7A6210:fontsize=${fontSize}${lineSpacingPart}:borderw=${outlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2+${Math.max(2, Math.floor(depthPx / 2))}:y=${roundTime(adjustedY + Math.max(2, Math.floor(depthPx / 2)))}:enable='${enable}'[${depthLabel}]`,
   );
   const outputLabel = `${labelPrefix}main`;
   filters.push(
-    `[${depthLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=${color}:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${roundTime(y)}:enable='${enable}'[${outputLabel}]`,
+    `[${depthLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=${color}:fontsize=${fontSize}${lineSpacingPart}:borderw=${outlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${roundTime(adjustedY)}:enable='${enable}'[${outputLabel}]`,
   );
   return outputLabel;
 }
@@ -177,12 +213,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `[${answerSourceLabel}]scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${sharpAnswerLabel}]`,
       );
       const preRevealCoverLabel = `scene${roundIndex}pixelPreCover`;
-      filters.push(
-        `[${currentLabel}]drawbox=x=${coverX}:y=${coverY}:w=${coverWidth}:h=${coverHeight}:color=black:t=fill:enable='${formatEnableBetween(0, round.local.reveal_start_seconds)}'[${preRevealCoverLabel}]`,
-      );
+      if (round.local.reveal_start_seconds > 0) {
+        filters.push(
+          `[${currentLabel}]drawbox=x=${coverX}:y=${coverY}:w=${coverWidth}:h=${coverHeight}:color=black:t=fill:enable='${formatEnableBetween(0, round.local.reveal_start_seconds)}'[${preRevealCoverLabel}]`,
+        );
+      }
       const pixelatedSceneLabel = `scene${roundIndex}pixelated`;
       filters.push(
-        `[${preRevealCoverLabel}][${spriteBaseLabel}]overlay=x=${box.center_x}-w/2:y=${box.center_y}-h/2:enable='${formatEnableBetween(round.local.reveal_start_seconds, round.local.answer_start_seconds)}'[${pixelatedSceneLabel}]`,
+        `[${round.local.reveal_start_seconds > 0 ? preRevealCoverLabel : currentLabel}][${spriteBaseLabel}]overlay=x=${box.center_x}-w/2:y=${box.center_y}-h/2:enable='${formatEnableBetween(round.local.reveal_start_seconds, round.local.answer_start_seconds)}'[${pixelatedSceneLabel}]`,
       );
       const sharpSceneLabel = `scene${roundIndex}sharp`;
       filters.push(
@@ -303,6 +341,9 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       depthPx: textLayout.depth_px,
       startSeconds: round.local.answer_start_seconds,
       endSeconds: sceneTextEnd,
+      maxWidth: width - 100,
+      lineSpacing: Math.max(4, Math.round(textLayout.answer_font_size * 0.08)),
+      centerMultiline: true,
     });
     filters.push(`[${currentLabel}]format=rgba[scene${roundIndex}]`);
   });

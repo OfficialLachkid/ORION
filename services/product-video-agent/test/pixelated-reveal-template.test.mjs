@@ -80,6 +80,9 @@ test('pixelated reveal is a standalone manually selectable template', async () =
   assert.equal(template.template_id, 'pokemon.pixelated-reveal.v1');
   assert.equal(template.template_key, 'pixelated-reveal');
   assert.equal(template.selection_rules.round_count, 4);
+  assert.equal(template.layout.reveal_box.center_y, 925);
+  assert.equal(template.layout.text.difficulty_label_y, 435);
+  assert.equal(template.layout.rounds.show_first_reveal_immediately, true);
   assert.equal(template.reveal.mode, 'fixed_video');
   assert.deepEqual(template.reveal.methods, ['pixelated']);
   assert.equal(progressiveTemplate.reveal.methods.includes('pixelated'), false);
@@ -129,6 +132,7 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
     seed: 'pixelated-reveal-difficulty-progression',
     assetInventory: buildAssetInventory(),
   });
+  plan.rounds[0].answer_text = 'ALOLAN EXEGGUTOR FORM';
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
@@ -142,6 +146,10 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
 
   assert.equal(plan.template_id, 'pokemon.pixelated-reveal.v1');
   assert.equal(plan.rounds.length, 4);
+  assert.equal(plan.rounds[0].scene_lead_seconds, 0);
+  assert.equal(renderPlan.rounds[0].local.reveal_start_seconds, 0);
+  assert.equal(renderPlan.reveal_box.center_y, 925);
+  assert.equal(renderPlan.text_layout.difficulty_label_y, 435);
   assert.deepEqual(plan.selection.reveal_methods, Array(4).fill('pixelated'));
   assert.deepEqual(
     plan.rounds.map((round) => round.difficulty_id),
@@ -166,7 +174,9 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
   for (const difficulty of ['EASY', 'MEDIUM', 'HARD', 'IMPOSSIBLE']) {
     assert.match(visualFilter.script, new RegExp(`drawtext=text='${difficulty}'`, 'u'));
   }
-  assert.match(visualFilter.script, /y=360/u);
+  assert.match(visualFilter.script, /y=435/u);
+  assert.doesNotMatch(visualFilter.script, /scene0pixelPreCover/u);
+  assert.match(visualFilter.script, /ALOLAN\\nEXEGGUTOR FORM/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.3\)/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.25\)/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.2\)/u);
