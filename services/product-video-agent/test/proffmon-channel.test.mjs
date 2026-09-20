@@ -25,14 +25,11 @@ const PROFFMON_CONFIG_PATH = 'services/product-video-agent/config/channels/proff
 const POKE_QUIZZ_CONFIG_PATH = 'services/product-video-agent/config/channels/poke-quizz-youtube.json';
 const PROFFMON_WEIGHT_THREE_TEMPLATE_IDS = new Set([
   'pokemon.progressive-reveal.v1',
+  'pokemon.pixelated-reveal.v1',
   'pokemon.stat-clash.v1',
   'pokemon.build-your-team.v1',
   'pokemon.cry-match.v1',
 ]);
-const MANUAL_ONLY_TEMPLATE_IDS = new Set([
-  'pokemon.pixelated-reveal.v1',
-]);
-
 async function loadJson(projectRelativePath) {
   return JSON.parse(await readFile(resolve(PROJECT_ROOT, projectRelativePath), 'utf8'));
 }
@@ -66,11 +63,7 @@ test('ProffMon uses every Poke Quizz template with its selected weight overrides
       : pokeQuizzConfig.templates[templateId].weight;
     assert.equal(proffmonTemplate.enabled, true, `${templateId} must be enabled`);
     assert.equal(proffmonTemplate.manual_generate, true, `${templateId} must support manual generation`);
-    assert.equal(
-      proffmonTemplate.night_shift,
-      !MANUAL_ONLY_TEMPLATE_IDS.has(templateId),
-      `${templateId} must use its intended night-shift availability`,
-    );
+    assert.equal(proffmonTemplate.night_shift, true, `${templateId} must participate in night shift`);
     assert.equal(
       proffmonTemplate.weight,
       expectedWeight,
@@ -91,9 +84,9 @@ test('ProffMon uses every Poke Quizz template with its selected weight overrides
   assert.ok(proffmonRuntime);
   assert.deepEqual(
     proffmonRuntime.nightShift.reviewBacklogTemplateWeights,
-    Object.fromEntries(Object.entries(proffmonConfig.templates)
-      .filter(([, template]) => template.night_shift === true)
-      .map(([templateId, template]) => [templateId, template.weight])),
+    Object.fromEntries(Object.entries(proffmonConfig.templates).map(([templateId, template]) => (
+      [templateId, template.weight]
+    ))),
   );
   assert.equal(proffmonRuntime.nightShift.publicationAutomationEnabled, true);
   assert.equal(proffmonRuntime.nightShift.publicationAutomationMode, 'auto');

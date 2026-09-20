@@ -72,6 +72,7 @@
       "hook_line_gap_px": 8,
       "difficulty_label_y": 435,
       "difficulty_label_font_size": 62,
+      "show_round_counter": false,
       "counter_x": 72,
       "counter_y": 92,
       "counter_font_size": 48,
@@ -133,13 +134,13 @@
         "id": "hard",
         "label": "HARD",
         "color": "0xFF5A52",
-        "answer_clarity_progress": 0.2
+        "answer_clarity_progress": 0.15
       },
       {
         "id": "impossible",
         "label": "IMPOSSIBLE",
         "color": "0xB76CFF",
-        "answer_clarity_progress": 0.15
+        "answer_clarity_progress": 0.1
       }
     ],
     "method_config": {

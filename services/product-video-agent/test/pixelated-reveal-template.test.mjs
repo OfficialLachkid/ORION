@@ -82,6 +82,7 @@ test('pixelated reveal is a standalone manually selectable template', async () =
   assert.equal(template.selection_rules.round_count, 4);
   assert.equal(template.layout.reveal_box.center_y, 925);
   assert.equal(template.layout.text.difficulty_label_y, 435);
+  assert.equal(template.layout.text.show_round_counter, false);
   assert.equal(template.layout.rounds.show_first_reveal_immediately, true);
   assert.equal(template.reveal.mode, 'fixed_video');
   assert.deepEqual(template.reveal.methods, ['pixelated']);
@@ -107,7 +108,8 @@ test('pixelated reveal is a standalone manually selectable template', async () =
   assert.equal(runtime.templateId, 'pokemon.pixelated-reveal.v1');
   assert.equal(runtime.channelTemplate.templateKey, 'pixelated-reveal');
   assert.equal(runtime.channelTemplate.manualGenerate, true);
-  assert.equal(runtime.channelTemplate.nightShift, false);
+  assert.equal(runtime.channelTemplate.nightShift, true);
+  assert.equal(runtime.channelTemplate.weight, 2);
   assert.equal(runtime.genreLabel, 'Pixelated Reveal');
   assert.equal(
     runtime.templatePath,
@@ -161,11 +163,11 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
   );
   assert.deepEqual(
     plan.rounds.map((round) => round.reveal_completion_progress),
-    [0.3, 0.25, 0.2, 0.15],
+    [0.3, 0.25, 0.15, 0.1],
   );
   assert.deepEqual(
     plan.rounds.map((round) => round.reveal_duration_seconds),
-    [7.65, 6.375, 5.1, 3.825],
+    [7.65, 6.375, 3.825, 2.55],
   );
   assert.equal(plan.rounds.every((round) => round.reveal_config.resolution_steps_px.length === 37), true);
   assert.equal(plan.rounds.every((round) => round.reveal_config.resolution_steps_px[0] === 4), true);
@@ -175,12 +177,13 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
     assert.match(visualFilter.script, new RegExp(`drawtext=text='${difficulty}'`, 'u'));
   }
   assert.match(visualFilter.script, /y=435/u);
+  assert.doesNotMatch(visualFilter.script, /drawtext=text='1\/4'/u);
   assert.doesNotMatch(visualFilter.script, /scene0pixelPreCover/u);
   assert.match(visualFilter.script, /ALOLAN\\nEXEGGUTOR FORM/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.3\)/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.25\)/u);
-  assert.match(visualFilter.script, /\/25\.5,0,0\.2\)/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.15\)/u);
+  assert.match(visualFilter.script, /\/25\.5,0,0\.1\)/u);
 
   const metadata = buildPokeQuizzFallbackPublicationMetadata(plan, { name: 'Poke Quizz' });
   assert.match(metadata.description, /Easy to Impossible/u);
