@@ -38,6 +38,14 @@
       "weight": 3,
       "genre_label": "Progressive Reveal"
     },
+    "pokemon.pixelated-reveal.v1": {
+      "template_key": "pixelated-reveal",
+      "enabled": true,
+      "manual_generate": true,
+      "night_shift": false,
+      "weight": 1,
+      "genre_label": "Pixelated Reveal"
+    },
     "pokemon.memory.v1": {
       "template_key": "memory",
       "enabled": true,

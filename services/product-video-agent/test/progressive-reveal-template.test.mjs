@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PRODUCT_VIDEO_TEMPLATE_OPTIONS } from '../../task-router/src/product-video-command-parser.mjs';
 import { buildPokeQuizzFallbackPublicationMetadata } from '../src/local-publication-metadata.mjs';
@@ -104,9 +103,12 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.question_contract.hook_text, 'Who is that Pokemon?');
   assert.deepEqual(template.question_contract.headline_lines, ['WHO IS THAT', 'POKEMON?']);
   assert.equal(template.reveal.target_opaque_fraction, 0.6);
-  assert.deepEqual(template.reveal.methods, PROGRESSIVE_REVEAL_METHODS);
   assert.deepEqual(
-    template.reveal.methods.slice(-9),
+    template.reveal.methods,
+    PROGRESSIVE_REVEAL_METHODS.filter((method) => method !== 'pixelated'),
+  );
+  assert.deepEqual(
+    template.reveal.methods.slice(-8),
     [
       'spiral',
       'diamond',
@@ -116,7 +118,6 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
       'square_spiral',
       'square_spiral_inward',
       'fluid_fill',
-      'pixelated',
     ],
   );
   assert.equal(template.layout.branding, undefined);
@@ -130,16 +131,7 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.method_config.square_spiral_inward.turns, 3);
   assert.equal(template.reveal.method_config.fluid_fill.particle_size_px, 8);
   assert.equal(template.reveal.method_config.fluid_fill.fall_step_count, 12);
-  assert.equal(template.reveal.method_config.pixelated.progress_speed_multiplier, 0.2);
-  assert.equal(template.reveal.method_config.pixelated.answer_clarity_progress, 0.2);
-  assert.equal(template.reveal.method_config.pixelated.resolution_steps_px[0], 4);
-  assert.ok(template.reveal.method_config.pixelated.resolution_steps_px.length >= 30);
-  assert.ok(template.reveal.method_config.pixelated.resolution_steps_px
-    .slice(1)
-    .every((value, index) => (
-      value - template.reveal.method_config.pixelated.resolution_steps_px[index] <= 50
-    )));
-  assert.equal(template.reveal.method_config.pixelated.resolution_steps_px.at(-1), 520);
+  assert.equal(template.reveal.method_config.pixelated, undefined);
 });
 
 test('planner deterministically selects three Pokemon and seeded non-repeating reveal methods', async () => {
@@ -231,53 +223,6 @@ test('fixed reveal mode uses one configured algorithm for the entire video', asy
     assetInventory: buildAssetInventory(),
   });
   assert.deepEqual(plan.selection.reveal_methods, ['strips', 'strips', 'strips']);
-});
-
-test('pixelated reveal requires animated GIFs and sharpens them in stepped resolutions', async (context) => {
-  const runtimeDirectory = await mkdtemp(join(tmpdir(), 'orion-pixelated-reveal-'));
-  context.after(() => rm(runtimeDirectory, { recursive: true, force: true }));
-  const animatedGifPath = join(runtimeDirectory, 'animated.gif');
-  await writeFile(
-    animatedGifPath,
-    Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
-  );
-  const template = await loadTemplate();
-  template.reveal.mode = 'fixed_video';
-  template.reveal.method = 'pixelated';
-  const pokedexRows = Array.from({ length: 6 }, (_, index) => ({
-    ...buildFixtureSubject(index + 1),
-    animated_sprite_path: animatedGifPath,
-  }));
-  const plan = await planPokemonProgressiveRevealChallenge({
-    template,
-    pokedexRows,
-    seed: 'progressive-reveal-pixelated-gif',
-    assetInventory: buildAssetInventory(),
-  });
-  const renderPlan = buildPokeQuizzRenderPlan({
-    plan,
-    template,
-    outputPath: '/tmp/progressive-reveal-pixelated.mp4',
-  });
-  const visualInputs = buildVisualInputs(plan, renderPlan);
-  const visualFilter = buildVisualFilterScript(plan, template, renderPlan, {
-    background: 0,
-    rounds: renderPlan.rounds.map((_, index) => ({ sprite: index + 1 })),
-  });
-
-  assert.deepEqual(plan.selection.reveal_methods, ['pixelated', 'pixelated', 'pixelated']);
-  assert.equal(plan.rounds.every((round) => round.subject.render_sprite_path === animatedGifPath), true);
-  assert.equal(plan.rounds.every((round) => round.reveal_duration_seconds === 5.1), true);
-  assert.equal(plan.rounds.every((round) => round.reveal_completion_progress === 0.2), true);
-  assert.equal(visualInputs.slice(1).every((input) => input.path === animatedGifPath), true);
-  assert.equal(visualInputs.slice(1).every((input) => input.args.includes('-ignore_loop')), true);
-  assert.match(visualFilter.script, /round0pixelSource/u);
-  assert.match(visualFilter.script, /scale=w='if\(lt\(clip\(\(\(n\/30\)/u);
-  assert.match(visualFilter.script, /\/25\.5,0,0\.2\)/u);
-  assert.doesNotMatch(visualFilter.script, /scale=w='[^']*N\/30/u);
-  assert.match(visualFilter.script, /round0sharpAnswer/u);
-  assert.match(visualFilter.script, /scene0pixelPreCover/u);
-  assert.doesNotMatch(visualFilter.script, /round0coverProgressive/u);
 });
 
 test('all V1 reveal algorithms build deterministic progressive alpha masks', () => {

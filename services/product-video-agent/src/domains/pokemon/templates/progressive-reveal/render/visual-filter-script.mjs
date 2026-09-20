@@ -272,6 +272,21 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       });
     }
 
+    if (round.difficulty_label) {
+      currentLabel = appendLayeredText(filters, currentLabel, {
+        labelPrefix: `scene${roundIndex}difficulty`,
+        text: round.difficulty_label,
+        y: textLayout.difficulty_label_y,
+        fontSize: textLayout.difficulty_label_font_size,
+        color: round.difficulty_color || textLayout.accent_color,
+        fontPart,
+        outlineWidth: Math.max(4, textLayout.outline_width - 2),
+        depthPx: Math.max(4, textLayout.depth_px - 2),
+        startSeconds: 0,
+        endSeconds: sceneTextEnd,
+      });
+    }
+
     const counterLabel = `scene${roundIndex}counter`;
     filters.push(
       `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.round_label)}'${fontPart}:fontcolor=white:fontsize=${textLayout.counter_font_size}:borderw=5:bordercolor=black:fix_bounds=1:x=${textLayout.counter_x}:y=${textLayout.counter_y}[${counterLabel}]`,

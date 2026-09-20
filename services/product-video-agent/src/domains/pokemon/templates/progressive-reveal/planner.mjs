@@ -347,6 +347,31 @@ function resolveMethodConfig(template, method, random) {
   return { ...baseConfig };
 }
 
+function resolveRoundDifficulty(template, roundIndex, fallbackDifficulty) {
+  const configuredRounds = Array.isArray(template?.reveal?.difficulty_rounds)
+    ? template.reveal.difficulty_rounds
+    : [];
+  const configured = configuredRounds[roundIndex];
+  if (!configured || typeof configured !== 'object' || Array.isArray(configured)) {
+    return {
+      id: fallbackDifficulty,
+      label: '',
+      color: '',
+      answerClarityProgress: null,
+    };
+  }
+  const id = String(configured.id || fallbackDifficulty).trim().toLowerCase() || fallbackDifficulty;
+  const configuredClarity = Number(configured.answer_clarity_progress);
+  return {
+    id,
+    label: String(configured.label || id).trim().toUpperCase(),
+    color: String(configured.color || '').trim(),
+    answerClarityProgress: Number.isFinite(configuredClarity) && configuredClarity > 0
+      ? clamp(configuredClarity, 0.05, 1)
+      : null,
+  };
+}
+
 function buildSubjectRecord(subject, renderSpritePath, cryPath) {
   return {
     pokedex_id: subject.id,
@@ -441,7 +466,9 @@ export async function planPokemonProgressiveRevealChallenge({
         ));
         const freshMethods = availableMethods.filter((candidate) => !previousMethods.has(candidate));
         const pool = freshMethods.length > 0 ? freshMethods : availableMethods;
-        selectedMethods[index] = pool[Math.floor(random() * pool.length)] || 'wipe';
+        if (pool.length > 0) {
+          selectedMethods[index] = pool[Math.floor(random() * pool.length)];
+        }
       });
     }
   }
@@ -525,8 +552,14 @@ export async function planPokemonProgressiveRevealChallenge({
   const roundBlueprints = renderedSubjects.map((subject, index) => {
     const method = selectedMethods[index];
     const revealSeed = `${seed}:round-${index + 1}:${subject.pokedex_id || subject.name}:${method}`;
-    const revealConfig = resolveMethodConfig(template, method, random);
-    return { subject, index, method, revealSeed, revealConfig };
+    const roundDifficulty = resolveRoundDifficulty(template, index, difficulty);
+    const revealConfig = {
+      ...resolveMethodConfig(template, method, random),
+      ...(roundDifficulty.answerClarityProgress === null
+        ? {}
+        : { answer_clarity_progress: roundDifficulty.answerClarityProgress }),
+    };
+    return { subject, index, method, revealSeed, revealConfig, roundDifficulty };
   });
   const rounds = await Promise.all(roundBlueprints.map(async ({
     subject,
@@ -534,6 +567,7 @@ export async function planPokemonProgressiveRevealChallenge({
     method,
     revealSeed,
     revealConfig,
+    roundDifficulty,
   }) => {
     const configuredPixelProgressSpeed = Number(revealConfig?.progress_speed_multiplier);
     const configuredPixelAnswerClarity = Number(revealConfig?.answer_clarity_progress);
@@ -602,7 +636,10 @@ export async function planPokemonProgressiveRevealChallenge({
       final_hold_seconds: index === roundCount - 1 ? finalHoldSeconds : 0,
       reveal_method: method,
       reveal_seed: revealSeed,
-      reveal_difficulty: difficulty,
+      reveal_difficulty: roundDifficulty.id,
+      difficulty_id: roundDifficulty.id,
+      difficulty_label: roundDifficulty.label,
+      difficulty_color: roundDifficulty.color,
       reveal_config: {
         ...revealConfig,
         progress_scale: coverage.progressScale,
@@ -639,6 +676,11 @@ export async function planPokemonProgressiveRevealChallenge({
     selection: {
       mode: String(template?.selection_rules?.mode || 'random').trim().toLowerCase() || 'random',
       difficulty_id: difficulty,
+      difficulty_rounds: rounds.map((round) => ({
+        id: round.difficulty_id,
+        label: round.difficulty_label,
+        answer_clarity_progress: round.reveal_completion_progress,
+      })),
       round_count: roundCount,
       type_pair: [],
       selected_subject_count: renderedSubjects.length,
