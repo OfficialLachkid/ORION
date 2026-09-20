@@ -262,7 +262,8 @@ test('pixelated reveal requires animated GIFs and sharpens them in stepped resol
   assert.equal(visualInputs.slice(1).every((input) => input.path === animatedGifPath), true);
   assert.equal(visualInputs.slice(1).every((input) => input.args.includes('-ignore_loop')), true);
   assert.match(visualFilter.script, /round0pixelSource/u);
-  assert.match(visualFilter.script, /scale=w='if\(lt\(clip/u);
+  assert.match(visualFilter.script, /scale=w='if\(lt\(clip\(\(\(n\/30\)/u);
+  assert.doesNotMatch(visualFilter.script, /scale=w='[^']*N\/30/u);
   assert.match(visualFilter.script, /round0sharpAnswer/u);
   assert.match(visualFilter.script, /scene0pixelPreCover/u);
   assert.doesNotMatch(visualFilter.script, /round0coverProgressive/u);

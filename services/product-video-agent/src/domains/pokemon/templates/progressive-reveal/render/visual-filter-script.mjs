@@ -148,13 +148,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       : [];
     const spritePreparation = `[${spriteInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS`;
     if (round.reveal_method === 'pixelated') {
-      const pixelProgress = buildProgressiveRevealProgressExpression({
-        startSeconds: round.local.reveal_start_seconds,
-        durationSeconds: round.reveal_duration_seconds,
-        fps,
-        difficulty: round.reveal_difficulty,
-        completionProgress: 1,
-      });
+      // The scale filter exposes the per-frame variable as lowercase `n`.
+      // Progressive alpha masks use uppercase `N`, so their shared helper
+      // cannot be reused for this dynamic scale expression.
+      const pixelProgress = `clip(((n/${fps})-${round.local.reveal_start_seconds})/${round.reveal_duration_seconds},0,1)`;
       const pixelResolution = buildPixelatedResolutionExpression(
         pixelProgress,
         round.reveal_config?.resolution_steps_px,
