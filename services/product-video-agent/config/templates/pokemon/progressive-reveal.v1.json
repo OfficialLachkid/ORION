@@ -124,7 +124,8 @@
       "diagonal_particles",
       "square_spiral",
       "square_spiral_inward",
-      "fluid_fill"
+      "fluid_fill",
+      "pixelated"
     ],
     "duration_seconds": 8.5,
     "target_opaque_fraction": 0.6,
@@ -228,6 +229,20 @@
         "fall_duration_seconds": 1.4,
         "fall_step_count": 12,
         "fall_distance_px": 748
+      },
+      "pixelated": {
+        "resolution_steps_px": [
+          18,
+          26,
+          38,
+          56,
+          82,
+          120,
+          176,
+          258,
+          378,
+          520
+        ]
       }
     }
   },

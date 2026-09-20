@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PRODUCT_VIDEO_TEMPLATE_OPTIONS } from '../../task-router/src/product-video-command-parser.mjs';
 import { buildPokeQuizzFallbackPublicationMetadata } from '../src/local-publication-metadata.mjs';
@@ -105,7 +106,7 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.target_opaque_fraction, 0.6);
   assert.deepEqual(template.reveal.methods, PROGRESSIVE_REVEAL_METHODS);
   assert.deepEqual(
-    template.reveal.methods.slice(-8),
+    template.reveal.methods.slice(-9),
     [
       'spiral',
       'diamond',
@@ -115,6 +116,7 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
       'square_spiral',
       'square_spiral_inward',
       'fluid_fill',
+      'pixelated',
     ],
   );
   assert.equal(template.layout.branding, undefined);
@@ -128,6 +130,8 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.method_config.square_spiral_inward.turns, 3);
   assert.equal(template.reveal.method_config.fluid_fill.particle_size_px, 8);
   assert.equal(template.reveal.method_config.fluid_fill.fall_step_count, 12);
+  assert.equal(template.reveal.method_config.pixelated.resolution_steps_px[0], 18);
+  assert.equal(template.reveal.method_config.pixelated.resolution_steps_px.at(-1), 520);
 });
 
 test('planner deterministically selects three Pokemon and seeded non-repeating reveal methods', async () => {
@@ -221,6 +225,49 @@ test('fixed reveal mode uses one configured algorithm for the entire video', asy
   assert.deepEqual(plan.selection.reveal_methods, ['strips', 'strips', 'strips']);
 });
 
+test('pixelated reveal requires animated GIFs and sharpens them in stepped resolutions', async (context) => {
+  const runtimeDirectory = await mkdtemp(join(tmpdir(), 'orion-pixelated-reveal-'));
+  context.after(() => rm(runtimeDirectory, { recursive: true, force: true }));
+  const animatedGifPath = join(runtimeDirectory, 'animated.gif');
+  await writeFile(
+    animatedGifPath,
+    Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
+  );
+  const template = await loadTemplate();
+  template.reveal.mode = 'fixed_video';
+  template.reveal.method = 'pixelated';
+  const pokedexRows = Array.from({ length: 6 }, (_, index) => ({
+    ...buildFixtureSubject(index + 1),
+    animated_sprite_path: animatedGifPath,
+  }));
+  const plan = await planPokemonProgressiveRevealChallenge({
+    template,
+    pokedexRows,
+    seed: 'progressive-reveal-pixelated-gif',
+    assetInventory: buildAssetInventory(),
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/progressive-reveal-pixelated.mp4',
+  });
+  const visualInputs = buildVisualInputs(plan, renderPlan);
+  const visualFilter = buildVisualFilterScript(plan, template, renderPlan, {
+    background: 0,
+    rounds: renderPlan.rounds.map((_, index) => ({ sprite: index + 1 })),
+  });
+
+  assert.deepEqual(plan.selection.reveal_methods, ['pixelated', 'pixelated', 'pixelated']);
+  assert.equal(plan.rounds.every((round) => round.subject.render_sprite_path === animatedGifPath), true);
+  assert.equal(visualInputs.slice(1).every((input) => input.path === animatedGifPath), true);
+  assert.equal(visualInputs.slice(1).every((input) => input.args.includes('-ignore_loop')), true);
+  assert.match(visualFilter.script, /round0pixelSource/u);
+  assert.match(visualFilter.script, /scale=w='if\(lt\(clip/u);
+  assert.match(visualFilter.script, /round0sharpAnswer/u);
+  assert.match(visualFilter.script, /scene0pixelPreCover/u);
+  assert.doesNotMatch(visualFilter.script, /round0coverProgressive/u);
+});
+
 test('all V1 reveal algorithms build deterministic progressive alpha masks', () => {
   const progress = buildProgressiveRevealProgressExpression({
     startSeconds: 1.5,
@@ -283,6 +330,7 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(expressions[17], /\(H-1-floor\(Y\/8\)\*8\)\/max\(1,H-1\)/u);
   assert.match(expressions[17], /sin\(\(floor\(X\/8\)\*8\)\*0\.045/u);
   assert.match(expressions[17], /floor\(X\/8\)\*331\+floor\(Y\/8\)\*521/u);
+  assert.match(expressions[18], /gte\(.+,0\)/u);
 });
 
 test('falling-particle phases descend in discrete sand steps before settling', () => {

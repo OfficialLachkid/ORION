@@ -283,6 +283,27 @@ function selectTemplateScopedSound(template, inventory, configKey, fallbackKey) 
     }) || fallbackPath;
 }
 
+function selectCryMeterPalette(template, random) {
+  const configuredPalettes = Array.isArray(template?.layout?.cry_meter?.equalizer?.palettes)
+    ? template.layout.cry_meter.equalizer.palettes
+    : [];
+  const palettes = configuredPalettes
+    .map((palette, index) => ({
+      id: String(palette?.id || `palette-${index + 1}`).trim() || `palette-${index + 1}`,
+      colors: (Array.isArray(palette?.colors) ? palette.colors : [])
+        .map((color) => String(color || '').trim())
+        .filter(Boolean),
+    }))
+    .filter((palette) => palette.colors.length > 0);
+  if (palettes.length === 0) {
+    return {
+      id: 'electric-blue',
+      colors: ['0x00D4FF', '0x2F7BFF', '0x7657FF', '0xB845FF', '0x2BE7FF'],
+    };
+  }
+  return palettes[Math.floor(random() * palettes.length)] || palettes[0];
+}
+
 async function resolveRenderSpritePath(subject) {
   const explicitAnimatedPath = String(subject?.animated_sprite_path || '').trim();
   if (explicitAnimatedPath && await canAccessPath(explicitAnimatedPath)) {
@@ -450,6 +471,7 @@ export async function planPokemonCryMatchChallenge({
     random,
     normalizedSelectionState,
   );
+  const selectedCryMeterPalette = selectCryMeterPalette(template, random);
   const selectedTimerEndSoundPath = selectTemplateScopedSound(template, inventory, 'timer_end', 'timer_end');
   const selectedIntroRevealSoundPath = selectTemplateScopedSound(template, inventory, 'intro_slot_reveal', 'pokeball_intro');
   const revealTemplate = pickSeededQuestionText(
@@ -652,6 +674,7 @@ export async function planPokemonCryMatchChallenge({
       selected_subject_count: uniqueSelectedSubjects.length,
       display_subject_count: roundCount * candidateCount,
       selected_subjects: uniqueSelectedSubjects,
+      cry_meter_palette: selectedCryMeterPalette,
     },
     narration: {
       local_model_required: false,

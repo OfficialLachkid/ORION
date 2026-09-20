@@ -58,6 +58,7 @@ export const PROGRESSIVE_REVEAL_METHODS = Object.freeze([
   'cascade',
   'pathfinding',
   ...ADDITIONAL_PROGRESSIVE_REVEAL_METHODS,
+  'pixelated',
 ]);
 
 function ensureNumber(value, fallback) {
@@ -595,6 +596,7 @@ export function buildProgressiveRevealMaskExpression({
     diagonal: buildDiagonalMask,
     cascade: buildCascadeMask,
     pathfinding: buildPathfindingMask,
+    pixelated: (currentProgress) => `gte(${currentProgress},0)`,
   };
   const visibleExpression = builders[normalizedMethod]?.(maskProgress, numericSeed, config)
     || buildAdditionalProgressiveRevealMask(normalizedMethod, maskProgress, numericSeed, config);

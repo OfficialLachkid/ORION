@@ -134,6 +134,80 @@
         "top_color": "0xFF3B30",
         "mid_color": "0xFFD60A",
         "bottom_color": "0x30D158",
+        "palettes": [
+          {
+            "id": "electric-blue",
+            "colors": [
+              "0x00D4FF",
+              "0x2F7BFF",
+              "0x7657FF",
+              "0xB845FF",
+              "0x2BE7FF"
+            ]
+          },
+          {
+            "id": "rainbow",
+            "colors": [
+              "0xFF3B30",
+              "0xFF9500",
+              "0xFFD60A",
+              "0x30D158",
+              "0x00C7BE",
+              "0x0A84FF",
+              "0xBF5AF2"
+            ]
+          },
+          {
+            "id": "red",
+            "colors": [
+              "0xFFB3AD",
+              "0xFF6961",
+              "0xFF3B30",
+              "0xD70015",
+              "0x8E0011"
+            ]
+          },
+          {
+            "id": "yellow",
+            "colors": [
+              "0xFFF7B2",
+              "0xFFE45C",
+              "0xFFD60A",
+              "0xFFB800",
+              "0xFF9500"
+            ]
+          },
+          {
+            "id": "green",
+            "colors": [
+              "0xB8FFD0",
+              "0x66E38E",
+              "0x30D158",
+              "0x00A86B",
+              "0x007A4D"
+            ]
+          },
+          {
+            "id": "purple",
+            "colors": [
+              "0xE9C7FF",
+              "0xD28BFF",
+              "0xBF5AF2",
+              "0x8E44D6",
+              "0x5E2B97"
+            ]
+          },
+          {
+            "id": "sunset",
+            "colors": [
+              "0xFF375F",
+              "0xFF6961",
+              "0xFF9500",
+              "0xFFD60A",
+              "0xBF5AF2"
+            ]
+          }
+        ],
         "background_alpha": 0.28,
         "wave_speed": 5.5
       }

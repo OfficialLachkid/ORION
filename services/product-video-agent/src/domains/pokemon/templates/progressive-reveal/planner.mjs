@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import {
+  buildPokeQuizzAnimatedSpritePath,
   buildPokeQuizzPreviewDirectory,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
@@ -160,6 +161,23 @@ async function resolveRenderSpritePath(subject) {
     return animatedPath;
   }
   return String(subject?.sprite_path || '').trim();
+}
+
+async function resolveAnimatedGifPath(subject) {
+  const candidates = [
+    String(subject?.animated_sprite_path || '').trim(),
+    String(buildPokeQuizzAnimatedSpritePath(subject) || '').trim(),
+  ].filter((candidate, index, values) => (
+    candidate
+    && /\.gif$/iu.test(candidate)
+    && values.indexOf(candidate) === index
+  ));
+  for (const candidate of candidates) {
+    if (await canAccessPath(candidate)) {
+      return candidate;
+    }
+  }
+  return '';
 }
 
 function resolveRevealAnalysisLayout(template) {
@@ -394,10 +412,62 @@ export async function planPokemonProgressiveRevealChallenge({
     throw new Error(`Progressive Reveal requires at least ${roundCount} Pokemon with local sprites, found ${eligibleSubjects.length}.`);
   }
 
-  const selectedSubjects = shuffle(eligibleSubjects, random).slice(0, roundCount);
-  const renderedSubjects = await Promise.all(selectedSubjects.map(async (subject) => {
+  const selectedMethods = selectRoundMethods(
+    template,
+    roundCount,
+    random,
+    normalizedSelectionState.last_reveal_methods || [],
+  );
+  const animatedGifPathBySubjectKey = new Map();
+  if (selectedMethods.includes('pixelated')) {
+    await Promise.all(eligibleSubjects.map(async (subject) => {
+      const subjectKey = normalizeSlug(subject.id || subject.slug || subject.name);
+      const gifPath = await resolveAnimatedGifPath(subject);
+      if (subjectKey && gifPath) {
+        animatedGifPathBySubjectKey.set(subjectKey, gifPath);
+      }
+    }));
+    if (animatedGifPathBySubjectKey.size === 0) {
+      const previousMethods = new Set(
+        (normalizedSelectionState.last_reveal_methods || [])
+          .map((method) => normalizeProgressiveRevealMethod(method, ''))
+          .filter(Boolean),
+      );
+      selectedMethods.forEach((method, index) => {
+        if (method !== 'pixelated') return;
+        const alreadySelected = new Set(selectedMethods.filter((_, otherIndex) => otherIndex !== index));
+        const availableMethods = resolveRevealMethods(template).filter((candidate) => (
+          candidate !== 'pixelated' && !alreadySelected.has(candidate)
+        ));
+        const freshMethods = availableMethods.filter((candidate) => !previousMethods.has(candidate));
+        const pool = freshMethods.length > 0 ? freshMethods : availableMethods;
+        selectedMethods[index] = pool[Math.floor(random() * pool.length)] || 'wipe';
+      });
+    }
+  }
+  const usedSubjectKeys = new Set();
+  const selectedSubjects = selectedMethods.map((method, index) => {
+    const requiresAnimatedGif = method === 'pixelated';
+    const eligiblePool = eligibleSubjects.filter((subject) => {
+      const subjectKey = normalizeSlug(subject.id || subject.slug || subject.name);
+      return subjectKey
+        && !usedSubjectKeys.has(subjectKey)
+        && (!requiresAnimatedGif || animatedGifPathBySubjectKey.has(subjectKey));
+    });
+    const subject = shuffle(eligiblePool, random)[0] || null;
+    if (!subject) {
+      const requirement = requiresAnimatedGif ? ' with an accessible animated GIF' : '';
+      throw new Error(`Progressive Reveal round ${index + 1} requires a unique Pokemon${requirement}.`);
+    }
+    usedSubjectKeys.add(normalizeSlug(subject.id || subject.slug || subject.name));
+    return subject;
+  });
+  const renderedSubjects = await Promise.all(selectedSubjects.map(async (subject, index) => {
+    const subjectKey = normalizeSlug(subject.id || subject.slug || subject.name);
     const [renderSpritePath, cryPath] = await Promise.all([
-      resolveRenderSpritePath(subject),
+      selectedMethods[index] === 'pixelated'
+        ? Promise.resolve(animatedGifPathBySubjectKey.get(subjectKey) || '')
+        : resolveRenderSpritePath(subject),
       resolvePokemonCryPath(subject),
     ]);
     return buildSubjectRecord(subject, renderSpritePath, cryPath);
@@ -407,12 +477,6 @@ export async function planPokemonProgressiveRevealChallenge({
     backgroundPool.backgrounds,
     random,
     normalizedSelectionState,
-  );
-  const selectedMethods = selectRoundMethods(
-    template,
-    roundCount,
-    random,
-    normalizedSelectionState.last_reveal_methods || [],
   );
   const hookText = pickSeededText(
     template?.question_contract?.hook_text,
@@ -471,26 +535,37 @@ export async function planPokemonProgressiveRevealChallenge({
     revealSeed,
     revealConfig,
   }) => {
-    let opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.sprite_path, template);
-    if (
-      opaqueAnalysis.opaquePoints.length === 0
-      && subject.render_sprite_path
-      && subject.render_sprite_path !== subject.sprite_path
-    ) {
-      opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.render_sprite_path, template);
+    let coverage;
+    if (method === 'pixelated') {
+      coverage = {
+        completionProgress: targetOpaqueFraction,
+        estimatedOpaqueFraction: targetOpaqueFraction,
+        maskProgressAtCompletion: targetOpaqueFraction,
+        progressScale: 1,
+        sampledOpaquePixelCount: 0,
+      };
+    } else {
+      let opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.sprite_path, template);
+      if (
+        opaqueAnalysis.opaquePoints.length === 0
+        && subject.render_sprite_path
+        && subject.render_sprite_path !== subject.sprite_path
+      ) {
+        opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.render_sprite_path, template);
+      }
+      coverage = calculateOpaqueRevealCompletionProgress({
+        method,
+        seed: revealSeed,
+        config: {
+          ...revealConfig,
+          reveal_duration_seconds: fullRevealDurationSeconds,
+        },
+        opaquePoints: opaqueAnalysis.opaquePoints,
+        width: opaqueAnalysis.width,
+        height: opaqueAnalysis.height,
+        targetOpaqueFraction,
+      });
     }
-    const coverage = calculateOpaqueRevealCompletionProgress({
-      method,
-      seed: revealSeed,
-      config: {
-        ...revealConfig,
-        reveal_duration_seconds: fullRevealDurationSeconds,
-      },
-      opaquePoints: opaqueAnalysis.opaquePoints,
-      width: opaqueAnalysis.width,
-      height: opaqueAnalysis.height,
-      targetOpaqueFraction,
-    });
     const revealDurationSeconds = Number((
       fullRevealDurationSeconds * targetOpaqueFraction
     ).toFixed(3));
