@@ -232,7 +232,7 @@
       },
       "pixelated": {
         "progress_speed_multiplier": 0.2,
-        "answer_clarity_progress": 0.3,
+        "answer_clarity_progress": 0.2,
         "resolution_steps_px": [
           4,
           6,
