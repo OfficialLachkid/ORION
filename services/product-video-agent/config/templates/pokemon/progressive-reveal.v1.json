@@ -234,7 +234,7 @@
         "progress_speed_multiplier": 0.2,
         "answer_clarity_progress": 0.5,
         "resolution_steps_px": [
-          18,
+          9,
           26,
           38,
           56,

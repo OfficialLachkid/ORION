@@ -132,7 +132,7 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.method_config.fluid_fill.fall_step_count, 12);
   assert.equal(template.reveal.method_config.pixelated.progress_speed_multiplier, 0.2);
   assert.equal(template.reveal.method_config.pixelated.answer_clarity_progress, 0.5);
-  assert.equal(template.reveal.method_config.pixelated.resolution_steps_px[0], 18);
+  assert.equal(template.reveal.method_config.pixelated.resolution_steps_px[0], 9);
   assert.equal(template.reveal.method_config.pixelated.resolution_steps_px.at(-1), 520);
 });
 
