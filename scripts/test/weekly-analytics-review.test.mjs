@@ -77,9 +77,68 @@ test('buildDataPack groups by channel + template and produces top/bottom slices'
   assert.equal(pack.publish_hour_rollup.per_channel['poke-quizz-youtube'][6].videos, 1);
   assert.equal(pack.publish_hour_rollup.per_channel['dexguess-youtube'][12].videos, 1);
 
-  // Instrumentation gaps surfaced so the analyst can flag what's missing
-  assert.ok(Array.isArray(pack.instrumentation_gaps) && pack.instrumentation_gaps.length > 0);
-  assert.ok(pack.instrumentation_gaps.some((g) => /geography|country/iu.test(g)));
+  // Viewer geography + traffic blocks always emitted, with a coverage
+  // hint so the prompt can say "no data yet" when both are empty.
+  assert.ok(pack.viewer_geography);
+  assert.equal(pack.viewer_geography.videos_with_data, 0);
+  assert.equal(pack.viewer_geography.videos_total, 3);
+  assert.deepEqual(pack.viewer_geography.network_wide_top_countries, []);
+  assert.ok(pack.traffic_sources_split);
+  assert.equal(pack.traffic_sources_split.videos_with_data, 0);
+
+  // Instrumentation gaps still surfaced; geo + traffic sources are now
+  // "coming from adapter but no data yet this week" entries instead of
+  // "not collected" — the retention + hourly gaps still stand.
+  assert.ok(Array.isArray(pack.instrumentation_gaps));
+  assert.ok(pack.instrumentation_gaps.some((g) => /retention/iu.test(g)));
+  assert.ok(pack.instrumentation_gaps.some((g) => /hourly view/iu.test(g)));
+});
+
+test('buildDataPack aggregates viewer_countries and traffic_sources when metrics carry them', () => {
+  const publications = [
+    { id: 'a', account_key: 'poke-quizz-youtube', title: 'A', published_at: '2026-09-15T06:00:00Z', metadata: {}, external_id: 'aaa' },
+    { id: 'b', account_key: 'poke-quizz-youtube', title: 'B', published_at: '2026-09-16T10:00:00Z', metadata: {}, external_id: 'bbb' },
+    { id: 'c', account_key: 'dexguess-youtube', title: 'C', published_at: '2026-09-17T12:00:00Z', metadata: {}, external_id: 'ccc' },
+  ];
+  const analytics = new Map([
+    ['a', { metrics: {
+      views: 1000, likes: 10,
+      viewer_countries: [{ key: 'US', views: 700 }, { key: 'NL', views: 300 }],
+      traffic_sources: [{ key: 'YT_CHANNEL', views: 600 }, { key: 'RELATED_VIDEO', views: 400 }],
+    } }],
+    ['b', { metrics: {
+      views: 500, likes: 5,
+      viewer_countries: [{ key: 'US', views: 250 }, { key: 'DE', views: 250 }],
+      traffic_sources: [{ key: 'YT_CHANNEL', views: 500 }],
+    } }],
+    ['c', { metrics: {
+      views: 200, likes: 2,
+      viewer_countries: [{ key: 'US', views: 200 }],
+      traffic_sources: [{ key: 'EXT_URL', views: 200 }],
+    } }],
+  ]);
+  const pack = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y' });
+
+  // Coverage counter picks up populated rows
+  assert.equal(pack.viewer_geography.videos_with_data, 3);
+  assert.equal(pack.traffic_sources_split.videos_with_data, 3);
+
+  // Network-wide aggregation sorts by total views descending
+  assert.equal(pack.viewer_geography.network_wide_top_countries[0].key, 'US');
+  assert.equal(pack.viewer_geography.network_wide_top_countries[0].views, 1150); // 700+250+200
+
+  // Per-channel geo preserved
+  assert.ok(pack.viewer_geography.per_channel_top_countries['poke-quizz-youtube']);
+  assert.equal(pack.viewer_geography.per_channel_top_countries['poke-quizz-youtube'][0].key, 'US');
+  assert.equal(pack.viewer_geography.per_channel_top_countries['poke-quizz-youtube'][0].views, 950); // 700+250
+
+  // Traffic-source aggregation
+  assert.equal(pack.traffic_sources_split.network_wide[0].key, 'YT_CHANNEL');
+  assert.equal(pack.traffic_sources_split.network_wide[0].views, 1100); // 600+500
+
+  // Gaps list no longer flags geo/traffic as "no data yet" now that coverage > 0
+  assert.equal(pack.instrumentation_gaps.some((g) => /viewer geography/iu.test(g)), false);
+  assert.equal(pack.instrumentation_gaps.some((g) => /traffic sources/iu.test(g)), false);
 });
 
 test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bold-number instruction', () => {
@@ -96,6 +155,10 @@ test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bo
   assert.ok(withoutPrior.includes('publish_hour_rollup'), 'prompt must reference the publish-hour data field');
   assert.ok(withoutPrior.includes('instrumentation_gaps'), 'prompt must ask analyst to acknowledge missing signals');
   assert.ok(withoutPrior.includes('08:00, 12:00, 14:00'), 'prompt must state the current 3x/day schedule for context');
+  // Geo + traffic-source section landed with the adapter enrichment
+  assert.ok(withoutPrior.includes('Audience mix'), 'prompt must include the geo + traffic section');
+  assert.ok(withoutPrior.includes('viewer_geography'), 'prompt must reference the viewer_geography field');
+  assert.ok(withoutPrior.includes('traffic_sources_split'), 'prompt must reference the traffic_sources_split field');
 
   const withPrior = buildAnalystPrompt(pack, 'Last week I said X and Y happened.');
   assert.ok(withPrior.includes('Previous week\'s summary'));
