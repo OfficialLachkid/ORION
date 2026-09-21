@@ -143,6 +143,19 @@ import {
 
 export { CURRENT_POOL_EXPANSION_VERSION, LOCATION_ROTATION };
 
+// Empty-combo memory (2026-09-21 operator ask): when a niche×location
+// query produces zero usable leads, remember it so the next few full
+// rotation cycles skip that combo — the small-town / niche-doesn't-exist
+// combinations (e.g. recruitmentbureaus Chaam) burn ~48% of sweep slots
+// otherwise. Every full cycle still checks every location at least once
+// because the skip window is bounded (SKIP_CYCLES_AFTER_EMPTY): after
+// that many niche-cycle advances, the combo becomes retry-eligible again.
+// Combos that come back empty CONSECUTIVELY_EMPTY_THRESHOLD times in a
+// row get flagged for operator review in the Discord sweep card so the
+// operator can decide whether to prune them for good or accept them.
+export const SKIP_CYCLES_AFTER_EMPTY = 3;
+export const CONSECUTIVELY_EMPTY_THRESHOLD = 3;
+
 // Rebuild the visited-set for one niche from its legacy cityIndex. The
 // legacy pool was a positional array so the cursor's "current" position
 // meant "everything from position 0 up to and including current has been
@@ -159,13 +172,23 @@ function backfillVisitedFromLegacyIndex(cityIndex) {
 }
 
 function loadRotationState() {
-  const empty = () => ({ visitedByNiche: {}, poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION });
+  const empty = () => ({
+    visitedByNiche: {},
+    cycleCountByNiche: {},
+    emptyByNicheLocation: {},
+    poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
+  });
   if (!existsSync(ROTATION_STATE_PATH)) return empty();
 
   try {
     const state = JSON.parse(readFileSync(ROTATION_STATE_PATH, 'utf8'));
     // Fast path: already in the new shape at the current version.
     if (state.visitedByNiche && Number(state.poolExpansionVersion) === CURRENT_POOL_EXPANSION_VERSION) {
+      // Ensure new sub-maps exist even for state files written before the
+      // 2026-09-21 empty-combo memory landed. Empty defaults are safe: an
+      // absent record just means "not yet flagged as empty".
+      if (!state.cycleCountByNiche) state.cycleCountByNiche = {};
+      if (!state.emptyByNicheLocation) state.emptyByNicheLocation = {};
       return state;
     }
 
@@ -187,6 +210,8 @@ function loadRotationState() {
     );
     return {
       visitedByNiche,
+      cycleCountByNiche: {},
+      emptyByNicheLocation: {},
       poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
       migratedFromVersion: Number(state.poolExpansionVersion) || 1,
       migratedAt: new Date().toISOString(),
@@ -201,19 +226,55 @@ function saveRotationState(state) {
   writeFileSync(ROTATION_STATE_PATH, JSON.stringify(state, null, 2));
 }
 
-// Pick the first location the niche hasn't visited THIS CYCLE. When the
-// visited set covers the whole pool, the cycle is complete — reset it
-// so the next call starts a fresh cycle from the first location. Same
-// per-niche independence guarantee as before: a failed niche stays on
-// its own cursor while others advance.
+// Locations this niche has ALREADY been checked for and returned empty
+// within the current skip window — subsequent peeks skip them until the
+// window elapses. Guarantees the "check every location at least once
+// per full cycle" property because the skip is bounded by cycle count,
+// not by absolute time — a location skipped for cycles N..N+2 becomes
+// eligible again at cycle N+3, i.e. after every OTHER location has had
+// SKIP_CYCLES_AFTER_EMPTY chances to be picked in its stead.
+function locationsSkippedForNiche(state, nicheKey) {
+  const currentCycle = Number(state.cycleCountByNiche?.[nicheKey] || 0);
+  const emptyMap = state.emptyByNicheLocation?.[nicheKey] || {};
+  const skipped = new Set();
+  for (const [location, record] of Object.entries(emptyMap)) {
+    if (Number(record?.skipUntilCycle || 0) > currentCycle) {
+      skipped.add(location);
+    }
+  }
+  return skipped;
+}
+
+// Pick the first location the niche hasn't visited THIS CYCLE and isn't
+// currently skipped for being known-empty. When the visited+skipped set
+// covers the whole pool the cycle is complete — reset it so the next
+// call starts a fresh cycle from the first location. Same per-niche
+// independence guarantee as before: a failed niche stays on its own
+// cursor while others advance.
+//
+// If EVERY location is skipped (extreme case — every combo is known
+// empty for this niche), fall back to the first unvisited location
+// regardless of skip status: skipping infinitely is worse than a wasted
+// check, and the operator would have already been alerted via the
+// confirmed-empty threshold well before this point.
 function peekNicheCity(state, nicheKey) {
   const visited = new Set(state.visitedByNiche?.[nicheKey] || []);
+  const skipped = locationsSkippedForNiche(state, nicheKey);
   const cycleComplete = visited.size >= LOCATION_ROTATION.length;
   const effectiveVisited = cycleComplete ? new Set() : visited;
-  const location = LOCATION_ROTATION.find((name) => !effectiveVisited.has(name)) || LOCATION_ROTATION[0];
+  const isPickable = (name) => !effectiveVisited.has(name) && !skipped.has(name);
+  const location = LOCATION_ROTATION.find(isPickable)
+    // fall-back: only skipped locations remain — check the oldest one
+    // anyway rather than idle. The whole point of the skip is to defer,
+    // never to permanently prune.
+    || LOCATION_ROTATION.find((name) => !effectiveVisited.has(name))
+    || LOCATION_ROTATION[0];
   const afterLocation = new Set(effectiveVisited);
   afterLocation.add(location);
-  const nextLocation = LOCATION_ROTATION.find((name) => !afterLocation.has(name)) || LOCATION_ROTATION[0];
+  const isPickableAfter = (name) => !afterLocation.has(name) && !skipped.has(name);
+  const nextLocation = LOCATION_ROTATION.find(isPickableAfter)
+    || LOCATION_ROTATION.find((name) => !afterLocation.has(name))
+    || LOCATION_ROTATION[0];
   return {
     location,
     nextLocation,
@@ -235,20 +296,99 @@ function commitNicheAdvance(state, nicheKey, locationOrIndex) {
   if (!location) return state;
   const prevVisited = state.visitedByNiche?.[nicheKey] || [];
   const nextVisitedSet = new Set(prevVisited);
-  // If the incoming location completes the cycle, reset first so the
-  // "just-completed" location gets carried into the fresh cycle rather
-  // than being lost.
-  if (nextVisitedSet.size >= LOCATION_ROTATION.length) nextVisitedSet.clear();
+  const nextCycleCountByNiche = { ...(state.cycleCountByNiche || {}) };
+  // Wrap: if the visited set is already full from a prior cycle, reset
+  // it first so the "just-completed" location becomes the head of the
+  // new cycle rather than being lost.
+  if (nextVisitedSet.size >= LOCATION_ROTATION.length) {
+    nextVisitedSet.clear();
+  }
   nextVisitedSet.add(location);
+  // Tick the per-niche cycle counter the moment this add fills the pool
+  // — that's what makes skipUntilCycle records expire naturally over
+  // time. Counter semantic: "number of cycles this niche has completed".
+  if (nextVisitedSet.size >= LOCATION_ROTATION.length) {
+    nextCycleCountByNiche[nicheKey] = Number(nextCycleCountByNiche[nicheKey] || 0) + 1;
+  }
   const nextState = {
     ...state,
     visitedByNiche: { ...(state.visitedByNiche || {}), [nicheKey]: [...nextVisitedSet] },
+    cycleCountByNiche: nextCycleCountByNiche,
     poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
     updatedAt: new Date().toISOString(),
   };
   saveRotationState(nextState);
   return nextState;
 }
+
+// Record that (niche, location) returned zero usable leads. Deferred for
+// SKIP_CYCLES_AFTER_EMPTY full cycles, then retry-eligible again. When a
+// combo hits CONSECUTIVELY_EMPTY_THRESHOLD consecutive empties, it's
+// flagged so the sweep overview can surface it for operator review.
+function commitNicheEmpty(state, nicheKey, location) {
+  if (!nicheKey || !location) return state;
+  const currentCycle = Number(state.cycleCountByNiche?.[nicheKey] || 0);
+  const prev = state.emptyByNicheLocation?.[nicheKey]?.[location] || {};
+  const record = {
+    skipUntilCycle: currentCycle + SKIP_CYCLES_AFTER_EMPTY,
+    consecutiveEmpties: Number(prev.consecutiveEmpties || 0) + 1,
+    lastEmptyAt: new Date().toISOString(),
+  };
+  const nichesEmpty = { ...(state.emptyByNicheLocation?.[nicheKey] || {}), [location]: record };
+  const nextState = {
+    ...state,
+    emptyByNicheLocation: { ...(state.emptyByNicheLocation || {}), [nicheKey]: nichesEmpty },
+    poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
+    updatedAt: new Date().toISOString(),
+  };
+  saveRotationState(nextState);
+  return nextState;
+}
+
+// Successful pull — the combo is producing again. Wipe its empty record
+// so it's not counted toward the consecutive-empty threshold anymore.
+function clearNicheEmpty(state, nicheKey, location) {
+  if (!nicheKey || !location) return state;
+  const nicheMap = state.emptyByNicheLocation?.[nicheKey];
+  if (!nicheMap || !nicheMap[location]) return state;
+  const nextNicheMap = { ...nicheMap };
+  delete nextNicheMap[location];
+  const nextState = {
+    ...state,
+    emptyByNicheLocation: { ...(state.emptyByNicheLocation || {}), [nicheKey]: nextNicheMap },
+    poolExpansionVersion: CURRENT_POOL_EXPANSION_VERSION,
+    updatedAt: new Date().toISOString(),
+  };
+  saveRotationState(nextState);
+  return nextState;
+}
+
+// List of (niche, location) combos flagged for operator review — combos
+// that have come back empty CONSECUTIVELY_EMPTY_THRESHOLD or more times
+// in a row. Used by the Discord sweep card so the operator can decide
+// whether to add the location to the niche's blocklist or accept as
+// known-empty.
+export function listConfirmedEmptyCombos(state) {
+  const combos = [];
+  for (const [niche, locationMap] of Object.entries(state.emptyByNicheLocation || {})) {
+    for (const [location, record] of Object.entries(locationMap || {})) {
+      const consecutive = Number(record?.consecutiveEmpties || 0);
+      if (consecutive >= CONSECUTIVELY_EMPTY_THRESHOLD) {
+        combos.push({ niche, location, consecutiveEmpties: consecutive, lastEmptyAt: record.lastEmptyAt });
+      }
+    }
+  }
+  return combos.sort((a, b) => b.consecutiveEmpties - a.consecutiveEmpties);
+}
+
+// Exported for direct testing of the state machine.
+export const __testables = {
+  peekNicheCity,
+  commitNicheAdvance,
+  commitNicheEmpty,
+  clearNicheEmpty,
+  locationsSkippedForNiche,
+};
 
 export function resolveScheduledSweepRounds(value = DEFAULT_SCHEDULED_SWEEP_ROUNDS) {
   const parsed = Number.parseInt(String(value ?? DEFAULT_SCHEDULED_SWEEP_ROUNDS), 10);
@@ -380,6 +520,18 @@ export async function runLeadgenSweepRound({
       // — the pool can reshuffle across expansions without invalidating
       // per-niche progress.
       rotationState = commitNicheAdvance(rotationState, niche.key, location);
+      // Empty-combo memory: if this run produced ZERO usable leads, mark
+      // the combo so the next SKIP_CYCLES_AFTER_EMPTY cycles skip it and
+      // spend that slot on a location that might actually produce. If
+      // the run DID find leads, wipe any prior empty record so the combo
+      // isn't dragged toward the confirmed-empty operator-review flag by
+      // stale history.
+      const leadCount = Number(outcome.result?.leadCount || 0);
+      if (leadCount === 0) {
+        rotationState = commitNicheEmpty(rotationState, niche.key, location);
+      } else {
+        rotationState = clearNicheEmpty(rotationState, niche.key, location);
+      }
     } else {
       process.stderr.write(`${niche.key} failed — not advancing its city, will retry ${location} next run.\n`);
     }
@@ -405,10 +557,16 @@ export async function runLeadgenSweepRound({
   } catch {
     // counts are a nicety, never worth failing the sweep over
   }
+  // Confirmed-empty combos: (niche, location) pairs that returned zero
+  // leads CONSECUTIVELY_EMPTY_THRESHOLD or more times in a row. Surfaced
+  // on the sweep overview so the operator can decide per combo whether
+  // to prune the location for that niche or accept it as known-empty.
+  const confirmedEmptyCombos = listConfirmedEmptyCombos(rotationState);
   await updateSweepOverview(config, overviewMessage, {
     statuses,
     totalLeads,
     newLeadsInDatabase,
+    confirmedEmptyCombos,
     title: overviewTitle,
   });
 
@@ -419,6 +577,7 @@ export async function runLeadgenSweepRound({
     statuses,
     totalLeads,
     newLeadsInDatabase,
+    confirmedEmptyCombos,
     failures: outcomes.filter((outcome) => outcome.runError),
   };
 }
