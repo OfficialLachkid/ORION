@@ -155,6 +155,8 @@ function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso }) {
       likes: Number(metrics.likes || 0),
       comments: Number(metrics.comments || 0),
       hashtags: Array.isArray(metrics.hashtags) ? metrics.hashtags : (pub.metadata?.manifest_publication?.hashtags || []),
+      viewer_countries: Array.isArray(metrics.viewer_countries) ? metrics.viewer_countries : [],
+      traffic_sources: Array.isArray(metrics.traffic_sources) ? metrics.traffic_sources : [],
     });
   }
 
@@ -172,6 +174,48 @@ function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso }) {
   const topVideos = scoredVideos.slice(0, TOP_VIDEOS_TO_INCLUDE);
   const bottomVideos = scoredVideos.slice(-BOTTOM_VIDEOS_TO_INCLUDE).reverse();
 
+  // Publish-hour rollup (UTC-based per YouTube's published_at). We're
+  // currently posting at 08/12/14 CEST across all channels — this rollup
+  // exposes whether one of those slots actually pulls more views than the
+  // others so the analyst can reason about per-channel schedule changes.
+  const publishHourBuckets = buildPublishHourBuckets(scoredVideos);
+  const publishHourByChannel = {};
+  const scoredByChannel = groupBy(scoredVideos, (v) => v.channel);
+  for (const [ch, vids] of Object.entries(scoredByChannel)) {
+    publishHourByChannel[ch] = buildPublishHourBuckets(vids);
+  }
+
+  // Geography + traffic-source rollups — sum per-video top-N lists into
+  // network-wide and per-channel view splits so the analyst can reason
+  // about where viewers come from without walking every video row.
+  const networkGeoTotals = aggregateDimensionBreakdown(scoredVideos.map((v) => v.viewer_countries));
+  const networkTrafficTotals = aggregateDimensionBreakdown(scoredVideos.map((v) => v.traffic_sources));
+  const geoByChannel = {};
+  const trafficByChannel = {};
+  for (const [ch, vids] of Object.entries(scoredByChannel)) {
+    geoByChannel[ch] = aggregateDimensionBreakdown(vids.map((v) => v.viewer_countries));
+    trafficByChannel[ch] = aggregateDimensionBreakdown(vids.map((v) => v.traffic_sources));
+  }
+  const geoCoverage = scoredVideos.filter((v) => v.viewer_countries.length > 0).length;
+  const trafficCoverage = scoredVideos.filter((v) => v.traffic_sources.length > 0).length;
+
+  // Only surface gaps we STILL can't answer (retention + hourly). Geo +
+  // traffic dropped from the list on 2026-09-21 when the youtube-adapter
+  // started pulling dimensions=country + insightTrafficSourceType — but
+  // if this run's coverage is 0 (no analytics sweep has hit any video
+  // yet with the new adapter), keep them in the gap list with an
+  // explanation so the analyst doesn't try to answer from empty data.
+  const instrumentationGaps = [
+    'hourly view distribution (when viewers actually watch vs when we posted) — needs `dimensions=day + startTime + endTime` slicing',
+    'retention curve + average view % — currently NULL; needs the retention audit query',
+  ];
+  if (geoCoverage === 0) {
+    instrumentationGaps.push('viewer geography — collected via the enriched adapter but this week no rows have populated data yet; expect full coverage next review');
+  }
+  if (trafficCoverage === 0) {
+    instrumentationGaps.push('traffic sources — collected via the enriched adapter but this week no rows have populated data yet; expect full coverage next review');
+  }
+
   return {
     window: { since: sinceIso, until: untilIso, days: 7 },
     totals: {
@@ -182,9 +226,81 @@ function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso }) {
     },
     per_channel: channelSummaries,
     per_template: templateSummaries,
+    publish_hour_rollup: {
+      note: 'hours are UTC. current schedule fires 08/12/14 CEST which is 06/10/12 UTC (or 07/11/13 UTC on standard time).',
+      network_wide: publishHourBuckets,
+      per_channel: publishHourByChannel,
+    },
+    viewer_geography: {
+      videos_with_data: geoCoverage,
+      videos_total: scoredVideos.length,
+      network_wide_top_countries: networkGeoTotals,
+      per_channel_top_countries: geoByChannel,
+    },
+    traffic_sources_split: {
+      videos_with_data: trafficCoverage,
+      videos_total: scoredVideos.length,
+      network_wide: networkTrafficTotals,
+      per_channel: trafficByChannel,
+    },
+    instrumentation_gaps: instrumentationGaps,
     top_videos: topVideos,
     bottom_videos: bottomVideos,
   };
+}
+
+// Sum {key, views} lists across multiple videos into a single sorted
+// distribution — used for both geography (country codes) and traffic
+// sources (insightTrafficSourceType values).
+function aggregateDimensionBreakdown(perVideoLists = []) {
+  const totals = new Map();
+  for (const list of perVideoLists) {
+    if (!Array.isArray(list)) continue;
+    for (const entry of list) {
+      if (!entry || !entry.key) continue;
+      totals.set(entry.key, (totals.get(entry.key) || 0) + Number(entry.views || 0));
+    }
+  }
+  return [...totals.entries()]
+    .map(([key, views]) => ({ key, views }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 15);
+}
+
+function groupBy(items, keyFn) {
+  const out = {};
+  for (const item of items) {
+    const key = keyFn(item);
+    if (!out[key]) out[key] = [];
+    out[key].push(item);
+  }
+  return out;
+}
+
+// Rollup of average / median views per UTC publish hour. Enough signal to
+// tell whether the current 08/12/14 CEST slots split into a winner + a
+// loser, or whether they're all roughly equivalent — without needing a
+// separate YouTube-Analytics geo/hour query.
+function buildPublishHourBuckets(videos) {
+  const byHour = {};
+  for (const v of videos) {
+    if (!v.published_at) continue;
+    const hour = new Date(v.published_at).getUTCHours();
+    if (!byHour[hour]) byHour[hour] = [];
+    byHour[hour].push(v.views || 0);
+  }
+  const rollup = {};
+  for (const [hour, viewsList] of Object.entries(byHour)) {
+    const sorted = [...viewsList].sort((a, b) => a - b);
+    const total = viewsList.reduce((s, n) => s + n, 0);
+    rollup[hour] = {
+      videos: viewsList.length,
+      total_views: total,
+      median_views: sorted[Math.floor(sorted.length / 2)] || 0,
+      avg_views: viewsList.length ? Math.round(total / viewsList.length) : 0,
+    };
+  }
+  return rollup;
 }
 
 // ─── Claude call ────────────────────────────────────────────────────
@@ -193,13 +309,17 @@ function buildAnalystPrompt(dataPack, priorSummary = '') {
   const lines = [
     'You are an analyst for a Pokemon quiz Shorts network on YouTube. Read the JSON data pack below (last 7 days of published Shorts across 5 channels) and produce a concise operator-facing weekly review.',
     '',
+    'FORMATTING: every concrete number you cite (view count, like count, v/vid, like-rate %, median, delta, hour, etc.) MUST be wrapped in bold with double-asterisks so it stands out at a glance in Discord. Example: "poke-quizz-youtube pulled **2070 v/vid** on **90 videos** (like-rate **1.33%**)." This is non-negotiable — plain numbers get lost in the wall of text.',
+    '',
     'Structure your response as:',
-    '1. **This week in numbers** — 2-3 sentences on totals + which channel/template stood out.',
+    '1. **This week in numbers** — 2-3 sentences on totals + which channel/template stood out. Bold every number.',
     '2. **What is working** — 2-4 bullets identifying the templates or channels moving up, with the specific v/vid or like-rate numbers as evidence.',
     '3. **What is not working** — 2-4 bullets on underperformers or drops relative to peers. Do NOT recommend killing a channel or template with fewer than 20 videos in the window (undersampled).',
-    '4. **Concrete adjustments to consider** — a bulleted list of specific things the operator could try. Each bullet must include: WHAT to change (template weight, title pattern, hashtag mix, thumbnail idea, posting cadence), WHERE to change it (which channel or template), and WHY (which datapoint in the pack supports it).',
-    '5. **Metadata patterns** — 1-3 bullets describing patterns in the top-video titles/hashtags that do NOT appear in the bottom-video titles/hashtags.',
-    '6. **Needs manual investigation** — anything you cannot decide from data alone (e.g., "trivamon lagging by 15% on medians — worth eyeballing thumbnails / upload timing manually").',
+    '4. **Scheduling signal** — the network currently posts 3× / day at 08:00, 12:00, 14:00 CEST across ALL channels. Read the `publish_hour_rollup` block. Answer: (a) does one UTC hour slot pull materially more views than the others network-wide, (b) does the picture differ per channel (some channels prefer earlier/later slots), and (c) is there a recommended per-channel schedule change based on the data. Cross-reference with `viewer_geography` — if most viewers are in one timezone (e.g. **US** heavy vs **EU** heavy), the "best hour" might be different from what a naive views-per-UTC-slot read suggests. If the sample per slot is too small (< 5 videos in a slot) say so explicitly rather than over-fit. Flag any remaining `instrumentation_gaps` so the operator knows what would sharpen next week.',
+    '4b. **Audience mix (geo + traffic)** — read `viewer_geography` and `traffic_sources_split`. Report the top-3 countries network-wide (with view %s) and any channel that skews meaningfully differently from the network mix. Then report the traffic-source split (browse / suggested / search / external) — is one source disproportionately carrying a channel or template? If `videos_with_data` is 0 for either block, say "no data yet, expected next review" and skip the section rather than fabricate.',
+    '5. **Concrete adjustments to consider** — a bulleted list of specific things the operator could try. Each bullet must include: WHAT to change (template weight, title pattern, hashtag mix, thumbnail idea, posting cadence), WHERE to change it (which channel or template), and WHY (which datapoint in the pack supports it). Bold every number cited as evidence.',
+    '6. **Metadata patterns** — 1-3 bullets describing patterns in the top-video titles/hashtags that do NOT appear in the bottom-video titles/hashtags.',
+    '7. **Needs manual investigation** — anything you cannot decide from data alone (e.g., "trivamon lagging by 15% on medians — worth eyeballing thumbnails / upload timing manually"). Include any instrumentation gaps that block a real answer.',
     '',
     'Tone: analytical, terse, no marketing language, no filler. It is fine to say "no clear signal this week" for any section if the data does not support a conclusion. Do NOT recommend permanent deprecations from a single week of data.',
     '',
