@@ -44,9 +44,9 @@ test('summarizeChannel handles pubs without analytics coverage', () => {
 
 test('buildDataPack groups by channel + template and produces top/bottom slices', () => {
   const publications = [
-    { id: 'a', account_key: 'poke-quizz-youtube', title: 'Top hit', published_at: '2026-09-15T00:00:00Z', metadata: { template_id: 'pokemon.cry-match.v1' }, external_id: 'aaa' },
-    { id: 'b', account_key: 'poke-quizz-youtube', title: 'Mid', published_at: '2026-09-16T00:00:00Z', metadata: { template_id: 'pokemon.cry-match.v1' }, external_id: 'bbb' },
-    { id: 'c', account_key: 'dexguess-youtube', title: 'Weak', published_at: '2026-09-17T00:00:00Z', metadata: { template_id: 'pokemon.dual-type-reveal.v1' }, external_id: 'ccc' },
+    { id: 'a', account_key: 'poke-quizz-youtube', title: 'Top hit', published_at: '2026-09-15T06:00:00Z', metadata: { template_id: 'pokemon.cry-match.v1' }, external_id: 'aaa' },
+    { id: 'b', account_key: 'poke-quizz-youtube', title: 'Mid', published_at: '2026-09-16T10:00:00Z', metadata: { template_id: 'pokemon.cry-match.v1' }, external_id: 'bbb' },
+    { id: 'c', account_key: 'dexguess-youtube', title: 'Weak', published_at: '2026-09-17T12:00:00Z', metadata: { template_id: 'pokemon.dual-type-reveal.v1' }, external_id: 'ccc' },
   ];
   const analytics = new Map([
     ['a', { metrics: { views: 10000, likes: 100 } }],
@@ -65,15 +65,37 @@ test('buildDataPack groups by channel + template and produces top/bottom slices'
   assert.equal(pack.per_template['dual-type-reveal'].videos_published, 1);
   assert.equal(pack.top_videos[0].views, 10000);
   assert.equal(pack.bottom_videos[0].views, 50);
+
+  // Scheduling signal — publish-hour rollup is what the analyst reasons over
+  assert.ok(pack.publish_hour_rollup);
+  assert.ok(pack.publish_hour_rollup.network_wide[6], 'hour 6 slot (08 CEST) must appear network-wide');
+  assert.equal(pack.publish_hour_rollup.network_wide[6].videos, 1);
+  assert.equal(pack.publish_hour_rollup.network_wide[6].avg_views, 10000);
+  assert.equal(pack.publish_hour_rollup.network_wide[10].videos, 1);
+  assert.equal(pack.publish_hour_rollup.network_wide[12].videos, 1);
+  // Per-channel rollup keeps channels separate
+  assert.equal(pack.publish_hour_rollup.per_channel['poke-quizz-youtube'][6].videos, 1);
+  assert.equal(pack.publish_hour_rollup.per_channel['dexguess-youtube'][12].videos, 1);
+
+  // Instrumentation gaps surfaced so the analyst can flag what's missing
+  assert.ok(Array.isArray(pack.instrumentation_gaps) && pack.instrumentation_gaps.length > 0);
+  assert.ok(pack.instrumentation_gaps.some((g) => /geography|country/iu.test(g)));
 });
 
-test('buildAnalystPrompt embeds JSON data pack and optional prior summary', () => {
+test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bold-number instruction', () => {
   const pack = { totals: { publications: 1 }, per_channel: {}, per_template: {}, top_videos: [], bottom_videos: [], window: { since: 'X', until: 'Y', days: 7 } };
   const withoutPrior = buildAnalystPrompt(pack, '');
   assert.ok(withoutPrior.includes('You are an analyst'));
   assert.ok(withoutPrior.includes('This week\'s data pack (JSON)'));
   assert.ok(!withoutPrior.includes('Previous week\'s summary'));
   assert.ok(withoutPrior.includes('does NOT open PRs') || withoutPrior.includes('not to act on it'));
+  // Bold-numbers formatting rule must be present
+  assert.ok(withoutPrior.includes('double-asterisks') || withoutPrior.includes('**'), 'prompt must instruct bolding numbers');
+  // Scheduling section must be present with reference to publish_hour_rollup and per-channel semantics
+  assert.ok(withoutPrior.includes('Scheduling signal'), 'prompt must include a scheduling section');
+  assert.ok(withoutPrior.includes('publish_hour_rollup'), 'prompt must reference the publish-hour data field');
+  assert.ok(withoutPrior.includes('instrumentation_gaps'), 'prompt must ask analyst to acknowledge missing signals');
+  assert.ok(withoutPrior.includes('08:00, 12:00, 14:00'), 'prompt must state the current 3x/day schedule for context');
 
   const withPrior = buildAnalystPrompt(pack, 'Last week I said X and Y happened.');
   assert.ok(withPrior.includes('Previous week\'s summary'));
