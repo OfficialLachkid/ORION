@@ -226,13 +226,9 @@ function saveRotationState(state) {
   writeFileSync(ROTATION_STATE_PATH, JSON.stringify(state, null, 2));
 }
 
-// Locations this niche has ALREADY been checked for and returned empty
-// within the current skip window — subsequent peeks skip them until the
-// window elapses. Guarantees the "check every location at least once
-// per full cycle" property because the skip is bounded by cycle count,
-// not by absolute time — a location skipped for cycles N..N+2 becomes
-// eligible again at cycle N+3, i.e. after every OTHER location has had
-// SKIP_CYCLES_AFTER_EMPTY chances to be picked in its stead.
+// Skip set for this niche — locations known-empty within their skip
+// window. Bounded by cycle count so every location gets a check at
+// least once per SKIP_CYCLES_AFTER_EMPTY cycles.
 function locationsSkippedForNiche(state, nicheKey) {
   const currentCycle = Number(state.cycleCountByNiche?.[nicheKey] || 0);
   const emptyMap = state.emptyByNicheLocation?.[nicheKey] || {};
@@ -245,18 +241,10 @@ function locationsSkippedForNiche(state, nicheKey) {
   return skipped;
 }
 
-// Pick the first location the niche hasn't visited THIS CYCLE and isn't
-// currently skipped for being known-empty. When the visited+skipped set
-// covers the whole pool the cycle is complete — reset it so the next
-// call starts a fresh cycle from the first location. Same per-niche
-// independence guarantee as before: a failed niche stays on its own
-// cursor while others advance.
-//
-// If EVERY location is skipped (extreme case — every combo is known
-// empty for this niche), fall back to the first unvisited location
-// regardless of skip status: skipping infinitely is worse than a wasted
-// check, and the operator would have already been alerted via the
-// confirmed-empty threshold well before this point.
+// Pick first location this niche hasn't visited THIS CYCLE and isn't
+// in the current skip window. Cycle wraps when the pool fills. Fallback
+// on the extreme "everything skipped" case picks any unvisited location
+// so the sweep never idles — skip is defer, never permanent prune.
 function peekNicheCity(state, nicheKey) {
   const visited = new Set(state.visitedByNiche?.[nicheKey] || []);
   const skipped = locationsSkippedForNiche(state, nicheKey);
@@ -264,9 +252,6 @@ function peekNicheCity(state, nicheKey) {
   const effectiveVisited = cycleComplete ? new Set() : visited;
   const isPickable = (name) => !effectiveVisited.has(name) && !skipped.has(name);
   const location = LOCATION_ROTATION.find(isPickable)
-    // fall-back: only skipped locations remain — check the oldest one
-    // anyway rather than idle. The whole point of the skip is to defer,
-    // never to permanently prune.
     || LOCATION_ROTATION.find((name) => !effectiveVisited.has(name))
     || LOCATION_ROTATION[0];
   const afterLocation = new Set(effectiveVisited);
@@ -297,16 +282,13 @@ function commitNicheAdvance(state, nicheKey, locationOrIndex) {
   const prevVisited = state.visitedByNiche?.[nicheKey] || [];
   const nextVisitedSet = new Set(prevVisited);
   const nextCycleCountByNiche = { ...(state.cycleCountByNiche || {}) };
-  // Wrap: if the visited set is already full from a prior cycle, reset
-  // it first so the "just-completed" location becomes the head of the
-  // new cycle rather than being lost.
+  // Wrap when the visited set is already full (start of a new cycle).
   if (nextVisitedSet.size >= LOCATION_ROTATION.length) {
     nextVisitedSet.clear();
   }
   nextVisitedSet.add(location);
-  // Tick the per-niche cycle counter the moment this add fills the pool
-  // — that's what makes skipUntilCycle records expire naturally over
-  // time. Counter semantic: "number of cycles this niche has completed".
+  // Tick the per-niche cycle counter as soon as the pool fills — this is
+  // what makes skipUntilCycle records expire naturally over time.
   if (nextVisitedSet.size >= LOCATION_ROTATION.length) {
     nextCycleCountByNiche[nicheKey] = Number(nextCycleCountByNiche[nicheKey] || 0) + 1;
   }
@@ -321,10 +303,8 @@ function commitNicheAdvance(state, nicheKey, locationOrIndex) {
   return nextState;
 }
 
-// Record that (niche, location) returned zero usable leads. Deferred for
-// SKIP_CYCLES_AFTER_EMPTY full cycles, then retry-eligible again. When a
-// combo hits CONSECUTIVELY_EMPTY_THRESHOLD consecutive empties, it's
-// flagged so the sweep overview can surface it for operator review.
+// Record (niche, location) as empty. Skipped for SKIP_CYCLES_AFTER_EMPTY
+// cycles then retry-eligible; flagged for review after N consecutive.
 function commitNicheEmpty(state, nicheKey, location) {
   if (!nicheKey || !location) return state;
   const currentCycle = Number(state.cycleCountByNiche?.[nicheKey] || 0);
@@ -363,11 +343,8 @@ function clearNicheEmpty(state, nicheKey, location) {
   return nextState;
 }
 
-// List of (niche, location) combos flagged for operator review — combos
-// that have come back empty CONSECUTIVELY_EMPTY_THRESHOLD or more times
-// in a row. Used by the Discord sweep card so the operator can decide
-// whether to add the location to the niche's blocklist or accept as
-// known-empty.
+// Combos flagged for operator review (>= CONSECUTIVELY_EMPTY_THRESHOLD
+// empties in a row). Rendered on the Discord sweep card.
 export function listConfirmedEmptyCombos(state) {
   const combos = [];
   for (const [niche, locationMap] of Object.entries(state.emptyByNicheLocation || {})) {
