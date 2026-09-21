@@ -29,6 +29,34 @@ function resolveTextOutlineWidth(template) {
   );
 }
 
+function parsePaletteColor(value) {
+  const normalized = String(value || '').trim().replace(/^#/u, '').replace(/^0x/iu, '');
+  if (!/^[0-9a-f]{6}$/iu.test(normalized)) {
+    return null;
+  }
+  const numeric = Number.parseInt(normalized, 16);
+  return {
+    r: (numeric >> 16) & 0xFF,
+    g: (numeric >> 8) & 0xFF,
+    b: numeric & 0xFF,
+  };
+}
+
+function buildPaletteChannelExpression(colors, channel, barIndexExpression) {
+  const parsedColors = (Array.isArray(colors) ? colors : [])
+    .map(parsePaletteColor)
+    .filter(Boolean);
+  const palette = parsedColors.length > 0
+    ? parsedColors
+    : ['0x00D4FF', '0x2F7BFF', '0x7657FF', '0xB845FF', '0x2BE7FF']
+        .map(parsePaletteColor);
+  let expression = String(palette.at(-1)?.[channel] ?? 255);
+  for (let index = palette.length - 2; index >= 0; index -= 1) {
+    expression = `if(eq(mod(${barIndexExpression}\\,${palette.length})\\,${index})\\,${palette[index][channel]}\\,${expression})`;
+  }
+  return expression;
+}
+
 function extractPromptHeaderText(text, _round) {
   // Cry Match's prompts are genuine questions ("Whose cry is this?",
   // "Who's that Pokemon?") — keep the trailing "?" so the header
@@ -903,12 +931,13 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       //   r: 30-230 (low cyan → high magenta)
       //   g: 60-220 (low magenta → high cyan)
       //   b: 210-255 (high across the board)
-      // sin/cos with different frequencies means each bar picks a
-      // different combination without visible repetition.
+      // Each equalizer bar advances through the palette selected once
+      // for this video, keeping every round visually consistent.
       const barIdxExpr = `floor(X/${barUnitWidth})`;
-      const rExpr = `30+100*abs(sin(${barIdxExpr}*0.9))+100*abs(sin(${barIdxExpr}*0.4))`;
-      const gExpr = `60+80*abs(cos(${barIdxExpr}*1.1))+80*abs(cos(${barIdxExpr}*0.5))`;
-      const bExpr = `210+45*abs(sin(${barIdxExpr}*0.7+1))`;
+      const paletteColors = cryMeter.equalizer?.palette?.colors || [];
+      const rExpr = buildPaletteChannelExpression(paletteColors, 'r', barIdxExpr);
+      const gExpr = buildPaletteChannelExpression(paletteColors, 'g', barIdxExpr);
+      const bExpr = buildPaletteChannelExpression(paletteColors, 'b', barIdxExpr);
       const alphaExpr = `if(lt(mod(X\\,${barUnitWidth})\\,${barWidth})\\,if(gt(r(X\\,Y)+g(X\\,Y)+b(X\\,Y)\\,30)\\,255\\,0)\\,0)`;
       // Bars pipeline now emits two layers:
       //   - bars: the colored bar fill

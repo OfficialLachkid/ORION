@@ -254,10 +254,26 @@ function shuffle(values, random) {
   return items;
 }
 
+function buildSingleTypeGapSelections(multiTypeCount, singleTypeCount, minimumSpacing) {
+  const selections = [];
+  function visit(nextGapIndex, selectedGapIndexes) {
+    if (selectedGapIndexes.length === singleTypeCount) {
+      selections.push(selectedGapIndexes);
+      return;
+    }
+    for (let gapIndex = nextGapIndex; gapIndex <= multiTypeCount; gapIndex += 1) {
+      visit(gapIndex + minimumSpacing, [...selectedGapIndexes, gapIndex]);
+    }
+  }
+  visit(0, []);
+  return selections;
+}
+
 function selectSubjectsForTypeQuiz({
   eligibleSubjects,
   roundCount,
   typeCardinalityMode,
+  minimumMultiTypeRoundsBetweenSingleTypes,
   random,
 }) {
   const shuffledSubjects = shuffle(eligibleSubjects, random);
@@ -267,7 +283,13 @@ function selectSubjectsForTypeQuiz({
 
   const singleTypeSubjects = shuffledSubjects.filter((subject) => isSingleTypeSubject(subject));
   const multiTypeSubjects = shuffledSubjects.filter((subject) => !isSingleTypeSubject(subject));
-  const minimumMultiCountForSpacing = Math.ceil((roundCount - 1) / 2);
+  const minimumSpacing = Math.max(
+    1,
+    ensurePositiveInteger(minimumMultiTypeRoundsBetweenSingleTypes, 1),
+  );
+  const minimumMultiCountForSpacing = Math.ceil(
+    (minimumSpacing * (roundCount - 1)) / (minimumSpacing + 1),
+  );
   const minimumSelectedMultiCount = Math.max(
     roundCount - singleTypeSubjects.length,
     minimumMultiCountForSpacing,
@@ -275,7 +297,7 @@ function selectSubjectsForTypeQuiz({
 
   if (multiTypeSubjects.length < minimumSelectedMultiCount) {
     throw new Error(
-      `No sufficient localized Pokemon rows are available for a mixed type quiz without consecutive single-type rounds. `
+      `No sufficient localized Pokemon rows are available for a mixed type quiz with ${minimumSpacing} dual-type rounds between single-type rounds. `
       + `Need at least ${minimumSelectedMultiCount} dual-typing (or higher) Pokemon, found ${multiTypeSubjects.length}.`,
     );
   }
@@ -287,12 +309,14 @@ function selectSubjectsForTypeQuiz({
   const selectedMultiSubjects = multiTypeSubjects.slice(0, selectedMultiCount);
   const selectedSingleSubjects = singleTypeSubjects.slice(0, selectedSingleCount);
 
-  const chosenGapIndexes = shuffle(
-    Array.from({ length: selectedMultiSubjects.length + 1 }, (_, index) => index),
-    random,
-  )
-    .slice(0, selectedSingleSubjects.length)
-    .sort((left, right) => left - right);
+  const validGapSelections = buildSingleTypeGapSelections(
+    selectedMultiSubjects.length,
+    selectedSingleSubjects.length,
+    minimumSpacing,
+  );
+  const chosenGapIndexes = validGapSelections[
+    Math.floor(random() * validGapSelections.length)
+  ] || [];
   const singlesByGap = new Map(
     chosenGapIndexes.map((gapIndex, index) => [gapIndex, selectedSingleSubjects[index]]),
   );
@@ -456,6 +480,12 @@ export async function planPokemonTypeQuizChallenge({
   const countdownFrom = ensurePositiveInteger(template?.layout?.timer?.countdown_from, 3);
   const countdownTo = Number.parseInt(String(template?.layout?.timer?.countdown_to ?? 0), 10);
   const typeCardinalityMode = normalizeTypeCardinalityMode(template);
+  const minimumMultiTypeRoundsBetweenSingleTypes = typeCardinalityMode === 'any'
+    ? ensurePositiveInteger(
+      template?.selection_rules?.minimum_dual_type_rounds_between_single_type_rounds,
+      1,
+    )
+    : 0;
   const transitionDurationSeconds = ensureNonNegativeNumber(
     template?.layout?.rounds?.transition_duration_seconds,
     0.42,
@@ -491,6 +521,7 @@ export async function planPokemonTypeQuizChallenge({
     eligibleSubjects,
     roundCount,
     typeCardinalityMode,
+    minimumMultiTypeRoundsBetweenSingleTypes,
     random,
   });
   const shinyReveal = resolveShinyRevealState({
@@ -610,6 +641,8 @@ export async function planPokemonTypeQuizChallenge({
       mode: String(template?.selection_rules?.mode || 'random').trim().toLowerCase() || 'random',
       difficulty_id: selectedRoundCountDifficulty?.id || null,
       type_cardinality: typeCardinalityMode,
+      minimum_dual_type_rounds_between_single_type_rounds:
+        minimumMultiTypeRoundsBetweenSingleTypes,
       round_count: roundCount,
       selected_subject_count: selectedSubjects.length,
       display_subject_count: selectedSubjects.length,

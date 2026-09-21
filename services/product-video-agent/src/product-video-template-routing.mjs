@@ -30,6 +30,13 @@ export const PRODUCT_VIDEO_TEMPLATE_DEFINITIONS = Object.freeze([
     legacyConfigSlug: '',
   },
   {
+    templateKey: 'pixelated-reveal',
+    templateId: 'pokemon.pixelated-reveal.v1',
+    label: 'Pixelated Reveal',
+    genreLabel: 'Pixelated Reveal',
+    legacyConfigSlug: '',
+  },
+  {
     templateKey: 'stat-clash',
     templateId: 'pokemon.stat-clash.v1',
     label: 'Stat Clash',

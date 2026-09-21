@@ -103,7 +103,10 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.question_contract.hook_text, 'Who is that Pokemon?');
   assert.deepEqual(template.question_contract.headline_lines, ['WHO IS THAT', 'POKEMON?']);
   assert.equal(template.reveal.target_opaque_fraction, 0.6);
-  assert.deepEqual(template.reveal.methods, PROGRESSIVE_REVEAL_METHODS);
+  assert.deepEqual(
+    template.reveal.methods,
+    PROGRESSIVE_REVEAL_METHODS.filter((method) => method !== 'pixelated'),
+  );
   assert.deepEqual(
     template.reveal.methods.slice(-8),
     [
@@ -128,6 +131,7 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(template.reveal.method_config.square_spiral_inward.turns, 3);
   assert.equal(template.reveal.method_config.fluid_fill.particle_size_px, 8);
   assert.equal(template.reveal.method_config.fluid_fill.fall_step_count, 12);
+  assert.equal(template.reveal.method_config.pixelated, undefined);
 });
 
 test('planner deterministically selects three Pokemon and seeded non-repeating reveal methods', async () => {
@@ -283,6 +287,7 @@ test('all V1 reveal algorithms build deterministic progressive alpha masks', () 
   assert.match(expressions[17], /\(H-1-floor\(Y\/8\)\*8\)\/max\(1,H-1\)/u);
   assert.match(expressions[17], /sin\(\(floor\(X\/8\)\*8\)\*0\.045/u);
   assert.match(expressions[17], /floor\(X\/8\)\*331\+floor\(Y\/8\)\*521/u);
+  assert.match(expressions[18], /gte\(.+,0\)/u);
 });
 
 test('falling-particle phases descend in discrete sand steps before settling', () => {

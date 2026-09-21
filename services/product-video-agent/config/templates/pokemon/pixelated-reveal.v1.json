@@ -1,0 +1,231 @@
+{
+  "template_id": "pokemon.pixelated-reveal.v1",
+  "template_key": "pixelated-reveal",
+  "domain": "pokemon",
+  "mechanics": [
+    "selection",
+    "pixelated_reveal",
+    "difficulty_progression",
+    "answer",
+    "transition"
+  ],
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 30,
+    "safe_zone": {
+      "top": 160,
+      "right": 120,
+      "bottom": 260,
+      "left": 120
+    }
+  },
+  "selection_rules": {
+    "subject_table": "pokedex",
+    "generation_scope": [],
+    "require_truth_fields": [
+      "national_dex_number",
+      "name",
+      "sprite_path"
+    ],
+    "skip_subject_when_missing": [
+      "national_dex_number",
+      "name",
+      "sprite_path"
+    ],
+    "round_count": 4,
+    "mode": "random"
+  },
+  "question_contract": {
+    "hook_text": "Who is that Pokemon?",
+    "hook_text_variants": [
+      "Who is that Pokemon?"
+    ],
+    "headline_lines": [
+      "WHO IS THAT",
+      "POKEMON?"
+    ],
+    "answer_text": "{pokemon}",
+    "answer_text_variants": [
+      "{pokemon}"
+    ]
+  },
+  "layout": {
+    "background": {
+      "source_policy": "local_t7_pixel_backgrounds",
+      "media_type": "looping_image_gif_or_video",
+      "fit": "cover",
+      "blur_sigma": 6,
+      "motion": {
+        "enabled": true,
+        "zoom_scale": 1.12,
+        "subpixel_scale": 2,
+        "pan_cycle_seconds": 18,
+        "vertical_pan_ratio": 0.72
+      },
+      "darken_alpha": 0.24
+    },
+    "text": {
+      "hook_y": 150,
+      "hook_font_size": 102,
+      "hook_line_gap_px": 8,
+      "difficulty_label_y": 435,
+      "difficulty_label_font_size": 62,
+      "show_round_counter": false,
+      "counter_x": 72,
+      "counter_y": 92,
+      "counter_font_size": 48,
+      "answer_y": 1440,
+      "answer_font_size": 104,
+      "primary_color": "white",
+      "accent_color": "0xFFD60A",
+      "outline_width": 8,
+      "depth_px": 8,
+      "font_candidates": [
+        "/System/Library/Fonts/Supplemental/Arial Black.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Avenir Next.ttc"
+      ]
+    },
+    "reveal_box": {
+      "center_x": 540,
+      "center_y": 925,
+      "width_px": 760,
+      "height_px": 760,
+      "sprite_size_px": 650,
+      "background_color": "white",
+      "border_color": "white@0.92",
+      "border_width_px": 6,
+      "shadow_offset_px": 18
+    },
+    "rounds": {
+      "hook_hold_seconds": 1.7,
+      "show_first_reveal_immediately": true,
+      "pre_reveal_hold_seconds": 0.18,
+      "answer_hold_seconds": 1.45,
+      "transition_duration_seconds": 0.42,
+      "final_hold_seconds": 0.6
+    }
+  },
+  "reveal": {
+    "mode": "fixed_video",
+    "method": "pixelated",
+    "methods": [
+      "pixelated"
+    ],
+    "duration_seconds": 8.5,
+    "target_opaque_fraction": 0.6,
+    "difficulty": "easy-to-impossible",
+    "difficulty_rounds": [
+      {
+        "id": "easy",
+        "label": "EASY",
+        "color": "0x35E27A",
+        "answer_clarity_progress": 0.3
+      },
+      {
+        "id": "medium",
+        "label": "MEDIUM",
+        "color": "0xFFD60A",
+        "answer_clarity_progress": 0.25
+      },
+      {
+        "id": "hard",
+        "label": "HARD",
+        "color": "0xFF5A52",
+        "answer_clarity_progress": 0.15
+      },
+      {
+        "id": "impossible",
+        "label": "IMPOSSIBLE",
+        "color": "0xB76CFF",
+        "answer_clarity_progress": 0.1
+      }
+    ],
+    "method_config": {
+      "pixelated": {
+        "progress_speed_multiplier": 0.2,
+        "answer_clarity_progress": 0.25,
+        "resolution_steps_px": [
+          4,
+          6,
+          8,
+          10,
+          12,
+          14,
+          16,
+          18,
+          21,
+          24,
+          27,
+          30,
+          34,
+          38,
+          43,
+          48,
+          54,
+          61,
+          69,
+          78,
+          88,
+          99,
+          112,
+          126,
+          142,
+          160,
+          180,
+          203,
+          229,
+          258,
+          291,
+          328,
+          370,
+          417,
+          444,
+          470,
+          520
+        ]
+      }
+    }
+  },
+  "audio": {
+    "voice_peak_db": -3,
+    "voice_profile_selection": {
+      "mode": "seeded_random",
+      "allowed_genders": [
+        "female",
+        "male"
+      ]
+    },
+    "music_enabled": true,
+    "music_source_policy": "local_rights_cleared_only",
+    "battle_intro_music": {
+      "start_seconds": 0,
+      "duck_under_voice": true,
+      "stop_at_reveal": false
+    },
+    "sound_effects": {
+      "reveal": {
+        "enabled": true,
+        "trigger": "sprite_complete",
+        "volume_multiplier": 0.85
+      }
+    },
+    "cry_playback": {
+      "enabled": true,
+      "delay_after_ding_seconds": 0.3,
+      "volume_multiplier": 0.275
+    }
+  },
+  "renderer": {
+    "input_policy": "approved_local_assets_only",
+    "video_codec": "libx264",
+    "preset": "medium",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "crf": 20,
+    "faststart": true
+  }
+}

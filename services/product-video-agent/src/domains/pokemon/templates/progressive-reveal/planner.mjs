@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import {
+  buildPokeQuizzAnimatedSpritePath,
   buildPokeQuizzPreviewDirectory,
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
@@ -160,6 +161,23 @@ async function resolveRenderSpritePath(subject) {
     return animatedPath;
   }
   return String(subject?.sprite_path || '').trim();
+}
+
+async function resolveAnimatedGifPath(subject) {
+  const candidates = [
+    String(subject?.animated_sprite_path || '').trim(),
+    String(buildPokeQuizzAnimatedSpritePath(subject) || '').trim(),
+  ].filter((candidate, index, values) => (
+    candidate
+    && /\.gif$/iu.test(candidate)
+    && values.indexOf(candidate) === index
+  ));
+  for (const candidate of candidates) {
+    if (await canAccessPath(candidate)) {
+      return candidate;
+    }
+  }
+  return '';
 }
 
 function resolveRevealAnalysisLayout(template) {
@@ -329,6 +347,31 @@ function resolveMethodConfig(template, method, random) {
   return { ...baseConfig };
 }
 
+function resolveRoundDifficulty(template, roundIndex, fallbackDifficulty) {
+  const configuredRounds = Array.isArray(template?.reveal?.difficulty_rounds)
+    ? template.reveal.difficulty_rounds
+    : [];
+  const configured = configuredRounds[roundIndex];
+  if (!configured || typeof configured !== 'object' || Array.isArray(configured)) {
+    return {
+      id: fallbackDifficulty,
+      label: '',
+      color: '',
+      answerClarityProgress: null,
+    };
+  }
+  const id = String(configured.id || fallbackDifficulty).trim().toLowerCase() || fallbackDifficulty;
+  const configuredClarity = Number(configured.answer_clarity_progress);
+  return {
+    id,
+    label: String(configured.label || id).trim().toUpperCase(),
+    color: String(configured.color || '').trim(),
+    answerClarityProgress: Number.isFinite(configuredClarity) && configuredClarity > 0
+      ? clamp(configuredClarity, 0.05, 1)
+      : null,
+  };
+}
+
 function buildSubjectRecord(subject, renderSpritePath, cryPath) {
   return {
     pokedex_id: subject.id,
@@ -352,7 +395,7 @@ function buildTimeline(hookText, rounds) {
   if (hookText) {
     timeline.push({
       phase: 'hook',
-      duration_seconds: rounds[0]?.scene_lead_seconds || DEFAULT_HOOK_HOLD_SECONDS,
+      duration_seconds: rounds[0]?.scene_lead_seconds ?? DEFAULT_HOOK_HOLD_SECONDS,
       spoken_text: hookText,
       on_screen_text: hookText,
     });
@@ -394,10 +437,64 @@ export async function planPokemonProgressiveRevealChallenge({
     throw new Error(`Progressive Reveal requires at least ${roundCount} Pokemon with local sprites, found ${eligibleSubjects.length}.`);
   }
 
-  const selectedSubjects = shuffle(eligibleSubjects, random).slice(0, roundCount);
-  const renderedSubjects = await Promise.all(selectedSubjects.map(async (subject) => {
+  const selectedMethods = selectRoundMethods(
+    template,
+    roundCount,
+    random,
+    normalizedSelectionState.last_reveal_methods || [],
+  );
+  const animatedGifPathBySubjectKey = new Map();
+  if (selectedMethods.includes('pixelated')) {
+    await Promise.all(eligibleSubjects.map(async (subject) => {
+      const subjectKey = normalizeSlug(subject.id || subject.slug || subject.name);
+      const gifPath = await resolveAnimatedGifPath(subject);
+      if (subjectKey && gifPath) {
+        animatedGifPathBySubjectKey.set(subjectKey, gifPath);
+      }
+    }));
+    if (animatedGifPathBySubjectKey.size === 0) {
+      const previousMethods = new Set(
+        (normalizedSelectionState.last_reveal_methods || [])
+          .map((method) => normalizeProgressiveRevealMethod(method, ''))
+          .filter(Boolean),
+      );
+      selectedMethods.forEach((method, index) => {
+        if (method !== 'pixelated') return;
+        const alreadySelected = new Set(selectedMethods.filter((_, otherIndex) => otherIndex !== index));
+        const availableMethods = resolveRevealMethods(template).filter((candidate) => (
+          candidate !== 'pixelated' && !alreadySelected.has(candidate)
+        ));
+        const freshMethods = availableMethods.filter((candidate) => !previousMethods.has(candidate));
+        const pool = freshMethods.length > 0 ? freshMethods : availableMethods;
+        if (pool.length > 0) {
+          selectedMethods[index] = pool[Math.floor(random() * pool.length)];
+        }
+      });
+    }
+  }
+  const usedSubjectKeys = new Set();
+  const selectedSubjects = selectedMethods.map((method, index) => {
+    const requiresAnimatedGif = method === 'pixelated';
+    const eligiblePool = eligibleSubjects.filter((subject) => {
+      const subjectKey = normalizeSlug(subject.id || subject.slug || subject.name);
+      return subjectKey
+        && !usedSubjectKeys.has(subjectKey)
+        && (!requiresAnimatedGif || animatedGifPathBySubjectKey.has(subjectKey));
+    });
+    const subject = shuffle(eligiblePool, random)[0] || null;
+    if (!subject) {
+      const requirement = requiresAnimatedGif ? ' with an accessible animated GIF' : '';
+      throw new Error(`Progressive Reveal round ${index + 1} requires a unique Pokemon${requirement}.`);
+    }
+    usedSubjectKeys.add(normalizeSlug(subject.id || subject.slug || subject.name));
+    return subject;
+  });
+  const renderedSubjects = await Promise.all(selectedSubjects.map(async (subject, index) => {
+    const subjectKey = normalizeSlug(subject.id || subject.slug || subject.name);
     const [renderSpritePath, cryPath] = await Promise.all([
-      resolveRenderSpritePath(subject),
+      selectedMethods[index] === 'pixelated'
+        ? Promise.resolve(animatedGifPathBySubjectKey.get(subjectKey) || '')
+        : resolveRenderSpritePath(subject),
       resolvePokemonCryPath(subject),
     ]);
     return buildSubjectRecord(subject, renderSpritePath, cryPath);
@@ -407,12 +504,6 @@ export async function planPokemonProgressiveRevealChallenge({
     backgroundPool.backgrounds,
     random,
     normalizedSelectionState,
-  );
-  const selectedMethods = selectRoundMethods(
-    template,
-    roundCount,
-    random,
-    normalizedSelectionState.last_reveal_methods || [],
   );
   const hookText = pickSeededText(
     template?.question_contract?.hook_text,
@@ -456,13 +547,20 @@ export async function planPokemonProgressiveRevealChallenge({
     template?.layout?.rounds?.final_hold_seconds,
     DEFAULT_FINAL_HOLD_SECONDS,
   );
+  const showFirstRevealImmediately = template?.layout?.rounds?.show_first_reveal_immediately === true;
   const difficulty = String(template?.reveal?.difficulty || 'normal').trim().toLowerCase() || 'normal';
 
   const roundBlueprints = renderedSubjects.map((subject, index) => {
     const method = selectedMethods[index];
     const revealSeed = `${seed}:round-${index + 1}:${subject.pokedex_id || subject.name}:${method}`;
-    const revealConfig = resolveMethodConfig(template, method, random);
-    return { subject, index, method, revealSeed, revealConfig };
+    const roundDifficulty = resolveRoundDifficulty(template, index, difficulty);
+    const revealConfig = {
+      ...resolveMethodConfig(template, method, random),
+      ...(roundDifficulty.answerClarityProgress === null
+        ? {}
+        : { answer_clarity_progress: roundDifficulty.answerClarityProgress }),
+    };
+    return { subject, index, method, revealSeed, revealConfig, roundDifficulty };
   });
   const rounds = await Promise.all(roundBlueprints.map(async ({
     subject,
@@ -470,40 +568,66 @@ export async function planPokemonProgressiveRevealChallenge({
     method,
     revealSeed,
     revealConfig,
+    roundDifficulty,
   }) => {
-    let opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.sprite_path, template);
-    if (
-      opaqueAnalysis.opaquePoints.length === 0
-      && subject.render_sprite_path
-      && subject.render_sprite_path !== subject.sprite_path
-    ) {
-      opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.render_sprite_path, template);
+    const configuredPixelProgressSpeed = Number(revealConfig?.progress_speed_multiplier);
+    const configuredPixelAnswerClarity = Number(revealConfig?.answer_clarity_progress);
+    const pixelProgressSpeed = method === 'pixelated'
+      && Number.isFinite(configuredPixelProgressSpeed)
+      && configuredPixelProgressSpeed > 0
+      ? clamp(configuredPixelProgressSpeed, 0.01, 1)
+      : 1;
+    const pixelAnswerClarity = method === 'pixelated'
+      && Number.isFinite(configuredPixelAnswerClarity)
+      && configuredPixelAnswerClarity > 0
+      ? clamp(configuredPixelAnswerClarity, 0.05, 1)
+      : 1;
+    let coverage;
+    if (method === 'pixelated') {
+      coverage = {
+        completionProgress: pixelAnswerClarity,
+        estimatedOpaqueFraction: pixelAnswerClarity,
+        maskProgressAtCompletion: pixelAnswerClarity,
+        progressScale: 1,
+        sampledOpaquePixelCount: 0,
+      };
+    } else {
+      let opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.sprite_path, template);
+      if (
+        opaqueAnalysis.opaquePoints.length === 0
+        && subject.render_sprite_path
+        && subject.render_sprite_path !== subject.sprite_path
+      ) {
+        opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.render_sprite_path, template);
+      }
+      coverage = calculateOpaqueRevealCompletionProgress({
+        method,
+        seed: revealSeed,
+        config: {
+          ...revealConfig,
+          reveal_duration_seconds: fullRevealDurationSeconds,
+        },
+        opaquePoints: opaqueAnalysis.opaquePoints,
+        width: opaqueAnalysis.width,
+        height: opaqueAnalysis.height,
+        targetOpaqueFraction,
+      });
     }
-    const coverage = calculateOpaqueRevealCompletionProgress({
-      method,
-      seed: revealSeed,
-      config: {
-        ...revealConfig,
-        reveal_duration_seconds: fullRevealDurationSeconds,
-      },
-      opaquePoints: opaqueAnalysis.opaquePoints,
-      width: opaqueAnalysis.width,
-      height: opaqueAnalysis.height,
-      targetOpaqueFraction,
-    });
-    const revealDurationSeconds = Number((
-      fullRevealDurationSeconds * targetOpaqueFraction
+    const baseRevealDurationSeconds = fullRevealDurationSeconds * targetOpaqueFraction;
+    const revealDurationSeconds = Number((method === 'pixelated'
+      ? baseRevealDurationSeconds * (pixelAnswerClarity / pixelProgressSpeed)
+      : baseRevealDurationSeconds
     ).toFixed(3));
     return {
       round_number: index + 1,
       round_label: `${index + 1}/${roundCount}`,
       subject,
       scene_lead_seconds: index === 0
-        ? hookHoldSeconds
+        ? (showFirstRevealImmediately ? 0 : hookHoldSeconds)
         : transitionDurationSeconds + preRevealHoldSeconds,
       reveal_duration_seconds: revealDurationSeconds,
       full_reveal_duration_seconds: fullRevealDurationSeconds,
-      reveal_completion_progress: targetOpaqueFraction,
+      reveal_completion_progress: coverage.completionProgress,
       reveal_target_opaque_fraction: targetOpaqueFraction,
       reveal_estimated_opaque_fraction: coverage.estimatedOpaqueFraction,
       reveal_mask_progress_at_completion: coverage.maskProgressAtCompletion,
@@ -513,7 +637,10 @@ export async function planPokemonProgressiveRevealChallenge({
       final_hold_seconds: index === roundCount - 1 ? finalHoldSeconds : 0,
       reveal_method: method,
       reveal_seed: revealSeed,
-      reveal_difficulty: difficulty,
+      reveal_difficulty: roundDifficulty.id,
+      difficulty_id: roundDifficulty.id,
+      difficulty_label: roundDifficulty.label,
+      difficulty_color: roundDifficulty.color,
       reveal_config: {
         ...revealConfig,
         progress_scale: coverage.progressScale,
@@ -550,6 +677,11 @@ export async function planPokemonProgressiveRevealChallenge({
     selection: {
       mode: String(template?.selection_rules?.mode || 'random').trim().toLowerCase() || 'random',
       difficulty_id: difficulty,
+      difficulty_rounds: rounds.map((round) => ({
+        id: round.difficulty_id,
+        label: round.difficulty_label,
+        answer_clarity_progress: round.reveal_completion_progress,
+      })),
       round_count: roundCount,
       type_pair: [],
       selected_subject_count: renderedSubjects.length,

@@ -188,8 +188,7 @@ export async function renderPokeQuizzVideo({
     timerCountdown: inputRoleIndex.get('timer-countdown'),
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
     pokeball: inputRoleIndex.get('pokeball-grid'),
-    normalSprite: inputRoleIndex.get('normal-sprite'),
-    shinySprite: inputRoleIndex.get('shiny-sprite'),
+    cellSprites: renderPlan.grid.cells.map((cell) => inputRoleIndex.get(`cell-${cell.index}-sprite`)),
     shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
   };
   const fontPath = await resolveFontPath(fontCandidates);

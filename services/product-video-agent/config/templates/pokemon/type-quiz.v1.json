@@ -51,7 +51,8 @@
       }
     },
     "mode": "random",
-    "type_cardinality": "any"
+    "type_cardinality": "any",
+    "minimum_dual_type_rounds_between_single_type_rounds": 3
   },
   "question_contract": {
     "hook_text": "Can you guess the typing?",

@@ -28,6 +28,11 @@ function buildTextLayout(template) {
     hook_y: ensureNumber(config.hook_y, 150),
     hook_font_size: Math.max(48, Math.round(ensureNumber(config.hook_font_size, 102))),
     hook_line_gap_px: Math.max(0, Math.round(ensureNumber(config.hook_line_gap_px, 8))),
+    difficulty_label_y: ensureNumber(config.difficulty_label_y, 360),
+    difficulty_label_font_size: Math.max(
+      32,
+      Math.round(ensureNumber(config.difficulty_label_font_size, 62)),
+    ),
     counter_x: ensureNumber(config.counter_x, 72),
     counter_y: ensureNumber(config.counter_y, 92),
     counter_font_size: Math.max(30, Math.round(ensureNumber(config.counter_font_size, 48))),

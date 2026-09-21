@@ -25,11 +25,11 @@ const PROFFMON_CONFIG_PATH = 'services/product-video-agent/config/channels/proff
 const POKE_QUIZZ_CONFIG_PATH = 'services/product-video-agent/config/channels/poke-quizz-youtube.json';
 const PROFFMON_WEIGHT_THREE_TEMPLATE_IDS = new Set([
   'pokemon.progressive-reveal.v1',
+  'pokemon.pixelated-reveal.v1',
   'pokemon.stat-clash.v1',
   'pokemon.build-your-team.v1',
   'pokemon.cry-match.v1',
 ]);
-
 async function loadJson(projectRelativePath) {
   return JSON.parse(await readFile(resolve(PROJECT_ROOT, projectRelativePath), 'utf8'));
 }

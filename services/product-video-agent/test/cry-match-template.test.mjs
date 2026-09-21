@@ -9,6 +9,7 @@ import {
 import {
   buildPokeQuizzRenderPlan,
   buildAudioFilterScript,
+  buildVisualFilterScript,
 } from '../src/domains/pokemon/templates/cry-match/renderer.mjs';
 import { buildCryMatchCryCues } from '../src/domains/pokemon/templates/cry-match/render/audio-filter-script.mjs';
 import {
@@ -54,6 +55,10 @@ test('cry-match config sanity — template_id + template_key + mode align', asyn
   assert.equal(template.selection_rules.candidate_count, 4);
   assert.ok(template.audio?.cry_playback?.enabled, 'cry_playback must be enabled');
   assert.ok(template.layout?.cry_meter?.enabled, 'cry_meter overlay must be enabled');
+  assert.deepEqual(
+    template.layout.cry_meter.equalizer.palettes.map((palette) => palette.id),
+    ['electric-blue', 'rainbow', 'red', 'yellow', 'green', 'purple', 'sunset'],
+  );
 });
 
 test('cry-match template is exposed in the slash-command PRODUCT_VIDEO_TEMPLATE_OPTIONS', () => {
@@ -123,6 +128,11 @@ test('planner picks 4 candidates per round, marks exactly one as the target, and
     plan.narration.lines.length, 1,
     'exactly one TTS narration line should be emitted (the round-1 hook)',
   );
+  assert.ok(
+    template.layout.cry_meter.equalizer.palettes
+      .some((palette) => palette.id === plan.selection.cry_meter_palette.id),
+    'planner must select one configured soundbar palette for the whole video',
+  );
 });
 
 test('cry cue builder emits countdown-start cues and a reveal replay for the target only', async () => {
@@ -189,7 +199,46 @@ test('render plan carries the cry_meter_layout and drops the old stat_value_layo
   const renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath: '/tmp/fake.mp4' });
   assert.ok(renderPlan.cry_meter_layout, 'render plan must include cry_meter_layout');
   assert.equal(renderPlan.cry_meter_layout.enabled, true);
+  assert.deepEqual(
+    renderPlan.cry_meter_layout.equalizer.palette,
+    plan.selection.cry_meter_palette,
+  );
   assert.ok(!('stat_value_layout' in renderPlan), 'stat_value_layout leftover must be dropped');
+});
+
+test('visual soundbar colors are generated from the video-level seeded palette', async () => {
+  const template = await loadTemplate();
+  const pokedexRows = Array.from({ length: 12 }, (_, index) => buildFixtureSubject(index + 1));
+  const plan = await planPokemonCryMatchChallenge({
+    template,
+    pokedexRows,
+    seed: 'cry-match-colored-soundbar',
+    assetInventory: {
+      backgrounds: ['/fake/bg.png'], sound_effects: { countdown_tick: '/f/t.wav', timer_end: '/f/d.wav', all: [] },
+      overlay_presets: { grass_plateau: '/f/p.png', pokeball_primary: '/f/pb.gif' },
+      overlays: [], music: [],
+    },
+    selectionState: null,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath: '/tmp/fake.mp4' });
+  let nextInputRef = 1;
+  const roundInputRefs = renderPlan.rounds.map((round) => {
+    const candidates = round.candidates.map(() => nextInputRef++);
+    return { candidates, still_candidates: [], cry: nextInputRef++ };
+  });
+  const visualFilter = buildVisualFilterScript(plan, template, renderPlan, {
+    background: 0,
+    introPokeball: null,
+    grassPlatform: null,
+    rounds: roundInputRefs,
+  });
+  const paletteSize = plan.selection.cry_meter_palette.colors.length;
+
+  assert.match(
+    visualFilter.script,
+    new RegExp(`geq=r='if\\(eq\\(mod\\(floor\\(X\\/48\\)\\\\,${paletteSize}\\)`, 'u'),
+  );
+  assert.doesNotMatch(visualFilter.script, /30\+100\*abs\(sin/u);
 });
 
 test('audio filter script includes cry cue inputs when cues are supplied', async () => {

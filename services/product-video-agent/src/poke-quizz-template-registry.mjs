@@ -100,6 +100,11 @@ const TEMPLATE_REGISTRY = Object.freeze({
     buildRenderPlan: buildProgressiveRevealRenderPlan,
     renderVideo: renderProgressiveRevealVideo,
   }),
+  'pixelated-reveal': Object.freeze({
+    planner: planPokemonProgressiveRevealChallenge,
+    buildRenderPlan: buildProgressiveRevealRenderPlan,
+    renderVideo: renderProgressiveRevealVideo,
+  }),
   'stat-clash': Object.freeze({
     planner: planPokemonStatClashChallenge,
     buildRenderPlan: buildStatClashRenderPlan,
@@ -152,6 +157,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   if (templateKey === 'progressive-reveal' || templateKey === 'guess-before-revealed') {
     return 'progressive-reveal';
   }
+  if (templateKey === 'pixelated-reveal') {
+    return 'pixelated-reveal';
+  }
   if (templateKey === 'cry-match') {
     return 'cry-match';
   }
@@ -175,6 +183,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   }
   if (templateId.includes('progressive-reveal')) {
     return 'progressive-reveal';
+  }
+  if (templateId.includes('pixelated-reveal')) {
+    return 'pixelated-reveal';
   }
   if (templateId.includes('cry-match')) {
     return 'cry-match';
