@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PRODUCT_VIDEO_TEMPLATE_OPTIONS } from '../../task-router/src/product-video-command-parser.mjs';
 import { buildPokeQuizzFallbackPublicationMetadata } from '../src/local-publication-metadata.mjs';
@@ -97,6 +98,8 @@ test('progressive reveal is exposed through routing, runtime config, and scoped 
   assert.equal(runtime.templatePath, 'services/product-video-agent/config/templates/pokemon/progressive-reveal.v1.json');
   assert.match(template.layout.text.font_candidates[0], /Arial Black\.ttf$/u);
   assert.equal(template.layout.reveal_box.background_color, 'white');
+  assert.equal(template.layout.reveal_box.sprite_visible_margin_px, 24);
+  assert.equal(template.layout.reveal_box.sprite_crop_padding_px, 4);
   assert.equal(template.reveal.method_config.strips.strip_width_px, 6);
   assert.equal(template.reveal.method_config.strips.line_reveal_min_seconds, 0.3);
   assert.equal(template.reveal.method_config.strips.line_reveal_max_seconds, 1);
@@ -223,6 +226,68 @@ test('fixed reveal mode uses one configured algorithm for the entire video', asy
     assetInventory: buildAssetInventory(),
   });
   assert.deepEqual(plan.selection.reveal_methods, ['strips', 'strips', 'strips']);
+});
+
+test('visible alpha bounds crop and enlarge differently padded sprites', async (context) => {
+  const runtimeDirectory = await mkdtemp(join(tmpdir(), 'orion-progressive-alpha-fit-'));
+  context.after(() => rm(runtimeDirectory, { recursive: true, force: true }));
+  const spritePath = join(runtimeDirectory, 'padded-sprite.png');
+  const { default: sharp } = await import('sharp');
+  const visibleSprite = await sharp({
+    create: {
+      width: 30,
+      height: 50,
+      channels: 4,
+      background: { r: 0, g: 120, b: 255, alpha: 1 },
+    },
+  }).png().toBuffer();
+  await sharp({
+    create: {
+      width: 100,
+      height: 100,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: visibleSprite, left: 35, top: 25 }])
+    .png()
+    .toFile(spritePath);
+
+  const template = await loadTemplate();
+  template.reveal.mode = 'fixed_video';
+  template.reveal.method = 'wipe';
+  const plan = await planPokemonProgressiveRevealChallenge({
+    template,
+    pokedexRows: Array.from({ length: 6 }, (_, index) => ({
+      ...buildFixtureSubject(index + 1),
+      sprite_path: spritePath,
+    })),
+    seed: 'progressive-reveal-visible-alpha-fit',
+    assetInventory: buildAssetInventory(),
+  });
+  const expectedCrop = {
+    x: 31,
+    y: 21,
+    width: 38,
+    height: 58,
+    source_width: 100,
+    source_height: 100,
+  };
+  for (const round of plan.rounds) {
+    assert.deepEqual(round.subject.sprite_crop, expectedCrop);
+  }
+
+  const renderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template,
+    outputPath: '/tmp/progressive-reveal-alpha-fit.mp4',
+  });
+  const visualFilter = buildVisualFilterScript(plan, template, renderPlan, {
+    background: 0,
+    rounds: renderPlan.rounds.map((_, index) => ({ sprite: index + 1 })),
+  });
+  assert.match(visualFilter.script, /crop=38:58:31:21/u);
+  assert.match(visualFilter.script, /scale=700:700:force_original_aspect_ratio=decrease/u);
 });
 
 test('all V1 reveal algorithms build deterministic progressive alpha masks', () => {
@@ -380,6 +445,7 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
       metadata: { youtube_handle: '@PokeGuesss' },
     },
   });
+  plan.rounds[0].answer_text = 'ALOLAN EXEGGUTOR FORM';
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
@@ -428,6 +494,9 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /xfade=transition=slideleft/u);
   assert.match(visualFilter.script, /WHO IS THAT/u);
   assert.match(visualFilter.script, /POKEMON\?/u);
+  assert.match(visualFilter.script, /drawtext=text='ALOLAN'/u);
+  assert.match(visualFilter.script, /drawtext=text='EXEGGUTOR FORM'/u);
+  assert.doesNotMatch(visualFilter.script, /ALOLAN(?:\\+n|n)EXEGGUTOR FORM/u);
   assert.doesNotMatch(visualFilter.script, /FALLING PARTICLES|scene0method/u);
   assert.match(visualFilter.script, /\*0\.6/u);
   assert.match(visualFilter.script, /split=11\[round0spriteBase\]\[round0fallSource0\]/u);

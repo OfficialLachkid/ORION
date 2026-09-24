@@ -90,6 +90,8 @@
       "width_px": 760,
       "height_px": 760,
       "sprite_size_px": 650,
+      "sprite_visible_margin_px": 24,
+      "sprite_crop_padding_px": 4,
       "background_color": "white",
       "border_color": "white@0.92",
       "border_width_px": 6,

@@ -60,26 +60,59 @@ function appendLayeredText(filters, currentLabel, {
   centerMultiline = false,
 }) {
   const displayText = wrapTextToWidth(text, fontSize, maxWidth);
-  const lineCount = displayText.split('\n').length;
+  const displayLines = displayText.split('\n');
+  const lineCount = displayLines.length;
   const adjustedY = centerMultiline
     ? y - (((lineCount - 1) * (fontSize + lineSpacing)) / 2)
     : y;
-  const escapedText = escapeDrawtextText(displayText).replaceAll('\n', '\\n');
   const enable = formatEnableBetween(startSeconds, endSeconds);
-  const lineSpacingPart = lineSpacing > 0 ? `:line_spacing=${lineSpacing}` : '';
-  const shadowLabel = `${labelPrefix}shadow`;
-  filters.push(
-    `[${currentLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=black@0.68:fontsize=${fontSize}${lineSpacingPart}:borderw=${outlineWidth}:bordercolor=black@0.8:fix_bounds=1:x=(w-text_w)/2+${Math.max(3, depthPx)}:y=${roundTime(adjustedY + Math.max(5, depthPx + 2))}:enable='${enable}'[${shadowLabel}]`,
-  );
-  const depthLabel = `${labelPrefix}depth`;
-  filters.push(
-    `[${shadowLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=0x7A6210:fontsize=${fontSize}${lineSpacingPart}:borderw=${outlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2+${Math.max(2, Math.floor(depthPx / 2))}:y=${roundTime(adjustedY + Math.max(2, Math.floor(depthPx / 2)))}:enable='${enable}'[${depthLabel}]`,
-  );
-  const outputLabel = `${labelPrefix}main`;
-  filters.push(
-    `[${depthLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=${color}:fontsize=${fontSize}${lineSpacingPart}:borderw=${outlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${roundTime(adjustedY)}:enable='${enable}'[${outputLabel}]`,
-  );
-  return outputLabel;
+  const appendPass = ({
+    inputLabel,
+    suffix,
+    fontColor,
+    borderColor,
+    xOffset,
+    yOffset,
+  }) => {
+    let passLabel = inputLabel;
+    for (const [lineIndex, line] of displayLines.entries()) {
+      const isLastLine = lineIndex === displayLines.length - 1;
+      const outputLabel = isLastLine
+        ? `${labelPrefix}${suffix}`
+        : `${labelPrefix}${suffix}Line${lineIndex}`;
+      const xOffsetPart = xOffset > 0 ? `+${xOffset}` : '';
+      const lineY = adjustedY + yOffset + (lineIndex * (fontSize + lineSpacing));
+      filters.push(
+        `[${passLabel}]drawtext=text='${escapeDrawtextText(line)}'${fontPart}:fontcolor=${fontColor}:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=${borderColor}:fix_bounds=1:x=(w-text_w)/2${xOffsetPart}:y=${roundTime(lineY)}:enable='${enable}'[${outputLabel}]`,
+      );
+      passLabel = outputLabel;
+    }
+    return passLabel;
+  };
+  const shadowLabel = appendPass({
+    inputLabel: currentLabel,
+    suffix: 'shadow',
+    fontColor: 'black@0.68',
+    borderColor: 'black@0.8',
+    xOffset: Math.max(3, depthPx),
+    yOffset: Math.max(5, depthPx + 2),
+  });
+  const depthLabel = appendPass({
+    inputLabel: shadowLabel,
+    suffix: 'depth',
+    fontColor: '0x7A6210',
+    borderColor: 'black',
+    xOffset: Math.max(2, Math.floor(depthPx / 2)),
+    yOffset: Math.max(2, Math.floor(depthPx / 2)),
+  });
+  return appendPass({
+    inputLabel: depthLabel,
+    suffix: 'main',
+    fontColor: color,
+    borderColor: 'black',
+    xOffset: 0,
+    yOffset: 0,
+  });
 }
 
 function resolveHeadlineLines(template) {
@@ -104,6 +137,16 @@ function buildPixelatedResolutionExpression(progressExpression, configuredSteps 
     expression = `if(lt(${progressExpression},${threshold}),${resolutions[index]},${expression})`;
   }
   return expression;
+}
+
+function resolveSpriteCrop(subject = {}) {
+  const crop = subject?.sprite_crop;
+  if (!crop || typeof crop !== 'object') return null;
+  const x = Math.max(0, Math.round(Number(crop.x) || 0));
+  const y = Math.max(0, Math.round(Number(crop.y) || 0));
+  const width = Math.round(Number(crop.width) || 0);
+  const height = Math.round(Number(crop.height) || 0);
+  return width > 0 && height > 0 ? { x, y, width, height } : null;
 }
 
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = null) {
@@ -159,6 +202,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const coverX = box.x + coverInset;
     const coverY = box.y + coverInset;
     const spriteInput = inputRefs.rounds[roundIndex].sprite;
+    const spriteCrop = resolveSpriteCrop(round.subject);
+    const spriteCropFilter = spriteCrop
+      ? `,crop=${spriteCrop.width}:${spriteCrop.height}:${spriteCrop.x}:${spriteCrop.y}`
+      : '';
+    const fittedSpriteWidth = spriteCrop
+      ? Math.max(2, coverWidth - (box.sprite_visible_margin_px * 2))
+      : box.sprite_size_px;
+    const fittedSpriteHeight = spriteCrop
+      ? Math.max(2, coverHeight - (box.sprite_visible_margin_px * 2))
+      : box.sprite_size_px;
     const spriteBaseLabel = `round${roundIndex}spriteBase`;
     const fallingProgress = buildProgressiveRevealProgressExpression({
       startSeconds: round.local.reveal_start_seconds,
@@ -183,7 +236,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         },
       })
       : [];
-    const spritePreparation = `[${spriteInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS`;
+    const spritePreparation = `[${spriteInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba${spriteCropFilter}`;
     if (round.reveal_method === 'pixelated') {
       // The scale filter exposes the per-frame variable as lowercase `n`.
       // Progressive alpha masks use uppercase `N`, so their shared helper
@@ -207,10 +260,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `${spritePreparation},format=rgba,split=2[${pixelSourceLabel}][${answerSourceLabel}]`,
       );
       filters.push(
-        `[${pixelSourceLabel}]scale=w='${pixelResolution}':h='${pixelResolution}':eval=frame:force_original_aspect_ratio=decrease:flags=neighbor,scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${spriteBaseLabel}]`,
+        `[${pixelSourceLabel}]scale=w='${pixelResolution}':h='${pixelResolution}':eval=frame:force_original_aspect_ratio=decrease:flags=neighbor,scale=${fittedSpriteWidth}:${fittedSpriteHeight}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${spriteBaseLabel}]`,
       );
       filters.push(
-        `[${answerSourceLabel}]scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${sharpAnswerLabel}]`,
+        `[${answerSourceLabel}]scale=${fittedSpriteWidth}:${fittedSpriteHeight}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${sharpAnswerLabel}]`,
       );
       const preRevealCoverLabel = `scene${roundIndex}pixelPreCover`;
       if (round.local.reveal_start_seconds > 0) {
@@ -228,7 +281,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       currentLabel = sharpSceneLabel;
     } else {
-      const scaledSpritePreparation = `${spritePreparation},scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1`;
+      const scaledSpritePreparation = `${spritePreparation},scale=${fittedSpriteWidth}:${fittedSpriteHeight}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1`;
       if (fallingPhases.length > 0) {
         filters.push(
           `${scaledSpritePreparation},pad=${coverWidth}:${coverHeight}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,split=${fallingPhases.length + 1}[${spriteBaseLabel}]${fallingPhases.map((phase) => `[round${roundIndex}fallSource${phase.index}]`).join('')}`,

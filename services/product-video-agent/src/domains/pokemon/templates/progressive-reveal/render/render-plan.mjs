@@ -15,6 +15,14 @@ function buildRevealBoxLayout(template) {
     center_x: roundTime(centerX),
     center_y: roundTime(centerY),
     sprite_size_px: Math.max(240, Math.round(ensureNumber(config.sprite_size_px, 650))),
+    sprite_visible_margin_px: Math.max(
+      0,
+      Math.round(ensureNumber(config.sprite_visible_margin_px, 24)),
+    ),
+    sprite_crop_padding_px: Math.max(
+      0,
+      Math.round(ensureNumber(config.sprite_crop_padding_px, 4)),
+    ),
     background_color: String(config.background_color || 'black@0.88').trim() || 'black@0.88',
     border_color: String(config.border_color || 'white@0.92').trim() || 'white@0.92',
     border_width_px: Math.max(0, Math.round(ensureNumber(config.border_width_px, 6))),
