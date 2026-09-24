@@ -70,10 +70,29 @@ function createEmptyAnalysis(layout) {
   };
 }
 
-function findVisibleBounds(data, info) {
+export function resolveSpriteFrameHeight(metadata, info) {
+  const totalHeight = Number(info?.height || 0);
+  const pageHeight = Number(metadata?.pageHeight || info?.pageHeight || 0);
+  if (pageHeight > 0) return Math.min(totalHeight || pageHeight, Math.round(pageHeight));
+
+  const metadataHeight = Number(metadata?.height || 0);
+  const pages = Math.max(1, Math.round(Number(metadata?.pages || info?.pages || 1)));
+  if (metadataHeight > 0) {
+    if (pages > 1 && totalHeight > 0 && metadataHeight >= totalHeight) {
+      return Math.max(1, Math.round(metadataHeight / pages));
+    }
+    return Math.min(totalHeight || metadataHeight, Math.round(metadataHeight));
+  }
+  return totalHeight > 0 ? Math.max(1, Math.round(totalHeight / pages)) : 0;
+}
+
+function findVisibleBounds(data, info, frameHeightHint) {
   const sourceWidth = Number(info?.width || 0);
   const totalHeight = Number(info?.height || 0);
-  const sourceHeight = Number(info?.pageHeight || totalHeight);
+  const hintedFrameHeight = Number(frameHeightHint || 0);
+  const sourceHeight = hintedFrameHeight > 0
+    ? Math.min(totalHeight, Math.round(hintedFrameHeight))
+    : Number(info?.pageHeight || totalHeight);
   const channels = Number(info?.channels || 4);
   if (
     sourceWidth <= 0
@@ -178,11 +197,14 @@ export async function loadOpaqueSpriteAnalysis(spritePath, template) {
     const sharp = await loadSharp();
     if (!sharp) return createEmptyAnalysis(layout);
     try {
-      const { data, info } = await sharp(normalizedPath, { animated: true, pages: -1 })
+      const image = sharp(normalizedPath, { animated: true, pages: -1 });
+      const metadata = await image.metadata();
+      const { data, info } = await image
         .ensureAlpha()
         .raw()
         .toBuffer({ resolveWithObject: true });
-      const bounds = findVisibleBounds(data, info);
+      const frameHeight = resolveSpriteFrameHeight(metadata, info);
+      const bounds = findVisibleBounds(data, info, frameHeight);
       return bounds ? buildVisibleAnalysis(bounds, layout) : createEmptyAnalysis(layout);
     } catch {
       return createEmptyAnalysis(layout);

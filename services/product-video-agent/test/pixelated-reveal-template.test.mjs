@@ -20,6 +20,7 @@ import { planPokemonProgressiveRevealChallenge } from '../src/domains/pokemon/te
 import { buildPokeQuizzRenderPlan } from '../src/domains/pokemon/templates/progressive-reveal/renderer.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/progressive-reveal/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/progressive-reveal/render/visual-inputs.mjs';
+import { resolveSpriteFrameHeight } from '../src/domains/pokemon/templates/progressive-reveal/render/sprite-alpha-analysis.mjs';
 
 const HERE = resolve(import.meta.dirname);
 const PROJECT_ROOT = resolve(HERE, '..', '..', '..');
@@ -36,6 +37,17 @@ const PROGRESSIVE_TEMPLATE_PATH = resolve(
 async function loadJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
+
+test('animated GIF analysis uses one frame height instead of the stacked raw height', () => {
+  assert.equal(resolveSpriteFrameHeight(
+    { height: 64, pageHeight: 64, pages: 69 },
+    { height: 4416, width: 90, channels: 4 },
+  ), 64);
+  assert.equal(resolveSpriteFrameHeight(
+    { height: 4416, pages: 69 },
+    { height: 4416, width: 90, channels: 4 },
+  ), 64);
+});
 
 function buildFixtureSubject(index, animatedGifPath) {
   return {
