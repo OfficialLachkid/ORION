@@ -33,6 +33,9 @@ const promptLabelByPoolKey = Object.freeze({
   final_stage: 'Final Stage',
   legendary_mythical: 'Legendary',
   dynamax: 'Dynamax',
+  mega: 'Mega',
+  final_starter: 'Final Starter',
+  mega_legendary: 'Mega or Legendary',
 });
 const promptColorByPoolKey = Object.freeze({
   baby: '0xFF6FAE',
@@ -42,6 +45,9 @@ const promptColorByPoolKey = Object.freeze({
   final_stage: '0xFFD60A',
   legendary_mythical: '0xFF3B30',
   dynamax: '0xAF52DE',
+  mega: '0xFF2D9A',
+  final_starter: '0x30D158',
+  mega_legendary: '0xFF453A',
 });
 
 const fixtureAssets = [
@@ -85,6 +91,9 @@ const fixturePokemon = [
   ['venusaur', 'Venusaur', { is_final_evolution: true, evolution_stage: 'final' }],
   ['meganium', 'Meganium', { is_final_evolution: true, evolution_stage: 'final' }],
   ['charizard-mega-x', 'Mega Charizard X', { is_final_evolution: true, evolution_stage: 'final', pokemon_api: { is_mega: true } }],
+  ['blastoise-mega', 'Mega Blastoise', { is_final_evolution: true, evolution_stage: 'final', pokemon_api: { is_mega: true } }],
+  ['venusaur-mega', 'Mega Venusaur', { is_final_evolution: true, evolution_stage: 'final', pokemon_api: { is_mega: true } }],
+  ['gengar-mega', 'Mega Gengar', { is_final_evolution: true, evolution_stage: 'final', pokemon_api: { is_mega: true } }],
   ['mewtwo', 'Mewtwo', { is_legendary: true }],
   ['mew', 'Mew', { is_mythical: true }],
   ['lugia', 'Lugia', { is_legendary: true }],
@@ -106,6 +115,26 @@ await Promise.all([
 ].map((filename) => writeFile(mediaPath(filename), 'fixture', 'utf8')));
 
 const template = JSON.parse(await readFile(TEMPLATE_CONFIG_PATH, 'utf8'));
+
+function withFixedRoundCount(baseTemplate, roundCount, variantId = `fixed_${roundCount}_rounds`) {
+  return {
+    ...baseTemplate,
+    selection_rules: {
+      ...baseTemplate.selection_rules,
+      round_count: roundCount,
+      round_count_weights: {
+        [variantId]: 1,
+      },
+      round_count_levels: {
+        [variantId]: {
+          round_count: roundCount,
+        },
+      },
+    },
+  };
+}
+
+const sixRoundTemplate = withFixedRoundCount(template, 6, 'six_rounds');
 
 const pokedexRows = fixturePokemon.map(([slug, name, metadata], index) => ({
   id: `fixture-${slug}`,
@@ -164,9 +193,25 @@ test('build-your-team config sanity aligns template identity and pool count', ()
   assert.equal(template.template_id, 'pokemon.build-your-team.v1');
   assert.equal(template.template_key, 'build-your-team');
   assert.equal(template.selection_rules.round_count, 6);
+  assert.deepEqual(template.selection_rules.round_count_weights, {
+    three_rounds: 1,
+    four_rounds: 1,
+    five_rounds: 1,
+    six_rounds: 1,
+  });
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(template.selection_rules.round_count_levels)
+      .map(([variantId, level]) => [variantId, level.round_count])),
+    {
+      three_rounds: 3,
+      four_rounds: 4,
+      five_rounds: 5,
+      six_rounds: 6,
+    },
+  );
   assert.equal(template.selection_rules.candidate_count, 4);
   assert.equal(template.selection_rules.max_shiny_per_round, 1);
-  assert.equal(template.selection_rules.pool_variants.length, 7);
+  assert.equal(template.selection_rules.pool_variants.length, 10);
   assert.deepEqual(
     Object.fromEntries(template.selection_rules.pool_variants.map((pool) => [pool.key, pool.prompt_label])),
     promptLabelByPoolKey,
@@ -266,9 +311,9 @@ test('template registry resolves build-your-team planner and render path', () =>
   assert.equal(planner, planPokemonBuildYourTeamChallenge);
 });
 
-test('build-your-team planner builds six four-option pool rounds', async () => {
+test('build-your-team planner builds six four-option pool rounds when the six-round variant is selected', async () => {
   const plan = await planPokemonBuildYourTeamChallenge({
-    template,
+    template: sixRoundTemplate,
     pokedexRows,
     seed: 'build-team-plan',
     assetInventory,
@@ -277,6 +322,7 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
   assert.equal(plan.template_id, 'pokemon.build-your-team.v1');
   assert.equal(plan.template_key, 'build-your-team');
   assert.equal(plan.selection.mode, 'team_builder');
+  assert.equal(plan.selection.round_count_variant_id, 'six_rounds');
   assert.equal(plan.selection.round_count, 6);
   assert.equal(plan.selection.candidate_count, 4);
   assert.equal(plan.selection.display_subject_count, 24);
@@ -299,6 +345,9 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
     'final_stage',
     'legendary_mythical',
     'dynamax',
+    'mega',
+    'final_starter',
+    'mega_legendary',
   ].includes(poolKey)));
   assert.equal(plan.rounds.length, 6);
   for (const round of plan.rounds) {
@@ -339,14 +388,31 @@ test('build-your-team planner builds six four-option pool rounds', async () => {
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Build Your Team$/u);
 });
 
+test('build-your-team planner can deterministically select every configured round-count variant', async () => {
+  const cases = [
+    ['build-team-round-variant-10', 'three_rounds', 3],
+    ['build-team-round-variant-9', 'four_rounds', 4],
+    ['build-team-round-variant-1', 'five_rounds', 5],
+    ['build-team-round-variant-3', 'six_rounds', 6],
+  ];
+
+  for (const [seed, expectedVariantId, expectedRoundCount] of cases) {
+    const plan = await planPokemonBuildYourTeamChallenge({
+      template,
+      pokedexRows,
+      seed,
+      assetInventory,
+    });
+    assert.equal(plan.selection.round_count_variant_id, expectedVariantId);
+    assert.equal(plan.selection.round_count, expectedRoundCount);
+    assert.equal(plan.rounds.length, expectedRoundCount);
+    assert.equal(plan.selection.display_subject_count, expectedRoundCount * 4);
+    assert.equal(plan.rounds.at(-1)?.round_label, `${expectedRoundCount}/${expectedRoundCount}`);
+  }
+});
+
 test('build-your-team weights common Pokeball sprites more heavily', async () => {
-  const weightedTemplate = {
-    ...template,
-    selection_rules: {
-      ...template.selection_rules,
-      round_count: 250,
-    },
-  };
+  const weightedTemplate = withFixedRoundCount(template, 250, 'weighted_sample');
   const plan = await planPokemonBuildYourTeamChallenge({
     template: weightedTemplate,
     pokedexRows,
@@ -369,9 +435,9 @@ test('build-your-team weights common Pokeball sprites more heavily', async () =>
 
 test('build-your-team shiny selection is deterministic and capped to one per round', async () => {
   const forcedShinyTemplate = {
-    ...template,
+    ...sixRoundTemplate,
     selection_rules: {
-      ...template.selection_rules,
+      ...sixRoundTemplate.selection_rules,
       shiny_chance_per_candidate: 1,
       max_shiny_per_round: 1,
     },
@@ -394,18 +460,12 @@ test('build-your-team shiny selection is deterministic and capped to one per rou
   assert.equal(plan.assets.audio.selected_sound_effects.shiny, mediaPath('shiny.mp3'));
 });
 
-test('build-your-team pool selectors handle babies starters and non-mega final stages', async () => {
-  const sevenRoundTemplate = {
-    ...template,
-    selection_rules: {
-      ...template.selection_rules,
-      round_count: 7,
-    },
-  };
+test('build-your-team pool selectors cover the original and new specialty pools', async () => {
+  const allPoolTemplate = withFixedRoundCount(template, 10, 'all_pools');
   const plan = await planPokemonBuildYourTeamChallenge({
-    template: sevenRoundTemplate,
+    template: allPoolTemplate,
     pokedexRows,
-    seed: 'build-team-seven-pools',
+    seed: 'build-team-all-pools',
     assetInventory,
   });
 
@@ -417,10 +477,16 @@ test('build-your-team pool selectors handle babies starters and non-mega final s
     'final_stage',
     'legendary_mythical',
     'dynamax',
+    'mega',
+    'final_starter',
+    'mega_legendary',
   ]));
   const babyRound = plan.rounds.find((round) => round.pool_key === 'baby');
   const starterRound = plan.rounds.find((round) => round.pool_key === 'starter');
   const finalRound = plan.rounds.find((round) => round.pool_key === 'final_stage');
+  const megaRound = plan.rounds.find((round) => round.pool_key === 'mega');
+  const finalStarterRound = plan.rounds.find((round) => round.pool_key === 'final_starter');
+  const megaLegendaryRound = plan.rounds.find((round) => round.pool_key === 'mega_legendary');
   assert.ok(babyRound.candidates.every((candidate) => (
     ['pichu', 'cleffa', 'igglybuff', 'togepi'].includes(candidate.subject.slug)
   )));
@@ -435,23 +501,31 @@ test('build-your-team pool selectors handle babies starters and non-mega final s
     )),
     JSON.stringify(finalRound.candidates.map((candidate) => candidate.subject.slug)),
   );
+  assert.ok(megaRound.candidates.every((candidate) => candidate.subject.slug.includes('mega')));
+  assert.ok(finalStarterRound.candidates.every((candidate) => (
+    ['charizard', 'blastoise', 'venusaur', 'meganium'].includes(candidate.subject.slug)
+  )));
+  assert.ok(megaLegendaryRound.candidates.every((candidate) => (
+    candidate.subject.slug.includes('mega')
+      || ['mewtwo', 'lugia'].includes(candidate.subject.slug)
+  )));
 });
 
 test('build-your-team render plan reuses grid reveal without stat or decoy reveal overlays', async () => {
   const plan = await planPokemonBuildYourTeamChallenge({
-    template,
+    template: sixRoundTemplate,
     pokedexRows,
     seed: 'build-team-render',
     assetInventory,
   });
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
-    template,
+    template: sixRoundTemplate,
     outputPath: '/tmp/build-your-team.mp4',
   });
   const visualFilter = buildVisualFilterScript(
     plan,
-    template,
+    sixRoundTemplate,
     renderPlan,
     {
       background: 0,
@@ -565,13 +639,13 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
   const firstPokeballSpeed = renderPlan.rounds[0].candidates[0].pokeball_wiggle_speed_multiplier;
   const firstPokeballDirection = renderPlan.rounds[0].candidates[0].pokeball_wiggle_direction_multiplier;
   const firstPokeballFrequencyRadians = Number((
-    template.renderer.held_pokeball_wiggle_frequency_hz
+    sixRoundTemplate.renderer.held_pokeball_wiggle_frequency_hz
     * firstPokeballSpeed
     * Math.PI
     * 2
   ).toFixed(3));
   const firstRoundWiggleFrequencies = renderPlan.rounds[0].candidates.map((candidate) => Number((
-    template.renderer.held_pokeball_wiggle_frequency_hz
+    sixRoundTemplate.renderer.held_pokeball_wiggle_frequency_hz
     * candidate.pokeball_wiggle_speed_multiplier
     * Math.PI
     * 2
@@ -611,7 +685,7 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
     return y + fontSize;
   }));
   assert.ok(
-    lowestPromptEdge <= renderPlan.timer_layout.y - template.layout.text.prompt_above_timer_gap_px,
+    lowestPromptEdge <= renderPlan.timer_layout.y - sixRoundTemplate.layout.text.prompt_above_timer_gap_px,
     `${lowestPromptEdge} must stay above timer y=${renderPlan.timer_layout.y}`,
   );
   assert.equal(cryCues.length, 24);
@@ -625,9 +699,9 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
 
 test('build-your-team render path overlays shiny sparkle and audio for shiny candidates', async () => {
   const forcedShinyTemplate = {
-    ...template,
+    ...sixRoundTemplate,
     selection_rules: {
-      ...template.selection_rules,
+      ...sixRoundTemplate.selection_rules,
       shiny_chance_per_candidate: 1,
       max_shiny_per_round: 1,
     },
