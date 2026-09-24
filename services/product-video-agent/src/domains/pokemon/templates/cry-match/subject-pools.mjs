@@ -353,10 +353,11 @@ function selectWeightedPool(pools, random) {
   return pools.at(-1) || null;
 }
 
-export function selectCryMatchSubjectPool({
+export function selectCryMatchRoundPools({
   eligibleSubjects,
   template,
   candidateCount,
+  roundCount,
   random = Math.random,
 }) {
   const configuredPools = resolvePoolVariants(template);
@@ -381,14 +382,14 @@ export function selectCryMatchSubjectPool({
         `Cry Match pool override "${forcedPoolKey}" only has ${forcedPool.subjects.length} eligible Pokemon; ${candidateCount} required.`,
       );
     }
-    return { ...forcedPool, forced: true };
+    return Array.from(
+      { length: Math.max(1, ensurePositiveInteger(roundCount, 1)) },
+      () => ({ ...forcedPool, forced: true }),
+    );
   }
 
   const viablePools = evaluatedPools.filter((pool) => pool.subjects.length >= candidateCount);
-  const selectedPool = selectWeightedPool(viablePools, random);
-  if (selectedPool) return { ...selectedPool, forced: false };
-
-  return {
+  const fallbackPool = {
     key: 'mixed',
     label: 'Mixed Pokemon',
     selector: 'all',
@@ -396,4 +397,23 @@ export function selectCryMatchSubjectPool({
     subjects: collapseDuplicateSubjects(eligibleSubjects),
     forced: false,
   };
+  const pools = viablePools.length > 0 ? viablePools : [fallbackPool];
+  const sequence = [];
+  let remainingPools = [];
+  const targetRoundCount = Math.max(1, ensurePositiveInteger(roundCount, 1));
+  while (sequence.length < targetRoundCount) {
+    if (remainingPools.length === 0) remainingPools = [...pools];
+    const previousPoolKey = sequence.at(-1)?.key || '';
+    const selectablePools = previousPoolKey && remainingPools.length > 1
+      ? remainingPools.filter((pool) => pool.key !== previousPoolKey)
+      : remainingPools;
+    const selectedPool = selectWeightedPool(selectablePools, random) || fallbackPool;
+    sequence.push({ ...selectedPool, forced: false });
+    remainingPools = remainingPools.filter((pool) => pool.key !== selectedPool.key);
+  }
+  return sequence;
+}
+
+export function selectCryMatchSubjectPool(options) {
+  return selectCryMatchRoundPools({ ...options, roundCount: 1 })[0];
 }

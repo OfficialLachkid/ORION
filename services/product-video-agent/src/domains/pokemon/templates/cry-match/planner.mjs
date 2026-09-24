@@ -14,7 +14,7 @@ import {
   selectSeededFile,
 } from '../../../../poke-quizz-asset-inventory.mjs';
 import { normalizeBaseStats } from '../tournament/battle-logic.mjs';
-import { selectCryMatchSubjectPool } from './subject-pools.mjs';
+import { selectCryMatchRoundPools } from './subject-pools.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
 const DEFAULT_CANDIDATE_COUNT = 4;
@@ -466,10 +466,11 @@ export async function planPokemonCryMatchChallenge({
   if (eligibleSubjects.length < candidateCount) {
     throw new Error(`Cry Match requires at least ${candidateCount} Pokemon with local sprites, found ${eligibleSubjects.length}.`);
   }
-  const selectedSubjectPool = selectCryMatchSubjectPool({
+  const roundSubjectPools = selectCryMatchRoundPools({
     eligibleSubjects,
     template,
     candidateCount,
+    roundCount,
     random,
   });
 
@@ -521,6 +522,7 @@ export async function planPokemonCryMatchChallenge({
   const rounds = [];
 
   for (let roundIndex = 0; roundIndex < roundCount; roundIndex += 1) {
+    const selectedSubjectPool = roundSubjectPools[roundIndex] || roundSubjectPools[0];
     const selection = selectRoundCandidates({
       subjects: selectedSubjectPool.subjects,
       candidateCount,
@@ -684,14 +686,13 @@ export async function planPokemonCryMatchChallenge({
       difficulty_id: selectedRoundCountDifficulty?.id || null,
       round_count: roundCount,
       pool_selection_mode: String(
-        template?.selection_rules?.pool_selection_mode || 'seeded_weighted_video',
+        template?.selection_rules?.pool_selection_mode || 'seeded_weighted_round',
       ).trim(),
-      pool_key: selectedSubjectPool.key,
-      pool_label: selectedSubjectPool.label,
-      pool_selector: selectedSubjectPool.selector,
-      pool_weight: selectedSubjectPool.weight,
-      pool_forced: selectedSubjectPool.forced === true,
-      pool_eligible_subject_count: selectedSubjectPool.subjects.length,
+      pool_keys: rounds.map((round) => round.pool_key),
+      pool_labels: rounds.map((round) => round.pool_label),
+      pool_selectors: rounds.map((round) => round.pool_selector),
+      pool_forced: roundSubjectPools.every((pool) => pool.forced === true),
+      pool_eligible_subject_counts: roundSubjectPools.map((pool) => pool.subjects.length),
       selected_subject_count: uniqueSelectedSubjects.length,
       display_subject_count: roundCount * candidateCount,
       selected_subjects: uniqueSelectedSubjects,

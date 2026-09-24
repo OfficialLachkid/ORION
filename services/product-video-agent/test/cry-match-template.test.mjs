@@ -91,7 +91,8 @@ test('cry-match config sanity — template_id + template_key + mode align', asyn
   assert.equal(template.template_key, 'cry-match');
   assert.equal(template.selection_rules.mode, 'cry_target');
   assert.equal(template.selection_rules.candidate_count, 4);
-  assert.equal(template.selection_rules.pool_selection_mode, 'seeded_weighted_video');
+  assert.equal(template.selection_rules.pool_selection_mode, 'seeded_weighted_round');
+  assert.equal(template.selection_rules.pool_order_mode, 'weighted_without_replacement_each_cycle');
   assert.deepEqual(
     template.selection_rules.pool_variants.map((pool) => pool.key),
     [
@@ -150,34 +151,38 @@ test('cry-match skips configured pools that cannot fill all four candidate slots
   assert.equal(selectedPool.subjects.length, subjects.length);
 });
 
-test('cry-match applies one selected specialty pool to every round in a video', async () => {
+test('cry-match randomly assigns a different viable specialty pool to every round', async () => {
   const template = await loadTemplate();
   template.selection_rules.round_count_levels = {};
   template.selection_rules.round_count_weights = {};
-  template.selection_rules.round_count = 2;
-  template.selection_rules.force_pool_key = 'legendary';
-  template.selection_rules.pool_variants = [{
-    key: 'legendary',
-    label: 'Legendary Pokemon',
-    selector: 'legendary_only',
-    weight: 1,
-  }];
+  template.selection_rules.round_count = 3;
+  template.selection_rules.pool_variants = [
+    { key: 'legendary', label: 'Legendary Pokemon', selector: 'legendary_only', weight: 1 },
+    { key: 'baby', label: 'Baby Pokemon', selector: 'baby_pokemon', weight: 1 },
+    { key: 'mega', label: 'Mega Pokemon', selector: 'mega_pokemon', weight: 1 },
+  ];
   const legendarySubjects = Array.from({ length: 4 }, (_, index) => buildFixtureSubject(index + 20, {
     slug: `legendary-${index + 1}`,
     name: `Legendary ${index + 1}`,
     cry_path: process.execPath,
     metadata: { is_legendary: true },
   }));
-  const mythicalSubjects = Array.from({ length: 4 }, (_, index) => buildFixtureSubject(index + 30, {
-    slug: `mythical-${index + 1}`,
-    name: `Mythical ${index + 1}`,
+  const babySubjects = Array.from({ length: 4 }, (_, index) => buildFixtureSubject(index + 30, {
+    slug: `baby-${index + 1}`,
+    name: `Baby ${index + 1}`,
     cry_path: process.execPath,
-    metadata: { is_mythical: true },
+    metadata: { is_baby: true },
+  }));
+  const megaSubjects = Array.from({ length: 4 }, (_, index) => buildFixtureSubject(index + 40, {
+    slug: `mega-${index + 1}`,
+    name: `Mega ${index + 1}`,
+    cry_path: process.execPath,
+    metadata: { pokemon_api: { is_mega: true } },
   }));
   const plan = await planPokemonCryMatchChallenge({
     template,
-    pokedexRows: [...legendarySubjects, ...mythicalSubjects],
-    seed: 'cry-match-legendary-video-pool',
+    pokedexRows: [...legendarySubjects, ...babySubjects, ...megaSubjects],
+    seed: 'cry-match-random-pool-per-round',
     assetInventory: {
       backgrounds: ['/fake/bg.png'],
       sound_effects: {
@@ -195,14 +200,20 @@ test('cry-match applies one selected specialty pool to every round in a video', 
     },
   });
 
-  assert.equal(plan.selection.pool_key, 'legendary');
-  assert.equal(plan.selection.pool_selector, 'legendary_only');
-  assert.equal(plan.selection.pool_forced, true);
-  assert.equal(plan.selection.pool_eligible_subject_count, 4);
-  assert.equal(plan.rounds.length, 2);
+  assert.equal(plan.selection.pool_selection_mode, 'seeded_weighted_round');
+  assert.equal(plan.selection.pool_forced, false);
+  assert.equal(plan.rounds.length, 3);
+  assert.deepEqual(new Set(plan.selection.pool_keys), new Set(['legendary', 'baby', 'mega']));
+  assert.deepEqual(plan.selection.pool_keys, plan.rounds.map((round) => round.pool_key));
+  const expectedSlugPrefixByPool = {
+    legendary: 'legendary-',
+    baby: 'baby-',
+    mega: 'mega-',
+  };
   for (const round of plan.rounds) {
-    assert.equal(round.pool_key, 'legendary');
-    assert.ok(round.candidates.every((candidate) => candidate.subject.slug.startsWith('legendary-')));
+    const expectedPrefix = expectedSlugPrefixByPool[round.pool_key];
+    assert.ok(expectedPrefix, `unexpected pool ${round.pool_key}`);
+    assert.ok(round.candidates.every((candidate) => candidate.subject.slug.startsWith(expectedPrefix)));
   }
 });
 

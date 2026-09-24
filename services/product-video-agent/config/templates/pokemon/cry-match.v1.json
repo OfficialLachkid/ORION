@@ -45,7 +45,8 @@
     "mode": "cry_target",
     "sampling_attempts_per_round": 180,
     "require_cry_available": true,
-    "pool_selection_mode": "seeded_weighted_video",
+    "pool_selection_mode": "seeded_weighted_round",
+    "pool_order_mode": "weighted_without_replacement_each_cycle",
     "pool_variants": [
       {
         "key": "mixed",
