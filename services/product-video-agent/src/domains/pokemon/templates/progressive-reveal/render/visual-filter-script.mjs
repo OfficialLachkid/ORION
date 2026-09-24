@@ -60,26 +60,59 @@ function appendLayeredText(filters, currentLabel, {
   centerMultiline = false,
 }) {
   const displayText = wrapTextToWidth(text, fontSize, maxWidth);
-  const lineCount = displayText.split('\n').length;
+  const displayLines = displayText.split('\n');
+  const lineCount = displayLines.length;
   const adjustedY = centerMultiline
     ? y - (((lineCount - 1) * (fontSize + lineSpacing)) / 2)
     : y;
-  const escapedText = escapeDrawtextText(displayText).replaceAll('\n', '\\\\n');
   const enable = formatEnableBetween(startSeconds, endSeconds);
-  const lineSpacingPart = lineSpacing > 0 ? `:line_spacing=${lineSpacing}` : '';
-  const shadowLabel = `${labelPrefix}shadow`;
-  filters.push(
-    `[${currentLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=black@0.68:fontsize=${fontSize}${lineSpacingPart}:borderw=${outlineWidth}:bordercolor=black@0.8:fix_bounds=1:x=(w-text_w)/2+${Math.max(3, depthPx)}:y=${roundTime(adjustedY + Math.max(5, depthPx + 2))}:enable='${enable}'[${shadowLabel}]`,
-  );
-  const depthLabel = `${labelPrefix}depth`;
-  filters.push(
-    `[${shadowLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=0x7A6210:fontsize=${fontSize}${lineSpacingPart}:borderw=${outlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2+${Math.max(2, Math.floor(depthPx / 2))}:y=${roundTime(adjustedY + Math.max(2, Math.floor(depthPx / 2)))}:enable='${enable}'[${depthLabel}]`,
-  );
-  const outputLabel = `${labelPrefix}main`;
-  filters.push(
-    `[${depthLabel}]drawtext=text='${escapedText}'${fontPart}:fontcolor=${color}:fontsize=${fontSize}${lineSpacingPart}:borderw=${outlineWidth}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${roundTime(adjustedY)}:enable='${enable}'[${outputLabel}]`,
-  );
-  return outputLabel;
+  const appendPass = ({
+    inputLabel,
+    suffix,
+    fontColor,
+    borderColor,
+    xOffset,
+    yOffset,
+  }) => {
+    let passLabel = inputLabel;
+    for (const [lineIndex, line] of displayLines.entries()) {
+      const isLastLine = lineIndex === displayLines.length - 1;
+      const outputLabel = isLastLine
+        ? `${labelPrefix}${suffix}`
+        : `${labelPrefix}${suffix}Line${lineIndex}`;
+      const xOffsetPart = xOffset > 0 ? `+${xOffset}` : '';
+      const lineY = adjustedY + yOffset + (lineIndex * (fontSize + lineSpacing));
+      filters.push(
+        `[${passLabel}]drawtext=text='${escapeDrawtextText(line)}'${fontPart}:fontcolor=${fontColor}:fontsize=${fontSize}:borderw=${outlineWidth}:bordercolor=${borderColor}:fix_bounds=1:x=(w-text_w)/2${xOffsetPart}:y=${roundTime(lineY)}:enable='${enable}'[${outputLabel}]`,
+      );
+      passLabel = outputLabel;
+    }
+    return passLabel;
+  };
+  const shadowLabel = appendPass({
+    inputLabel: currentLabel,
+    suffix: 'shadow',
+    fontColor: 'black@0.68',
+    borderColor: 'black@0.8',
+    xOffset: Math.max(3, depthPx),
+    yOffset: Math.max(5, depthPx + 2),
+  });
+  const depthLabel = appendPass({
+    inputLabel: shadowLabel,
+    suffix: 'depth',
+    fontColor: '0x7A6210',
+    borderColor: 'black',
+    xOffset: Math.max(2, Math.floor(depthPx / 2)),
+    yOffset: Math.max(2, Math.floor(depthPx / 2)),
+  });
+  return appendPass({
+    inputLabel: depthLabel,
+    suffix: 'main',
+    fontColor: color,
+    borderColor: 'black',
+    xOffset: 0,
+    yOffset: 0,
+  });
 }
 
 function resolveHeadlineLines(template) {

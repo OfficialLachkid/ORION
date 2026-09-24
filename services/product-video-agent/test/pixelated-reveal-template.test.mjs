@@ -179,7 +179,9 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
   assert.match(visualFilter.script, /y=435/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='1\/4'/u);
   assert.doesNotMatch(visualFilter.script, /scene0pixelPreCover/u);
-  assert.match(visualFilter.script, /ALOLAN\\\\nEXEGGUTOR FORM/u);
+  assert.match(visualFilter.script, /drawtext=text='ALOLAN'/u);
+  assert.match(visualFilter.script, /drawtext=text='EXEGGUTOR FORM'/u);
+  assert.doesNotMatch(visualFilter.script, /ALOLAN(?:\\+n|n)EXEGGUTOR FORM/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.3\)/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.25\)/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.15\)/u);
