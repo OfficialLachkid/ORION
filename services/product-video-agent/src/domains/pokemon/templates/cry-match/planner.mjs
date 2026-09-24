@@ -14,6 +14,7 @@ import {
   selectSeededFile,
 } from '../../../../poke-quizz-asset-inventory.mjs';
 import { normalizeBaseStats } from '../tournament/battle-logic.mjs';
+import { selectCryMatchRoundPools } from './subject-pools.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
 const DEFAULT_CANDIDATE_COUNT = 4;
@@ -465,6 +466,13 @@ export async function planPokemonCryMatchChallenge({
   if (eligibleSubjects.length < candidateCount) {
     throw new Error(`Cry Match requires at least ${candidateCount} Pokemon with local sprites, found ${eligibleSubjects.length}.`);
   }
+  const roundSubjectPools = selectCryMatchRoundPools({
+    eligibleSubjects,
+    template,
+    candidateCount,
+    roundCount,
+    random,
+  });
 
   const selectedBackgroundPath = selectBackground(
     inventory.backgrounds,
@@ -514,15 +522,18 @@ export async function planPokemonCryMatchChallenge({
   const rounds = [];
 
   for (let roundIndex = 0; roundIndex < roundCount; roundIndex += 1) {
+    const selectedSubjectPool = roundSubjectPools[roundIndex] || roundSubjectPools[0];
     const selection = selectRoundCandidates({
-      subjects: eligibleSubjects,
+      subjects: selectedSubjectPool.subjects,
       candidateCount,
       attempts: samplingAttempts,
       random,
       usedSubjectIds,
     });
     if (!selection || !Array.isArray(selection.sample) || selection.sample.length < candidateCount) {
-      throw new Error(`Cry Match could not find ${candidateCount} Pokemon for round ${roundIndex + 1}.`);
+      throw new Error(
+        `Cry Match could not find ${candidateCount} Pokemon for round ${roundIndex + 1} from ${selectedSubjectPool.label}.`,
+      );
     }
 
     const candidateRevealOrder = shuffle(
@@ -615,6 +626,9 @@ export async function planPokemonCryMatchChallenge({
     rounds.push({
       round_number: roundIndex + 1,
       round_label: `${roundIndex + 1}/${roundCount}`,
+      pool_key: selectedSubjectPool.key,
+      pool_label: selectedSubjectPool.label,
+      pool_selector: selectedSubjectPool.selector,
       prompt_text: promptText,
       spoken_prompt_text: spokenPromptText,
       reveal_text: revealText,
@@ -671,6 +685,14 @@ export async function planPokemonCryMatchChallenge({
       mode: String(template?.selection_rules?.mode || 'cry_target').trim().toLowerCase() || 'cry_target',
       difficulty_id: selectedRoundCountDifficulty?.id || null,
       round_count: roundCount,
+      pool_selection_mode: String(
+        template?.selection_rules?.pool_selection_mode || 'seeded_weighted_round',
+      ).trim(),
+      pool_keys: rounds.map((round) => round.pool_key),
+      pool_labels: rounds.map((round) => round.pool_label),
+      pool_selectors: rounds.map((round) => round.pool_selector),
+      pool_forced: roundSubjectPools.every((pool) => pool.forced === true),
+      pool_eligible_subject_counts: roundSubjectPools.map((pool) => pool.subjects.length),
       selected_subject_count: uniqueSelectedSubjects.length,
       display_subject_count: roundCount * candidateCount,
       selected_subjects: uniqueSelectedSubjects,
