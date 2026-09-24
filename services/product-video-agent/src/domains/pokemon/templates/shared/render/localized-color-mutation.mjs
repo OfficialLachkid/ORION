@@ -226,9 +226,12 @@ export function analyzeVisibleColorFamilies({
   };
 }
 
-function scoreColorGroup(group) {
-  const targetPercent = 0.16;
-  const percentScore = 1 - Math.min(1, Math.abs(group.percent - targetPercent) / targetPercent);
+function scoreColorGroup(group, targetPercent = 0.16) {
+  const normalizedTargetPercent = Math.max(0.001, Number(targetPercent) || 0.16);
+  const percentScore = 1 - Math.min(
+    1,
+    Math.abs(group.percent - normalizedTargetPercent) / normalizedTargetPercent,
+  );
   const lightnessScore = 1 - Math.min(1, Math.abs(group.lightness - 0.52) / 0.48);
   return Number(((percentScore * 3) + (group.saturation * 2) + lightnessScore).toFixed(4));
 }
@@ -245,17 +248,18 @@ export function selectMutableColorFamily(analysis, config = {}) {
   const idealMax = Number(config.ideal_max_percent ?? DEFAULT_IDEAL_MAX_PERCENT);
   const broadMin = Number(config.broad_min_percent ?? DEFAULT_BROAD_MIN_PERCENT);
   const broadMax = Number(config.broad_max_percent ?? DEFAULT_BROAD_MAX_PERCENT);
+  const targetPercent = Number(config.selection_target_percent ?? 0.16);
   const ideal = groups.filter((group) => group.percent >= idealMin && group.percent <= idealMax);
   const broad = groups.filter((group) => group.percent >= broadMin && group.percent <= broadMax);
   const pool = ideal.length > 0 ? ideal : (broad.length > 0 ? broad : groups);
   const selected = [...pool].sort((left, right) => {
-    const scoreDiff = scoreColorGroup(right) - scoreColorGroup(left);
+    const scoreDiff = scoreColorGroup(right, targetPercent) - scoreColorGroup(left, targetPercent);
     return scoreDiff || (right.count - left.count);
   })[0];
 
   return {
     ...selected,
-    score: scoreColorGroup(selected),
+    score: scoreColorGroup(selected, targetPercent),
     tolerance_hue: Number(config.hue_tolerance_degrees ?? 28),
   };
 }
