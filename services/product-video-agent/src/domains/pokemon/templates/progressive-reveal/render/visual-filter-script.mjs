@@ -64,7 +64,7 @@ function appendLayeredText(filters, currentLabel, {
   const adjustedY = centerMultiline
     ? y - (((lineCount - 1) * (fontSize + lineSpacing)) / 2)
     : y;
-  const escapedText = escapeDrawtextText(displayText).replaceAll('\n', '\\n');
+  const escapedText = escapeDrawtextText(displayText).replaceAll('\n', '\\\\n');
   const enable = formatEnableBetween(startSeconds, endSeconds);
   const lineSpacingPart = lineSpacing > 0 ? `:line_spacing=${lineSpacing}` : '';
   const shadowLabel = `${labelPrefix}shadow`;

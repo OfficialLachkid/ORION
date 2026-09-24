@@ -380,6 +380,7 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
       metadata: { youtube_handle: '@PokeGuesss' },
     },
   });
+  plan.rounds[0].answer_text = 'ALOLAN EXEGGUTOR FORM';
   const renderPlan = buildPokeQuizzRenderPlan({
     plan,
     template,
@@ -428,6 +429,7 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.match(visualFilter.script, /xfade=transition=slideleft/u);
   assert.match(visualFilter.script, /WHO IS THAT/u);
   assert.match(visualFilter.script, /POKEMON\?/u);
+  assert.match(visualFilter.script, /ALOLAN\\\\nEXEGGUTOR FORM/u);
   assert.doesNotMatch(visualFilter.script, /FALLING PARTICLES|scene0method/u);
   assert.match(visualFilter.script, /\*0\.6/u);
   assert.match(visualFilter.script, /split=11\[round0spriteBase\]\[round0fallSource0\]/u);
