@@ -139,6 +139,16 @@ function buildPixelatedResolutionExpression(progressExpression, configuredSteps 
   return expression;
 }
 
+function resolveSpriteCrop(subject = {}) {
+  const crop = subject?.sprite_crop;
+  if (!crop || typeof crop !== 'object') return null;
+  const x = Math.max(0, Math.round(Number(crop.x) || 0));
+  const y = Math.max(0, Math.round(Number(crop.y) || 0));
+  const width = Math.round(Number(crop.width) || 0);
+  const height = Math.round(Number(crop.height) || 0);
+  return width > 0 && height > 0 ? { x, y, width, height } : null;
+}
+
 export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath = null) {
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
@@ -192,6 +202,16 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     const coverX = box.x + coverInset;
     const coverY = box.y + coverInset;
     const spriteInput = inputRefs.rounds[roundIndex].sprite;
+    const spriteCrop = resolveSpriteCrop(round.subject);
+    const spriteCropFilter = spriteCrop
+      ? `,crop=${spriteCrop.width}:${spriteCrop.height}:${spriteCrop.x}:${spriteCrop.y}`
+      : '';
+    const fittedSpriteWidth = spriteCrop
+      ? Math.max(2, coverWidth - (box.sprite_visible_margin_px * 2))
+      : box.sprite_size_px;
+    const fittedSpriteHeight = spriteCrop
+      ? Math.max(2, coverHeight - (box.sprite_visible_margin_px * 2))
+      : box.sprite_size_px;
     const spriteBaseLabel = `round${roundIndex}spriteBase`;
     const fallingProgress = buildProgressiveRevealProgressExpression({
       startSeconds: round.local.reveal_start_seconds,
@@ -216,7 +236,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         },
       })
       : [];
-    const spritePreparation = `[${spriteInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS`;
+    const spritePreparation = `[${spriteInput}:v]fps=${fps},trim=duration=${round.scene_duration_seconds},setpts=PTS-STARTPTS,format=rgba${spriteCropFilter}`;
     if (round.reveal_method === 'pixelated') {
       // The scale filter exposes the per-frame variable as lowercase `n`.
       // Progressive alpha masks use uppercase `N`, so their shared helper
@@ -240,10 +260,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `${spritePreparation},format=rgba,split=2[${pixelSourceLabel}][${answerSourceLabel}]`,
       );
       filters.push(
-        `[${pixelSourceLabel}]scale=w='${pixelResolution}':h='${pixelResolution}':eval=frame:force_original_aspect_ratio=decrease:flags=neighbor,scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${spriteBaseLabel}]`,
+        `[${pixelSourceLabel}]scale=w='${pixelResolution}':h='${pixelResolution}':eval=frame:force_original_aspect_ratio=decrease:flags=neighbor,scale=${fittedSpriteWidth}:${fittedSpriteHeight}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${spriteBaseLabel}]`,
       );
       filters.push(
-        `[${answerSourceLabel}]scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${sharpAnswerLabel}]`,
+        `[${answerSourceLabel}]scale=${fittedSpriteWidth}:${fittedSpriteHeight}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1[${sharpAnswerLabel}]`,
       );
       const preRevealCoverLabel = `scene${roundIndex}pixelPreCover`;
       if (round.local.reveal_start_seconds > 0) {
@@ -261,7 +281,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       );
       currentLabel = sharpSceneLabel;
     } else {
-      const scaledSpritePreparation = `${spritePreparation},scale=${box.sprite_size_px}:${box.sprite_size_px}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1`;
+      const scaledSpritePreparation = `${spritePreparation},scale=${fittedSpriteWidth}:${fittedSpriteHeight}:force_original_aspect_ratio=decrease:flags=neighbor,format=rgba,setsar=1`;
       if (fallingPhases.length > 0) {
         filters.push(
           `${scaledSpritePreparation},pad=${coverWidth}:${coverHeight}:(ow-iw)/2:(oh-ih)/2:color=0x00000000,split=${fallingPhases.length + 1}[${spriteBaseLabel}]${fallingPhases.map((phase) => `[round${roundIndex}fallSource${phase.index}]`).join('')}`,

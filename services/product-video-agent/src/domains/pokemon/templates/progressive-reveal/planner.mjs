@@ -12,6 +12,7 @@ import {
   PROGRESSIVE_REVEAL_METHODS,
 } from '../shared/render/progressive-reveal-engine.mjs';
 import { resolvePokemonCryPath } from '../shared/pokemon-cry-resolver.mjs';
+import { loadOpaqueSpriteAnalysis } from './render/sprite-alpha-analysis.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
 const DEFAULT_REVEAL_DURATION_SECONDS = 8.5;
@@ -21,11 +22,7 @@ const DEFAULT_PRE_REVEAL_HOLD_SECONDS = 0.18;
 const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
 const DEFAULT_FINAL_HOLD_SECONDS = 0.6;
 const DEFAULT_TARGET_OPAQUE_FRACTION = 0.6;
-const MIN_VISIBLE_ALPHA = 8;
-const MAX_OPAQUE_ANALYSIS_POINTS = 18000;
 const spriteAvailabilityCache = new Map();
-const spriteOpaquePointsCache = new Map();
-let sharpModulePromise = null;
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -59,15 +56,6 @@ function ensurePositiveNumber(value, fallback) {
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
-}
-
-async function loadSharp() {
-  if (!sharpModulePromise) {
-    sharpModulePromise = import('sharp')
-      .then((module) => module.default || module)
-      .catch(() => null);
-  }
-  return sharpModulePromise;
 }
 
 function resolveChannelIdentity(channelProfile = {}) {
@@ -178,74 +166,6 @@ async function resolveAnimatedGifPath(subject) {
     }
   }
   return '';
-}
-
-function resolveRevealAnalysisLayout(template) {
-  const box = template?.layout?.reveal_box || {};
-  const width = Math.max(320, Math.round(ensurePositiveNumber(box.width_px, 760)));
-  const height = Math.max(320, Math.round(ensurePositiveNumber(box.height_px, 760)));
-  const border = Math.max(0, Math.round(Number(box.border_width_px) || 0));
-  return {
-    width: Math.max(2, width - (border * 2)),
-    height: Math.max(2, height - (border * 2)),
-    spriteSize: Math.max(240, Math.round(ensurePositiveNumber(box.sprite_size_px, 650))),
-  };
-}
-
-async function loadOpaqueSpriteAnalysis(spritePath, template) {
-  const normalizedPath = String(spritePath || '').trim();
-  const layout = resolveRevealAnalysisLayout(template);
-  if (!normalizedPath) {
-    return { ...layout, opaquePoints: [] };
-  }
-  const cacheKey = `${normalizedPath}:${layout.width}:${layout.height}:${layout.spriteSize}`;
-  if (spriteOpaquePointsCache.has(cacheKey)) {
-    return spriteOpaquePointsCache.get(cacheKey);
-  }
-  const analysisPromise = (async () => {
-    const sharp = await loadSharp();
-    if (!sharp) return { ...layout, opaquePoints: [] };
-    try {
-      const { data, info } = await sharp(normalizedPath, { page: 0 })
-        .ensureAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-      const sourceWidth = Number(info?.width || 0);
-      const sourceHeight = Number(info?.pageHeight || info?.height || 0);
-      const channels = Number(info?.channels || 4);
-      if (sourceWidth <= 0 || sourceHeight <= 0 || channels < 4 || !data?.length) {
-        return { ...layout, opaquePoints: [] };
-      }
-      const displayScale = Math.min(
-        layout.spriteSize / sourceWidth,
-        layout.spriteSize / sourceHeight,
-      );
-      const displayWidth = sourceWidth * displayScale;
-      const displayHeight = sourceHeight * displayScale;
-      const offsetX = (layout.width - displayWidth) / 2;
-      const offsetY = (layout.height - displayHeight) / 2;
-      const sampleStride = Math.max(
-        1,
-        Math.ceil(Math.sqrt((sourceWidth * sourceHeight) / MAX_OPAQUE_ANALYSIS_POINTS)),
-      );
-      const opaquePoints = [];
-      for (let y = 0; y < sourceHeight; y += sampleStride) {
-        for (let x = 0; x < sourceWidth; x += sampleStride) {
-          const alphaIndex = ((y * sourceWidth) + x) * channels + 3;
-          if ((data[alphaIndex] || 0) < MIN_VISIBLE_ALPHA) continue;
-          opaquePoints.push({
-            x: offsetX + ((x + 0.5) * displayScale),
-            y: offsetY + ((y + 0.5) * displayScale),
-          });
-        }
-      }
-      return { ...layout, opaquePoints };
-    } catch {
-      return { ...layout, opaquePoints: [] };
-    }
-  })();
-  spriteOpaquePointsCache.set(cacheKey, analysisPromise);
-  return analysisPromise;
 }
 
 function selectBackground(backgrounds, random, selectionState) {
@@ -582,6 +502,10 @@ export async function planPokemonProgressiveRevealChallenge({
       && configuredPixelAnswerClarity > 0
       ? clamp(configuredPixelAnswerClarity, 0.05, 1)
       : 1;
+    const renderSpriteAnalysis = await loadOpaqueSpriteAnalysis(
+      subject.render_sprite_path || subject.sprite_path,
+      template,
+    );
     let coverage;
     if (method === 'pixelated') {
       coverage = {
@@ -592,13 +516,13 @@ export async function planPokemonProgressiveRevealChallenge({
         sampledOpaquePixelCount: 0,
       };
     } else {
-      let opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.sprite_path, template);
+      let opaqueAnalysis = renderSpriteAnalysis;
       if (
         opaqueAnalysis.opaquePoints.length === 0
-        && subject.render_sprite_path
+        && subject.sprite_path
         && subject.render_sprite_path !== subject.sprite_path
       ) {
-        opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.render_sprite_path, template);
+        opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.sprite_path, template);
       }
       coverage = calculateOpaqueRevealCompletionProgress({
         method,
@@ -621,7 +545,10 @@ export async function planPokemonProgressiveRevealChallenge({
     return {
       round_number: index + 1,
       round_label: `${index + 1}/${roundCount}`,
-      subject,
+      subject: {
+        ...subject,
+        sprite_crop: renderSpriteAnalysis.spriteCrop,
+      },
       scene_lead_seconds: index === 0
         ? (showFirstRevealImmediately ? 0 : hookHoldSeconds)
         : transitionDurationSeconds + preRevealHoldSeconds,

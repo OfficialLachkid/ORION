@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -81,6 +81,8 @@ test('pixelated reveal is a standalone manually selectable template', async () =
   assert.equal(template.template_key, 'pixelated-reveal');
   assert.equal(template.selection_rules.round_count, 4);
   assert.equal(template.layout.reveal_box.center_y, 925);
+  assert.equal(template.layout.reveal_box.sprite_visible_margin_px, 24);
+  assert.equal(template.layout.reveal_box.sprite_crop_padding_px, 4);
   assert.equal(template.layout.text.difficulty_label_y, 435);
   assert.equal(template.layout.text.show_round_counter, false);
   assert.equal(template.layout.rounds.show_first_reveal_immediately, true);
@@ -121,10 +123,26 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
   const runtimeDirectory = await mkdtemp(join(tmpdir(), 'orion-pixelated-reveal-'));
   context.after(() => rm(runtimeDirectory, { recursive: true, force: true }));
   const animatedGifPath = join(runtimeDirectory, 'animated.gif');
-  await writeFile(
-    animatedGifPath,
-    Buffer.from('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==', 'base64'),
-  );
+  const { default: sharp } = await import('sharp');
+  const visibleSprite = await sharp({
+    create: {
+      width: 20,
+      height: 40,
+      channels: 4,
+      background: { r: 255, g: 0, b: 0, alpha: 1 },
+    },
+  }).png().toBuffer();
+  await sharp({
+    create: {
+      width: 100,
+      height: 100,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: visibleSprite, left: 40, top: 30 }])
+    .gif()
+    .toFile(animatedGifPath);
   const template = await loadJson(TEMPLATE_PATH);
   const plan = await planPokemonProgressiveRevealChallenge({
     template,
@@ -151,6 +169,7 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
   assert.equal(plan.rounds[0].scene_lead_seconds, 0);
   assert.equal(renderPlan.rounds[0].local.reveal_start_seconds, 0);
   assert.equal(renderPlan.reveal_box.center_y, 925);
+  assert.equal(renderPlan.reveal_box.sprite_visible_margin_px, 24);
   assert.equal(renderPlan.text_layout.difficulty_label_y, 435);
   assert.deepEqual(plan.selection.reveal_methods, Array(4).fill('pixelated'));
   assert.deepEqual(
@@ -172,6 +191,16 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
   assert.equal(plan.rounds.every((round) => round.reveal_config.resolution_steps_px.length === 37), true);
   assert.equal(plan.rounds.every((round) => round.reveal_config.resolution_steps_px[0] === 4), true);
   assert.equal(plan.rounds.every((round) => round.subject.render_sprite_path === animatedGifPath), true);
+  assert.equal(plan.rounds.every((round) => (
+    JSON.stringify(round.subject.sprite_crop) === JSON.stringify({
+      x: 36,
+      y: 26,
+      width: 28,
+      height: 48,
+      source_width: 100,
+      source_height: 100,
+    })
+  )), true);
   assert.equal(visualInputs.slice(1).every((input) => input.args.includes('-ignore_loop')), true);
   for (const difficulty of ['EASY', 'MEDIUM', 'HARD', 'IMPOSSIBLE']) {
     assert.match(visualFilter.script, new RegExp(`drawtext=text='${difficulty}'`, 'u'));
@@ -179,6 +208,8 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
   assert.match(visualFilter.script, /y=435/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='1\/4'/u);
   assert.doesNotMatch(visualFilter.script, /scene0pixelPreCover/u);
+  assert.match(visualFilter.script, /crop=28:48:36:26/u);
+  assert.match(visualFilter.script, /scale=700:700:force_original_aspect_ratio=decrease/u);
   assert.match(visualFilter.script, /drawtext=text='ALOLAN'/u);
   assert.match(visualFilter.script, /drawtext=text='EXEGGUTOR FORM'/u);
   assert.doesNotMatch(visualFilter.script, /ALOLAN(?:\\+n|n)EXEGGUTOR FORM/u);
