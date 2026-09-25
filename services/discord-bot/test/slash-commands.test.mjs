@@ -10,7 +10,7 @@ import {
 test('buildGuildSlashCommands returns the supported slash commands', () => {
   const commands = buildGuildSlashCommands();
 
-  assert.equal(commands.length, 12);
+  assert.equal(commands.length, 13);
   assert.deepEqual(commands.map((command) => command.name), [
     'commands',
     'help',
@@ -22,6 +22,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'analytics',
     'leadgen',
     'leadgen-sweep',
+    'lead-qualification',
     'create-developer-issue',
     'email-draft',
   ]);
