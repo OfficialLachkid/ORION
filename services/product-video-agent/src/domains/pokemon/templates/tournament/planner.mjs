@@ -956,7 +956,7 @@ export async function planPokemonTournamentChallenge({
   const finalBattleStat = selectWeightedTournamentStat(
     battleStatVariants,
     random,
-    [semiFinalTwoBattleStat.key],
+    [semiFinalOneBattleStat.key, semiFinalTwoBattleStat.key],
   );
 
   const semiFinalOne = buildMatchRecord({

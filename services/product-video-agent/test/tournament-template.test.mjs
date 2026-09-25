@@ -366,8 +366,7 @@ test('generic planner dispatch builds a four-participant tournament bracket with
     plan.tournament.matches.map((match) => match.battle_stat.key),
   );
   assert.equal(plan.tournament.battle_stats.length, 3);
-  assert.notEqual(plan.tournament.matches[0].battle_stat.key, plan.tournament.matches[1].battle_stat.key);
-  assert.notEqual(plan.tournament.matches[1].battle_stat.key, plan.tournament.matches[2].battle_stat.key);
+  assert.equal(new Set(plan.selection.battle_stat_keys).size, 3);
   assert.equal(plan.narration.lines[0].text, 'Which Pokemon wins each stat battle?');
   assert.match(plan.tournament.champion_text, /wins the tournament/u);
   assert.equal(plan.tournament.matches.every((match) => (
