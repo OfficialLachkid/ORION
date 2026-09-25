@@ -24,6 +24,26 @@
     "subject_table": "pokedex",
     "generation_scope": [],
     "round_count": 6,
+    "round_count_weights": {
+      "three_rounds": 1,
+      "four_rounds": 1,
+      "five_rounds": 1,
+      "six_rounds": 1
+    },
+    "round_count_levels": {
+      "three_rounds": {
+        "round_count": 3
+      },
+      "four_rounds": {
+        "round_count": 4
+      },
+      "five_rounds": {
+        "round_count": 5
+      },
+      "six_rounds": {
+        "round_count": 6
+      }
+    },
     "candidate_count": 4,
     "mode": "team_builder",
     "sampling_attempts_per_round": 120,
@@ -85,6 +105,30 @@
         "prompt_label": "Dynamax",
         "prompt_color": "0xAF52DE",
         "selector": "dynamax_pokemon",
+        "weight": 1
+      },
+      {
+        "key": "mega",
+        "label": "Mega Pokemon",
+        "prompt_label": "Mega",
+        "prompt_color": "0xFF2D9A",
+        "selector": "mega_pokemon",
+        "weight": 1
+      },
+      {
+        "key": "final_starter",
+        "label": "Final Starter Evolutions",
+        "prompt_label": "Final Starter",
+        "prompt_color": "0x30D158",
+        "selector": "final_starter_evolutions",
+        "weight": 1
+      },
+      {
+        "key": "mega_legendary",
+        "label": "Mega and Legendary Pokemon",
+        "prompt_label": "Mega or Legendary",
+        "prompt_color": "0xFF453A",
+        "selector": "mega_or_legendary",
         "weight": 1
       }
     ]
