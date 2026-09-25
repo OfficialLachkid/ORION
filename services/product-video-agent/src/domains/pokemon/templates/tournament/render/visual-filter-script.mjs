@@ -905,18 +905,19 @@ function buildChampionSpritePlacement(stage) {
   };
 }
 
-function buildBattleStatsLayout(battleStage, template = {}) {
+function buildBattleStatsLayout(battleStage, template = {}, rowCount = TOURNAMENT_STAT_ROWS.length) {
   const panelWidth = 446;
-  const rowHeight = 40;
+  const isFocusedStat = rowCount === 1;
+  const rowHeight = isFocusedStat ? 60 : 40;
   const rowGap = 6;
-  const panelHeight = (TOURNAMENT_STAT_ROWS.length * rowHeight) + ((TOURNAMENT_STAT_ROWS.length - 1) * rowGap);
+  const panelHeight = (rowCount * rowHeight) + (Math.max(0, rowCount - 1) * rowGap);
   const spriteBottom = battleStage.center_y + (battleStage.sprite_size_px / 2);
   const statsTopOffsetPx = ensureNumber(template?.layout?.battle_stage?.stats_top_offset_px, 68);
   const proposedTop = Math.round(spriteBottom + statsTopOffsetPx);
   const maxTopBeforeName = Math.round(battleStage.name_y - panelHeight - 34);
   const top = Math.max(100, Math.min(proposedTop, maxTopBeforeName));
-  const labelWidth = 128;
-  const valueWidth = 72;
+  const labelWidth = isFocusedStat ? 150 : 128;
+  const valueWidth = isFocusedStat ? 78 : 72;
   const barX = labelWidth + valueWidth + 22;
   const barWidth = panelWidth - barX - 18;
   return {
@@ -931,8 +932,8 @@ function buildBattleStatsLayout(battleStage, template = {}) {
     top,
     leftX: Math.round(battleStage.left_center_x - (panelWidth / 2)),
     rightX: Math.round(battleStage.right_center_x - (panelWidth / 2)),
-    valueFontSize: 31,
-    labelFontSize: 30,
+    valueFontSize: isFocusedStat ? 38 : 31,
+    labelFontSize: isFocusedStat ? 36 : 30,
   };
 }
 
@@ -948,7 +949,18 @@ function appendBattleStatsFilters({
   battleDisappearStart,
   labelPrefix,
 }) {
-  const layout = buildBattleStatsLayout(battleStage, template);
+  const selectedStatKey = String(match?.battle_stat?.key || '').trim().toLowerCase();
+  const selectedStatRows = selectedStatKey
+    ? TOURNAMENT_STAT_ROWS
+      .filter((row) => row.key === selectedStatKey)
+      .map((row) => ({
+        ...row,
+        label: String(match?.battle_stat?.label || row.label).trim(),
+        color: String(match?.battle_stat?.color || row.color).trim(),
+      }))
+    : TOURNAMENT_STAT_ROWS;
+  const statRows = selectedStatRows.length > 0 ? selectedStatRows : TOURNAMENT_STAT_ROWS;
+  const layout = buildBattleStatsLayout(battleStage, template, statRows.length);
   const rowLeadInSeconds = Math.max(0, ensureNumber(template?.renderer?.stat_row_lead_in_seconds, 0.16));
   const rowStaggerSeconds = Math.max(0.05, ensureNumber(template?.renderer?.stat_row_stagger_seconds, 0.3));
   const rowFillDurationSeconds = 0.66;
@@ -966,7 +978,7 @@ function appendBattleStatsFilters({
       `color=c=black@0:s=${layout.panelWidth}x${layout.panelHeight}:r=${fps}:d=${totalDurationSeconds},format=rgba`,
     ];
 
-    TOURNAMENT_STAT_ROWS.forEach((row, rowIndex) => {
+    statRows.forEach((row, rowIndex) => {
       const value = Math.max(0, Math.min(255, round(stats[row.key] || 0)));
       const y = rowIndex * (layout.rowHeight + layout.rowGap);
       const fillWidth = Math.max(2, round((value / 255) * layout.barWidth));
@@ -1581,6 +1593,20 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         firstMatch.intro_start_seconds,
       ),
     );
+    const battleStat = renderPlan.battle_stat || plan.tournament?.battle_stat;
+    if (battleStat?.badge_text) {
+      drawtextParts.push(
+        buildAnimatedSceneText(
+          battleStat.badge_text,
+          fontPart,
+          renderPlan.text_layout.stat_badge_font_size,
+          renderPlan.text_layout.stat_badge_y,
+          firstMatch.intro_start_seconds,
+          renderPlan.champion_scene.end_seconds,
+          battleStat.color || '0xFFD60A',
+        ),
+      );
+    }
   }
 
   (plan.tournament?.participants || []).forEach((participant, index) => {
@@ -1700,7 +1726,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
 
   drawtextParts.push(
     ...buildAnimatedSceneTextBlock(
-      `Winner: ${plan.tournament?.champion?.display_name || ''}`,
+      plan.tournament?.champion_text || `Winner: ${plan.tournament?.champion?.display_name || ''}`,
       fontPart,
       template,
       renderPlan.text_layout.champion_font_size,

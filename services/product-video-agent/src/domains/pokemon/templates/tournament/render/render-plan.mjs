@@ -101,6 +101,8 @@ function buildTextLayout(template) {
   return {
     hook_y: ensureNumber(template?.layout?.text?.hook_y, 150),
     hook_font_size: ensureNumber(template?.layout?.text?.hook_font_size, 122),
+    stat_badge_y: ensureNumber(template?.layout?.text?.stat_badge_y, 72),
+    stat_badge_font_size: ensureNumber(template?.layout?.text?.stat_badge_font_size, 42),
     round_y: ensureNumber(template?.layout?.text?.round_y, 305),
     round_font_size: ensureNumber(template?.layout?.text?.round_font_size, 68),
     matchup_y: ensureNumber(template?.layout?.text?.matchup_y, 365),
@@ -304,6 +306,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     },
     seed: String(plan?.seed || ''),
     participant_count: participantCount,
+    battle_stat: plan?.tournament?.battle_stat || null,
     total_duration_seconds: championScene.end_seconds,
     text_layout: buildTextLayout(template),
     bracket_layout: buildBracketLayout(template),
