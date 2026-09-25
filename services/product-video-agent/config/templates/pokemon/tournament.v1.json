@@ -177,7 +177,7 @@
     },
     "stat_spinner": {
       "center_x": 540,
-      "top_y": 410,
+      "name_y_offset_px": 100,
       "width_px": 440,
       "height_px": 132,
       "header_font_size": 25,

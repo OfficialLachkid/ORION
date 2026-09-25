@@ -745,6 +745,7 @@ test('tournament audio and visual filters include winner sting cues and champion
   assert.match(visualFilter.script, /fade=t=in:st=/u);
   assert.match(visualFilter.script, /drawtext=text='HP/u);
   assert.match(visualFilter.script, /drawtext=text='BATTLE STAT'/u);
+  assert.match(visualFilter.script, /drawbox=x=320:y=1530:w=440:h=132/u);
   assert.match(visualFilter.script, /drawtext=text='Sp\. Atk'/u);
   assert.match(visualFilter.script, /drawtext=text='Sp\. Def'/u);
   assert.match(

@@ -48,7 +48,13 @@ export function buildTournamentStatSpinnerFilters(match, template, fontPart = ''
   const width = Math.max(260, ensureNumber(config.width_px, 440));
   const height = Math.max(100, ensureNumber(config.height_px, 132));
   const x = Math.round(ensureNumber(config.center_x, canvasWidth / 2) - (width / 2));
-  const y = Math.round(ensureNumber(config.top_y, 410));
+  const battleNameY = ensureNumber(template?.layout?.battle_stage?.name_y, 1160);
+  const nameYOffset = ensureNumber(config.name_y_offset_px, 100);
+  const requestedY = config.top_y === undefined
+    ? battleNameY + nameYOffset
+    : ensureNumber(config.top_y, battleNameY + nameYOffset);
+  const canvasHeight = ensureNumber(template?.canvas?.height, 1920);
+  const y = Math.round(Math.max(40, Math.min(requestedY, canvasHeight - height - 40)));
   const headerFontSize = Math.max(18, ensureNumber(config.header_font_size, 25));
   const labelFontSize = Math.max(32, ensureNumber(config.label_font_size, 52));
   const appearStart = ensureNumber(match?.spinner_appear_start_seconds, match?.intro_start_seconds);
