@@ -82,71 +82,48 @@
       }
     ],
     "battle_stat_variants": [
-      {
-        "key": "hp",
-        "label": "HP",
-        "spoken_label": "HP",
-        "badge_text": "HP TOURNAMENT",
-        "color": "0xFF4D6D",
-        "weight": 1
-      },
-      {
-        "key": "attack",
-        "label": "Attack",
-        "spoken_label": "Attack",
-        "badge_text": "ATTACK TOURNAMENT",
-        "color": "0xFF8F1F",
-        "weight": 1
-      },
-      {
-        "key": "defense",
-        "label": "Defense",
-        "spoken_label": "Defense",
-        "badge_text": "DEFENSE TOURNAMENT",
-        "color": "0xFFD23F",
-        "weight": 1
-      },
-      {
-        "key": "special_attack",
-        "label": "Sp. Atk",
-        "spoken_label": "Special Attack",
-        "badge_text": "SP. ATTACK TOURNAMENT",
-        "color": "0x4D8CFF",
-        "weight": 1
-      },
-      {
-        "key": "special_defense",
-        "label": "Sp. Def",
-        "spoken_label": "Special Defense",
-        "badge_text": "SP. DEFENSE TOURNAMENT",
-        "color": "0x55D66B",
-        "weight": 1
-      },
-      {
-        "key": "speed",
-        "label": "Speed",
-        "spoken_label": "Speed",
-        "badge_text": "SPEED TOURNAMENT",
-        "color": "0xFF58A8",
-        "weight": 1
-      }
-    ]
+      { "key": "hp", "label": "HP", "spoken_label": "HP", "color": "0xFF4D6D", "weight": 1 },
+      { "key": "attack", "label": "Attack", "spoken_label": "Attack", "color": "0xFF8F1F", "weight": 1 },
+      { "key": "defense", "label": "Defense", "spoken_label": "Defense", "color": "0xFFD23F", "weight": 1 },
+      { "key": "special_attack", "label": "Sp. Atk", "spoken_label": "Special Attack", "color": "0x4D8CFF", "weight": 1 },
+      { "key": "special_defense", "label": "Sp. Def", "spoken_label": "Special Defense", "color": "0x55D66B", "weight": 1 },
+      { "key": "speed", "label": "Speed", "spoken_label": "Speed", "color": "0xFF58A8", "weight": 1 }
+    ],
+    "battle_weights": {
+      "base_stat_total": 0.06,
+      "hp": 0.18,
+      "attack": 0.24,
+      "defense": 0.19,
+      "special_attack": 0.23,
+      "special_defense": 0.19,
+      "speed": 0.25,
+      "type_advantage": 20,
+      "speed_edge": 0.42,
+      "offensive_matchup": 0.11,
+      "defense_bulk": 0.07,
+      "meaningful_base_stat_total_delta": 25,
+      "meaningful_speed_delta": 10,
+      "meaningful_offense_delta": 18,
+      "meaningful_defense_delta": 22,
+      "close_battle_threshold": 5,
+      "random_spread": 4
+    }
   },
   "question_contract": {
-    "hook_text": "Which Pokemon wins each stat battle?",
+    "hook_text": "Who wins this tournament?",
     "hook_text_variants": [
-      "Which Pokemon wins each stat battle?",
-      "Who survives every stat battle?",
-      "Which Pokemon takes the tournament?"
+      "Who wins this tournament?",
+      "Who takes this Pokemon tournament?",
+      "Who will champion of this tournament?"
     ],
     "matchup_text": "{pokemon_a} vs {pokemon_b}",
     "matchup_text_variants": [
       "{pokemon_a} vs {pokemon_b}",
       "{pokemon_a} versus {pokemon_b}"
     ],
-    "champion_text": "{champion_name} wins the tournament!",
+    "champion_text": "{champion_name} won the tournament",
     "champion_text_variants": [
-      "{champion_name} wins the tournament!"
+      "{champion_name} won the tournament"
     ]
   },
   "layout": {
@@ -159,8 +136,6 @@
     "text": {
       "hook_y": 150,
       "hook_font_size": 84,
-      "stat_badge_y": 72,
-      "stat_badge_font_size": 42,
       "round_y": 140,
       "round_font_size": 46,
       "matchup_y": 218,
@@ -200,6 +175,14 @@
       "versus_width_px": 250,
       "versus_y_px": 760
     },
+    "stat_spinner": {
+      "center_x": 540,
+      "top_y": 410,
+      "width_px": 440,
+      "height_px": 132,
+      "header_font_size": 25,
+      "label_font_size": 52
+    },
     "champion_stage": {
       "sprite_size_px": 460,
       "center_x": 540,
@@ -220,6 +203,10 @@
       "post_progress_hold_seconds": 1,
       "match_intro_hold_seconds": 1.8,
       "suspense_hold_seconds": 0.9,
+      "stat_spinner_appear_delay_seconds": 2.35,
+      "stat_spinner_spawn_hold_seconds": 0.45,
+      "stat_spinner_spin_seconds": 2.6,
+      "stat_spinner_stop_hold_seconds": 1.2,
       "reveal_hold_seconds": 1.2,
       "transition_duration_seconds": 0.4,
       "champion_hold_seconds": 0.1

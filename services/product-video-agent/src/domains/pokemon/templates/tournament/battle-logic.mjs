@@ -1,3 +1,5 @@
+import { resolveTournamentBattleStat } from './battle-stat.mjs';
+
 function normalizeTypeName(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -314,144 +316,101 @@ function resolveBreakdownText(left, right, winner, scoreCards, selectedAdvantage
   return `BST ${left.base_stat_total}-${right.base_stat_total} | ${typeLead} | Edge: ${selectedAdvantage.label} | Winner: ${winner.display_name}`;
 }
 
-const TOURNAMENT_STAT_LABELS = Object.freeze({
-  hp: 'HP',
-  attack: 'Attack',
-  defense: 'Defense',
-  special_attack: 'Special Attack',
-  special_defense: 'Special Defense',
-  speed: 'Speed',
-});
-
-function normalizeTournamentBattleStat(battleStat) {
-  const key = String(battleStat?.key || '').trim().toLowerCase();
-  if (!Object.hasOwn(TOURNAMENT_STAT_LABELS, key)) {
-    return null;
-  }
-  const spokenLabel = String(
-    battleStat?.spoken_label || battleStat?.label || TOURNAMENT_STAT_LABELS[key],
-  ).trim();
-  return {
-    ...battleStat,
-    key,
-    label: String(battleStat?.label || TOURNAMENT_STAT_LABELS[key]).trim(),
-    spoken_label: spokenLabel,
-    badge_text: String(battleStat?.badge_text || `${spokenLabel.toUpperCase()} TOURNAMENT`).trim(),
-    color: String(battleStat?.color || '0xFFD60A').trim(),
-  };
-}
-
-function resolveExactTieWinner(left, right) {
-  const leftDex = toFiniteNumber(left.national_dex_number, Number.POSITIVE_INFINITY);
-  const rightDex = toFiniteNumber(right.national_dex_number, Number.POSITIVE_INFINITY);
-  if (leftDex !== rightDex && Number.isFinite(Math.min(leftDex, rightDex))) {
+function resolveStatWinnerSide(left, right, statKey) {
+  const leftValue = left.base_stats[statKey];
+  const rightValue = right.base_stats[statKey];
+  if (leftValue !== rightValue) {
     return {
-      winner: leftDex < rightDex ? left : right,
-      key: 'national_dex_number',
-      label: 'Pokédex number',
-      left_value: leftDex,
-      right_value: rightDex,
+      winner_side: leftValue > rightValue ? 'left' : 'right',
+      tiebreaker: null,
     };
   }
+  if (left.base_stat_total !== right.base_stat_total) {
+    return {
+      winner_side: left.base_stat_total > right.base_stat_total ? 'left' : 'right',
+      tiebreaker: 'base_stat_total',
+    };
+  }
+  const leftDex = toFiniteNumber(left.national_dex_number, Number.POSITIVE_INFINITY);
+  const rightDex = toFiniteNumber(right.national_dex_number, Number.POSITIVE_INFINITY);
   return {
-    winner: left,
-    key: 'bracket_seed',
-    label: 'bracket seed',
-    left_value: null,
-    right_value: null,
+    winner_side: leftDex <= rightDex ? 'left' : 'right',
+    tiebreaker: Number.isFinite(leftDex) || Number.isFinite(rightDex)
+      ? 'national_dex_number'
+      : 'bracket_seed',
   };
 }
 
-function resolveStatBattleInsight({ battleStat, winner, loser, winnerValue, loserValue, tiebreaker }) {
-  if (tiebreaker?.key === 'base_stat_total') {
-    return `${battleStat.spoken_label} is tied at ${winnerValue}. ${winner.display_name} wins the Base Stat Total tiebreak: ${winner.base_stat_total} to ${loser.base_stat_total}.`;
+function buildStatInsightText({ stat, left, right, winner, loser, winnerSide, tiebreaker }) {
+  const leftValue = left.base_stats[stat.key];
+  const rightValue = right.base_stats[stat.key];
+  if (tiebreaker === 'base_stat_total') {
+    return `The slot lands on ${stat.spoken_label}. ${stat.spoken_label} is tied at ${leftValue}. ${winner.display_name} wins the Base Stat Total tiebreak: ${winner.base_stat_total} to ${loser.base_stat_total}.`;
   }
-  if (tiebreaker?.key === 'national_dex_number') {
-    return `${battleStat.spoken_label} and Base Stat Total are tied. ${winner.display_name} advances on the lower Pokédex number tiebreak.`;
+  if (tiebreaker) {
+    return `The slot lands on ${stat.spoken_label}. ${stat.spoken_label} is tied at ${leftValue}. ${winner.display_name} wins the final tiebreak.`;
   }
-  if (tiebreaker?.key === 'bracket_seed') {
-    return `${battleStat.spoken_label} and Base Stat Total are tied. ${winner.display_name} advances from the first bracket slot.`;
-  }
-  if (battleStat.key === 'speed') {
-    return `${winner.display_name} is faster: ${winnerValue} to ${loserValue}.`;
-  }
-  if (battleStat.key === 'hp') {
-    return `${winner.display_name} has more HP: ${winnerValue} to ${loserValue}.`;
-  }
-  return `${winner.display_name} has higher ${battleStat.spoken_label}: ${winnerValue} to ${loserValue}.`;
-}
-
-function resolveTournamentStatBattle({ left, right, battleStat, matchId, roundLabel }) {
-  const leftValue = toFiniteNumber(left.base_stats[battleStat.key], 0);
-  const rightValue = toFiniteNumber(right.base_stats[battleStat.key], 0);
-  let winner = leftValue >= rightValue ? left : right;
-  let tiebreaker = null;
-
-  if (leftValue === rightValue) {
-    if (left.base_stat_total !== right.base_stat_total) {
-      winner = left.base_stat_total > right.base_stat_total ? left : right;
-      tiebreaker = {
-        used: true,
-        key: 'base_stat_total',
-        label: 'Base Stat Total',
-        left_value: left.base_stat_total,
-        right_value: right.base_stat_total,
-      };
-    } else {
-      const exactTie = resolveExactTieWinner(left, right);
-      winner = exactTie.winner;
-      tiebreaker = {
-        used: true,
-        key: exactTie.key,
-        label: exactTie.label,
-        left_value: exactTie.left_value,
-        right_value: exactTie.right_value,
-      };
-    }
-  }
-
-  const winnerSide = winner.id === left.id ? 'left' : 'right';
-  const loser = winnerSide === 'left' ? right : left;
   const winnerValue = winnerSide === 'left' ? leftValue : rightValue;
   const loserValue = winnerSide === 'left' ? rightValue : leftValue;
-  const insightText = resolveStatBattleInsight({
-    battleStat,
+  const comparison = stat.key === 'speed'
+    ? 'is faster'
+    : stat.key === 'hp'
+      ? 'has more HP'
+      : `has higher ${stat.spoken_label}`;
+  return `The slot lands on ${stat.spoken_label}. ${winner.display_name} ${comparison}: ${winnerValue} to ${loserValue}.`;
+}
+
+function resolveStatBattle({ left, right, battleStat, normalizedWeights, matchId, roundLabel }) {
+  const stat = resolveTournamentBattleStat(battleStat);
+  const outcome = resolveStatWinnerSide(left, right, stat.key);
+  const winner = outcome.winner_side === 'left' ? left : right;
+  const loser = outcome.winner_side === 'left' ? right : left;
+  const leftValue = left.base_stats[stat.key];
+  const rightValue = right.base_stats[stat.key];
+  const leftCard = {
+    stat_key: stat.key,
+    stat_label: stat.spoken_label,
+    stat_value: leftValue,
+    base_stat_total: left.base_stat_total,
+    total_score: leftValue,
+  };
+  const rightCard = {
+    stat_key: stat.key,
+    stat_label: stat.spoken_label,
+    stat_value: rightValue,
+    base_stat_total: right.base_stat_total,
+    total_score: rightValue,
+  };
+  const winnerCard = outcome.winner_side === 'left' ? leftCard : rightCard;
+  const loserCard = outcome.winner_side === 'left' ? rightCard : leftCard;
+  const scoreCards = {
+    left: leftCard,
+    right: rightCard,
+    winner: winnerCard,
+    loser: loserCard,
+  };
+  const insightText = buildStatInsightText({
+    stat,
+    left,
+    right,
     winner,
     loser,
-    winnerValue,
-    loserValue,
-    tiebreaker,
+    winnerSide: outcome.winner_side,
+    tiebreaker: outcome.tiebreaker,
   });
-  const introLineText = `${battleStat.spoken_label} battle. ${left.display_name} versus ${right.display_name}.`;
-  const scoreCards = {
-    left: {
-      selected_stat_key: battleStat.key,
-      selected_stat_value: leftValue,
-      base_stat_total: left.base_stat_total,
-      total_score: leftValue,
-    },
-    right: {
-      selected_stat_key: battleStat.key,
-      selected_stat_value: rightValue,
-      base_stat_total: right.base_stat_total,
-      total_score: rightValue,
-    },
-  };
-  scoreCards.winner = winnerSide === 'left' ? scoreCards.left : scoreCards.right;
-  scoreCards.loser = winnerSide === 'left' ? scoreCards.right : scoreCards.left;
+  const introLineText = `${left.display_name} versus ${right.display_name}.`;
   const selectedAdvantage = {
-    id: `${battleStat.key}_edge`,
-    label: battleStat.label,
+    id: `${stat.key}_battle`,
+    label: stat.spoken_label,
     text: insightText,
     strength: Math.abs(leftValue - rightValue),
     verified: true,
     evidence: {
       left_value: leftValue,
       right_value: rightValue,
-      tiebreaker: tiebreaker?.key || null,
+      tiebreaker: outcome.tiebreaker,
     },
   };
-
   return {
     match_id: matchId,
     round_label: roundLabel,
@@ -459,21 +418,18 @@ function resolveTournamentStatBattle({ left, right, battleStat, matchId, roundLa
     right,
     winner,
     loser,
-    winner_side: winnerSide,
+    winner_side: outcome.winner_side,
+    battle_stat: stat,
+    stat_values: { left: leftValue, right: rightValue },
+    tiebreaker: outcome.tiebreaker,
     intro_line_text: introLineText,
     insight_text: insightText,
-    breakdown_text: `${battleStat.label} ${leftValue}-${rightValue} | Winner: ${winner.display_name}`,
+    breakdown_text: `${stat.spoken_label} ${leftValue}-${rightValue} | Winner: ${winner.display_name}`,
     commentary_text: `${introLineText} ${insightText}`,
     winner_line_text: `${winner.display_name} wins!`,
     score_cards: scoreCards,
     selected_advantage: selectedAdvantage,
-    battle_stat: battleStat,
-    stat_values: {
-      left: leftValue,
-      right: rightValue,
-    },
-    tiebreaker,
-    battle_weights: null,
+    battle_weights: normalizedWeights,
   };
 }
 
@@ -488,17 +444,17 @@ export function resolveTournamentBattle({
 }) {
   const normalizedLeft = normalizeSubject(left);
   const normalizedRight = normalizeSubject(right);
-  const normalizedBattleStat = normalizeTournamentBattleStat(battleStat);
-  if (normalizedBattleStat) {
-    return resolveTournamentStatBattle({
+  const normalizedWeights = normalizeBattleWeights(weights);
+  if (resolveTournamentBattleStat(battleStat)) {
+    return resolveStatBattle({
       left: normalizedLeft,
       right: normalizedRight,
-      battleStat: normalizedBattleStat,
+      battleStat,
+      normalizedWeights,
       matchId,
       roundLabel,
     });
   }
-  const normalizedWeights = normalizeBattleWeights(weights);
   const randomEdge = ((random() * 2) - 1) * normalizedWeights.random_spread;
   const leftCard = buildScoreCard(normalizedLeft, normalizedRight, normalizedWeights, randomEdge);
   const rightCard = buildScoreCard(normalizedRight, normalizedLeft, normalizedWeights, -randomEdge);

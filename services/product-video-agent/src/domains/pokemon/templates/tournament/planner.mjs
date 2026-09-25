@@ -18,58 +18,9 @@ import {
   resolveTournamentBattle,
   sumBaseStats,
 } from './battle-logic.mjs';
+import { selectTournamentBattleStat } from './battle-stat.mjs';
 
 const DEFAULT_PARTICIPANT_COUNT = 4;
-const DEFAULT_TOURNAMENT_STAT_VARIANTS = Object.freeze([
-  Object.freeze({
-    key: 'hp',
-    label: 'HP',
-    spoken_label: 'HP',
-    badge_text: 'HP TOURNAMENT',
-    color: '0xFF4D6D',
-    weight: 1,
-  }),
-  Object.freeze({
-    key: 'attack',
-    label: 'Attack',
-    spoken_label: 'Attack',
-    badge_text: 'ATTACK TOURNAMENT',
-    color: '0xFF8F1F',
-    weight: 1,
-  }),
-  Object.freeze({
-    key: 'defense',
-    label: 'Defense',
-    spoken_label: 'Defense',
-    badge_text: 'DEFENSE TOURNAMENT',
-    color: '0xFFD23F',
-    weight: 1,
-  }),
-  Object.freeze({
-    key: 'special_attack',
-    label: 'Sp. Atk',
-    spoken_label: 'Special Attack',
-    badge_text: 'SP. ATTACK TOURNAMENT',
-    color: '0x4D8CFF',
-    weight: 1,
-  }),
-  Object.freeze({
-    key: 'special_defense',
-    label: 'Sp. Def',
-    spoken_label: 'Special Defense',
-    badge_text: 'SP. DEFENSE TOURNAMENT',
-    color: '0x55D66B',
-    weight: 1,
-  }),
-  Object.freeze({
-    key: 'speed',
-    label: 'Speed',
-    spoken_label: 'Speed',
-    badge_text: 'SPEED TOURNAMENT',
-    color: '0xFF58A8',
-    weight: 1,
-  }),
-]);
 const mirroredSpriteAvailabilityCache = new Map();
 const cryAvailabilityCache = new Map();
 const cryDownloadCache = new Map();
@@ -482,42 +433,6 @@ function resolveTournamentPoolVariants(template = {}) {
     .filter((variant) => variant.key);
 }
 
-function resolveTournamentStatVariants(template = {}) {
-  const configuredVariants = Array.isArray(template?.selection_rules?.battle_stat_variants)
-    && template.selection_rules.battle_stat_variants.length > 0
-    ? template.selection_rules.battle_stat_variants
-    : DEFAULT_TOURNAMENT_STAT_VARIANTS;
-  const supportedKeys = new Set(DEFAULT_TOURNAMENT_STAT_VARIANTS.map((variant) => variant.key));
-  return configuredVariants
-    .map((variant, index) => ({
-      key: String(variant?.key || '').trim().toLowerCase(),
-      label: String(variant?.label || variant?.key || `Stat ${index + 1}`).trim(),
-      spoken_label: String(variant?.spoken_label || variant?.label || variant?.key || '').trim(),
-      badge_text: String(variant?.badge_text || '').trim(),
-      color: String(variant?.color || '0xFFD60A').trim(),
-      weight: Math.max(1, Number(variant?.weight) || 1),
-    }))
-    .filter((variant) => supportedKeys.has(variant.key));
-}
-
-function selectWeightedTournamentStat(variants = [], random = Math.random, excludedKeys = []) {
-  if (!Array.isArray(variants) || variants.length === 0) {
-    return DEFAULT_TOURNAMENT_STAT_VARIANTS.at(-1);
-  }
-  const excluded = new Set((Array.isArray(excludedKeys) ? excludedKeys : []).map((key) => String(key || '').trim()));
-  const eligibleVariants = variants.filter((variant) => !excluded.has(variant.key));
-  const selectableVariants = eligibleVariants.length > 0 ? eligibleVariants : variants;
-  const totalWeight = selectableVariants.reduce((sum, variant) => sum + variant.weight, 0);
-  let cursor = random() * totalWeight;
-  for (const variant of selectableVariants) {
-    cursor -= variant.weight;
-    if (cursor <= 0) {
-      return variant;
-    }
-  }
-  return selectableVariants.at(-1);
-}
-
 function filterCombatantsForTournamentPool(subjects = [], pool = {}, template = {}) {
   const selector = String(pool?.selector || 'all').trim().toLowerCase();
   const minimumStrongFinalBaseStatTotal = Number.isFinite(Number(pool?.strong_final_evolution_min_base_stat_total))
@@ -806,15 +721,15 @@ function buildMatchRecord({
   roundLabel,
   left,
   right,
-  template,
   battleStat,
+  template,
   random,
 }) {
   const battle = resolveTournamentBattle({
     left,
     right,
-    weights: template?.selection_rules?.battle_weights || {},
     battleStat,
+    weights: template?.selection_rules?.battle_weights || {},
     random,
     matchId,
     roundLabel,
@@ -828,20 +743,25 @@ function buildMatchRecord({
     winner: battle.winner,
     loser: battle.loser,
     winner_side: battle.winner_side,
+    battle_stat: battle.battle_stat,
+    stat_values: battle.stat_values,
+    tiebreaker: battle.tiebreaker,
     intro_line_text: battle.intro_line_text,
     insight_text: battle.insight_text,
     breakdown_text: battle.breakdown_text,
     commentary_text: battle.commentary_text,
     winner_line_text: battle.winner_line_text,
     score_cards: battle.score_cards,
-    selected_advantage: battle.selected_advantage,
-    battle_stat: battle.battle_stat,
-    stat_values: battle.stat_values,
-    tiebreaker: battle.tiebreaker,
   };
 }
 
-function buildNarrationLines(hookText, matches, championText) {
+function buildNarrationLines(template, hookText, matches, champion, random) {
+  const championText = pickSeededQuestionText(
+    template?.question_contract?.champion_text,
+    template?.question_contract?.champion_text_variants,
+    random,
+    { champion_name: champion.display_name },
+  );
   return [
     { role: 'hook', text: hookText },
     ...matches.flatMap((match) => ([
@@ -858,6 +778,10 @@ function buildTimeline(template, hookText, matches, championText) {
   const hookHoldSeconds = Number(rounds.hook_hold_seconds ?? 1.1);
   const matchIntroHoldSeconds = Number(rounds.match_intro_hold_seconds ?? 1.8);
   const suspenseHoldSeconds = Number(rounds.suspense_hold_seconds ?? 0.9);
+  const spinnerAppearDelaySeconds = Number(rounds.stat_spinner_appear_delay_seconds ?? matchIntroHoldSeconds);
+  const spinnerSpawnHoldSeconds = Number(rounds.stat_spinner_spawn_hold_seconds ?? 0.35);
+  const spinnerSpinSeconds = Number(rounds.stat_spinner_spin_seconds ?? suspenseHoldSeconds);
+  const spinnerStopHoldSeconds = Number(rounds.stat_spinner_stop_hold_seconds ?? 1.2);
   const revealHoldSeconds = Number(rounds.reveal_hold_seconds ?? 1.2);
   const transitionDurationSeconds = Number(rounds.transition_duration_seconds ?? 0.4);
   const championHoldSeconds = Number(rounds.champion_hold_seconds ?? 1.1);
@@ -871,7 +795,11 @@ function buildTimeline(template, hookText, matches, championText) {
     ...matches.map((match, index) => ({
       phase: match.round_key,
       match_id: match.match_id,
-      duration_seconds: matchIntroHoldSeconds + suspenseHoldSeconds + revealHoldSeconds + (
+      duration_seconds: spinnerAppearDelaySeconds
+        + spinnerSpawnHoldSeconds
+        + spinnerSpinSeconds
+        + spinnerStopHoldSeconds
+        + revealHoldSeconds + (
         index === matches.length - 1 ? 0 : transitionDurationSeconds
       ),
       spoken_text: `${match.intro_line_text} ${match.insight_text} ${match.winner_line_text}`.trim(),
@@ -946,18 +874,17 @@ export async function planPokemonTournamentChallenge({
       },
     )
   )));
-  const battleStatVariants = resolveTournamentStatVariants(template);
-  const semiFinalOneBattleStat = selectWeightedTournamentStat(battleStatVariants, random);
-  const semiFinalTwoBattleStat = selectWeightedTournamentStat(
-    battleStatVariants,
-    random,
-    [semiFinalOneBattleStat.key],
-  );
-  const finalBattleStat = selectWeightedTournamentStat(
-    battleStatVariants,
-    random,
-    [semiFinalOneBattleStat.key, semiFinalTwoBattleStat.key],
-  );
+
+  let previousBattleStatKey = '';
+  const selectNextBattleStat = () => {
+    const battleStat = selectTournamentBattleStat(
+      template,
+      random,
+      previousBattleStatKey ? [previousBattleStatKey] : [],
+    );
+    previousBattleStatKey = battleStat.key;
+    return battleStat;
+  };
 
   const semiFinalOne = buildMatchRecord({
     matchId: 'semi-final-1',
@@ -965,8 +892,8 @@ export async function planPokemonTournamentChallenge({
     roundLabel: 'Semi Final 1',
     left: participants[0],
     right: participants[1],
+    battleStat: selectNextBattleStat(),
     template,
-    battleStat: semiFinalOneBattleStat,
     random,
   });
   const semiFinalTwo = buildMatchRecord({
@@ -975,8 +902,8 @@ export async function planPokemonTournamentChallenge({
     roundLabel: 'Semi Final 2',
     left: participants[2],
     right: participants[3],
+    battleStat: selectNextBattleStat(),
     template,
-    battleStat: semiFinalTwoBattleStat,
     random,
   });
   const finalMatch = buildMatchRecord({
@@ -985,8 +912,8 @@ export async function planPokemonTournamentChallenge({
     roundLabel: 'Final',
     left: semiFinalOne.winner,
     right: semiFinalTwo.winner,
+    battleStat: selectNextBattleStat(),
     template,
-    battleStat: finalBattleStat,
     random,
   });
   const matches = [semiFinalOne, semiFinalTwo, finalMatch];
@@ -1000,9 +927,7 @@ export async function planPokemonTournamentChallenge({
     template?.question_contract?.champion_text,
     template?.question_contract?.champion_text_variants,
     random,
-    {
-      champion_name: champion.display_name,
-    },
+    { champion_name: champion.display_name },
   );
   const tournamentBackgroundPool = (
     Array.isArray(inventory?.battle_backgrounds) && inventory.battle_backgrounds.length > 0
@@ -1109,8 +1034,7 @@ export async function planPokemonTournamentChallenge({
       mode: String(template?.selection_rules?.mode || 'single_elimination_bracket').trim().toLowerCase() || 'single_elimination_bracket',
       participant_count: participants.length,
       round_count: matches.length,
-      battle_stat_keys: matches.map((match) => match.battle_stat.key),
-      battle_stat_labels: matches.map((match) => match.battle_stat.spoken_label),
+      battle_stats: matches.map((match) => match.battle_stat?.key).filter(Boolean),
       pool_key: selectedPool.key,
       pool_label: selectedPool.label,
       pool_selector: selectedPool.selector,
@@ -1136,13 +1060,11 @@ export async function planPokemonTournamentChallenge({
       participants,
       matches,
       champion,
-      battle_stats: matches.map((match) => match.battle_stat),
-      champion_text: championText,
     },
     narration: {
       local_model_required: false,
       tts_provider: 'kokoro',
-      lines: buildNarrationLines(hookText, matches, championText),
+      lines: buildNarrationLines(template, hookText, matches, champion, random),
     },
     timeline: buildTimeline(template, hookText, matches, championText),
     assets: {
