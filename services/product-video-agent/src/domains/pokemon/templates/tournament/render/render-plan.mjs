@@ -306,7 +306,6 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
     },
     seed: String(plan?.seed || ''),
     participant_count: participantCount,
-    battle_stat: plan?.tournament?.battle_stat || null,
     total_duration_seconds: championScene.end_seconds,
     text_layout: buildTextLayout(template),
     bracket_layout: buildBracketLayout(template),

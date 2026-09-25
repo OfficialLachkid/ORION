@@ -25,7 +25,6 @@ const DEFAULT_TOURNAMENT_STAT_VARIANTS = Object.freeze([
     key: 'hp',
     label: 'HP',
     spoken_label: 'HP',
-    hook_text: 'Who has the most HP in this tournament?',
     badge_text: 'HP TOURNAMENT',
     color: '0xFF4D6D',
     weight: 1,
@@ -34,7 +33,6 @@ const DEFAULT_TOURNAMENT_STAT_VARIANTS = Object.freeze([
     key: 'attack',
     label: 'Attack',
     spoken_label: 'Attack',
-    hook_text: 'Who has the highest Attack in this tournament?',
     badge_text: 'ATTACK TOURNAMENT',
     color: '0xFF8F1F',
     weight: 1,
@@ -43,7 +41,6 @@ const DEFAULT_TOURNAMENT_STAT_VARIANTS = Object.freeze([
     key: 'defense',
     label: 'Defense',
     spoken_label: 'Defense',
-    hook_text: 'Who has the highest Defense in this tournament?',
     badge_text: 'DEFENSE TOURNAMENT',
     color: '0xFFD23F',
     weight: 1,
@@ -52,7 +49,6 @@ const DEFAULT_TOURNAMENT_STAT_VARIANTS = Object.freeze([
     key: 'special_attack',
     label: 'Sp. Atk',
     spoken_label: 'Special Attack',
-    hook_text: 'Who has the highest Special Attack in this tournament?',
     badge_text: 'SP. ATTACK TOURNAMENT',
     color: '0x4D8CFF',
     weight: 1,
@@ -61,7 +57,6 @@ const DEFAULT_TOURNAMENT_STAT_VARIANTS = Object.freeze([
     key: 'special_defense',
     label: 'Sp. Def',
     spoken_label: 'Special Defense',
-    hook_text: 'Who has the highest Special Defense in this tournament?',
     badge_text: 'SP. DEFENSE TOURNAMENT',
     color: '0x55D66B',
     weight: 1,
@@ -70,7 +65,6 @@ const DEFAULT_TOURNAMENT_STAT_VARIANTS = Object.freeze([
     key: 'speed',
     label: 'Speed',
     spoken_label: 'Speed',
-    hook_text: 'Who is the fastest in this tournament?',
     badge_text: 'SPEED TOURNAMENT',
     color: '0xFF58A8',
     weight: 1,
@@ -499,27 +493,29 @@ function resolveTournamentStatVariants(template = {}) {
       key: String(variant?.key || '').trim().toLowerCase(),
       label: String(variant?.label || variant?.key || `Stat ${index + 1}`).trim(),
       spoken_label: String(variant?.spoken_label || variant?.label || variant?.key || '').trim(),
-      hook_text: String(variant?.hook_text || '').trim(),
       badge_text: String(variant?.badge_text || '').trim(),
       color: String(variant?.color || '0xFFD60A').trim(),
       weight: Math.max(1, Number(variant?.weight) || 1),
     }))
-    .filter((variant) => supportedKeys.has(variant.key) && variant.hook_text);
+    .filter((variant) => supportedKeys.has(variant.key));
 }
 
-function selectWeightedTournamentStat(variants = [], random = Math.random) {
+function selectWeightedTournamentStat(variants = [], random = Math.random, excludedKeys = []) {
   if (!Array.isArray(variants) || variants.length === 0) {
     return DEFAULT_TOURNAMENT_STAT_VARIANTS.at(-1);
   }
-  const totalWeight = variants.reduce((sum, variant) => sum + variant.weight, 0);
+  const excluded = new Set((Array.isArray(excludedKeys) ? excludedKeys : []).map((key) => String(key || '').trim()));
+  const eligibleVariants = variants.filter((variant) => !excluded.has(variant.key));
+  const selectableVariants = eligibleVariants.length > 0 ? eligibleVariants : variants;
+  const totalWeight = selectableVariants.reduce((sum, variant) => sum + variant.weight, 0);
   let cursor = random() * totalWeight;
-  for (const variant of variants) {
+  for (const variant of selectableVariants) {
     cursor -= variant.weight;
     if (cursor <= 0) {
       return variant;
     }
   }
-  return variants.at(-1);
+  return selectableVariants.at(-1);
 }
 
 function filterCombatantsForTournamentPool(subjects = [], pool = {}, template = {}) {
@@ -950,9 +946,17 @@ export async function planPokemonTournamentChallenge({
       },
     )
   )));
-  const selectedBattleStat = selectWeightedTournamentStat(
-    resolveTournamentStatVariants(template),
+  const battleStatVariants = resolveTournamentStatVariants(template);
+  const semiFinalOneBattleStat = selectWeightedTournamentStat(battleStatVariants, random);
+  const semiFinalTwoBattleStat = selectWeightedTournamentStat(
+    battleStatVariants,
     random,
+    [semiFinalOneBattleStat.key],
+  );
+  const finalBattleStat = selectWeightedTournamentStat(
+    battleStatVariants,
+    random,
+    [semiFinalTwoBattleStat.key],
   );
 
   const semiFinalOne = buildMatchRecord({
@@ -962,7 +966,7 @@ export async function planPokemonTournamentChallenge({
     left: participants[0],
     right: participants[1],
     template,
-    battleStat: selectedBattleStat,
+    battleStat: semiFinalOneBattleStat,
     random,
   });
   const semiFinalTwo = buildMatchRecord({
@@ -972,7 +976,7 @@ export async function planPokemonTournamentChallenge({
     left: participants[2],
     right: participants[3],
     template,
-    battleStat: selectedBattleStat,
+    battleStat: semiFinalTwoBattleStat,
     random,
   });
   const finalMatch = buildMatchRecord({
@@ -982,19 +986,22 @@ export async function planPokemonTournamentChallenge({
     left: semiFinalOne.winner,
     right: semiFinalTwo.winner,
     template,
-    battleStat: selectedBattleStat,
+    battleStat: finalBattleStat,
     random,
   });
   const matches = [semiFinalOne, semiFinalTwo, finalMatch];
   const champion = finalMatch.winner;
-  const hookText = selectedBattleStat.hook_text;
+  const hookText = pickSeededQuestionText(
+    template?.question_contract?.hook_text,
+    template?.question_contract?.hook_text_variants,
+    random,
+  );
   const championText = pickSeededQuestionText(
     template?.question_contract?.champion_text,
     template?.question_contract?.champion_text_variants,
     random,
     {
       champion_name: champion.display_name,
-      stat_label: selectedBattleStat.spoken_label,
     },
   );
   const tournamentBackgroundPool = (
@@ -1102,8 +1109,8 @@ export async function planPokemonTournamentChallenge({
       mode: String(template?.selection_rules?.mode || 'single_elimination_bracket').trim().toLowerCase() || 'single_elimination_bracket',
       participant_count: participants.length,
       round_count: matches.length,
-      battle_stat_key: selectedBattleStat.key,
-      battle_stat_label: selectedBattleStat.spoken_label,
+      battle_stat_keys: matches.map((match) => match.battle_stat.key),
+      battle_stat_labels: matches.map((match) => match.battle_stat.spoken_label),
       pool_key: selectedPool.key,
       pool_label: selectedPool.label,
       pool_selector: selectedPool.selector,
@@ -1129,7 +1136,7 @@ export async function planPokemonTournamentChallenge({
       participants,
       matches,
       champion,
-      battle_stat: selectedBattleStat,
+      battle_stats: matches.map((match) => match.battle_stat),
       champion_text: championText,
     },
     narration: {

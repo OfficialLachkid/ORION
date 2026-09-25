@@ -1026,16 +1026,67 @@ function appendBattleStatsFilters({
 }
 
 function buildSlotNameDrawtext(text, slot, fontPart, fontSize, enableExpression = '') {
+  const fittedFontSize = fitSingleLineFontSize(text, Math.max(80, slot.width - 18), fontSize, 18);
   const enablePart = enableExpression ? `:enable='${enableExpression}'` : '';
-  return `drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=white:fontsize=${fontSize}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${slot.center_x}-text_w/2:y=${slot.y + slot.height - 46}${enablePart}`;
+  const leftBoundary = slot.x + 8;
+  const rightBoundary = slot.x + slot.width - 8;
+  const xExpression = `max(${leftBoundary},min(${slot.center_x}-text_w/2,${rightBoundary}-text_w))`;
+  return `drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=white:fontsize=${fittedFontSize}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='${xExpression}':y=${slot.y + slot.height - 46}${enablePart}`;
 }
 
 function buildPlaceholderDrawtext(slot, fontPart, enableExpression) {
   return `drawtext=text='?'${fontPart}:fontcolor=white:fontsize=84:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${slot.center_x}-text_w/2:y=${slot.y + 32}:enable='${enableExpression}'`;
 }
 
-function buildAnimatedSceneText(text, fontPart, fontSize, y, startSeconds, endSeconds, color = 'white') {
-  return `drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=${color}:fontsize=${fontSize}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y='${buildAnimatedTextYExpression(y, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'`;
+function fitSingleLineFontSize(text, maxWidth, requestedFontSize, minimumFontSize = 18) {
+  const characterCount = Math.max(1, Array.from(String(text || '')).length);
+  const estimatedFontSize = Math.floor(maxWidth / (characterCount * 0.62));
+  return Math.max(minimumFontSize, Math.min(Math.floor(requestedFontSize), estimatedFontSize));
+}
+
+function fitSceneTextBlock(text, template, requestedFontSize, maxLines) {
+  const requested = Math.max(18, Math.floor(requestedFontSize));
+  const minimum = Math.max(18, Math.floor(requested * 0.45));
+  for (let fontSize = requested; fontSize >= minimum; fontSize -= 2) {
+    const maxCharactersPerLine = Math.max(
+      8,
+      Math.floor(estimateWrapCharacterLimit(template, fontSize) * 0.82),
+    );
+    const wrapped = wrapTextBlock(text, {
+      maxCharactersPerLine,
+      maxLines: Number.MAX_SAFE_INTEGER,
+    });
+    if (
+      wrapped.lines.length <= maxLines
+      && wrapped.lines.every((line) => Array.from(line).length <= maxCharactersPerLine)
+    ) {
+      return { fontSize, lines: wrapped.lines };
+    }
+  }
+  const maxCharactersPerLine = Math.max(
+    8,
+    Math.floor(estimateWrapCharacterLimit(template, minimum) * 0.82),
+  );
+  return {
+    fontSize: minimum,
+    lines: wrapTextBlock(text, {
+      maxCharactersPerLine,
+      maxLines: Number.MAX_SAFE_INTEGER,
+    }).lines,
+  };
+}
+
+function buildAnimatedSceneText(
+  text,
+  fontPart,
+  fontSize,
+  y,
+  startSeconds,
+  endSeconds,
+  color = 'white',
+  xExpression = '(w-text_w)/2',
+) {
+  return `drawtext=text='${escapeDrawtextText(text)}'${fontPart}:fontcolor=${color}:fontsize=${fontSize}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='${xExpression}':y='${buildAnimatedTextYExpression(y, startSeconds)}':alpha='${buildAnimatedTextSegmentAlphaExpression(startSeconds, endSeconds)}':enable='${formatEnableBetween(startSeconds, endSeconds)}'`;
 }
 
 function buildAnimatedSceneTextBlock(
@@ -1053,26 +1104,27 @@ function buildAnimatedSceneTextBlock(
   } = {},
 ) {
   const safeTop = ensureNumber(safeTopOverride, ensureNumber(template?.canvas?.safe_zone?.top, 160));
-  const lineHeight = Math.round(fontSize + 12);
-  const maxCharactersPerLine = Math.max(10, Math.floor(estimateWrapCharacterLimit(template, fontSize) * 0.92));
-  const wrapped = wrapTextBlock(text, {
-    maxCharactersPerLine,
-    maxLines,
-  });
-  const lines = wrapped.lines.length > 0 ? wrapped.lines : [String(text || '').trim()].filter(Boolean);
+  const safeLeft = ensureNumber(template?.canvas?.safe_zone?.left, 100);
+  const safeRight = ensureNumber(template?.canvas?.safe_zone?.right, 100);
+  const fitted = fitSceneTextBlock(text, template, fontSize, maxLines);
+  const effectiveFontSize = fitted.fontSize;
+  const lineHeight = Math.round(effectiveFontSize + 12);
+  const lines = fitted.lines.length > 0 ? fitted.lines : [String(text || '').trim()].filter(Boolean);
   const blockStartY = Math.max(
     safeTop - 8,
     Math.round(y - (((Math.max(1, lines.length) - 1) * lineHeight) / 2)),
   );
+  const xExpression = `max(${safeLeft},min((w-text_w)/2,w-${safeRight}-text_w))`;
   return lines.map((lineText, index) => (
     buildAnimatedSceneText(
       lineText,
       fontPart,
-      fontSize,
+      effectiveFontSize,
       blockStartY + (index * lineHeight),
       startSeconds,
       endSeconds,
       color,
+      xExpression,
     )
   ));
 }
@@ -1593,20 +1645,6 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         firstMatch.intro_start_seconds,
       ),
     );
-    const battleStat = renderPlan.battle_stat || plan.tournament?.battle_stat;
-    if (battleStat?.badge_text) {
-      drawtextParts.push(
-        buildAnimatedSceneText(
-          battleStat.badge_text,
-          fontPart,
-          renderPlan.text_layout.stat_badge_font_size,
-          renderPlan.text_layout.stat_badge_y,
-          firstMatch.intro_start_seconds,
-          renderPlan.champion_scene.end_seconds,
-          battleStat.color || '0xFFD60A',
-        ),
-      );
-    }
   }
 
   (plan.tournament?.participants || []).forEach((participant, index) => {
@@ -1660,6 +1698,23 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
 
   renderPlan.matches.forEach((match) => {
+    const battleNameMaxWidth = Math.max(180, (renderPlan.canvas.width / 2) - 100);
+    const leftBattleNameFontSize = fitSingleLineFontSize(
+      match.participant_a.display_name,
+      battleNameMaxWidth,
+      renderPlan.battle_stage.name_font_size,
+      24,
+    );
+    const rightBattleNameFontSize = fitSingleLineFontSize(
+      match.participant_b.display_name,
+      battleNameMaxWidth,
+      renderPlan.battle_stage.name_font_size,
+      24,
+    );
+    const battleHalfMargin = 40;
+    const halfWidth = renderPlan.canvas.width / 2;
+    const leftBattleNameX = `max(${battleHalfMargin},min(${renderPlan.battle_stage.left_center_x}-text_w/2,${halfWidth - battleHalfMargin}-text_w))`;
+    const rightBattleNameX = `max(${halfWidth + battleHalfMargin},min(${renderPlan.battle_stage.right_center_x}-text_w/2,w-${battleHalfMargin}-text_w))`;
     const winnerSlotKey = (
       match.match_id === 'semi-final-1' ? 'semi_1_winner'
         : match.match_id === 'semi-final-2' ? 'semi_2_winner'
@@ -1675,6 +1730,20 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           bracketVisibleExpression,
           `gte(t,${match.bracket_progress_end_seconds})`,
         ),
+      ),
+      ...buildAnimatedSceneTextBlock(
+        match.battle_stat?.badge_text || '',
+        fontPart,
+        template,
+        renderPlan.text_layout.stat_badge_font_size,
+        renderPlan.text_layout.stat_badge_y,
+        match.intro_start_seconds,
+        match.scene_end_seconds,
+        {
+          color: match.battle_stat?.color || '0xFFD60A',
+          maxLines: 1,
+          safeTopOverride: 40,
+        },
       ),
       ...buildAnimatedSceneTextBlock(
         match.round_label,
@@ -1716,14 +1785,29 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         match.scene_end_seconds,
         { color: '0xFFD60A', maxLines: 2 },
       ),
-      `drawtext=text='${escapeDrawtextText(match.participant_a.display_name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.battle_stage.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.battle_stage.left_center_x}-text_w/2:y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
-      `drawtext=text='${escapeDrawtextText(match.participant_b.display_name)}'${fontPart}:fontcolor=white:fontsize=${renderPlan.battle_stage.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.battle_stage.right_center_x}-text_w/2:y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
+      `drawtext=text='${escapeDrawtextText(match.participant_a.display_name)}'${fontPart}:fontcolor=white:fontsize=${leftBattleNameFontSize}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='${leftBattleNameX}':y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
+      `drawtext=text='${escapeDrawtextText(match.participant_b.display_name)}'${fontPart}:fontcolor=white:fontsize=${rightBattleNameFontSize}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='${rightBattleNameX}':y=${renderPlan.battle_stage.name_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.scene_end_seconds)}'`,
       ...(inputRefs.versus == null
         ? [`drawtext=text='VS'${fontPart}:fontcolor=0xFFD60A:fontsize=${renderPlan.battle_stage.vs_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${renderPlan.battle_stage.vs_y}:enable='${formatEnableBetween(match.intro_start_seconds, match.reveal_start_seconds)}'`]
         : []),
     );
   });
 
+  const championNameMaxWidth = Math.max(
+    180,
+    renderPlan.canvas.width
+      - ensureNumber(template?.canvas?.safe_zone?.left, 100)
+      - ensureNumber(template?.canvas?.safe_zone?.right, 100),
+  );
+  const championNameFontSize = fitSingleLineFontSize(
+    plan.tournament?.champion?.display_name || '',
+    championNameMaxWidth,
+    renderPlan.champion_stage.name_font_size,
+    28,
+  );
+  const championSafeLeft = ensureNumber(template?.canvas?.safe_zone?.left, 100);
+  const championSafeRight = ensureNumber(template?.canvas?.safe_zone?.right, 100);
+  const championNameX = `max(${championSafeLeft},min((w-text_w)/2,w-${championSafeRight}-text_w))`;
   drawtextParts.push(
     ...buildAnimatedSceneTextBlock(
       plan.tournament?.champion_text || `Winner: ${plan.tournament?.champion?.display_name || ''}`,
@@ -1735,7 +1819,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       renderPlan.champion_scene.end_seconds,
       { color: '0xFFD60A', maxLines: 2 },
     ),
-    `drawtext=text='${escapeDrawtextText(plan.tournament?.champion?.display_name || '')}'${fontPart}:fontcolor=white:fontsize=${renderPlan.champion_stage.name_font_size}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${renderPlan.champion_stage.name_y}:enable='${formatEnableBetween(renderPlan.champion_scene.start_seconds, renderPlan.champion_scene.end_seconds)}'`,
+    `drawtext=text='${escapeDrawtextText(plan.tournament?.champion?.display_name || '')}'${fontPart}:fontcolor=white:fontsize=${championNameFontSize}:borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x='${championNameX}':y=${renderPlan.champion_stage.name_y}:enable='${formatEnableBetween(renderPlan.champion_scene.start_seconds, renderPlan.champion_scene.end_seconds)}'`,
   );
 
   filters.push(

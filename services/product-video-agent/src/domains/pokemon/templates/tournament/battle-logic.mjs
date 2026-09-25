@@ -422,7 +422,7 @@ function resolveTournamentStatBattle({ left, right, battleStat, matchId, roundLa
     loserValue,
     tiebreaker,
   });
-  const introLineText = `${left.display_name} versus ${right.display_name}.`;
+  const introLineText = `${battleStat.spoken_label} battle. ${left.display_name} versus ${right.display_name}.`;
   const scoreCards = {
     left: {
       selected_stat_key: battleStat.key,

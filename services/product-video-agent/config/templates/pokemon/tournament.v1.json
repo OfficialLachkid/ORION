@@ -9,7 +9,7 @@
     "winner_reveal",
     "champion_reveal"
   ],
-  "version": "1.0.0",
+  "version": "1.1.0",
   "canvas": {
     "width": 1080,
     "height": 1920,
@@ -86,7 +86,6 @@
         "key": "hp",
         "label": "HP",
         "spoken_label": "HP",
-        "hook_text": "Who has the most HP in this tournament?",
         "badge_text": "HP TOURNAMENT",
         "color": "0xFF4D6D",
         "weight": 1
@@ -95,7 +94,6 @@
         "key": "attack",
         "label": "Attack",
         "spoken_label": "Attack",
-        "hook_text": "Who has the highest Attack in this tournament?",
         "badge_text": "ATTACK TOURNAMENT",
         "color": "0xFF8F1F",
         "weight": 1
@@ -104,7 +102,6 @@
         "key": "defense",
         "label": "Defense",
         "spoken_label": "Defense",
-        "hook_text": "Who has the highest Defense in this tournament?",
         "badge_text": "DEFENSE TOURNAMENT",
         "color": "0xFFD23F",
         "weight": 1
@@ -113,7 +110,6 @@
         "key": "special_attack",
         "label": "Sp. Atk",
         "spoken_label": "Special Attack",
-        "hook_text": "Who has the highest Special Attack in this tournament?",
         "badge_text": "SP. ATTACK TOURNAMENT",
         "color": "0x4D8CFF",
         "weight": 1
@@ -122,7 +118,6 @@
         "key": "special_defense",
         "label": "Sp. Def",
         "spoken_label": "Special Defense",
-        "hook_text": "Who has the highest Special Defense in this tournament?",
         "badge_text": "SP. DEFENSE TOURNAMENT",
         "color": "0x55D66B",
         "weight": 1
@@ -131,7 +126,6 @@
         "key": "speed",
         "label": "Speed",
         "spoken_label": "Speed",
-        "hook_text": "Who is the fastest in this tournament?",
         "badge_text": "SPEED TOURNAMENT",
         "color": "0xFF58A8",
         "weight": 1
@@ -139,20 +133,20 @@
     ]
   },
   "question_contract": {
-    "hook_text": "Who wins this tournament?",
+    "hook_text": "Which Pokemon wins each stat battle?",
     "hook_text_variants": [
-      "Who wins this tournament?",
-      "Who takes this Pokemon tournament?",
-      "Who will champion of this tournament?"
+      "Which Pokemon wins each stat battle?",
+      "Who survives every stat battle?",
+      "Which Pokemon takes the tournament?"
     ],
     "matchup_text": "{pokemon_a} vs {pokemon_b}",
     "matchup_text_variants": [
       "{pokemon_a} vs {pokemon_b}",
       "{pokemon_a} versus {pokemon_b}"
     ],
-    "champion_text": "{champion_name} wins the {stat_label} tournament!",
+    "champion_text": "{champion_name} wins the tournament!",
     "champion_text_variants": [
-      "{champion_name} wins the {stat_label} tournament!"
+      "{champion_name} wins the tournament!"
     ]
   },
   "layout": {
