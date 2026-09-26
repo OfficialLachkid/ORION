@@ -279,13 +279,24 @@ function closePlaywrightSession(sessionName) {
     return;
   }
 
+  // Best-effort cleanup only — never let a missing binary or an async
+  // spawn failure crash the qualifier. Note: `spawn` emits 'error'
+  // ASYNCHRONOUSLY when the executable can't be found (ENOENT), so a
+  // bare try/catch does NOT catch it — the emitted 'error' event on
+  // the child becomes an uncaughtException instead. Attach an .on('error')
+  // handler so the failure is truly swallowed. Observed 2026-09-26 as
+  // "manual qualification stuck on lead #1" when the discord-bot's
+  // LaunchAgent PATH lacked /opt/homebrew/bin and playwright-cli
+  // couldn't be located; the cleanup crash killed the whole child.
   try {
-    spawn('playwright-cli', ['-s', sessionName, 'close'], {
+    const child = spawn('playwright-cli', ['-s', sessionName, 'close'], {
       stdio: 'ignore',
       detached: true,
-    }).unref();
+    });
+    child.on('error', () => { /* swallowed — best-effort cleanup */ });
+    child.unref();
   } catch {
-    // best-effort cleanup only
+    // synchronous spawn failures land here — same treatment
   }
 }
 
