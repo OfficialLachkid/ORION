@@ -7,8 +7,13 @@ import {
   planPokemonCryMatchChallenge,
 } from '../src/domains/pokemon/templates/cry-match/planner.mjs';
 import {
+  filterSubjectsForCryMatchPool,
+  selectCryMatchSubjectPool,
+} from '../src/domains/pokemon/templates/cry-match/subject-pools.mjs';
+import {
   buildPokeQuizzRenderPlan,
   buildAudioFilterScript,
+  buildVisualFilterScript,
 } from '../src/domains/pokemon/templates/cry-match/renderer.mjs';
 import { buildCryMatchCryCues } from '../src/domains/pokemon/templates/cry-match/render/audio-filter-script.mjs';
 import {
@@ -46,14 +51,170 @@ function buildFixtureSubject(index, overrides = {}) {
   };
 }
 
+function buildPoolFixtureSubjects() {
+  return [
+    buildFixtureSubject(1, { slug: 'pichu', name: 'Pichu', metadata: { is_baby: true } }),
+    buildFixtureSubject(2, { slug: 'bulbasaur', name: 'Bulbasaur', metadata: { evolution_stage: 'base' } }),
+    buildFixtureSubject(3, { slug: 'ivysaur', name: 'Ivysaur', metadata: { evolution_stage: 'middle' } }),
+    buildFixtureSubject(4, {
+      slug: 'venusaur',
+      name: 'Venusaur',
+      metadata: { evolution_stage: 'final', is_final_evolution: true },
+    }),
+    buildFixtureSubject(5, { slug: 'articuno', name: 'Articuno', metadata: { is_legendary: true } }),
+    buildFixtureSubject(6, { slug: 'mew', name: 'Mew', metadata: { is_mythical: true } }),
+    buildFixtureSubject(7, {
+      slug: 'venusaur-mega',
+      name: 'Mega Venusaur',
+      metadata: {
+        evolution_stage: 'final',
+        is_final_evolution: true,
+        pokemon_api: { is_mega: true, species_name: 'venusaur' },
+      },
+    }),
+    buildFixtureSubject(8, {
+      slug: 'venusaur-gmax',
+      name: 'Gigantamax Venusaur',
+      metadata: {
+        evolution_stage: 'final',
+        is_final_evolution: true,
+        pokemon_api: { is_gigantamax: true, species_name: 'venusaur' },
+      },
+    }),
+    buildFixtureSubject(9, { slug: 'ditto', name: 'Ditto' }),
+  ];
+}
+
 test('cry-match config sanity — template_id + template_key + mode align', async () => {
   const template = await loadTemplate();
   assert.equal(template.template_id, 'pokemon.cry-match.v1');
   assert.equal(template.template_key, 'cry-match');
   assert.equal(template.selection_rules.mode, 'cry_target');
   assert.equal(template.selection_rules.candidate_count, 4);
+  assert.equal(template.selection_rules.pool_selection_mode, 'seeded_weighted_round');
+  assert.equal(template.selection_rules.pool_order_mode, 'weighted_without_replacement_each_cycle');
+  assert.deepEqual(
+    template.selection_rules.pool_variants.map((pool) => pool.key),
+    [
+      'mixed',
+      'legendary',
+      'final_stage',
+      'middle_stage',
+      'first_stage',
+      'baby',
+      'mega',
+      'dynamax',
+      'final_starter',
+    ],
+  );
+  assert.ok(template.selection_rules.pool_variants.every((pool) => pool.weight === 1));
   assert.ok(template.audio?.cry_playback?.enabled, 'cry_playback must be enabled');
   assert.ok(template.layout?.cry_meter?.enabled, 'cry_meter overlay must be enabled');
+  assert.deepEqual(
+    template.layout.cry_meter.equalizer.palettes.map((palette) => palette.id),
+    ['electric-blue', 'rainbow', 'red', 'yellow', 'green', 'purple', 'sunset'],
+  );
+});
+
+test('cry-match subject pools classify every requested Pokemon group', () => {
+  const subjects = buildPoolFixtureSubjects();
+  const slugsFor = (selector) => filterSubjectsForCryMatchPool(subjects, { selector })
+    .map((subject) => subject.slug);
+
+  assert.deepEqual(slugsFor('legendary_only'), ['articuno']);
+  assert.deepEqual(slugsFor('final_stage_evolutions'), ['venusaur']);
+  assert.deepEqual(slugsFor('middle_stage_evolutions'), ['ivysaur']);
+  assert.deepEqual(slugsFor('first_stage_evolutions'), ['bulbasaur']);
+  assert.deepEqual(slugsFor('baby_pokemon'), ['pichu']);
+  assert.deepEqual(slugsFor('mega_pokemon'), ['venusaur-mega']);
+  assert.deepEqual(slugsFor('dynamax_pokemon'), ['venusaur-gmax']);
+  assert.deepEqual(slugsFor('final_starter_evolutions'), ['venusaur']);
+  assert.equal(slugsFor('all').length, subjects.length);
+});
+
+test('cry-match skips configured pools that cannot fill all four candidate slots', () => {
+  const subjects = buildPoolFixtureSubjects();
+  const selectedPool = selectCryMatchSubjectPool({
+    eligibleSubjects: subjects,
+    candidateCount: 4,
+    random: () => 0,
+    template: {
+      selection_rules: {
+        pool_variants: [
+          { key: 'baby', label: 'Baby Pokemon', selector: 'baby_pokemon', weight: 100 },
+          { key: 'mixed', label: 'Mixed Pokemon', selector: 'all', weight: 1 },
+        ],
+      },
+    },
+  });
+  assert.equal(selectedPool.key, 'mixed');
+  assert.equal(selectedPool.subjects.length, subjects.length);
+});
+
+test('cry-match randomly assigns a different viable specialty pool to every round', async () => {
+  const template = await loadTemplate();
+  template.selection_rules.round_count_levels = {};
+  template.selection_rules.round_count_weights = {};
+  template.selection_rules.round_count = 3;
+  template.selection_rules.pool_variants = [
+    { key: 'legendary', label: 'Legendary Pokemon', selector: 'legendary_only', weight: 1 },
+    { key: 'baby', label: 'Baby Pokemon', selector: 'baby_pokemon', weight: 1 },
+    { key: 'mega', label: 'Mega Pokemon', selector: 'mega_pokemon', weight: 1 },
+  ];
+  const legendarySubjects = Array.from({ length: 4 }, (_, index) => buildFixtureSubject(index + 20, {
+    slug: `legendary-${index + 1}`,
+    name: `Legendary ${index + 1}`,
+    cry_path: process.execPath,
+    metadata: { is_legendary: true },
+  }));
+  const babySubjects = Array.from({ length: 4 }, (_, index) => buildFixtureSubject(index + 30, {
+    slug: `baby-${index + 1}`,
+    name: `Baby ${index + 1}`,
+    cry_path: process.execPath,
+    metadata: { is_baby: true },
+  }));
+  const megaSubjects = Array.from({ length: 4 }, (_, index) => buildFixtureSubject(index + 40, {
+    slug: `mega-${index + 1}`,
+    name: `Mega ${index + 1}`,
+    cry_path: process.execPath,
+    metadata: { pokemon_api: { is_mega: true } },
+  }));
+  const plan = await planPokemonCryMatchChallenge({
+    template,
+    pokedexRows: [...legendarySubjects, ...babySubjects, ...megaSubjects],
+    seed: 'cry-match-random-pool-per-round',
+    assetInventory: {
+      backgrounds: ['/fake/bg.png'],
+      sound_effects: {
+        countdown_tick: '/fake/tick.wav',
+        timer_end: '/fake/ding.wav',
+        pokeball_intro: '/fake/open.wav',
+        all: [],
+      },
+      overlay_presets: {
+        grass_plateau: '/fake/platform.png',
+        pokeball_primary: '/fake/pokeball.gif',
+      },
+      overlays: [],
+      music: [],
+    },
+  });
+
+  assert.equal(plan.selection.pool_selection_mode, 'seeded_weighted_round');
+  assert.equal(plan.selection.pool_forced, false);
+  assert.equal(plan.rounds.length, 3);
+  assert.deepEqual(new Set(plan.selection.pool_keys), new Set(['legendary', 'baby', 'mega']));
+  assert.deepEqual(plan.selection.pool_keys, plan.rounds.map((round) => round.pool_key));
+  const expectedSlugPrefixByPool = {
+    legendary: 'legendary-',
+    baby: 'baby-',
+    mega: 'mega-',
+  };
+  for (const round of plan.rounds) {
+    const expectedPrefix = expectedSlugPrefixByPool[round.pool_key];
+    assert.ok(expectedPrefix, `unexpected pool ${round.pool_key}`);
+    assert.ok(round.candidates.every((candidate) => candidate.subject.slug.startsWith(expectedPrefix)));
+  }
 });
 
 test('cry-match template is exposed in the slash-command PRODUCT_VIDEO_TEMPLATE_OPTIONS', () => {
@@ -123,6 +284,11 @@ test('planner picks 4 candidates per round, marks exactly one as the target, and
     plan.narration.lines.length, 1,
     'exactly one TTS narration line should be emitted (the round-1 hook)',
   );
+  assert.ok(
+    template.layout.cry_meter.equalizer.palettes
+      .some((palette) => palette.id === plan.selection.cry_meter_palette.id),
+    'planner must select one configured soundbar palette for the whole video',
+  );
 });
 
 test('cry cue builder emits countdown-start cues and a reveal replay for the target only', async () => {
@@ -189,7 +355,46 @@ test('render plan carries the cry_meter_layout and drops the old stat_value_layo
   const renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath: '/tmp/fake.mp4' });
   assert.ok(renderPlan.cry_meter_layout, 'render plan must include cry_meter_layout');
   assert.equal(renderPlan.cry_meter_layout.enabled, true);
+  assert.deepEqual(
+    renderPlan.cry_meter_layout.equalizer.palette,
+    plan.selection.cry_meter_palette,
+  );
   assert.ok(!('stat_value_layout' in renderPlan), 'stat_value_layout leftover must be dropped');
+});
+
+test('visual soundbar colors are generated from the video-level seeded palette', async () => {
+  const template = await loadTemplate();
+  const pokedexRows = Array.from({ length: 12 }, (_, index) => buildFixtureSubject(index + 1));
+  const plan = await planPokemonCryMatchChallenge({
+    template,
+    pokedexRows,
+    seed: 'cry-match-colored-soundbar',
+    assetInventory: {
+      backgrounds: ['/fake/bg.png'], sound_effects: { countdown_tick: '/f/t.wav', timer_end: '/f/d.wav', all: [] },
+      overlay_presets: { grass_plateau: '/f/p.png', pokeball_primary: '/f/pb.gif' },
+      overlays: [], music: [],
+    },
+    selectionState: null,
+  });
+  const renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath: '/tmp/fake.mp4' });
+  let nextInputRef = 1;
+  const roundInputRefs = renderPlan.rounds.map((round) => {
+    const candidates = round.candidates.map(() => nextInputRef++);
+    return { candidates, still_candidates: [], cry: nextInputRef++ };
+  });
+  const visualFilter = buildVisualFilterScript(plan, template, renderPlan, {
+    background: 0,
+    introPokeball: null,
+    grassPlatform: null,
+    rounds: roundInputRefs,
+  });
+  const paletteSize = plan.selection.cry_meter_palette.colors.length;
+
+  assert.match(
+    visualFilter.script,
+    new RegExp(`geq=r='if\\(eq\\(mod\\(floor\\(X\\/48\\)\\\\,${paletteSize}\\)`, 'u'),
+  );
+  assert.doesNotMatch(visualFilter.script, /30\+100\*abs\(sin/u);
 });
 
 test('audio filter script includes cry cue inputs when cues are supplied', async () => {

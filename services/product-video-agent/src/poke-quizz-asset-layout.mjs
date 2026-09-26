@@ -30,6 +30,7 @@ const POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES = Object.freeze({
   'find-the-shiny': 'Find the Shiny',
   'know-your-shiny': 'Know Your Shiny',
   'progressive-reveal': 'Progressive Reveal',
+  'pixelated-reveal': 'Pixelated Reveal',
   'stat-clash': 'Stat Clash',
   'build-your-team': 'Build Your Team',
   tournament: 'Tournament',
@@ -81,6 +82,9 @@ export function resolvePokeQuizzPreviewTemplateKey(templateRef) {
   }
   if (candidates.some((value) => value.includes('progressive-reveal'))) {
     return 'progressive-reveal';
+  }
+  if (candidates.some((value) => value.includes('pixelated-reveal'))) {
+    return 'pixelated-reveal';
   }
   if (candidates.some((value) => value.includes('stat-clash') || value.includes('stat-battle'))) {
     return 'stat-clash';

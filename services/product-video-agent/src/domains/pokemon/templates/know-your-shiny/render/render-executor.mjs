@@ -66,6 +66,22 @@ export function applyLocalizedDecoyAssetsToRound(round, sourceSpritePath, genera
   };
 }
 
+export function resolveLocalizedDecoyMutationConfig(plan, template) {
+  const plannedConfig = plan?.selection?.localized_decoy_color_mutation;
+  if (plannedConfig && typeof plannedConfig === 'object' && Object.keys(plannedConfig).length > 0) {
+    return { ...plannedConfig };
+  }
+  const baseConfig = template?.renderer?.localized_decoy_color_mutation;
+  const difficultyId = String(plan?.selection?.difficulty_id || '').trim();
+  const difficultyConfig = difficultyId
+    ? template?.selection_rules?.round_count_levels?.[difficultyId]?.localized_decoy_color_mutation
+    : null;
+  return {
+    ...(baseConfig && typeof baseConfig === 'object' ? baseConfig : {}),
+    ...(difficultyConfig && typeof difficultyConfig === 'object' ? difficultyConfig : {}),
+  };
+}
+
 async function prepareLocalizedDecoyRenderPlan({
   renderPlan,
   plan,
@@ -83,7 +99,7 @@ async function prepareLocalizedDecoyRenderPlan({
     'know-your-shiny-decoys',
     slugify(plan.seed || 'preview'),
   );
-  const mutationConfig = template?.renderer?.localized_decoy_color_mutation || {};
+  const mutationConfig = resolveLocalizedDecoyMutationConfig(plan, template);
   const rounds = await Promise.all((Array.isArray(renderPlan.rounds) ? renderPlan.rounds : [])
     .map(async (round) => {
       const sourceSpritePath = String(

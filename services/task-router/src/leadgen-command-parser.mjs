@@ -2,6 +2,8 @@ const DEFAULT_MAX_RESULTS = 10;
 const MAX_RESULTS_CEILING = 50;
 const DEFAULT_SWEEP_ROUNDS = 1;
 const MAX_SWEEP_ROUNDS = 10;
+const DEFAULT_QUALIFICATION_LIMIT = 3;
+const MAX_QUALIFICATION_LIMIT = 100;
 
 function normalizeWhitespace(value) {
   return String(value || '').replace(/\s+/gu, ' ').trim();
@@ -38,6 +40,28 @@ function clampRounds(value) {
   return Math.min(Math.round(parsed), MAX_SWEEP_ROUNDS);
 }
 
+function clampQualificationLimit(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_QUALIFICATION_LIMIT;
+  }
+
+  return Math.min(Math.round(parsed), MAX_QUALIFICATION_LIMIT);
+}
+
+function extractLeadQualificationParts(text) {
+  const pattern = /^run lead qualification(?:\s+limit:\s*(\d+))?$/iu;
+  const match = pattern.exec(text);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    mode: 'qualification',
+    limit: match[1] ? Number(match[1]) : DEFAULT_QUALIFICATION_LIMIT,
+  };
+}
+
 function extractLeadgenSweepParts(text) {
   const pattern = /^run leadgen sweep(?:\s+rounds:\s*(\d+))?$/iu;
   const match = pattern.exec(text);
@@ -70,6 +94,14 @@ export function parseLeadgenCommand(text) {
     return null;
   }
 
+  const extractedQualification = extractLeadQualificationParts(rawText);
+  if (extractedQualification) {
+    return {
+      mode: 'qualification',
+      limit: clampQualificationLimit(extractedQualification.limit),
+    };
+  }
+
   const extractedSweep = extractLeadgenSweepParts(rawText);
   if (extractedSweep) {
     return {
@@ -91,6 +123,10 @@ export function parseLeadgenCommand(text) {
 }
 
 export function serializeLeadgenCommand(request = {}) {
+  if (String(request.mode || '').trim().toLowerCase() === 'qualification') {
+    return serializeLeadQualificationCommand(request);
+  }
+
   if (String(request.mode || '').trim().toLowerCase() === 'sweep') {
     return serializeLeadgenSweepCommand(request);
   }
@@ -109,7 +145,16 @@ export function serializeLeadgenSweepCommand(request = {}) {
   return `run leadgen sweep rounds: ${rounds}`;
 }
 
+export function serializeLeadQualificationCommand(request = {}) {
+  const limit = clampQualificationLimit(request.limit);
+  return `run lead qualification limit: ${limit}`;
+}
+
 export function summarizeLeadgenRequest(request = {}) {
+  if (String(request.mode || '').trim().toLowerCase() === 'qualification') {
+    return `Run lead qualification: up to ${clampQualificationLimit(request.limit)} new lead(s)`;
+  }
+
   if (String(request.mode || '').trim().toLowerCase() === 'sweep') {
     return `Run leadgen sweep: ${clampRounds(request.rounds)} round(s) across all niches`;
   }

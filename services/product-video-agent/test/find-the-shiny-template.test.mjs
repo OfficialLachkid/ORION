@@ -158,6 +158,24 @@ const pokedexRows = [
   },
 ];
 
+pokedexRows.push(...Array.from({ length: 9 }, (_, index) => {
+  const dexNumber = 200 + index;
+  return {
+    id: `pokedex-${dexNumber}`,
+    national_dex_number: dexNumber,
+    name: `Fixturemon${index + 1}`,
+    generation: 1,
+    region: 'kanto',
+    types: ['ice', 'fire'],
+    sprite_path: `/tmp/fixturemon-${index + 1}.png`,
+    shiny_sprite_path: `/tmp/fixturemon-${index + 1}-shiny.png`,
+    metadata: {
+      type_icon_source_urls: [],
+      pokemon_api: { is_default_form: true },
+    },
+  };
+}));
+
 const assetInventory = {
   scanned_at: '2026-08-09T00:00:00.000Z',
   directories: {},
@@ -196,7 +214,7 @@ const assetInventory = {
   transitions: [],
 };
 
-test('generic planner dispatch builds a find-the-shiny plan with one chosen subject and themed background priority', async () => {
+test('generic planner dispatch builds a unique Pokemon grid with one or two shiny cells', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -207,13 +225,23 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
 
   assert.equal(plan.template_id, 'pokemon.find-the-shiny.v1');
   assert.deepEqual(plan.selection.type_pair, ['fire', 'ice']);
-  assert.equal(plan.selection.selected_subject_count, 1);
+  assert.equal(plan.selection.selected_subject_count, plan.selection.display_subject_count);
+  assert.equal(
+    new Set(plan.selection.selected_subjects.map((subject) => subject.pokedex_id)).size,
+    plan.selection.display_subject_count,
+  );
   assert.equal([3, 6, 9].includes(plan.selection.display_subject_count), true);
   assert.equal(plan.selection.grid.columns, 3);
   assert.equal(plan.selection.grid.rows, Math.ceil(plan.selection.display_subject_count / 3));
   assert.equal(plan.assets.background.selected_path, '/tmp/ice-backgrounds/glacier.png');
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Find the Shiny$/u);
-  assert.equal(plan.assets.pokemon[0].name, 'Articuno');
+  assert.equal(plan.assets.pokemon.some((pokemon) => pokemon.name === 'Articuno'), true);
+  assert.equal(plan.assets.pokemon.length, plan.selection.display_subject_count);
+  assert.equal(
+    plan.assets.pokemon.filter((pokemon) => pokemon.is_shiny_reveal).length,
+    plan.shiny_reveal.shiny_count,
+  );
+  assert.equal(plan.shiny_reveal.shiny_count <= (plan.selection.display_subject_count === 9 ? 2 : 1), true);
   assert.equal(plan.assets.overlays.selected_primary_pokeball_overlay_path, '/tmp/pokeball.gif');
   assert.equal(plan.assets.overlays.timer_display_mode, 'hp_bar_depletion');
   assert.equal(plan.assets.overlays.selected_timer_hp_bar_path, '/tmp/long-hp-bar-countdown-1s.mp4');
@@ -222,7 +250,7 @@ test('generic planner dispatch builds a find-the-shiny plan with one chosen subj
   assert.equal(plan.assets.overlays.selected_timer_alarm_path, null);
   assert.equal(plan.assets.audio.selected_sound_effects.pokeball_intro, '/tmp/pokeball-intro.mp3');
   assert.equal(plan.shiny_reveal.active, true);
-  assert.equal(plan.shiny_reveal.selected_name, 'Articuno');
+  assert.equal(plan.shiny_reveal.selected_names.includes(plan.shiny_reveal.selected_name), true);
   assert.equal(plan.shiny_reveal.selected_cell_index >= 0, true);
   assert.equal(plan.shiny_reveal.selected_cell_index < plan.selection.display_subject_count, true);
   assert.equal(plan.timeline.find((entry) => entry.phase === 'reveal')?.spoken_text, 'Did you find it?');
@@ -311,6 +339,30 @@ test('find-the-shiny planner can produce each supported grid size with a max of 
   assert.deepEqual([...displayCounts].sort((left, right) => left - right), [3, 6, 9]);
 });
 
+test('find-the-shiny permits two shiny Pokemon only on a nine-cell grid', async () => {
+  const hardTemplate = structuredClone(template);
+  hardTemplate.layout.sprite_grid.difficulty_levels = {
+    hard: { sprite_count: 9, rows: 3, columns: 3 },
+  };
+  hardTemplate.layout.sprite_grid.difficulty_weights = { hard: 1 };
+  hardTemplate.reveal.shiny.max_per_video = 2;
+  hardTemplate.reveal.shiny.multiple_shiny_grid_size = 9;
+  hardTemplate.reveal.shiny.multiple_shiny_chance = 1;
+  const plan = await planPokemonTypeChallenge({
+    template: hardTemplate,
+    pokedexRows,
+    seed: 'find-the-shiny-two-shinies',
+    forcedTypePair: ['ice', 'fire'],
+    assetInventory,
+  });
+
+  assert.equal(plan.selection.display_subject_count, 9);
+  assert.equal(plan.shiny_reveal.shiny_count, 2);
+  assert.equal(plan.shiny_reveal.selected_cell_indices.length, 2);
+  assert.equal(new Set(plan.shiny_reveal.selected_cell_indices).size, 2);
+  assert.equal(plan.assets.pokemon.filter((pokemon) => pokemon.is_shiny_reveal).length, 2);
+});
+
 test('generic render-plan dispatch keeps the shiny grid centered and reveal timing deterministic', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
@@ -369,7 +421,7 @@ test('find-the-shiny hook text uses the configured lower position and larger fon
   assert.equal(centeredY, 419.5);
 });
 
-test('visual inputs and audio cues use one normal sprite source plus one shiny reveal source', async () => {
+test('visual inputs use one unique normal-or-shiny sprite source per grid cell', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -384,20 +436,20 @@ test('visual inputs and audio cues use one normal sprite source plus one shiny r
   });
 
   const inputs = buildVisualInputs(plan, renderPlan);
-  assert.deepEqual(inputs.map((input) => input.role), [
-    'background',
-    'timer-hp-bar',
-    'timer-hp-bar-frame',
-    'pokeball-grid',
-    'normal-sprite',
-    'shiny-sprite',
-    'shiny-sparkle',
+  assert.deepEqual(inputs.slice(0, 4).map((input) => input.role), [
+    'background', 'timer-hp-bar', 'timer-hp-bar-frame', 'pokeball-grid',
   ]);
+  const spriteInputs = inputs.filter((input) => /^cell-\d+-sprite$/u.test(input.role));
+  assert.equal(spriteInputs.length, plan.selection.display_subject_count);
+  assert.equal(new Set(spriteInputs.map((input) => input.path)).size, spriteInputs.length);
+  assert.equal(inputs.at(-1).role, 'shiny-sparkle');
   assert.deepEqual(inputs[1].args, ['-stream_loop', '-1', '-t', '8', '-i', '/tmp/long-hp-bar-countdown-1s.mp4']);
   assert.deepEqual(inputs[2].args, ['-loop', '1', '-framerate', '30', '-t', '8', '-i', '/tmp/long-hp-bar.png']);
   assert.deepEqual(inputs[3].args, ['-stream_loop', '-1', '-ignore_loop', '0', '-t', '8', '-i', '/tmp/pokeball.gif']);
-  assert.deepEqual(inputs[4].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno.png']);
-  assert.deepEqual(inputs[5].args, ['-loop', '1', '-framerate', '30', '-t', '2.4', '-i', '/tmp/articuno-shiny.png']);
+  assert.equal(
+    spriteInputs.filter((input) => input.path.includes('-shiny.png')).length,
+    plan.shiny_reveal.shiny_count,
+  );
 
   const script = buildAudioFilterScript({
     narrationPaths: ['/tmp/hook.wav', '/tmp/prompt.wav', '/tmp/reveal.wav'],
@@ -445,17 +497,17 @@ test('find-the-shiny planner prefers the greenscreen hp-bar overlay and skips th
   });
   const inputs = buildVisualInputs(plan, renderPlan);
 
-  assert.deepEqual(inputs.map((input) => input.role), [
-    'background',
-    'timer-hp-bar',
-    'pokeball-grid',
-    'normal-sprite',
-    'shiny-sprite',
-    'shiny-sparkle',
+  assert.deepEqual(inputs.slice(0, 3).map((input) => input.role), [
+    'background', 'timer-hp-bar', 'pokeball-grid',
   ]);
+  assert.equal(
+    inputs.filter((input) => /^cell-\d+-sprite$/u.test(input.role)).length,
+    plan.selection.display_subject_count,
+  );
+  assert.equal(inputs.at(-1).role, 'shiny-sparkle');
 });
 
-test('visual filter starts with pokeballs, then reveals the grid with exactly one shiny cell and sparkle', async () => {
+test('visual filter starts with pokeballs, then reveals every unique cell and its shiny sparkle', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -488,9 +540,8 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
       timerCountdown: null,
       timerAlarm: null,
       pokeball: 3,
-      normalSprite: 4,
-      shinySprite: 5,
-      shinySparkle: 6,
+      cellSprites: renderPlan.grid.cells.map((_, index) => 4 + index),
+      shinySparkle: 4 + renderPlan.grid.cells.length,
     },
     null,
     {
@@ -518,20 +569,21 @@ test('visual filter starts with pokeballs, then reveals the grid with exactly on
   assert.match(visualFilter.script, /\[timerhpbarprecountsrc\]trim=duration=0\.033,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,fade=t=in:st=[0-9.]+:d=0\.3:alpha=1,format=rgba,setsar=1\[timerhpbarprecount\]/u);
   assert.match(visualFilter.script, /\[vgr2\]\[timerhpbarprecount\]overlay=.*y='400\+if\(lt\(\(t\),[0-9.]+\),\(1-\(\(\(t\)-[0-9.]+\)\/0\.32\)\)\*18\*sin\(\(\(t\)-[0-9.]+\)\*20\),0\)'.*enable='gte\(t,[0-9.]+\)\*lt\(t,2\.6\)'/u);
   assert.match(visualFilter.script, /\[vgr2hbp\]\[timerhpbarcountdown\]overlay=.*enable='between\(t,2\.6,5\.6\)'/u);
-  assert.match(visualFilter.script, /\[5:v\]fps=30,trim=duration=2\.4,setpts=PTS-STARTPTS\+5\.68\/TB/u);
+  const firstShinyInput = 4 + plan.shiny_reveal.selected_cell_indices[0];
+  assert.match(visualFilter.script, new RegExp(`\\[${firstShinyInput}:v\\]fps=30,trim=duration=2\\.4,setpts=PTS-STARTPTS\\+5\\.68\\/TB`, 'u'));
   assert.doesNotMatch(visualFilter.script, /pokeballstaticsource/u);
   assert.doesNotMatch(visualFilter.script, /timercountdown/u);
   assert.doesNotMatch(visualFilter.script, /timeralarm/u);
   assert.doesNotMatch(visualFilter.script, /drawtext=text='3'/u);
-  assert.match(visualFilter.script, new RegExp(`scale=${expectedSpriteHoldSize}:${expectedSpriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1\\[shinyhold\\]`, 'u'));
+  assert.match(visualFilter.script, new RegExp(`scale=${expectedSpriteHoldSize}:${expectedSpriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1\\[cellhold${shinyCell.index}\\]`, 'u'));
   assert.match(visualFilter.script, new RegExp(`scale=${expectedPokeballSize}:${expectedPokeballSize}:force_original_aspect_ratio=decrease`, 'u'));
   assert.match(visualFilter.script, /\[pbsrc0\]split=2\[pbisrc0\]\[pbrsrc0\]/u);
   assert.match(visualFilter.script, /\[pbr0\]split=2\[pbo0\]\[pbt0\]/u);
   assert.match(visualFilter.script, /\[vg0\]\[pbo0\]overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,5\.68\)'/u);
   assert.match(visualFilter.script, new RegExp(`overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2`, 'u'));
-  assert.match(visualFilter.script, /\[6:v\]fps=30,trim=duration=0\.9,setpts=PTS-STARTPTS\+5\.68\/TB/u);
+  assert.match(visualFilter.script, new RegExp(`\\[${4 + renderPlan.grid.cells.length}:v\\]fps=30,trim=duration=0\\.9,setpts=PTS-STARTPTS\\+5\\.68\\/TB`, 'u'));
   assert.match(visualFilter.script, /pokeballpop/u);
-  assert.match(visualFilter.script, /normaltransition/u);
+  assert.match(visualFilter.script, /celltransition/u);
   assert.match(visualFilter.script, /\[pbisrc0\]trim=start=[0-9.]+:duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=w='/u);
   assert.match(visualFilter.script, /\[pbrsrc0\]trim=start=[0-9.]+:duration=0\.6,tpad=stop_mode=clone:stop_duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=/u);
   assert.match(visualFilter.script, /\[v0\]\[pbi0\]overlay=.*enable='gte\(t,[0-9.]+\)\*lt\(t,[0-9.]+\)'/u);
@@ -574,9 +626,8 @@ test('visual filter keys out green when the hp-bar countdown uses the greenscree
       timerCountdown: null,
       timerAlarm: null,
       pokeball: 2,
-      normalSprite: 3,
-      shinySprite: 4,
-      shinySparkle: 5,
+      cellSprites: renderPlan.grid.cells.map((_, index) => 3 + index),
+      shinySparkle: 3 + renderPlan.grid.cells.length,
     },
     null,
     {

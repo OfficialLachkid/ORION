@@ -155,9 +155,10 @@ function buildTextLayout(template) {
   };
 }
 
-function buildCryMeterLayout(template) {
+function buildCryMeterLayout(template, plan) {
   const config = template?.layout?.cry_meter || {};
   const equalizer = config.equalizer || {};
+  const selectedPalette = plan?.selection?.cry_meter_palette || {};
   return {
     enabled: config.enabled !== false,
     style: String(config.style || 'equalizer_bars').trim() || 'equalizer_bars',
@@ -185,6 +186,12 @@ function buildCryMeterLayout(template) {
       bottom_color: String(equalizer.bottom_color || '0x30D158').trim() || '0x30D158',
       background_alpha: ensureNumber(equalizer.background_alpha, 0.28),
       wave_speed: ensureNumber(equalizer.wave_speed, 4.5),
+      palette: {
+        id: String(selectedPalette.id || 'electric-blue').trim() || 'electric-blue',
+        colors: (Array.isArray(selectedPalette.colors) ? selectedPalette.colors : [])
+          .map((color) => String(color || '').trim())
+          .filter(Boolean),
+      },
     },
   };
 }
@@ -345,7 +352,7 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
   const textLayout = buildTextLayout(template);
   const gridLayout = buildGridLayout(template, plan?.rounds?.[0]?.candidates?.length || 4);
   const timerLayout = buildTimerBarLayout(template, gridLayout);
-  const cryMeterLayout = buildCryMeterLayout(template);
+  const cryMeterLayout = buildCryMeterLayout(template, plan);
   const rendererSettings = {
     candidate_intro_initial_delay_seconds: roundTime(Math.max(
       0,

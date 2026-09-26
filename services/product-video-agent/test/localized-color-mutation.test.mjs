@@ -5,6 +5,7 @@ import {
   buildLocalizedColorMutationVariants,
   hueDistance,
   rgbToHsl,
+  selectMutableColorFamily,
 } from '../src/domains/pokemon/templates/shared/render/localized-color-mutation.mjs';
 
 function setPixel(data, pixelIndex, red, green, blue, alpha = 255) {
@@ -68,6 +69,48 @@ test('localized color mutation changes one useful color family while preserving 
   const darkerMutated = rgbToHsl(...getPixel(variant, 40).slice(0, 3));
   const lighterMutated = rgbToHsl(...getPixel(variant, 48).slice(0, 3));
   assert.equal(lighterMutated.lightness > darkerMutated.lightness, true);
+});
+
+test('localized color mutation difficulty targets smaller accent families on hard mode', () => {
+  const analysis = {
+    groups: [
+      {
+        key: 'body-color',
+        count: 160,
+        percent: 0.16,
+        red: 220,
+        green: 120,
+        blue: 35,
+        hue: 28,
+        saturation: 0.74,
+        lightness: 0.5,
+      },
+      {
+        key: 'accent-color',
+        count: 40,
+        percent: 0.04,
+        red: 45,
+        green: 125,
+        blue: 225,
+        hue: 212,
+        saturation: 0.75,
+        lightness: 0.53,
+      },
+    ],
+  };
+  const easyFamily = selectMutableColorFamily(analysis, {
+    selection_target_percent: 0.16,
+    ideal_min_percent: 0.01,
+    ideal_max_percent: 0.3,
+  });
+  const hardFamily = selectMutableColorFamily(analysis, {
+    selection_target_percent: 0.04,
+    ideal_min_percent: 0.01,
+    ideal_max_percent: 0.07,
+  });
+
+  assert.equal(easyFamily.key, 'body-color');
+  assert.equal(hardFamily.key, 'accent-color');
 });
 
 test('localized color mutation chooses distinct replacement colors away from major original colors', () => {

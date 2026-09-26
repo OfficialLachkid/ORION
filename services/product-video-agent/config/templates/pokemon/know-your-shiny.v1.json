@@ -43,15 +43,35 @@
     ],
     "round_count": 3,
     "round_count_weights": {
+      "easy": 1,
       "medium": 1,
       "hard": 1
     },
     "round_count_levels": {
-      "medium": {
+      "easy": {
         "round_count": 3
       },
+      "medium": {
+        "round_count": 4,
+        "localized_decoy_color_mutation": {
+          "selection_target_percent": 0.1,
+          "ideal_min_percent": 0.04,
+          "ideal_max_percent": 0.16,
+          "broad_min_percent": 0.02,
+          "broad_max_percent": 0.22,
+          "hue_tolerance_degrees": 22
+        }
+      },
       "hard": {
-        "round_count": 5
+        "round_count": 6,
+        "localized_decoy_color_mutation": {
+          "selection_target_percent": 0.04,
+          "ideal_min_percent": 0.01,
+          "ideal_max_percent": 0.07,
+          "broad_min_percent": 0.005,
+          "broad_max_percent": 0.1,
+          "hue_tolerance_degrees": 16
+        }
       }
     },
     "mode": "random"

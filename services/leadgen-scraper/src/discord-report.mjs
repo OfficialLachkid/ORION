@@ -150,7 +150,7 @@ export async function postLeadgenStarted(config, { title, niche, query }) {
   return message;
 }
 
-function buildSweepOverviewDescription({ statuses, totalLeads = null, newLeadsInDatabase = null }) {
+function buildSweepOverviewDescription({ statuses, totalLeads = null, newLeadsInDatabase = null, confirmedEmptyCombos = [] }) {
   const completed = statuses.filter((s) => s.state === 'completed').length;
   const running = statuses.find((s) => s.state === 'running');
   const queued = statuses.filter((s) => s.state === 'queued').length;
@@ -209,13 +209,28 @@ function buildSweepOverviewDescription({ statuses, totalLeads = null, newLeadsIn
   }
   const totalLine = footerLines.length > 0 ? `\n\n${footerLines.join('\n')}` : '';
 
-  return `${headline}\n${lines.join('\n')}${totalLine}`;
+  // Confirmed-empty combos for operator review: niche × location pairs
+  // that have come back with zero leads on 3+ consecutive attempts. The
+  // skip window still auto-defers them (they cost nothing per sweep) —
+  // this block just surfaces them so the operator can prune the combo
+  // permanently or accept it as known-empty. Capped at 10 entries to
+  // keep the card readable; a longer log is available in the run stdout.
+  let reviewBlock = '';
+  if (Array.isArray(confirmedEmptyCombos) && confirmedEmptyCombos.length > 0) {
+    const capped = confirmedEmptyCombos.slice(0, 10);
+    const overflow = confirmedEmptyCombos.length - capped.length;
+    const bullets = capped.map((c) => `• ${c.niche} × ${c.location} (${c.consecutiveEmpties}× empty)`);
+    if (overflow > 0) bullets.push(`… +${overflow} more (see run stdout)`);
+    reviewBlock = `\n\n**⚠️ Confirmed-empty combos for review** (auto-skipped for now):\n${bullets.join('\n')}`;
+  }
+
+  return `${headline}\n${lines.join('\n')}${totalLine}${reviewBlock}`;
 }
 
 // One pinned-style overview message per sweep: posted before the first
 // niche starts, edited in place at every niche transition so the channel
 // always shows how far the day's sweep is at a glance.
-export async function postSweepOverview(config, { statuses, totalLeads = null, newLeadsInDatabase = null, title = 'Daily Leadgen Sweep' }) {
+export async function postSweepOverview(config, { statuses, totalLeads = null, newLeadsInDatabase = null, confirmedEmptyCombos = [], title = 'Daily Leadgen Sweep' }) {
   const channelId = resolveChannelId(config);
   if (!channelId || !config.env.DISCORD_BOT_TOKEN) {
     return null;
@@ -228,7 +243,7 @@ export async function postSweepOverview(config, { statuses, totalLeads = null, n
       {
         body: buildNoticeDiscordPayload({
           title,
-          description: buildSweepOverviewDescription({ statuses, totalLeads, newLeadsInDatabase }),
+          description: buildSweepOverviewDescription({ statuses, totalLeads, newLeadsInDatabase, confirmedEmptyCombos }),
           color: 0x5865F2,
           footerText: 'ORION leadgen sweep',
         }),
@@ -240,7 +255,7 @@ export async function postSweepOverview(config, { statuses, totalLeads = null, n
   }
 }
 
-export async function updateSweepOverview(config, message, { statuses, totalLeads = null, newLeadsInDatabase = null, title = 'Daily Leadgen Sweep' }) {
+export async function updateSweepOverview(config, message, { statuses, totalLeads = null, newLeadsInDatabase = null, confirmedEmptyCombos = [], title = 'Daily Leadgen Sweep' }) {
   if (!message?.messageId || !config.env.DISCORD_BOT_TOKEN) {
     return null;
   }
@@ -253,7 +268,7 @@ export async function updateSweepOverview(config, message, { statuses, totalLead
         method: 'PATCH',
         body: buildNoticeDiscordPayload({
           title,
-          description: consumeRecoveryNote() + buildSweepOverviewDescription({ statuses, totalLeads, newLeadsInDatabase }),
+          description: consumeRecoveryNote() + buildSweepOverviewDescription({ statuses, totalLeads, newLeadsInDatabase, confirmedEmptyCombos }),
           color: statuses.every((s) => s.state === 'completed') ? 0x57F287 : 0x5865F2,
           footerText: 'ORION leadgen sweep',
         }),

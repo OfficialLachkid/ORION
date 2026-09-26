@@ -148,6 +148,53 @@ export async function fetchYoutubeVideoStatisticsMap({
   };
 }
 
+// Shared query builder for the dimensioned analytics reports (geo /
+// traffic source). The summary path already sets the same window +
+// filters — we only differ in `dimensions`, `metrics`, `sort`, and an
+// optional `maxResults`. Kept small so the two callers stay one-liners.
+async function fetchYoutubeAnalyticsDimensioned({
+  externalId,
+  accessToken,
+  publication,
+  capturedAt,
+  fetchImpl,
+  dimensions,
+  metrics,
+  sort = '',
+  maxResults = 0,
+}) {
+  const videoId = String(externalId || '').trim();
+  if (!videoId) return { metricsByName: {}, rows: [], columnHeaders: [], rawPayload: null };
+
+  const window = resolveAnalyticsWindow(publication, capturedAt);
+  const url = new URL(YOUTUBE_ANALYTICS_REPORTS_ENDPOINT);
+  url.searchParams.set('ids', 'channel==MINE');
+  url.searchParams.set('startDate', window.startDate);
+  url.searchParams.set('endDate', window.endDate);
+  url.searchParams.set('metrics', metrics.join(','));
+  url.searchParams.set('dimensions', dimensions.join(','));
+  url.searchParams.set('filters', `video==${videoId}`);
+  if (sort) url.searchParams.set('sort', sort);
+  if (maxResults > 0) url.searchParams.set('maxResults', String(maxResults));
+
+  const response = await fetchImpl(url, { method: 'GET', headers: buildAuthHeaders(accessToken) });
+  const { bodyText, payload } = await readJsonResponse(response);
+  if (!response.ok) {
+    // Dimensioned queries are best-effort enrichment. A single failure
+    // (permission-missing, empty window, transient 500) must NOT torpedo
+    // the whole publication metrics fetch — callers get a null-shaped
+    // result and continue. The summary metric fetch is still the source
+    // of truth for the required numbers (views/likes/comments).
+    return { metricsByName: {}, rows: [], columnHeaders: [], rawPayload: null, error: `${response.status}: ${bodyText || 'no body'}` };
+  }
+  return {
+    metricsByName: mapAnalyticsRow(payload?.columnHeaders || [], payload?.rows || []),
+    rows: Array.isArray(payload?.rows) ? payload.rows : [],
+    columnHeaders: Array.isArray(payload?.columnHeaders) ? payload.columnHeaders : [],
+    rawPayload: payload,
+  };
+}
+
 export async function fetchYoutubeAnalyticsSummary({
   externalId,
   accessToken,
@@ -188,6 +235,25 @@ export async function fetchYoutubeAnalyticsSummary({
   };
 }
 
+// Convert a dimensioned analytics response into a lightweight sorted
+// list of {key, views} entries so the persisted metric stays compact
+// (Supabase JSONB is fine either way, but the weekly review data pack
+// stays readable when it doesn't have to dig through columnHeaders).
+function summarizeDimensionRows({ rows = [], columnHeaders = [], dimensionName, viewsColumn = 'views', topN = 25 }) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const dimensionIdx = columnHeaders.findIndex((h) => (h?.name || '') === dimensionName);
+  const viewsIdx = columnHeaders.findIndex((h) => (h?.name || '') === viewsColumn);
+  if (dimensionIdx < 0 || viewsIdx < 0) return [];
+  return rows
+    .map((row) => ({
+      key: String(row[dimensionIdx] || '').trim(),
+      views: parseYoutubeCount(row[viewsIdx], 0),
+    }))
+    .filter((entry) => entry.key)
+    .sort((a, b) => b.views - a.views)
+    .slice(0, topN);
+}
+
 export async function fetchYoutubePublicationMetrics({
   publication,
   accessToken,
@@ -197,13 +263,33 @@ export async function fetchYoutubePublicationMetrics({
 }) {
   const externalId = String(publication?.external_id || '').trim();
   const resolvedStatistics = statistics || null;
-  const analyticsSummary = await fetchYoutubeAnalyticsSummary({
-    externalId,
-    accessToken,
-    publication,
-    capturedAt,
-    fetchImpl,
-  });
+  // Fire summary + geo + traffic in parallel. Summary is required (the
+  // views/likes/comments totals depend on it); geo + traffic are best-
+  // effort enrichment and null-shape on failure — the shared helper
+  // swallows non-200s and returns empty rows so a broken enrichment
+  // never blocks the summary write.
+  const [analyticsSummary, geoBreakdown, trafficBreakdown] = await Promise.all([
+    fetchYoutubeAnalyticsSummary({
+      externalId,
+      accessToken,
+      publication,
+      capturedAt,
+      fetchImpl,
+    }),
+    fetchYoutubeAnalyticsDimensioned({
+      externalId, accessToken, publication, capturedAt, fetchImpl,
+      dimensions: ['country'],
+      metrics: ['views'],
+      sort: '-views',
+      maxResults: 25,
+    }),
+    fetchYoutubeAnalyticsDimensioned({
+      externalId, accessToken, publication, capturedAt, fetchImpl,
+      dimensions: ['insightTrafficSourceType'],
+      metrics: ['views'],
+      sort: '-views',
+    }),
+  ]);
   const statisticsPayload = resolvedStatistics?.statistics || {};
 
   const metrics = {
@@ -233,7 +319,19 @@ export async function fetchYoutubePublicationMetrics({
     subs_gained: normalizeNumericMetric(analyticsSummary.metricsByName.subscribersGained),
     subs_lost: normalizeNumericMetric(analyticsSummary.metricsByName.subscribersLost),
     retention_curve: null,
-    traffic_sources: null,
+    // Populated 2026-09-21 (was hardcoded null). Compact top-N shape so
+    // the weekly analytics review can render country / traffic-source
+    // distribution without walking raw columnHeaders on every row.
+    viewer_countries: summarizeDimensionRows({
+      rows: geoBreakdown.rows,
+      columnHeaders: geoBreakdown.columnHeaders,
+      dimensionName: 'country',
+    }),
+    traffic_sources: summarizeDimensionRows({
+      rows: trafficBreakdown.rows,
+      columnHeaders: trafficBreakdown.columnHeaders,
+      dimensionName: 'insightTrafficSourceType',
+    }),
     fetch_lag_hours: analyticsSummary.fetchLagHours,
     captured_at: capturedAt,
     published_at: publication?.published_at || publication?.uploaded_at || publication?.created_at || null,
@@ -249,6 +347,8 @@ export async function fetchYoutubePublicationMetrics({
     raw_payload: {
       youtube_videos_item: resolvedStatistics,
       youtube_analytics_report: analyticsSummary.rawPayload,
+      youtube_analytics_geo: geoBreakdown.rawPayload,
+      youtube_analytics_traffic: trafficBreakdown.rawPayload,
     },
   };
 }

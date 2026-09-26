@@ -204,7 +204,9 @@
     "visual_delay_seconds": 0.08,
     "shiny": {
       "enabled": true,
-      "max_per_video": 1,
+      "max_per_video": 2,
+      "multiple_shiny_grid_size": 9,
+      "multiple_shiny_chance": 0.5,
       "sparkle_overlay_role": "shiny_sparkle",
       "sound_effect_role": "shiny",
       "sparkle_duration_seconds": 0.9,

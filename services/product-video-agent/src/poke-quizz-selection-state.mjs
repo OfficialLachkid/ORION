@@ -104,6 +104,9 @@ function normalizeTemplateScopeValue(value) {
   if (normalized.includes('progressive-reveal')) {
     return 'progressive-reveal';
   }
+  if (normalized.includes('pixelated-reveal')) {
+    return 'pixelated-reveal';
+  }
   if (normalized.includes('stat-clash') || normalized.includes('stat-battle')) {
     return 'stat-clash';
   }

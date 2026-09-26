@@ -78,6 +78,36 @@ const STARTER_POKEMON_SPECIES_SLUGS = new Set([
   'quaxly',
 ]);
 
+const FINAL_STARTER_EVOLUTION_SPECIES_SLUGS = new Set([
+  'venusaur',
+  'charizard',
+  'blastoise',
+  'meganium',
+  'typhlosion',
+  'feraligatr',
+  'sceptile',
+  'blaziken',
+  'swampert',
+  'torterra',
+  'infernape',
+  'empoleon',
+  'serperior',
+  'emboar',
+  'samurott',
+  'chesnaught',
+  'delphox',
+  'greninja',
+  'decidueye',
+  'incineroar',
+  'primarina',
+  'rillaboom',
+  'cinderace',
+  'inteleon',
+  'meowscarada',
+  'skeledirge',
+  'quaquaval',
+]);
+
 const readablePathAvailabilityCache = new Map();
 const cryDownloadCache = new Map();
 const crySourceUrlCache = new Map();
@@ -105,6 +135,28 @@ function createPrng(seedInput) {
 function ensurePositiveInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function buildRoundCountVariantCatalog(template) {
+  const configuredLevels = template?.selection_rules?.round_count_levels || {};
+  const configuredWeights = template?.selection_rules?.round_count_weights || {};
+  return Object.entries(configuredLevels)
+    .map(([variantId, entry]) => ({
+      id: String(variantId || '').trim(),
+      round_count: ensurePositiveInteger(entry?.round_count, 0),
+      weight: Math.max(1, ensurePositiveInteger(configuredWeights[variantId], 1)),
+    }))
+    .filter((entry) => entry.id && entry.round_count > 0);
+}
+
+function chooseRoundCountVariant(variantCatalog, random) {
+  if (!Array.isArray(variantCatalog) || variantCatalog.length === 0) {
+    return null;
+  }
+  const weightedPool = variantCatalog.flatMap((entry) => (
+    Array.from({ length: entry.weight }, () => entry)
+  ));
+  return weightedPool[Math.floor(random() * weightedPool.length)] || variantCatalog[0];
 }
 
 function ensureFiniteNumber(value, fallback) {
@@ -226,6 +278,14 @@ function isStarterLikeSubject(subject) {
   return STARTER_POKEMON_SPECIES_SLUGS.has(normalizeSubjectSpeciesSlug(subject));
 }
 
+function isFinalStarterEvolutionLikeSubject(subject) {
+  const speciesSlug = normalizeSubjectSpeciesSlug(subject);
+  const subjectSlug = normalizeSubjectSlug(subject);
+  return FINAL_STARTER_EVOLUTION_SPECIES_SLUGS.has(speciesSlug)
+    || [...FINAL_STARTER_EVOLUTION_SPECIES_SLUGS]
+      .some((starterSlug) => subjectSlug === starterSlug || subjectSlug.startsWith(`${starterSlug}-`));
+}
+
 function isMegaLikeSubject(subject) {
   if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
     'is_mega',
@@ -296,11 +356,23 @@ function isFinalEvolutionLikeSubject(subject) {
   return evolutionStage === 'final' || evolutionStage === 'fully_evolved';
 }
 
-function isLegendaryOrMythicalLikeSubject(subject) {
+function isLegendaryLikeSubject(subject) {
   if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
     'is_legendary',
     'legendary',
     'isLegendary',
+  ]))) {
+    return true;
+  }
+  const classification = String(readSubjectMetadataValue(subject, [
+    'classification',
+    'category',
+  ]) || '').trim().toLowerCase();
+  return classification === 'legendary';
+}
+
+function isMythicalLikeSubject(subject) {
+  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
     'is_mythical',
     'mythical',
     'isMythical',
@@ -311,7 +383,11 @@ function isLegendaryOrMythicalLikeSubject(subject) {
     'classification',
     'category',
   ]) || '').trim().toLowerCase();
-  return classification === 'legendary' || classification === 'mythical';
+  return classification === 'mythical';
+}
+
+function isLegendaryOrMythicalLikeSubject(subject) {
+  return isLegendaryLikeSubject(subject) || isMythicalLikeSubject(subject);
 }
 
 function isDynamaxLikeSubject(subject) {
@@ -468,6 +544,25 @@ function filterSubjectsForBuildYourTeamPool(subjects = [], pool = {}) {
     case 'dynamax_pokemon':
     case 'gigantamax':
       return subjects.filter((subject) => isDynamaxLikeSubject(subject));
+    case 'mega':
+    case 'mega_only':
+    case 'mega_pokemon':
+      return subjects.filter((subject) => isMegaLikeSubject(subject));
+    case 'final_starter':
+    case 'final_starter_evolutions':
+    case 'last_stage_starter_evolutions':
+      return subjects.filter((subject) => (
+        !isMegaLikeSubject(subject)
+        && !isDynamaxLikeSubject(subject)
+        && isFinalStarterEvolutionLikeSubject(subject)
+        && isFinalEvolutionLikeSubject(subject)
+      ));
+    case 'mega_legendary':
+    case 'mega_or_legendary':
+    case 'mega_and_legendary':
+      return subjects.filter((subject) => (
+        isMegaLikeSubject(subject) || isLegendaryLikeSubject(subject)
+      ));
     case 'all':
     default:
       return [...subjects];
@@ -897,10 +992,10 @@ export async function planPokemonBuildYourTeamChallenge({
     .trim();
   const inventory = assetInventory || await scanPokeQuizzAssetInventory();
   const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
-  const roundCount = ensurePositiveInteger(
-    template?.selection_rules?.round_count,
-    DEFAULT_ROUND_COUNT,
-  );
+  const roundCountVariantCatalog = buildRoundCountVariantCatalog(template);
+  const selectedRoundCountVariant = chooseRoundCountVariant(roundCountVariantCatalog, random);
+  const roundCount = selectedRoundCountVariant?.round_count
+    ?? ensurePositiveInteger(template?.selection_rules?.round_count, DEFAULT_ROUND_COUNT);
   const candidateCount = ensurePositiveInteger(
     template?.selection_rules?.candidate_count,
     DEFAULT_CANDIDATE_COUNT,
@@ -1121,6 +1216,7 @@ export async function planPokemonBuildYourTeamChallenge({
     seed: String(seed),
     selection: {
       mode: String(template?.selection_rules?.mode || 'team_builder').trim().toLowerCase() || 'team_builder',
+      round_count_variant_id: selectedRoundCountVariant?.id || null,
       round_count: roundCount,
       candidate_count: candidateCount,
       pool_order_mode: String(template?.selection_rules?.pool_order_mode || 'shuffle_each_once').trim(),

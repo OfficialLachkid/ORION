@@ -1,10 +1,11 @@
 {
-  "template_id": "pokemon.progressive-reveal.v1",
-  "template_key": "progressive-reveal",
+  "template_id": "pokemon.pixelated-reveal.v1",
+  "template_key": "pixelated-reveal",
   "domain": "pokemon",
   "mechanics": [
     "selection",
-    "progressive_reveal",
+    "pixelated_reveal",
+    "difficulty_progression",
     "answer",
     "transition"
   ],
@@ -33,7 +34,7 @@
       "name",
       "sprite_path"
     ],
-    "round_count": 3,
+    "round_count": 4,
     "mode": "random"
   },
   "question_contract": {
@@ -69,6 +70,9 @@
       "hook_y": 150,
       "hook_font_size": 102,
       "hook_line_gap_px": 8,
+      "difficulty_label_y": 435,
+      "difficulty_label_font_size": 62,
+      "show_round_counter": false,
       "counter_x": 72,
       "counter_y": 92,
       "counter_font_size": 48,
@@ -86,7 +90,7 @@
     },
     "reveal_box": {
       "center_x": 540,
-      "center_y": 850,
+      "center_y": 925,
       "width_px": 760,
       "height_px": 760,
       "sprite_size_px": 650,
@@ -99,6 +103,7 @@
     },
     "rounds": {
       "hook_hold_seconds": 1.7,
+      "show_first_reveal_immediately": true,
       "pre_reveal_hold_seconds": 0.18,
       "answer_hold_seconds": 1.45,
       "transition_duration_seconds": 0.42,
@@ -106,134 +111,83 @@
     }
   },
   "reveal": {
-    "mode": "random_per_round",
-    "method": "wipe",
+    "mode": "fixed_video",
+    "method": "pixelated",
     "methods": [
-      "wipe",
-      "fragments",
-      "strips",
-      "noise",
-      "particles",
-      "radial",
-      "checkerboard",
-      "micro_checkerboard",
-      "diagonal",
-      "cascade",
-      "pathfinding",
-      "spiral",
-      "diamond",
-      "cross",
-      "edge_particles",
-      "diagonal_particles",
-      "square_spiral",
-      "square_spiral_inward",
-      "fluid_fill"
+      "pixelated"
     ],
     "duration_seconds": 8.5,
     "target_opaque_fraction": 0.6,
-    "difficulty": "normal",
-    "directions": [
-      "top_to_bottom",
-      "bottom_to_top",
-      "left_to_right",
-      "right_to_left"
+    "difficulty": "easy-to-impossible",
+    "difficulty_rounds": [
+      {
+        "id": "easy",
+        "label": "EASY",
+        "color": "0x35E27A",
+        "answer_clarity_progress": 0.3
+      },
+      {
+        "id": "medium",
+        "label": "MEDIUM",
+        "color": "0xFFD60A",
+        "answer_clarity_progress": 0.25
+      },
+      {
+        "id": "hard",
+        "label": "HARD",
+        "color": "0xFF5A52",
+        "answer_clarity_progress": 0.15
+      },
+      {
+        "id": "impossible",
+        "label": "IMPOSSIBLE",
+        "color": "0xB76CFF",
+        "answer_clarity_progress": 0.1
+      }
     ],
     "method_config": {
-      "wipe": {
-        "boundary_roughness_px": 20
-      },
-      "fragments": {
-        "fragment_size_px": 72
-      },
-      "strips": {
-        "strip_width_px": 6,
-        "line_reveal_min_seconds": 0.3,
-        "line_reveal_max_seconds": 1,
-        "orientations": [
-          "horizontal",
-          "vertical"
+      "pixelated": {
+        "progress_speed_multiplier": 0.2,
+        "answer_clarity_progress": 0.25,
+        "resolution_steps_px": [
+          4,
+          6,
+          8,
+          10,
+          12,
+          14,
+          16,
+          18,
+          21,
+          24,
+          27,
+          30,
+          34,
+          38,
+          43,
+          48,
+          54,
+          61,
+          69,
+          78,
+          88,
+          99,
+          112,
+          126,
+          142,
+          160,
+          180,
+          203,
+          229,
+          258,
+          291,
+          328,
+          370,
+          417,
+          444,
+          470,
+          520
         ]
-      },
-      "noise": {
-        "noise_scale": 0.035
-      },
-      "particles": {
-        "particle_size_px": 9,
-        "density_exponent": 1.3
-      },
-      "radial": {
-        "origin_count": 4,
-        "maximum_radius_ratio": 0.42
-      },
-      "checkerboard": {
-        "cell_size_px": 56
-      },
-      "micro_checkerboard": {
-        "cell_size_px": 24
-      },
-      "diagonal": {
-        "wave_amplitude": 0.055,
-        "wave_frequency": 0.028,
-        "directions": [
-          "top_left_to_bottom_right",
-          "bottom_right_to_top_left",
-          "top_right_to_bottom_left",
-          "bottom_left_to_top_right"
-        ]
-      },
-      "cascade": {
-        "particle_size_px": 12,
-        "fall_jitter": 0.28,
-        "fall_duration_seconds": 1.2,
-        "fall_step_count": 10,
-        "fall_distance_px": 748
-      },
-      "pathfinding": {
-        "cell_size_px": 14,
-        "origin_inset_ratio": 0.08,
-        "terrain_jitter": 0.18,
-        "distance_scale": 0.86
-      },
-      "spiral": {
-        "turns": 2.75,
-        "radial_weight": 0.58
-      },
-      "diamond": {
-        "center_jitter_ratio": 0.08
-      },
-      "cross": {
-        "corner_fill_ratio": 0.18
-      },
-      "edge_particles": {
-        "particle_size_px": 10,
-        "edge_jitter": 0.22
-      },
-      "diagonal_particles": {
-        "particle_size_px": 10,
-        "path_jitter": 0.2,
-        "directions": [
-          "top_left_to_bottom_right",
-          "bottom_right_to_top_left",
-          "top_right_to_bottom_left",
-          "bottom_left_to_top_right"
-        ]
-      },
-      "square_spiral": {
-        "turns": 3,
-        "radial_weight": 0.62
-      },
-      "square_spiral_inward": {
-        "turns": 3,
-        "radial_weight": 0.62
-      },
-      "fluid_fill": {
-        "particle_size_px": 8,
-        "particle_jitter": 0.16,
-        "surface_wave_amplitude": 0.055,
-        "surface_wave_frequency": 0.045,
-        "fall_duration_seconds": 1.4,
-        "fall_step_count": 12,
-        "fall_distance_px": 748
       }
     }
   },
