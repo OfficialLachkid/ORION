@@ -965,6 +965,16 @@ export async function planPokemonTournamentChallenge({
     template?.audio?.sound_effects?.stats_reveal || {},
     inventory?.sound_effects?.stats_reveal || null,
   );
+  const statSpinnerSpinSoundPath = selectPreferredSoundEffectPath(
+    inventory?.sound_effects || {},
+    template?.audio?.sound_effects?.stat_spinner_spin || {},
+    inventory?.sound_effects?.stat_spinner_spin || '',
+  );
+  const statSpinnerCompleteSoundPath = selectPreferredSoundEffectPath(
+    inventory?.sound_effects || {},
+    template?.audio?.sound_effects?.stat_spinner_complete || {},
+    inventory?.sound_effects?.stat_spinner_complete || '',
+  );
   const bracketProgressSoundPath = selectPreferredSoundEffectPath(
     inventory?.sound_effects || {},
     template?.audio?.sound_effects?.bracket_progress || {},
@@ -996,6 +1006,18 @@ export async function planPokemonTournamentChallenge({
     && !statsRevealSoundPath
   ) {
     requiredAssetGaps.push('stats_reveal_sfx_missing');
+  }
+  if (
+    template?.audio?.sound_effects?.stat_spinner_spin?.enabled !== false
+    && !statSpinnerSpinSoundPath
+  ) {
+    requiredAssetGaps.push('stat_spinner_spin_sfx_missing');
+  }
+  if (
+    template?.audio?.sound_effects?.stat_spinner_complete?.enabled !== false
+    && !statSpinnerCompleteSoundPath
+  ) {
+    requiredAssetGaps.push('stat_spinner_complete_sfx_missing');
   }
   if (
     template?.audio?.sound_effects?.bracket_progress?.enabled !== false
@@ -1091,6 +1113,8 @@ export async function planPokemonTournamentChallenge({
           bracket_progress: bracketProgressSoundPath,
           winner_reveal: winnerRevealSoundPath,
           stats_reveal: statsRevealSoundPath,
+          stat_spinner_spin: statSpinnerSpinSoundPath,
+          stat_spinner_complete: statSpinnerCompleteSoundPath,
           disappear: disappearSoundPath,
         },
       },

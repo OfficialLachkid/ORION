@@ -253,6 +253,18 @@
           "electric-loading-sound"
         ]
       },
+      "stat_spinner_spin": {
+        "enabled": true,
+        "preferred_keywords": [
+          "rotating-slot.mp3"
+        ]
+      },
+      "stat_spinner_complete": {
+        "enabled": true,
+        "preferred_keywords": [
+          "rotating-slot-complete"
+        ]
+      },
       "disappear": {
         "enabled": true,
         "preferred_keywords": [

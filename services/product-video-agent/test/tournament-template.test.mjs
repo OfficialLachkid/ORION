@@ -139,6 +139,14 @@ const template = {
         enabled: true,
         preferred_keywords: ['electric-loading-sound'],
       },
+      stat_spinner_spin: {
+        enabled: true,
+        preferred_keywords: ['rotating-slot.mp3'],
+      },
+      stat_spinner_complete: {
+        enabled: true,
+        preferred_keywords: ['rotating-slot-complete'],
+      },
       disappear: {
         enabled: true,
         preferred_keywords: ['disappear-sound'],
@@ -233,10 +241,12 @@ const assetInventory = {
   battle_backgrounds: ['/tmp/battle-backgrounds/arena.png'],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3', '/tmp/electric-loading-sound.mp3', '/tmp/disappear-sound.mp3'],
+    all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3', '/tmp/electric-loading-sound.mp3', '/tmp/rotating-slot.mp3', '/tmp/rotating-slot-complete.mp3', '/tmp/disappear-sound.mp3'],
     timer_end: '/tmp/ding-sound.mp3',
     pokeball_intro: '/tmp/pokeball-open-sound.mp3',
     stats_reveal: '/tmp/electric-loading-sound.mp3',
+    stat_spinner_spin: '/tmp/rotating-slot.mp3',
+    stat_spinner_complete: '/tmp/rotating-slot-complete.mp3',
     disappear: '/tmp/disappear-sound.mp3',
   },
   overlays: ['/tmp/open-close-pokeball.gif', '/tmp/disappear.gif', '/tmp/grass-plateau.png', '/tmp/versus.png'],
@@ -350,6 +360,8 @@ test('generic planner dispatch builds a four-participant tournament bracket with
   assert.equal(plan.assets.audio.selected_sound_effects.bracket_progress, '/tmp/select-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.winner_reveal, '/tmp/ding-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.stats_reveal, '/tmp/electric-loading-sound.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.stat_spinner_spin, '/tmp/rotating-slot.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.stat_spinner_complete, '/tmp/rotating-slot-complete.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.disappear, '/tmp/disappear-sound.mp3');
   assert.equal(plan.required_asset_gaps.length, 0);
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Tournament$/u);
@@ -708,6 +720,8 @@ test('tournament audio and visual filters include winner sting cues and champion
     bracketProgressPath: '/tmp/select-sound.mp3',
     winnerRevealPath: '/tmp/ding-sound.mp3',
     statsRevealPath: '/tmp/electric-loading-sound.mp3',
+    statSpinnerSpinPath: '/tmp/rotating-slot.mp3',
+    statSpinnerCompletePath: '/tmp/rotating-slot-complete.mp3',
     disappearPath: '/tmp/disappear-sound.mp3',
     cryCues: buildTournamentCryCues(plan, renderPlan),
     renderPlan,
@@ -785,10 +799,21 @@ test('tournament audio and visual filters include winner sting cues and champion
   assert.match(audioFilter, /volume=0\.113\[open0\]/u);
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
   assert.match(audioFilter, /asplit=3\[ssrc0\]\[ssrc1\]\[ssrc2\]/u);
+  assert.match(audioFilter, /asplit=3\[spsrc0\]\[spsrc1\]\[spsrc2\]/u);
+  assert.match(audioFilter, /asplit=3\[scsrc0\]\[scsrc1\]\[scsrc2\]/u);
   assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
   assert.match(audioFilter, /asplit=3\[dsrc0\]\[dsrc1\]\[dsrc2\]/u);
   assert.match(audioFilter, /volume=0\.113\[progress0\]/u);
   assert.match(audioFilter, /volume=0\.36\[stats0\]/u);
+  assert.match(audioFilter, /atrim=start=0:duration=0\.9,asetpts=PTS-STARTPTS,afade=t=out:st=0\.84:d=0\.06/u);
+  assert.match(
+    audioFilter,
+    new RegExp(`adelay=${Math.round(renderPlan.matches[0].spinner_spin_start_seconds * 1000)}\\|${Math.round(renderPlan.matches[0].spinner_spin_start_seconds * 1000)},volume=0\\.405\\[spin0\\]`, 'u'),
+  );
+  assert.match(
+    audioFilter,
+    new RegExp(`adelay=${Math.round(renderPlan.matches[0].spinner_stop_seconds * 1000)}\\|${Math.round(renderPlan.matches[0].spinner_stop_seconds * 1000)},volume=0\\.72\\[complete0\\]`, 'u'),
+  );
   assert.match(audioFilter, /volume=0\.113\[cry0\]/u);
   assert.match(visualFilter.script, /vbattledisappearleft0/u);
   assert.match(visualFilter.script, /vbattledisappearright0/u);
