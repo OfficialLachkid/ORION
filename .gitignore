@@ -227,3 +227,6 @@ config/gmail/.env
 
 # Night-shift per-day run markers (local runtime state)
 /data/night-shift/
+
+# Weekly analytics review thread and comparison state (local runtime state)
+/data/analytics/
