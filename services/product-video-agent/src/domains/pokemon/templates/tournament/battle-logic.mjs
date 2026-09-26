@@ -1,3 +1,5 @@
+import { resolveTournamentBattleStat } from './battle-stat.mjs';
+
 function normalizeTypeName(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -117,6 +119,26 @@ function normalizeSubject(subject = {}) {
       .filter(Boolean),
     base_stats: baseStats,
     base_stat_total: toFiniteNumber(subject.base_stat_total, sumBaseStats(baseStats)),
+  };
+}
+
+export function resolveTournamentTypeAdvantage(leftInput, rightInput) {
+  const left = normalizeSubject(leftInput);
+  const right = normalizeSubject(rightInput);
+  const leftAttack = resolveBestTypeAttack(left.types, right.types);
+  const rightAttack = resolveBestTypeAttack(right.types, left.types);
+  const hasUnequalSuperEffectiveEdge = (
+    leftAttack.multiplier !== rightAttack.multiplier
+    && Math.max(leftAttack.multiplier, rightAttack.multiplier) >= 2
+  );
+  const winnerSide = hasUnequalSuperEffectiveEdge
+    ? (leftAttack.multiplier > rightAttack.multiplier ? 'left' : 'right')
+    : null;
+  return {
+    eligible: Boolean(winnerSide),
+    winner_side: winnerSide,
+    left_attack: leftAttack,
+    right_attack: rightAttack,
   };
 }
 
@@ -314,10 +336,215 @@ function resolveBreakdownText(left, right, winner, scoreCards, selectedAdvantage
   return `BST ${left.base_stat_total}-${right.base_stat_total} | ${typeLead} | Edge: ${selectedAdvantage.label} | Winner: ${winner.display_name}`;
 }
 
+function resolveStatWinnerSide(left, right, statKey) {
+  const leftValue = left.base_stats[statKey];
+  const rightValue = right.base_stats[statKey];
+  if (leftValue !== rightValue) {
+    return {
+      winner_side: leftValue > rightValue ? 'left' : 'right',
+      tiebreaker: null,
+    };
+  }
+  if (left.base_stat_total !== right.base_stat_total) {
+    return {
+      winner_side: left.base_stat_total > right.base_stat_total ? 'left' : 'right',
+      tiebreaker: 'base_stat_total',
+    };
+  }
+  const leftDex = toFiniteNumber(left.national_dex_number, Number.POSITIVE_INFINITY);
+  const rightDex = toFiniteNumber(right.national_dex_number, Number.POSITIVE_INFINITY);
+  return {
+    winner_side: leftDex <= rightDex ? 'left' : 'right',
+    tiebreaker: Number.isFinite(leftDex) || Number.isFinite(rightDex)
+      ? 'national_dex_number'
+      : 'bracket_seed',
+  };
+}
+
+function buildStatInsightText({ stat, left, right, winner, loser, winnerSide, tiebreaker }) {
+  const leftValue = left.base_stats[stat.key];
+  const rightValue = right.base_stats[stat.key];
+  if (tiebreaker === 'base_stat_total') {
+    return `The slot lands on ${stat.spoken_label}. ${stat.spoken_label} is tied at ${leftValue}. ${winner.display_name} wins the Base Stat Total tiebreak: ${winner.base_stat_total} to ${loser.base_stat_total}.`;
+  }
+  if (tiebreaker) {
+    return `The slot lands on ${stat.spoken_label}. ${stat.spoken_label} is tied at ${leftValue}. ${winner.display_name} wins the final tiebreak.`;
+  }
+  const winnerValue = winnerSide === 'left' ? leftValue : rightValue;
+  const loserValue = winnerSide === 'left' ? rightValue : leftValue;
+  const comparison = stat.key === 'speed'
+    ? 'is faster'
+    : stat.key === 'hp'
+      ? 'has more HP'
+      : `has higher ${stat.spoken_label}`;
+  return `The slot lands on ${stat.spoken_label}. ${winner.display_name} ${comparison}: ${winnerValue} to ${loserValue}.`;
+}
+
+function formatTypeName(value) {
+  const normalized = String(value || '').trim();
+  return normalized ? `${normalized[0].toUpperCase()}${normalized.slice(1)}` : 'its typing';
+}
+
+function resolveTypeBattle({ left, right, battleStat, normalizedWeights, matchId, roundLabel }) {
+  const stat = resolveTournamentBattleStat(battleStat);
+  const advantage = resolveTournamentTypeAdvantage(left, right);
+  if (!advantage.eligible) {
+    throw new Error('Type cannot be selected for a tournament match without an unequal super-effective advantage.');
+  }
+  const winner = advantage.winner_side === 'left' ? left : right;
+  const loser = advantage.winner_side === 'left' ? right : left;
+  const winnerAttack = advantage.winner_side === 'left'
+    ? advantage.left_attack
+    : advantage.right_attack;
+  const leftValue = advantage.left_attack.multiplier;
+  const rightValue = advantage.right_attack.multiplier;
+  const insightText = `The slot lands on Type. ${winner.display_name} has the type advantage with ${formatTypeName(winnerAttack.attacking_type)}.`;
+  const introLineText = `${left.display_name} versus ${right.display_name}.`;
+  const leftCard = {
+    stat_key: stat.key,
+    stat_label: stat.spoken_label,
+    stat_value: leftValue,
+    attacking_type: advantage.left_attack.attacking_type,
+    base_stat_total: left.base_stat_total,
+    total_score: leftValue,
+  };
+  const rightCard = {
+    stat_key: stat.key,
+    stat_label: stat.spoken_label,
+    stat_value: rightValue,
+    attacking_type: advantage.right_attack.attacking_type,
+    base_stat_total: right.base_stat_total,
+    total_score: rightValue,
+  };
+  const winnerCard = advantage.winner_side === 'left' ? leftCard : rightCard;
+  const loserCard = advantage.winner_side === 'left' ? rightCard : leftCard;
+  const selectedAdvantage = {
+    id: 'type_battle',
+    label: stat.spoken_label,
+    text: insightText,
+    strength: Math.abs(leftValue - rightValue),
+    verified: true,
+    evidence: {
+      left_multiplier: leftValue,
+      right_multiplier: rightValue,
+      winning_type: winnerAttack.attacking_type,
+    },
+  };
+  return {
+    match_id: matchId,
+    round_label: roundLabel,
+    left,
+    right,
+    winner,
+    loser,
+    winner_side: advantage.winner_side,
+    battle_stat: stat,
+    stat_values: { left: leftValue, right: rightValue },
+    tiebreaker: null,
+    intro_line_text: introLineText,
+    insight_text: insightText,
+    breakdown_text: `Type ${leftValue}x-${rightValue}x | Winner: ${winner.display_name}`,
+    commentary_text: `${introLineText} ${insightText}`,
+    winner_line_text: `${winner.display_name} wins!`,
+    score_cards: {
+      left: leftCard,
+      right: rightCard,
+      winner: winnerCard,
+      loser: loserCard,
+    },
+    selected_advantage: selectedAdvantage,
+    battle_weights: normalizedWeights,
+  };
+}
+
+function resolveStatBattle({ left, right, battleStat, normalizedWeights, matchId, roundLabel }) {
+  const stat = resolveTournamentBattleStat(battleStat);
+  if (stat.key === 'type') {
+    return resolveTypeBattle({
+      left,
+      right,
+      battleStat: stat,
+      normalizedWeights,
+      matchId,
+      roundLabel,
+    });
+  }
+  const outcome = resolveStatWinnerSide(left, right, stat.key);
+  const winner = outcome.winner_side === 'left' ? left : right;
+  const loser = outcome.winner_side === 'left' ? right : left;
+  const leftValue = left.base_stats[stat.key];
+  const rightValue = right.base_stats[stat.key];
+  const leftCard = {
+    stat_key: stat.key,
+    stat_label: stat.spoken_label,
+    stat_value: leftValue,
+    base_stat_total: left.base_stat_total,
+    total_score: leftValue,
+  };
+  const rightCard = {
+    stat_key: stat.key,
+    stat_label: stat.spoken_label,
+    stat_value: rightValue,
+    base_stat_total: right.base_stat_total,
+    total_score: rightValue,
+  };
+  const winnerCard = outcome.winner_side === 'left' ? leftCard : rightCard;
+  const loserCard = outcome.winner_side === 'left' ? rightCard : leftCard;
+  const scoreCards = {
+    left: leftCard,
+    right: rightCard,
+    winner: winnerCard,
+    loser: loserCard,
+  };
+  const insightText = buildStatInsightText({
+    stat,
+    left,
+    right,
+    winner,
+    loser,
+    winnerSide: outcome.winner_side,
+    tiebreaker: outcome.tiebreaker,
+  });
+  const introLineText = `${left.display_name} versus ${right.display_name}.`;
+  const selectedAdvantage = {
+    id: `${stat.key}_battle`,
+    label: stat.spoken_label,
+    text: insightText,
+    strength: Math.abs(leftValue - rightValue),
+    verified: true,
+    evidence: {
+      left_value: leftValue,
+      right_value: rightValue,
+      tiebreaker: outcome.tiebreaker,
+    },
+  };
+  return {
+    match_id: matchId,
+    round_label: roundLabel,
+    left,
+    right,
+    winner,
+    loser,
+    winner_side: outcome.winner_side,
+    battle_stat: stat,
+    stat_values: { left: leftValue, right: rightValue },
+    tiebreaker: outcome.tiebreaker,
+    intro_line_text: introLineText,
+    insight_text: insightText,
+    breakdown_text: `${stat.spoken_label} ${leftValue}-${rightValue} | Winner: ${winner.display_name}`,
+    commentary_text: `${introLineText} ${insightText}`,
+    winner_line_text: `${winner.display_name} wins!`,
+    score_cards: scoreCards,
+    selected_advantage: selectedAdvantage,
+    battle_weights: normalizedWeights,
+  };
+}
+
 export function resolveTournamentBattle({
   left,
   right,
   weights = {},
+  battleStat = null,
   random = Math.random,
   matchId = '',
   roundLabel = '',
@@ -325,6 +552,16 @@ export function resolveTournamentBattle({
   const normalizedLeft = normalizeSubject(left);
   const normalizedRight = normalizeSubject(right);
   const normalizedWeights = normalizeBattleWeights(weights);
+  if (resolveTournamentBattleStat(battleStat)) {
+    return resolveStatBattle({
+      left: normalizedLeft,
+      right: normalizedRight,
+      battleStat,
+      normalizedWeights,
+      matchId,
+      roundLabel,
+    });
+  }
   const randomEdge = ((random() * 2) - 1) * normalizedWeights.random_spread;
   const leftCard = buildScoreCard(normalizedLeft, normalizedRight, normalizedWeights, randomEdge);
   const rightCard = buildScoreCard(normalizedRight, normalizedLeft, normalizedWeights, -randomEdge);

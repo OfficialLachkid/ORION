@@ -13,6 +13,7 @@ import {
   estimateWrapCharacterLimit,
   wrapTextBlock,
 } from '../../dual-type-reveal/render/text-layout.mjs';
+import { buildTournamentStatSpinnerFilters } from './stat-spinner-filter.mjs';
 
 const TOURNAMENT_STAT_ROWS = Object.freeze([
   { key: 'hp', label: 'HP', color: '0xFF4D6D', background: '0x2A171D' },
@@ -1670,6 +1671,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         match.reveal_start_seconds,
         { maxLines: 2 },
       ),
+      ...buildTournamentStatSpinnerFilters(match, template, fontPart),
       ...buildAnimatedSceneTextBlock(
         match.insight_text,
         fontPart,

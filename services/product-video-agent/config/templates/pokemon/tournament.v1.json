@@ -9,7 +9,7 @@
     "winner_reveal",
     "champion_reveal"
   ],
-  "version": "1.0.0",
+  "version": "1.1.0",
   "canvas": {
     "width": 1080,
     "height": 1920,
@@ -80,6 +80,15 @@
         "max_base_stat_total_spread": 150,
         "max_matchup_base_stat_total_delta": 95
       }
+    ],
+    "battle_stat_variants": [
+      { "key": "hp", "label": "HP", "spoken_label": "HP", "color": "0xFF4D6D", "weight": 1 },
+      { "key": "attack", "label": "Attack", "spoken_label": "Attack", "color": "0xFF8F1F", "weight": 1 },
+      { "key": "defense", "label": "Defense", "spoken_label": "Defense", "color": "0xFFD23F", "weight": 1 },
+      { "key": "special_attack", "label": "Sp. Atk", "spoken_label": "Special Attack", "color": "0x4D8CFF", "weight": 1 },
+      { "key": "special_defense", "label": "Sp. Def", "spoken_label": "Special Defense", "color": "0x55D66B", "weight": 1 },
+      { "key": "speed", "label": "Speed", "spoken_label": "Speed", "color": "0xFF58A8", "weight": 1 },
+      { "key": "type", "label": "Type", "spoken_label": "Type", "color": "0xB884FF", "weight": 1 }
     ],
     "battle_weights": {
       "base_stat_total": 0.06,
@@ -167,6 +176,16 @@
       "versus_width_px": 250,
       "versus_y_px": 760
     },
+    "stat_spinner": {
+      "center_x": 540,
+      "name_y_offset_px": 100,
+      "width_px": 440,
+      "height_px": 132,
+      "header_font_size": 25,
+      "label_font_size": 52,
+      "spawn_animation_seconds": 0.3,
+      "spawn_animation_steps": 10
+    },
     "champion_stage": {
       "sprite_size_px": 460,
       "center_x": 540,
@@ -187,6 +206,10 @@
       "post_progress_hold_seconds": 1,
       "match_intro_hold_seconds": 1.8,
       "suspense_hold_seconds": 0.9,
+      "stat_spinner_appear_delay_seconds": 2.35,
+      "stat_spinner_spawn_hold_seconds": 0.45,
+      "stat_spinner_spin_seconds": 2.6,
+      "stat_spinner_stop_hold_seconds": 1.2,
       "reveal_hold_seconds": 1.2,
       "transition_duration_seconds": 0.4,
       "champion_hold_seconds": 0.1
@@ -231,6 +254,18 @@
         "enabled": true,
         "preferred_keywords": [
           "electric-loading-sound"
+        ]
+      },
+      "stat_spinner_spin": {
+        "enabled": true,
+        "preferred_keywords": [
+          "rotating-slot.mp3"
+        ]
+      },
+      "stat_spinner_complete": {
+        "enabled": true,
+        "preferred_keywords": [
+          "rotating-slot-complete"
         ]
       },
       "disappear": {
