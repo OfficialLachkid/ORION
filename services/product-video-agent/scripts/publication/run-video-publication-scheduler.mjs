@@ -91,6 +91,26 @@ async function executePublicationPhase({
   return parseTrailingJsonArray(result.stdout);
 }
 
+async function executeSocialPublicationPhase({
+  asOf,
+}, options = {}) {
+  const runProcess = options.runProcess || runLocalProcess;
+  const executable = options.executable || process.execPath;
+  const scriptPath = options.scriptPath
+    || resolve(projectRoot, 'services/product-video-agent/scripts/publication/social/tiktok/execute-due-publications.mjs');
+  const result = await runProcess({
+    executable,
+    args: [
+      scriptPath,
+      '--as-of',
+      asOf,
+    ],
+    cwd: projectRoot,
+    timeoutMs: 1_200_000,
+  });
+  return parseTrailingJsonArray(result.stdout);
+}
+
 function buildYoutubeApiPlan(queuePlan, profiles, publications) {
   return queuePlan.channels.map((channelQueue) => {
     const profile = profiles.find((item) => item.id === channelQueue.channel.id);
@@ -135,6 +155,7 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
   const loadProfiles = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
   const loadPublications = dependencies.loadQueuedPublications || loadQueuedPublications;
   const executePhase = dependencies.executePublicationPhase || executePublicationPhase;
+  const executeSocialPhase = dependencies.executeSocialPublicationPhase || executeSocialPublicationPhase;
   const profiles = await loadProfiles(channelsPath, { projectRoot });
   const activeProfiles = profiles.filter((profile) => profile.status === 'active');
   const publications = await loadPublications(runtimeConfig.env || {}, { fetchJson: dependencies.fetchJson || fetchJson });
@@ -145,6 +166,7 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
   });
   const youtubeApiPlan = buildYoutubeApiPlan(queuePlan, profiles, publications);
   const executionResults = [];
+  let socialPublicationResults = [];
 
   if (!planOnly) {
     for (const profile of activeProfiles) {
@@ -182,12 +204,21 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
         + `${scheduleUpdateResults.length} schedule update(s).`
       );
     }
+    socialPublicationResults = await executeSocialPhase({
+      asOf,
+    }, {
+      runProcess: dependencies.runProcess,
+      executable: dependencies.executable,
+      scriptPath: dependencies.socialScriptPath,
+    });
+    printInfo(`Processed ${socialPublicationResults.length} social publication task(s).`);
   }
 
   return {
     queue_plan: queuePlan,
     youtube_api_plan: youtubeApiPlan,
     execution_results: executionResults,
+    social_publication_results: socialPublicationResults,
   };
 }
 

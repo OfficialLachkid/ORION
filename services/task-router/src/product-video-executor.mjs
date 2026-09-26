@@ -28,6 +28,7 @@ import {
   loadYoutubeClientCredentials,
 } from '../../product-video-agent/src/youtube-publication-executor.mjs';
 import { syncPublicationReviewMessage } from '../../product-video-agent/src/publication-review-message-sync.mjs';
+import { upsertAdditionalPlatformPublicationTargets } from '../../product-video-agent/src/social-publication-targets.mjs';
 
 function slugify(value) {
   return String(value || '')
@@ -359,6 +360,25 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
   const refreshedWorkflowState = refreshedPublication?.metadata?.workflow_state || 'preview_approved';
   const scheduledFor = refreshedPublication?.scheduled_for || '';
   if (refreshedWorkflowState === 'scheduled' && scheduledFor) {
+    const fanOutPublicationTargets =
+      dependencies.upsertAdditionalPlatformPublicationTargets
+      || upsertAdditionalPlatformPublicationTargets;
+    let platformPublicationResults = [];
+    let platformPublicationError = '';
+    try {
+      platformPublicationResults = await fanOutPublicationTargets({
+        store,
+        sourcePublication: refreshedPublication,
+        videoRow,
+        sourceChannelProfile: channelProfile,
+        scheduledFor,
+        asOf: approvedAt,
+      });
+    } catch (error) {
+      platformPublicationError = error.message || String(error);
+      process.stderr.write(`Could not create additional platform publication target(s) for ${publication.id}: ${platformPublicationError}\n`);
+    }
+
     try {
       await refreshPublicationReviewMessage({
         config,
@@ -383,13 +403,17 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
       rawStdout: '',
       report: {
         state: 'scheduled',
-        severity: 'success',
-        summary: `Approved ${publication.id} and scheduled it for ${scheduledFor}.`,
+        severity: platformPublicationError ? 'warning' : 'success',
+        summary: platformPublicationError
+          ? `Approved ${publication.id} and scheduled it for ${scheduledFor}, but additional platform target setup failed: ${platformPublicationError}`
+          : `Approved ${publication.id} and scheduled it for ${scheduledFor}.`,
         publicationId: refreshedPublication?.id || publication.id,
         previewUrl: refreshedPublication?.preview_url || publication.preview_url || '',
         workflowState: refreshedWorkflowState,
         approvedAt,
         scheduledFor,
+        platformPublicationResults,
+        platformPublicationError,
       },
     };
   }
