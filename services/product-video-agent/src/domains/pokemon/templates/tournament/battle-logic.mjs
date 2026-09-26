@@ -122,6 +122,26 @@ function normalizeSubject(subject = {}) {
   };
 }
 
+export function resolveTournamentTypeAdvantage(leftInput, rightInput) {
+  const left = normalizeSubject(leftInput);
+  const right = normalizeSubject(rightInput);
+  const leftAttack = resolveBestTypeAttack(left.types, right.types);
+  const rightAttack = resolveBestTypeAttack(right.types, left.types);
+  const hasUnequalSuperEffectiveEdge = (
+    leftAttack.multiplier !== rightAttack.multiplier
+    && Math.max(leftAttack.multiplier, rightAttack.multiplier) >= 2
+  );
+  const winnerSide = hasUnequalSuperEffectiveEdge
+    ? (leftAttack.multiplier > rightAttack.multiplier ? 'left' : 'right')
+    : null;
+  return {
+    eligible: Boolean(winnerSide),
+    winner_side: winnerSide,
+    left_attack: leftAttack,
+    right_attack: rightAttack,
+  };
+}
+
 function resolveBulkScore(stats) {
   return (stats.hp * 0.5) + (stats.defense * 0.25) + (stats.special_defense * 0.25);
 }
@@ -360,8 +380,95 @@ function buildStatInsightText({ stat, left, right, winner, loser, winnerSide, ti
   return `The slot lands on ${stat.spoken_label}. ${winner.display_name} ${comparison}: ${winnerValue} to ${loserValue}.`;
 }
 
+function formatTypeName(value) {
+  const normalized = String(value || '').trim();
+  return normalized ? `${normalized[0].toUpperCase()}${normalized.slice(1)}` : 'its typing';
+}
+
+function resolveTypeBattle({ left, right, battleStat, normalizedWeights, matchId, roundLabel }) {
+  const stat = resolveTournamentBattleStat(battleStat);
+  const advantage = resolveTournamentTypeAdvantage(left, right);
+  if (!advantage.eligible) {
+    throw new Error('Type cannot be selected for a tournament match without an unequal super-effective advantage.');
+  }
+  const winner = advantage.winner_side === 'left' ? left : right;
+  const loser = advantage.winner_side === 'left' ? right : left;
+  const winnerAttack = advantage.winner_side === 'left'
+    ? advantage.left_attack
+    : advantage.right_attack;
+  const leftValue = advantage.left_attack.multiplier;
+  const rightValue = advantage.right_attack.multiplier;
+  const insightText = `The slot lands on Type. ${winner.display_name} has the type advantage with ${formatTypeName(winnerAttack.attacking_type)}.`;
+  const introLineText = `${left.display_name} versus ${right.display_name}.`;
+  const leftCard = {
+    stat_key: stat.key,
+    stat_label: stat.spoken_label,
+    stat_value: leftValue,
+    attacking_type: advantage.left_attack.attacking_type,
+    base_stat_total: left.base_stat_total,
+    total_score: leftValue,
+  };
+  const rightCard = {
+    stat_key: stat.key,
+    stat_label: stat.spoken_label,
+    stat_value: rightValue,
+    attacking_type: advantage.right_attack.attacking_type,
+    base_stat_total: right.base_stat_total,
+    total_score: rightValue,
+  };
+  const winnerCard = advantage.winner_side === 'left' ? leftCard : rightCard;
+  const loserCard = advantage.winner_side === 'left' ? rightCard : leftCard;
+  const selectedAdvantage = {
+    id: 'type_battle',
+    label: stat.spoken_label,
+    text: insightText,
+    strength: Math.abs(leftValue - rightValue),
+    verified: true,
+    evidence: {
+      left_multiplier: leftValue,
+      right_multiplier: rightValue,
+      winning_type: winnerAttack.attacking_type,
+    },
+  };
+  return {
+    match_id: matchId,
+    round_label: roundLabel,
+    left,
+    right,
+    winner,
+    loser,
+    winner_side: advantage.winner_side,
+    battle_stat: stat,
+    stat_values: { left: leftValue, right: rightValue },
+    tiebreaker: null,
+    intro_line_text: introLineText,
+    insight_text: insightText,
+    breakdown_text: `Type ${leftValue}x-${rightValue}x | Winner: ${winner.display_name}`,
+    commentary_text: `${introLineText} ${insightText}`,
+    winner_line_text: `${winner.display_name} wins!`,
+    score_cards: {
+      left: leftCard,
+      right: rightCard,
+      winner: winnerCard,
+      loser: loserCard,
+    },
+    selected_advantage: selectedAdvantage,
+    battle_weights: normalizedWeights,
+  };
+}
+
 function resolveStatBattle({ left, right, battleStat, normalizedWeights, matchId, roundLabel }) {
   const stat = resolveTournamentBattleStat(battleStat);
+  if (stat.key === 'type') {
+    return resolveTypeBattle({
+      left,
+      right,
+      battleStat: stat,
+      normalizedWeights,
+      matchId,
+      roundLabel,
+    });
+  }
   const outcome = resolveStatWinnerSide(left, right, stat.key);
   const winner = outcome.winner_side === 'left' ? left : right;
   const loser = outcome.winner_side === 'left' ? right : left;

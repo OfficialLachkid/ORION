@@ -16,6 +16,7 @@ import {
 import {
   normalizeBaseStats,
   resolveTournamentBattle,
+  resolveTournamentTypeAdvantage,
   sumBaseStats,
 } from './battle-logic.mjs';
 import { selectTournamentBattleStat } from './battle-stat.mjs';
@@ -876,11 +877,15 @@ export async function planPokemonTournamentChallenge({
   )));
 
   let previousBattleStatKey = '';
-  const selectNextBattleStat = () => {
+  const selectNextBattleStat = (left, right) => {
+    const excludedKeys = previousBattleStatKey ? [previousBattleStatKey] : [];
+    if (!resolveTournamentTypeAdvantage(left, right).eligible) {
+      excludedKeys.push('type');
+    }
     const battleStat = selectTournamentBattleStat(
       template,
       random,
-      previousBattleStatKey ? [previousBattleStatKey] : [],
+      excludedKeys,
     );
     previousBattleStatKey = battleStat.key;
     return battleStat;
@@ -892,7 +897,7 @@ export async function planPokemonTournamentChallenge({
     roundLabel: 'Semi Final 1',
     left: participants[0],
     right: participants[1],
-    battleStat: selectNextBattleStat(),
+    battleStat: selectNextBattleStat(participants[0], participants[1]),
     template,
     random,
   });
@@ -902,7 +907,7 @@ export async function planPokemonTournamentChallenge({
     roundLabel: 'Semi Final 2',
     left: participants[2],
     right: participants[3],
-    battleStat: selectNextBattleStat(),
+    battleStat: selectNextBattleStat(participants[2], participants[3]),
     template,
     random,
   });
@@ -912,7 +917,7 @@ export async function planPokemonTournamentChallenge({
     roundLabel: 'Final',
     left: semiFinalOne.winner,
     right: semiFinalTwo.winner,
-    battleStat: selectNextBattleStat(),
+    battleStat: selectNextBattleStat(semiFinalOne.winner, semiFinalTwo.winner),
     template,
     random,
   });

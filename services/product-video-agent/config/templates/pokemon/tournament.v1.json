@@ -87,7 +87,8 @@
       { "key": "defense", "label": "Defense", "spoken_label": "Defense", "color": "0xFFD23F", "weight": 1 },
       { "key": "special_attack", "label": "Sp. Atk", "spoken_label": "Special Attack", "color": "0x4D8CFF", "weight": 1 },
       { "key": "special_defense", "label": "Sp. Def", "spoken_label": "Special Defense", "color": "0x55D66B", "weight": 1 },
-      { "key": "speed", "label": "Speed", "spoken_label": "Speed", "color": "0xFF58A8", "weight": 1 }
+      { "key": "speed", "label": "Speed", "spoken_label": "Speed", "color": "0xFF58A8", "weight": 1 },
+      { "key": "type", "label": "Type", "spoken_label": "Type", "color": "0xB884FF", "weight": 1 }
     ],
     "battle_weights": {
       "base_stat_total": 0.06,
@@ -181,7 +182,9 @@
       "width_px": 440,
       "height_px": 132,
       "header_font_size": 25,
-      "label_font_size": 52
+      "label_font_size": 52,
+      "spawn_animation_seconds": 0.3,
+      "spawn_animation_steps": 10
     },
     "champion_stage": {
       "sprite_size_px": 460,

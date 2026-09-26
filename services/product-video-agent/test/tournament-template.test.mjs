@@ -9,8 +9,11 @@ import {
 import {
   resolveBestTypeAttack,
   resolveTournamentBattle,
+  resolveTournamentTypeAdvantage,
 } from '../src/domains/pokemon/templates/tournament/battle-logic.mjs';
+import { selectTournamentBattleStat } from '../src/domains/pokemon/templates/tournament/battle-stat.mjs';
 import { applyNarrationDurationsToRenderPlan } from '../src/domains/pokemon/templates/tournament/render/render-plan.mjs';
+import { buildTournamentStatSpinnerFilters } from '../src/domains/pokemon/templates/tournament/render/stat-spinner-filter.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/tournament/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/tournament/render/visual-inputs.mjs';
 
@@ -439,6 +442,67 @@ test('tournament slot stat alone decides the match after it lands', () => {
   assert.equal(battle.intro_line_text, 'Left Slot versus Right Slot.');
   assert.equal(battle.insight_text, 'The slot lands on Attack. Right Slot has higher Attack: 50 to 40.');
   assert.equal(battle.tiebreaker, null);
+});
+
+test('tournament Type slot only resolves a real unequal super-effective advantage', () => {
+  const charizard = {
+    id: 'charizard-type-slot',
+    display_name: 'Charizard',
+    types: ['fire', 'flying'],
+    base_stats: { hp: 78, attack: 84, defense: 78, special_attack: 109, special_defense: 85, speed: 100 },
+    base_stat_total: 534,
+  };
+  const blastoise = {
+    id: 'blastoise-type-slot',
+    display_name: 'Blastoise',
+    types: ['water'],
+    base_stats: { hp: 79, attack: 83, defense: 100, special_attack: 85, special_defense: 105, speed: 78 },
+    base_stat_total: 530,
+  };
+
+  const advantage = resolveTournamentTypeAdvantage(charizard, blastoise);
+  const battle = resolveTournamentBattle({
+    left: charizard,
+    right: blastoise,
+    battleStat: 'type',
+  });
+
+  assert.equal(advantage.eligible, true);
+  assert.equal(advantage.winner_side, 'right');
+  assert.equal(battle.winner.id, 'blastoise-type-slot');
+  assert.equal(battle.battle_stat.key, 'type');
+  assert.deepEqual(battle.stat_values, { left: 1, right: 2 });
+  assert.equal(battle.insight_text, 'The slot lands on Type. Blastoise has the type advantage with Water.');
+
+  const neutralAdvantage = resolveTournamentTypeAdvantage(
+    { display_name: 'Alpha', types: ['normal'] },
+    { display_name: 'Beta', types: ['normal'] },
+  );
+  assert.equal(neutralAdvantage.eligible, false);
+  assert.equal(neutralAdvantage.winner_side, null);
+  assert.notEqual(selectTournamentBattleStat({
+    selection_rules: {
+      battle_stat_variants: [{ key: 'type', weight: 10 }],
+    },
+  }, () => 0, ['type']).key, 'type');
+});
+
+test('tournament stat slot panel grows from its center before settling', () => {
+  const filters = buildTournamentStatSpinnerFilters({
+    match_id: 'spawn-test',
+    battle_stat: 'type',
+    spinner_appear_start_seconds: 2,
+    spinner_spin_start_seconds: 2.45,
+    spinner_stop_seconds: 4,
+    reveal_start_seconds: 5,
+  }, template);
+  const panelBoxes = filters.filter((filter) => filter.startsWith('drawbox='));
+
+  assert.equal(panelBoxes.length, 22);
+  assert.match(panelBoxes[0], /w=\d+:h=\d+:color=0xFFD60A/u);
+  assert.doesNotMatch(panelBoxes[0], /x=320:y=1530:w=440:h=132/u);
+  assert.match(panelBoxes.at(-2), /x=320:y=1530:w=440:h=132/u);
+  assert.match(filters.join(','), /drawtext=text='Type'/u);
 });
 
 test('tournament slot stat uses Base Stat Total only as a tie-break', () => {

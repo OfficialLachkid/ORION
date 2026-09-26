@@ -12,6 +12,38 @@ function roundTime(value) {
   return Math.round(ensureNumber(value, 0) * 1000) / 1000;
 }
 
+function buildPanelBoxFilters({ x, y, width, height, start, end, config }) {
+  const requestedDuration = Math.max(0, ensureNumber(config.spawn_animation_seconds, 0.3));
+  const duration = Math.min(requestedDuration, Math.max(0, end - start));
+  const stepCount = Math.max(1, Math.round(ensureNumber(config.spawn_animation_steps, 10)));
+  const filters = [];
+  if (duration > 0.001) {
+    for (let index = 0; index < stepCount; index += 1) {
+      const progress = (index + 1) / stepCount;
+      const eased = 1 - ((1 - progress) ** 3);
+      const scale = Math.min(1.04, 0.12 + (0.88 * eased) + (0.05 * Math.sin(Math.PI * progress)));
+      const stepWidth = Math.max(12, Math.round(width * scale));
+      const stepHeight = Math.max(12, Math.round(height * scale));
+      const stepX = Math.round(x + ((width - stepWidth) / 2));
+      const stepY = Math.round(y + ((height - stepHeight) / 2));
+      const stepStart = roundTime(start + ((duration * index) / stepCount));
+      const stepEnd = roundTime(start + ((duration * (index + 1)) / stepCount));
+      const enable = formatEnableBetween(stepStart, stepEnd);
+      filters.push(
+        `drawbox=x=${stepX}:y=${stepY}:w=${stepWidth}:h=${stepHeight}:color=0xFFD60A@0.96:t=4:replace=0:enable='${enable}'`,
+        `drawbox=x=${stepX + 5}:y=${stepY + 5}:w=${Math.max(2, stepWidth - 10)}:h=${Math.max(2, stepHeight - 10)}:color=0x07111F@0.92:t=fill:replace=0:enable='${enable}'`,
+      );
+    }
+  }
+  const settledStart = roundTime(start + duration);
+  const settledEnable = formatEnableBetween(settledStart, end);
+  filters.push(
+    `drawbox=x=${x}:y=${y}:w=${width}:h=${height}:color=0xFFD60A@0.96:t=4:replace=0:enable='${settledEnable}'`,
+    `drawbox=x=${x + 5}:y=${y + 5}:w=${width - 10}:h=${height - 10}:color=0x07111F@0.92:t=fill:replace=0:enable='${settledEnable}'`,
+  );
+  return { filters, settledStart };
+}
+
 function buildSpinSegments(match) {
   const start = ensureNumber(match?.spinner_spin_start_seconds, 0);
   const stop = Math.max(start, ensureNumber(match?.spinner_stop_seconds, start));
@@ -61,13 +93,21 @@ export function buildTournamentStatSpinnerFilters(match, template, fontPart = ''
   const spinStart = ensureNumber(match?.spinner_spin_start_seconds, appearStart);
   const stop = ensureNumber(match?.spinner_stop_seconds, spinStart);
   const reveal = Math.max(stop, ensureNumber(match?.reveal_start_seconds, stop));
-  const spinnerEnable = formatEnableBetween(appearStart, reveal);
   const labelCenterY = y + 72;
+  const panel = buildPanelBoxFilters({
+    x,
+    y,
+    width,
+    height,
+    start: appearStart,
+    end: reveal,
+    config,
+  });
+  const textEnable = formatEnableBetween(panel.settledStart, reveal);
   const filters = [
-    `drawbox=x=${x}:y=${y}:w=${width}:h=${height}:color=0xFFD60A@0.96:t=4:replace=0:enable='${spinnerEnable}'`,
-    `drawbox=x=${x + 5}:y=${y + 5}:w=${width - 10}:h=${height - 10}:color=0x07111F@0.92:t=fill:replace=0:enable='${spinnerEnable}'`,
-    `drawtext=text='BATTLE STAT'${fontPart}:fontcolor=0xFFD60A:fontsize=${headerFontSize}:borderw=2:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${y + 12}:enable='${spinnerEnable}'`,
-    `drawtext=text='?'${fontPart}:fontcolor=white:fontsize=${labelFontSize}:borderw=3:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${labelCenterY}-text_h/2:enable='${formatEnableBetween(appearStart, spinStart)}'`,
+    ...panel.filters,
+    `drawtext=text='BATTLE STAT'${fontPart}:fontcolor=0xFFD60A:fontsize=${headerFontSize}:borderw=2:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${y + 12}:enable='${textEnable}'`,
+    `drawtext=text='?'${fontPart}:fontcolor=white:fontsize=${labelFontSize}:borderw=3:bordercolor=black:fix_bounds=1:x=(w-text_w)/2:y=${labelCenterY}-text_h/2:enable='${formatEnableBetween(panel.settledStart, spinStart)}'`,
   ];
 
   buildSpinSegments(match).forEach((segment) => {

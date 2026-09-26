@@ -5,6 +5,7 @@ export const TOURNAMENT_BATTLE_STATS = Object.freeze([
   Object.freeze({ key: 'special_attack', label: 'Sp. Atk', spoken_label: 'Special Attack', color: '0x4D8CFF', weight: 1 }),
   Object.freeze({ key: 'special_defense', label: 'Sp. Def', spoken_label: 'Special Defense', color: '0x55D66B', weight: 1 }),
   Object.freeze({ key: 'speed', label: 'Speed', spoken_label: 'Speed', color: '0xFF58A8', weight: 1 }),
+  Object.freeze({ key: 'type', label: 'Type', spoken_label: 'Type', color: '0xB884FF', weight: 1 }),
 ]);
 
 const BATTLE_STAT_BY_KEY = new Map(TOURNAMENT_BATTLE_STATS.map((stat) => [stat.key, stat]));
@@ -50,7 +51,10 @@ export function selectTournamentBattleStat(template = {}, random = Math.random, 
   const excluded = new Set((Array.isArray(excludedKeys) ? excludedKeys : []).map(normalizeStatKey));
   const allVariants = resolveTournamentBattleStatVariants(template);
   const available = allVariants.filter((variant) => !excluded.has(variant.key));
-  const candidates = available.length > 0 ? available : allVariants;
+  const fallbackAvailable = TOURNAMENT_BATTLE_STATS.filter((variant) => !excluded.has(variant.key));
+  const candidates = available.length > 0
+    ? available
+    : (fallbackAvailable.length > 0 ? fallbackAvailable : allVariants);
   const totalWeight = candidates.reduce((sum, variant) => sum + variant.weight, 0);
   let cursor = random() * totalWeight;
   for (const candidate of candidates) {
