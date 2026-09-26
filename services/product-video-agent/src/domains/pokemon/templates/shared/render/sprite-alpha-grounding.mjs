@@ -80,4 +80,3 @@ export async function buildVisualInputGroundingRatios(visualInputs = [], {
   }));
   return new Map(entries);
 }
-
