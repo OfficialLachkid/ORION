@@ -131,6 +131,7 @@ function appendPlatformAndSprite({
   spriteScaleFilter = null,
   spriteStreamFilters = [],
   platformStreamFilters = [],
+  bottomTransparentRatio = 0,
   template,
 }) {
   let baseVideoLabel = currentVideoLabel;
@@ -170,7 +171,7 @@ function appendPlatformAndSprite({
     `[${spriteInputIndex}:v]${spriteFilterParts.join(',')}[${spriteLabel}]`,
   );
   filters.push(
-    `[${baseVideoLabel}][${spriteLabel}]overlay=x='${centerX}-w/2':y='${centerY}-h/2':enable='${enableExpression}'[${outputLabel}]`,
+    `[${baseVideoLabel}][${spriteLabel}]overlay=x='${centerX}-w/2':y='${centerY}-h/2${ensureNumber(bottomTransparentRatio, 0) > 0 ? `+h*${Math.max(0, ensureNumber(bottomTransparentRatio, 0))}` : ''}':enable='${enableExpression}'[${outputLabel}]`,
   );
   return outputLabel;
 }
@@ -306,6 +307,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentVideoLabel,
       inputRefs,
       spriteInputIndex: inputRefs.sprites[index],
+      bottomTransparentRatio: inputRefs.spriteBottomTransparentRatios?.[index] || 0,
       spriteLabel,
       outputLabel: memorizeLabel,
       platformLabelPrefix: `memstudy${index}`,
@@ -397,6 +399,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         currentVideoLabel,
         inputRefs,
         spriteInputIndex: inputRefs.optionSprites[index],
+        bottomTransparentRatio: inputRefs.optionSpriteBottomTransparentRatios?.[index] || 0,
         spriteLabel: optionSpriteLabel,
         outputLabel: optionVideoLabel,
         platformLabelPrefix: `memoption${index}`,
@@ -442,6 +445,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentVideoLabel,
       inputRefs,
       spriteInputIndex: inputRefs.revealSprite,
+      bottomTransparentRatio: inputRefs.revealSpriteBottomTransparentRatio || 0,
       spriteLabel: revealSpriteLabel,
       outputLabel: revealVideoLabel,
       platformLabelPrefix: 'memreveal',

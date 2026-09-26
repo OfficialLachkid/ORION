@@ -251,6 +251,7 @@ function resolvePlatformLayout(template) {
   const config = template?.layout?.sprite_platform || {};
   return {
     enabled: config.option_enabled !== false,
+    visible_bottom_alignment_enabled: config.visible_bottom_alignment_enabled === true,
     width_multiplier: ensureNumber(config.option_width_multiplier, 0.9),
     center_y_offset_multiplier: ensureNumber(config.center_y_offset_multiplier, 0.34),
     center_y_offset_px: ensureNumber(config.option_center_y_offset_px, ensureNumber(config.center_y_offset_px, 0)),
@@ -300,21 +301,23 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     );
 
     let currentLabel = sceneBaseLabel;
-    const counterSceneLabel = `scene${roundIndex}c`;
-    const counterStartSeconds = roundIndex === 0 && renderPlan.hook_text
-      ? roundTime(round.local.countdown_start_seconds + 0.03)
-      : roundTime(incomingTransitionSeconds + 0.03);
-    const counterScaleExpression = buildAnimatedPopSettleExpression(
-      counterStartSeconds,
-      0.24,
-      0.62,
-      1.18,
-      1,
-    );
-    filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(formatCounterText(round))}'${fontPart}:fontcolor=white:fontsize='${renderPlan.text_layout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.text_layout.counter_x}:y='${renderPlan.text_layout.counter_y}':alpha='${buildAnimatedTextSegmentAlphaExpression(counterStartSeconds, round.local.scene_duration_seconds)}'[${counterSceneLabel}]`,
-    );
-    currentLabel = counterSceneLabel;
+    if (template?.layout?.text?.show_counter !== false) {
+      const counterSceneLabel = `scene${roundIndex}c`;
+      const counterStartSeconds = roundIndex === 0 && renderPlan.hook_text
+        ? roundTime(round.local.countdown_start_seconds + 0.03)
+        : roundTime(incomingTransitionSeconds + 0.03);
+      const counterScaleExpression = buildAnimatedPopSettleExpression(
+        counterStartSeconds,
+        0.24,
+        0.62,
+        1.18,
+        1,
+      );
+      filters.push(
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(formatCounterText(round))}'${fontPart}:fontcolor=white:fontsize='${renderPlan.text_layout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.text_layout.counter_x}:y='${renderPlan.text_layout.counter_y}':alpha='${buildAnimatedTextSegmentAlphaExpression(counterStartSeconds, round.local.scene_duration_seconds)}'[${counterSceneLabel}]`,
+      );
+      currentLabel = counterSceneLabel;
+    }
 
     if (roundIndex === 0 && renderPlan.hook_text) {
       const hookSegments = buildTextSegments(renderPlan.hook_text, {
@@ -375,6 +378,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const candidateCenterY = Number((
         cell.center_y + gridSpriteLayout.center_y_offset_px
       ).toFixed(3));
+      const bottomTransparentRatio = Math.max(
+        0,
+        ensureNumber(roundInputRefs.bottom_transparent_ratios?.[candidate.index], 0),
+      );
+      const candidateBottomY = Number((candidateCenterY + (baseSpriteSize / 2)).toFixed(3));
+      const groundedYExpression = platformLayout.visible_bottom_alignment_enabled
+        ? `${candidateBottomY}-h${bottomTransparentRatio > 0 ? `+h*${bottomTransparentRatio}` : ''}`
+        : `${candidateCenterY}-h/2${bottomTransparentRatio > 0 ? `+h*${bottomTransparentRatio}` : ''}`;
       const candidateSourceLabel = `r${roundIndex}src${candidate.index}`;
       const graySourceLabel = `r${roundIndex}gray${candidate.index}`;
       filters.push(
@@ -402,7 +413,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       }
       const baseSceneLabel = `scene${roundIndex}cand${candidate.index}`;
       filters.push(
-        `[${currentLabel}][${baseLabel}]overlay=x='${cell.center_x}-w/2':y='${candidateCenterY}-h/2':enable='${formatEnableBetween(introStart, round.local.scene_duration_seconds)}'[${baseSceneLabel}]`,
+        `[${currentLabel}][${baseLabel}]overlay=x='${cell.center_x}-w/2':y='${groundedYExpression}':enable='${formatEnableBetween(introStart, round.local.scene_duration_seconds)}'[${baseSceneLabel}]`,
       );
       currentLabel = baseSceneLabel;
 
@@ -412,7 +423,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           `[${graySourceLabel}]fps=${fps},${baseChain},hue=s=0,fade=t=in:st=${round.local.reveal_visual_start_seconds}:d=${grayFadeDuration}:alpha=1[${graySourceLabel}v]`,
         );
         filters.push(
-          `[${currentLabel}][${graySourceLabel}v]overlay=x='${cell.center_x}-w/2':y='${candidateCenterY}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${graySceneLabel}]`,
+          `[${currentLabel}][${graySourceLabel}v]overlay=x='${cell.center_x}-w/2':y='${groundedYExpression}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${graySceneLabel}]`,
         );
         currentLabel = graySceneLabel;
       }

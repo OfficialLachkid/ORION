@@ -59,7 +59,7 @@ export function escapeDrawtextText(value) {
   return String(value || '')
     .replaceAll('\\', '\\\\')
     .replaceAll(':', '\\:')
-    .replaceAll("'", "\\'")
+    .replaceAll("'", "'\\''")
     .replaceAll('%', '\\%')
     .replaceAll(',', '\\,');
 }

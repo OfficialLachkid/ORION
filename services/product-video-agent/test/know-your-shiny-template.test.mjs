@@ -34,8 +34,8 @@ const template = {
   question_contract: {
     hook_text: 'Do you know your shiny?',
     hook_text_variants: ['Do you know your shiny?'],
-    prompt_text: 'Which one\u2019s shiny?',
-    prompt_text_variants: ['Which one\u2019s shiny?'],
+    prompt_text: 'Which one is the Real Shiny?',
+    prompt_text_variants: ['Which one is the Real Shiny?'],
     reveal_text: '',
     reveal_text_variants: [],
   },
@@ -47,14 +47,16 @@ const template = {
       hook_y: 300,
       hook_font_size: 136,
       prompt_y: 300,
-      prompt_font_size: 98,
+      prompt_font_size: 92,
       reveal_y: 300,
       reveal_font_size: 110,
       counter_x: 72,
       counter_y: 144,
       counter_font_size: 96,
       highlight_color: '0xFFD60A',
-      highlight_keywords: ['shiny'],
+      highlight_x_offset_px: 0,
+      highlight_y_offset_px: 0,
+      highlight_keywords: ['real shiny', 'real'],
     },
     sprite_grid: {
       rows: 2,
@@ -267,6 +269,22 @@ test('know-your-shiny builds a hard six-round variant with the harder color prof
   );
 });
 
+test('know-your-shiny includes shared pixel backgrounds in its selection pool', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'know-your-shiny-pixel-background',
+    assetInventory: {
+      ...assetInventory,
+      backgrounds: [],
+      pixel_backgrounds: ['/tmp/pixel-backgrounds/route.png'],
+    },
+  });
+
+  assert.equal(plan.assets.background.selected_path, '/tmp/pixel-backgrounds/route.png');
+  assert.equal(plan.assets.background.expected_directories.length, 2);
+});
+
 test('know-your-shiny render plan and input builders stay deterministic for slide rounds', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
@@ -325,6 +343,22 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
     },
     null,
   );
+  const visibleBottomTemplate = structuredClone(template);
+  visibleBottomTemplate.layout.sprite_platform.visible_bottom_alignment_enabled = true;
+  const visibleBottomVisualFilter = buildVisualFilterScript(
+    plan,
+    visibleBottomTemplate,
+    renderPlan,
+    {
+      background: 0,
+      rounds: renderPlan.rounds.map((round, roundIndex) => ({
+        candidates: round.candidates.map((_, candidateIndex) => 1 + (roundIndex * 4) + candidateIndex),
+      })),
+      grassPlatform: 13,
+      shinySparkle: 14,
+    },
+    null,
+  );
   const audioFilter = buildAudioFilterScript({
     narrationPaths: [],
     musicPath: '/tmp/music.mp3',
@@ -349,8 +383,11 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(visualFilter.script, /enable='between\(t,4\.34,5\.34\)'/u);
   assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
   assert.match(visualFilter.script, /647-h\/2/u);
+  assert.match(visibleBottomVisualFilter.script, /838\.25-h/u);
   assert.match(visualFilter.script, /colorchannelmixer=/u);
   assert.match(visualFilter.script, /fontcolor=0xFFD60A/u);
+  assert.match(visualFilter.script, /text='Which one is the'/u);
+  assert.match(visualFilter.script, /text='Real Shiny\?'.*fontcolor=0xFFD60A/u);
   assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);
   assert.doesNotMatch(visualFilter.script, /color=c=[^:]+:s=\d+x\d+\.\d+/u);
   assert.doesNotMatch(visualFilter.script, /color=c=[^:]+:s=\d+\.\d+x\d+/u);

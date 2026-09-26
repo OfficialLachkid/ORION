@@ -468,6 +468,6 @@ test('escaped enable windows are safe for ffmpeg filter parsing', () => {
 test('drawtext escaping preserves apostrophes for ffmpeg filter parsing', () => {
   assert.equal(
     escapeDrawtextText("Who's that Pokemon?"),
-    "Who\\'s that Pokemon?",
+    "Who'\\''s that Pokemon?",
   );
 });

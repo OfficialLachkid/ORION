@@ -117,6 +117,7 @@
     "product-video:analytics-sweep": "node services/product-video-agent/scripts/run-video-analytics-sweep.mjs",
     "product-video:plan-poke-quizz": "node services/product-video-agent/scripts/plan-pokemon-type-challenge.mjs",
     "product-video:render-poke-quizz": "node services/product-video-agent/scripts/render-poke-quizz-video.mjs",
+    "product-video:generate-pokemon-long-form-review": "node services/product-video-agent/scripts/generate-pokemon-long-form-review.mjs",
     "product-video:register-poke-quizz-publication": "node services/product-video-agent/scripts/register-poke-quizz-publication.mjs",
     "product-video:execute-youtube-publication": "node services/product-video-agent/scripts/execute-youtube-publication.mjs",
     "product-video:localize-poke-quizz-assets": "node services/product-video-agent/scripts/localize-poke-quizz-assets.mjs",

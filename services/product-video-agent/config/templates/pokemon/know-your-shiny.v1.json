@@ -81,9 +81,9 @@
     "hook_text_variants": [
       "Do you know your shiny?"
     ],
-    "prompt_text": "Which one\u2019s shiny?",
+    "prompt_text": "Which one is the Real Shiny?",
     "prompt_text_variants": [
-      "Which one\u2019s shiny?"
+      "Which one is the Real Shiny?"
     ],
     "reveal_text": "",
     "reveal_text_variants": []
@@ -99,7 +99,7 @@
       "hook_y": 150,
       "hook_font_size": 136,
       "prompt_y": 150,
-      "prompt_font_size": 98,
+      "prompt_font_size": 92,
       "reveal_y": 300,
       "reveal_font_size": 110,
       "font_candidates": [
@@ -112,10 +112,11 @@
       "counter_y": 144,
       "counter_font_size": 96,
       "highlight_color": "0xFFD60A",
-      "highlight_x_offset_px": 20,
-      "highlight_y_offset_px": -12,
+      "highlight_x_offset_px": 0,
+      "highlight_y_offset_px": 0,
       "highlight_keywords": [
-        "shiny"
+        "real shiny",
+        "real"
       ]
     },
     "sprite_grid": {

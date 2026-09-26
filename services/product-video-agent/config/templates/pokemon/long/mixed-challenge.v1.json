@@ -1,0 +1,123 @@
+{
+  "template_id": "pokemon.long.mixed-challenge.v1",
+  "template_key": "long-mixed-challenge",
+  "domain": "pokemon",
+  "content_format": "long_form",
+  "content_surface": "youtube_watch",
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "aspect_ratio": "16:9"
+  },
+  "episode": {
+    "shuffle_sections": true,
+    "intro_duration_seconds": 6,
+    "intro_music_volume": 0.24,
+    "intro_pokeball_count": 4,
+    "intro_pokeball_size_px": 126,
+    "intro_pokeball_center_y": 835,
+    "chapter_intro_duration_seconds": 3.5,
+    "outro_duration_seconds": 7,
+    "difficulty_levels": [
+      {
+        "key": "easy",
+        "label": "EASY ROUND",
+        "accent_color": "0x45D483"
+      },
+      {
+        "key": "medium",
+        "label": "MEDIUM ROUND",
+        "accent_color": "0xFFD60A"
+      },
+      {
+        "key": "hard",
+        "label": "HARD ROUND",
+        "accent_color": "0xFF5B62"
+      }
+    ],
+    "excluded_template_keys": [
+      "tournament",
+      "build-your-team"
+    ]
+  },
+  "assets": {
+    "minimum_background_width": 1280,
+    "minimum_background_height": 720,
+    "minimum_background_aspect_ratio": 1.4
+  },
+  "layout": {
+    "background": {
+      "blur_sigma": 8,
+      "motion": {
+        "enabled": true,
+        "zoom_scale": 1.3,
+        "subpixel_scale": 1.5
+      }
+    },
+    "progress_tracker": {
+      "enabled": true,
+      "left_px": 160,
+      "bottom_px": 160,
+      "marker_size_px": 42,
+      "marker_gap_px": 16,
+      "border_width_px": 3,
+      "fill_start_seconds": 0.55,
+      "fill_stagger_seconds": 0.16
+    },
+    "subscribe_reminder": {
+      "enabled": true,
+      "width_px": 960,
+      "center_x": 1460,
+      "center_y": 830,
+      "chroma_key_color": "0x00FF00",
+      "chroma_similarity": 0.22,
+      "chroma_blend": 0.08
+    },
+    "round_transition": {
+      "enabled": true,
+      "overlap_mode": true,
+      "external_enabled": false,
+      "duration_seconds": 1.15,
+      "external_duration_seconds": 3,
+      "green_key_similarity": 0.22,
+      "green_key_blend": 0.08,
+      "black_key_similarity": 0.08,
+      "black_key_blend": 0.04,
+      "pokeball_size_px": 340,
+      "start_scale": 0.08,
+      "cover_scale": 7.2,
+      "rotation_turns": 1.25
+    }
+  },
+  "renderer": {
+    "video_codec": "libx264",
+    "preset": "fast",
+    "crf": 21,
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "faststart": true
+  },
+  "publication": {
+    "title": "The Ultimate Pokemon Challenge Compilation",
+    "description": "Play every Pokemon challenge in one video: types, shinies, cries, stats, memory, and progressive reveals. Keep track of your score as each new challenge begins.",
+    "hashtags": [
+      "#pokemon",
+      "#pokemonquiz",
+      "#guessthepokemon",
+      "#pokemontypes",
+      "#shinypokemon"
+    ]
+  },
+  "publication_policy": {
+    "manual_review_required": true,
+    "night_shift_enabled": false,
+    "related_video_enabled": false,
+    "auto_comment_enabled": false,
+    "custom_thumbnail_required": false,
+    "playlist_enabled": false,
+    "watermark_enabled": false
+  }
+}

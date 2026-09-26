@@ -378,7 +378,10 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       });
     }
 
-    if (template?.layout?.text?.show_round_counter !== false) {
+    if (
+      template?.layout?.text?.show_counter !== false
+      && template?.layout?.text?.show_round_counter !== false
+    ) {
       const counterLabel = `scene${roundIndex}counter`;
       filters.push(
         `[${currentLabel}]drawtext=text='${escapeDrawtextText(round.round_label)}'${fontPart}:fontcolor=white:fontsize=${textLayout.counter_font_size}:borderw=5:bordercolor=black:fix_bounds=1:x=${textLayout.counter_x}:y=${textLayout.counter_y}[${counterLabel}]`,

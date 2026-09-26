@@ -91,6 +91,7 @@ test('overlay preset selection exposes open-close pokeball separately while keep
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Timer Countdown.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Timer Alarm.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Pixel Pokeball Wiggle.gif',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/subscribe-reminder-greenscreen.mp4',
   ]);
 
   assert.match(presets.timer || '', /Timer Countdown\.gif$/u);
@@ -104,6 +105,7 @@ test('overlay preset selection exposes open-close pokeball separately while keep
   assert.match(presets.disappear || '', /disappear\.gif$/u);
   assert.match(presets.pokeball_open_close || '', /Open and Close Pokeball\.gif$/u);
   assert.match(presets.pokeball_primary || '', /3D Pokeball Wiggle\.gif$/u);
+  assert.match(presets.subscribe_reminder || '', /subscribe-reminder-greenscreen\.mp4$/u);
 });
 
 test('overlay preset selection prefers greenscreen hp-bar videos when present', () => {
