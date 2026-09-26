@@ -19,6 +19,16 @@ function ensureDirectory(directoryPath) {
   }
 }
 
+// Match the PATH the other ORION LaunchAgents set (leadgen-schedule,
+// qualification-schedule, night-shift). Without this, launchd hands the
+// bot a bare PATH=/usr/bin:/bin:/usr/sbin:/sbin — /opt/homebrew/bin is
+// missing, so subprocesses the bot spawns (notably run-lead-qualification
+// → claude -p → Bash "playwright-cli ...") crash with ENOENT. Observed
+// 2026-09-26 as "manual /lead-qualification is stuck on first lead" —
+// the qualifier's fire-and-forget playwright-cli cleanup crashed the
+// whole child process before it could report back.
+const LAUNCHAGENT_PATH = '/opt/homebrew/bin:/opt/homebrew/opt/node/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin';
+
 function buildPlistContent({ nodePath, scriptPath, workingDirectory, stdoutPath, stderrPath }) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -34,6 +44,11 @@ function buildPlistContent({ nodePath, scriptPath, workingDirectory, stdoutPath,
     <string>${scriptPath}</string>
     <string>--live</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${LAUNCHAGENT_PATH}</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -46,6 +61,8 @@ function buildPlistContent({ nodePath, scriptPath, workingDirectory, stdoutPath,
 </plist>
 `;
 }
+
+export { buildPlistContent, LAUNCHAGENT_PATH, PLIST_LABEL };
 
 function loadLaunchAgent(plistPath) {
   try {
