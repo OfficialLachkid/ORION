@@ -184,6 +184,19 @@ export function selectSoundEffectPresets(soundEffects) {
     ['electric', 'loading'],
     ['loading', 'sound'],
   ]);
+  const statSpinnerComplete = matchSoundEffectKeywordGroups(allSoundEffects, [
+    ['rotating', 'slot', 'complete'],
+    ['slot', 'spinner', 'complete'],
+    ['slot', 'complete'],
+  ]);
+  const statSpinnerSpin = matchSoundEffectKeywordGroups(
+    allSoundEffects.filter((filePath) => !/(complete|finish|stop|land)/iu.test(filePath)),
+    [
+      ['rotating', 'slot'],
+      ['slot', 'spinner'],
+      ['slot', 'spin'],
+    ],
+  );
 
   return {
     all: allSoundEffects,
@@ -196,6 +209,8 @@ export function selectSoundEffectPresets(soundEffects) {
     pokeball_intro: pokeballIntro,
     pokeball_wiggle: pokeballWiggle,
     stats_reveal: statsReveal,
+    stat_spinner_spin: statSpinnerSpin,
+    stat_spinner_complete: statSpinnerComplete,
   };
 }
 

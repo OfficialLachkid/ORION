@@ -9,6 +9,8 @@ import { buildLoopingMusicFilter } from '../../shared/render/audio-looping.mjs';
 const DEFAULT_TOURNAMENT_POKEBALL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
 const DEFAULT_TOURNAMENT_BRACKET_PROGRESS_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.125).toFixed(3));
 const DEFAULT_TOURNAMENT_STATS_REVEAL_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.4).toFixed(3));
+const DEFAULT_TOURNAMENT_SPINNER_SPIN_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.45).toFixed(3));
+const DEFAULT_TOURNAMENT_SPINNER_COMPLETE_VOLUME = Number((DEFAULT_TIMER_END_VOLUME * 0.8).toFixed(3));
 const DEFAULT_TOURNAMENT_CRY_VOLUME = Number(((DEFAULT_TIMER_END_VOLUME * 0.18) * 0.7).toFixed(3));
 
 export function buildAudioInputs(assets) {
@@ -96,6 +98,8 @@ export function buildAudioFilterScript({
   bracketProgressPath,
   winnerRevealPath,
   statsRevealPath,
+  statSpinnerSpinPath,
+  statSpinnerCompletePath,
   disappearPath,
   cryCues = [],
   renderPlan,
@@ -157,6 +161,34 @@ export function buildAudioFilterScript({
       const delayMs = Math.max(0, Math.round((ensureNumber(match?.intro_start_seconds, 0) + statsLeadInSeconds) * 1000));
       const label = `stats${matchIndex}`;
       filters.push(`[ssrc${matchIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_TOURNAMENT_STATS_REVEAL_VOLUME}[${label}]`);
+      mixLabels.push(label);
+    });
+    inputIndex += 1;
+  }
+
+  if (statSpinnerSpinPath) {
+    const splitCount = Math.max(1, renderPlan.matches.length);
+    filters.push(`[${inputIndex}:a]asplit=${splitCount}${Array.from({ length: splitCount }, (_, index) => `[spsrc${index}]`).join('')}`);
+    renderPlan.matches.forEach((match, matchIndex) => {
+      const spinStart = Math.max(0, ensureNumber(match?.spinner_spin_start_seconds, 0));
+      const spinStop = Math.max(spinStart, ensureNumber(match?.spinner_stop_seconds, spinStart));
+      const spinDuration = Number(Math.max(0.05, spinStop - spinStart).toFixed(3));
+      const fadeStart = Number(Math.max(0, spinDuration - 0.06).toFixed(3));
+      const delayMs = Math.round(spinStart * 1000);
+      const label = `spin${matchIndex}`;
+      filters.push(`[spsrc${matchIndex}]atrim=start=0:duration=${spinDuration},asetpts=PTS-STARTPTS,afade=t=out:st=${fadeStart}:d=0.06,adelay=${delayMs}|${delayMs},volume=${DEFAULT_TOURNAMENT_SPINNER_SPIN_VOLUME}[${label}]`);
+      mixLabels.push(label);
+    });
+    inputIndex += 1;
+  }
+
+  if (statSpinnerCompletePath) {
+    const splitCount = Math.max(1, renderPlan.matches.length);
+    filters.push(`[${inputIndex}:a]asplit=${splitCount}${Array.from({ length: splitCount }, (_, index) => `[scsrc${index}]`).join('')}`);
+    renderPlan.matches.forEach((match, matchIndex) => {
+      const delayMs = Math.max(0, Math.round(ensureNumber(match?.spinner_stop_seconds, 0) * 1000));
+      const label = `complete${matchIndex}`;
+      filters.push(`[scsrc${matchIndex}]adelay=${delayMs}|${delayMs},volume=${DEFAULT_TOURNAMENT_SPINNER_COMPLETE_VOLUME}[${label}]`);
       mixLabels.push(label);
     });
     inputIndex += 1;

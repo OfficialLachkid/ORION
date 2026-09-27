@@ -16,8 +16,10 @@ import {
 import {
   normalizeBaseStats,
   resolveTournamentBattle,
+  resolveTournamentTypeAdvantage,
   sumBaseStats,
 } from './battle-logic.mjs';
+import { selectTournamentBattleStat } from './battle-stat.mjs';
 
 const DEFAULT_PARTICIPANT_COUNT = 4;
 const mirroredSpriteAvailabilityCache = new Map();
@@ -720,12 +722,14 @@ function buildMatchRecord({
   roundLabel,
   left,
   right,
+  battleStat,
   template,
   random,
 }) {
   const battle = resolveTournamentBattle({
     left,
     right,
+    battleStat,
     weights: template?.selection_rules?.battle_weights || {},
     random,
     matchId,
@@ -740,6 +744,9 @@ function buildMatchRecord({
     winner: battle.winner,
     loser: battle.loser,
     winner_side: battle.winner_side,
+    battle_stat: battle.battle_stat,
+    stat_values: battle.stat_values,
+    tiebreaker: battle.tiebreaker,
     intro_line_text: battle.intro_line_text,
     insight_text: battle.insight_text,
     breakdown_text: battle.breakdown_text,
@@ -772,6 +779,10 @@ function buildTimeline(template, hookText, matches, championText) {
   const hookHoldSeconds = Number(rounds.hook_hold_seconds ?? 1.1);
   const matchIntroHoldSeconds = Number(rounds.match_intro_hold_seconds ?? 1.8);
   const suspenseHoldSeconds = Number(rounds.suspense_hold_seconds ?? 0.9);
+  const spinnerAppearDelaySeconds = Number(rounds.stat_spinner_appear_delay_seconds ?? matchIntroHoldSeconds);
+  const spinnerSpawnHoldSeconds = Number(rounds.stat_spinner_spawn_hold_seconds ?? 0.35);
+  const spinnerSpinSeconds = Number(rounds.stat_spinner_spin_seconds ?? suspenseHoldSeconds);
+  const spinnerStopHoldSeconds = Number(rounds.stat_spinner_stop_hold_seconds ?? 1.2);
   const revealHoldSeconds = Number(rounds.reveal_hold_seconds ?? 1.2);
   const transitionDurationSeconds = Number(rounds.transition_duration_seconds ?? 0.4);
   const championHoldSeconds = Number(rounds.champion_hold_seconds ?? 1.1);
@@ -785,7 +796,11 @@ function buildTimeline(template, hookText, matches, championText) {
     ...matches.map((match, index) => ({
       phase: match.round_key,
       match_id: match.match_id,
-      duration_seconds: matchIntroHoldSeconds + suspenseHoldSeconds + revealHoldSeconds + (
+      duration_seconds: spinnerAppearDelaySeconds
+        + spinnerSpawnHoldSeconds
+        + spinnerSpinSeconds
+        + spinnerStopHoldSeconds
+        + revealHoldSeconds + (
         index === matches.length - 1 ? 0 : transitionDurationSeconds
       ),
       spoken_text: `${match.intro_line_text} ${match.insight_text} ${match.winner_line_text}`.trim(),
@@ -861,12 +876,28 @@ export async function planPokemonTournamentChallenge({
     )
   )));
 
+  let previousBattleStatKey = '';
+  const selectNextBattleStat = (left, right) => {
+    const excludedKeys = previousBattleStatKey ? [previousBattleStatKey] : [];
+    if (!resolveTournamentTypeAdvantage(left, right).eligible) {
+      excludedKeys.push('type');
+    }
+    const battleStat = selectTournamentBattleStat(
+      template,
+      random,
+      excludedKeys,
+    );
+    previousBattleStatKey = battleStat.key;
+    return battleStat;
+  };
+
   const semiFinalOne = buildMatchRecord({
     matchId: 'semi-final-1',
     roundKey: 'semi_final',
     roundLabel: 'Semi Final 1',
     left: participants[0],
     right: participants[1],
+    battleStat: selectNextBattleStat(participants[0], participants[1]),
     template,
     random,
   });
@@ -876,6 +907,7 @@ export async function planPokemonTournamentChallenge({
     roundLabel: 'Semi Final 2',
     left: participants[2],
     right: participants[3],
+    battleStat: selectNextBattleStat(participants[2], participants[3]),
     template,
     random,
   });
@@ -885,6 +917,7 @@ export async function planPokemonTournamentChallenge({
     roundLabel: 'Final',
     left: semiFinalOne.winner,
     right: semiFinalTwo.winner,
+    battleStat: selectNextBattleStat(semiFinalOne.winner, semiFinalTwo.winner),
     template,
     random,
   });
@@ -937,6 +970,16 @@ export async function planPokemonTournamentChallenge({
     template?.audio?.sound_effects?.stats_reveal || {},
     inventory?.sound_effects?.stats_reveal || null,
   );
+  const statSpinnerSpinSoundPath = selectPreferredSoundEffectPath(
+    inventory?.sound_effects || {},
+    template?.audio?.sound_effects?.stat_spinner_spin || {},
+    inventory?.sound_effects?.stat_spinner_spin || '',
+  );
+  const statSpinnerCompleteSoundPath = selectPreferredSoundEffectPath(
+    inventory?.sound_effects || {},
+    template?.audio?.sound_effects?.stat_spinner_complete || {},
+    inventory?.sound_effects?.stat_spinner_complete || '',
+  );
   const bracketProgressSoundPath = selectPreferredSoundEffectPath(
     inventory?.sound_effects || {},
     template?.audio?.sound_effects?.bracket_progress || {},
@@ -968,6 +1011,18 @@ export async function planPokemonTournamentChallenge({
     && !statsRevealSoundPath
   ) {
     requiredAssetGaps.push('stats_reveal_sfx_missing');
+  }
+  if (
+    template?.audio?.sound_effects?.stat_spinner_spin?.enabled !== false
+    && !statSpinnerSpinSoundPath
+  ) {
+    requiredAssetGaps.push('stat_spinner_spin_sfx_missing');
+  }
+  if (
+    template?.audio?.sound_effects?.stat_spinner_complete?.enabled !== false
+    && !statSpinnerCompleteSoundPath
+  ) {
+    requiredAssetGaps.push('stat_spinner_complete_sfx_missing');
   }
   if (
     template?.audio?.sound_effects?.bracket_progress?.enabled !== false
@@ -1006,6 +1061,7 @@ export async function planPokemonTournamentChallenge({
       mode: String(template?.selection_rules?.mode || 'single_elimination_bracket').trim().toLowerCase() || 'single_elimination_bracket',
       participant_count: participants.length,
       round_count: matches.length,
+      battle_stats: matches.map((match) => match.battle_stat?.key).filter(Boolean),
       pool_key: selectedPool.key,
       pool_label: selectedPool.label,
       pool_selector: selectedPool.selector,
@@ -1062,6 +1118,8 @@ export async function planPokemonTournamentChallenge({
           bracket_progress: bracketProgressSoundPath,
           winner_reveal: winnerRevealSoundPath,
           stats_reveal: statsRevealSoundPath,
+          stat_spinner_spin: statSpinnerSpinSoundPath,
+          stat_spinner_complete: statSpinnerCompleteSoundPath,
           disappear: disappearSoundPath,
         },
       },

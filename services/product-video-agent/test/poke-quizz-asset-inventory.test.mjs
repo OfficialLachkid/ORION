@@ -127,6 +127,8 @@ test('timer_finished stays the shared timer-end default when a ding file is also
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/shiny-sound.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/timer_finished.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/pokeball_wiggle.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/rotating-slot-complete.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/rotating-slot.mp3',
   ]);
 
   assert.match(soundEffectPresets.countdown_tick || '', /countdown\.mp3$/u);
@@ -137,6 +139,8 @@ test('timer_finished stays the shared timer-end default when a ding file is also
   assert.match(soundEffectPresets.disappear || '', /disappear-sound\.mp3$/u);
   assert.match(soundEffectPresets.pokeball_intro || '', /enlarge-pokeball\.mp3$/u);
   assert.match(soundEffectPresets.pokeball_wiggle || '', /pokeball_wiggle\.mp3$/u);
+  assert.match(soundEffectPresets.stat_spinner_spin || '', /rotating-slot\.mp3$/u);
+  assert.match(soundEffectPresets.stat_spinner_complete || '', /rotating-slot-complete\.mp3$/u);
 });
 
 test('disappear-sound files are detected as the disappear cue', async () => {

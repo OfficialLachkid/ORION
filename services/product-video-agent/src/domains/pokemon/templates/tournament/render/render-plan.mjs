@@ -197,9 +197,24 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
   ));
   const matchIntroHoldSeconds = roundTime(ensureNumber(rounds.match_intro_hold_seconds, 1.8));
   const suspenseHoldSeconds = roundTime(ensureNumber(rounds.suspense_hold_seconds, 0.9));
+  const spinnerAppearDelaySeconds = roundTime(Math.max(
+    0.2,
+    ensureNumber(rounds.stat_spinner_appear_delay_seconds, matchIntroHoldSeconds),
+  ));
+  const spinnerSpawnHoldSeconds = roundTime(Math.max(
+    0.1,
+    ensureNumber(rounds.stat_spinner_spawn_hold_seconds, 0.35),
+  ));
+  const spinnerSpinSeconds = roundTime(Math.max(
+    0.5,
+    ensureNumber(rounds.stat_spinner_spin_seconds, suspenseHoldSeconds),
+  ));
+  const spinnerStopHoldSeconds = roundTime(Math.max(
+    0.3,
+    ensureNumber(rounds.stat_spinner_stop_hold_seconds, 1.2),
+  ));
   const revealHoldSeconds = roundTime(ensureNumber(rounds.reveal_hold_seconds, 1.2));
   const transitionDurationSeconds = roundTime(ensureNumber(rounds.transition_duration_seconds, 0.4));
-  const insightLeadInSeconds = roundTime(Math.max(0.12, ensureNumber(template?.renderer?.stat_row_lead_in_seconds, 0.16) + 0.34));
   const bracketStageSeconds = resolveIntroBracketStageDurations(template);
   const bracketDrawLeadSeconds = bracketStageSeconds
     ? roundTime(
@@ -218,7 +233,11 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
     const introDelaySeconds = index === 0 ? firstRoundLeadSeconds : interRoundBracketHoldSeconds;
     const sceneStart = roundTime(currentStart);
     const introStart = roundTime(sceneStart + introDelaySeconds);
-    const revealStart = roundTime(introStart + matchIntroHoldSeconds + suspenseHoldSeconds);
+    const spinnerAppearStart = roundTime(introStart + spinnerAppearDelaySeconds);
+    const spinnerSpinStart = roundTime(spinnerAppearStart + spinnerSpawnHoldSeconds);
+    const spinnerStop = roundTime(spinnerSpinStart + spinnerSpinSeconds);
+    const insightStart = spinnerStop;
+    const revealStart = roundTime(insightStart + spinnerStopHoldSeconds);
     const transitionSeconds = index === matches.length - 1 ? 0 : transitionDurationSeconds;
     const sceneEnd = roundTime(revealStart + revealHoldSeconds + transitionSeconds);
     const battleTransitionStartSeconds = roundTime(
@@ -232,10 +251,10 @@ function buildRenderedMatches(template, matches = [], participantCount = 0) {
       ...match,
       scene_start_seconds: sceneStart,
       intro_start_seconds: introStart,
-      insight_start_seconds: roundTime(Math.min(
-        revealStart,
-        introStart + Math.min(matchIntroHoldSeconds, insightLeadInSeconds),
-      )),
+      spinner_appear_start_seconds: spinnerAppearStart,
+      spinner_spin_start_seconds: spinnerSpinStart,
+      spinner_stop_seconds: spinnerStop,
+      insight_start_seconds: insightStart,
       battle_transition_start_seconds: battleTransitionStartSeconds,
       battle_transition_duration_seconds: transitionDurationSeconds,
       reveal_start_seconds: revealStart,
@@ -352,21 +371,39 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
     ));
     const introNarrationDuration = ensureNumber(durationsByRole.get(`${match.match_id}-intro`), 0);
     const insightNarrationDuration = ensureNumber(durationsByRole.get(`${match.match_id}-insight`), 0);
-    const introDuration = roundTime(Math.max(
-      match.reveal_start_seconds - match.intro_start_seconds,
-      introNarrationDuration + insightNarrationDuration,
-    ));
     const winnerDuration = roundTime(Math.max(
       match.scene_end_seconds - match.reveal_start_seconds - match.transition_duration_seconds,
       ensureNumber(durationsByRole.get(`${match.match_id}-winner`), 0),
     ));
     const sceneStart = roundTime(currentStart);
     const introStart = roundTime(sceneStart + introDelay);
-    const insightStart = roundTime(Math.min(
-      introStart + introDuration,
-      introStart + introNarrationDuration,
-    ));
-    const revealStart = roundTime(introStart + introDuration);
+    const spinnerAppearDelay = Math.max(
+      0,
+      ensureNumber(match.spinner_appear_start_seconds, match.insight_start_seconds) - match.intro_start_seconds,
+    );
+    const spinnerSpawnHold = Math.max(
+      0.1,
+      ensureNumber(match.spinner_spin_start_seconds, match.spinner_appear_start_seconds)
+        - ensureNumber(match.spinner_appear_start_seconds, match.intro_start_seconds),
+    );
+    const spinnerSpinDuration = Math.max(
+      0.5,
+      ensureNumber(match.spinner_stop_seconds, match.insight_start_seconds)
+        - ensureNumber(match.spinner_spin_start_seconds, match.spinner_appear_start_seconds),
+    );
+    const spinnerStopHold = Math.max(
+      0.3,
+      match.reveal_start_seconds - ensureNumber(match.spinner_stop_seconds, match.insight_start_seconds),
+    );
+    const spinnerAppearStart = roundTime(
+      introStart + Math.max(spinnerAppearDelay, introNarrationDuration + 0.25),
+    );
+    const spinnerSpinStart = roundTime(spinnerAppearStart + spinnerSpawnHold);
+    const spinnerStop = roundTime(spinnerSpinStart + spinnerSpinDuration);
+    const insightStart = spinnerStop;
+    const revealStart = roundTime(
+      insightStart + Math.max(spinnerStopHold, insightNarrationDuration + 0.12),
+    );
     const sceneEnd = roundTime(revealStart + winnerDuration + match.transition_duration_seconds);
     const battleTransitionStartSeconds = roundTime(
       Math.max(
@@ -379,6 +416,9 @@ export function applyNarrationDurationsToRenderPlan(renderPlan, narrationDuratio
       ...match,
       scene_start_seconds: sceneStart,
       intro_start_seconds: introStart,
+      spinner_appear_start_seconds: spinnerAppearStart,
+      spinner_spin_start_seconds: spinnerSpinStart,
+      spinner_stop_seconds: spinnerStop,
       insight_start_seconds: insightStart,
       battle_transition_start_seconds: battleTransitionStartSeconds,
       battle_transition_duration_seconds: match.battle_transition_duration_seconds ?? match.transition_duration_seconds,
