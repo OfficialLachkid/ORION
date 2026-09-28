@@ -120,6 +120,7 @@ export function buildThreeDTypeStyleCatalog(files, rootDirectory = POKE_QUIZZ_AS
 
 function preferredThreeDStyleOrder(styleCatalog) {
   const preferredNames = [
+    'original-style',
     'badge-style',
     'style-1',
     'style1',

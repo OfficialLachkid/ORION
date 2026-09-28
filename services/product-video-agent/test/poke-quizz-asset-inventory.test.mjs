@@ -21,7 +21,7 @@ test('background inventory excludes avif assets until the renderer supports them
   assert.equal(BACKGROUND_EXTENSIONS.has('.jpg'), true);
 });
 
-test('type icon selection prefers 3D assets only when every requested type exists', () => {
+test('type icon selection prefers original-style assets when every requested type exists', () => {
   const inventory = {
     type_icons: {
       pixel: [
@@ -29,18 +29,46 @@ test('type icon selection prefers 3D assets only when every requested type exist
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
       ],
       three_d: [
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/grass.png',
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/grass.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/glow-style/grass.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/glow-style/poison.png',
       ],
       three_d_styles: buildThreeDTypeStyleCatalog([
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/grass.png',
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/grass.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/glow-style/grass.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/glow-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/legacy/grass.png',
       ]),
+    },
+  };
+
+  assert.deepEqual(selectTypeIconSet(['grass', 'poison'], inventory), {
+    style: 'three_d',
+    style_variant: 'original-style',
+    file_paths: [
+      '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/grass.png',
+      '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/poison.png',
+    ],
+  });
+});
+
+test('type icon selection falls back to complete badge-style assets when original-style is incomplete', () => {
+  const paths = [
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/grass.png',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/grass.png',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/poison.png',
+  ];
+  const inventory = {
+    type_icons: {
+      pixel: [],
+      three_d: paths,
+      three_d_styles: buildThreeDTypeStyleCatalog(paths),
     },
   };
 
