@@ -47,7 +47,7 @@ export async function getGmailThread(envOrConfig, threadId, options = {}) {
   });
 
   if (response.status === 403) {
-    throw new Error(`GMAIL_READ_SCOPE_MISSING: reading the thread returned 403 — re-authorize Gmail with the ${format === 'full' ? 'gmail.readonly' : 'gmail.metadata'} scope.`);
+    throw new Error(`GMAIL_READ_SCOPE_MISSING: reading the thread returned 403 — re-authorize Gmail with the ${format === 'full' ? 'gmail.readonly' : 'gmail.metadata'} scope by running "node scripts/gmail-authorize.mjs".`);
   }
   if (response.status === 404) {
     return { messages: [], notFound: true };

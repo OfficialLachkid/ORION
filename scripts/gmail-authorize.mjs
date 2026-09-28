@@ -11,7 +11,7 @@ import {
   buildLoopbackRedirectUri,
   exchangeAuthorizationCode,
   GMAIL_COMPOSE_SCOPE,
-  GMAIL_METADATA_SCOPE,
+  GMAIL_READONLY_SCOPE,
 } from '../services/gmail/src/oauth.mjs';
 import {
   getBooleanOption,
@@ -128,11 +128,15 @@ async function main() {
 
   const state = `orion-${Date.now()}`;
   const redirectUri = buildLoopbackRedirectUri(gmailConfig.loopbackPort);
-  // compose (create + send drafts) + metadata (read thread structure/headers
-  // for reply detection). Space-separated = request both in one consent.
+  // compose (create + send drafts) + readonly (read thread + message bodies).
+  // Readonly is a strict superset of metadata — we need the body scan for
+  // opt-out detection (afmelden / unsubscribe language required by NL
+  // Telecommunicatiewet 11.7 + GDPR). Space-separated = request both in
+  // one consent. If a prior consent granted metadata-only, Google's screen
+  // will highlight readonly as a NEW permission being added.
   const authorizeUrl = buildAuthorizeUrl(gmailConfig, {
     state,
-    scope: `${GMAIL_COMPOSE_SCOPE} ${GMAIL_METADATA_SCOPE}`,
+    scope: `${GMAIL_COMPOSE_SCOPE} ${GMAIL_READONLY_SCOPE}`,
   });
 
   printInfo(`Redirect URI: ${redirectUri}`);

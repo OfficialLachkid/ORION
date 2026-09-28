@@ -3,12 +3,20 @@ const OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 export const GMAIL_SEND_SCOPE = 'https://www.googleapis.com/auth/gmail.send';
 export const GMAIL_COMPOSE_SCOPE = 'https://www.googleapis.com/auth/gmail.compose';
-// Read scope for reply detection — metadata only (message headers + labels +
-// thread structure, NOT bodies). Enough to count thread messages and read the
-// From/Subject of a reply to tell a real reply from a bounce/auto-reply, while
-// granting the least privilege (we never need to read the email body to detect
-// that *something* came back). gmail.readonly would also work but reads bodies.
+// Metadata scope — message headers + labels + thread structure, NOT bodies.
+// Was sufficient for pre-2026-09-28 reply detection (counting inbound
+// messages + reading From/Subject to tell reply vs bounce vs auto-reply).
+// Kept as a fallback / documentation; the token now requests the strictly-
+// broader readonly scope so reply-detector can scan message bodies for
+// opt-out language (afmelden / unsubscribe) — a legal requirement under
+// NL Telecommunicatiewet 11.7 + GDPR.
 export const GMAIL_METADATA_SCOPE = 'https://www.googleapis.com/auth/gmail.metadata';
+// Read scope with BODY access — needed so reply-detector can scan the reply
+// body for opt-out language (not just the subject). Google's readonly scope
+// is a proper superset of metadata: everything metadata could do plus
+// message.body content. We ask for readonly (not metadata) so the operator
+// only has to consent to one read scope instead of two overlapping ones.
+export const GMAIL_READONLY_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 
 async function readJsonResponse(response) {
   if (typeof response?.text === 'function') {
