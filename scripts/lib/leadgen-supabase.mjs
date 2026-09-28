@@ -219,3 +219,35 @@ export async function fetchLeads(filters = {}, config = getLeadgenPersistenceCon
     headers: createHeaders(config.apiKey),
   }));
 }
+
+// Domain-level suppression check for the qualifier's pre-draft gate.
+// Given a list of domains, returns the subset that already has at least one
+// lead with a suppressed status ('unsubscribed' or 'bounced'). Used to skip
+// drafting for a lead whose sibling on the same domain already told us to
+// stop. The qualifier calls this once per batch (single query instead of
+// per-lead) to keep the loop cheap.
+export async function fetchSuppressedDomains(domains = [], config = getLeadgenPersistenceConfig()) {
+  const list = Array.from(new Set(
+    (Array.isArray(domains) ? domains : [])
+      .map((d) => String(d || '').trim().toLowerCase())
+      .filter(Boolean),
+  ));
+  if (list.length === 0 || !isLeadgenPersistenceConfigured(config)) {
+    return new Set();
+  }
+
+  const url = new URL(`/rest/v1/${config.leadsTable}`, config.supabaseUrl);
+  url.searchParams.set('select', 'domain');
+  url.searchParams.set('status', 'in.(unsubscribed,bounced)');
+  // PostgREST `in.` filter needs the values wrapped in parens, comma-separated.
+  const escaped = list.map((d) => `"${d.replace(/"/gu, '""')}"`).join(',');
+  url.searchParams.set('domain', `in.(${escaped})`);
+  url.searchParams.set('limit', String(list.length));
+
+  const rows = await retryTransientSupabaseOperation(() => fetchJson(url.toString(), {
+    headers: createHeaders(config.apiKey),
+  })).catch(() => []);
+  return new Set((Array.isArray(rows) ? rows : [])
+    .map((r) => String(r?.domain || '').trim().toLowerCase())
+    .filter(Boolean));
+}
