@@ -64,6 +64,7 @@ async function executePublicationPhase({
   channelsPath,
   asOf,
   scheduleApproved = false,
+  reconcileOnly = false,
 }, options = {}) {
   const runProcess = options.runProcess || runLocalProcess;
   const executable = options.executable || process.execPath;
@@ -78,7 +79,9 @@ async function executePublicationPhase({
     '--as-of',
     asOf,
   ];
-  if (scheduleApproved) {
+  if (reconcileOnly) {
+    args.push('--reconcile-only');
+  } else if (scheduleApproved) {
     args.push('--schedule-approved');
   }
 
@@ -131,6 +134,7 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
   );
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
   const planOnly = getBooleanOption(options, 'plan-only', false);
+  const reconcileOnly = getBooleanOption(options, 'reconcile-only', false);
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
   const loadProfiles = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
   const loadPublications = dependencies.loadQueuedPublications || loadQueuedPublications;
@@ -144,42 +148,75 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
     asOf,
   });
   const youtubeApiPlan = buildYoutubeApiPlan(queuePlan, profiles, publications);
-  const executionResults = [];
+  const executionResults = planOnly ? [] : activeProfiles.map((profile) => ({
+    channel: {
+      id: profile.id,
+      name: profile.name,
+      account_key: profile.account_key,
+    },
+    preview_upload_results: [],
+    schedule_update_results: [],
+    preview_upload_error: null,
+    schedule_update_error: null,
+  }));
+  const executionErrors = [];
 
   if (!planOnly) {
-    for (const profile of activeProfiles) {
-      const previewUploadResults = await executePhase({
-        channelSelector: profile.account_key,
-        channelsPath,
-        asOf,
-        scheduleApproved: false,
-      }, {
-        runProcess: dependencies.runProcess,
-        executable: dependencies.executable,
-        scriptPath: dependencies.scriptPath,
-      });
-      const scheduleUpdateResults = await executePhase({
-        channelSelector: profile.account_key,
-        channelsPath,
-        asOf,
-        scheduleApproved: true,
-      }, {
-        runProcess: dependencies.runProcess,
-        executable: dependencies.executable,
-        scriptPath: dependencies.scriptPath,
-      });
-      executionResults.push({
-        channel: {
-          id: profile.id,
-          name: profile.name,
-          account_key: profile.account_key,
-        },
-        preview_upload_results: previewUploadResults,
-        schedule_update_results: scheduleUpdateResults,
-      });
+    const phaseOptions = {
+      runProcess: dependencies.runProcess,
+      executable: dependencies.executable,
+      scriptPath: dependencies.scriptPath,
+    };
+
+    // Reconcile every channel before a missing or invalid preview can affect uploads.
+    for (let index = 0; index < activeProfiles.length; index += 1) {
+      const profile = activeProfiles[index];
+      const result = executionResults[index];
+      try {
+        result.schedule_update_results = await executePhase({
+          channelSelector: profile.account_key,
+          channelsPath,
+          asOf,
+          scheduleApproved: !reconcileOnly,
+          reconcileOnly,
+        }, phaseOptions);
+      } catch (error) {
+        result.schedule_update_error = String(error?.message || error);
+        executionErrors.push({
+          channel: profile.account_key,
+          phase: reconcileOnly ? 'reconciliation' : 'schedule_reconciliation',
+          error: result.schedule_update_error,
+        });
+      }
+    }
+
+    if (!reconcileOnly) {
+      for (let index = 0; index < activeProfiles.length; index += 1) {
+        const profile = activeProfiles[index];
+        const result = executionResults[index];
+        try {
+          result.preview_upload_results = await executePhase({
+            channelSelector: profile.account_key,
+            channelsPath,
+            asOf,
+            scheduleApproved: false,
+            reconcileOnly: false,
+          }, phaseOptions);
+        } catch (error) {
+          result.preview_upload_error = String(error?.message || error);
+          executionErrors.push({
+            channel: profile.account_key,
+            phase: 'preview_upload',
+            error: result.preview_upload_error,
+          });
+        }
+      }
+    }
+
+    for (const result of executionResults) {
       printInfo(
-        `Processed ${profile.account_key}: ${previewUploadResults.length} preview upload(s), `
-        + `${scheduleUpdateResults.length} schedule update(s).`
+        `Processed ${result.channel.account_key}: ${result.preview_upload_results.length} preview upload(s), `
+        + `${result.schedule_update_results.length} schedule/reconciliation update(s).`
       );
     }
   }
@@ -188,6 +225,7 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
     queue_plan: queuePlan,
     youtube_api_plan: youtubeApiPlan,
     execution_results: executionResults,
+    execution_errors: executionErrors,
   };
 }
 
@@ -201,12 +239,16 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --channels <path>   Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
       '  --as-of <ISO>       Deterministic timestamp for queue planning.',
       '  --plan-only         Build the queue plan without executing uploads or schedule updates.',
+      '  --reconcile-only    Reconcile YouTube/comments and refresh queue cards; skip preview uploads.',
     ]);
     process.exit(0);
   }
 
   runVideoPublicationScheduler(options).then((result) => {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (result.execution_errors.length > 0) {
+      process.exitCode = 1;
+    }
   }).catch((error) => {
     process.stderr.write(`${error.stack || error.message}\n`);
     process.exitCode = 1;

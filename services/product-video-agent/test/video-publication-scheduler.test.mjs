@@ -39,6 +39,18 @@ const pausedChannelProfile = {
   status: 'paused',
 };
 
+const secondActiveChannelProfile = normalizePublicationChannelProfile({
+  ...activeChannelProfile,
+  id: 'video-channel-dexguess-youtube',
+  name: 'DexGuess',
+  account_key: 'dexguess-youtube',
+  youtube: {
+    ...activeChannelProfile.youtube,
+    channel_id: 'UC-DEXGUESS',
+    oauth_refresh_token_env: 'YOUTUBE_DEXGUESS_REFRESH_TOKEN',
+  },
+});
+
 const previewPending = {
   id: 'pub-preview',
   platform: 'youtube_shorts',
@@ -82,8 +94,8 @@ test('runVideoPublicationScheduler executes preview uploads and schedule updates
   });
 
   assert.deepEqual(executionCalls, [
-    { channelSelector: 'poke-quizz-youtube', scheduleApproved: false },
     { channelSelector: 'poke-quizz-youtube', scheduleApproved: true },
+    { channelSelector: 'poke-quizz-youtube', scheduleApproved: false },
   ]);
   assert.equal(result.queue_plan.channels.length, 1);
   assert.equal(result.execution_results.length, 1);
@@ -114,4 +126,67 @@ test('runVideoPublicationScheduler skips execution in plan-only mode', async () 
   assert.equal(executionCallCount, 0);
   assert.deepEqual(result.execution_results, []);
   assert.equal(result.queue_plan.channels[0].scheduled_publish_queue.length, 1);
+});
+
+test('runVideoPublicationScheduler isolates each channel and phase while reconciling all channels first', async () => {
+  const executionCalls = [];
+  const result = await runVideoPublicationScheduler({
+    channels: 'services/product-video-agent/publication-channels.example.json',
+    'as-of': '2026-08-01T10:01:00.000Z',
+  }, {
+    runtimeConfig: { env: {} },
+    loadPublicationChannelProfiles: async () => [activeChannelProfile, secondActiveChannelProfile],
+    loadQueuedPublications: async () => [previewPending, previewApproved],
+    executePublicationPhase: async ({ channelSelector, scheduleApproved, reconcileOnly }) => {
+      executionCalls.push({ channelSelector, scheduleApproved, reconcileOnly });
+      if (channelSelector === 'poke-quizz-youtube' && scheduleApproved) {
+        throw new Error('schedule failed');
+      }
+      if (channelSelector === 'dexguess-youtube' && !scheduleApproved) {
+        throw new Error('preview failed');
+      }
+      return [{ channelSelector, scheduleApproved }];
+    },
+  });
+
+  assert.deepEqual(executionCalls, [
+    { channelSelector: 'poke-quizz-youtube', scheduleApproved: true, reconcileOnly: false },
+    { channelSelector: 'dexguess-youtube', scheduleApproved: true, reconcileOnly: false },
+    { channelSelector: 'poke-quizz-youtube', scheduleApproved: false, reconcileOnly: false },
+    { channelSelector: 'dexguess-youtube', scheduleApproved: false, reconcileOnly: false },
+  ]);
+  assert.equal(result.execution_results[0].schedule_update_error, 'schedule failed');
+  assert.equal(result.execution_results[0].preview_upload_results.length, 1);
+  assert.equal(result.execution_results[1].schedule_update_results.length, 1);
+  assert.equal(result.execution_results[1].preview_upload_error, 'preview failed');
+  assert.deepEqual(result.execution_errors.map(({ channel, phase }) => ({ channel, phase })), [
+    { channel: 'poke-quizz-youtube', phase: 'schedule_reconciliation' },
+    { channel: 'dexguess-youtube', phase: 'preview_upload' },
+  ]);
+});
+
+test('runVideoPublicationScheduler reconciliation-only mode skips preview upload phases', async () => {
+  const executionCalls = [];
+  const result = await runVideoPublicationScheduler({
+    channels: 'services/product-video-agent/publication-channels.example.json',
+    'as-of': '2026-08-01T10:05:00.000Z',
+    'reconcile-only': true,
+  }, {
+    runtimeConfig: { env: {} },
+    loadPublicationChannelProfiles: async () => [activeChannelProfile],
+    loadQueuedPublications: async () => [previewPending, previewApproved],
+    executePublicationPhase: async (phase) => {
+      executionCalls.push(phase);
+      return [{ action: 'reconcile_published' }];
+    },
+  });
+
+  assert.equal(executionCalls.length, 1);
+  assert.equal(executionCalls[0].scheduleApproved, false);
+  assert.equal(executionCalls[0].reconcileOnly, true);
+  assert.deepEqual(result.execution_results[0].preview_upload_results, []);
+  assert.deepEqual(result.execution_results[0].schedule_update_results, [
+    { action: 'reconcile_published' },
+  ]);
+  assert.deepEqual(result.execution_errors, []);
 });

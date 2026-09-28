@@ -6,6 +6,8 @@ import { normalizePublicationChannelProfile } from '../src/publication-channels.
 const originalArgv1 = process.argv[1];
 process.argv[1] = '';
 const {
+  blockMissingPreviewPublication,
+  isMissingPreviewRenderError,
   reconcilePreviewPublications,
   reconcilePublishedPublications,
   reconcileScheduledPublications,
@@ -76,6 +78,51 @@ function createStore(initialPublication, videoRow = null) {
     },
   };
 }
+
+test('missing preview renders are marked blocked so they are not retried', async () => {
+  const publication = {
+    id: 'pub-missing-render',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'approved',
+    metadata: {
+      workflow_state: 'preview_upload_pending',
+      render_path: '/Volumes/T7/missing-preview.mp4',
+    },
+  };
+  const store = createStore(publication);
+  const error = Object.assign(new Error('render file missing'), {
+    code: 'ENOENT',
+    path: '/Volumes/T7/missing-preview.mp4',
+  });
+
+  assert.equal(isMissingPreviewRenderError(error), true);
+  assert.equal(isMissingPreviewRenderError(new Error('network failed')), false);
+
+  const blocked = await blockMissingPreviewPublication({
+    store,
+    runtimeConfig: { env: {} },
+    publication,
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    renderPath: publication.metadata.render_path,
+    error,
+    blockedAt: '2026-09-28T12:05:00.000Z',
+  });
+
+  assert.equal(store.current().status, 'blocked');
+  assert.equal(store.current().metadata.workflow_state, 'blocked');
+  assert.equal(store.current().metadata.preview_upload_blocked_reason, 'render_file_missing');
+  assert.equal(store.current().metadata.preview_upload_blocked_at, '2026-09-28T12:05:00.000Z');
+  assert.equal(store.current().metadata.preview_upload_missing_render_path, '/Volumes/T7/missing-preview.mp4');
+  assert.deepEqual(blocked.result, {
+    publication_id: 'pub-missing-render',
+    action: 'preview_upload_blocked',
+    workflow_state: 'blocked',
+    reason: 'render_file_missing',
+    render_path: '/Volumes/T7/missing-preview.mp4',
+  });
+});
 
 test('scheduled queue reconciliation reopens a missing YouTube video for approval', async () => {
   const publication = {
