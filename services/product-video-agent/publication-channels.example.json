@@ -365,6 +365,10 @@
         {
           "hour": 12,
           "minute": 0
+        },
+        {
+          "hour": 18,
+          "minute": 0
         }
       ],
       "workflow": {
@@ -535,6 +539,10 @@
         },
         {
           "hour": 12,
+          "minute": 0
+        },
+        {
+          "hour": 18,
           "minute": 0
         }
       ],
