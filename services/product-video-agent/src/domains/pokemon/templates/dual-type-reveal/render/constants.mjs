@@ -107,5 +107,7 @@ export function typeIconUsesOpaqueBadgeArt(typeIconAsset) {
     .trim()
     .replaceAll('\\', '/')
     .toLowerCase();
-  return styleVariant === 'badge-style' || localPath.includes('/badge-style/');
+  const selfContainedBadgeStyles = ['original-style', 'badge-style'];
+  return selfContainedBadgeStyles.includes(styleVariant)
+    || selfContainedBadgeStyles.some((styleName) => localPath.includes(`/${styleName}/`));
 }
