@@ -59,7 +59,7 @@ function supabaseFetch(config, path) {
 async function fetchPokemonPublications(config, sinceIso) {
   const rows = await supabaseFetch(
     config,
-    `video_publications?platform=eq.youtube_shorts&status=eq.published&external_id=not.is.null&select=id,account_key,external_id,title,published_at,metadata&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at.asc&limit=2000`,
+    `video_publications?platform=eq.youtube_shorts&status=eq.published&external_id=not.is.null&select=id,account_key,external_id,title,published_at,hashtags,metadata&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at.asc&limit=2000`,
   );
   return (Array.isArray(rows) ? rows : []).filter((row) => POKE_CHANNELS.has(row.account_key));
 }
@@ -130,6 +130,26 @@ function summarizeChannel(publications, analyticsByPub) {
   };
 }
 
+// Hashtag capture is best-effort: the top-level `hashtags` column on
+// video_publications is the source of truth (populated at publish time),
+// but historical rows may only carry them under
+// metadata.manifest_publication.hashtags, and future analytics writers
+// might attach them to the metrics row itself. Prefer the freshest
+// non-empty source in that order.
+function pickHashtags(metrics, pub) {
+  const candidates = [
+    Array.isArray(metrics?.hashtags) ? metrics.hashtags : null,
+    Array.isArray(pub?.hashtags) ? pub.hashtags : null,
+    Array.isArray(pub?.metadata?.manifest_publication?.hashtags)
+      ? pub.metadata.manifest_publication.hashtags
+      : null,
+  ];
+  for (const list of candidates) {
+    if (list && list.length > 0) return list;
+  }
+  return [];
+}
+
 function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso }) {
   const byChannel = new Map();
   const byTemplate = new Map();
@@ -154,7 +174,7 @@ function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso }) {
       views: Number(metrics.views || 0),
       likes: Number(metrics.likes || 0),
       comments: Number(metrics.comments || 0),
-      hashtags: Array.isArray(metrics.hashtags) ? metrics.hashtags : (pub.metadata?.manifest_publication?.hashtags || []),
+      hashtags: pickHashtags(metrics, pub),
       viewer_countries: Array.isArray(metrics.viewer_countries) ? metrics.viewer_countries : [],
       traffic_sources: Array.isArray(metrics.traffic_sources) ? metrics.traffic_sources : [],
     });

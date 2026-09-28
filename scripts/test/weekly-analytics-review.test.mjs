@@ -101,6 +101,44 @@ test('buildDataPack groups by channel + template and produces top/bottom slices'
   assert.ok(pack.instrumentation_gaps.some((g) => /hourly view/iu.test(g)));
 });
 
+test('buildDataPack picks hashtags from pub.hashtags when metrics.hashtags is absent', () => {
+  // Weekly-review regression 2026-09-28: the top-level `hashtags` column
+  // on video_publications is the source of truth (populated at publish
+  // time), but the earlier version selected it into oblivion and only
+  // fell back to metadata.manifest_publication.hashtags — which is empty
+  // on most rows — so the analyst prompt saw hashtags: [] everywhere.
+  const publications = [
+    {
+      id: 'a', account_key: 'poke-quizz-youtube', title: 'A',
+      published_at: '2026-09-15T06:00:00Z', external_id: 'aaa',
+      hashtags: ['#pokemon', '#teambuilding', '#shorts'],
+      metadata: {},
+    },
+    {
+      id: 'b', account_key: 'poke-quizz-youtube', title: 'B',
+      published_at: '2026-09-15T06:00:00Z', external_id: 'bbb',
+      hashtags: null,
+      metadata: { manifest_publication: { hashtags: ['#legacy'] } },
+    },
+    {
+      id: 'c', account_key: 'poke-quizz-youtube', title: 'C',
+      published_at: '2026-09-15T06:00:00Z', external_id: 'ccc',
+      hashtags: [],
+      metadata: {},
+    },
+  ];
+  const analytics = new Map([
+    ['a', { metrics: { views: 100, likes: 1 } }],
+    ['b', { metrics: { views: 100, likes: 1 } }],
+    ['c', { metrics: { views: 100, likes: 1, hashtags: ['#override'] } }],
+  ]);
+  const pack = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y' });
+  const byExt = Object.fromEntries(pack.top_videos.concat(pack.bottom_videos).map((v) => [v.external_id, v]));
+  assert.deepEqual(byExt.aaa.hashtags, ['#pokemon', '#teambuilding', '#shorts'], 'top-level pub.hashtags wins');
+  assert.deepEqual(byExt.bbb.hashtags, ['#legacy'], 'legacy manifest_publication.hashtags still used when pub.hashtags is null');
+  assert.deepEqual(byExt.ccc.hashtags, ['#override'], 'metrics.hashtags wins when present');
+});
+
 test('buildDataPack aggregates viewer_countries and traffic_sources when metrics carry them', () => {
   const publications = [
     { id: 'a', account_key: 'poke-quizz-youtube', title: 'A', published_at: '2026-09-15T06:00:00Z', metadata: {}, external_id: 'aaa' },

@@ -201,9 +201,12 @@ const expectedStatClashSeededTitles = new Set([
   'Who has the Highest Stats? 🤔 💭',
 ]);
 
+// Weekly analytics review 2026-09-28: dropped 'Pick 1 Pokémon Every
+// Round!' after it tanked on two different channels and added four
+// new variants in the winning "Ultimate/Perfect/Dream team of N"
+// register — see comment in local-publication-metadata.mjs.
 const expectedBuildYourTeamSeededTitles = new Set([
   'Build Your Ultimate Pokémon Team! 🔥',
-  'Pick 1 Pokémon Every Round!',
   'Can You Build the Best Pokémon Team?',
   '6 Rounds to Build Your Pokémon Team!',
   'Choose Your Pokémon Team! ⚡',
@@ -215,6 +218,10 @@ const expectedBuildYourTeamSeededTitles = new Set([
   'Pokémon Team Builder Challenge!',
   'Can You Build an OP Pokémon Team?',
   'Your Pokémon Team Depends on Your Choices!',
+  'Draft Your Perfect Pokémon Team of 6!',
+  'Assemble Your Dream Pokémon Team!',
+  'Only True Fans Build the Perfect Team',
+  'Craft the Ultimate Pokémon Team of 6',
 ]);
 
 test('fallback publication metadata keeps the quiz type pair intact', () => {
@@ -555,7 +562,7 @@ test('fallback publication metadata frames build-your-team as a team choice chal
 });
 
 test('build-your-team title pool contains all requested variants', () => {
-  assert.equal(expectedBuildYourTeamSeededTitles.size, 13);
+  assert.equal(expectedBuildYourTeamSeededTitles.size, 16);
 });
 
 test('seeded build-your-team fallback metadata uses the supported generic title variants', () => {

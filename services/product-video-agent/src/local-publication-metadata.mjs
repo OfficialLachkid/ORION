@@ -170,9 +170,15 @@ const DEFAULT_PIXELATED_REVEAL_TITLE_BUILDERS = Object.freeze([
   () => 'Name Them Before the Pixels Clear!',
 ]);
 
+// Weekly analytics review 2026-09-28: dropped 'Pick 1 Pokémon Every
+// Round!' — same title tanked on two different channels this week
+// (32 + 54 views) while 'Create Your Ultimate Team of 6!' pulled
+// 4,205 views on poke-quizz for the same template. Second-person +
+// concrete number + ultimate/perfect phrasing consistently outperforms
+// literal command form. Added four new variants in that winning
+// register so there's still a healthy variant pool for future A/B.
 const DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS = Object.freeze([
   () => 'Build Your Ultimate Pokémon Team! 🔥',
-  () => 'Pick 1 Pokémon Every Round!',
   () => 'Can You Build the Best Pokémon Team?',
   () => '6 Rounds to Build Your Pokémon Team!',
   () => 'Choose Your Pokémon Team! ⚡',
@@ -184,6 +190,12 @@ const DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS = Object.freeze([
   () => 'Pokémon Team Builder Challenge!',
   () => 'Can You Build an OP Pokémon Team?',
   () => 'Your Pokémon Team Depends on Your Choices!',
+  // New variants (2026-09-28) in the winning register — verb-forward,
+  // second-person, concrete number, "ultimate/perfect/dream/legend" hook.
+  () => 'Draft Your Perfect Pokémon Team of 6!',
+  () => 'Assemble Your Dream Pokémon Team!',
+  () => 'Only True Fans Build the Perfect Team',
+  () => 'Craft the Ultimate Pokémon Team of 6',
 ]);
 
 const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([
