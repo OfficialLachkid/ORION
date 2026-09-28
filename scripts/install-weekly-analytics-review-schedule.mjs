@@ -7,12 +7,20 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-// Weekly review runs Sundays at 08:00 local time. Sunday chosen because
-// it lets the operator start the week with the summary in hand; 08:00
-// gives Claude's usage window a full quiet night before firing.
-const DEFAULT_WEEKDAY = 0; // 0 = Sunday under macOS launchd (same as JS Date)
-const DEFAULT_HOUR = 8;
-const DEFAULT_MINUTE = 0;
+// Run shortly after Monday's 09:00 analytics sweep so the review includes
+// the freshest weekly snapshots without competing with the collector.
+export const DEFAULT_WEEKDAY = 1; // 1 = Monday under macOS launchd (same as JS Date)
+export const DEFAULT_HOUR = 9;
+export const DEFAULT_MINUTE = 15;
+export const DEFAULT_LAUNCH_AGENT_PATH = [
+  '/opt/homebrew/bin',
+  '/opt/homebrew/opt/node/bin',
+  '/usr/local/bin',
+  '/usr/bin',
+  '/bin',
+  '/usr/sbin',
+  '/sbin',
+].join(':');
 export const PLIST_LABEL = 'io.vbj.orion.weekly-analytics-review';
 
 function getArgValue(flag) {
@@ -50,6 +58,7 @@ export function buildWeeklyAnalyticsReviewPlistContent({
   weekday,
   hour,
   minute,
+  executablePath = DEFAULT_LAUNCH_AGENT_PATH,
 }) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -64,6 +73,11 @@ export function buildWeeklyAnalyticsReviewPlistContent({
     <string>${nodePath}</string>
     <string>${scriptPath}</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${executablePath}</string>
+  </dict>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Weekday</key>
@@ -108,7 +122,7 @@ function uninstallLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-weekly-analytics-review-schedule.mjs [--weekday 0] [--hour 8] [--minute 0] [--no-load]',
+      'Usage: node scripts/install-weekly-analytics-review-schedule.mjs [--weekday 1] [--hour 9] [--minute 15] [--no-load]',
       '       node scripts/install-weekly-analytics-review-schedule.mjs --uninstall',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.weekly-analytics-review.plist and loads it by default.',
@@ -117,8 +131,8 @@ function main() {
       'the resulting summary to a Discord thread in the ORION analytics channel. The operator',
       'reads the summary and applies changes manually — the script does NOT open PRs.',
       '',
-      '--weekday N picks the launchd weekday (0 = Sunday, 6 = Saturday). Default: 0 (Sunday).',
-      '--hour + --minute pick the launchd fire time (macOS local time). Defaults: 08:00.',
+      '--weekday N picks the launchd weekday (0 = Sunday, 6 = Saturday). Default: 1 (Monday).',
+      '--hour + --minute pick the launchd fire time (macOS local time). Defaults: 09:15.',
       '',
       '--uninstall unloads and removes the plist.',
     ].join('\n'));

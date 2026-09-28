@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { __testables } from '../run-weekly-analytics-review.mjs';
-import { buildWeeklyAnalyticsReviewPlistContent, PLIST_LABEL } from '../install-weekly-analytics-review-schedule.mjs';
+import {
+  buildWeeklyAnalyticsReviewPlistContent,
+  DEFAULT_HOUR,
+  DEFAULT_LAUNCH_AGENT_PATH,
+  DEFAULT_MINUTE,
+  DEFAULT_WEEKDAY,
+  PLIST_LABEL,
+} from '../install-weekly-analytics-review-schedule.mjs';
 
 const { buildDataPack, buildAnalystPrompt, summarizeChannel, templateSlugFromMetadata } = __testables;
 
@@ -165,20 +172,23 @@ test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bo
   assert.ok(withPrior.includes('Last week I said X and Y happened.'));
 });
 
-test('install-schedule plist points at run-weekly-analytics-review.mjs on the chosen weekday+time', () => {
+test('install-schedule plist uses the Monday post-sweep schedule and exposes Homebrew tools', () => {
   const plist = buildWeeklyAnalyticsReviewPlistContent({
     nodePath: '/usr/local/bin/node',
     scriptPath: '/repo/scripts/run-weekly-analytics-review.mjs',
     workingDirectory: '/repo',
     stdoutPath: '/tmp/out.log',
     stderrPath: '/tmp/err.log',
-    weekday: 0,
-    hour: 8,
-    minute: 0,
+    weekday: DEFAULT_WEEKDAY,
+    hour: DEFAULT_HOUR,
+    minute: DEFAULT_MINUTE,
   });
   assert.ok(plist.includes(`<string>${PLIST_LABEL}</string>`));
   assert.ok(plist.includes('<string>/repo/scripts/run-weekly-analytics-review.mjs</string>'));
-  assert.ok(plist.includes('<key>Weekday</key>\n    <integer>0</integer>'));
-  assert.ok(plist.includes('<key>Hour</key>\n    <integer>8</integer>'));
+  assert.ok(plist.includes('<key>Weekday</key>\n    <integer>1</integer>'));
+  assert.ok(plist.includes('<key>Hour</key>\n    <integer>9</integer>'));
+  assert.ok(plist.includes('<key>Minute</key>\n    <integer>15</integer>'));
+  assert.ok(plist.includes(`<string>${DEFAULT_LAUNCH_AGENT_PATH}</string>`));
+  assert.ok(DEFAULT_LAUNCH_AGENT_PATH.includes('/opt/homebrew/bin'));
   assert.ok(plist.includes('/tmp/err.log'));
 });
