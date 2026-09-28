@@ -10,11 +10,16 @@ function resolveInputConfig(envOrConfig) {
   return resolveGmailRuntimeConfig(envOrConfig || {});
 }
 
-// Reads a thread's messages with header metadata only (format=metadata — no
-// bodies; needs the gmail.metadata read scope). Returns { messages: [...] }
-// where each message has id, labelIds, and the requested headers. Throws with
-// a recognizable message on 403 so callers can detect the "read scope not yet
-// authorized" state and skip reply detection gracefully.
+// Reads a thread's messages. `format` defaults to 'metadata' (headers only,
+// needs the gmail.metadata scope) for backward compatibility with existing
+// callers; pass 'full' to also fetch message bodies (needs gmail.readonly
+// or gmail.modify scope — reply-detector uses this to scan for opt-out
+// language, and falls back to metadata when the broader scope isn't
+// granted). Returns { messages: [...] } where each message has id,
+// labelIds, requested headers, and (in 'full' mode) a decoded payload.
+// Throws with a recognizable message on 403 so callers can detect the
+// "read scope not yet authorized" state and skip reply detection
+// gracefully.
 export async function getGmailThread(envOrConfig, threadId, options = {}) {
   const gmailConfig = resolveInputConfig(envOrConfig);
   assertGmailRuntimeConfig(gmailConfig);
@@ -27,10 +32,13 @@ export async function getGmailThread(envOrConfig, threadId, options = {}) {
   const fetchAccessTokenImpl = options.fetchAccessToken || fetchAccessToken;
   const { accessToken } = await fetchAccessTokenImpl(gmailConfig, { fetch: fetchImpl });
 
+  const format = options.format === 'full' ? 'full' : 'metadata';
   const url = new URL(`${GMAIL_THREADS_URL}/${encodeURIComponent(id)}`);
-  url.searchParams.set('format', 'metadata');
-  for (const header of ['From', 'Subject', 'Auto-Submitted', 'Message-Id']) {
-    url.searchParams.append('metadataHeaders', header);
+  url.searchParams.set('format', format);
+  if (format === 'metadata') {
+    for (const header of ['From', 'Subject', 'Auto-Submitted', 'Message-Id']) {
+      url.searchParams.append('metadataHeaders', header);
+    }
   }
 
   const response = await fetchImpl(url.toString(), {
@@ -39,7 +47,7 @@ export async function getGmailThread(envOrConfig, threadId, options = {}) {
   });
 
   if (response.status === 403) {
-    throw new Error('GMAIL_READ_SCOPE_MISSING: reading the thread returned 403 — re-authorize Gmail with the gmail.metadata scope.');
+    throw new Error(`GMAIL_READ_SCOPE_MISSING: reading the thread returned 403 — re-authorize Gmail with the ${format === 'full' ? 'gmail.readonly' : 'gmail.metadata'} scope.`);
   }
   if (response.status === 404) {
     return { messages: [], notFound: true };
