@@ -99,6 +99,16 @@ function resolveQueueStatusTitle(channelProfile, presentation = DEFAULT_QUEUE_ST
   return configuredTitle.replaceAll('{channel}', channelName);
 }
 
+export function resolvePokeQuizzQueueStatusMessageCandidates(channelProfile = {}, channelState = {}) {
+  const configuredMessageId = String(
+    channelProfile?.metadata?.queue_status_message_id
+      || channelProfile?.metadata?.queueStatusMessageId
+      || '',
+  ).trim();
+  const stateMessageId = String(channelState?.messageId || '').trim();
+  return [...new Set([configuredMessageId, stateMessageId].filter(Boolean))];
+}
+
 async function readQueueStatusState() {
   try {
     return JSON.parse(await readFile(POKE_QUIZZ_QUEUE_STATUS_STATE_PATH, 'utf8'));
@@ -198,13 +208,19 @@ export async function syncPokeQuizzQueueStatusMessage({
   const state = await readQueueStatusState();
   const channelState = state.channels?.[channelSelector] || {};
   let result = null;
-  const knownMessageId = String(channelState.messageId || '').trim();
+  const messageCandidates = resolvePokeQuizzQueueStatusMessageCandidates(
+    channelProfile,
+    channelState,
+  );
 
-  if (knownMessageId) {
-    result = await editDiscordChannelMessage(runtimeConfig, channelId, knownMessageId, payload);
+  for (const messageId of messageCandidates) {
+    result = await editDiscordChannelMessage(runtimeConfig, channelId, messageId, payload);
+    if (result?.posted || result?.reason !== 'discord_api_404') {
+      break;
+    }
   }
 
-  if (!knownMessageId || result?.reason === 'discord_api_404') {
+  if (messageCandidates.length === 0 || result?.reason === 'discord_api_404') {
     result = await sendDiscordChannelMessage(runtimeConfig, channelId, payload);
   }
 
