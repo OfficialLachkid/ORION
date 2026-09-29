@@ -9,18 +9,29 @@ function hashSeed(input) {
   return hash >>> 0;
 }
 
-function resolveSeededPhase(seed, axis) {
+function resolveSeededTravelPhase(seed, axis) {
   const ratio = hashSeed(`${seed || 'background-motion'}:${axis}`) / 4294967296;
-  return Number((ratio * Math.PI * 2).toFixed(6));
+  return Number((ratio * 2).toFixed(6));
 }
 
 function fixed(value, digits = 6) {
   return Number(Number(value || 0).toFixed(digits));
 }
 
-function buildMaximumWithoutCommaExpression(valueExpression, minimumValue) {
-  const minimum = fixed(minimumValue);
-  return `((${valueExpression})+${minimum}+abs((${valueExpression})-${minimum}))/2`;
+function buildMinimumWithoutCommaExpression(valueExpression, maximumValue) {
+  const maximum = fixed(maximumValue);
+  return `((${valueExpression})+${maximum}-abs((${valueExpression})-${maximum}))/2`;
+}
+
+function buildPingPongExpression({
+  travelExpression,
+  speedExpression,
+  phase,
+}) {
+  const offsetExpression = `((${travelExpression})*${fixed(phase)}+t*(${speedExpression}))`;
+  const cycleExpression = `(2*(${travelExpression}))`;
+  const wrappedExpression = `(${offsetExpression}-${cycleExpression}*floor(${offsetExpression}/${cycleExpression}))`;
+  return `((${travelExpression})-abs(${wrappedExpression}-(${travelExpression})))`;
 }
 
 export function calculatePanCycleSeconds({
@@ -32,7 +43,7 @@ export function calculatePanCycleSeconds({
   const speed = Math.max(0, ensureNumber(speedPxPerSecond, 0));
   const minimumCycle = Math.max(4, ensureNumber(minimumCycleSeconds, 18));
   if (speed === 0 || distance === 0) return minimumCycle;
-  return Math.max(minimumCycle, (Math.PI * distance) / speed);
+  return Math.max(minimumCycle, (2 * distance) / speed);
 }
 
 export function buildBackgroundPreparationFilter({
@@ -87,29 +98,37 @@ export function buildBackgroundPreparationFilter({
   const verticalTravelExpression = `(ih-${outputHeight})*${fixed(verticalPanRatio)}`;
   const horizontalSpeed = horizontalSpeedPxPerSecond * subpixelScale;
   const verticalSpeed = verticalSpeedPxPerSecond * subpixelScale;
-  // For a sine sweep, peak speed is travelDistance * angularSpeed / 2.
-  // Deriving angular speed from the post-cover overflow caps visible speed
-  // while allowing wide or tall sources to take longer to reach their edges.
-  const horizontalMinimumTravel = (horizontalSpeed * minimumPanCycleSeconds) / Math.PI;
-  const verticalMinimumTravel = (verticalSpeed * minimumPanCycleSeconds) / Math.PI;
-  const horizontalDenominator = buildMaximumWithoutCommaExpression(
-    horizontalTravelExpression,
-    horizontalMinimumTravel,
+  // Move at a constant output-space speed and reflect at the source edges.
+  // The minimum-cycle limit only slows backgrounds with very little overflow;
+  // wide and tall sources retain the configured speed instead of receiving a
+  // very long sine wave that can appear stationary near its turning points.
+  const horizontalCycleLimitedSpeed = `(2*(${horizontalTravelExpression}))/${fixed(minimumPanCycleSeconds)}`;
+  const verticalCycleLimitedSpeed = `(2*(${verticalTravelExpression}))/${fixed(minimumPanCycleSeconds)}`;
+  const horizontalEffectiveSpeed = buildMinimumWithoutCommaExpression(
+    horizontalCycleLimitedSpeed,
+    horizontalSpeed,
   );
-  const verticalDenominator = buildMaximumWithoutCommaExpression(
-    verticalTravelExpression,
-    verticalMinimumTravel,
+  const verticalEffectiveSpeed = buildMinimumWithoutCommaExpression(
+    verticalCycleLimitedSpeed,
+    verticalSpeed,
   );
-  const horizontalAngularSpeed = horizontalSpeed > 0
-    ? `(${fixed(horizontalSpeed * 2)}/${horizontalDenominator})`
-    : '0';
-  const verticalAngularSpeed = verticalSpeed > 0 && verticalPanRatio > 0
-    ? `(${fixed(verticalSpeed * 2)}/${verticalDenominator})`
-    : '0';
-  const horizontalPhase = resolveSeededPhase(seed, 'x');
-  const verticalPhase = resolveSeededPhase(seed, 'y');
-  const xExpression = `(${horizontalTravelExpression})*(0.5+0.5*sin(t*${horizontalAngularSpeed}+${horizontalPhase}))`;
-  const yExpression = `((ih-${outputHeight})-${verticalTravelExpression})/2+(${verticalTravelExpression})*(0.5+0.5*cos(t*${verticalAngularSpeed}+${verticalPhase}))`;
+  const horizontalPhase = resolveSeededTravelPhase(seed, 'x');
+  const verticalPhase = resolveSeededTravelPhase(seed, 'y');
+  const xExpression = horizontalSpeed > 0
+    ? buildPingPongExpression({
+      travelExpression: horizontalTravelExpression,
+      speedExpression: horizontalEffectiveSpeed,
+      phase: horizontalPhase,
+    })
+    : `(${horizontalTravelExpression})/2`;
+  const verticalMotionExpression = verticalSpeed > 0 && verticalPanRatio > 0
+    ? buildPingPongExpression({
+      travelExpression: verticalTravelExpression,
+      speedExpression: verticalEffectiveSpeed,
+      phase: verticalPhase,
+    })
+    : `(${verticalTravelExpression})/2`;
+  const yExpression = `((ih-${outputHeight})-${verticalTravelExpression})/2+${verticalMotionExpression}`;
   const subpixelDownscaleFilter = subpixelScale > 1
     ? `,scale=${width}:${height}:flags=lanczos`
     : '';

@@ -481,7 +481,8 @@ test('render plan and filters keep sprites centered, reach full reveal, and slid
   assert.equal(visualInputs[0].role, 'background');
   assert.equal(visualInputs[1].role, 'round-1-sprite');
   assert.match(visualFilter.script, /flags=neighbor/u);
-  assert.match(visualFilter.script, /crop=w=2160:h=3840:x='\(iw-2160\)\*\(0\.5\+0\.5\*sin\(t\*/u);
+  assert.match(visualFilter.script, /crop=w=2160:h=3840:x='\(\(iw-2160\)-abs/u);
+  assert.match(visualFilter.script, /floor/u);
   assert.match(visualFilter.script, /scale=1080:1920:flags=lanczos,gblur=sigma=6/u);
   assert.match(visualFilter.script, /geq=r='r\(X,Y\)'/u);
   assert.match(visualFilter.script, /alpha\(X,Y\)/u);

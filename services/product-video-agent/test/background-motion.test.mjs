@@ -27,7 +27,7 @@ const motionTemplate = {
   },
 };
 
-test('dimension-aware pan keeps the same peak speed and lengthens wide-image cycles', () => {
+test('dimension-aware pan keeps constant travel speed and lengthens wide-image cycles', () => {
   const portraitCycle = calculatePanCycleSeconds({
     travelDistancePx: 130,
     speedPxPerSecond: 22,
@@ -39,13 +39,13 @@ test('dimension-aware pan keeps the same peak speed and lengthens wide-image cyc
     minimumCycleSeconds: 18,
   });
 
-  assert.ok(Math.abs(portraitCycle - 18.564) < 0.01);
-  assert.ok(Math.abs(landscapeCycle - 391.272) < 0.01);
-  assert.ok(Math.abs((Math.PI * 130) / portraitCycle - 22) < 0.01);
-  assert.ok(Math.abs((Math.PI * 2740) / landscapeCycle - 22) < 0.01);
+  assert.equal(portraitCycle, 18);
+  assert.ok(Math.abs(landscapeCycle - 249.091) < 0.01);
+  assert.ok(Math.abs((2 * 130) / portraitCycle - 14.444) < 0.01);
+  assert.ok(Math.abs((2 * 2740) / landscapeCycle - 22) < 0.01);
 });
 
-test('background filter derives angular speed from actual scaled overflow', () => {
+test('background filter derives a constant reflected speed from actual scaled overflow', () => {
   const filter = buildBackgroundPreparationFilter({
     inputRef: 0,
     width: 1080,
@@ -58,9 +58,11 @@ test('background filter derives angular speed from actual scaled overflow', () =
 
   assert.match(filter, /iw-2160/u);
   assert.match(filter, /\(ih-3840\)\*0\.72/u);
-  assert.match(filter, /abs\(\(iw-2160\)-/u);
-  assert.match(filter, /abs\(\(\(ih-3840\)\*0\.72\)-/u);
-  assert.doesNotMatch(filter, /t\*0\.349066/u);
+  assert.match(filter, /floor/u);
+  assert.match(filter, /t\*\(/u);
+  assert.match(filter, /abs/u);
+  assert.doesNotMatch(filter, /sin\(/u);
+  assert.doesNotMatch(filter, /cos\(/u);
 });
 
 test('background motion starts at a stable seed-specific source position', () => {
