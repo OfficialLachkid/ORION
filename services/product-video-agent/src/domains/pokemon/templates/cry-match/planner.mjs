@@ -13,6 +13,7 @@ import {
   scanPokeQuizzAssetInventory,
   selectSeededFile,
 } from '../../../../poke-quizz-asset-inventory.mjs';
+import { buildNormalAndPixelBackgroundPool } from '../shared/background-pools.mjs';
 import { normalizeBaseStats } from '../tournament/battle-logic.mjs';
 import { selectCryMatchRoundPools } from './subject-pools.mjs';
 
@@ -475,7 +476,7 @@ export async function planPokemonCryMatchChallenge({
   });
 
   const selectedBackgroundPath = selectBackground(
-    inventory.backgrounds,
+    buildNormalAndPixelBackgroundPool(inventory),
     random,
     normalizedSelectionState,
   );

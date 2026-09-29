@@ -86,7 +86,7 @@
   },
   "layout": {
     "background": {
-      "source_policy": "local_t7_backgrounds",
+      "source_policy": "local_t7_backgrounds_and_pixel_backgrounds",
       "media_type": "looping_image_gif_or_video",
       "fit": "cover",
       "blur_sigma": 3
