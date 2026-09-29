@@ -8,6 +8,7 @@ import {
 import {
   buildPokeQuizzQueueStatusPayload,
   computePokeQuizzQueueStatus,
+  resolvePokeQuizzQueueStatusMessageCandidates,
 } from '../src/poke-quizz-queue-status.mjs';
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -150,6 +151,29 @@ test('queue status payload supports channel-aware title overrides', () => {
   });
 
   assert.equal(payload.embeds?.[0]?.title, 'DexGuess Video Queue');
+});
+
+test('queue status message candidates prefer the canonical channel card over local state', () => {
+  assert.deepEqual(resolvePokeQuizzQueueStatusMessageCandidates({
+    metadata: {
+      queue_status_message_id: 'canonical-message',
+    },
+  }, {
+    messageId: 'workspace-local-message',
+  }), [
+    'canonical-message',
+    'workspace-local-message',
+  ]);
+});
+
+test('queue status message candidates deduplicate matching canonical and local ids', () => {
+  assert.deepEqual(resolvePokeQuizzQueueStatusMessageCandidates({
+    metadata: {
+      queueStatusMessageId: 'same-message',
+    },
+  }, {
+    messageId: 'same-message',
+  }), ['same-message']);
 });
 
 test('publication channel helpers support per-channel handle URLs and review threads', () => {

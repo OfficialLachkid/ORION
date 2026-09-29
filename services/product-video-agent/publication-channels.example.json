@@ -42,6 +42,7 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
+        "queue_status_message_id": "1533577706518745141",
         "youtube_auto_comment": {
           "enabled": true,
           "max_attempts": 3,
@@ -338,6 +339,7 @@
           }
         },
         "review_thread_id": "1536146358749233222",
+        "queue_status_message_id": "1536308134337974303",
         "related_video": {
           "enabled": true,
           "provider": "youtube_studio",
@@ -513,6 +515,7 @@
           }
         },
         "review_thread_id": "1536721345440780339",
+        "queue_status_message_id": "1536753013538947257",
         "related_video": {
           "enabled": true,
           "provider": "youtube_studio",
@@ -688,6 +691,7 @@
           }
         },
         "review_thread_id": "1537438092338798684",
+        "queue_status_message_id": "1537469765705269380",
         "related_video": {
           "enabled": true,
           "provider": "youtube_studio",
@@ -862,6 +866,7 @@
           }
         },
         "review_thread_id": "1549355550553280542",
+        "queue_status_message_id": "1549426826487660705",
         "related_video": {
           "enabled": true,
           "provider": "youtube_studio",
