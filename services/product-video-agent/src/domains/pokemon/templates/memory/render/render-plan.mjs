@@ -72,10 +72,19 @@ function buildTimerLayout(template, optionGridLayout = null, timerDisplayMode = 
       Math.max(720, stageWidth - 20),
     );
     const width = Math.min(canvasWidth - 60, Math.max(640, configuredWidth));
-    const height = Math.min(maxHeight, canvasHeight - safeBottom - stageBottom - gapTop);
+    const titleGap = Number(template?.layout?.timer?.hp_bar_title_gap_px);
+    const titleAnchoredY = Number.isFinite(titleGap)
+      ? ensureNumber(template?.layout?.text?.question_y, 0) + titleGap
+      : null;
+    const height = Math.min(
+      maxHeight,
+      titleAnchoredY == null
+        ? canvasHeight - safeBottom - stageBottom - gapTop
+        : canvasHeight - safeBottom - titleAnchoredY,
+    );
     const stageCenterX = stageLeft + Math.floor(stageWidth / 2);
     const x = roundTime(Math.max(30, Math.floor(stageCenterX - (width / 2))));
-    const y = roundTime(stageBottom + gapTop);
+    const y = roundTime(titleAnchoredY ?? (stageBottom + gapTop));
     return {
       mode: HP_BAR_TIMER_DISPLAY_MODE,
       x,

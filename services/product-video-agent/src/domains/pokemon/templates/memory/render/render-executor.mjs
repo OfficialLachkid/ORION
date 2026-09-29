@@ -23,6 +23,7 @@ import {
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
 import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
+import { buildVisualInputGroundingRatios } from '../../shared/render/sprite-alpha-grounding.mjs';
 
 export async function renderPokeQuizzVideo({
   plan,
@@ -162,6 +163,13 @@ export async function renderPokeQuizzVideo({
   const visualInputs = buildVisualInputs(plan, renderPlan);
   await verifyReadableFiles(visualInputs.map((input) => input.path));
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
+  const groundingRatios = await buildVisualInputGroundingRatios(visualInputs, {
+    enabled: template?.layout?.sprite_platform?.alpha_grounding_enabled === true,
+    rolePattern: /sprite/iu,
+  });
+  const sprites = (plan.assets.pokemon || []).map((_, index) => inputRoleIndex.get(`display-sprite-${index}`));
+  const optionSprites = (plan.question?.options || []).map((_, index) => inputRoleIndex.get(`option-sprite-${index}`));
+  const revealSprite = inputRoleIndex.has('reveal-sprite') ? inputRoleIndex.get('reveal-sprite') : null;
   const inputRefs = {
     background: inputRoleIndex.get('background'),
     timerHpBar: inputRoleIndex.has('timer-hp-bar') ? inputRoleIndex.get('timer-hp-bar') : null,
@@ -171,9 +179,12 @@ export async function renderPokeQuizzVideo({
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     introDisappear: inputRoleIndex.has('intro-disappear') ? inputRoleIndex.get('intro-disappear') : null,
     introPokeball: inputRoleIndex.has('intro-pokeball') ? inputRoleIndex.get('intro-pokeball') : null,
-    sprites: (plan.assets.pokemon || []).map((_, index) => inputRoleIndex.get(`display-sprite-${index}`)),
-    optionSprites: (plan.question?.options || []).map((_, index) => inputRoleIndex.get(`option-sprite-${index}`)),
-    revealSprite: inputRoleIndex.has('reveal-sprite') ? inputRoleIndex.get('reveal-sprite') : null,
+    sprites,
+    spriteBottomTransparentRatios: sprites.map((inputIndex) => groundingRatios.get(inputIndex) || 0),
+    optionSprites,
+    optionSpriteBottomTransparentRatios: optionSprites.map((inputIndex) => groundingRatios.get(inputIndex) || 0),
+    revealSprite,
+    revealSpriteBottomTransparentRatio: groundingRatios.get(revealSprite) || 0,
   };
   const fontPath = await resolveFontPath(fontCandidates);
   const textArtifacts = await writeDrawtextArtifacts({

@@ -373,6 +373,23 @@ test('render plan creates staggered round timing with slide transitions', async 
   assert.equal(renderPlan.rounds[0].type_badge_layout[0].label_font_size, 78);
   assert.equal(renderPlan.total_duration_seconds, renderPlan.rounds[4].scene_end_seconds);
   assert.equal(renderPlan.output_path, '/tmp/type-quiz.mp4');
+
+  const landscapeRenderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template: {
+      ...structuredClone(template),
+      canvas: { ...template.canvas, width: 1920, height: 1080 },
+      layout: {
+        ...structuredClone(template.layout),
+        timer: { ...template.layout.timer, enabled: false },
+      },
+    },
+    outputPath: '/tmp/type-quiz-landscape.mp4',
+  });
+  const landscapeDualTypeRound = landscapeRenderPlan.rounds.find((round) => round.subject.types.length === 2);
+  assert.equal(landscapeDualTypeRound.type_badge_layout[0].center_x, 819);
+  assert.equal(landscapeDualTypeRound.type_badge_layout[1].center_x, 1101);
+  assert.equal(landscapeRenderPlan.timer_layout.enabled, false);
 });
 
 test('visual inputs loop gif backgrounds, use one shiny round, and include the sparkle overlay once', async () => {

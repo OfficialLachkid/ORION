@@ -9,11 +9,12 @@ export function buildTypeIconLayout(template, count = 2) {
   const canvasWidth = ensureNumber(template?.canvas?.width, 1080);
   const spacing = ensureNumber(template?.layout?.type_icons?.spacing_px, 28);
   const iconSize = ensureNumber(template?.layout?.type_icons?.icon_size_px, 168);
+  const iconY = ensureNumber(template?.layout?.type_icons?.y, DEFAULT_TYPE_ICON_Y);
   const totalWidth = (count * iconSize) + (Math.max(0, count - 1) * spacing);
   const startX = Math.floor((canvasWidth - totalWidth) / 2);
   return Array.from({ length: count }, (_, index) => ({
     x: startX + (index * (iconSize + spacing)),
-    y: DEFAULT_TYPE_ICON_Y,
+    y: iconY,
     width: iconSize,
     height: iconSize,
   }));
@@ -25,12 +26,13 @@ export function buildHookTypeIconLayout(template, count = 2) {
   const iconSize = Math.round(
     ensureNumber(template?.layout?.type_icons?.icon_size_px, 168) * DEFAULT_TYPE_ICON_HOOK_SCALE_MULTIPLIER,
   );
+  const hookY = ensureNumber(template?.layout?.type_icons?.hook_y, DEFAULT_TYPE_ICON_HOOK_Y);
   const spacing = Math.max(60, Math.round(baseSpacing * 1.35));
   const totalWidth = (count * iconSize) + (Math.max(0, count - 1) * spacing);
   const startX = Math.floor((canvasWidth - totalWidth) / 2);
   return Array.from({ length: count }, (_, index) => ({
     x: startX + (index * (iconSize + spacing)),
-    y: DEFAULT_TYPE_ICON_HOOK_Y,
+    y: hookY,
     width: iconSize,
     height: iconSize,
   }));

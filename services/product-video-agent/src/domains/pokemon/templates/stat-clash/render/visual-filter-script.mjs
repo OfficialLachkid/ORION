@@ -1235,6 +1235,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       const spriteOverlayLabel = `scene${roundIndex}spritev${candidate.index}`;
       const settledSpriteLabel = `scene${roundIndex}settled${candidate.index}`;
       const isStillSpriteFallback = Boolean(roundInputs.still_candidates?.[candidate.index]);
+      const bottomTransparentRatio = Math.max(
+        0,
+        ensureNumber(roundInputs.bottom_transparent_ratios?.[candidate.index], 0),
+      );
+      const groundingYOffset = bottomTransparentRatio > 0 ? `+h*${bottomTransparentRatio}` : '';
       const spriteScaleExpression = buildAnimatedPopSettleExpression(
         candidate.intro_start_seconds,
         introDuration,
@@ -1274,11 +1279,11 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         `[${spritePreparedLabel}]scale=w='${baseSpriteSize}*(${spriteScaleExpression})':h='${baseSpriteSize}*(${spriteScaleExpression})':eval=frame:force_original_aspect_ratio=decrease,format=rgba,setsar=1,split=${shouldCreateGraySprite ? 3 : 2}${spriteSplitLabels}`,
       );
       filters.push(
-        `[${currentLabel}][${spriteIntroInputLabel}]overlay=x='${cell.center_x}-w/2':y='${spriteYExpression}+${introYOffset}-h/2':enable='${formatEnableBetween(candidate.intro_start_seconds, candidate.intro_end_seconds)}'[${spriteOverlayLabel}]`,
+        `[${currentLabel}][${spriteIntroInputLabel}]overlay=x='${cell.center_x}-w/2':y='${spriteYExpression}+${introYOffset}-h/2${groundingYOffset}':enable='${formatEnableBetween(candidate.intro_start_seconds, candidate.intro_end_seconds)}'[${spriteOverlayLabel}]`,
       );
       currentLabel = spriteOverlayLabel;
       filters.push(
-        `[${currentLabel}][${spriteSettledInputLabel}]overlay=x='${cell.center_x}-w/2':y='${settledSpriteBaseY}${settledSpriteYOffsetExpression}-h/2':enable='${formatEnableBetween(candidate.intro_end_seconds, round.local.scene_duration_seconds)}'[${settledSpriteLabel}]`,
+        `[${currentLabel}][${spriteSettledInputLabel}]overlay=x='${cell.center_x}-w/2':y='${settledSpriteBaseY}${settledSpriteYOffsetExpression}-h/2${groundingYOffset}':enable='${formatEnableBetween(candidate.intro_end_seconds, round.local.scene_duration_seconds)}'[${settledSpriteLabel}]`,
       );
       currentLabel = settledSpriteLabel;
 
@@ -1322,6 +1327,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
           candidate,
           cell,
           grayInputLabel: spriteGrayInputLabel,
+          bottomTransparentRatio,
         });
       }
     }
@@ -1443,14 +1449,14 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       accentColor: '0xFFB2AC',
     });
 
-    decoyGrayCandidates.forEach(({ candidate, cell, grayInputLabel }) => {
+    decoyGrayCandidates.forEach(({ candidate, cell, grayInputLabel, bottomTransparentRatio }) => {
       const grayLabel = `scene${roundIndex}gray${candidate.index}`;
       const grayOverlayLabel = `scene${roundIndex}grayv${candidate.index}`;
       filters.push(
         `[${grayInputLabel}]format=rgba,eq=saturation=0:brightness=-0.42:contrast=1.22,setsar=1,colorchannelmixer=aa=0.94,fade=t=in:st=${round.local.reveal_visual_start_seconds}:d=${decoyGrayFadeDuration}:alpha=1[${grayLabel}]`,
       );
       filters.push(
-        `[${currentLabel}][${grayLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + gridSpriteYOffset).toFixed(3))}${Boolean(roundInputs.still_candidates?.[candidate.index]) ? `-${buildStaticSpriteWobbleExpression(round, candidate, template)}` : ''}-h/2':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${grayOverlayLabel}]`,
+        `[${currentLabel}][${grayLabel}]overlay=x='${cell.center_x}-w/2':y='${Number((cell.center_y + gridSpriteYOffset).toFixed(3))}${Boolean(roundInputs.still_candidates?.[candidate.index]) ? `-${buildStaticSpriteWobbleExpression(round, candidate, template)}` : ''}-h/2${bottomTransparentRatio > 0 ? `+h*${bottomTransparentRatio}` : ''}':enable='${formatEnableBetween(round.local.reveal_visual_start_seconds, round.local.scene_duration_seconds)}'[${grayOverlayLabel}]`,
       );
       currentLabel = grayOverlayLabel;
     });

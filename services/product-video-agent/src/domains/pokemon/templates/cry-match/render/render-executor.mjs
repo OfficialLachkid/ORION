@@ -20,6 +20,7 @@ import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
 import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
+import { buildVisualInputGroundingRatios } from '../../shared/render/sprite-alpha-grounding.mjs';
 
 const MIN_SAFE_ANIMATED_SPRITE_DURATION_SECONDS = 0.2;
 
@@ -231,12 +232,20 @@ export async function renderPokeQuizzVideo({
   });
   await verifyReadableFiles(visualInputs.map((input) => input.path));
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
+  const groundingRatios = await buildVisualInputGroundingRatios(visualInputs, {
+    enabled: template?.layout?.sprite_platform?.alpha_grounding_enabled === true,
+    rolePattern: /candidate/iu,
+  });
   const inputRefs = {
     background: inputRoleIndex.get('background'),
     introPokeball: inputRoleIndex.has('intro-pokeball') ? inputRoleIndex.get('intro-pokeball') : null,
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     rounds: renderPlan.rounds.map((round) => ({
       candidates: round.candidates.map((candidate) => inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`)),
+      bottom_transparent_ratios: round.candidates.map((candidate) => {
+        const inputIndex = inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`);
+        return groundingRatios.get(inputIndex) || 0;
+      }),
       still_candidates: round.candidates.map((candidate) => {
         const inputIndex = inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`);
         if (inputIndex == null) {

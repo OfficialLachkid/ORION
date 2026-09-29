@@ -599,6 +599,58 @@ async function executeFeedbackRegenerationTask(task, config, dependencies = {}) 
   );
   const reviewRuntimeRoot = resolve(projectRoot, 'data/runtime/product-video-agent/poke-quizz/reviews');
   const processRunner = dependencies.runProcess || runLocalProcess;
+
+  if (normalizedFeedback.contentFormat === 'long_form') {
+    const longFormResult = await processRunner({
+      executable: process.execPath,
+      args: [
+        resolve(projectRoot, 'services/product-video-agent/scripts/generate-pokemon-long-form-review.mjs'),
+        '--channel',
+        normalizedFeedback.channelSelector || DEFAULT_CHANNEL_SELECTOR,
+        '--thread-id',
+        normalizedFeedback.reviewThreadId,
+        '--seed',
+        revisionSeed,
+        '--catalog-json',
+        resolve(projectRoot, normalizedFeedback.catalogJsonPath),
+        '--template',
+        resolve(projectRoot, normalizedFeedback.templatePath),
+        '--config',
+        resolve(projectRoot, normalizedFeedback.configPath || DEFAULT_CONFIG_PATH),
+      ],
+      cwd: projectRoot,
+      timeoutMs: 7_200_000,
+    });
+    const reviewPayload = parseLastJsonObject(longFormResult.stdout) || {};
+    let priorPublicationUpdateError = '';
+    try {
+      await (dependencies.updatePriorPublicationForRevision || updatePriorPublicationForRevision)(
+        normalizedFeedback,
+        config,
+        dependencies,
+      );
+    } catch (error) {
+      priorPublicationUpdateError = error.message || String(error);
+    }
+    return {
+      rawStdout: longFormResult.stdout || '',
+      report: {
+        state: 'preview_regenerated',
+        severity: priorPublicationUpdateError ? 'warning' : 'success',
+        summary: priorPublicationUpdateError
+          ? `Generated a revised long-form Pokemon preview, but could not collapse the prior review card: ${priorPublicationUpdateError}`
+          : 'Generated a revised long-form Pokemon preview and posted it back to the review thread.',
+        publicationId: reviewPayload.publication_id || '',
+        previewUrl: reviewPayload.preview_url || '',
+        reviewTaskId: reviewPayload.task_id || '',
+        reviewMessageId: reviewPayload.message_id || '',
+        renderPath: reviewPayload.render_path || reviewPayload.output_path || '',
+        feedback: normalizedFeedback.feedback || '',
+        priorPublicationUpdateError,
+      },
+    };
+  }
+
   const { planPath } = await buildRevisionPlan({
     feedback: normalizedFeedback,
     revisionSeed,
