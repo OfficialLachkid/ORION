@@ -598,7 +598,8 @@ test('build-your-team render plan reuses grid reveal without stat or decoy revea
       && candidate.pokeball_hold_start_seconds < candidate.pokeball_start_seconds
   )));
   assert.match(visualFilter.script, /split=6\[bg0\]\[bg1\]\[bg2\]\[bg3\]\[bg4\]\[bg5\]/u);
-  assert.match(visualFilter.script, /crop=w=2160:h=3840:x='\(iw-2160\)\*\(0\.5\+0\.5\*sin\(t\*/u);
+  assert.match(visualFilter.script, /crop=w=2160:h=3840:x='\(\(iw-2160\)-abs/u);
+  assert.match(visualFilter.script, /floor/u);
   assert.match(visualFilter.script, /scale=1080:1920:flags=lanczos/u);
   for (const [roundIndex, round] of renderPlan.rounds.entries()) {
     const expectedTrim = roundIndex === 0

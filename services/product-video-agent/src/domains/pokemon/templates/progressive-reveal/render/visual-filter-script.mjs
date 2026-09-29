@@ -162,6 +162,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     fps,
     blurSigma: background.blur_sigma,
     template,
+    seed: plan.seed,
   });
   filters.push(
     `${backgroundPreparationFilter},eq=saturation=1.08:brightness=-0.035,format=rgba,split=${roundCount}${backgroundLabels.map((label) => `[${label}]`).join('')}`,

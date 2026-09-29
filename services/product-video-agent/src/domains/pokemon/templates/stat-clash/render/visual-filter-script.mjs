@@ -960,6 +960,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     fps,
     blurSigma: backgroundBlurSigma,
     template,
+    seed: plan.seed,
   });
   filters.push(
     `${backgroundPreparationFilter},split=${allBackgroundLabels.length}${allBackgroundLabels.map((label) => `[${label}]`).join('')}`,
