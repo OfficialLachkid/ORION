@@ -12,6 +12,7 @@ import {
   scanPokeQuizzAssetInventory,
   selectSeededFile,
 } from '../../../../poke-quizz-asset-inventory.mjs';
+import { buildNormalAndPixelBackgroundPool } from '../shared/background-pools.mjs';
 import { normalizeBaseStats } from '../tournament/battle-logic.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
@@ -764,7 +765,7 @@ export async function planPokemonStatClashChallenge({
   });
 
   const selectedBackgroundPath = selectBackground(
-    inventory.backgrounds,
+    buildNormalAndPixelBackgroundPool(inventory),
     random,
     normalizedSelectionState,
   );
