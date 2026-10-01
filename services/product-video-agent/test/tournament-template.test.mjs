@@ -347,7 +347,8 @@ test('generic planner dispatch builds a four-participant tournament bracket with
   assert.equal(plan.tournament.matches.length, 3);
   assert.equal(plan.tournament.matches[0].round_label, 'Semi Final 1');
   assert.equal(plan.tournament.matches.every((match) => match.battle_stat?.key), true);
-  assert.equal(plan.tournament.matches.every((match) => /^The slot lands on /u.test(match.insight_text)), true);
+  assert.equal(plan.tournament.matches.every((match) => !/^The slot lands on /u.test(match.insight_text)), true);
+  assert.equal(plan.tournament.matches.every((match) => !/: \d+ to \d+/u.test(match.insight_text)), true);
   assert.equal(plan.tournament.matches.every((match) => !/Attack|Defense|Speed|HP/u.test(match.intro_line_text)), true);
   assert.notEqual(plan.tournament.matches[0].battle_stat.key, plan.tournament.matches[1].battle_stat.key);
   assert.notEqual(plan.tournament.matches[1].battle_stat.key, plan.tournament.matches[2].battle_stat.key);
@@ -440,7 +441,7 @@ test('tournament slot stat alone decides the match after it lands', () => {
   assert.equal(battle.battle_stat.key, 'attack');
   assert.deepEqual(battle.stat_values, { left: 40, right: 50 });
   assert.equal(battle.intro_line_text, 'Left Slot versus Right Slot.');
-  assert.equal(battle.insight_text, 'The slot lands on Attack. Right Slot has higher Attack: 50 to 40.');
+  assert.equal(battle.insight_text, 'Right Slot has higher Attack.');
   assert.equal(battle.tiebreaker, null);
 });
 
@@ -472,7 +473,7 @@ test('tournament Type slot only resolves a real unequal super-effective advantag
   assert.equal(battle.winner.id, 'blastoise-type-slot');
   assert.equal(battle.battle_stat.key, 'type');
   assert.deepEqual(battle.stat_values, { left: 1, right: 2 });
-  assert.equal(battle.insight_text, 'The slot lands on Type. Blastoise has the type advantage with Water.');
+  assert.equal(battle.insight_text, 'Blastoise has the type advantage.');
 
   const neutralAdvantage = resolveTournamentTypeAdvantage(
     { display_name: 'Alpha', types: ['normal'] },
@@ -524,7 +525,7 @@ test('tournament slot stat uses Base Stat Total only as a tie-break', () => {
 
   assert.equal(battle.winner.id, 'left-tie');
   assert.equal(battle.tiebreaker, 'base_stat_total');
-  assert.match(battle.insight_text, /HP is tied at 80.*Base Stat Total tiebreak/u);
+  assert.equal(battle.insight_text, 'Left Tie has higher Base Stat Total.');
 });
 
 test('tournament type effectiveness handles dual typings and immunities', () => {

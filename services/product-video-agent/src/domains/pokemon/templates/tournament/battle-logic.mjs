@@ -361,28 +361,14 @@ function resolveStatWinnerSide(left, right, statKey) {
   };
 }
 
-function buildStatInsightText({ stat, left, right, winner, loser, winnerSide, tiebreaker }) {
-  const leftValue = left.base_stats[stat.key];
-  const rightValue = right.base_stats[stat.key];
+function buildStatInsightText({ stat, winner, tiebreaker }) {
   if (tiebreaker === 'base_stat_total') {
-    return `The slot lands on ${stat.spoken_label}. ${stat.spoken_label} is tied at ${leftValue}. ${winner.display_name} wins the Base Stat Total tiebreak: ${winner.base_stat_total} to ${loser.base_stat_total}.`;
+    return `${winner.display_name} has higher Base Stat Total.`;
   }
   if (tiebreaker) {
-    return `The slot lands on ${stat.spoken_label}. ${stat.spoken_label} is tied at ${leftValue}. ${winner.display_name} wins the final tiebreak.`;
+    return `${winner.display_name} wins the tiebreak.`;
   }
-  const winnerValue = winnerSide === 'left' ? leftValue : rightValue;
-  const loserValue = winnerSide === 'left' ? rightValue : leftValue;
-  const comparison = stat.key === 'speed'
-    ? 'is faster'
-    : stat.key === 'hp'
-      ? 'has more HP'
-      : `has higher ${stat.spoken_label}`;
-  return `The slot lands on ${stat.spoken_label}. ${winner.display_name} ${comparison}: ${winnerValue} to ${loserValue}.`;
-}
-
-function formatTypeName(value) {
-  const normalized = String(value || '').trim();
-  return normalized ? `${normalized[0].toUpperCase()}${normalized.slice(1)}` : 'its typing';
+  return `${winner.display_name} has higher ${stat.spoken_label}.`;
 }
 
 function resolveTypeBattle({ left, right, battleStat, normalizedWeights, matchId, roundLabel }) {
@@ -398,7 +384,7 @@ function resolveTypeBattle({ left, right, battleStat, normalizedWeights, matchId
     : advantage.right_attack;
   const leftValue = advantage.left_attack.multiplier;
   const rightValue = advantage.right_attack.multiplier;
-  const insightText = `The slot lands on Type. ${winner.display_name} has the type advantage with ${formatTypeName(winnerAttack.attacking_type)}.`;
+  const insightText = `${winner.display_name} has the type advantage.`;
   const introLineText = `${left.display_name} versus ${right.display_name}.`;
   const leftCard = {
     stat_key: stat.key,
@@ -498,11 +484,7 @@ function resolveStatBattle({ left, right, battleStat, normalizedWeights, matchId
   };
   const insightText = buildStatInsightText({
     stat,
-    left,
-    right,
     winner,
-    loser,
-    winnerSide: outcome.winner_side,
     tiebreaker: outcome.tiebreaker,
   });
   const introLineText = `${left.display_name} versus ${right.display_name}.`;
