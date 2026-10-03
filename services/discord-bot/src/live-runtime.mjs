@@ -509,39 +509,62 @@ export function isLeadOutreachSendComplete(execution, task) {
 // configured outreach-approval threads' recent messages and find the
 // one whose content/embeds reference this taskId. Returns a target
 // shaped like the other two sources so the delete loop treats it the
-// same. Pure function: all I/O is injected for test coverage.
+// same.
+//
+// Paginates backward through each thread via the `before` cursor until
+// a match is found or `maxDepth` messages have been scanned. The
+// default depth (1000 messages = 10 pages at Discord's 100-per-page
+// cap) covers the realistic worst case — a batch-send of hundreds of
+// drafts clicked days later in a chatty parent channel — without
+// burning through rate limits on the common case where the card is on
+// the first page.
+//
+// Pure function: `fetchChannelMessages(threadId, limit, { beforeId })`
+// is injected for test coverage; production wires it to the Discord
+// Get Channel Messages endpoint.
 export async function searchApprovalMessageInThreads({
   taskId,
   threadIds = [],
   fetchChannelMessages,
   pageLimit = 100,
+  maxDepth = 1000,
 }) {
   const normalizedTaskId = String(taskId || '').trim();
   if (!normalizedTaskId || typeof fetchChannelMessages !== 'function') return null;
   for (const threadId of threadIds) {
     const normalizedThread = String(threadId || '').trim();
     if (!normalizedThread) continue;
-    let messages = [];
-    try {
-      messages = await fetchChannelMessages(normalizedThread, pageLimit);
-    } catch {
-      continue;
-    }
-    if (!Array.isArray(messages)) continue;
-    for (const message of messages) {
-      const content = String(message?.content || '');
-      // Embeds carry title/description/fields where the taskId usually
-      // shows up on these approval cards; stringify the whole array to
-      // cover title, description, field names and field values at once.
-      const embedBlob = Array.isArray(message?.embeds) ? JSON.stringify(message.embeds) : '';
-      if (content.includes(normalizedTaskId) || embedBlob.includes(normalizedTaskId)) {
-        return {
-          channelId: normalizedThread,
-          messageId: String(message?.id || ''),
-          key: null,
-          source: 'thread_search',
-        };
+    let scanned = 0;
+    let beforeId = null;
+    while (scanned < maxDepth) {
+      let messages = [];
+      try {
+        messages = await fetchChannelMessages(normalizedThread, pageLimit, { beforeId });
+      } catch {
+        break; // skip this thread on error, try the next
       }
+      if (!Array.isArray(messages) || messages.length === 0) break;
+      for (const message of messages) {
+        const content = String(message?.content || '');
+        // Embeds carry title/description/fields where the taskId usually
+        // shows up on these approval cards; stringify the whole array to
+        // cover title, description, field names and field values at once.
+        const embedBlob = Array.isArray(message?.embeds) ? JSON.stringify(message.embeds) : '';
+        if (content.includes(normalizedTaskId) || embedBlob.includes(normalizedTaskId)) {
+          return {
+            channelId: normalizedThread,
+            messageId: String(message?.id || ''),
+            key: null,
+            source: 'thread_search',
+          };
+        }
+      }
+      scanned += messages.length;
+      if (messages.length < pageLimit) break; // reached the end of the channel
+      // Discord returns messages newest-first; the oldest in this page
+      // becomes the `before` cursor for the next page.
+      beforeId = String(messages[messages.length - 1]?.id || '');
+      if (!beforeId) break;
     }
   }
   return null;
@@ -1916,9 +1939,9 @@ export async function runLiveDiscordBot(config) {
             config?.channelIds?.outreachFollowupsAgent,
             config?.channelIds?.outreachAgent,
           ],
-          fetchChannelMessages: async (threadId, limit) => sendDiscordApiRequest(
+          fetchChannelMessages: async (threadId, limit, { beforeId } = {}) => sendDiscordApiRequest(
             token,
-            `/channels/${threadId}/messages?limit=${limit}`,
+            `/channels/${threadId}/messages?limit=${limit}${beforeId ? `&before=${beforeId}` : ''}`,
             undefined,
             'GET',
           ),
