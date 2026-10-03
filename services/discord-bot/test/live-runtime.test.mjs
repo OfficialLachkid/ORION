@@ -22,6 +22,7 @@ import {
   prepareCommandTasksForExecution,
   rehydratePokeQuizzReviewTask,
   resolveInteractionApprovalOrigin,
+  searchApprovalMessageInThreads,
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
 
@@ -724,4 +725,77 @@ test('collectApprovalDeleteTargets deduplicates when tracked and origin point to
 test('collectApprovalDeleteTargets returns empty when neither source has a target', () => {
   assert.deepEqual(collectApprovalDeleteTargets({ task: { task_id: 'TASK-1' }, trackedMap: new Map() }), []);
   assert.deepEqual(collectApprovalDeleteTargets({}), []);
+});
+
+test('searchApprovalMessageInThreads: finds the message by task_id in content or embeds', async () => {
+  // Last-resort fallback for the delete-on-send cleanup: when both the
+  // interaction-payload approval_origin AND the trackedTaskMessages
+  // bot-posted map come up empty (bot restart, modal path, etc.), scan
+  // the configured outreach threads and match on taskId.
+  const fetched = [];
+  const fetchChannelMessages = async (threadId, limit) => {
+    fetched.push({ threadId, limit });
+    if (threadId === 'THREAD-WAITING') {
+      return [
+        { id: 'MSG-OLD', content: 'TASK-OTHER lives here', embeds: [] },
+        { id: 'MSG-HIT', content: '', embeds: [{ title: 'Draft outreach', fields: [{ name: 'Task', value: 'TASK-1' }] }] },
+      ];
+    }
+    return [];
+  };
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-1',
+    threadIds: ['THREAD-WAITING', 'THREAD-FOLLOWUPS'],
+    fetchChannelMessages,
+  });
+  assert.deepEqual(target, {
+    channelId: 'THREAD-WAITING',
+    messageId: 'MSG-HIT',
+    key: null,
+    source: 'thread_search',
+  });
+  // Stops after the first hit — doesn't scan unused later threads
+  assert.equal(fetched.length, 1);
+});
+
+test('searchApprovalMessageInThreads: content substring match also works', async () => {
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-ABC',
+    threadIds: ['THREAD-1'],
+    fetchChannelMessages: async () => ([
+      { id: 'MSG-TEXT', content: 'approve TASK-ABC', embeds: [] },
+    ]),
+  });
+  assert.equal(target?.messageId, 'MSG-TEXT');
+  assert.equal(target?.source, 'thread_search');
+});
+
+test('searchApprovalMessageInThreads: returns null when no thread contains the task', async () => {
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-MISSING',
+    threadIds: ['THREAD-1', 'THREAD-2'],
+    fetchChannelMessages: async () => ([]),
+  });
+  assert.equal(target, null);
+});
+
+test('searchApprovalMessageInThreads: a thread-fetch error is swallowed and the next thread is tried', async () => {
+  let callCount = 0;
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-9',
+    threadIds: ['THREAD-BAD', 'THREAD-GOOD'],
+    fetchChannelMessages: async (threadId) => {
+      callCount += 1;
+      if (threadId === 'THREAD-BAD') throw new Error('rate limited');
+      return [{ id: 'MSG-9', content: 'TASK-9 approved', embeds: [] }];
+    },
+  });
+  assert.equal(callCount, 2);
+  assert.equal(target?.messageId, 'MSG-9');
+  assert.equal(target?.channelId, 'THREAD-GOOD');
+});
+
+test('searchApprovalMessageInThreads: refuses to run without a taskId or fetcher', async () => {
+  assert.equal(await searchApprovalMessageInThreads({ taskId: '', threadIds: ['T'], fetchChannelMessages: async () => [] }), null);
+  assert.equal(await searchApprovalMessageInThreads({ taskId: 'TASK-1', threadIds: ['T'] }), null);
 });
