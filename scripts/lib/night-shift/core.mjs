@@ -14,6 +14,7 @@ import {
   postPokemonNightShiftDigest,
 } from './digest.mjs';
 import {
+  reconcilePokeQuizzReviewThreads,
   reconcilePreviewFallbackStorage,
   refreshPokeQuizzReviewMessages,
   replenishPokeQuizzReviewBacklog,
@@ -80,6 +81,7 @@ function buildRuntime(deps) {
     runVideoQueueMaintenance,
     replenishPokeQuizzReviewBacklog,
     refreshPokeQuizzReviewMessages,
+    reconcilePokeQuizzReviewThreads,
     fetchLeads,
     countOpenDrafts,
     postNightShiftFailure,
@@ -204,6 +206,7 @@ export async function runNightShift(argv = process.argv, deps = {}) {
   let videoQueueMaintenanceError = '';
   let reviewBacklogReplenishment = null;
   let reviewMessageRefresh = null;
+  let reviewThreadReconciliation = null;
   let skippedPokemonMaintenance = false;
 
   if (isFallback && runtime.existsSync(pokemonMaintenanceMarker)) {
@@ -249,6 +252,29 @@ export async function runNightShift(argv = process.argv, deps = {}) {
         retried: 0,
       };
       runtime.stderr.write(`Review card refresh failed (non-fatal): ${error.message}\n`);
+    }
+
+    // Runs AFTER refresh so freshly-edited messages don't false-404
+    // if Discord was propagating the edit mid-sweep. A deleted message
+    // the user won't restore is the only thing we want to catch here.
+    try {
+      reviewThreadReconciliation = await runtime.reconcilePokeQuizzReviewThreads(config, runTimestamp);
+    } catch (error) {
+      reviewThreadReconciliation = {
+        status: 'failed',
+        attemptedChannels: 0,
+        processedChannels: 0,
+        failedChannels: 0,
+        candidates: 0,
+        present: 0,
+        missing: 0,
+        errors: 0,
+        withdrawnPublicationIds: [],
+        unresolvedPublicationIds: [],
+        channels: [],
+        channelErrors: [{ channelKey: '', error: error.message }],
+      };
+      runtime.stderr.write(`Review-thread reconcile failed (non-fatal): ${error.message}\n`);
     }
 
     writeMarker(pokemonMaintenanceMarker, runtime.now(), runtime);
@@ -310,6 +336,7 @@ export async function runNightShift(argv = process.argv, deps = {}) {
         previewFallback,
         reviewBacklogReplenishment,
         reviewMessageRefresh,
+        reviewThreadReconciliation,
         videoQueueMaintenanceError,
         previewFallbackError,
       },
@@ -354,6 +381,7 @@ export async function runNightShift(argv = process.argv, deps = {}) {
     videoQueueMaintenance,
     reviewBacklogReplenishment,
     reviewMessageRefresh,
+    reviewThreadReconciliation,
     previewFallback,
     videoQueueMaintenanceError,
     previewFallbackError,

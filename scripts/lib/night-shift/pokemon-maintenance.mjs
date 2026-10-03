@@ -27,6 +27,8 @@ export {
   selectNextReviewBacklogRuntime,
 } from './pokemon-maintenance-review-backlog.mjs';
 export { runNightShiftRelatedVideoRefresh } from './related-video-sweep.mjs';
+// Review-thread reconcile lives in its own module (script-size guardrail).
+export { reconcilePokeQuizzReviewThreads } from './pokemon-maintenance-review-thread-reconcile.mjs';
 
 export const DEFAULT_PUBLICATION_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 export const REVIEW_READY_TARGET_COUNT = POKE_QUIZZ_REVIEW_TARGET_COUNT;

@@ -99,6 +99,23 @@ function makeDeps(root, overrides = {}) {
       calls.push('refreshPokeQuizzReviewMessages');
       return { refreshed: 0, failed: 0, retried: 0 };
     },
+    reconcilePokeQuizzReviewThreads: async () => {
+      calls.push('reconcilePokeQuizzReviewThreads');
+      return {
+        status: 'completed',
+        attemptedChannels: 0,
+        processedChannels: 0,
+        failedChannels: 0,
+        candidates: 0,
+        present: 0,
+        missing: 0,
+        errors: 0,
+        withdrawnPublicationIds: [],
+        unresolvedPublicationIds: [],
+        channels: [],
+        channelErrors: [],
+      };
+    },
     fetchLeads: async () => {
       calls.push('fetchLeads');
       return [];
@@ -154,6 +171,13 @@ test('primary night shift still runs Pokemon maintenance and leadgen after syste
   assert.equal(calls.includes('runVideoQueueMaintenance'), true);
   assert.equal(calls.includes('replenishPokeQuizzReviewBacklog'), true);
   assert.equal(calls.includes('refreshPokeQuizzReviewMessages'), true);
+  assert.equal(calls.includes('reconcilePokeQuizzReviewThreads'), true);
+  // Reconcile must run AFTER refresh so freshly-edited messages don't false-404
+  // mid-propagation and get withdrawn by accident.
+  assert.ok(
+    calls.indexOf('reconcilePokeQuizzReviewThreads') > calls.indexOf('refreshPokeQuizzReviewMessages'),
+    'reconcilePokeQuizzReviewThreads must run after refreshPokeQuizzReviewMessages',
+  );
   assert.equal(calls.includes('kickOffScheduledLeadgen'), true);
   assert.equal(calls.includes('postPokemonNightShiftDigest'), true);
   // Under the 2026-09-18 phase re-ordering, redraft-rejected, follow-ups
@@ -206,6 +230,7 @@ test('fallback retries qualification but skips duplicate Pokemon maintenance and
   assert.equal(calls.includes('runVideoQueueMaintenance'), false);
   assert.equal(calls.includes('replenishPokeQuizzReviewBacklog'), false);
   assert.equal(calls.includes('refreshPokeQuizzReviewMessages'), false);
+  assert.equal(calls.includes('reconcilePokeQuizzReviewThreads'), false);
   assert.equal(calls.includes('kickOffScheduledLeadgen'), false);
 });
 

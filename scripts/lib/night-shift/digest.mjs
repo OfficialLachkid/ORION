@@ -184,6 +184,25 @@ function summarizeReviewRefreshFailures(report) {
   return parts.join(', ');
 }
 
+function buildReviewThreadReconciliationLine(report) {
+  if (!report) return '';
+  if (report.status === 'failed' && report.channelErrors?.length) {
+    const first = report.channelErrors[0];
+    return `Review-thread reconcile failed: ${first.error || 'unknown error'}`;
+  }
+  const withdrawn = Number(report.missing || 0);
+  const unresolved = Number(report.errors || 0);
+  if (withdrawn === 0 && unresolved === 0) return '';
+  const parts = [];
+  if (withdrawn > 0) {
+    parts.push(`Review-thread reconcile withdrew **${withdrawn}** orphan preview(s) (Discord message was 404)`);
+  }
+  if (unresolved > 0) {
+    parts.push(`**${unresolved}** pending re-check next pass`);
+  }
+  return `${parts.join('; ')}.`;
+}
+
 function buildReviewMessageRefreshLine(report) {
   if (!report) {
     return '';
@@ -209,6 +228,7 @@ export function buildPokemonNightShiftDigest({
   previewFallback = null,
   reviewBacklogReplenishment = null,
   reviewMessageRefresh = null,
+  reviewThreadReconciliation = null,
   videoQueueMaintenanceError = '',
   previewFallbackError = '',
 } = {}) {
@@ -239,6 +259,11 @@ export function buildPokemonNightShiftDigest({
   const reviewMessageRefreshLine = buildReviewMessageRefreshLine(reviewMessageRefresh);
   if (reviewMessageRefreshLine) {
     lines.push(reviewMessageRefreshLine);
+  }
+
+  const reviewThreadLine = buildReviewThreadReconciliationLine(reviewThreadReconciliation);
+  if (reviewThreadLine) {
+    lines.push(reviewThreadLine);
   }
 
   if (lines.length === 0) {
