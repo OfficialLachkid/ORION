@@ -195,7 +195,7 @@ function resolveBackgroundPool(inventory = {}) {
   };
 }
 
-function resolveRevealMethods(template) {
+export function resolveProgressiveRevealMethods(template) {
   const configured = Array.isArray(template?.reveal?.methods)
     ? template.reveal.methods
     : PROGRESSIVE_REVEAL_METHODS;
@@ -206,7 +206,7 @@ function resolveRevealMethods(template) {
 }
 
 function selectRoundMethods(template, roundCount, random, previousVideoMethods = []) {
-  const methods = resolveRevealMethods(template);
+  const methods = resolveProgressiveRevealMethods(template);
   const mode = String(template?.reveal?.mode || 'random_per_round').trim().toLowerCase();
   const fixedMethod = normalizeProgressiveRevealMethod(template?.reveal?.method, methods[0]);
   if (mode === 'fixed' || mode === 'fixed_video' || mode === 'one_per_video') {
@@ -381,7 +381,7 @@ export async function planPokemonProgressiveRevealChallenge({
       selectedMethods.forEach((method, index) => {
         if (method !== 'pixelated') return;
         const alreadySelected = new Set(selectedMethods.filter((_, otherIndex) => otherIndex !== index));
-        const availableMethods = resolveRevealMethods(template).filter((candidate) => (
+        const availableMethods = resolveProgressiveRevealMethods(template).filter((candidate) => (
           candidate !== 'pixelated' && !alreadySelected.has(candidate)
         ));
         const freshMethods = availableMethods.filter((candidate) => !previousMethods.has(candidate));

@@ -79,6 +79,21 @@ V1 presentation requirements:
 - [ ] Split long-form analytics from Shorts analytics.
 - [ ] Record average view duration, average percentage viewed, impressions, CTR, and subscriber gain.
 
+## V2: Reveal-Only Challenge
+
+Status: V1 preview implementation
+
+This second long-form format is a duration-aware composition of the existing Progressive Reveal and Pixelated Reveal Short templates. It discovers reveal methods from the same progressive-reveal configuration and planner used by Shorts, renders cloned native 16:9 sections through the existing renderer, and does not reimplement reveal effects.
+
+- Target duration: 6–10 minutes, with a 6:30 planning target.
+- Progressive and Pixelated sections are balanced with configurable weights and no immediate template repeat.
+- Pokémon are de-duplicated across the episode while enough eligible assets remain.
+- Landscape pixel backgrounds rotate between configurable section groups without changing mid-round.
+- Rights-cleared music runs continuously beneath narration, cries, and SFX, with crossfades and no immediate track repeat.
+- The format remains manual-generation and manual-review only; Shorts and the mixed long-form format keep their existing behavior.
+
+The orchestration entry point is `product-video:generate-pokemon-reveal-long-form-review`, and the format configuration lives in `config/templates/pokemon/long/reveal-challenge.v1.json`.
+
 ## Future Episode Formats
 
 Recommended order after V1:

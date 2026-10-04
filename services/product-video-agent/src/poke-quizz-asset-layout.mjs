@@ -37,6 +37,7 @@ const POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES = Object.freeze({
   memory: 'Memory',
   'type-quiz': 'Type Quiz',
   'cry-match': 'Cry Match',
+  'long-reveal-challenge': 'Reveal Challenge Long Form',
 });
 
 export function formatDexNumber(value) {
@@ -106,6 +107,9 @@ export function resolvePokeQuizzPreviewTemplateKey(templateRef) {
   }
   if (candidates.some((value) => value.includes('cry-match'))) {
     return 'cry-match';
+  }
+  if (candidates.some((value) => value.includes('long-reveal-challenge'))) {
+    return 'long-reveal-challenge';
   }
   return null;
 }
