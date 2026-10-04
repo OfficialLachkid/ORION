@@ -21,6 +21,7 @@ import {
 } from '../src/domains/pokemon/long-form/reveal-challenge/registry.mjs';
 import { buildRevealChallengeProgramFilter } from '../src/domains/pokemon/long-form/reveal-challenge/renderer.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/progressive-reveal/render/visual-inputs.mjs';
+import { buildAudioFilterScript } from '../src/domains/pokemon/templates/progressive-reveal/renderer.mjs';
 
 const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 
@@ -252,4 +253,31 @@ test('reveal sections can seek through one continuous rendered background group'
     '-i',
     '/tmp/group-01.mp4',
   ]);
+});
+
+test('long-form reveal audio is padded to the planned section boundary', () => {
+  const filter = buildAudioFilterScript({
+    narrationPaths: [],
+    musicPath: null,
+    revealSoundPath: '/tmp/ding.mp3',
+    cryCues: [],
+    renderPlan: {
+      total_duration_seconds: 28.6,
+      rounds: [{ answer_start_seconds: 6 }],
+    },
+    padToDuration: true,
+  });
+  assert.match(filter, /apad,atrim=duration=28\.6\[aout\]/u);
+
+  const shortFilter = buildAudioFilterScript({
+    narrationPaths: [],
+    musicPath: null,
+    revealSoundPath: '/tmp/ding.mp3',
+    cryCues: [],
+    renderPlan: {
+      total_duration_seconds: 28.6,
+      rounds: [{ answer_start_seconds: 6 }],
+    },
+  });
+  assert.doesNotMatch(shortFilter, /apad/u);
 });
