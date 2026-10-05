@@ -1,12 +1,13 @@
 import { extname } from 'node:path';
 
-function buildLoopingVisualInput(path, durationSeconds, fps) {
+function buildLoopingVisualInput(path, durationSeconds, fps, startSeconds = 0) {
   const extension = extname(path || '').toLowerCase();
+  const seekArgs = Number(startSeconds) > 0 ? ['-ss', String(startSeconds)] : [];
   if (['.mp4', '.mov', '.webm'].includes(extension)) {
-    return ['-stream_loop', '-1', '-t', String(durationSeconds), '-i', path];
+    return ['-stream_loop', '-1', ...seekArgs, '-t', String(durationSeconds), '-i', path];
   }
   if (extension === '.gif') {
-    return ['-ignore_loop', '0', '-t', String(durationSeconds), '-i', path];
+    return ['-ignore_loop', '0', ...seekArgs, '-t', String(durationSeconds), '-i', path];
   }
   return ['-loop', '1', '-framerate', String(fps), '-t', String(durationSeconds), '-i', path];
 }
@@ -19,6 +20,7 @@ export function buildVisualInputs(plan, renderPlan) {
       plan.assets.background.selected_path,
       renderPlan.total_duration_seconds,
       renderPlan.canvas.fps,
+      plan.assets.background.start_seconds,
     ),
   }];
 

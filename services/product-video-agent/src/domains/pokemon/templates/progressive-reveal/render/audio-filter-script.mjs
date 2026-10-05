@@ -37,6 +37,7 @@ export function buildAudioFilterScript({
   cryCues = [],
   renderPlan,
   revealSoundVolumeMultiplier = 1,
+  padToDuration = false,
 }) {
   const filters = [];
   const mixLabels = [];
@@ -89,6 +90,9 @@ export function buildAudioFilterScript({
     filters.push(`anullsrc=r=48000:cl=stereo,atrim=0:${renderPlan.total_duration_seconds}[silence]`);
     mixLabels.push('silence');
   }
-  filters.push(`${mixLabels.map((label) => `[${label}]`).join('')}amix=inputs=${mixLabels.length}:normalize=0,alimiter=limit=0.95[aout]`);
+  const durationFilter = padToDuration
+    ? `,apad,atrim=duration=${renderPlan.total_duration_seconds}`
+    : '';
+  filters.push(`${mixLabels.map((label) => `[${label}]`).join('')}amix=inputs=${mixLabels.length}:normalize=0,alimiter=limit=0.95${durationFilter}[aout]`);
   return `${filters.join(';\n')}\n`;
 }

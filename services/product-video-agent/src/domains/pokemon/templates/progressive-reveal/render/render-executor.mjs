@@ -61,6 +61,7 @@ export async function renderPokeQuizzVideo({
     cryCues,
     revealSoundVolumeMultiplier: template?.audio?.sound_effects?.reveal?.volume_multiplier ?? 1,
     renderPlan,
+    padToDuration: plan.content_format === 'long_form_section',
   });
   await writeFile(audioFilterScriptPath, audioFilterScript, 'utf8');
   await runLocalProcess({
