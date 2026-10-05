@@ -28,7 +28,7 @@ const TYPE_THEMED_BACKGROUND_PRIORITY = Object.freeze([
   'fire',
   'water',
 ]);
-const ANSWER_LABELS = Object.freeze(['A', 'B', 'C', 'D']);
+const ANSWER_LABELS = Object.freeze(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']);
 const HP_BAR_TIMER_DISPLAY_MODE = 'hp_bar_depletion';
 const NUMERIC_TIMER_DISPLAY_MODE = 'numeric_with_small_ring';
 const mirroredSpriteAvailabilityCache = new Map();
@@ -479,9 +479,12 @@ function buildDifficultyCatalog(template) {
     .filter((entry) => entry.rows > 0 && entry.columns > 0 && entry.sprite_count >= 4);
 }
 
-function chooseDifficulty(difficultyCatalog, selectableCount, random) {
+function chooseDifficulty(difficultyCatalog, selectableCount, answerOptionCount, random) {
   const eligible = (Array.isArray(difficultyCatalog) ? difficultyCatalog : [])
-    .filter((entry) => selectableCount >= (entry.sprite_count + 1));
+    .filter((entry) => (
+      entry.sprite_count >= (answerOptionCount - 1)
+      && selectableCount >= Math.max(entry.sprite_count + 1, answerOptionCount)
+    ));
   if (eligible.length === 0) {
     throw new Error('Memory template requires at least one grid configuration with enough Pokemon to hide one answer.');
   }
@@ -558,6 +561,9 @@ function getTemplateSelectionConfig(template) {
       .filter((value) => Number.isFinite(value) && value > 0)
     : [];
   const difficultyCatalog = buildDifficultyCatalog(template);
+  const optionGridRows = ensurePositiveInteger(template?.layout?.option_grid?.rows, 2);
+  const optionGridColumns = ensurePositiveInteger(template?.layout?.option_grid?.columns, 2);
+  const answerOptionCount = optionGridRows * optionGridColumns;
   return {
     generationScope: configuredGenerationScope.length > 0 ? configuredGenerationScope : null,
     disallowedPairs: new Set(
@@ -566,8 +572,9 @@ function getTemplateSelectionConfig(template) {
     ),
     minCatalogMatches: Number(typePairPolicy.min_catalog_matches || 5),
     difficultyCatalog,
+    answerOptionCount,
     minimumSelectableCount: difficultyCatalog.reduce((minimum, entry) => (
-      Math.min(minimum, entry.sprite_count + 1)
+      Math.min(minimum, Math.max(entry.sprite_count + 1, answerOptionCount))
     ), Number.POSITIVE_INFINITY),
   };
 }
@@ -689,9 +696,10 @@ function buildQuestionState({
   displayedSubjectAssetsById,
   hiddenSubjectAsset,
   questionText,
+  optionCount,
   random,
 }) {
-  const distractors = sampleArray(displayedSubjects, 3, random);
+  const distractors = sampleArray(displayedSubjects, optionCount - 1, random);
   const optionEntries = shuffle([
     ...distractors.map((subject) => ({
       subject,
@@ -705,7 +713,7 @@ function buildQuestionState({
       is_correct: true,
       appeared_on_screen: false,
     },
-  ], random).slice(0, 4);
+  ], random).slice(0, optionCount);
 
   const options = optionEntries.map((entry, index) => ({
     label: ANSWER_LABELS[index] || String(index + 1),
@@ -780,7 +788,12 @@ export async function planPokemonMemoryChallenge({
     selectedPair.selectable_matches,
     random,
   );
-  const selectedDifficulty = chooseDifficulty(config.difficultyCatalog, selectableSubjects.length, random);
+  const selectedDifficulty = chooseDifficulty(
+    config.difficultyCatalog,
+    selectableSubjects.length,
+    config.answerOptionCount,
+    random,
+  );
   const displaySubjects = selectableSubjects.slice(0, selectedDifficulty.sprite_count);
   const hiddenSubject = selectableSubjects[selectedDifficulty.sprite_count];
 
@@ -809,6 +822,7 @@ export async function planPokemonMemoryChallenge({
     displayedSubjectAssetsById,
     hiddenSubjectAsset,
     questionText: questionTextBundle.question,
+    optionCount: config.answerOptionCount,
     random,
   });
   const selectedBackgroundPath = selectBackgroundForTypePair(

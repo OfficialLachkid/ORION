@@ -132,11 +132,16 @@ test('landscape adapters clone source templates and preserve native renderer con
     'services/product-video-agent/config/templates/pokemon/memory.v1.json',
   ));
   assert.equal(memory.layout.rounds.reveal_hold_seconds, 2.1);
+  assert.deepEqual(Object.keys(memory.layout.sprite_grid.difficulty_levels), ['hard']);
+  assert.equal(memory.layout.sprite_grid.difficulty_levels.hard.rows, 3);
+  assert.equal(memory.layout.sprite_grid.difficulty_levels.hard.columns, 3);
   assert.equal(memory.layout.sprite_grid.column_gap_px, 90);
   assert.equal(memory.layout.sprite_grid.sprite_scale_multiplier, 1.32);
-  assert.equal(memory.layout.option_grid.column_gap_px, 160);
-  assert.equal(memory.layout.option_grid.sprite_scale_multiplier, 1.4);
-  assert.equal(memory.layout.option_grid.stage_bounds_px.width, 1760);
+  assert.equal(memory.layout.option_grid.rows, 3);
+  assert.equal(memory.layout.option_grid.columns, 3);
+  assert.equal(memory.layout.option_grid.column_gap_px, 200);
+  assert.equal(memory.layout.option_grid.sprite_scale_multiplier, 1.1);
+  assert.equal(memory.layout.option_grid.stage_bounds_px.width, 1420);
   assert.equal(memory.layout.timer.hp_bar_title_gap_px, 50);
 });
 
