@@ -28,7 +28,7 @@ const TYPE_THEMED_BACKGROUND_PRIORITY = Object.freeze([
   'fire',
   'water',
 ]);
-const ANSWER_LABELS = Object.freeze(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']);
+const ANSWER_LABELS = Object.freeze(['A', 'B', 'C', 'D']);
 const HP_BAR_TIMER_DISPLAY_MODE = 'hp_bar_depletion';
 const NUMERIC_TIMER_DISPLAY_MODE = 'numeric_with_small_ring';
 const mirroredSpriteAvailabilityCache = new Map();

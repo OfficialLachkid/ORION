@@ -111,16 +111,22 @@
       "hook_font_size": 124,
       "question_y": 190,
       "question_font_size": 88,
-      "option_label_gap_px": 10,
-      "option_label_font_size": 60,
+      "option_label_gap_px": 16,
+      "option_label_font_size": 78,
       "reveal_y": 220,
       "reveal_font_size": 110
     },
     "sprite_grid": {
       "difficulty_weights": {
+        "medium": 1,
         "hard": 1
       },
       "difficulty_levels": {
+        "medium": {
+          "sprite_count": 6,
+          "rows": 2,
+          "columns": 3
+        },
         "hard": {
           "sprite_count": 9,
           "rows": 3,
@@ -147,18 +153,18 @@
       }
     },
     "option_grid": {
-      "rows": 3,
-      "columns": 3,
-      "item_size_px": 236,
-      "min_item_size_px": 176,
-      "column_gap_px": 82,
-      "row_gap_px": 120,
-      "sprite_scale_multiplier": 1.12,
+      "rows": 2,
+      "columns": 2,
+      "item_size_px": 320,
+      "min_item_size_px": 250,
+      "column_gap_px": 150,
+      "row_gap_px": 220,
+      "sprite_scale_multiplier": 1.72,
       "stage_bounds_px": {
-        "left": 96,
+        "left": 100,
         "top": 280,
-        "width": 888,
-        "height": 1000
+        "width": 880,
+        "height": 860
       }
     },
     "reveal_sprite": {

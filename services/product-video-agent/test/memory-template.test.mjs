@@ -49,26 +49,20 @@ const template = {
       question_y: 560,
       question_font_size: 88,
       option_label_gap_px: 10,
-      option_label_font_size: 60,
+      option_label_font_size: 78,
       reveal_y: 220,
       reveal_font_size: 110,
     },
     sprite_grid: {
       difficulty_levels: {
-        hard: {
-          sprite_count: 9,
-          rows: 3,
+        medium: {
+          sprite_count: 6,
+          rows: 2,
           columns: 3,
-          stage_bounds_px: {
-            left: 96,
-            top: 360,
-            width: 888,
-            height: 930,
-          },
         },
       },
       difficulty_weights: {
-        hard: 1,
+        medium: 1,
       },
       item_size_px: 236,
       min_item_size_px: 176,
@@ -84,18 +78,18 @@ const template = {
       },
     },
     option_grid: {
-      rows: 3,
-      columns: 3,
-      item_size_px: 236,
-      min_item_size_px: 176,
-      column_gap_px: 82,
-      row_gap_px: 120,
+      rows: 2,
+      columns: 2,
+      item_size_px: 196,
+      min_item_size_px: 168,
+      column_gap_px: 120,
+      row_gap_px: 220,
       sprite_scale_multiplier: 1.12,
       stage_bounds_px: {
-        left: 96,
+        left: 160,
         top: 280,
-        width: 888,
-        height: 1000,
+        width: 760,
+        height: 860,
       },
     },
     reveal_sprite: {
@@ -218,7 +212,7 @@ const assetInventory = {
   transitions: [],
 };
 
-test('generic planner dispatch builds a 3x3 memory round with one off-screen answer and nine options', async () => {
+test('generic planner dispatch builds a 3x2 memory round with one off-screen answer and four options', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -230,11 +224,11 @@ test('generic planner dispatch builds a 3x3 memory round with one off-screen ans
   assert.equal(plan.template_id, 'pokemon.memory.v1');
   assert.equal(plan.template_key, 'memory');
   assert.deepEqual(plan.selection.type_pair, ['fire', 'ice']);
-  assert.equal(plan.selection.display_subject_count, 9);
+  assert.equal(plan.selection.display_subject_count, 6);
   assert.equal(plan.selection.grid.columns, 3);
-  assert.equal(plan.selection.grid.rows, 3);
+  assert.equal(plan.selection.grid.rows, 2);
   assert.equal(plan.question.mode, 'which_not_on_screen');
-  assert.equal(plan.question.option_count, 9);
+  assert.equal(plan.question.option_count, 4);
   assert.equal(plan.question.options.filter((option) => option.is_correct).length, 1);
   assert.equal(
     plan.selection.selected_subjects.some((subject) => subject.name === plan.question.hidden_subject.name),
@@ -242,7 +236,7 @@ test('generic planner dispatch builds a 3x3 memory round with one off-screen ans
   );
   assert.equal(
     plan.question.options.filter((option) => option.appeared_on_screen).length,
-    8,
+    3,
   );
   assert.equal(plan.question.options.every((option) => option.render_sprite_path), true);
   assert.equal(plan.assets.reveal_pokemon.name, plan.question.hidden_subject.name);
@@ -378,11 +372,11 @@ test('memory render plan keeps memorize, question, countdown, and reveal timing 
   assert.equal(renderPlan.audio_cues.intro_disappear_start_seconds, 2.48);
   assert.equal(renderPlan.timer_layout.mode, 'hp_bar_depletion');
   assert.deepEqual(renderPlan.countdown_numbers, []);
-  assert.equal(renderPlan.grid.cells.length, 9);
-  assert.equal(renderPlan.option_grid.rows, 3);
-  assert.equal(renderPlan.option_grid.columns, 3);
-  assert.equal(renderPlan.option_grid.cells.length, 9);
-  assert.equal(renderPlan.question.options.length, 9);
+  assert.equal(renderPlan.grid.cells.length, 6);
+  assert.equal(renderPlan.option_grid.rows, 2);
+  assert.equal(renderPlan.option_grid.columns, 2);
+  assert.equal(renderPlan.option_grid.cells.length, 4);
+  assert.equal(renderPlan.question.options.length, 4);
   assert.equal(renderPlan.output_path, '/tmp/memory.mp4');
 
   const titleAnchoredTemplate = structuredClone(template);
@@ -420,8 +414,8 @@ test('memory visual inputs include study sprites, question-option sprites, and t
     'intro-disappear',
     'intro-pokeball',
   ]);
-  assert.equal(inputs.filter((input) => input.role.startsWith('display-sprite-')).length, 9);
-  assert.equal(inputs.filter((input) => input.role.startsWith('option-sprite-')).length, 9);
+  assert.equal(inputs.filter((input) => input.role.startsWith('display-sprite-')).length, 6);
+  assert.equal(inputs.filter((input) => input.role.startsWith('option-sprite-')).length, 4);
   assert.equal(inputs.some((input) => input.role === 'reveal-sprite'), true);
   assert.deepEqual(inputs[1].args, [
     '-stream_loop',
@@ -433,7 +427,7 @@ test('memory visual inputs include study sprites, question-option sprites, and t
   ]);
 });
 
-test('memory drawtext artifacts place nine multiple-choice labels under a 3x3 sprite grid', async () => {
+test('memory drawtext artifacts place four multiple-choice labels under a 2x2 sprite grid', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -448,13 +442,12 @@ test('memory drawtext artifacts place nine multiple-choice labels under a 3x3 sp
   });
 
   const artifacts = buildTextArtifacts({ renderPlan, template });
-  assert.equal(artifacts.options.lines.length, 9);
+  assert.equal(artifacts.options.lines.length, 4);
   assert.equal(artifacts.options.lines[0].text, 'A');
-  assert.equal(artifacts.options.lines[8].text, 'I');
   assert.match(artifacts.options.lines[0].x_expression, /-text_w\/2$/u);
   assert.notEqual(artifacts.options.lines[1].y - artifacts.options.lines[0].y, 116);
   assert.ok(
-    artifacts.options.lines[8].y + artifacts.options.lines[8].font_size
+    artifacts.options.lines[3].y + artifacts.options.lines[3].font_size
       < renderPlan.timer_layout.y,
   );
   assert.ok(artifacts.hook.segments.at(-1).start_seconds <= 1.72);
@@ -493,7 +486,7 @@ test('memory audio filter schedules hook, question, countdown ticks, and reveal 
   assert.match(script, /\[6:a\]adelay=2480\|2480,volume=0\.5\[disappear\]/u);
 });
 
-test('memory visual filter shows 3x3 intro and option sprites, the hidden answer reveal, and uses a greenscreen HP bar countdown', async () => {
+test('memory visual filter shows 3x2 intro sprites, four option sprites, the hidden answer reveal, and uses a greenscreen HP bar countdown', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -520,9 +513,9 @@ test('memory visual filter shows 3x3 intro and option sprites, the hidden answer
       grassPlatform: 2,
       introDisappear: 3,
       introPokeball: 4,
-      sprites: [5, 6, 7, 8, 9, 10, 11, 12, 13],
-      optionSprites: [14, 15, 16, 17, 18, 19, 20, 21, 22],
-      revealSprite: 23,
+      sprites: [5, 6, 7, 8, 9, 10],
+      optionSprites: [11, 12, 13, 14],
+      revealSprite: 15,
     },
     '/tmp/font.ttf',
     {
@@ -547,9 +540,9 @@ test('memory visual filter shows 3x3 intro and option sprites, the hidden answer
   assert.match(visualFilter.script, /\[2:v\]fps=30,scale=.*:-1,format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
   assert.match(visualFilter.script, /\[4:v\]fps=30,trim=duration=[0-9.]+,setpts=PTS-STARTPTS\+[0-9.]+\/TB,scale=/u);
   assert.match(visualFilter.script, /\[5:v\]fps=30,scale=w='.*0\.08/u);
-  assert.match(visualFilter.script, /\[14:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1/u);
-  assert.match(visualFilter.script, /\[(14|16|17|18|19|20|21|22):v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
-  assert.match(visualFilter.script, /\[23:v\]fps=30,scale=/u);
+  assert.match(visualFilter.script, /\[11:v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1/u);
+  assert.match(visualFilter.script, /\[(11|13|14):v\]fps=30,scale=.*format=rgba,setsar=1,fade=t=in:st=[0-9.]+:d=0\.2:alpha=1,fade=t=out:st=6\.35:d=0\.3:alpha=1/u);
+  assert.match(visualFilter.script, /\[15:v\]fps=30,scale=/u);
   assert.match(visualFilter.script, /memoption0platform/u);
   assert.match(visualFilter.script, /mempokeball0/u);
   assert.match(visualFilter.script, /memdisappear0/u);
