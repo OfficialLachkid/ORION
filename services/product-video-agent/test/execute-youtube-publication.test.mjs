@@ -789,6 +789,49 @@ test('related-video refresh is a no-op when the channel does not have related_vi
   assert.equal(store.updateCalls.length, 0, 'no metadata should be written for disabled channels');
 });
 
+test('related-video refresh excludes long-form publications even when stale policy enables them', async () => {
+  const longFormPublication = {
+    id: 'pub-long-form',
+    video_id: 'video-long-form',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-long-form',
+    metadata: {
+      workflow_state: 'published',
+      content_surface: 'youtube_watch',
+      publication_policy: { related_video_enabled: true },
+      related_video: {
+        selection_status: 'planned',
+        target_external_id: 'yt-short-target',
+        apply_status: 'login_required',
+      },
+    },
+  };
+  const store = createStore(longFormPublication);
+  let applyImplCalled = false;
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [longFormPublication],
+    includePublished: true,
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-10-05T12:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async () => {
+      applyImplCalled = true;
+      return { capability: { status: 'configured' }, applyStatus: 'applied' };
+    },
+  });
+
+  assert.deepEqual(refreshed.results, []);
+  assert.equal(applyImplCalled, false, 'Studio automation must never run for long-form publications');
+  assert.equal(store.updateCalls.length, 0, 'long-form related-video metadata must remain untouched');
+});
+
 test('related-video --include-published preserves the existing target on backfill', async () => {
   // Regression guard for the operator's explicit ask: once we backfill a
   // published video, we must NOT re-pick the target and change what viewers

@@ -18,6 +18,7 @@ import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '.
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import { syncPublicationReviewMessage } from '../../src/publication-review-message-sync.mjs';
+import { isRelatedVideoEligiblePublication } from '../../src/related-video/eligibility.mjs';
 import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs';
 import { applyYoutubeRelatedVideoSelection } from '../../src/related-video/youtube-studio-automation.mjs';
 import { syncYoutubeAutoCommentState } from '../../src/youtube-auto-comments.mjs';
@@ -339,6 +340,7 @@ function buildRelatedVideoRuntimePatch(publication, applyResult, asOf) {
 }
 
 function isRelatedVideoRefreshCandidate(publication, { includePublished = false } = {}) {
+  if (!isRelatedVideoEligiblePublication(publication)) return false;
   const state = normalizeWorkflowState(publication);
   if (['preview_uploaded', 'preview_approved', 'scheduled'].includes(state)) return true;
   if (includePublished && state === 'published') return true;
