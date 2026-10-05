@@ -315,12 +315,11 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
         height: 560,
       }),
       difficulty_levels: Object.freeze({
-        easy: Object.freeze({ sprite_count: 4, rows: 1, columns: 4 }),
         medium: Object.freeze({ sprite_count: 6, rows: 2, columns: 3 }),
         hard: Object.freeze({
           sprite_count: 9,
-          rows: 2,
-          columns: 5,
+          rows: 3,
+          columns: 3,
           stage_bounds_px: Object.freeze({
             left: 150,
             top: 230,
