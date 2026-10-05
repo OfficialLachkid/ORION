@@ -50,6 +50,17 @@ export const LANDSCAPE_POKEMON_TEMPLATE_SPECS = Object.freeze([
   }),
 ]);
 
+export const LANDSCAPE_POKEMON_REVEAL_TEMPLATE_SPECS = Object.freeze([
+  Object.freeze({
+    key: 'progressive-reveal',
+    path: 'services/product-video-agent/config/templates/pokemon/progressive-reveal.v1.json',
+  }),
+  Object.freeze({
+    key: 'pixelated-reveal',
+    path: 'services/product-video-agent/config/templates/pokemon/pixelated-reveal.v1.json',
+  }),
+]);
+
 const COMMON_LAYOUT = Object.freeze({
   foreground_y_offset_px: 0,
   background: Object.freeze({
@@ -78,6 +89,26 @@ const FOUR_OPTION_GRID = Object.freeze({
     top: 330,
     width: 1620,
     height: 430,
+  }),
+});
+
+const PROGRESSIVE_REVEAL_LAYOUT_OVERRIDE = Object.freeze({
+  text: Object.freeze({
+    hook_y: 54,
+    hook_font_size: 72,
+    counter_x: 52,
+    counter_y: 38,
+    counter_font_size: 42,
+    answer_y: 925,
+    answer_font_size: 68,
+  }),
+  reveal_box: Object.freeze({
+    center_x: 960,
+    center_y: 545,
+    width_px: 700,
+    height_px: 700,
+    sprite_size_px: 610,
+    shadow_offset_px: 14,
   }),
 });
 
@@ -181,23 +212,13 @@ const TEMPLATE_LAYOUT_OVERRIDES = Object.freeze({
       bar_horizontal_inset_px: 190,
     }),
   }),
-  'progressive-reveal': Object.freeze({
+  'progressive-reveal': PROGRESSIVE_REVEAL_LAYOUT_OVERRIDE,
+  'pixelated-reveal': Object.freeze({
+    ...PROGRESSIVE_REVEAL_LAYOUT_OVERRIDE,
     text: Object.freeze({
-      hook_y: 54,
-      hook_font_size: 72,
-      counter_x: 52,
-      counter_y: 38,
-      counter_font_size: 42,
-      answer_y: 925,
-      answer_font_size: 68,
-    }),
-    reveal_box: Object.freeze({
-      center_x: 960,
-      center_y: 545,
-      width_px: 700,
-      height_px: 700,
-      sprite_size_px: 610,
-      shadow_offset_px: 14,
+      ...PROGRESSIVE_REVEAL_LAYOUT_OVERRIDE.text,
+      difficulty_label_y: 94,
+      difficulty_label_font_size: 46,
     }),
   }),
   'stat-clash': Object.freeze({
