@@ -35,6 +35,7 @@ test('asset layout helpers build deterministic Pokemon asset paths', () => {
   assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'know-your-shiny' }), /Previews\/Know Your Shiny$/u);
   assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'stat-clash' }), /Previews\/Stat Clash$/u);
   assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'build-your-team' }), /Previews\/Build Your Team$/u);
+  assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'long-reveal-challenge' }), /Previews\/Reveal Challenge Long Form$/u);
   assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'tournament' }), /Previews\/Tournament$/u);
   assert.match(buildPokeQuizzPreviewDirectory({ template_key: 'showdown' }), /Previews\/Tournament$/u);
   assert.match(buildPokeQuizzPreviewDirectory({ template_id: 'pokemon.dual-type-reveal.v1' }), /Previews\/Dual Type Reveal$/u);
