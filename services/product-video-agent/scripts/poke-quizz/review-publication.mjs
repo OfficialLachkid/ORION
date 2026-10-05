@@ -181,6 +181,26 @@ async function persistPlannedRelatedVideo({
   channelProfile,
   asOf,
 }) {
+  const contentSurface = String(publication?.metadata?.content_surface || 'youtube_shorts').trim();
+  const relatedVideoEnabled = publication?.metadata?.publication_policy?.related_video_enabled !== false;
+  if (contentSurface !== 'youtube_shorts' || !relatedVideoEnabled) {
+    const updatedPublication = await store.updatePublication(publication.id, {
+      metadata: mergePublicationMetadata(publication, {
+        related_video: {
+          selector_version: 'related-video-v1',
+          selection_status: 'disabled',
+          disabled_reason: contentSurface !== 'youtube_shorts'
+            ? 'content_surface_not_youtube_shorts'
+            : 'publication_policy_disabled',
+          selected_at: new Date(asOf).toISOString(),
+          target_publication_id: '',
+          target_external_id: '',
+          target_url: '',
+        },
+      }),
+    });
+    return updatedPublication || publication;
+  }
   const publications = await store.fetchPublicationsByChannel({
     platform: channelProfile.platform,
     accountKey: channelProfile.account_key,

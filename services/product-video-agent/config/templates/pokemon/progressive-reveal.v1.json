@@ -118,6 +118,7 @@
       "particles",
       "radial",
       "checkerboard",
+      "micro_checkerboard",
       "diagonal",
       "cascade",
       "pathfinding",
@@ -168,6 +169,9 @@
       },
       "checkerboard": {
         "cell_size_px": 56
+      },
+      "micro_checkerboard": {
+        "cell_size_px": 24
       },
       "diagonal": {
         "wave_amplitude": 0.055,

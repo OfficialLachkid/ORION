@@ -27,7 +27,8 @@ function buildTimerLayout(template, gridLayout = null, timerDisplayMode = '') {
     const width = Math.min(canvasWidth - 48, Math.max(680, Math.min(gridWidth + 32, canvasWidth - 48)));
     const height = Math.min(timerZoneHeight, maxHeight);
     const left = Math.max(24, Math.floor((canvasWidth - width) / 2));
-    const top = timerZoneTop + Math.max(0, Math.floor((timerZoneHeight - height) / 2));
+    const yOffset = ensureNumber(template?.layout?.timer?.hp_bar_y_offset_px, 0);
+    const top = timerZoneTop + Math.max(0, Math.floor((timerZoneHeight - height) / 2)) + yOffset;
     return {
       mode: HP_BAR_TIMER_DISPLAY_MODE,
       x: left,

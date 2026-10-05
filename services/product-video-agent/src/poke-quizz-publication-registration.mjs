@@ -50,15 +50,27 @@ export async function resolvePokeQuizzRenderFileDetails(renderPath, override = n
   };
 }
 
+function resolveContentFormat(plan = {}) {
+  return String(plan?.content_format || '').trim() === 'long_form' ? 'long_form' : 'short_form';
+}
+
+function resolveContentSurface(plan = {}) {
+  return String(plan?.content_surface || '').trim() === 'youtube_watch'
+    ? 'youtube_watch'
+    : 'youtube_shorts';
+}
+
 function buildWorkflowDocument(plan, registrationTime, renderPath, metadata) {
+  const contentFormat = resolveContentFormat(plan);
+  const contentSurface = resolveContentSurface(plan);
   return {
     schema_version: plan?.schema_version || 'poke-quizz-plan-v1',
     run_at: registrationTime,
     mode: 'local_render',
     adapter: 'poke-quizz-local-publication',
     content_strategy: {
-      primary: 'short_form',
-      platforms: ['youtube_shorts'],
+      primary: contentFormat,
+      platforms: [contentSurface],
     },
     gates: {
       render_ready: true,
@@ -95,6 +107,8 @@ export async function createPokeQuizzPublicationRegistration({
   const publicationId = buildPublicationId(videoId, channelProfile);
   const selectedSubjects = plan?.selection?.selected_subjects || [];
   const typePair = plan?.selection?.type_pair || [];
+  const contentFormat = resolveContentFormat(plan);
+  const contentSurface = resolveContentSurface(plan);
 
   const videoRow = {
     id: videoId,
@@ -108,6 +122,8 @@ export async function createPokeQuizzPublicationRegistration({
     source_data: {
       schema_version: plan?.schema_version || 'poke-quizz-plan-v1',
       seed: plan?.seed || '',
+      content_format: contentFormat,
+      content_surface: contentSurface,
       type_pair: typePair,
       background_path: plan?.assets?.background?.selected_path || null,
       reveal_methods: Array.isArray(plan?.selection?.reveal_methods)
@@ -137,6 +153,10 @@ export async function createPokeQuizzPublicationRegistration({
       file_size_bytes: fileDetails.sizeBytes,
       modified_at: fileDetails.modifiedAt,
       template_id: plan?.template_id || '',
+      content_format: contentFormat,
+      content_surface: contentSurface,
+      media_profile: plan?.media_profile || null,
+      duration_seconds: Number(plan?.timing?.total_duration_seconds || 0) || null,
       seed: plan?.seed || '',
       type_pair: typePair,
       reveal_methods: Array.isArray(plan?.selection?.reveal_methods)
@@ -187,6 +207,9 @@ export async function createPokeQuizzPublicationRegistration({
     published_at: null,
     metadata: {
       workflow_state: 'preview_upload_pending',
+      content_format: contentFormat,
+      content_surface: contentSurface,
+      publication_policy: plan?.publication_policy || {},
       type_pair: typePair,
       background_path: plan?.assets?.background?.selected_path || null,
       seed: plan?.seed || '',

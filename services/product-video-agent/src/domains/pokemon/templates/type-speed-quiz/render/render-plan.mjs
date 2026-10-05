@@ -9,6 +9,7 @@ function buildTimerLayout(template) {
   const centerY = ensureNumber(template?.layout?.timer?.center_y, 470);
   const size = ensureNumber(template?.layout?.timer?.size_px, 268);
   return {
+    enabled: template?.layout?.timer?.enabled !== false,
     x: roundTime(centerX - (size / 2)),
     y: roundTime(centerY - (size / 2)),
     width: size,
@@ -73,16 +74,17 @@ function buildTextLayout(template) {
   };
 }
 
-function buildTypeBadgeLayout(template, iconCount, textLayout) {
+function buildTypeBadgeLayout(template, iconCount, textLayout, canvasWidth) {
   const centerY = ensureNumber(template?.layout?.type_badges?.center_y, 1322);
   const iconSize = ensureNumber(template?.layout?.type_badges?.icon_size_px, 208);
   const spacing = ensureNumber(template?.layout?.type_badges?.spacing_px, 42);
   const labelAnchorRatio = ensureNumber(template?.layout?.type_badges?.label_anchor_ratio, 0.24);
   const labelGap = ensureNumber(template?.layout?.type_badges?.label_gap_px, 28);
   const labelY = roundTime(centerY + (iconSize * labelAnchorRatio) + labelGap);
+  const canvasCenterX = ensureNumber(canvasWidth, 1080) / 2;
   if (iconCount <= 1) {
     return [{
-      center_x: 540,
+      center_x: canvasCenterX,
       center_y: centerY,
       size_px: iconSize,
       label_y: labelY,
@@ -91,7 +93,7 @@ function buildTypeBadgeLayout(template, iconCount, textLayout) {
   }
 
   const totalWidth = (iconSize * iconCount) + (spacing * (iconCount - 1));
-  const left = 540 - (totalWidth / 2) + (iconSize / 2);
+  const left = canvasCenterX - (totalWidth / 2) + (iconSize / 2);
   return Array.from({ length: iconCount }, (_, index) => ({
     center_x: roundTime(left + (index * (iconSize + spacing))),
     center_y: centerY,
@@ -173,7 +175,12 @@ export function buildPokeQuizzRenderPlan({ plan, template, outputPath }) {
         scene_duration_seconds: sceneDurationSeconds,
       },
       countdown_numbers: [],
-      type_badge_layout: buildTypeBadgeLayout(template, round.type_icons?.length || 0, textLayout),
+      type_badge_layout: buildTypeBadgeLayout(
+        template,
+        round.type_icons?.length || 0,
+        textLayout,
+        template?.canvas?.width,
+      ),
     };
     renderedRound.countdown_numbers = buildCountdownMoments(
       renderedRound,

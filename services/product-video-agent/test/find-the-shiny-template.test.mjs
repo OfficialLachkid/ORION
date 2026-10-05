@@ -386,6 +386,15 @@ test('generic render-plan dispatch keeps the shiny grid centered and reveal timi
   assert.equal(renderPlan.timer_layout.mode, 'hp_bar_depletion');
   assert.equal(renderPlan.timer_layout.y < renderPlan.grid.stage_bounds_px.top, true);
   assert.equal(renderPlan.output_path, '/tmp/find-the-shiny.mp4');
+
+  const raisedHpBarTemplate = structuredClone(template);
+  raisedHpBarTemplate.layout.timer.hp_bar_y_offset_px = -150;
+  const raisedHpBarRenderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template: raisedHpBarTemplate,
+    outputPath: '/tmp/find-the-shiny-raised-hp-bar.mp4',
+  });
+  assert.equal(raisedHpBarRenderPlan.timer_layout.y, renderPlan.timer_layout.y - 150);
 });
 
 test('find-the-shiny hook text uses the configured lower position and larger font size', async () => {

@@ -82,6 +82,18 @@ test('shared filter injection adds one dynamic layered watermark after the hook'
   assert.equal((transformed.script.match(/\[vout\]/gu) || []).length, 1);
 });
 
+test('long-form sections can disable the shared watermark without changing the filter', () => {
+  const visualFilter = { script: '[0:v]format=yuv420p[vout]\n' };
+  assert.equal(applyChannelWatermarkToVisualFilter(visualFilter, {
+    plan: { presentation: { watermark_enabled: false } },
+    renderPlan: { canvas: { height: 1080 } },
+  }), visualFilter);
+  assert.equal(applyChannelWatermarkToVisualFilter(visualFilter, {
+    plan: { publication_policy: { watermark_enabled: false } },
+    renderPlan: { canvas: { height: 1080 } },
+  }), visualFilter);
+});
+
 test('every current Pokemon renderer writes its filter through the shared watermark helper', async () => {
   for (const templateKey of SHARED_RENDER_EXECUTORS) {
     const sourcePath = resolve(

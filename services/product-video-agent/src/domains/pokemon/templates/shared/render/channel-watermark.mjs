@@ -74,6 +74,9 @@ export function applyChannelWatermarkToVisualFilter(visualFilter = {}, {
   fontPath = '',
 } = {}) {
   const script = String(visualFilter?.script || '');
+  const watermarkEnabled = plan?.presentation?.watermark_enabled !== false
+    && plan?.publication_policy?.watermark_enabled !== false;
+  if (!watermarkEnabled) return visualFilter;
   if (!script || script.includes('[channelwatermarkbase]')) return visualFilter;
 
   const outputMarker = '[vout]';
