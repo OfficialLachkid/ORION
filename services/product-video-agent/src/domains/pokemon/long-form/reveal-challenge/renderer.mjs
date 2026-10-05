@@ -113,11 +113,21 @@ export function buildRevealChallengeProgramFilter(sectionCount, {
     if (transition?.input_ref != null && template?.layout?.round_transition?.enabled !== false) {
       transitionSchedule.push({ ...transition, cut_seconds: programDurationSeconds });
     }
-    filters.push(`[${index}:v]setpts=PTS-STARTPTS[v${index}]`);
-    filters.push(`[${index}:a]aresample=48000,asetpts=PTS-STARTPTS[a${index}]`);
+    const sectionDuration = Math.max(0.1, ensureNumber(sections[index]?.duration_seconds, 0.1));
+    // Concat cuts on the real stream duration. Rendered reveal sections can
+    // end a few frames early when their last audio or animation cue finishes,
+    // which previously moved the background cut ahead of the transition's
+    // planned midpoint. Pad and trim both streams to the declared section
+    // duration so the Pokeball reaches full coverage exactly on the cut.
+    filters.push(
+      `[${index}:v]fps=${fps},tpad=stop_mode=clone:stop_duration=${roundTime(sectionDuration)},trim=duration=${roundTime(sectionDuration)},setpts=PTS-STARTPTS[v${index}]`,
+    );
+    filters.push(
+      `[${index}:a]aresample=48000,apad,atrim=duration=${roundTime(sectionDuration)},asetpts=PTS-STARTPTS[a${index}]`,
+    );
     programInputs.push(`[v${index}][a${index}]`);
     programDurationSeconds = roundTime(
-      programDurationSeconds + Math.max(0, Number(sections[index]?.duration_seconds || 0)),
+      programDurationSeconds + sectionDuration,
     );
   }
 

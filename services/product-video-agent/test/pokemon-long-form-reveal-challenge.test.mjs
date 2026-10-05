@@ -220,6 +220,26 @@ test('reveal plan and assembly filter retain watch-page semantics and gameplay a
   assert.match(filter, /\[2:a\].*adelay=0\|0\[music0\]/u);
   assert.match(filter, /\[gameaudio\]\[musicbed\]amix=inputs=2/u);
   assert.match(filter, /\[3:v\].*rotate=/u);
+  assert.match(
+    filter,
+    /\[0:v\]fps=30,tpad=stop_mode=clone:stop_duration=30,trim=duration=30,setpts=PTS-STARTPTS\[v0\]/u,
+  );
+  assert.match(
+    filter,
+    /\[0:a\]aresample=48000,apad,atrim=duration=30,asetpts=PTS-STARTPTS\[a0\]/u,
+  );
+  assert.match(
+    filter,
+    /\[3:v\].*setpts=PTS\+4\.425\/TB\[transitionball0\]/u,
+  );
+  assert.match(
+    filter,
+    /overlay=.*enable='between\(t,4\.425,5\.575\)'/u,
+  );
+  assert.match(
+    filter,
+    /\[4:v\].*setpts=PTS\+34\.425\/TB\[transitionball1\]/u,
+  );
 });
 
 test('reveal sections can seek through one continuous rendered background group', () => {
