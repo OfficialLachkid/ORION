@@ -10,7 +10,7 @@ import {
 test('buildGuildSlashCommands returns the supported slash commands', () => {
   const commands = buildGuildSlashCommands();
 
-  assert.equal(commands.length, 12);
+  assert.equal(commands.length, 13);
   assert.deepEqual(commands.map((command) => command.name), [
     'commands',
     'help',
@@ -22,6 +22,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'analytics',
     'leadgen',
     'leadgen-sweep',
+    'lead-qualification',
     'create-developer-issue',
     'email-draft',
   ]);
@@ -41,10 +42,14 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     .map((choice) => choice.value)
     .sort();
   assert.deepEqual(generateTemplateChoiceValues, [
+    'build-your-team',
+    'cry-match',
     'dual-type-reveal',
     'find-the-shiny',
     'know-your-shiny',
     'memory',
+    'pixelated-reveal',
+    'progressive-reveal',
     'stat-clash',
     'tournament',
     'type-speed-quiz',
@@ -56,6 +61,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'dexguess-youtube',
     'poke-guess-youtube',
     'poke-quizz-youtube',
+    'proffmon-youtube',
     'trivamon-youtube',
   ]);
   const analyticsCommand = commands.find((command) => command.name === 'analytics');
@@ -67,6 +73,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'dexguess-youtube',
     'poke-guess-youtube',
     'poke-quizz-youtube',
+    'proffmon-youtube',
     'trivamon-youtube',
   ]);
 });
@@ -500,6 +507,62 @@ test('normalizeSupportedSlashCommandInteraction converts a stat-clash slash comm
   });
 
   assert.equal(message?.content, 'generate video template: stat-clash channel: poke-quizz-youtube');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts a cry-match slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-cry-match-1',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-cry-match-1',
+    data: {
+      name: 'generate-video',
+      options: [
+        { name: 'template', value: 'cry-match' },
+        { name: 'channel', value: 'poke-quizz-youtube' },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'generate video template: cry-match channel: poke-quizz-youtube');
+  assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction converts a build-your-team slash command into a routed message', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-build-your-team-1',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-build-your-team-1',
+    data: {
+      name: 'generate-video',
+      options: [
+        { name: 'template', value: 'build-your-team' },
+        { name: 'channel', value: 'poke-quizz-youtube' },
+      ],
+    },
+    member: {
+      nick: 'Valen',
+      roles: ['role-1'],
+      user: {
+        id: 'user-1',
+        username: 'vbjservices',
+        global_name: 'VBJ Services',
+      },
+    },
+  });
+
+  assert.equal(message?.content, 'generate video template: build-your-team channel: poke-quizz-youtube');
   assert.equal(message?.channelKey, 'commands');
 });
 

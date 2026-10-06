@@ -27,6 +27,7 @@ const channelProfile = {
 
 const publication = {
   external_id: 'yt-target',
+  platform: 'youtube_shorts',
 };
 
 const relatedVideo = {
@@ -63,6 +64,26 @@ test('related-video capability probe refuses channels without a configured profi
 
   assert.equal(capability.status, 'profile_not_configured');
   assert.equal(capability.canAttempt, false);
+});
+
+test('related-video capability probe refuses long-form publications on a Shorts channel', () => {
+  const capability = probeYoutubeRelatedVideoCapability({
+    channelProfile,
+    publication: {
+      external_id: 'yt-long-form',
+      platform: 'youtube_shorts',
+      metadata: {
+        content_surface: 'youtube_watch',
+        publication_policy: { related_video_enabled: true },
+      },
+    },
+    relatedVideo,
+    fsExists: () => true,
+  });
+
+  assert.equal(capability.status, 'unsupported_content_surface');
+  assert.equal(capability.canAttempt, false);
+  assert.match(capability.reason, /only supports YouTube Shorts/u);
 });
 
 test('related-video apply short-circuits cleanly when automation is disabled', async () => {
@@ -121,7 +142,7 @@ test('buildStudioEditUrl returns empty string for a missing external id', () => 
 // wraps the returned value as {"result": "<JSON string>"}; older releases
 // returned the flat object directly. Both must map to the correct applyStatus.
 
-const applyPublication = { external_id: 'yt-current' };
+const applyPublication = { external_id: 'yt-current', platform: 'youtube_shorts' };
 const applyRelatedVideo = {
   selection_status: 'planned',
   target_title: 'Guess the Pokemon: Bug / Ground',

@@ -1,4 +1,5 @@
-import { createGmailDraft, sendGmailDraft } from '../../gmail/src/send.mjs';
+import { createGmailDraft, getGmailDraft, sendGmailDraft, updateGmailDraft } from '../../gmail/src/send.mjs';
+import { ensureOptOutFooter, hasOptOutFooter } from '../../gmail/src/opt-out-footer.mjs';
 
 function normalizeWhitespace(value) {
   return String(value || '').replace(/\s+/gu, ' ').trim();
@@ -120,6 +121,40 @@ async function executeGmailSendDraftAction(task, config, options = {}) {
   }
 
   const to = task?.gmail_draft?.to || task?.email_request?.to || 'recipient';
+
+  // Opt-out footer guard (mandatory pre-send step, 2026-09-28): read the
+  // current Gmail draft body and, if it's missing an opt-out phrase,
+  // patch the draft with an appended PS line before firing drafts.send.
+  // Covers the ~400 drafts that were composed BEFORE the qualifier
+  // prompt started emitting the PS line, plus any operator hand-edit
+  // that accidentally stripped it. Read failures are non-fatal — we
+  // still proceed with the send so a transient Gmail hiccup doesn't
+  // block outreach; the send call's own error handling stays intact.
+  try {
+    const current = await getGmailDraft(config.env, draftId, options);
+    if (current && !hasOptOutFooter(current.bodyText)) {
+      const patched = ensureOptOutFooter(current.bodyText);
+      await updateGmailDraft(config.env, draftId, {
+        to: current.to,
+        subject: current.subject,
+        bodyText: patched,
+        fromEmail: current.fromEmail,
+        fromName: current.fromName,
+        replyTo: current.replyTo,
+        inReplyTo: current.inReplyTo,
+        references: current.references,
+        threadId: current.threadId,
+      }, options);
+    }
+  } catch (guardError) {
+    // Best-effort guard. If the read/update fails (transient, permission,
+    // 404 already-gone), fall through to the send call — the existing
+    // already-sent detection still handles the 404 case, and a stale
+    // network blip shouldn't block a legitimate approval.
+    process.stderr.write(
+      `[gmail-executor] Opt-out footer guard skipped for draft ${draftId}: ${guardError?.message || guardError}\n`,
+    );
+  }
 
   let result;
   try {

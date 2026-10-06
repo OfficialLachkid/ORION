@@ -3,6 +3,7 @@ const MID_PUBLICATION_WINDOW_HOURS = 14 * 24;
 const DEFAULT_LEADERBOARD_SIZE = 5;
 const DEFAULT_INSIGHT_GROUP_LIMIT = 3;
 const DEFAULT_HOOK_PREVIEW_LENGTH = 64;
+const TEN_THOUSAND_VIEWS = 10_000;
 
 function toDateOrNull(value) {
   const normalized = String(value || '').trim();
@@ -15,6 +16,9 @@ function toDateOrNull(value) {
 }
 
 function toFiniteNumber(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -401,6 +405,34 @@ function buildPublicationEntry(publication = {}, snapshot = null, videoRow = nul
   };
 }
 
+function resolveFirstThresholdCrossing(snapshots = [], threshold = TEN_THOUSAND_VIEWS) {
+  const orderedSnapshots = toArray(snapshots)
+    .map((snapshot) => ({
+      snapshot,
+      capturedAt: toDateOrNull(snapshot?.captured_at),
+      views: pickMetric(snapshot?.metrics || {}, ['views']),
+    }))
+    .filter((entry) => entry.capturedAt && entry.views !== null)
+    .sort((left, right) => left.capturedAt - right.capturedAt);
+
+  let previousViews = null;
+  for (const entry of orderedSnapshots) {
+    if (entry.views >= threshold && (previousViews === null || previousViews < threshold)) {
+      return entry;
+    }
+    previousViews = entry.views;
+  }
+  return null;
+}
+
+function resolveLatestCaptureTimestamp(entries = []) {
+  return toArray(entries)
+    .map((entry) => toDateOrNull(entry?.captured_at))
+    .filter(Boolean)
+    .sort((left, right) => right - left)[0]
+    ?.toISOString() || null;
+}
+
 export function resolveVideoAnalyticsCadenceHours(publicationAgeHours) {
   const ageHours = Number(publicationAgeHours);
   if (!Number.isFinite(ageHours) || ageHours < 0) {
@@ -473,6 +505,7 @@ export function buildChannelVideoAnalyticsDigest({
   channelProfile,
   publications = [],
   latestSnapshotsByPublicationId = new Map(),
+  analyticsSnapshotsByPublicationId = new Map(),
   videoRowsById = new Map(),
   asOf = new Date().toISOString(),
   windowDays = 7,
@@ -505,6 +538,29 @@ export function buildChannelVideoAnalyticsDigest({
   const recentWinners = takeEntries(entriesWithViews, compareViewsDescending, leaderboardSize);
   const recentLosers = takeEntries(entriesWithViews, compareViewsAscending, leaderboardSize);
   const recentUploads = takeEntries(entries, comparePublishedDescending, leaderboardSize);
+  const allTimeEntriesByPublicationId = new Map(
+    allTimeEntries.map((entry) => [entry.publication_id, entry]),
+  );
+  const thresholdCrossings = publishedPublications
+    .map((publication) => {
+      const publicationId = String(publication?.id || '').trim();
+      const crossing = resolveFirstThresholdCrossing(
+        analyticsSnapshotsByPublicationId.get(publicationId) || [],
+      );
+      if (!crossing || !isWithinWindow(crossing.capturedAt, windowStart, endDate)) {
+        return null;
+      }
+      return {
+        ...buildPerformanceSummary(allTimeEntriesByPublicationId.get(publicationId) || {}),
+        crossed_at: crossing.capturedAt.toISOString(),
+        observed_views: crossing.views,
+      };
+    })
+    .filter(Boolean);
+  const retentionMetricsAvailableCount = entries.filter((entry) => (
+    entry.avg_view_duration_sec !== null || entry.avg_view_percentage !== null
+  )).length;
+  const videosWithSnapshotsCount = entries.filter((entry) => entry.captured_at).length;
 
   const digest = {
     channel_id: String(channelProfile?.id || '').trim(),
@@ -516,10 +572,14 @@ export function buildChannelVideoAnalyticsDigest({
     window_start: windowStart.toISOString(),
     window_end: endDate.toISOString(),
     new_videos_count: windowPublications.length,
-    videos_with_snapshots_count: entries.filter((entry) => entry.captured_at).length,
+    videos_with_snapshots_count: videosWithSnapshotsCount,
     all_time_publications_count: publishedPublications.length,
     all_time_videos_with_snapshots_count: allTimeEntries.filter((entry) => entry.captured_at).length,
-    crossed_10k_views_count: entries.filter((entry) => (entry.views || 0) >= 10_000).length,
+    crossed_10k_views_count: thresholdCrossings.length,
+    crossed_10k_views: thresholdCrossings,
+    retention_metrics_available_count: retentionMetricsAvailableCount,
+    retention_metrics_pending_count: Math.max(0, videosWithSnapshotsCount - retentionMetricsAvailableCount),
+    latest_snapshot_at: resolveLatestCaptureTimestamp(allTimeEntries),
     median_views: calculateMedian(entries.map((entry) => entry.views)),
     median_avg_view_duration_sec: calculateMedian(entries.map((entry) => entry.avg_view_duration_sec)),
     median_avg_view_percentage: calculateMedian(entries.map((entry) => entry.avg_view_percentage)),
@@ -558,6 +618,7 @@ export function buildVideoAnalyticsOverviewDigest({
     total_videos_with_snapshots_count: sumNumbers(digests.map((digest) => digest.videos_with_snapshots_count)),
     total_all_time_videos_with_snapshots_count: sumNumbers(digests.map((digest) => digest.all_time_videos_with_snapshots_count)),
     total_crossed_10k_views_count: sumNumbers(digests.map((digest) => digest.crossed_10k_views_count)),
+    total_retention_metrics_pending_count: sumNumbers(digests.map((digest) => digest.retention_metrics_pending_count)),
     total_views: sumNumbers(digests.map((digest) => digest.total_views)),
     total_all_time_views: sumNumbers(digests.map((digest) => digest.all_time_views)),
     channels: digests.map((digest) => ({
@@ -569,6 +630,8 @@ export function buildVideoAnalyticsOverviewDigest({
       median_views: digest.median_views,
       median_avg_view_duration_sec: digest.median_avg_view_duration_sec,
       median_avg_view_percentage: digest.median_avg_view_percentage,
+      retention_metrics_pending_count: digest.retention_metrics_pending_count,
+      latest_snapshot_at: digest.latest_snapshot_at,
       insufficient_data: digest.insufficient_data,
     })),
   };

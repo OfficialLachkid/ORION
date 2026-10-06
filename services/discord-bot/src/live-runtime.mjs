@@ -502,6 +502,74 @@ export function isLeadOutreachSendComplete(execution, task) {
   );
 }
 
+// Last-resort fallback for the delete-on-send cleanup. If both
+// `task.approval_origin` AND `trackedTaskMessages` came up empty — e.g.
+// bot restarted after the approval card was posted, or the interaction
+// payload didn't carry message.id (modal-submit path) — fetch the
+// configured outreach-approval threads' recent messages and find the
+// one whose content/embeds reference this taskId. Returns a target
+// shaped like the other two sources so the delete loop treats it the
+// same.
+//
+// Paginates backward through each thread via the `before` cursor until
+// a match is found or `maxDepth` messages have been scanned. The
+// default depth (1000 messages = 10 pages at Discord's 100-per-page
+// cap) covers the realistic worst case — a batch-send of hundreds of
+// drafts clicked days later in a chatty parent channel — without
+// burning through rate limits on the common case where the card is on
+// the first page.
+//
+// Pure function: `fetchChannelMessages(threadId, limit, { beforeId })`
+// is injected for test coverage; production wires it to the Discord
+// Get Channel Messages endpoint.
+export async function searchApprovalMessageInThreads({
+  taskId,
+  threadIds = [],
+  fetchChannelMessages,
+  pageLimit = 100,
+  maxDepth = 1000,
+}) {
+  const normalizedTaskId = String(taskId || '').trim();
+  if (!normalizedTaskId || typeof fetchChannelMessages !== 'function') return null;
+  for (const threadId of threadIds) {
+    const normalizedThread = String(threadId || '').trim();
+    if (!normalizedThread) continue;
+    let scanned = 0;
+    let beforeId = null;
+    while (scanned < maxDepth) {
+      let messages = [];
+      try {
+        messages = await fetchChannelMessages(normalizedThread, pageLimit, { beforeId });
+      } catch {
+        break; // skip this thread on error, try the next
+      }
+      if (!Array.isArray(messages) || messages.length === 0) break;
+      for (const message of messages) {
+        const content = String(message?.content || '');
+        // Embeds carry title/description/fields where the taskId usually
+        // shows up on these approval cards; stringify the whole array to
+        // cover title, description, field names and field values at once.
+        const embedBlob = Array.isArray(message?.embeds) ? JSON.stringify(message.embeds) : '';
+        if (content.includes(normalizedTaskId) || embedBlob.includes(normalizedTaskId)) {
+          return {
+            channelId: normalizedThread,
+            messageId: String(message?.id || ''),
+            key: null,
+            source: 'thread_search',
+          };
+        }
+      }
+      scanned += messages.length;
+      if (messages.length < pageLimit) break; // reached the end of the channel
+      // Discord returns messages newest-first; the oldest in this page
+      // becomes the `before` cursor for the next page.
+      beforeId = String(messages[messages.length - 1]?.id || '');
+      if (!beforeId) break;
+    }
+  }
+  return null;
+}
+
 function buildTaskDispatchBlockedEvents(task) {
   const reason = 'No executor is mapped for this request yet.';
   const publicationId = String(
@@ -1850,6 +1918,48 @@ export async function runLiveDiscordBot(config) {
     // silently no-op'd for the far more common batch-script case.
     if (isLeadOutreachSendComplete(execution, task)) {
       const targets = collectApprovalDeleteTargets({ task, trackedMap: trackedTaskMessages });
+      // Diagnostics (2026-10-03): operator reported the original approval
+      // card stays in waiting-approval / followups / outreach-agent after a
+      // successful send. Record the outcome of each delete attempt — and
+      // the no-targets case explicitly — so the next click produces data
+      // in ops-events.jsonl to root-cause from.
+      //
+      // Fallback: when the two primary sources (approval_origin from the
+      // interaction + trackedTaskMessages for bot-posted cards) both come
+      // up empty — e.g. bot restarted between card-posted and click, or
+      // reject-with-feedback modal where interaction.message.id is absent —
+      // scan the configured outreach approval threads for a message whose
+      // content/embeds reference this task_id. Not elegant but reliable;
+      // runs ONLY when the normal sources failed.
+      if (targets.length === 0) {
+        const fallbackTarget = await searchApprovalMessageInThreads({
+          taskId: task.task_id,
+          threadIds: [
+            config?.channelIds?.outreachWaitingApproval,
+            config?.channelIds?.outreachFollowupsAgent,
+            config?.channelIds?.outreachAgent,
+          ],
+          fetchChannelMessages: async (threadId, limit, { beforeId } = {}) => sendDiscordApiRequest(
+            token,
+            `/channels/${threadId}/messages?limit=${limit}${beforeId ? `&before=${beforeId}` : ''}`,
+            undefined,
+            'GET',
+          ),
+        });
+        if (fallbackTarget?.messageId) {
+          targets.push(fallbackTarget);
+        } else {
+          safeRecordMetric('approval_message_delete_result', {
+            taskId: task.task_id,
+            leadId: task.lead_id || '',
+            sourceType: task.source_type || '',
+            outcome: 'skipped_no_targets',
+            approvalOriginChannelId: task.approval_origin?.channelId || '',
+            approvalOriginMessageId: task.approval_origin?.messageId || '',
+            trackedMapSize: trackedTaskMessages.size,
+          });
+        }
+      }
       for (const target of targets) {
         try {
           await sendDiscordApiRequest(
@@ -1859,14 +1969,33 @@ export async function runLiveDiscordBot(config) {
             'DELETE',
           );
           if (target.key) trackedTaskMessages.delete(target.key);
+          safeRecordMetric('approval_message_delete_result', {
+            taskId: task.task_id,
+            leadId: task.lead_id || '',
+            source: target.source || '',
+            channelId: target.channelId,
+            messageId: target.messageId,
+            outcome: 'deleted',
+          });
         } catch (error) {
           // 404 is fine — message may have already been cleaned up manually
           // or by a prior handler. Any other error just logs, we don't want
           // a Discord blip to fail the send report (the email is already
           // gone by this point).
+          const errorMessage = error?.message || String(error);
+          const is404 = /\(404\)/u.test(errorMessage);
           process.stderr.write(
-            `Could not delete resolved approval message ${target.messageId} for outreach send ${task.task_id}: ${error.message}\n`,
+            `Could not delete resolved approval message ${target.messageId} for outreach send ${task.task_id}: ${errorMessage}\n`,
           );
+          safeRecordMetric('approval_message_delete_result', {
+            taskId: task.task_id,
+            leadId: task.lead_id || '',
+            source: target.source || '',
+            channelId: target.channelId,
+            messageId: target.messageId,
+            outcome: is404 ? 'already_gone_404' : 'failed_api',
+            error: errorMessage,
+          });
         }
       }
     }

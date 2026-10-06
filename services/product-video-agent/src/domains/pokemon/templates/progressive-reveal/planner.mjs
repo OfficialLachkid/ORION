@@ -1,0 +1,659 @@
+import { access } from 'node:fs/promises';
+import {
+  buildPokeQuizzAnimatedSpritePath,
+  buildPokeQuizzPreviewDirectory,
+  POKE_QUIZZ_ASSET_LAYOUT,
+} from '../../../../poke-quizz-asset-layout.mjs';
+import { scanPokeQuizzAssetInventory, selectSeededFile } from '../../../../poke-quizz-asset-inventory.mjs';
+import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selection-state.mjs';
+import {
+  calculateOpaqueRevealCompletionProgress,
+  normalizeProgressiveRevealMethod,
+  PROGRESSIVE_REVEAL_METHODS,
+} from '../shared/render/progressive-reveal-engine.mjs';
+import { resolvePokemonCryPath } from '../shared/pokemon-cry-resolver.mjs';
+import { loadOpaqueSpriteAnalysis } from './render/sprite-alpha-analysis.mjs';
+
+const DEFAULT_ROUND_COUNT = 3;
+const DEFAULT_REVEAL_DURATION_SECONDS = 8.5;
+const DEFAULT_ANSWER_HOLD_SECONDS = 1.45;
+const DEFAULT_HOOK_HOLD_SECONDS = 1.55;
+const DEFAULT_PRE_REVEAL_HOLD_SECONDS = 0.18;
+const DEFAULT_TRANSITION_DURATION_SECONDS = 0.42;
+const DEFAULT_FINAL_HOLD_SECONDS = 0.6;
+const DEFAULT_TARGET_OPAQUE_FRACTION = 0.6;
+const spriteAvailabilityCache = new Map();
+
+function hashSeed(input) {
+  let hash = 2166136261;
+  for (const character of String(input || 'progressive-reveal')) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function createPrng(seedInput) {
+  let seed = hashSeed(seedInput) || 1;
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6D2B79F5) | 0;
+    let result = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    result ^= result + Math.imul(result ^ (result >>> 7), 61 | result);
+    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function ensurePositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function ensurePositiveNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function clamp(value, minimum, maximum) {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function resolveChannelIdentity(channelProfile = {}) {
+  const name = String(channelProfile?.name || 'Poke Quizz').trim() || 'Poke Quizz';
+  const configuredHandle = String(
+    channelProfile?.metadata?.youtube_handle
+      || channelProfile?.metadata?.channel_handle
+      || '',
+  ).trim();
+  const fallbackHandle = `@${name.replace(/[^a-z0-9]+/giu, '')}`;
+  const handle = configuredHandle
+    ? `@${configuredHandle.replace(/^@+/u, '')}`
+    : fallbackHandle;
+  return {
+    id: String(channelProfile?.id || 'poke-quizz').trim() || 'poke-quizz',
+    name,
+    account_key: String(channelProfile?.account_key || 'poke-quizz-youtube').trim()
+      || 'poke-quizz-youtube',
+    niche: String(channelProfile?.niche || 'pokemon_quiz').trim() || 'pokemon_quiz',
+    content_lane: 'pokemon_progressive_reveal',
+    handle,
+  };
+}
+
+function shuffle(values, random) {
+  const items = [...values];
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+  }
+  return items;
+}
+
+function normalizeTextOptions(primaryText, variants = []) {
+  return [...new Set([
+    String(primaryText || '').trim(),
+    ...(Array.isArray(variants) ? variants : []).map((value) => String(value || '').trim()),
+  ].filter(Boolean))];
+}
+
+function pickSeededText(primaryText, variants, random) {
+  const options = normalizeTextOptions(primaryText, variants);
+  return options[Math.floor(random() * options.length)] || options[0] || '';
+}
+
+function normalizeSlug(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/gu, '-');
+}
+
+function selectEligibleSubjects(pokedexRows = [], generationScope = []) {
+  const allowedGenerations = new Set(
+    (Array.isArray(generationScope) ? generationScope : [])
+      .map((value) => Number.parseInt(String(value), 10))
+      .filter(Number.isFinite),
+  );
+  return (Array.isArray(pokedexRows) ? pokedexRows : [])
+    .filter((row) => row && typeof row === 'object')
+    .filter((row) => Number.parseInt(String(row.national_dex_number || 0), 10) > 0)
+    .filter((row) => String(row.name || '').trim())
+    .filter((row) => String(row.sprite_path || '').trim())
+    .filter((row) => !String(row.sprite_path || '').toLowerCase().includes('/placeholder/'))
+    .filter((row) => allowedGenerations.size === 0 || allowedGenerations.has(Number(row.generation)));
+}
+
+function collapseDuplicateSubjects(subjects = []) {
+  const unique = new Map();
+  for (const subject of subjects) {
+    const key = normalizeSlug(subject.slug || subject.name || subject.id);
+    if (key && !unique.has(key)) {
+      unique.set(key, subject);
+    }
+  }
+  return [...unique.values()];
+}
+
+async function canAccessPath(filePath) {
+  const normalizedPath = String(filePath || '').trim();
+  if (!normalizedPath) return false;
+  if (!spriteAvailabilityCache.has(normalizedPath)) {
+    spriteAvailabilityCache.set(
+      normalizedPath,
+      access(normalizedPath).then(() => true).catch(() => false),
+    );
+  }
+  return spriteAvailabilityCache.get(normalizedPath);
+}
+
+async function resolveRenderSpritePath(subject) {
+  const animatedPath = String(subject?.animated_sprite_path || '').trim();
+  if (animatedPath && await canAccessPath(animatedPath)) {
+    return animatedPath;
+  }
+  return String(subject?.sprite_path || '').trim();
+}
+
+async function resolveAnimatedGifPath(subject) {
+  const candidates = [
+    String(subject?.animated_sprite_path || '').trim(),
+    String(buildPokeQuizzAnimatedSpritePath(subject) || '').trim(),
+  ].filter((candidate, index, values) => (
+    candidate
+    && /\.gif$/iu.test(candidate)
+    && values.indexOf(candidate) === index
+  ));
+  for (const candidate of candidates) {
+    if (await canAccessPath(candidate)) {
+      return candidate;
+    }
+  }
+  return '';
+}
+
+function selectBackground(backgrounds, random, selectionState) {
+  const candidates = (Array.isArray(backgrounds) ? backgrounds : [])
+    .map((value) => String(value || '').trim())
+    .filter(Boolean)
+    .filter((value) => !value.toLowerCase().includes('/archived-backgrounds/'));
+  const previous = String(selectionState?.last_background_path || '').trim().toLowerCase();
+  const freshCandidates = candidates.filter((value) => value.toLowerCase() !== previous);
+  const pool = freshCandidates.length > 0 ? freshCandidates : candidates;
+  return pool[Math.floor(random() * pool.length)] || null;
+}
+
+function resolveBackgroundPool(inventory = {}) {
+  const pixelBackgrounds = Array.isArray(inventory.pixel_backgrounds)
+    ? inventory.pixel_backgrounds
+    : [];
+  if (pixelBackgrounds.length > 0) {
+    return {
+      backgrounds: pixelBackgrounds,
+      expected_directory: POKE_QUIZZ_ASSET_LAYOUT.pixelBackgrounds,
+    };
+  }
+  return {
+    backgrounds: inventory.backgrounds || [],
+    expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+  };
+}
+
+export function resolveProgressiveRevealMethods(template) {
+  const configured = Array.isArray(template?.reveal?.methods)
+    ? template.reveal.methods
+    : PROGRESSIVE_REVEAL_METHODS;
+  const methods = [...new Set(configured
+    .map((value) => normalizeProgressiveRevealMethod(value, ''))
+    .filter((value) => PROGRESSIVE_REVEAL_METHODS.includes(value)))];
+  return methods.length > 0 ? methods : [...PROGRESSIVE_REVEAL_METHODS];
+}
+
+function selectRoundMethods(template, roundCount, random, previousVideoMethods = []) {
+  const methods = resolveProgressiveRevealMethods(template);
+  const mode = String(template?.reveal?.mode || 'random_per_round').trim().toLowerCase();
+  const fixedMethod = normalizeProgressiveRevealMethod(template?.reveal?.method, methods[0]);
+  if (mode === 'fixed' || mode === 'fixed_video' || mode === 'one_per_video') {
+    return Array.from({ length: roundCount }, () => fixedMethod);
+  }
+  const previousMethods = new Set(previousVideoMethods
+    .map((method) => normalizeProgressiveRevealMethod(method, ''))
+    .filter(Boolean));
+  const freshMethods = methods.filter((method) => !previousMethods.has(method));
+  const selected = [];
+  for (let index = 0; index < roundCount; index += 1) {
+    const freshPool = freshMethods.filter((method) => !selected.includes(method));
+    const uniquePool = methods.filter((method) => !selected.includes(method));
+    const pool = freshPool.length > 0
+      ? freshPool
+      : uniquePool.length > 0
+        ? uniquePool
+        : methods.filter((method) => method !== selected.at(-1));
+    selected.push(pool[Math.floor(random() * pool.length)] || methods[0]);
+  }
+  return selected;
+}
+
+function resolveMethodConfig(template, method, random) {
+  const baseConfig = template?.reveal?.method_config?.[method] || {};
+  if (method === 'wipe') {
+    const directions = Array.isArray(template?.reveal?.directions)
+      ? template.reveal.directions
+      : ['top_to_bottom', 'bottom_to_top', 'left_to_right', 'right_to_left'];
+    return {
+      ...baseConfig,
+      direction: directions[Math.floor(random() * directions.length)] || 'top_to_bottom',
+    };
+  }
+  if (method === 'strips') {
+    const orientations = Array.isArray(baseConfig.orientations)
+      ? baseConfig.orientations
+      : ['horizontal', 'vertical'];
+    return {
+      ...baseConfig,
+      orientation: orientations[Math.floor(random() * orientations.length)] || 'horizontal',
+    };
+  }
+  if (method === 'diagonal' || method === 'diagonal_particles') {
+    const directions = Array.isArray(baseConfig.directions)
+      ? baseConfig.directions
+      : [
+        'top_left_to_bottom_right',
+        'bottom_right_to_top_left',
+        'top_right_to_bottom_left',
+        'bottom_left_to_top_right',
+      ];
+    return {
+      ...baseConfig,
+      direction: directions[Math.floor(random() * directions.length)] || 'top_left_to_bottom_right',
+    };
+  }
+  return { ...baseConfig };
+}
+
+function resolveRoundDifficulty(template, roundIndex, fallbackDifficulty) {
+  const configuredRounds = Array.isArray(template?.reveal?.difficulty_rounds)
+    ? template.reveal.difficulty_rounds
+    : [];
+  const configured = configuredRounds[roundIndex];
+  if (!configured || typeof configured !== 'object' || Array.isArray(configured)) {
+    return {
+      id: fallbackDifficulty,
+      label: '',
+      color: '',
+      answerClarityProgress: null,
+    };
+  }
+  const id = String(configured.id || fallbackDifficulty).trim().toLowerCase() || fallbackDifficulty;
+  const configuredClarity = Number(configured.answer_clarity_progress);
+  return {
+    id,
+    label: String(configured.label || id).trim().toUpperCase(),
+    color: String(configured.color || '').trim(),
+    answerClarityProgress: Number.isFinite(configuredClarity) && configuredClarity > 0
+      ? clamp(configuredClarity, 0.05, 1)
+      : null,
+  };
+}
+
+function buildSubjectRecord(subject, renderSpritePath, cryPath) {
+  return {
+    pokedex_id: subject.id,
+    national_dex_number: subject.national_dex_number,
+    slug: subject.slug,
+    name: subject.name,
+    generation: subject.generation,
+    region: subject.region,
+    types: subject.types,
+    sprite_path: subject.sprite_path,
+    animated_sprite_path: subject.animated_sprite_path || null,
+    render_sprite_path: renderSpritePath,
+    sprite_source_url: subject.sprite_source_url || null,
+    cry_path: cryPath,
+    cry_source_url: subject.cry_source_url || null,
+  };
+}
+
+function buildTimeline(hookText, rounds) {
+  const timeline = [];
+  if (hookText) {
+    timeline.push({
+      phase: 'hook',
+      duration_seconds: rounds[0]?.scene_lead_seconds ?? DEFAULT_HOOK_HOLD_SECONDS,
+      spoken_text: hookText,
+      on_screen_text: hookText,
+    });
+  }
+  for (const round of rounds) {
+    timeline.push({
+      phase: `round_${round.round_number}_progressive_reveal`,
+      duration_seconds: round.reveal_duration_seconds,
+      spoken_text: '',
+      on_screen_text: '',
+    });
+    timeline.push({
+      phase: `round_${round.round_number}_answer`,
+      duration_seconds: round.answer_hold_seconds,
+      spoken_text: '',
+      on_screen_text: round.answer_text,
+    });
+  }
+  return timeline;
+}
+
+export async function planPokemonProgressiveRevealChallenge({
+  template,
+  pokedexRows,
+  seed = 'progressive-reveal',
+  assetInventory = null,
+  selectionState = null,
+  channelProfile = null,
+}) {
+  const random = createPrng(seed);
+  const inventory = assetInventory || await scanPokeQuizzAssetInventory();
+  const normalizedSelectionState = normalizePokeQuizzSelectionState(selectionState);
+  const roundCount = ensurePositiveInteger(template?.selection_rules?.round_count, DEFAULT_ROUND_COUNT);
+  const eligibleSubjects = collapseDuplicateSubjects(selectEligibleSubjects(
+    pokedexRows,
+    template?.selection_rules?.generation_scope,
+  ));
+  if (eligibleSubjects.length < roundCount) {
+    throw new Error(`Progressive Reveal requires at least ${roundCount} Pokemon with local sprites, found ${eligibleSubjects.length}.`);
+  }
+
+  const selectedMethods = selectRoundMethods(
+    template,
+    roundCount,
+    random,
+    normalizedSelectionState.last_reveal_methods || [],
+  );
+  const animatedGifPathBySubjectKey = new Map();
+  if (selectedMethods.includes('pixelated')) {
+    await Promise.all(eligibleSubjects.map(async (subject) => {
+      const subjectKey = normalizeSlug(subject.id || subject.slug || subject.name);
+      const gifPath = await resolveAnimatedGifPath(subject);
+      if (subjectKey && gifPath) {
+        animatedGifPathBySubjectKey.set(subjectKey, gifPath);
+      }
+    }));
+    if (animatedGifPathBySubjectKey.size === 0) {
+      const previousMethods = new Set(
+        (normalizedSelectionState.last_reveal_methods || [])
+          .map((method) => normalizeProgressiveRevealMethod(method, ''))
+          .filter(Boolean),
+      );
+      selectedMethods.forEach((method, index) => {
+        if (method !== 'pixelated') return;
+        const alreadySelected = new Set(selectedMethods.filter((_, otherIndex) => otherIndex !== index));
+        const availableMethods = resolveProgressiveRevealMethods(template).filter((candidate) => (
+          candidate !== 'pixelated' && !alreadySelected.has(candidate)
+        ));
+        const freshMethods = availableMethods.filter((candidate) => !previousMethods.has(candidate));
+        const pool = freshMethods.length > 0 ? freshMethods : availableMethods;
+        if (pool.length > 0) {
+          selectedMethods[index] = pool[Math.floor(random() * pool.length)];
+        }
+      });
+    }
+  }
+  const usedSubjectKeys = new Set();
+  const selectedSubjects = selectedMethods.map((method, index) => {
+    const requiresAnimatedGif = method === 'pixelated';
+    const eligiblePool = eligibleSubjects.filter((subject) => {
+      const subjectKey = normalizeSlug(subject.id || subject.slug || subject.name);
+      return subjectKey
+        && !usedSubjectKeys.has(subjectKey)
+        && (!requiresAnimatedGif || animatedGifPathBySubjectKey.has(subjectKey));
+    });
+    const subject = shuffle(eligiblePool, random)[0] || null;
+    if (!subject) {
+      const requirement = requiresAnimatedGif ? ' with an accessible animated GIF' : '';
+      throw new Error(`Progressive Reveal round ${index + 1} requires a unique Pokemon${requirement}.`);
+    }
+    usedSubjectKeys.add(normalizeSlug(subject.id || subject.slug || subject.name));
+    return subject;
+  });
+  const renderedSubjects = await Promise.all(selectedSubjects.map(async (subject, index) => {
+    const subjectKey = normalizeSlug(subject.id || subject.slug || subject.name);
+    const [renderSpritePath, cryPath] = await Promise.all([
+      selectedMethods[index] === 'pixelated'
+        ? Promise.resolve(animatedGifPathBySubjectKey.get(subjectKey) || '')
+        : resolveRenderSpritePath(subject),
+      resolvePokemonCryPath(subject),
+    ]);
+    return buildSubjectRecord(subject, renderSpritePath, cryPath);
+  }));
+  const backgroundPool = resolveBackgroundPool(inventory);
+  const selectedBackgroundPath = selectBackground(
+    backgroundPool.backgrounds,
+    random,
+    normalizedSelectionState,
+  );
+  const hookText = pickSeededText(
+    template?.question_contract?.hook_text,
+    template?.question_contract?.hook_text_variants,
+    random,
+  );
+  const answerTemplate = pickSeededText(
+    template?.question_contract?.answer_text,
+    template?.question_contract?.answer_text_variants,
+    random,
+  ) || '{pokemon}';
+  const fullRevealDurationSeconds = ensurePositiveNumber(
+    template?.reveal?.duration_seconds,
+    DEFAULT_REVEAL_DURATION_SECONDS,
+  );
+  const targetOpaqueFraction = clamp(
+    ensurePositiveNumber(
+      template?.reveal?.target_opaque_fraction,
+      DEFAULT_TARGET_OPAQUE_FRACTION,
+    ),
+    0.05,
+    0.98,
+  );
+  const answerHoldSeconds = ensurePositiveNumber(
+    template?.layout?.rounds?.answer_hold_seconds,
+    DEFAULT_ANSWER_HOLD_SECONDS,
+  );
+  const hookHoldSeconds = ensurePositiveNumber(
+    template?.layout?.rounds?.hook_hold_seconds,
+    DEFAULT_HOOK_HOLD_SECONDS,
+  );
+  const preRevealHoldSeconds = ensurePositiveNumber(
+    template?.layout?.rounds?.pre_reveal_hold_seconds,
+    DEFAULT_PRE_REVEAL_HOLD_SECONDS,
+  );
+  const transitionDurationSeconds = ensurePositiveNumber(
+    template?.layout?.rounds?.transition_duration_seconds,
+    DEFAULT_TRANSITION_DURATION_SECONDS,
+  );
+  const finalHoldSeconds = ensurePositiveNumber(
+    template?.layout?.rounds?.final_hold_seconds,
+    DEFAULT_FINAL_HOLD_SECONDS,
+  );
+  const showFirstRevealImmediately = template?.layout?.rounds?.show_first_reveal_immediately === true;
+  const difficulty = String(template?.reveal?.difficulty || 'normal').trim().toLowerCase() || 'normal';
+
+  const roundBlueprints = renderedSubjects.map((subject, index) => {
+    const method = selectedMethods[index];
+    const revealSeed = `${seed}:round-${index + 1}:${subject.pokedex_id || subject.name}:${method}`;
+    const roundDifficulty = resolveRoundDifficulty(template, index, difficulty);
+    const revealConfig = {
+      ...resolveMethodConfig(template, method, random),
+      ...(roundDifficulty.answerClarityProgress === null
+        ? {}
+        : { answer_clarity_progress: roundDifficulty.answerClarityProgress }),
+    };
+    return { subject, index, method, revealSeed, revealConfig, roundDifficulty };
+  });
+  const rounds = await Promise.all(roundBlueprints.map(async ({
+    subject,
+    index,
+    method,
+    revealSeed,
+    revealConfig,
+    roundDifficulty,
+  }) => {
+    const configuredPixelProgressSpeed = Number(revealConfig?.progress_speed_multiplier);
+    const configuredPixelAnswerClarity = Number(revealConfig?.answer_clarity_progress);
+    const pixelProgressSpeed = method === 'pixelated'
+      && Number.isFinite(configuredPixelProgressSpeed)
+      && configuredPixelProgressSpeed > 0
+      ? clamp(configuredPixelProgressSpeed, 0.01, 1)
+      : 1;
+    const pixelAnswerClarity = method === 'pixelated'
+      && Number.isFinite(configuredPixelAnswerClarity)
+      && configuredPixelAnswerClarity > 0
+      ? clamp(configuredPixelAnswerClarity, 0.05, 1)
+      : 1;
+    const renderSpriteAnalysis = await loadOpaqueSpriteAnalysis(
+      subject.render_sprite_path || subject.sprite_path,
+      template,
+    );
+    let coverage;
+    if (method === 'pixelated') {
+      coverage = {
+        completionProgress: pixelAnswerClarity,
+        estimatedOpaqueFraction: pixelAnswerClarity,
+        maskProgressAtCompletion: pixelAnswerClarity,
+        progressScale: 1,
+        sampledOpaquePixelCount: 0,
+      };
+    } else {
+      let opaqueAnalysis = renderSpriteAnalysis;
+      if (
+        opaqueAnalysis.opaquePoints.length === 0
+        && subject.sprite_path
+        && subject.render_sprite_path !== subject.sprite_path
+      ) {
+        opaqueAnalysis = await loadOpaqueSpriteAnalysis(subject.sprite_path, template);
+      }
+      coverage = calculateOpaqueRevealCompletionProgress({
+        method,
+        seed: revealSeed,
+        config: {
+          ...revealConfig,
+          reveal_duration_seconds: fullRevealDurationSeconds,
+        },
+        opaquePoints: opaqueAnalysis.opaquePoints,
+        width: opaqueAnalysis.width,
+        height: opaqueAnalysis.height,
+        targetOpaqueFraction,
+      });
+    }
+    const baseRevealDurationSeconds = fullRevealDurationSeconds * targetOpaqueFraction;
+    const revealDurationSeconds = Number((method === 'pixelated'
+      ? baseRevealDurationSeconds * (pixelAnswerClarity / pixelProgressSpeed)
+      : baseRevealDurationSeconds
+    ).toFixed(3));
+    return {
+      round_number: index + 1,
+      round_label: `${index + 1}/${roundCount}`,
+      subject: {
+        ...subject,
+        sprite_crop: renderSpriteAnalysis.spriteCrop,
+      },
+      scene_lead_seconds: index === 0
+        ? (showFirstRevealImmediately ? 0 : hookHoldSeconds)
+        : transitionDurationSeconds + preRevealHoldSeconds,
+      reveal_duration_seconds: revealDurationSeconds,
+      full_reveal_duration_seconds: fullRevealDurationSeconds,
+      reveal_completion_progress: coverage.completionProgress,
+      reveal_target_opaque_fraction: targetOpaqueFraction,
+      reveal_estimated_opaque_fraction: coverage.estimatedOpaqueFraction,
+      reveal_mask_progress_at_completion: coverage.maskProgressAtCompletion,
+      reveal_sampled_opaque_pixel_count: coverage.sampledOpaquePixelCount,
+      answer_hold_seconds: answerHoldSeconds,
+      transition_duration_seconds: index === roundCount - 1 ? 0 : transitionDurationSeconds,
+      final_hold_seconds: index === roundCount - 1 ? finalHoldSeconds : 0,
+      reveal_method: method,
+      reveal_seed: revealSeed,
+      reveal_difficulty: roundDifficulty.id,
+      difficulty_id: roundDifficulty.id,
+      difficulty_label: roundDifficulty.label,
+      difficulty_color: roundDifficulty.color,
+      reveal_config: {
+        ...revealConfig,
+        progress_scale: coverage.progressScale,
+      },
+      answer_text: answerTemplate.replaceAll('{pokemon}', subject.name),
+    };
+  }));
+
+  const revealSoundPath = inventory?.sound_effects?.ding
+    || inventory?.sound_effects?.reveal
+    || inventory?.sound_effects?.timer_end
+    || null;
+  const requiredAssetGaps = [];
+  if (!selectedBackgroundPath) requiredAssetGaps.push('background_missing');
+  if (template?.audio?.sound_effects?.reveal?.enabled !== false && !revealSoundPath) {
+    requiredAssetGaps.push('reveal_sfx_missing');
+  }
+  if (renderedSubjects.some((subject) => !subject.render_sprite_path)) {
+    requiredAssetGaps.push('pokemon_sprite_local_assets_missing');
+  }
+  if (
+    template?.audio?.cry_playback?.enabled !== false
+    && renderedSubjects.some((subject) => !subject.cry_path)
+  ) {
+    requiredAssetGaps.push('pokemon_cry_local_assets_missing');
+  }
+
+  return {
+    schema_version: 'poke-quizz-progressive-reveal-plan-v1',
+    channel: resolveChannelIdentity(channelProfile),
+    template_id: template.template_id,
+    template_key: template.template_key,
+    seed: String(seed),
+    selection: {
+      mode: String(template?.selection_rules?.mode || 'random').trim().toLowerCase() || 'random',
+      difficulty_id: difficulty,
+      difficulty_rounds: rounds.map((round) => ({
+        id: round.difficulty_id,
+        label: round.difficulty_label,
+        answer_clarity_progress: round.reveal_completion_progress,
+      })),
+      round_count: roundCount,
+      type_pair: [],
+      selected_subject_count: renderedSubjects.length,
+      display_subject_count: renderedSubjects.length,
+      reveal_method_mode: String(template?.reveal?.mode || 'random_per_round'),
+      reveal_target_opaque_fraction: targetOpaqueFraction,
+      reveal_completion_progresses: rounds.map((round) => round.reveal_completion_progress),
+      reveal_methods: selectedMethods,
+      selected_subjects: renderedSubjects,
+    },
+    narration: {
+      local_model_required: false,
+      tts_provider: 'kokoro',
+      lines: hookText ? [{ role: 'hook', text: hookText }] : [],
+    },
+    timeline: buildTimeline(hookText, rounds),
+    rounds,
+    assets: {
+      background: {
+        expected_directory: backgroundPool.expected_directory,
+        selected_path: selectedBackgroundPath,
+      },
+      overlays: {
+        expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
+        available_paths: inventory?.overlays || [],
+      },
+      audio: {
+        battle_intro_music_directory: POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic,
+        sound_effects_directory: POKE_QUIZZ_ASSET_LAYOUT.soundEffects,
+        selected_battle_intro_music_path: selectSeededFile(inventory?.music || [], random),
+        selected_sound_effects: {
+          ...(inventory?.sound_effects || {}),
+          reveal: revealSoundPath,
+        },
+      },
+      outputs: {
+        previews_directory: buildPokeQuizzPreviewDirectory(template),
+        masters_directory: POKE_QUIZZ_ASSET_LAYOUT.masters,
+      },
+    },
+    selection_state: {
+      last_background_path: selectedBackgroundPath || null,
+      last_reveal_methods: selectedMethods,
+    },
+    asset_inventory_snapshot: inventory,
+    required_asset_gaps: [...new Set(requiredAssetGaps)],
+  };
+}

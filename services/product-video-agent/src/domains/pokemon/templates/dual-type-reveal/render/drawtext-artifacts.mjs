@@ -15,6 +15,7 @@ import {
 import { buildProgressiveTextArtifacts } from './text-layout.mjs';
 
 export function buildTextArtifacts({ renderPlan, template }) {
+  const textLayout = template?.layout?.text || {};
   const revealTextStartSeconds = Math.min(
     Math.max(0, renderPlan.total_duration_seconds - 0.12),
     ensureNumber(
@@ -26,17 +27,17 @@ export function buildTextArtifacts({ renderPlan, template }) {
   return {
     hook: buildProgressiveTextArtifacts(renderPlan.text.hook, {
       template,
-      fontSize: DEFAULT_HOOK_FONT_SIZE,
+      fontSize: ensureNumber(textLayout.hook_font_size, DEFAULT_HOOK_FONT_SIZE),
       maxLines: 2,
-      baseY: DEFAULT_HOOK_TEXT_Y,
+      baseY: ensureNumber(textLayout.hook_y, DEFAULT_HOOK_TEXT_Y),
       startSeconds: renderPlan.phases.hook.start_seconds,
       endSeconds: renderPlan.phases.hook.end_seconds,
     }),
     prompt: buildProgressiveTextArtifacts(renderPlan.text.prompt, {
       template,
-      fontSize: DEFAULT_PROMPT_FONT_SIZE,
+      fontSize: ensureNumber(textLayout.prompt_font_size, DEFAULT_PROMPT_FONT_SIZE),
       maxLines: 3,
-      baseY: DEFAULT_PROMPT_TEXT_Y,
+      baseY: ensureNumber(textLayout.prompt_y, DEFAULT_PROMPT_TEXT_Y),
       startSeconds: renderPlan.phases.type_prompt.start_seconds,
       endSeconds: ensureNumber(
         renderPlan.audio_cues?.prompt_end_seconds,
@@ -45,9 +46,9 @@ export function buildTextArtifacts({ renderPlan, template }) {
     }),
     reveal: buildProgressiveTextArtifacts(renderPlan.text.reveal, {
       template,
-      fontSize: DEFAULT_REVEAL_FONT_SIZE,
+      fontSize: ensureNumber(textLayout.reveal_font_size, DEFAULT_REVEAL_FONT_SIZE),
       maxLines: 2,
-      baseY: DEFAULT_REVEAL_TEXT_Y,
+      baseY: ensureNumber(textLayout.reveal_y, DEFAULT_REVEAL_TEXT_Y),
       startSeconds: revealTextStartSeconds,
       endSeconds: renderPlan.total_duration_seconds,
     }),

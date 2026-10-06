@@ -18,6 +18,7 @@ import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '.
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import { syncPublicationReviewMessage } from '../../src/publication-review-message-sync.mjs';
+import { isRelatedVideoEligiblePublication } from '../../src/related-video/eligibility.mjs';
 import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs';
 import { applyYoutubeRelatedVideoSelection } from '../../src/related-video/youtube-studio-automation.mjs';
 import { syncYoutubeAutoCommentState } from '../../src/youtube-auto-comments.mjs';
@@ -27,6 +28,7 @@ import {
   fetchYoutubeVideoStatus,
   fetchYoutubeVideoStatuses,
   loadYoutubeClientCredentials,
+  resolvePublicationRenderPath,
   scheduleYoutubePublication,
   uploadYoutubePreviewVideo,
 } from '../../src/youtube-publication-executor.mjs';
@@ -170,6 +172,52 @@ async function persistPublicationState({
   return updatedPublication;
 }
 
+export function isMissingPreviewRenderError(error) {
+  return error?.code === 'ENOENT';
+}
+
+export async function blockMissingPreviewPublication({
+  store,
+  runtimeConfig,
+  publication,
+  channelProfile,
+  channelSelector,
+  renderPath,
+  error,
+  blockedAt = new Date().toISOString(),
+}) {
+  const normalizedRenderPath = String(renderPath || error?.path || '').trim();
+  const updatedPublication = await persistPublicationState({
+    store,
+    runtimeConfig,
+    publication,
+    channelProfile,
+    channelSelector,
+    patch: {
+      status: 'blocked',
+      metadata: {
+        ...(publication.metadata || {}),
+        workflow_state: 'blocked',
+        preview_upload_blocked_at: blockedAt,
+        preview_upload_blocked_reason: 'render_file_missing',
+        preview_upload_missing_render_path: normalizedRenderPath,
+        preview_upload_error: String(error?.message || 'Preview render file is missing.'),
+      },
+    },
+  });
+
+  return {
+    publication: updatedPublication,
+    result: {
+      publication_id: publication.id,
+      action: 'preview_upload_blocked',
+      workflow_state: 'blocked',
+      reason: 'render_file_missing',
+      render_path: normalizedRenderPath,
+    },
+  };
+}
+
 async function syncPublicationYoutubeAutoComment({
   store,
   runtimeConfig,
@@ -292,6 +340,7 @@ function buildRelatedVideoRuntimePatch(publication, applyResult, asOf) {
 }
 
 function isRelatedVideoRefreshCandidate(publication, { includePublished = false } = {}) {
+  if (!isRelatedVideoEligiblePublication(publication)) return false;
   const state = normalizeWorkflowState(publication);
   if (['preview_uploaded', 'preview_approved', 'scheduled'].includes(state)) return true;
   if (includePublished && state === 'published') return true;
@@ -1224,6 +1273,7 @@ async function main() {
       '  --force                    Bypass the "already applied, skip" guard for published rows. Useful when',
       '                             a previous run recorded false-positive apply_status=applied that needs a retry.',
       '  --schedule-approved        Apply schedule updates instead of preview uploads.',
+      '  --reconcile-only           Reconcile YouTube state/comments and refresh the queue card; upload nothing.',
       '  --max-scheduled-days <n>   Limit schedule assignment to the next N days from --as-of.',
       '  --dry-run                  Print the planned work without calling YouTube.',
       '  --as-of <ISO>              Deterministic schedule planning timestamp. Default: now.',
@@ -1231,7 +1281,9 @@ async function main() {
     return;
   }
 
-  const previewUploadMode = !getBooleanOption(options, 'schedule-approved', false);
+  const scheduleApproved = getBooleanOption(options, 'schedule-approved', false);
+  const reconcileOnly = getBooleanOption(options, 'reconcile-only', false);
+  const previewUploadMode = !scheduleApproved && !reconcileOnly;
   const channelsPath = getStringOption(
     options,
     'channels',
@@ -1347,20 +1399,24 @@ async function main() {
       ...scheduledReconciled.results,
     ];
   }
-  const candidates = previewUploadMode
-    ? selectPreviewUploadCandidates(effectivePublications, channelProfile)
-    : assignScheduleSlots(
-      selectScheduleCandidates(effectivePublications, channelProfile, asOf),
-      channelProfile,
-      asOf,
-      listCommittedScheduledPublications(effectivePublications, channelProfile, asOf),
-      {
-        maxScheduledDays,
-      },
+  const candidates = reconcileOnly
+    ? []
+    : (
+      previewUploadMode
+        ? selectPreviewUploadCandidates(effectivePublications, channelProfile)
+        : assignScheduleSlots(
+          selectScheduleCandidates(effectivePublications, channelProfile, asOf),
+          channelProfile,
+          asOf,
+          listCommittedScheduledPublications(effectivePublications, channelProfile, asOf),
+          {
+            maxScheduledDays,
+          },
+        )
     );
   const workItems = withLimit(candidates, getStringOption(options, 'limit', ''));
 
-  if (workItems.length === 0 && preflightResults.length === 0) {
+  if (workItems.length === 0 && preflightResults.length === 0 && !reconcileOnly) {
     printWarn(`No ${previewUploadMode ? 'preview upload' : 'schedule'} candidates were found for ${channelProfile.account_key}.`);
     process.stdout.write('[]\n');
     return;
@@ -1391,13 +1447,33 @@ async function main() {
         continue;
       }
 
-      const uploaded = await uploadYoutubePreviewVideo({
-        publication,
-        videoRow,
-        channelProfile,
-        clientConfig,
-        refreshToken,
-      });
+      let uploaded;
+      try {
+        uploaded = await uploadYoutubePreviewVideo({
+          publication,
+          videoRow,
+          channelProfile,
+          clientConfig,
+          refreshToken,
+        });
+      } catch (error) {
+        if (!isMissingPreviewRenderError(error)) {
+          throw error;
+        }
+        const blocked = await blockMissingPreviewPublication({
+          store,
+          runtimeConfig,
+          publication,
+          channelProfile,
+          channelSelector,
+          renderPath: resolvePublicationRenderPath(publication, videoRow),
+          error,
+          blockedAt: asOf,
+        });
+        results.push(blocked.result);
+        printWarn(`Blocked preview ${publication.id}: render file is missing (${blocked.result.render_path}).`);
+        continue;
+      }
       const updatedPublication = await store.updatePublication(publication.id, {
         external_id: uploaded.externalId,
         preview_url: uploaded.previewUrl,

@@ -50,6 +50,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       'Options:',
       '  --catalog-json <path>     Parsed Pokedex rows JSON. Required.',
       `  --channel-config <path>   Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
+      '  --template-id <id>        Template id/key from the selected channel config.',
       '  --template <path>         Template JSON path. Default: services/product-video-agent/config/templates/pokemon/dual-type-reveal.v1.json',
       '  --output <path>           Output planning JSON path',
       '  --seed <text>             Deterministic seed. Default: current timestamp',
@@ -67,6 +68,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   const templateRuntime = await resolveVideoTemplateRuntime({
     projectRoot,
     channelConfigPath: getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH),
+    templateId: getStringOption(options, 'template-id', ''),
     templatePath: getStringOption(options, 'template', ''),
   });
   const templatePath = templateRuntime.templatePath;

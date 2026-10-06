@@ -181,6 +181,26 @@ async function persistPlannedRelatedVideo({
   channelProfile,
   asOf,
 }) {
+  const contentSurface = String(publication?.metadata?.content_surface || 'youtube_shorts').trim();
+  const relatedVideoEnabled = publication?.metadata?.publication_policy?.related_video_enabled !== false;
+  if (contentSurface !== 'youtube_shorts' || !relatedVideoEnabled) {
+    const updatedPublication = await store.updatePublication(publication.id, {
+      metadata: mergePublicationMetadata(publication, {
+        related_video: {
+          selector_version: 'related-video-v1',
+          selection_status: 'disabled',
+          disabled_reason: contentSurface !== 'youtube_shorts'
+            ? 'content_surface_not_youtube_shorts'
+            : 'publication_policy_disabled',
+          selected_at: new Date(asOf).toISOString(),
+          target_publication_id: '',
+          target_external_id: '',
+          target_url: '',
+        },
+      }),
+    });
+    return updatedPublication || publication;
+  }
   const publications = await store.fetchPublicationsByChannel({
     platform: channelProfile.platform,
     accountKey: channelProfile.account_key,
@@ -240,6 +260,7 @@ export async function reviewPokeQuizzPublication({
   channelsPath = 'services/product-video-agent/publication-channels.example.json',
   channelConfigPath = DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
   configPath = DEFAULT_CONFIG_PATH,
+  templateId = '',
   templatePath = DEFAULT_TEMPLATE_PATH,
   channelSelector = DEFAULT_CHANNEL_SELECTOR,
   genreLabel = DEFAULT_GENRE_LABEL,
@@ -257,6 +278,7 @@ export async function reviewPokeQuizzPublication({
   const templateRuntime = await resolveVideoTemplateRuntime({
     projectRoot,
     channelConfigPath,
+    templateId,
     templatePath,
     configPath,
     channelSelector,
@@ -421,6 +443,7 @@ async function main() {
       '  --publication-id <id>      Reuse an existing publication row instead of registering a new one.',
       '  --catalog-json <path>      Catalog JSON used for feedback-driven revisions.',
       `  --channel-config <path>    Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
+      '  --template-id <id>         Template id/key from the selected channel config.',
       '  --channel <id>             Channel id or account_key. Default: derived from channel config',
       '  --channels <path>          Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
       '  --config <path>            Product-video config JSON. Default: services/product-video-agent/config.example.json',
@@ -450,6 +473,7 @@ async function main() {
     ),
     channelConfigPath: getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH),
     configPath: getStringOption(options, 'config', DEFAULT_CONFIG_PATH),
+    templateId: getStringOption(options, 'template-id', ''),
     templatePath: getStringOption(options, 'template', DEFAULT_TEMPLATE_PATH),
     channelSelector: getStringOption(options, 'channel', DEFAULT_CHANNEL_SELECTOR),
     submittedAt: getStringOption(options, 'as-of', new Date().toISOString()),

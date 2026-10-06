@@ -22,6 +22,7 @@ import {
 } from './render-plan.mjs';
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
+import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
 
 export async function renderPokeQuizzVideo({
   plan,
@@ -57,6 +58,8 @@ export async function renderPokeQuizzVideo({
   const bracketProgressPath = plan.assets.audio.selected_sound_effects?.bracket_progress || null;
   const winnerRevealPath = plan.assets.audio.selected_sound_effects?.winner_reveal || null;
   const statsRevealPath = plan.assets.audio.selected_sound_effects?.stats_reveal || null;
+  const statSpinnerSpinPath = plan.assets.audio.selected_sound_effects?.stat_spinner_spin || null;
+  const statSpinnerCompletePath = plan.assets.audio.selected_sound_effects?.stat_spinner_complete || null;
   const disappearPath = plan.assets.audio.selected_sound_effects?.disappear || null;
   await verifyReadableFiles([
     ...narrationPaths,
@@ -65,6 +68,8 @@ export async function renderPokeQuizzVideo({
     ...(bracketProgressPath ? [bracketProgressPath] : []),
     ...(winnerRevealPath ? [winnerRevealPath] : []),
     ...(statsRevealPath ? [statsRevealPath] : []),
+    ...(statSpinnerSpinPath ? [statSpinnerSpinPath] : []),
+    ...(statSpinnerCompletePath ? [statSpinnerCompletePath] : []),
     ...(disappearPath ? [disappearPath] : []),
   ]);
 
@@ -89,6 +94,8 @@ export async function renderPokeQuizzVideo({
     bracketProgressPath,
     winnerRevealPath,
     statsRevealPath,
+    statSpinnerSpinPath,
+    statSpinnerCompletePath,
     disappearPath,
     cryCues,
     renderPlan,
@@ -105,6 +112,8 @@ export async function renderPokeQuizzVideo({
         ...(introSlotRevealPath ? [introSlotRevealPath] : []),
         ...(winnerRevealPath ? [winnerRevealPath] : []),
         ...(statsRevealPath ? [statsRevealPath] : []),
+        ...(statSpinnerSpinPath ? [statSpinnerSpinPath] : []),
+        ...(statSpinnerCompletePath ? [statSpinnerCompletePath] : []),
         ...(bracketProgressPath ? [bracketProgressPath] : []),
         ...(disappearPath ? [disappearPath] : []),
         ...cryCues.map((cue) => cue.path),
@@ -147,7 +156,11 @@ export async function renderPokeQuizzVideo({
     : fontCandidates;
   const fontPath = await resolveFontPath(effectiveFontCandidates);
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);
-  await writeFile(filterScriptPath, visualFilter.script, 'utf8');
+  await writeChannelWatermarkedVisualFilterScript(filterScriptPath, visualFilter, {
+    plan,
+    renderPlan,
+    fontPath,
+  });
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
   await runLocalProcess({

@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import { resolveVideoTemplateRuntime } from '../../../services/product-video-agent/src/video-template-context.mjs';
+import { normalizeChannelTemplateEntries } from '../../../services/product-video-agent/src/product-video-template-routing.mjs';
 import {
   POKE_QUIZZ_REVIEW_TARGET_COUNT,
 } from '../../../services/product-video-agent/src/poke-quizz-queue-status.mjs';
@@ -45,6 +46,20 @@ function normalizeTemplateWeights(value) {
   );
 }
 
+function normalizeTemplateWeightsFromChannelTemplates(channelConfig = {}) {
+  return Object.fromEntries(
+    normalizeChannelTemplateEntries(channelConfig)
+      .filter((entry) => entry.enabled !== false && entry.nightShift)
+      .map((entry) => [entry.templateId, parsePositiveNumber(entry.weight, 1)]),
+  );
+}
+
+function normalizeNightShiftTemplateIdsFromChannelTemplates(channelConfig = {}) {
+  return normalizeChannelTemplateEntries(channelConfig)
+    .filter((entry) => entry.enabled !== false && entry.nightShift)
+    .map((entry) => entry.templateId);
+}
+
 function normalizeNightShiftSettings(channelConfig = {}) {
   const nightShift = channelConfig?.night_shift && typeof channelConfig.night_shift === 'object'
     ? channelConfig.night_shift
@@ -64,6 +79,10 @@ function normalizeNightShiftSettings(channelConfig = {}) {
       publicationAutomation.enabled !== false
       && rawPublicationAutomationMode === 'auto'
     );
+  const channelTemplateWeights = normalizeTemplateWeightsFromChannelTemplates(channelConfig);
+  const legacyTemplateWeights = normalizeTemplateWeights(
+    reviewBacklog.template_weights,
+  );
   return {
     reviewBacklogEnabled: reviewBacklog.enabled === true,
     targetReviewReadyCount: parsePositiveInteger(
@@ -73,9 +92,10 @@ function normalizeNightShiftSettings(channelConfig = {}) {
     reviewBacklogMixChannelConfigPaths: normalizeStringArray(
       reviewBacklog.mix_channel_config_paths,
     ),
-    reviewBacklogTemplateWeights: normalizeTemplateWeights(
-      reviewBacklog.template_weights,
-    ),
+    reviewBacklogTemplateIds: normalizeNightShiftTemplateIdsFromChannelTemplates(channelConfig),
+    reviewBacklogTemplateWeights: Object.keys(channelTemplateWeights).length > 0
+      ? channelTemplateWeights
+      : legacyTemplateWeights,
     reviewRefreshEnabled: reviewRefresh.enabled === true,
     reviewRefreshPendingOnly: reviewRefresh.pending_only !== false,
     publicationAutomationEnabled,

@@ -128,7 +128,12 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const filters = [];
   const { width, height, fps } = renderPlan.canvas;
   const gridLayout = renderPlan.grid || { cells: [] };
-  const selectedShinyCellIndex = Number(plan.shiny_reveal?.selected_cell_index ?? -1);
+  const configuredShinyCellIndices = Array.isArray(plan.shiny_reveal?.selected_cell_indices)
+    ? plan.shiny_reveal.selected_cell_indices
+    : [plan.shiny_reveal?.selected_cell_index];
+  const selectedShinyCellIndices = new Set(
+    configuredShinyCellIndices.map(Number).filter(Number.isInteger),
+  );
   const gridItemSize = ensureNumber(gridLayout.item_size_px, 180);
   const countdownDuration = Math.max(0.5, ensureNumber(renderPlan.phases.countdown?.duration_seconds, 0));
   const countdownStart = ensureNumber(renderPlan.phases.countdown?.start_seconds, 0);
@@ -402,69 +407,42 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     }
   }
 
-  const nonShinyCells = gridLayout.cells.filter((cell) => cell.index !== selectedShinyCellIndex);
-  const normalTransitionLabelByCellIndex = new Map();
-  const normalHoldLabelByCellIndex = new Map();
-  if (nonShinyCells.length > 0) {
-    const normalSplitLabels = [];
-    for (const cell of nonShinyCells) {
-      normalSplitLabels.push(`[${safeFilterLabel('normalsrc', cell.index)}]`);
-      normalSplitLabels.push(`[${safeFilterLabel('normalholdsrc', cell.index)}]`);
+  const transitionLabelByCellIndex = new Map();
+  const holdLabelByCellIndex = new Map();
+  const transitionScaleTimeExpression = buildScaleFilterTimeExpression({
+    fps,
+    streamStartSeconds: revealVisualStart,
+  });
+  const transitionProgressExpression = `min(max((${normalizeAnimationTimeExpression(transitionScaleTimeExpression)}-${revealVisualStart})/${revealTransitionDuration},0),1)`;
+  const spriteScaleFactor = `max(0.03,if(lt(${transitionProgressExpression},0.22),0.06+(${transitionProgressExpression}/0.22)*0.34,0.40+(((${transitionProgressExpression}-0.22)/0.78)*0.80)))`;
+  const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;
+  for (const cell of gridLayout.cells) {
+    const spriteInputRef = inputRefs.cellSprites?.[cell.index];
+    if (spriteInputRef == null) {
+      continue;
     }
+    const transitionSourceLabel = safeFilterLabel('celltransitionsrc', cell.index);
+    const holdSourceLabel = safeFilterLabel('cellholdsrc', cell.index);
+    const transitionLabel = safeFilterLabel('celltransition', cell.index);
+    const holdLabel = safeFilterLabel('cellhold', cell.index);
+    const saturation = selectedShinyCellIndices.has(cell.index) ? 1.08 : 1.05;
     filters.push(
-      `[${inputRefs.normalSprite}:v]fps=${fps},trim=duration=${revealDurationSeconds},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.08:saturation=1.05,split=${normalSplitLabels.length}${normalSplitLabels.join('')}`,
+      `[${spriteInputRef}:v]fps=${fps},trim=duration=${revealDurationSeconds},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.08:saturation=${saturation},split=2[${transitionSourceLabel}][${holdSourceLabel}]`,
     );
-    const transitionScaleTimeExpression = buildScaleFilterTimeExpression({
-      fps,
-      streamStartSeconds: revealVisualStart,
-    });
-    const transitionProgressExpression = `min(max((${normalizeAnimationTimeExpression(transitionScaleTimeExpression)}-${revealVisualStart})/${revealTransitionDuration},0),1)`;
-    const spriteScaleFactor = `max(0.03,if(lt(${transitionProgressExpression},0.22),0.06+(${transitionProgressExpression}/0.22)*0.34,0.40+(((${transitionProgressExpression}-0.22)/0.78)*0.80)))`;
-    const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;
-    for (const cell of nonShinyCells) {
-      const holdSourceLabel = safeFilterLabel('normalholdsrc', cell.index);
-      const holdLabel = safeFilterLabel('normalhold', cell.index);
-      const transitionSourceLabel = safeFilterLabel('normalsrc', cell.index);
-      const transitionLabel = safeFilterLabel('normaltransition', cell.index);
-      filters.push(
-        `[${holdSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${holdLabel}]`,
-      );
-      filters.push(
-        `[${transitionSourceLabel}]scale=w='${spriteScaleExpression}':h='${spriteScaleExpression}':eval=frame,setsar=1[${transitionLabel}]`,
-      );
-      normalHoldLabelByCellIndex.set(cell.index, holdLabel);
-      normalTransitionLabelByCellIndex.set(cell.index, transitionLabel);
-    }
+    filters.push(
+      `[${holdSourceLabel}]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${holdLabel}]`,
+    );
+    filters.push(
+      `[${transitionSourceLabel}]scale=w='${spriteScaleExpression}':h='${spriteScaleExpression}':eval=frame,setsar=1[${transitionLabel}]`,
+    );
+    transitionLabelByCellIndex.set(cell.index, transitionLabel);
+    holdLabelByCellIndex.set(cell.index, holdLabel);
   }
 
-  let shinyHoldLabel = null;
-  let shinyTransitionLabel = null;
-  const shinyCell = gridLayout.cells.find((cell) => cell.index === selectedShinyCellIndex) || null;
-  if (shinyCell) {
-    const transitionScaleTimeExpression = buildScaleFilterTimeExpression({
-      fps,
-      streamStartSeconds: revealVisualStart,
-    });
-    const transitionProgressExpression = `min(max((${normalizeAnimationTimeExpression(transitionScaleTimeExpression)}-${revealVisualStart})/${revealTransitionDuration},0),1)`;
-    const spriteScaleFactor = `max(0.03,if(lt(${transitionProgressExpression},0.22),0.06+(${transitionProgressExpression}/0.22)*0.34,0.40+(((${transitionProgressExpression}-0.22)/0.78)*0.80)))`;
-    const spriteScaleExpression = `max(6,${spriteHoldSize}*(${spriteScaleFactor}))`;
-    shinyHoldLabel = 'shinyhold';
-    shinyTransitionLabel = 'shinytransition';
-    filters.push(
-      `[${inputRefs.shinySprite}:v]fps=${fps},trim=duration=${revealDurationSeconds},setpts=PTS-STARTPTS+${revealVisualStart}/TB,format=rgba,eq=contrast=1.08:saturation=1.08,split=2[shinysrc][shinyholdsrc]`,
-    );
-    filters.push(
-      `[shinyholdsrc]scale=${spriteHoldSize}:${spriteHoldSize}:force_original_aspect_ratio=decrease,setsar=1[${shinyHoldLabel}]`,
-    );
-    filters.push(
-      `[shinysrc]scale=w='${spriteScaleExpression}':h='${spriteScaleExpression}':eval=frame,setsar=1[${shinyTransitionLabel}]`,
-    );
-  }
+  const shinyCells = gridLayout.cells.filter((cell) => selectedShinyCellIndices.has(cell.index));
 
   for (const cell of gridLayout.cells) {
-    const transitionLabel = cell.index === selectedShinyCellIndex
-      ? shinyTransitionLabel
-      : normalTransitionLabelByCellIndex.get(cell.index);
+    const transitionLabel = transitionLabelByCellIndex.get(cell.index);
     if (!transitionLabel) {
       continue;
     }
@@ -489,9 +467,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   }
 
   for (const cell of gridLayout.cells) {
-    const holdLabel = cell.index === selectedShinyCellIndex
-      ? shinyHoldLabel
-      : normalHoldLabelByCellIndex.get(cell.index);
+    const holdLabel = holdLabelByCellIndex.get(cell.index);
     if (!holdLabel) {
       continue;
     }
@@ -502,8 +478,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
     currentVideoLabel = nextVideoLabel;
   }
 
-  if (shinyCell && plan.assets.overlays?.selected_shiny_sparkle_path && inputRefs.shinySparkle != null) {
-    const sparkleLabel = 'shinysparkle';
+  if (shinyCells.length > 0 && plan.assets.overlays?.selected_shiny_sparkle_path && inputRefs.shinySparkle != null) {
     const sparkleDuration = Math.max(
       0.12,
       ensureNumber(
@@ -523,14 +498,23 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
         ),
       ),
     );
+    const sparkleBaseLabel = 'shinysparklebase';
+    const sparkleLabels = shinyCells.map((cell) => safeFilterLabel('shinysparkle', cell.index));
     filters.push(
-      `[${inputRefs.shinySparkle}:v]fps=${fps},trim=duration=${sparkleDuration},setpts=PTS-STARTPTS+${revealVisualStart}/TB,scale=${sparkleSize}:${sparkleSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${sparkleLabel}]`,
+      `[${inputRefs.shinySparkle}:v]fps=${fps},trim=duration=${sparkleDuration},setpts=PTS-STARTPTS+${revealVisualStart}/TB,scale=${sparkleSize}:${sparkleSize}:force_original_aspect_ratio=decrease,format=rgba,setsar=1[${sparkleBaseLabel}]`,
     );
-    const sparkleVideoLabel = `${currentVideoLabel}ss`;
-    filters.push(
-      `[${currentVideoLabel}][${sparkleLabel}]overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2:enable='${formatEnableBetween(revealVisualStart, sparkleEnd)}'[${sparkleVideoLabel}]`,
-    );
-    currentVideoLabel = sparkleVideoLabel;
+    if (sparkleLabels.length > 1) {
+      filters.push(`[${sparkleBaseLabel}]split=${sparkleLabels.length}${sparkleLabels.map((label) => `[${label}]`).join('')}`);
+    } else {
+      filters.push(`[${sparkleBaseLabel}]null[${sparkleLabels[0]}]`);
+    }
+    shinyCells.forEach((shinyCell, index) => {
+      const sparkleVideoLabel = `${currentVideoLabel}ss${index}`;
+      filters.push(
+        `[${currentVideoLabel}][${sparkleLabels[index]}]overlay=${shinyCell.center_x}-w/2:${shinyCell.center_y}-h/2:enable='${formatEnableBetween(revealVisualStart, sparkleEnd)}'[${sparkleVideoLabel}]`,
+      );
+      currentVideoLabel = sparkleVideoLabel;
+    });
   }
 
   const drawtextParts = [];

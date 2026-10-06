@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import os from 'node:os';
 import { resolve } from 'node:path';
+import { isRelatedVideoEligiblePublication } from './eligibility.mjs';
 
 function normalizeToken(value) {
   return String(value || '').trim().toLowerCase();
@@ -102,6 +103,15 @@ export function probeYoutubeRelatedVideoCapability({
       settings,
       studioEditUrl: buildStudioEditUrl(publication?.external_id),
       reason: 'Related-video automation is disabled for this channel.',
+    };
+  }
+  if (!isRelatedVideoEligiblePublication(publication)) {
+    return {
+      status: 'unsupported_content_surface',
+      canAttempt: false,
+      settings,
+      studioEditUrl: buildStudioEditUrl(publication?.external_id),
+      reason: 'Related-video automation only supports YouTube Shorts publications.',
     };
   }
   if (normalizeToken(channelProfile?.platform) !== 'youtube_shorts') {

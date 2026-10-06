@@ -78,6 +78,10 @@ function buildRoundCountDifficultyCatalog(template) {
       id: String(difficultyId || '').trim(),
       round_count: ensurePositiveInteger(entry?.round_count, 0),
       weight: Math.max(1, ensurePositiveInteger(difficultyWeights[difficultyId], 1)),
+      localized_decoy_color_mutation: (
+        entry?.localized_decoy_color_mutation
+        && typeof entry.localized_decoy_color_mutation === 'object'
+      ) ? { ...entry.localized_decoy_color_mutation } : {},
     }))
     .filter((entry) => entry.id && entry.round_count > 0);
 }
@@ -90,6 +94,15 @@ function chooseRoundCountDifficulty(difficultyCatalog, random) {
     Array.from({ length: entry.weight }, () => entry)
   ));
   return weightedPool[Math.floor(random() * weightedPool.length)] || difficultyCatalog[0];
+}
+
+function resolveDifficultyColorMutation(template, selectedDifficulty) {
+  const baseConfig = template?.renderer?.localized_decoy_color_mutation;
+  const normalizedBaseConfig = baseConfig && typeof baseConfig === 'object' ? baseConfig : {};
+  return {
+    ...normalizedBaseConfig,
+    ...(selectedDifficulty?.localized_decoy_color_mutation || {}),
+  };
 }
 
 function normalizeQuestionTextOptions(primaryText, variants = []) {
@@ -323,6 +336,10 @@ export async function planKnowYourShinyChallenge({
   const selectedRoundCountDifficulty = chooseRoundCountDifficulty(roundCountDifficultyCatalog, random);
   const roundCount = selectedRoundCountDifficulty?.round_count
     ?? ensurePositiveInteger(template?.selection_rules?.round_count, DEFAULT_ROUND_COUNT);
+  const localizedDecoyColorMutation = resolveDifficultyColorMutation(
+    template,
+    selectedRoundCountDifficulty,
+  );
   const countdownFrom = ensurePositiveInteger(template?.layout?.timer?.countdown_from, 3);
   const countdownTo = Number.parseInt(String(template?.layout?.timer?.countdown_to ?? 0), 10);
   const eligibleSubjects = collapseDuplicateSubjects(
@@ -333,8 +350,12 @@ export async function planKnowYourShinyChallenge({
   }
 
   const selectedSubjects = shuffle(eligibleSubjects, random).slice(0, roundCount);
+  const backgroundCandidates = [...new Set([
+    ...(Array.isArray(inventory.backgrounds) ? inventory.backgrounds : []),
+    ...(Array.isArray(inventory.pixel_backgrounds) ? inventory.pixel_backgrounds : []),
+  ])];
   const selectedBackgroundPath = selectBackground(
-    inventory.backgrounds,
+    backgroundCandidates,
     random,
     normalizedSelectionState,
   );
@@ -427,6 +448,7 @@ export async function planKnowYourShinyChallenge({
       mode: String(template?.selection_rules?.mode || 'random').trim().toLowerCase() || 'random',
       difficulty_id: selectedRoundCountDifficulty?.id || null,
       round_count: roundCount,
+      localized_decoy_color_mutation: localizedDecoyColorMutation,
       type_pair: [],
       selected_subject_count: selectedSubjects.length,
       display_subject_count: roundCount * 4,
@@ -446,6 +468,10 @@ export async function planKnowYourShinyChallenge({
     assets: {
       background: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+        expected_directories: [
+          POKE_QUIZZ_ASSET_LAYOUT.backgrounds,
+          POKE_QUIZZ_ASSET_LAYOUT.pixelBackgrounds,
+        ],
         selected_path: selectedBackgroundPath,
       },
       overlays: {

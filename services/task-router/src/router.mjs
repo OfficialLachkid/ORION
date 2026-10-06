@@ -291,7 +291,11 @@ export function normalizeTaskMessage(message, config) {
         }
       : leadgenRequest
         ? {
-            runtime_action: leadgenRequest.mode === 'sweep' ? 'leadgen_sweep' : 'leadgen_search',
+            runtime_action: leadgenRequest.mode === 'qualification'
+              ? 'lead_qualification'
+              : leadgenRequest.mode === 'sweep'
+                ? 'leadgen_sweep'
+                : 'leadgen_search',
             leadgen_request: leadgenRequest,
           }
         : {}),

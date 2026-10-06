@@ -1,5 +1,6 @@
 import { serializeDraftEmailCommand } from '../../task-router/src/email-command-parser.mjs';
 import {
+  serializeLeadQualificationCommand,
   serializeLeadgenCommand,
   serializeLeadgenSweepCommand,
 } from '../../task-router/src/leadgen-command-parser.mjs';
@@ -24,6 +25,7 @@ const OPS_COMMAND_NAMES = new Set(['ops']);
 const EMAIL_DRAFT_COMMAND_NAMES = new Set(['email-draft']);
 const LEADGEN_COMMAND_NAMES = new Set(['leadgen']);
 const LEADGEN_SWEEP_COMMAND_NAMES = new Set(['leadgen-sweep']);
+const LEAD_QUALIFICATION_COMMAND_NAMES = new Set(['lead-qualification']);
 const DEVELOPER_TASK_COMMAND_NAMES = new Set(['create-developer-issue']);
 const PRODUCT_VIDEO_COMMAND_NAMES = new Set(['generate-video']);
 const VIDEO_ANALYTICS_COMMAND_NAMES = new Set(['analytics']);
@@ -311,6 +313,21 @@ export function buildGuildSlashCommands() {
       ],
     },
     {
+      name: 'lead-qualification',
+      description: 'Run the existing lead qualification workflow now.',
+      type: 1,
+      options: [
+        {
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_INTEGER,
+          name: 'limit',
+          description: 'Maximum new leads to qualify in this session (1-100).',
+          required: true,
+          min_value: 1,
+          max_value: 100,
+        },
+      ],
+    },
+    {
       name: 'create-developer-issue',
       description: 'Create an approval-gated issue for the developer agent.',
       type: 1,
@@ -362,6 +379,7 @@ export function isSupportedSlashCommandInteraction(interaction) {
       || EMAIL_DRAFT_COMMAND_NAMES.has(commandName)
       || LEADGEN_COMMAND_NAMES.has(commandName)
       || LEADGEN_SWEEP_COMMAND_NAMES.has(commandName)
+      || LEAD_QUALIFICATION_COMMAND_NAMES.has(commandName)
       || DEVELOPER_TASK_COMMAND_NAMES.has(commandName)
       || PRODUCT_VIDEO_COMMAND_NAMES.has(commandName)
       || VIDEO_ANALYTICS_COMMAND_NAMES.has(commandName)
@@ -453,6 +471,12 @@ function resolveSlashCommandContent(interaction) {
   if (LEADGEN_SWEEP_COMMAND_NAMES.has(commandName)) {
     return serializeLeadgenSweepCommand({
       rounds: getSlashCommandOptionValue(interaction, 'rounds'),
+    });
+  }
+
+  if (LEAD_QUALIFICATION_COMMAND_NAMES.has(commandName)) {
+    return serializeLeadQualificationCommand({
+      limit: getSlashCommandOptionValue(interaction, 'limit'),
     });
   }
 

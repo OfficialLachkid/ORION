@@ -10,7 +10,7 @@ import { resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
-import { fetchLeads, updateLead } from './lib/leadgen-supabase.mjs';
+import { fetchLeads, fetchSuppressedDomains, updateLead } from './lib/leadgen-supabase.mjs';
 import { measurePageSpeed, qualifyLead } from '../services/leadgen-qualifier/src/qualifier.mjs';
 import { executeTask } from '../services/task-router/src/executor.mjs';
 import { upsertPersistedPendingTask } from '../services/discord-bot/src/pending-task-store.mjs';
@@ -246,8 +246,43 @@ async function main() {
     await patchChannelMessage(config, channelId, progressMessageId, { content: body });
   };
 
+  // Suppression gate — one query for the whole batch. If any lead in this
+  // batch shares a domain with an already-'unsubscribed' or 'bounced'
+  // sibling, skip it (must, per NL Telecomwet 11.7 + GDPR — once someone
+  // said 'stop', we do not contact anyone else at the same organization
+  // via the same channel either). Suppression is CHEAPER than a wasted
+  // qualifier run and prevents the operator from ever having to eyeball
+  // a draft that should never have been generated.
+  const batchDomains = batch.map((l) => String(l.domain || '').toLowerCase()).filter(Boolean);
+  const suppressedDomains = await fetchSuppressedDomains(batchDomains).catch(() => new Set());
+
   for (const lead of batch) {
     await updateProgress({ currentLead: lead.business_name });
+
+    const leadDomain = String(lead.domain || '').toLowerCase();
+    if (leadDomain && suppressedDomains.has(leadDomain)) {
+      outcomes.push({
+        lead: lead.business_name,
+        domain: lead.domain,
+        sourceUrl: lead.source_url,
+        decision: 'suppressed',
+        status: 'suppressed',
+        reasoning: `Skipped: domain ${lead.domain} already has an 'unsubscribed' or 'bounced' sibling lead. No draft generated.`,
+        approvalTaskId: null,
+      });
+      if (!dryRun) {
+        await updateLead(lead.id, {
+          status: 'suppressed',
+          qualification: {
+            ...(lead.qualification || {}),
+            suppressed_reason: 'domain_previously_unsubscribed_or_bounced',
+            suppressed_at: new Date().toISOString(),
+          },
+        }).catch(() => {});
+      }
+      await updateProgress();
+      continue;
+    }
 
     const pageSpeed = await measurePageSpeed(
       lead.source_url,

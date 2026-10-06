@@ -168,6 +168,9 @@ const pokedexRows = [
   { id: 'pokedex-0136', national_dex_number: 136, name: 'Flareon', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/flareon.png', metadata: { is_final_evolution: true, pokemon_api: { is_default_form: true } } },
   { id: 'pokedex-0144', national_dex_number: 144, name: 'Articuno', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/articuno.png', metadata: { is_legendary: true, pokemon_api: { is_default_form: true } } },
   { id: 'pokedex-0146', national_dex_number: 146, name: 'Moltres', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/moltres.png', metadata: { is_legendary: true, pokemon_api: { is_default_form: true } } },
+  { id: 'pokedex-0240', national_dex_number: 240, name: 'Magby', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/magby.png', metadata: { pokemon_api: { is_default_form: true } } },
+  { id: 'pokedex-0215', national_dex_number: 215, name: 'Sneasel', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/sneasel.png', metadata: { pokemon_api: { is_default_form: true } } },
+  { id: 'pokedex-0225', national_dex_number: 225, name: 'Delibird', generation: 1, region: 'kanto', types: ['fire', 'ice'], sprite_path: '/tmp/delibird.png', metadata: { pokemon_api: { is_default_form: true } } },
 ];
 
 const assetInventory = {
@@ -209,7 +212,7 @@ const assetInventory = {
   transitions: [],
 };
 
-test('generic planner dispatch builds a memory round with one off-screen answer and four options', async () => {
+test('generic planner dispatch builds a 3x2 memory round with one off-screen answer and four options', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -370,8 +373,23 @@ test('memory render plan keeps memorize, question, countdown, and reveal timing 
   assert.equal(renderPlan.timer_layout.mode, 'hp_bar_depletion');
   assert.deepEqual(renderPlan.countdown_numbers, []);
   assert.equal(renderPlan.grid.cells.length, 6);
+  assert.equal(renderPlan.option_grid.rows, 2);
+  assert.equal(renderPlan.option_grid.columns, 2);
+  assert.equal(renderPlan.option_grid.cells.length, 4);
   assert.equal(renderPlan.question.options.length, 4);
   assert.equal(renderPlan.output_path, '/tmp/memory.mp4');
+
+  const titleAnchoredTemplate = structuredClone(template);
+  titleAnchoredTemplate.layout.timer.hp_bar_title_gap_px = 150;
+  const titleAnchoredRenderPlan = buildPokeQuizzRenderPlan({
+    plan,
+    template: titleAnchoredTemplate,
+    outputPath: '/tmp/memory-title-anchored.mp4',
+  });
+  assert.equal(
+    titleAnchoredRenderPlan.timer_layout.y,
+    titleAnchoredTemplate.layout.text.question_y + 150,
+  );
 });
 
 test('memory visual inputs include study sprites, question-option sprites, and the reveal sprite', async () => {
@@ -409,7 +427,7 @@ test('memory visual inputs include study sprites, question-option sprites, and t
   ]);
 });
 
-test('memory drawtext artifacts place the multiple-choice labels under a 2x2 sprite grid', async () => {
+test('memory drawtext artifacts place four multiple-choice labels under a 2x2 sprite grid', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,
@@ -428,6 +446,10 @@ test('memory drawtext artifacts place the multiple-choice labels under a 2x2 spr
   assert.equal(artifacts.options.lines[0].text, 'A');
   assert.match(artifacts.options.lines[0].x_expression, /-text_w\/2$/u);
   assert.notEqual(artifacts.options.lines[1].y - artifacts.options.lines[0].y, 116);
+  assert.ok(
+    artifacts.options.lines[3].y + artifacts.options.lines[3].font_size
+      < renderPlan.timer_layout.y,
+  );
   assert.ok(artifacts.hook.segments.at(-1).start_seconds <= 1.72);
 });
 
@@ -464,7 +486,7 @@ test('memory audio filter schedules hook, question, countdown ticks, and reveal 
   assert.match(script, /\[6:a\]adelay=2480\|2480,volume=0\.5\[disappear\]/u);
 });
 
-test('memory visual filter shows intro sprites, 2x2 option sprites, the hidden answer reveal, and uses a greenscreen HP bar countdown', async () => {
+test('memory visual filter shows 3x2 intro sprites, four option sprites, the hidden answer reveal, and uses a greenscreen HP bar countdown', async () => {
   const plan = await planPokemonTypeChallenge({
     template,
     pokedexRows,

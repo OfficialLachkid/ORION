@@ -57,3 +57,16 @@ test('qualifier prompt notes when we already have a contact_phone so Claude leav
   const prompt = buildQualificationPrompt(baseLead({ contact_phone: '+31 20 123 4567' }));
   assert.match(prompt, /\+31 20 123 4567/u);
 });
+
+test('qualifier prompt includes the operator email style inspiration', () => {
+  const prompt = buildQualificationPrompt(baseLead());
+  assert.match(prompt, /Draft style inspiration to follow/u);
+  assert.match(prompt, /Tijdens het bekijken van de website/u);
+  assert.match(prompt, /Zou het een gekke gedachte zijn/u);
+  assert.match(prompt, /Valentijn Jacobs/u);
+});
+
+test('qualifier prompt forbids long dashes in generated email copy', () => {
+  const prompt = buildQualificationPrompt(baseLead());
+  assert.match(prompt, /Do NOT use em dashes or en dashes in generated draft_subject or draft_body/u);
+});

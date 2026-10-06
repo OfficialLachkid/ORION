@@ -34,6 +34,13 @@ import {
   renderPokeQuizzVideo as renderKnowYourShinyVideo,
 } from './domains/pokemon/templates/know-your-shiny/renderer.mjs';
 import {
+  planPokemonProgressiveRevealChallenge,
+} from './domains/pokemon/templates/progressive-reveal/planner.mjs';
+import {
+  buildPokeQuizzRenderPlan as buildProgressiveRevealRenderPlan,
+  renderPokeQuizzVideo as renderProgressiveRevealVideo,
+} from './domains/pokemon/templates/progressive-reveal/renderer.mjs';
+import {
   planPokemonStatClashChallenge,
 } from './domains/pokemon/templates/stat-clash/planner.mjs';
 import {
@@ -41,12 +48,26 @@ import {
   renderPokeQuizzVideo as renderStatClashVideo,
 } from './domains/pokemon/templates/stat-clash/renderer.mjs';
 import {
+  planPokemonBuildYourTeamChallenge,
+} from './domains/pokemon/templates/build-your-team/planner.mjs';
+import {
+  buildPokeQuizzRenderPlan as buildBuildYourTeamRenderPlan,
+  renderPokeQuizzVideo as renderBuildYourTeamVideo,
+} from './domains/pokemon/templates/build-your-team/renderer.mjs';
+import {
   planPokemonTypeQuizChallenge,
 } from './domains/pokemon/templates/type-speed-quiz/planner.mjs';
 import {
   buildPokeQuizzRenderPlan as buildTypeSpeedQuizRenderPlan,
   renderPokeQuizzVideo as renderTypeSpeedQuizVideo,
 } from './domains/pokemon/templates/type-speed-quiz/renderer.mjs';
+import {
+  planPokemonCryMatchChallenge,
+} from './domains/pokemon/templates/cry-match/planner.mjs';
+import {
+  buildPokeQuizzRenderPlan as buildCryMatchRenderPlan,
+  renderPokeQuizzVideo as renderCryMatchVideo,
+} from './domains/pokemon/templates/cry-match/renderer.mjs';
 
 const TEMPLATE_REGISTRY = Object.freeze({
   'dual-type-reveal': Object.freeze({
@@ -74,15 +95,35 @@ const TEMPLATE_REGISTRY = Object.freeze({
     buildRenderPlan: buildKnowYourShinyRenderPlan,
     renderVideo: renderKnowYourShinyVideo,
   }),
+  'progressive-reveal': Object.freeze({
+    planner: planPokemonProgressiveRevealChallenge,
+    buildRenderPlan: buildProgressiveRevealRenderPlan,
+    renderVideo: renderProgressiveRevealVideo,
+  }),
+  'pixelated-reveal': Object.freeze({
+    planner: planPokemonProgressiveRevealChallenge,
+    buildRenderPlan: buildProgressiveRevealRenderPlan,
+    renderVideo: renderProgressiveRevealVideo,
+  }),
   'stat-clash': Object.freeze({
     planner: planPokemonStatClashChallenge,
     buildRenderPlan: buildStatClashRenderPlan,
     renderVideo: renderStatClashVideo,
   }),
+  'build-your-team': Object.freeze({
+    planner: planPokemonBuildYourTeamChallenge,
+    buildRenderPlan: buildBuildYourTeamRenderPlan,
+    renderVideo: renderBuildYourTeamVideo,
+  }),
   'type-quiz': Object.freeze({
     planner: planPokemonTypeQuizChallenge,
     buildRenderPlan: buildTypeSpeedQuizRenderPlan,
     renderVideo: renderTypeSpeedQuizVideo,
+  }),
+  'cry-match': Object.freeze({
+    planner: planPokemonCryMatchChallenge,
+    buildRenderPlan: buildCryMatchRenderPlan,
+    renderVideo: renderCryMatchVideo,
   }),
 });
 
@@ -113,8 +154,20 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   if (templateKey === 'know-your-shiny') {
     return 'know-your-shiny';
   }
+  if (templateKey === 'progressive-reveal' || templateKey === 'guess-before-revealed') {
+    return 'progressive-reveal';
+  }
+  if (templateKey === 'pixelated-reveal') {
+    return 'pixelated-reveal';
+  }
+  if (templateKey === 'cry-match') {
+    return 'cry-match';
+  }
   if (templateKey === 'stat-clash' || templateKey === 'stat-battle') {
     return 'stat-clash';
+  }
+  if (templateKey === 'build-your-team' || templateKey === 'team-builder') {
+    return 'build-your-team';
   }
   if (templateKey && TEMPLATE_REGISTRY[templateKey]) {
     return templateKey;
@@ -128,8 +181,20 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   if (templateId.includes('know-your-shiny')) {
     return 'know-your-shiny';
   }
+  if (templateId.includes('progressive-reveal')) {
+    return 'progressive-reveal';
+  }
+  if (templateId.includes('pixelated-reveal')) {
+    return 'pixelated-reveal';
+  }
+  if (templateId.includes('cry-match')) {
+    return 'cry-match';
+  }
   if (templateId.includes('stat-clash') || templateId.includes('stat-battle')) {
     return 'stat-clash';
+  }
+  if (templateId.includes('build-your-team') || templateId.includes('team-builder')) {
+    return 'build-your-team';
   }
   if (templateId.includes('tournament') || templateId.includes('showdown')) {
     return 'tournament';

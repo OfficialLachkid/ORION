@@ -139,6 +139,8 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   const { width, height, fps } = renderPlan.canvas;
   const fontPart = buildFontPart(fontPath);
   const roundCount = renderPlan.rounds.length;
+  const timerEnabled = renderPlan.timer_layout?.enabled !== false;
+  const counterEnabled = template?.layout?.text?.show_counter !== false;
   const timerVisualWidth = roundTime(renderPlan.timer_layout.width * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
   const timerVisualHeight = roundTime(renderPlan.timer_layout.height * DEFAULT_TIMER_VISUAL_SCALE_MULTIPLIER);
 
@@ -148,7 +150,7 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
   );
 
   let timerLabels = [];
-  if (inputRefs.timerCountdown != null) {
+  if (timerEnabled && inputRefs.timerCountdown != null) {
     timerLabels = Array.from({ length: roundCount }, (_, index) => `timer${index}`);
     filters.push(
       `[${inputRefs.timerCountdown}:v]split=${roundCount}${timerLabels.map((label) => `[${label}]`).join('')}`,
@@ -194,19 +196,21 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = timerSceneLabel;
     }
 
-    const counterSceneLabel = `scene${roundIndex}c`;
-    const counterStartSeconds = roundTime(incomingTransitionSeconds + 0.03);
-    const counterScaleExpression = buildAnimatedPopSettleExpression(
-      counterStartSeconds,
-      0.24,
-      0.62,
-      1.18,
-      1,
-    );
-    filters.push(
-      `[${currentLabel}]drawtext=text='${escapeDrawtextText(formatCounterText(round))}'${fontPart}:fontcolor=white:fontsize='${renderPlan.text_layout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.text_layout.counter_x}:y='${renderPlan.text_layout.counter_y}-${buildAnimatedLiftExpression(counterStartSeconds, 0.24, 16)}':alpha='${buildAnimatedTextSegmentAlphaExpression(counterStartSeconds, round.local.scene_duration_seconds)}'[${counterSceneLabel}]`,
-    );
-    currentLabel = counterSceneLabel;
+    if (counterEnabled) {
+      const counterSceneLabel = `scene${roundIndex}c`;
+      const counterStartSeconds = roundTime(incomingTransitionSeconds + 0.03);
+      const counterScaleExpression = buildAnimatedPopSettleExpression(
+        counterStartSeconds,
+        0.24,
+        0.62,
+        1.18,
+        1,
+      );
+      filters.push(
+        `[${currentLabel}]drawtext=text='${escapeDrawtextText(formatCounterText(round))}'${fontPart}:fontcolor=white:fontsize='${renderPlan.text_layout.counter_font_size}*(${counterScaleExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:fix_bounds=1:x=${renderPlan.text_layout.counter_x}:y='${renderPlan.text_layout.counter_y}-${buildAnimatedLiftExpression(counterStartSeconds, 0.24, 16)}':alpha='${buildAnimatedTextSegmentAlphaExpression(counterStartSeconds, round.local.scene_duration_seconds)}'[${counterSceneLabel}]`,
+      );
+      currentLabel = counterSceneLabel;
+    }
 
     const promptArtifacts = buildRoundPromptArtifacts(
       round,
@@ -246,20 +250,22 @@ export function buildVisualFilterScript(plan, template, renderPlan, inputRefs, f
       currentLabel = nameSceneLabel;
     }
 
-    round.countdown_numbers.forEach((countdown, countdownIndex) => {
-      if (String(countdown.value) === '0') {
-        return;
-      }
-      const scaleMultiplierExpression = buildCountdownNumberScaleMultiplierExpression(
-        countdown.start_seconds - round.scene_start_seconds,
-        countdown.end_seconds - round.scene_start_seconds,
-      );
-      const countdownSceneLabel = `scene${roundIndex}cd${countdownIndex}`;
-      filters.push(
-        `[${currentLabel}]drawtext=text='${escapeDrawtextText(countdown.value)}'${fontPart}:fontcolor=white:fontsize='${DEFAULT_TIMER_NUMBER_SIZE}*(${scaleMultiplierExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=${renderPlan.timer_layout.number_center_x}-text_w/2:y='${buildCountdownNumberYExpression(renderPlan.timer_layout.number_center_y, countdown.start_seconds - round.scene_start_seconds, countdown.end_seconds - round.scene_start_seconds)}-text_h/2':alpha='${buildCountdownNumberAlphaExpression(countdown.start_seconds - round.scene_start_seconds, countdown.end_seconds - round.scene_start_seconds)}':enable='${formatEnableBetween(countdown.start_seconds - round.scene_start_seconds, countdown.end_seconds - round.scene_start_seconds)}'[${countdownSceneLabel}]`,
-      );
-      currentLabel = countdownSceneLabel;
-    });
+    if (timerEnabled) {
+      round.countdown_numbers.forEach((countdown, countdownIndex) => {
+        if (String(countdown.value) === '0') {
+          return;
+        }
+        const scaleMultiplierExpression = buildCountdownNumberScaleMultiplierExpression(
+          countdown.start_seconds - round.scene_start_seconds,
+          countdown.end_seconds - round.scene_start_seconds,
+        );
+        const countdownSceneLabel = `scene${roundIndex}cd${countdownIndex}`;
+        filters.push(
+          `[${currentLabel}]drawtext=text='${escapeDrawtextText(countdown.value)}'${fontPart}:fontcolor=white:fontsize='${DEFAULT_TIMER_NUMBER_SIZE}*(${scaleMultiplierExpression})':borderw=${DEFAULT_TEXT_BORDER}:bordercolor=black:x=${renderPlan.timer_layout.number_center_x}-text_w/2:y='${buildCountdownNumberYExpression(renderPlan.timer_layout.number_center_y, countdown.start_seconds - round.scene_start_seconds, countdown.end_seconds - round.scene_start_seconds)}-text_h/2':alpha='${buildCountdownNumberAlphaExpression(countdown.start_seconds - round.scene_start_seconds, countdown.end_seconds - round.scene_start_seconds)}':enable='${formatEnableBetween(countdown.start_seconds - round.scene_start_seconds, countdown.end_seconds - round.scene_start_seconds)}'[${countdownSceneLabel}]`,
+        );
+        currentLabel = countdownSceneLabel;
+      });
+    }
 
     const typeLabelArtifacts = buildRoundTypeLabelArtifacts(round);
     for (let labelIndex = 0; labelIndex < typeLabelArtifacts.length; labelIndex += 1) {

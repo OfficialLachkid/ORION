@@ -94,6 +94,25 @@ function resolveTypePairSlug(plan) {
     .join('-');
 }
 
+function applyStatClashPoolOverride(template, forcedPoolValue) {
+  const normalizedPoolValue = String(forcedPoolValue || '').trim();
+  if (!normalizedPoolValue) {
+    return template;
+  }
+  const templateKey = String(template?.template_key || '').trim().toLowerCase();
+  const templateId = String(template?.template_id || '').trim().toLowerCase();
+  if (templateKey !== 'stat-clash' && !templateId.includes('stat-clash')) {
+    throw new Error('--stat-clash-pool can only be used with the Stat Clash template.');
+  }
+  return {
+    ...template,
+    selection_rules: {
+      ...(template.selection_rules || {}),
+      force_pool_key: normalizedPoolValue,
+    },
+  };
+}
+
 async function resolvePlan(
   options,
   selectionState = null,
@@ -126,17 +145,24 @@ async function resolvePlan(
   const forcedTypePair = forcedTypePairInput
     ? normalizeTypePair(forcedTypePairInput.split(','))
     : null;
-  const template = await loadJson(templatePath);
+  const template = applyStatClashPoolOverride(
+    await loadJson(templatePath),
+    getStringOption(
+      options,
+      'stat-clash-pool',
+      getStringOption(options, 'stat-clash-pool-weight', ''),
+    ),
+  );
   const statePath = getStringOption(
     options,
     'state',
-    resolvePokeQuizzSelectionStatePath(template),
+    resolvePokeQuizzSelectionStatePath(template, undefined, defaults.channelProfile),
   );
   const [pokedexRows, localSelectionState] = await Promise.all([
     loadJson(catalogJsonPath),
     loadOptionalJson(statePath),
   ]);
-  const effectiveSelectionState = mergePokeQuizzSelectionStates(selectionState, localSelectionState);
+  const effectiveSelectionState = mergePokeQuizzSelectionStates(localSelectionState, selectionState);
 
   const plan = await planPokemonTypeChallenge({
     template,
@@ -144,6 +170,7 @@ async function resolvePlan(
     seed: getStringOption(options, 'seed', defaultSeed),
     forcedTypePair,
     selectionState: effectiveSelectionState,
+    channelProfile: defaults.channelProfile || null,
   });
   await writeJson(outputPlanPath, plan);
   await writeJson(statePath, plan.selection_state || {});
@@ -187,6 +214,7 @@ async function generateAndReviewPokeQuizz(options) {
   const templateRuntime = await resolveVideoTemplateRuntime({
     projectRoot,
     channelConfigPath: getStringOption(options, 'channel-config', DEFAULT_VIDEO_CHANNEL_CONFIG_PATH),
+    templateId: getStringOption(options, 'template-id', ''),
     templatePath: getStringOption(options, 'template', ''),
     configPath: getStringOption(options, 'config', ''),
     channelSelector: getStringOption(options, 'channel', ''),
@@ -215,7 +243,7 @@ async function generateAndReviewPokeQuizz(options) {
     options,
     liveSelectionState,
     submittedAt,
-    { templatePath },
+    { templatePath, channelProfile },
   );
   const typePairSlug = resolveTypePairSlug(plan) || 'pokemon-type-challenge';
   const seedSlug = slugify(plan.seed || 'preview');
@@ -273,6 +301,7 @@ async function generateAndReviewPokeQuizz(options) {
           ffmpegExecutable,
           kokoro,
           runtimeRoot,
+          channelProfile,
         });
         break;
       } catch (error) {
@@ -304,6 +333,7 @@ async function generateAndReviewPokeQuizz(options) {
       catalogJsonPath: getStringOption(options, 'catalog-json', ''),
       channelsPath,
       configPath,
+      templateId: templateRuntime.templateId,
       templatePath,
       channelSelector,
       channelConfigPath: templateRuntime.channelConfigPath,
@@ -364,8 +394,10 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --state <path>             Selection-state JSON path used by the planner. Defaults to a template-scoped runtime file.',
       '  --seed <text>              Deterministic planning seed.',
       '  --type-pair <a,b>          Optional forced pair such as water,flying.',
+      '  --stat-clash-pool <key>    Optional Stat Clash pool override. Accepts key, selector, label, or weight.',
       '  --output <path>            Render output MP4 path.',
       `  --channel-config <path>    Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
+      '  --template-id <id>         Template id/key from the selected channel config.',
       '  --channel <id>             Channel id or account_key. Default: derived from channel config',
       '  --channels <path>          Channel registry JSON. Default: services/product-video-agent/publication-channels.example.json',
       '  --config <path>            Product-video config JSON. Default: services/product-video-agent/config.example.json',

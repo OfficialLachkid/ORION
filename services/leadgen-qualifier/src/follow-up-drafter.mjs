@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
 import { projectRoot } from '../../lib/runtime-config.mjs';
+import { sanitizeGeneratedDraftFields } from './draft-style.mjs';
 
 // Drafts a single, gentle follow-up to a lead who received the first outreach
-// email and hasn't responded. Deliberately lighter than qualification — no
+// email and hasn't responded. Deliberately lighter than qualification, no
 // re-fetch, no screenshot; it just writes a short Dutch nudge that references
 // the original and re-states the free-design offer with an easy out. Runs on
 // Claude (claude -p) like the qualifier, and every draft stays approval-gated.
@@ -11,13 +12,14 @@ const CLAUDE_TIMEOUT_MS = 120000;
 const FOLLOW_UP_RULES = `You write ONE short, polite Dutch follow-up email to a local business that received a first outreach email from VBJ Services and did not reply.
 
 Hard rules:
-- Address the business by name in the greeting — "Beste <bedrijfsnaam>," (or "Beste heer/mevrouw <achternaam>," if the original email used a person's name). NEVER a bare "Beste," — that reads as impersonal mass-mail.
-- SHORTER than a first email — 2 to 4 sentences, readable in ~10 seconds.
-- Reference the earlier message lightly ("ik wilde even kort terugkomen op mijn eerdere bericht…") — do NOT repeat it in full.
+- Address the business by name in the greeting, "Beste <bedrijfsnaam>," (or "Beste heer/mevrouw <achternaam>," if the original email used a person's name). NEVER a bare "Beste,", that reads as impersonal mass-mail.
+- SHORTER than a first email, 2 to 4 sentences, readable in ~10 seconds.
+- Reference the earlier message lightly ("ik wilde even kort terugkomen op mijn eerdere bericht..."), do NOT repeat it in full.
 - Re-state the offer in ONE line: a free, no-obligation website design/mockup; only if they like it do we build it out.
-- Give an easy, respectful out ("mocht het niet interessant zijn, dan hoor ik het graag — dan laat ik u verder met rust").
+- Give an easy, respectful out ("mocht het niet interessant zijn, dan hoor ik het graag, dan laat ik u verder met rust").
 - Business owner's language, no web-dev jargon. Courteous and professional. Never pushy, no fake urgency, no guilt.
 - Dutch. Sign off as "VBJ Services".
+- Do NOT use em dashes or en dashes in generated draft_subject or draft_body. Use commas, periods, or parentheses instead.
 - Subject: reuse the original subject with a "Re: " prefix so it threads.`;
 
 function buildFollowUpPrompt(lead) {
@@ -27,7 +29,7 @@ function buildFollowUpPrompt(lead) {
 THE LEAD:
 ${JSON.stringify({ business_name: lead.business_name, website: lead.source_url, niche: lead.niche }, null, 2)}
 
-THE ORIGINAL EMAIL THAT WENT UNANSWERED (for context — do not repeat it verbatim):
+THE ORIGINAL EMAIL THAT WENT UNANSWERED (for context, do not repeat it verbatim):
 subject: ${q.draft_subject || '(unknown)'}
 body:
 ${q.draft_body || '(unknown)'}
@@ -76,7 +78,7 @@ export function draftFollowUp(lead, config, options = {}) {
         return;
       }
       try {
-        const parsed = extractJson(stdout);
+        const parsed = sanitizeGeneratedDraftFields(extractJson(stdout));
         if (!parsed.draft_subject || !parsed.draft_body) {
           throw new Error('Follow-up draft missing subject or body.');
         }

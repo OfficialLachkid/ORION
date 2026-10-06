@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { runLocalProcess } from '../../../../../process-runner.mjs';
 import { probeMediaDurationSeconds, verifyReadableFiles } from '../../dual-type-reveal/render/media-probe.mjs';
@@ -10,6 +10,7 @@ import {
 import {
   buildAudioFilterScript,
   buildAudioInputs,
+  buildCandidateShinyCues,
   buildStatClashCryCues,
 } from './audio-filter-script.mjs';
 import {
@@ -19,8 +20,47 @@ import {
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
+import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
+import { buildVisualInputGroundingRatios } from '../../shared/render/sprite-alpha-grounding.mjs';
 
 const MIN_SAFE_ANIMATED_SPRITE_DURATION_SECONDS = 0.2;
+const SWSCALER_EAGAIN_FINGERPRINT = /Failed initializing scaling graph \(Resource temporarily unavailable\)/u;
+const TRUNCATED_OUTPUT_FINGERPRINT = /__stat_clash_truncated_output__/u;
+const MAX_FFMPEG_RETRIES = 3;
+
+async function removeFileIfExists(filePath) {
+  try {
+    await unlink(filePath);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+}
+
+async function runFfmpegWithSwscaleRetry(options, { onRetry, postCheck } = {}) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= MAX_FFMPEG_RETRIES; attempt += 1) {
+    try {
+      const result = await runLocalProcess(options);
+      if (typeof postCheck === 'function') {
+        await postCheck(result);
+      }
+      return result;
+    } catch (error) {
+      const message = String(error?.message || error || '');
+      const isKnownTransient = SWSCALER_EAGAIN_FINGERPRINT.test(message)
+        || TRUNCATED_OUTPUT_FINGERPRINT.test(message);
+      if (!isKnownTransient || attempt === MAX_FFMPEG_RETRIES) {
+        throw error;
+      }
+      lastError = error;
+      if (typeof onRetry === 'function') onRetry(attempt);
+      await new Promise((resolveRetry) => setTimeout(resolveRetry, 800));
+    }
+  }
+  throw lastError;
+}
 
 function parseRoundCandidateRole(role = '') {
   const match = /^round-(\d+)-candidate-(\d+)$/u.exec(String(role || '').trim());
@@ -123,14 +163,23 @@ export async function renderPokeQuizzVideo({
   const musicPath = plan.assets.audio.selected_battle_intro_music_path || null;
   const countdownPath = plan.assets.audio.selected_sound_effects?.countdown_tick || null;
   const timerEndPath = plan.assets.audio.selected_sound_effects?.timer_end || null;
+  const pokeballIntroPath = template?.renderer?.pokeball_spawn_sfx_enabled === true
+    ? plan.assets.audio.selected_sound_effects?.pokeball_intro || null
+    : null;
   const introSlotRevealPath = plan.assets.audio.selected_sound_effects?.intro_slot_reveal || null;
+  const shinyPath = plan.shiny_reveal?.active
+    ? plan.assets.audio.selected_sound_effects?.shiny || null
+    : null;
   const cryCues = buildStatClashCryCues(plan, renderPlan);
+  const shinyCues = buildCandidateShinyCues(plan, renderPlan);
   await verifyReadableFiles([
     ...narrationPaths,
     ...(musicPath ? [musicPath] : []),
     ...(countdownPath ? [countdownPath] : []),
     ...(timerEndPath ? [timerEndPath] : []),
+    ...(pokeballIntroPath ? [pokeballIntroPath] : []),
     ...(introSlotRevealPath ? [introSlotRevealPath] : []),
+    ...(shinyPath ? [shinyPath] : []),
     ...cryCues.map((cue) => cue.path),
   ]);
 
@@ -147,7 +196,10 @@ export async function renderPokeQuizzVideo({
     musicPath,
     countdownPath,
     timerEndPath,
+    pokeballIntroPath,
     introSlotRevealPath,
+    shinyPath,
+    shinyCues,
     cryCues,
     renderPlan,
     mediaDurations: {
@@ -164,7 +216,9 @@ export async function renderPokeQuizzVideo({
         ...(musicPath ? [musicPath] : []),
         ...(countdownPath ? [countdownPath] : []),
         ...(timerEndPath ? [timerEndPath] : []),
+        ...(pokeballIntroPath ? [pokeballIntroPath] : []),
         ...(introSlotRevealPath ? [introSlotRevealPath] : []),
+        ...(shinyPath ? [shinyPath] : []),
         ...cryCues.map((cue) => cue.path),
       ]),
       '-/filter_complex',
@@ -192,12 +246,22 @@ export async function renderPokeQuizzVideo({
   });
   await verifyReadableFiles(visualInputs.map((input) => input.path));
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
+  const groundingRatios = await buildVisualInputGroundingRatios(visualInputs, {
+    enabled: template?.layout?.sprite_platform?.alpha_grounding_enabled === true,
+    rolePattern: /candidate/iu,
+  });
   const inputRefs = {
     background: inputRoleIndex.get('background'),
     introPokeball: inputRoleIndex.has('intro-pokeball') ? inputRoleIndex.get('intro-pokeball') : null,
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
+    shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
     rounds: renderPlan.rounds.map((round) => ({
+      pokeball_hold_sprites: round.candidates.map((candidate) => inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}-pokeball-hold`)),
       candidates: round.candidates.map((candidate) => inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`)),
+      bottom_transparent_ratios: round.candidates.map((candidate) => {
+        const inputIndex = inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`);
+        return groundingRatios.get(inputIndex) || 0;
+      }),
       still_candidates: round.candidates.map((candidate) => {
         const inputIndex = inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`);
         if (inputIndex == null) {
@@ -222,13 +286,22 @@ export async function renderPokeQuizzVideo({
     : fontCandidates;
   const fontPath = await resolveFontPath(effectiveFontCandidates);
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);
-  await writeFile(filterScriptPath, visualFilter.script, 'utf8');
+  await writeChannelWatermarkedVisualFilterScript(filterScriptPath, visualFilter, {
+    plan,
+    renderPlan,
+    fontPath,
+  });
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
-  await runLocalProcess({
+  const expectedDurationSeconds = Number(renderPlan.total_duration_seconds || 0);
+  await runFfmpegWithSwscaleRetry({
     executable: ffmpegExecutable,
     args: [
       '-y',
+      '-filter_complex_threads',
+      '1',
+      '-filter_threads',
+      '1',
       ...visualInputs.flatMap((input) => input.args),
       '-i',
       audioMixPath,
@@ -260,7 +333,26 @@ export async function renderPokeQuizzVideo({
       outputAbsolutePath,
     ],
     cwd: projectRoot,
-    timeoutMs: 600000,
+    timeoutMs: 900000,
+  }, {
+    postCheck: async () => {
+      if (!(expectedDurationSeconds > 0)) return;
+      const actualDurationSeconds = await probeMediaDurationSeconds({
+        ffmpegExecutable,
+        mediaPath: outputAbsolutePath,
+        cwd: projectRoot,
+      });
+      if (
+        Number.isFinite(actualDurationSeconds)
+        && actualDurationSeconds > 0
+        && actualDurationSeconds + 1.5 < expectedDurationSeconds
+      ) {
+        await removeFileIfExists(outputAbsolutePath);
+        throw new Error(
+          `__stat_clash_truncated_output__ expected ~${expectedDurationSeconds.toFixed(2)}s, got ${actualDurationSeconds.toFixed(2)}s`,
+        );
+      }
+    },
   });
 
   await access(outputAbsolutePath);

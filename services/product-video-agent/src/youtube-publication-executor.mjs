@@ -49,8 +49,10 @@ function isYoutubeQuotaExceededPayload(payload = {}) {
   ));
 }
 
-function buildShortsUrl(videoId) {
-  return `https://youtube.com/shorts/${videoId}`;
+export function buildYoutubeVideoUrl(videoId, contentSurface = 'youtube_shorts') {
+  return String(contentSurface || '').trim() === 'youtube_watch'
+    ? `https://www.youtube.com/watch?v=${videoId}`
+    : `https://youtube.com/shorts/${videoId}`;
 }
 
 function normalizeYoutubeVideoStatus(videoId, item = null, payload = {}) {
@@ -62,7 +64,7 @@ function normalizeYoutubeVideoStatus(videoId, item = null, payload = {}) {
       publishAt: null,
       publishedAt: null,
       title: '',
-      publicUrl: buildShortsUrl(videoId),
+      publicUrl: buildYoutubeVideoUrl(videoId),
       payload,
     };
   }
@@ -74,7 +76,7 @@ function normalizeYoutubeVideoStatus(videoId, item = null, payload = {}) {
     publishAt: item.status?.publishAt || null,
     publishedAt: item.snippet?.publishedAt || null,
     title: String(item.snippet?.title || '').trim(),
-    publicUrl: buildShortsUrl(videoId),
+    publicUrl: buildYoutubeVideoUrl(videoId),
     payload,
   };
 }
@@ -168,7 +170,7 @@ export async function uploadYoutubePreviewVideo({
 
   return {
     externalId: payload.id,
-    previewUrl: buildShortsUrl(payload.id),
+    previewUrl: buildYoutubeVideoUrl(payload.id, publication?.metadata?.content_surface),
     uploadedAt: new Date().toISOString(),
     payload,
     renderPath,

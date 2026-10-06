@@ -76,8 +76,17 @@ function resolveTemplateFlavor(plan = {}) {
   if (templateKey.includes('memory') || templateId.includes('memory')) {
     return 'memory';
   }
+  if (templateKey.includes('pixelated-reveal') || templateId.includes('pixelated-reveal')) {
+    return 'pixelated-reveal';
+  }
+  if (templateKey.includes('progressive-reveal') || templateId.includes('progressive-reveal')) {
+    return 'progressive-reveal';
+  }
   if (templateKey.includes('stat-clash') || templateId.includes('stat-clash') || templateKey.includes('stat-battle') || templateId.includes('stat-battle')) {
     return 'stat-clash';
+  }
+  if (templateKey.includes('build-your-team') || templateId.includes('build-your-team') || templateKey.includes('team-builder') || templateId.includes('team-builder')) {
+    return 'build-your-team';
   }
   if (templateKey.includes('find-the-shiny') || templateId.includes('find-the-shiny')) {
     return 'find-the-shiny';
@@ -100,6 +109,9 @@ function resolveTemplateFlavor(plan = {}) {
     || templateId.includes('type-speed-quiz')
   ) {
     return 'type-quiz';
+  }
+  if (templateKey.includes('cry-match') || templateId.includes('cry-match')) {
+    return 'cry-match';
   }
   return 'dual-type-reveal';
 }
@@ -139,7 +151,51 @@ const DEFAULT_STAT_CLASH_TITLE_BUILDERS = Object.freeze([
   () => 'Who has the Better Stat?',
   () => 'Highest Stat Challenge!',
   () => 'Who has the Highest Stat?',
-  () => 'Stat Clash! 📊',
+  () => 'Who has the Highest Stats? 🤔 💭',
+]);
+
+const DEFAULT_PROGRESSIVE_REVEAL_TITLE_BUILDERS = Object.freeze([
+  () => "Guess the Pokemon Before It's Revealed!",
+  () => 'Can You Name It Before the Full Reveal?',
+  () => 'Pokemon Progressive Reveal Challenge!',
+  () => 'How Fast Can You Guess This Pokemon?',
+  () => 'Guess 3 Pokemon Before They Appear!',
+]);
+
+const DEFAULT_PIXELATED_REVEAL_TITLE_BUILDERS = Object.freeze([
+  () => 'Guess 4 Pixelated Pokemon!',
+  () => 'Can You Beat Every Pixel Level?',
+  () => 'Pokemon Pixel Reveal Challenge!',
+  () => 'Easy to Impossible Pokemon Pixels!',
+  () => 'Name Them Before the Pixels Clear!',
+]);
+
+// Weekly analytics review 2026-09-28: dropped 'Pick 1 Pokémon Every
+// Round!' — same title tanked on two different channels this week
+// (32 + 54 views) while 'Create Your Ultimate Team of 6!' pulled
+// 4,205 views on poke-quizz for the same template. Second-person +
+// concrete number + ultimate/perfect phrasing consistently outperforms
+// literal command form. Added four new variants in that winning
+// register so there's still a healthy variant pool for future A/B.
+const DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS = Object.freeze([
+  () => 'Build Your Ultimate Pokémon Team! 🔥',
+  () => 'Can You Build the Best Pokémon Team?',
+  () => '6 Rounds to Build Your Pokémon Team!',
+  () => 'Choose Your Pokémon Team! ⚡',
+  () => 'Pick Your Pokémon Team! ⚡',
+  () => 'You Have 6 Rounds to Build a Pokémon Team ✨',
+  () => 'Which Pokémon Are You Picking? 👀',
+  () => 'Build a Team of 6 Pokémon!',
+  () => 'Create Your Ultimate Team of 6!',
+  () => 'Pokémon Team Builder Challenge!',
+  () => 'Can You Build an OP Pokémon Team?',
+  () => 'Your Pokémon Team Depends on Your Choices!',
+  // New variants (2026-09-28) in the winning register — verb-forward,
+  // second-person, concrete number, "ultimate/perfect/dream/legend" hook.
+  () => 'Draft Your Perfect Pokémon Team of 6!',
+  () => 'Assemble Your Dream Pokémon Team!',
+  () => 'Only True Fans Build the Perfect Team',
+  () => 'Craft the Ultimate Pokémon Team of 6',
 ]);
 
 const DEFAULT_MEMORY_TITLE_BUILDERS = Object.freeze([
@@ -155,6 +211,23 @@ const DEFAULT_TYPE_QUIZ_TITLE_BUILDERS = Object.freeze([
   () => 'Test your Pokemon type knowledge',
   () => 'Pokemon Typings 101',
   () => '99% fail',
+]);
+
+function formatCryMatchDifficultyLabel(difficultyId) {
+  const normalized = String(difficultyId || '').trim().toLowerCase();
+  if (normalized === 'easy') return 'Easy';
+  if (normalized === 'medium') return 'Medium';
+  if (normalized === 'hard') return 'Hard';
+  return '';
+}
+
+const DEFAULT_CRY_MATCH_TITLE_BUILDERS = Object.freeze([
+  () => 'Guess the Pokemon by cry!',
+  () => 'Whose cry is this?',
+  () => 'Can you name this Pokemon by cry?',
+  () => 'Which Pokemon makes this sound?',
+  () => 'Only TRUE Fans Know these Pokemon by Listening! 👂',
+  () => 'Can you Guess the Pokemon From Listening? 👂',
 ]);
 
 function hashSeed(input) {
@@ -210,6 +283,20 @@ function buildMetadataPrompt(plan) {
 
 function buildTemplateAwareDefaultTitle(plan) {
   const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'pixelated-reveal') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|pixelated-reveal`) % DEFAULT_PIXELATED_REVEAL_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_PIXELATED_REVEAL_TITLE_BUILDERS[templateIndex]();
+  }
+  if (flavor === 'progressive-reveal') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|progressive-reveal`) % DEFAULT_PROGRESSIVE_REVEAL_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_PROGRESSIVE_REVEAL_TITLE_BUILDERS[templateIndex]();
+  }
   if (flavor === 'memory') {
     const seed = String(plan?.seed || '').trim();
     const templateIndex = seed
@@ -231,6 +318,13 @@ function buildTemplateAwareDefaultTitle(plan) {
       : 0;
     return DEFAULT_STAT_CLASH_TITLE_BUILDERS[templateIndex]();
   }
+  if (flavor === 'build-your-team') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|build-your-team`) % DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_BUILD_YOUR_TEAM_TITLE_BUILDERS[templateIndex]();
+  }
   if (flavor === 'tournament') {
     const seed = String(plan?.seed || '').trim();
     const templateIndex = seed
@@ -245,6 +339,15 @@ function buildTemplateAwareDefaultTitle(plan) {
       : 0;
     return DEFAULT_KNOW_YOUR_SHINY_TITLE_BUILDERS[templateIndex]();
   }
+  if (flavor === 'cry-match') {
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|cry-match`) % DEFAULT_CRY_MATCH_TITLE_BUILDERS.length
+      : 0;
+    const baseTitle = DEFAULT_CRY_MATCH_TITLE_BUILDERS[templateIndex]();
+    const difficultyLabel = formatCryMatchDifficultyLabel(plan?.selection?.difficulty_id);
+    return difficultyLabel ? `${baseTitle} - ${difficultyLabel}` : baseTitle;
+  }
   if (flavor !== 'find-the-shiny') {
     return buildDefaultTitle(plan);
   }
@@ -258,6 +361,20 @@ function buildTemplateAwareDefaultTitle(plan) {
 function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
   const flavor = resolveTemplateFlavor(plan);
   const channelName = resolveMetadataChannelName(channelProfile);
+  if (flavor === 'pixelated-reveal') {
+    const roundCount = Number(plan?.selection?.round_count || 0) || 4;
+    return joinDescriptionParagraphs(
+      `Guess ${roundCount} Pokemon as the pixel challenge climbs from Easy to Impossible. Lock in each answer before the sprite becomes sharp.`,
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
+  }
+  if (flavor === 'progressive-reveal') {
+    const roundCount = Number(plan?.selection?.round_count || 0) || 3;
+    return joinDescriptionParagraphs(
+      `Guess ${roundCount} Pokemon while each sprite is slowly revealed. Lock in every answer before the full image appears.`,
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
+  }
   if (flavor === 'memory') {
     const displayedCount = Number(plan?.selection?.display_subject_count || 0) || 6;
     return joinDescriptionParagraphs(
@@ -280,6 +397,13 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
       `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
     );
   }
+  if (flavor === 'build-your-team') {
+    const roundCount = Number(plan?.selection?.round_count || 0) || 6;
+    return joinDescriptionParagraphs(
+      `${roundCount} rounds, 4 Pokemon each round. Pick one Pokemon from every pool and build your final team before the timer runs out.`,
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
+  }
   if (flavor === 'tournament') {
     const participantCount = Number(plan?.selection?.participant_count || 0) || 4;
     return joinDescriptionParagraphs(
@@ -290,6 +414,12 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
   if (flavor === 'know-your-shiny') {
     return joinDescriptionParagraphs(
       'How well do you know Shiny Pokemon?\nCan you guess the real shiny before time runs out?',
+      `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
+    );
+  }
+  if (flavor === 'cry-match') {
+    return joinDescriptionParagraphs(
+      'A Pokemon cry plays — which of the four Pokemon is it? Listen closely and lock in your guess before the timer runs out.',
       `Welcome to ${channelName} to test your Pokemon knowledge, and see if you're a true master!`,
     );
   }
@@ -312,6 +442,45 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
 
 function buildTemplateAwareMetadataPrompt(plan) {
   const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'pixelated-reveal') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a pixelated Pokemon reveal challenge.',
+      `Round count: ${Number(plan?.selection?.round_count || 0) || 4}`,
+      'Difficulty order: Easy, Medium, Hard, Impossible',
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil the Pokemon names in the title.',
+      '- Explain that every round becomes harder as fewer pixels are revealed.',
+      '- Mention that the viewer should answer before the sprite becomes sharp.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
+  if (flavor === 'progressive-reveal') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    const revealMethods = Array.isArray(plan?.selection?.reveal_methods)
+      ? plan.selection.reveal_methods
+      : [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a progressive Pokemon reveal challenge.',
+      `Round count: ${Number(plan?.selection?.round_count || 0) || 3}`,
+      `Reveal methods: ${revealMethods.join(', ')}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil the Pokemon names in the title.',
+      '- Explain that each sprite becomes progressively more visible while the viewer guesses.',
+      '- Mention that the viewer should answer before the full reveal.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
   if (flavor === 'memory') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     const questionText = String(plan?.question?.question_text || '').trim();
@@ -368,6 +537,28 @@ function buildTemplateAwareMetadataPrompt(plan) {
       'Return JSON only.',
     ].join('\n');
   }
+  if (flavor === 'build-your-team') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    const poolLabels = Array.isArray(plan?.selection?.pool_labels)
+      ? plan.selection.pool_labels
+      : [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon team-building choice video.',
+      `Round count: ${Number(plan?.selection?.round_count || 0) || 6}`,
+      'Mechanic: the viewer picks one Pokemon from four options each round to build a team.',
+      `Round pools: ${poolLabels.join(', ')}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do not spoil every Pokemon in the title.',
+      '- The description should frame the video as a fast team-building challenge.',
+      '- Mention that the viewer chooses one Pokemon per round before the timer ends.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
   if (flavor === 'tournament') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     const championName = String(plan?.tournament?.champion?.name || '').trim();
@@ -404,6 +595,24 @@ function buildTemplateAwareMetadataPrompt(plan) {
       'Return JSON only.',
     ].join('\n');
   }
+  if (flavor === 'cry-match') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon cry-guessing challenge video.',
+      `Round count: ${Number(plan?.selection?.round_count || 0) || 3}`,
+      `Pokemon shown per round: 4 (one is the target whose cry plays)`,
+      `Pokemon shown across all rounds: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- The title must stay under 70 characters and sound native for YouTube Shorts.',
+      '- Do NOT spoil the target Pokemon names in the title.',
+      '- Frame the video as a listen-and-guess challenge — a Pokemon cry plays and the viewer picks which of the four Pokemon it belongs to.',
+      '- Mention the audio-driven mechanic (cry, sound) so the description reads unmistakably as an audio quiz.',
+      '- Hashtags must contain 4 to 6 short tags and include pokemon plus shorts.',
+      '- Keep the tone playful and sharp, not childish and not corporate.',
+      'Return JSON only.',
+    ].join('\n');
+  }
   if (flavor !== 'find-the-shiny') {
     return buildMetadataPrompt(plan);
   }
@@ -431,6 +640,24 @@ function buildTemplateAwareHashtags(plan) {
   const flavor = resolveTemplateFlavor(plan);
   const typePair = plan?.selection?.type_pair || [];
   const typeHashtags = buildTypeHashtags(typePair);
+  if (flavor === 'pixelated-reveal') {
+    return normalizeHashtags([
+      'pokemon',
+      'pixelchallenge',
+      'guessthepokemon',
+      'pokemonquiz',
+      'shorts',
+    ]);
+  }
+  if (flavor === 'progressive-reveal') {
+    return normalizeHashtags([
+      'pokemon',
+      'guessthepokemon',
+      'pokemonreveal',
+      'pokemonquiz',
+      'shorts',
+    ]);
+  }
   if (flavor === 'memory') {
     return normalizeHashtags([
       'pokemon',
@@ -458,6 +685,15 @@ function buildTemplateAwareHashtags(plan) {
       'shorts',
     ]);
   }
+  if (flavor === 'build-your-team') {
+    return normalizeHashtags([
+      'pokemon',
+      'pokemonteam',
+      'teambuilder',
+      'pokemonquiz',
+      'shorts',
+    ]);
+  }
   if (flavor === 'tournament') {
     return normalizeHashtags([
       'pokemon',
@@ -473,6 +709,15 @@ function buildTemplateAwareHashtags(plan) {
       'shinypokemon',
       'shinyhunt',
       'pokemonquiz',
+      'shorts',
+    ]);
+  }
+  if (flavor === 'cry-match') {
+    return normalizeHashtags([
+      'pokemon',
+      'pokemoncries',
+      'pokemonquiz',
+      'guessthepokemon',
       'shorts',
     ]);
   }

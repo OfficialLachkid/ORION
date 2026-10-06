@@ -118,8 +118,7 @@
     },
     "sprite_grid": {
       "difficulty_weights": {
-        "medium": 3,
-        "easy": 1,
+        "medium": 1,
         "hard": 1
       },
       "difficulty_levels": {
@@ -127,11 +126,6 @@
           "sprite_count": 6,
           "rows": 2,
           "columns": 3
-        },
-        "easy": {
-          "sprite_count": 4,
-          "rows": 2,
-          "columns": 2
         },
         "hard": {
           "sprite_count": 9,

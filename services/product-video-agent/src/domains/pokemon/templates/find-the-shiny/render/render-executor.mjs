@@ -22,6 +22,7 @@ import {
 } from './render-plan.mjs';
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
+import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
 
 export async function renderPokeQuizzVideo({
   plan,
@@ -187,8 +188,7 @@ export async function renderPokeQuizzVideo({
     timerCountdown: inputRoleIndex.get('timer-countdown'),
     timerAlarm: inputRoleIndex.has('timer-alarm') ? inputRoleIndex.get('timer-alarm') : null,
     pokeball: inputRoleIndex.get('pokeball-grid'),
-    normalSprite: inputRoleIndex.get('normal-sprite'),
-    shinySprite: inputRoleIndex.get('shiny-sprite'),
+    cellSprites: renderPlan.grid.cells.map((cell) => inputRoleIndex.get(`cell-${cell.index}-sprite`)),
     shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
   };
   const fontPath = await resolveFontPath(fontCandidates);
@@ -198,7 +198,11 @@ export async function renderPokeQuizzVideo({
     textArtifacts: buildTextArtifacts({ renderPlan, template }),
   });
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath, textArtifacts);
-  await writeFile(filterScriptPath, visualFilter.script, 'utf8');
+  await writeChannelWatermarkedVisualFilterScript(filterScriptPath, visualFilter, {
+    plan,
+    renderPlan,
+    fontPath,
+  });
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
   await runLocalProcess({

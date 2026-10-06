@@ -21,7 +21,7 @@ test('background inventory excludes avif assets until the renderer supports them
   assert.equal(BACKGROUND_EXTENSIONS.has('.jpg'), true);
 });
 
-test('type icon selection prefers 3D assets only when every requested type exists', () => {
+test('type icon selection prefers original-style assets when every requested type exists', () => {
   const inventory = {
     type_icons: {
       pixel: [
@@ -29,18 +29,46 @@ test('type icon selection prefers 3D assets only when every requested type exist
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Pixel Types/poison.gif',
       ],
       three_d: [
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/grass.png',
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/grass.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/glow-style/grass.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/glow-style/poison.png',
       ],
       three_d_styles: buildThreeDTypeStyleCatalog([
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/grass.png',
+        '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/grass.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/glow-style/grass.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/glow-style/poison.png',
         '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/legacy/grass.png',
       ]),
+    },
+  };
+
+  assert.deepEqual(selectTypeIconSet(['grass', 'poison'], inventory), {
+    style: 'three_d',
+    style_variant: 'original-style',
+    file_paths: [
+      '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/grass.png',
+      '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/poison.png',
+    ],
+  });
+});
+
+test('type icon selection falls back to complete badge-style assets when original-style is incomplete', () => {
+  const paths = [
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/original-style/grass.png',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/grass.png',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/3D Types/badge-style/poison.png',
+  ];
+  const inventory = {
+    type_icons: {
+      pixel: [],
+      three_d: paths,
+      three_d_styles: buildThreeDTypeStyleCatalog(paths),
     },
   };
 
@@ -91,6 +119,7 @@ test('overlay preset selection exposes open-close pokeball separately while keep
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Timer Countdown.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Timer Alarm.gif',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/Pixel Pokeball Wiggle.gif',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Overlays/subscribe-reminder-greenscreen.mp4',
   ]);
 
   assert.match(presets.timer || '', /Timer Countdown\.gif$/u);
@@ -104,6 +133,7 @@ test('overlay preset selection exposes open-close pokeball separately while keep
   assert.match(presets.disappear || '', /disappear\.gif$/u);
   assert.match(presets.pokeball_open_close || '', /Open and Close Pokeball\.gif$/u);
   assert.match(presets.pokeball_primary || '', /3D Pokeball Wiggle\.gif$/u);
+  assert.match(presets.subscribe_reminder || '', /subscribe-reminder-greenscreen\.mp4$/u);
 });
 
 test('overlay preset selection prefers greenscreen hp-bar videos when present', () => {
@@ -127,15 +157,20 @@ test('timer_finished stays the shared timer-end default when a ding file is also
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/shiny-sound.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/timer_finished.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/pokeball_wiggle.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/rotating-slot-complete.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/rotating-slot.mp3',
   ]);
 
   assert.match(soundEffectPresets.countdown_tick || '', /countdown\.mp3$/u);
+  assert.match(soundEffectPresets.ding || '', /ding-sound\.mp3$/u);
   assert.match(soundEffectPresets.timer_end || '', /timer_finished\.mp3$/u);
   assert.match(soundEffectPresets.reveal || '', /timer_finished\.mp3$/u);
   assert.match(soundEffectPresets.shiny || '', /shiny-sound\.mp3$/u);
   assert.match(soundEffectPresets.disappear || '', /disappear-sound\.mp3$/u);
   assert.match(soundEffectPresets.pokeball_intro || '', /enlarge-pokeball\.mp3$/u);
   assert.match(soundEffectPresets.pokeball_wiggle || '', /pokeball_wiggle\.mp3$/u);
+  assert.match(soundEffectPresets.stat_spinner_spin || '', /rotating-slot\.mp3$/u);
+  assert.match(soundEffectPresets.stat_spinner_complete || '', /rotating-slot-complete\.mp3$/u);
 });
 
 test('disappear-sound files are detected as the disappear cue', async () => {

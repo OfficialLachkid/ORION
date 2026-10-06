@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadRuntimeConfig } from '../../lib/runtime-config.mjs';
+import { PS_OPT_OUT_FOOTER } from '../../gmail/src/opt-out-footer.mjs';
 import {
   buildExecutionPlan,
   buildExecutionStartedEvents,
@@ -537,11 +538,16 @@ test('executeTask creates a Gmail draft and emits a follow-up approval request',
     },
   }, { fetchImpl });
 
+  // 2026-09-28: normalizeDraft now auto-appends the mandatory opt-out
+  // PS line (compliance backstop). The task's persisted draft body
+  // reflects what's actually in Gmail, so the assertion checks for the
+  // input body + the appended footer.
+  const expectedBody = `Hello from O.R.I.O.N.\n\n${PS_OPT_OUT_FOOTER}`;
   assert.equal(result.outcome, 'completed');
   assert.equal(result.executionResult.report.state, 'awaiting_approval');
   assert.equal(result.executionResult.report.pendingApprovalTask.runtime_action, 'gmail_send_draft');
-  assert.equal(result.executionResult.report.pendingApprovalTask.gmail_draft.bodyText, 'Hello from O.R.I.O.N.');
-  assert.equal(result.outboundEvents[1].metadata.emailBody, 'Hello from O.R.I.O.N.');
+  assert.equal(result.executionResult.report.pendingApprovalTask.gmail_draft.bodyText, expectedBody);
+  assert.equal(result.outboundEvents[1].metadata.emailBody, expectedBody);
   assert.equal(result.outboundEvents.some((event) => event.type === 'approval_request' && event.channelKey === 'approvals'), true);
   assert.equal(fetchCalls.length, 2);
 });
@@ -1070,8 +1076,9 @@ test('executeTask suppresses extra agent-results cards for manual Poke Quizz gen
     priority: 'normal',
     poke_quizz_generate_review: {
       templateKey: 'find-the-shiny',
+      templateId: 'pokemon.find-the-shiny.v1',
       channelSelector: 'trivamon-youtube',
-      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-find-the-shiny-youtube.json',
+      channelConfigPath: 'services/product-video-agent/config/channels/trivamon-youtube.json',
     },
   }, loadRuntimeConfig(), {
     productVideoActionRunner: async () => ({

@@ -1,6 +1,7 @@
 import { assertGmailRuntimeConfig, resolveGmailRuntimeConfig } from './config.mjs';
 import { buildRfc822Message, toBase64Url } from './mime.mjs';
 import { fetchAccessToken } from './oauth.mjs';
+import { ensureOptOutFooter } from './opt-out-footer.mjs';
 
 const GMAIL_SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 const GMAIL_DRAFTS_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/drafts';
@@ -34,7 +35,14 @@ function normalizeDraft(gmailConfig, draft) {
   return {
     to: draft.to,
     subject: draft.subject,
-    bodyText: draft.bodyText,
+    // Compliance backstop: ensureOptOutFooter is idempotent — no-op when the
+    // body already carries an opt-out phrase (which is what the qualifier
+    // prompt produces). Only actually appends when the caller handed us a
+    // body missing it (legacy code path, an operator hand-edit that
+    // stripped it, a follow-up drafter that forgot). The gmail-executor's
+    // send-time guard also patches pre-existing Gmail drafts before they
+    // fire; this line covers the create + direct-send paths.
+    bodyText: ensureOptOutFooter(draft.bodyText),
     fromEmail: draft.fromEmail || gmailConfig.senderEmail,
     fromName: draft.fromName || gmailConfig.senderName || '',
     replyTo: draft.replyTo || '',
@@ -253,14 +261,76 @@ export async function getGmailDraft(envOrConfig, draftId, options = {}) {
   const payload = await response.json();
   const messagePayload = payload?.message?.payload || {};
   const headers = Array.isArray(messagePayload.headers) ? messagePayload.headers : [];
-  const subjectHeader = headers.find((h) => String(h?.name || '').toLowerCase() === 'subject');
-  const subject = String(subjectHeader?.value || '').trim();
+  const getHeader = (name) => {
+    const h = headers.find((entry) => String(entry?.name || '').toLowerCase() === name.toLowerCase());
+    return String(h?.value || '').trim();
+  };
+  const subject = getHeader('Subject');
   const bodyText = extractTextPlainBody(messagePayload);
   const preserved = preserveBodyText(bodyText);
+  // Also surface enough of the RFC-822 headers that a caller (the
+  // gmail-executor's send-time opt-out guard) can rebuild the MIME
+  // via updateGmailDraft with the exact same envelope + threading.
+  // From is a decorated string ("Name <email>"); split it so callers
+  // can reuse fromEmail/fromName as normalizeDraft expects.
+  const rawFrom = getHeader('From');
+  const fromMatch = /^(?:"?([^"<]*?)"?\s*)?<([^>]+)>\s*$/u.exec(rawFrom);
+  const fromEmail = (fromMatch ? fromMatch[2] : rawFrom).trim();
+  const fromName = (fromMatch ? String(fromMatch[1] || '').trim() : '');
   return {
     subject,
     bodyText: preserved,
     bodyPreview: previewBody(preserved),
+    to: getHeader('To'),
+    fromEmail,
+    fromName,
+    replyTo: getHeader('Reply-To'),
+    inReplyTo: getHeader('In-Reply-To'),
+    references: getHeader('References'),
+    threadId: String(payload?.message?.threadId || '').trim(),
+  };
+}
+
+// Overwrites an existing draft's contents (Gmail drafts.update). Used by
+// the gmail-executor's opt-out footer guard to patch a body that's
+// missing the compliance PS line, right before the drafts.send call
+// fires. Rebuilds the RFC-822 message from the same envelope + headers
+// so nothing else about the draft changes (threading, From/Reply-To,
+// audit BCC).
+export async function updateGmailDraft(envOrConfig, draftId, draft, options = {}) {
+  const gmailConfig = resolveInputConfig(envOrConfig);
+  assertGmailRuntimeConfig(gmailConfig);
+  const draftIdentifier = String(draftId || '').trim();
+  if (!draftIdentifier) {
+    throw new Error('Missing Gmail draft ID.');
+  }
+  const fetchImpl = options.fetch || options.fetchImpl || fetch;
+  const fetchAccessTokenImpl = options.fetchAccessToken || fetchAccessToken;
+  const normalized = normalizeDraft(gmailConfig, draft);
+  const raw = toBase64Url(buildRfc822Message(normalized));
+  const message = normalized.threadId ? { raw, threadId: normalized.threadId } : { raw };
+
+  const { accessToken } = await fetchAccessTokenImpl(gmailConfig, { fetch: fetchImpl });
+  const response = await fetchImpl(`${GMAIL_DRAFTS_URL}/${encodeURIComponent(draftIdentifier)}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ message }),
+  });
+  const { bodyText, payload } = await readJsonResponse(response);
+  if (!response.ok) {
+    throw new Error(`Gmail draft update failed (${response.status}): ${bodyText || 'no body'}`);
+  }
+  return {
+    mode: 'draft_updated',
+    draftId: String(payload?.id || draftIdentifier).trim(),
+    messageId: String(payload?.message?.id || '').trim(),
+    threadId: String(payload?.message?.threadId || normalized.threadId || '').trim(),
+    subject: normalized.subject,
+    bodyText: preserveBodyText(normalized.bodyText),
+    bodyPreview: previewBody(normalized.bodyText),
   };
 }
 

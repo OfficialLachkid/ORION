@@ -74,6 +74,10 @@ async function listPokeQuizzGifBackgroundFiles() {
   return listFiles(POKE_QUIZZ_ASSET_LAYOUT.gifBackgrounds, BACKGROUND_EXTENSIONS);
 }
 
+async function listPokeQuizzPixelBackgroundFiles() {
+  return listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.pixelBackgrounds, BACKGROUND_EXTENSIONS);
+}
+
 async function listPokeQuizzBattleBackgroundFiles() {
   return listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.battleBackgrounds, BACKGROUND_EXTENSIONS);
 }
@@ -116,6 +120,7 @@ export function buildThreeDTypeStyleCatalog(files, rootDirectory = POKE_QUIZZ_AS
 
 function preferredThreeDStyleOrder(styleCatalog) {
   const preferredNames = [
+    'original-style',
     'badge-style',
     'style-1',
     'style1',
@@ -154,6 +159,7 @@ function matchOverlay(files, keywords) {
 export function selectSoundEffectPresets(soundEffects) {
   const allSoundEffects = Array.isArray(soundEffects) ? soundEffects : [];
   const countdownTick = matchSoundEffect(allSoundEffects, ['countdown', 'tick', 'beep']);
+  const ding = matchSoundEffect(allSoundEffects, ['ding-sound', 'ding_sound', 'ding sound', 'ding']);
   const timerEnd = (
     matchSoundEffect(allSoundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'reveal-hit'])
     || matchSoundEffect(allSoundEffects, ['ding'])
@@ -179,10 +185,24 @@ export function selectSoundEffectPresets(soundEffects) {
     ['electric', 'loading'],
     ['loading', 'sound'],
   ]);
+  const statSpinnerComplete = matchSoundEffectKeywordGroups(allSoundEffects, [
+    ['rotating', 'slot', 'complete'],
+    ['slot', 'spinner', 'complete'],
+    ['slot', 'complete'],
+  ]);
+  const statSpinnerSpin = matchSoundEffectKeywordGroups(
+    allSoundEffects.filter((filePath) => !/(complete|finish|stop|land)/iu.test(filePath)),
+    [
+      ['rotating', 'slot'],
+      ['slot', 'spinner'],
+      ['slot', 'spin'],
+    ],
+  );
 
   return {
     all: allSoundEffects,
     countdown_tick: countdownTick,
+    ding,
     timer_end: timerEnd,
     reveal,
     shiny,
@@ -190,6 +210,8 @@ export function selectSoundEffectPresets(soundEffects) {
     pokeball_intro: pokeballIntro,
     pokeball_wiggle: pokeballWiggle,
     stats_reveal: statsReveal,
+    stat_spinner_spin: statSpinnerSpin,
+    stat_spinner_complete: statSpinnerComplete,
   };
 }
 
@@ -237,6 +259,8 @@ export function selectOverlayPresets(overlays) {
   const disappear = matchOverlay(overlays, ['disappear'])
     || matchOverlay(overlays, ['vanish'])
     || matchOverlay(overlays, ['poof']);
+  const subscribeReminder = matchOverlay(overlayVideos, ['subscribe', 'reminder'])
+    || matchOverlay(overlayVideos, ['subscribe']);
   const pokeballOpenClose = matchOverlay(overlays, ['open', 'close', 'pokeball']);
   const timer = timerCountdown || matchOverlay(overlays, ['timer']);
   return {
@@ -252,6 +276,7 @@ export function selectOverlayPresets(overlays) {
     versus,
     type_placeholder: typePlaceholder,
     disappear,
+    subscribe_reminder: subscribeReminder,
     pokeball_open_close: pokeballOpenClose,
     pokeball_primary: matchOverlay(overlays, ['3d', 'pokeball'])
       || matchOverlay(overlays, ['pokeball', 'wiggle'])
@@ -262,6 +287,7 @@ export function selectOverlayPresets(overlays) {
 export async function scanPokeQuizzAssetInventory() {
   const [
     backgrounds,
+    pixelBackgrounds,
     gifBackgrounds,
     battleBackgrounds,
     music,
@@ -270,9 +296,11 @@ export async function scanPokeQuizzAssetInventory() {
     pixelTypes,
     threeDTypes,
     overlays,
+    pokeballSprites,
     transitions,
   ] = await Promise.all([
     listPokeQuizzBackgroundFiles(),
+    listPokeQuizzPixelBackgroundFiles(),
     listPokeQuizzGifBackgroundFiles(),
     listPokeQuizzBattleBackgroundFiles(),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.battleIntroMusic, AUDIO_EXTENSIONS),
@@ -281,6 +309,7 @@ export async function scanPokeQuizzAssetInventory() {
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.pixelTypes, IMAGE_EXTENSIONS),
     listFilesRecursive(POKE_QUIZZ_ASSET_LAYOUT.threeDTypes, new Set(['.png', '.webp'])),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.overlays, new Set(['.png', '.webp', '.gif', '.mov', '.mp4', '.webm'])),
+    listFiles(POKE_QUIZZ_ASSET_LAYOUT.pokeballSprites, new Set(['.png', '.webp'])),
     listFiles(POKE_QUIZZ_ASSET_LAYOUT.transitions, new Set(['.png', '.webp', '.gif', '.mov', '.mp4', '.webm'])),
   ]);
   const threeDTypeStyles = buildThreeDTypeStyleCatalog(threeDTypes);
@@ -288,6 +317,7 @@ export async function scanPokeQuizzAssetInventory() {
     scanned_at: new Date().toISOString(),
     directories: { ...POKE_QUIZZ_ASSET_LAYOUT },
     backgrounds,
+    pixel_backgrounds: pixelBackgrounds,
     gif_backgrounds: gifBackgrounds,
     battle_backgrounds: battleBackgrounds,
     music,
@@ -300,6 +330,7 @@ export async function scanPokeQuizzAssetInventory() {
     },
     overlay_presets: selectOverlayPresets(overlays),
     overlays,
+    pokeball_sprites: pokeballSprites,
     transitions,
   };
 }

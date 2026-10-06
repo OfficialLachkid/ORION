@@ -22,6 +22,7 @@ import {
   prepareCommandTasksForExecution,
   rehydratePokeQuizzReviewTask,
   resolveInteractionApprovalOrigin,
+  searchApprovalMessageInThreads,
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
 
@@ -724,4 +725,157 @@ test('collectApprovalDeleteTargets deduplicates when tracked and origin point to
 test('collectApprovalDeleteTargets returns empty when neither source has a target', () => {
   assert.deepEqual(collectApprovalDeleteTargets({ task: { task_id: 'TASK-1' }, trackedMap: new Map() }), []);
   assert.deepEqual(collectApprovalDeleteTargets({}), []);
+});
+
+test('searchApprovalMessageInThreads: finds the message by task_id in content or embeds', async () => {
+  // Last-resort fallback for the delete-on-send cleanup: when both the
+  // interaction-payload approval_origin AND the trackedTaskMessages
+  // bot-posted map come up empty (bot restart, modal path, etc.), scan
+  // the configured outreach threads and match on taskId.
+  const fetched = [];
+  const fetchChannelMessages = async (threadId, limit, { beforeId } = {}) => {
+    fetched.push({ threadId, limit, beforeId });
+    if (threadId === 'THREAD-WAITING') {
+      return [
+        { id: 'MSG-OLD', content: 'TASK-OTHER lives here', embeds: [] },
+        { id: 'MSG-HIT', content: '', embeds: [{ title: 'Draft outreach', fields: [{ name: 'Task', value: 'TASK-1' }] }] },
+      ];
+    }
+    return [];
+  };
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-1',
+    threadIds: ['THREAD-WAITING', 'THREAD-FOLLOWUPS'],
+    fetchChannelMessages,
+  });
+  assert.deepEqual(target, {
+    channelId: 'THREAD-WAITING',
+    messageId: 'MSG-HIT',
+    key: null,
+    source: 'thread_search',
+  });
+  // Stops after the first hit — doesn't scan unused later threads
+  assert.equal(fetched.length, 1);
+  assert.equal(fetched[0].beforeId, null, 'first page uses no before cursor');
+});
+
+test('searchApprovalMessageInThreads: paginates backward via `before` cursor until match found', async () => {
+  // Reproduces the 2026-10-03 bulk-send cleanup gap: the Discord Get
+  // Channel Messages endpoint returns at most 100 messages per call.
+  // When the target card is older than the top page, we must page
+  // backward using the oldest message's id as the `before` cursor.
+  const calls = [];
+  const fetchChannelMessages = async (threadId, limit, { beforeId } = {}) => {
+    calls.push({ beforeId });
+    if (!beforeId) {
+      // Full first page: 3 recent, none match
+      return [
+        { id: 'MSG-1003', content: 'misc', embeds: [] },
+        { id: 'MSG-1002', content: 'misc', embeds: [] },
+        { id: 'MSG-1001', content: 'misc', embeds: [] },
+      ];
+    }
+    if (beforeId === 'MSG-1001') {
+      // Second page: the hit is here
+      return [
+        { id: 'MSG-900', content: 'approve TASK-TARGET', embeds: [] },
+        { id: 'MSG-899', content: 'misc', embeds: [] },
+        { id: 'MSG-898', content: 'misc', embeds: [] },
+      ];
+    }
+    return [];
+  };
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-TARGET',
+    threadIds: ['THREAD-DEEP'],
+    fetchChannelMessages,
+    pageLimit: 3,
+    maxDepth: 100,
+  });
+  assert.equal(target?.messageId, 'MSG-900');
+  assert.equal(calls.length, 2, 'exactly 2 pages scanned: first + before=MSG-1001');
+  assert.equal(calls[1].beforeId, 'MSG-1001');
+});
+
+test('searchApprovalMessageInThreads: stops at maxDepth to bound rate-limit cost', async () => {
+  let page = 0;
+  const fetchChannelMessages = async (_t, limit) => {
+    page += 1;
+    return Array.from({ length: limit }, (_v, i) => ({
+      id: `MSG-p${page}-${i}`,
+      content: 'nothing matches',
+      embeds: [],
+    }));
+  };
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-NOWHERE',
+    threadIds: ['THREAD-X'],
+    fetchChannelMessages,
+    pageLimit: 10,
+    maxDepth: 25,
+  });
+  assert.equal(target, null);
+  // maxDepth=25, pageLimit=10 → 3 pages (10+10+10=30, loop breaks when scanned >= 25)
+  assert.equal(page, 3);
+});
+
+test('searchApprovalMessageInThreads: short final page ends pagination (reached channel start)', async () => {
+  let page = 0;
+  const fetchChannelMessages = async (_t, limit) => {
+    page += 1;
+    if (page === 1) return Array.from({ length: limit }, (_v, i) => ({ id: `MSG-${100 - i}`, content: 'misc', embeds: [] }));
+    // Partial page = end of channel
+    return [{ id: 'MSG-1', content: 'misc', embeds: [] }];
+  };
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-ABSENT',
+    threadIds: ['THREAD-END'],
+    fetchChannelMessages,
+    pageLimit: 10,
+    maxDepth: 1000,
+  });
+  assert.equal(target, null);
+  assert.equal(page, 2, 'stops after short page, does not request a third');
+});
+
+test('searchApprovalMessageInThreads: content substring match also works', async () => {
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-ABC',
+    threadIds: ['THREAD-1'],
+    fetchChannelMessages: async () => ([
+      { id: 'MSG-TEXT', content: 'approve TASK-ABC', embeds: [] },
+    ]),
+  });
+  assert.equal(target?.messageId, 'MSG-TEXT');
+  assert.equal(target?.source, 'thread_search');
+});
+
+test('searchApprovalMessageInThreads: returns null when no thread contains the task', async () => {
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-MISSING',
+    threadIds: ['THREAD-1', 'THREAD-2'],
+    fetchChannelMessages: async () => ([]),
+  });
+  assert.equal(target, null);
+});
+
+test('searchApprovalMessageInThreads: a thread-fetch error is swallowed and the next thread is tried', async () => {
+  let callCount = 0;
+  const target = await searchApprovalMessageInThreads({
+    taskId: 'TASK-9',
+    threadIds: ['THREAD-BAD', 'THREAD-GOOD'],
+    fetchChannelMessages: async (threadId) => {
+      callCount += 1;
+      if (threadId === 'THREAD-BAD') throw new Error('rate limited');
+      return [{ id: 'MSG-9', content: 'TASK-9 approved', embeds: [] }];
+    },
+  });
+  assert.equal(callCount, 2);
+  assert.equal(target?.messageId, 'MSG-9');
+  assert.equal(target?.channelId, 'THREAD-GOOD');
+});
+
+test('searchApprovalMessageInThreads: refuses to run without a taskId or fetcher', async () => {
+  assert.equal(await searchApprovalMessageInThreads({ taskId: '', threadIds: ['T'], fetchChannelMessages: async () => [] }), null);
+  assert.equal(await searchApprovalMessageInThreads({ taskId: 'TASK-1', threadIds: ['T'] }), null);
 });

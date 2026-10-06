@@ -6,8 +6,14 @@ import {
   buildAudioFilterScript,
   buildTournamentCryCues,
 } from '../src/domains/pokemon/templates/tournament/render/audio-filter-script.mjs';
-import { resolveTournamentBattle } from '../src/domains/pokemon/templates/tournament/battle-logic.mjs';
+import {
+  resolveBestTypeAttack,
+  resolveTournamentBattle,
+  resolveTournamentTypeAdvantage,
+} from '../src/domains/pokemon/templates/tournament/battle-logic.mjs';
+import { selectTournamentBattleStat } from '../src/domains/pokemon/templates/tournament/battle-stat.mjs';
 import { applyNarrationDurationsToRenderPlan } from '../src/domains/pokemon/templates/tournament/render/render-plan.mjs';
+import { buildTournamentStatSpinnerFilters } from '../src/domains/pokemon/templates/tournament/render/stat-spinner-filter.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/tournament/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/tournament/render/visual-inputs.mjs';
 
@@ -136,6 +142,14 @@ const template = {
         enabled: true,
         preferred_keywords: ['electric-loading-sound'],
       },
+      stat_spinner_spin: {
+        enabled: true,
+        preferred_keywords: ['rotating-slot.mp3'],
+      },
+      stat_spinner_complete: {
+        enabled: true,
+        preferred_keywords: ['rotating-slot-complete'],
+      },
       disappear: {
         enabled: true,
         preferred_keywords: ['disappear-sound'],
@@ -230,10 +244,12 @@ const assetInventory = {
   battle_backgrounds: ['/tmp/battle-backgrounds/arena.png'],
   music: ['/tmp/music.mp3'],
   sound_effects: {
-    all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3', '/tmp/electric-loading-sound.mp3', '/tmp/disappear-sound.mp3'],
+    all: ['/tmp/ding-sound.mp3', '/tmp/select-sound.mp3', '/tmp/pokeball-open-sound.mp3', '/tmp/electric-loading-sound.mp3', '/tmp/rotating-slot.mp3', '/tmp/rotating-slot-complete.mp3', '/tmp/disappear-sound.mp3'],
     timer_end: '/tmp/ding-sound.mp3',
     pokeball_intro: '/tmp/pokeball-open-sound.mp3',
     stats_reveal: '/tmp/electric-loading-sound.mp3',
+    stat_spinner_spin: '/tmp/rotating-slot.mp3',
+    stat_spinner_complete: '/tmp/rotating-slot-complete.mp3',
     disappear: '/tmp/disappear-sound.mp3',
   },
   overlays: ['/tmp/open-close-pokeball.gif', '/tmp/disappear.gif', '/tmp/grass-plateau.png', '/tmp/versus.png'],
@@ -330,6 +346,12 @@ test('generic planner dispatch builds a four-participant tournament bracket with
   assert.equal(plan.tournament.participants.length, 4);
   assert.equal(plan.tournament.matches.length, 3);
   assert.equal(plan.tournament.matches[0].round_label, 'Semi Final 1');
+  assert.equal(plan.tournament.matches.every((match) => match.battle_stat?.key), true);
+  assert.equal(plan.tournament.matches.every((match) => !/^The slot lands on /u.test(match.insight_text)), true);
+  assert.equal(plan.tournament.matches.every((match) => !/: \d+ to \d+/u.test(match.insight_text)), true);
+  assert.equal(plan.tournament.matches.every((match) => !/Attack|Defense|Speed|HP/u.test(match.intro_line_text)), true);
+  assert.notEqual(plan.tournament.matches[0].battle_stat.key, plan.tournament.matches[1].battle_stat.key);
+  assert.notEqual(plan.tournament.matches[1].battle_stat.key, plan.tournament.matches[2].battle_stat.key);
   assert.equal(plan.tournament.participants[0].render_sprite_path.endsWith('.gif'), true);
   assert.equal(plan.tournament.participants.filter((participant) => participant.uses_shiny_render_sprite).length, 1);
   assert.equal(plan.selection.animated_shiny_participant_count, 1);
@@ -342,6 +364,8 @@ test('generic planner dispatch builds a four-participant tournament bracket with
   assert.equal(plan.assets.audio.selected_sound_effects.bracket_progress, '/tmp/select-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.winner_reveal, '/tmp/ding-sound.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.stats_reveal, '/tmp/electric-loading-sound.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.stat_spinner_spin, '/tmp/rotating-slot.mp3');
+  assert.equal(plan.assets.audio.selected_sound_effects.stat_spinner_complete, '/tmp/rotating-slot-complete.mp3');
   assert.equal(plan.assets.audio.selected_sound_effects.disappear, '/tmp/disappear-sound.mp3');
   assert.equal(plan.required_asset_gaps.length, 0);
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Tournament$/u);
@@ -386,6 +410,269 @@ test('tournament battle commentary uses type advantage phrasing when typing deci
   assert.equal(battle.intro_line_text, 'Charizard versus Blastoise.');
   assert.equal(battle.insight_text, 'Blastoise has the type advantage.');
   assert.equal(battle.commentary_text, 'Charizard versus Blastoise. Blastoise has the type advantage.');
+});
+
+test('tournament slot stat alone decides the match after it lands', () => {
+  const left = {
+    id: 'left-slot',
+    national_dex_number: 1,
+    display_name: 'Left Slot',
+    types: ['fire'],
+    base_stats: { hp: 120, attack: 40, defense: 120, special_attack: 120, special_defense: 120, speed: 120 },
+    base_stat_total: 640,
+  };
+  const right = {
+    id: 'right-slot',
+    national_dex_number: 2,
+    display_name: 'Right Slot',
+    types: ['grass'],
+    base_stats: { hp: 40, attack: 50, defense: 40, special_attack: 40, special_defense: 40, speed: 40 },
+    base_stat_total: 250,
+  };
+  const battle = resolveTournamentBattle({
+    left,
+    right,
+    battleStat: { key: 'attack', label: 'Attack', spoken_label: 'Attack' },
+    weights: { type_advantage: 999, random_spread: 6 },
+    random: () => 0,
+  });
+
+  assert.equal(battle.winner.id, 'right-slot');
+  assert.equal(battle.battle_stat.key, 'attack');
+  assert.deepEqual(battle.stat_values, { left: 40, right: 50 });
+  assert.equal(battle.intro_line_text, 'Left Slot versus Right Slot.');
+  assert.equal(battle.insight_text, 'Right Slot has higher Attack.');
+  assert.equal(battle.tiebreaker, null);
+});
+
+test('tournament Type slot only resolves a real unequal super-effective advantage', () => {
+  const charizard = {
+    id: 'charizard-type-slot',
+    display_name: 'Charizard',
+    types: ['fire', 'flying'],
+    base_stats: { hp: 78, attack: 84, defense: 78, special_attack: 109, special_defense: 85, speed: 100 },
+    base_stat_total: 534,
+  };
+  const blastoise = {
+    id: 'blastoise-type-slot',
+    display_name: 'Blastoise',
+    types: ['water'],
+    base_stats: { hp: 79, attack: 83, defense: 100, special_attack: 85, special_defense: 105, speed: 78 },
+    base_stat_total: 530,
+  };
+
+  const advantage = resolveTournamentTypeAdvantage(charizard, blastoise);
+  const battle = resolveTournamentBattle({
+    left: charizard,
+    right: blastoise,
+    battleStat: 'type',
+  });
+
+  assert.equal(advantage.eligible, true);
+  assert.equal(advantage.winner_side, 'right');
+  assert.equal(battle.winner.id, 'blastoise-type-slot');
+  assert.equal(battle.battle_stat.key, 'type');
+  assert.deepEqual(battle.stat_values, { left: 1, right: 2 });
+  assert.equal(battle.insight_text, 'Blastoise has the type advantage.');
+
+  const neutralAdvantage = resolveTournamentTypeAdvantage(
+    { display_name: 'Alpha', types: ['normal'] },
+    { display_name: 'Beta', types: ['normal'] },
+  );
+  assert.equal(neutralAdvantage.eligible, false);
+  assert.equal(neutralAdvantage.winner_side, null);
+  assert.notEqual(selectTournamentBattleStat({
+    selection_rules: {
+      battle_stat_variants: [{ key: 'type', weight: 10 }],
+    },
+  }, () => 0, ['type']).key, 'type');
+});
+
+test('tournament stat slot panel grows from its center before settling', () => {
+  const filters = buildTournamentStatSpinnerFilters({
+    match_id: 'spawn-test',
+    battle_stat: 'type',
+    spinner_appear_start_seconds: 2,
+    spinner_spin_start_seconds: 2.45,
+    spinner_stop_seconds: 4,
+    reveal_start_seconds: 5,
+  }, template);
+  const panelBoxes = filters.filter((filter) => filter.startsWith('drawbox='));
+
+  assert.equal(panelBoxes.length, 22);
+  assert.match(panelBoxes[0], /w=\d+:h=\d+:color=0xFFD60A/u);
+  assert.doesNotMatch(panelBoxes[0], /x=320:y=1530:w=440:h=132/u);
+  assert.match(panelBoxes.at(-2), /x=320:y=1530:w=440:h=132/u);
+  assert.match(filters.join(','), /drawtext=text='Type'/u);
+});
+
+test('tournament slot stat uses Base Stat Total only as a tie-break', () => {
+  const battle = resolveTournamentBattle({
+    left: {
+      id: 'left-tie',
+      display_name: 'Left Tie',
+      base_stats: { hp: 80, attack: 90, defense: 90, special_attack: 90, special_defense: 90, speed: 90 },
+      base_stat_total: 530,
+    },
+    right: {
+      id: 'right-tie',
+      display_name: 'Right Tie',
+      base_stats: { hp: 80, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 70 },
+      base_stat_total: 430,
+    },
+    battleStat: 'hp',
+  });
+
+  assert.equal(battle.winner.id, 'left-tie');
+  assert.equal(battle.tiebreaker, 'base_stat_total');
+  assert.equal(battle.insight_text, 'Left Tie has higher Base Stat Total.');
+});
+
+test('tournament type effectiveness handles dual typings and immunities', () => {
+  assert.deepEqual(resolveBestTypeAttack(['electric'], ['water', 'flying']), {
+    attacking_type: 'electric',
+    multiplier: 4,
+  });
+  assert.deepEqual(resolveBestTypeAttack(['normal'], ['ghost']), {
+    attacking_type: 'normal',
+    multiplier: 0,
+  });
+});
+
+test('tournament battle uses speed phrasing only when the winner is meaningfully faster', () => {
+  const fastmon = {
+    id: 'fastmon',
+    display_name: 'Fastmon',
+    types: ['normal'],
+    base_stats: { hp: 80, attack: 80, defense: 80, special_attack: 80, special_defense: 80, speed: 130 },
+    base_stat_total: 530,
+  };
+  const slowmon = {
+    id: 'slowmon',
+    display_name: 'Slowmon',
+    types: ['normal'],
+    base_stats: { hp: 80, attack: 80, defense: 80, special_attack: 80, special_defense: 80, speed: 80 },
+    base_stat_total: 480,
+  };
+
+  const battle = resolveTournamentBattle({
+    left: fastmon,
+    right: slowmon,
+    weights: {
+      base_stat_total: 0,
+      offensive_matchup: 0,
+      defense_bulk: 0,
+      type_advantage: 0,
+      speed_edge: 1,
+      random_spread: 0,
+    },
+    random: () => 0.5,
+  });
+
+  assert.equal(battle.winner.id, 'fastmon');
+  assert.equal(battle.selected_advantage.id, 'speed_edge');
+  assert.equal(battle.insight_text, 'Fastmon is faster.');
+  assert.equal(battle.selected_advantage.verified, true);
+});
+
+test('tournament battle does not claim speed when slower stats decide the winner', () => {
+  const slowPower = {
+    id: 'slow-power',
+    display_name: 'Slow Power',
+    types: ['normal'],
+    base_stats: { hp: 110, attack: 130, defense: 120, special_attack: 95, special_defense: 110, speed: 45 },
+    base_stat_total: 610,
+  };
+  const fastGlass = {
+    id: 'fast-glass',
+    display_name: 'Fast Glass',
+    types: ['normal'],
+    base_stats: { hp: 55, attack: 55, defense: 45, special_attack: 55, special_defense: 45, speed: 125 },
+    base_stat_total: 380,
+  };
+
+  const battle = resolveTournamentBattle({
+    left: slowPower,
+    right: fastGlass,
+    weights: {
+      base_stat_total: 0.2,
+      offensive_matchup: 0.08,
+      defense_bulk: 0.08,
+      type_advantage: 0,
+      speed_edge: 0.05,
+      random_spread: 0,
+    },
+    random: () => 0.5,
+  });
+
+  assert.equal(battle.winner.id, 'slow-power');
+  assert.equal(/faster/u.test(battle.insight_text), false);
+  assert.ok(['attack_edge', 'defense_edge', 'overall_stats'].includes(battle.selected_advantage.id));
+  assert.equal(battle.selected_advantage.verified, true);
+});
+
+test('tournament battle uses close phrasing when no verified edge is meaningful', () => {
+  const alpha = {
+    id: 'alpha',
+    display_name: 'Alpha',
+    types: ['normal'],
+    base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 70 },
+    base_stat_total: 420,
+  };
+  const beta = {
+    id: 'beta',
+    display_name: 'Beta',
+    types: ['normal'],
+    base_stats: { hp: 70, attack: 70, defense: 70, special_attack: 70, special_defense: 70, speed: 70 },
+    base_stat_total: 420,
+  };
+
+  const battle = resolveTournamentBattle({
+    left: alpha,
+    right: beta,
+    weights: {
+      base_stat_total: 0,
+      offensive_matchup: 0,
+      defense_bulk: 0,
+      type_advantage: 0,
+      speed_edge: 0,
+      random_spread: 0,
+      close_battle_threshold: 5,
+    },
+    random: () => 0.5,
+  });
+
+  assert.equal(battle.winner.id, 'alpha');
+  assert.equal(battle.selected_advantage.id, 'close_battle');
+  assert.equal(battle.insight_text, 'Alpha narrowly takes the matchup.');
+});
+
+test('tournament battle output stays deterministic with fixed randomness', () => {
+  const left = {
+    id: 'left-fixed',
+    display_name: 'Left Fixed',
+    types: ['fire'],
+    base_stats: { hp: 78, attack: 84, defense: 78, special_attack: 109, special_defense: 85, speed: 100 },
+    base_stat_total: 534,
+  };
+  const right = {
+    id: 'right-fixed',
+    display_name: 'Right Fixed',
+    types: ['grass'],
+    base_stats: { hp: 80, attack: 82, defense: 83, special_attack: 100, special_defense: 100, speed: 80 },
+    base_stat_total: 525,
+  };
+  const options = {
+    left,
+    right,
+    weights: {
+      ...template.selection_rules.battle_weights,
+      random_spread: 4,
+    },
+    random: () => 0.73,
+  };
+
+  assert.deepEqual(resolveTournamentBattle(options), resolveTournamentBattle(options));
 });
 
 test('tournament planner can restrict selection to a seeded legendary-only pool', async () => {
@@ -444,6 +731,11 @@ test('tournament render plan and inputs stay deterministic for a four-Pokemon br
   assert.equal(renderPlan.intro_sequence.participant_reveal_stagger_seconds, 0.3);
   assert.equal(renderPlan.intro_sequence.participant_hold_end_seconds, renderPlan.matches[0].intro_start_seconds);
   assert.equal(renderPlan.matches[0].insight_start_seconds > renderPlan.matches[0].intro_start_seconds, true);
+  assert.equal(renderPlan.matches[0].spinner_appear_start_seconds > renderPlan.matches[0].intro_start_seconds, true);
+  assert.equal(renderPlan.matches[0].spinner_spin_start_seconds > renderPlan.matches[0].spinner_appear_start_seconds, true);
+  assert.equal(renderPlan.matches[0].spinner_stop_seconds > renderPlan.matches[0].spinner_spin_start_seconds, true);
+  assert.equal(renderPlan.matches[0].insight_start_seconds, renderPlan.matches[0].spinner_stop_seconds);
+  assert.equal(renderPlan.matches[0].reveal_start_seconds > renderPlan.matches[0].spinner_stop_seconds, true);
   assert.equal(renderPlan.narration_cues.some((cue) => cue.role === 'semi-final-1-insight'), true);
   assert.ok(
     (renderPlan.matches[1].battle_transition_start_seconds - renderPlan.matches[0].bracket_progress_end_seconds) >= 0.95,
@@ -493,6 +785,8 @@ test('tournament audio and visual filters include winner sting cues and champion
     bracketProgressPath: '/tmp/select-sound.mp3',
     winnerRevealPath: '/tmp/ding-sound.mp3',
     statsRevealPath: '/tmp/electric-loading-sound.mp3',
+    statSpinnerSpinPath: '/tmp/rotating-slot.mp3',
+    statSpinnerCompletePath: '/tmp/rotating-slot-complete.mp3',
     disappearPath: '/tmp/disappear-sound.mp3',
     cryCues: buildTournamentCryCues(plan, renderPlan),
     renderPlan,
@@ -529,6 +823,10 @@ test('tournament audio and visual filters include winner sting cues and champion
   assert.doesNotMatch(visualFilter.script, /drawtext=text='VS'/u);
   assert.match(visualFilter.script, /fade=t=in:st=/u);
   assert.match(visualFilter.script, /drawtext=text='HP/u);
+  assert.match(visualFilter.script, /drawtext=text='BATTLE STAT'/u);
+  assert.match(visualFilter.script, /drawbox=x=320:y=1530:w=440:h=132/u);
+  assert.match(visualFilter.script, /drawtext=text='Sp\. Atk'/u);
+  assert.match(visualFilter.script, /drawtext=text='Sp\. Def'/u);
   assert.match(
     visualFilter.script,
     new RegExp(`${firstMatchWinnerCenterX}\\+\\(${firstMatchBracketCenterX}-${firstMatchWinnerCenterX}\\)`, 'u'),
@@ -566,10 +864,21 @@ test('tournament audio and visual filters include winner sting cues and champion
   assert.match(audioFilter, /volume=0\.113\[open0\]/u);
   assert.match(audioFilter, /asplit=3\[wsrc0\]\[wsrc1\]\[wsrc2\]/u);
   assert.match(audioFilter, /asplit=3\[ssrc0\]\[ssrc1\]\[ssrc2\]/u);
+  assert.match(audioFilter, /asplit=3\[spsrc0\]\[spsrc1\]\[spsrc2\]/u);
+  assert.match(audioFilter, /asplit=3\[scsrc0\]\[scsrc1\]\[scsrc2\]/u);
   assert.match(audioFilter, /asplit=3\[psrc0\]\[psrc1\]\[psrc2\]/u);
   assert.match(audioFilter, /asplit=3\[dsrc0\]\[dsrc1\]\[dsrc2\]/u);
   assert.match(audioFilter, /volume=0\.113\[progress0\]/u);
   assert.match(audioFilter, /volume=0\.36\[stats0\]/u);
+  assert.match(audioFilter, /atrim=start=0:duration=0\.9,asetpts=PTS-STARTPTS,afade=t=out:st=0\.84:d=0\.06/u);
+  assert.match(
+    audioFilter,
+    new RegExp(`adelay=${Math.round(renderPlan.matches[0].spinner_spin_start_seconds * 1000)}\\|${Math.round(renderPlan.matches[0].spinner_spin_start_seconds * 1000)},volume=0\\.405\\[spin0\\]`, 'u'),
+  );
+  assert.match(
+    audioFilter,
+    new RegExp(`adelay=${Math.round(renderPlan.matches[0].spinner_stop_seconds * 1000)}\\|${Math.round(renderPlan.matches[0].spinner_stop_seconds * 1000)},volume=0\\.72\\[complete0\\]`, 'u'),
+  );
   assert.match(audioFilter, /volume=0\.113\[cry0\]/u);
   assert.match(visualFilter.script, /vbattledisappearleft0/u);
   assert.match(visualFilter.script, /vbattledisappearright0/u);
@@ -603,6 +912,11 @@ test('tournament render plan expands scene timings to measured narration duratio
   ]);
 
   assert.equal(stretchedPlan.matches[0].intro_start_seconds >= 2.4, true);
+  assert.equal(
+    stretchedPlan.matches[0].spinner_appear_start_seconds >= stretchedPlan.matches[0].intro_start_seconds + 1.7,
+    true,
+  );
+  assert.equal(stretchedPlan.matches[0].insight_start_seconds, stretchedPlan.matches[0].spinner_stop_seconds);
   assert.equal(
     (stretchedPlan.matches[0].insight_start_seconds - stretchedPlan.matches[0].intro_start_seconds) >= 1.69,
     true,

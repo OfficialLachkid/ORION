@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { countGmailDrafts, createGmailDraft, getGmailDraft, listGmailDraftsSummary, sendGmailMessage } from '../src/send.mjs';
+import { countGmailDrafts, createGmailDraft, getGmailDraft, listGmailDraftsSummary, sendGmailMessage, updateGmailDraft } from '../src/send.mjs';
+import { PS_OPT_OUT_FOOTER } from '../src/opt-out-footer.mjs';
 
 function baseConfig(overrides = {}) {
   return {
@@ -142,6 +143,99 @@ test('getGmailDraft extracts subject and text/plain body from a multipart Gmail 
   assert.equal(result.subject, 'uw website');
   assert.equal(result.bodyText, bodyText);
   assert.ok(result.bodyPreview.startsWith('Beste Acme, Uw website'));
+});
+
+test('getGmailDraft surfaces to/from/threadId/inReplyTo/references headers for MIME rebuild', async () => {
+  const draftPayload = {
+    id: 'd-99',
+    message: {
+      id: 'm-99',
+      threadId: 't-99',
+      payload: {
+        mimeType: 'text/plain',
+        headers: [
+          { name: 'From', value: 'Valentijn Jacobs <sender@example.com>' },
+          { name: 'To', value: 'lead@acme.nl' },
+          { name: 'Subject', value: 'uw website' },
+          { name: 'Reply-To', value: 'valentijn@example.com' },
+          { name: 'In-Reply-To', value: '<abc@example.com>' },
+          { name: 'References', value: '<abc@example.com> <def@example.com>' },
+        ],
+        body: { data: Buffer.from('body').toString('base64').replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/gu, '') },
+      },
+    },
+  };
+  const stubFetch = async () => ({ ok: true, status: 200, json: async () => draftPayload });
+  const result = await getGmailDraft(baseConfig(), 'd-99', { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() });
+  assert.equal(result.to, 'lead@acme.nl');
+  assert.equal(result.fromEmail, 'sender@example.com');
+  assert.equal(result.fromName, 'Valentijn Jacobs');
+  assert.equal(result.replyTo, 'valentijn@example.com');
+  assert.equal(result.inReplyTo, '<abc@example.com>');
+  assert.equal(result.references, '<abc@example.com> <def@example.com>');
+  assert.equal(result.threadId, 't-99');
+});
+
+test('updateGmailDraft PUTs the rebuilt MIME to /drafts/{id}', async () => {
+  let capturedUrl = '';
+  let capturedMethod = '';
+  let capturedBody = '';
+  const stubFetch = async (url, opts) => {
+    capturedUrl = url;
+    capturedMethod = opts.method || '';
+    capturedBody = opts.body || '';
+    return { ok: true, status: 200, text: async () => JSON.stringify({ id: 'd-77', message: { id: 'm-77', threadId: 't-77' } }) };
+  };
+  const result = await updateGmailDraft(
+    baseConfig(),
+    'd-77',
+    { to: 'lead@acme.nl', subject: 'uw website', bodyText: `Beste,\n\ntekst\n\n${PS_OPT_OUT_FOOTER}` },
+    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() },
+  );
+  assert.equal(capturedMethod, 'PUT');
+  assert.ok(capturedUrl.endsWith('/drafts/d-77'));
+  const payload = JSON.parse(capturedBody);
+  assert.ok(payload.message?.raw && !payload.message.raw.includes('+'), 'body must be base64url-encoded raw MIME');
+  assert.equal(result.mode, 'draft_updated');
+  assert.equal(result.draftId, 'd-77');
+  assert.equal(result.threadId, 't-77');
+});
+
+test('normalizeDraft (via createGmailDraft) auto-appends the opt-out footer when body is missing it', async () => {
+  let capturedBody = '';
+  const stubFetch = async (url, opts) => {
+    if (String(url).includes('/drafts')) {
+      capturedBody = opts.body || '';
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ id: 'd-1', message: { id: 'm-1', threadId: 't-1' } }) };
+  };
+  await createGmailDraft(
+    baseConfig(),
+    { to: 'lead@acme.nl', subject: 'uw website', bodyText: 'Beste,\n\ntekst zonder ps.' },
+    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() },
+  );
+  const payload = JSON.parse(capturedBody);
+  const raw = Buffer.from(payload.message.raw.replace(/-/gu, '+').replace(/_/gu, '/'), 'base64').toString('utf8');
+  assert.ok(raw.includes('PS: liever geen mails meer'), 'compliance PS must be auto-appended when body lacked opt-out language');
+});
+
+test('normalizeDraft does NOT double-append when body already carries opt-out language', async () => {
+  let capturedBody = '';
+  const stubFetch = async (url, opts) => {
+    if (String(url).includes('/drafts')) {
+      capturedBody = opts.body || '';
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ id: 'd-1', message: { id: 'm-1', threadId: 't-1' } }) };
+  };
+  await createGmailDraft(
+    baseConfig(),
+    { to: 'lead@acme.nl', subject: 'uw website', bodyText: `Beste,\n\ntekst\n\n${PS_OPT_OUT_FOOTER}` },
+    { fetch: stubFetch, fetchAccessToken: stubAccessTokenFn() },
+  );
+  const payload = JSON.parse(capturedBody);
+  const raw = Buffer.from(payload.message.raw.replace(/-/gu, '+').replace(/_/gu, '/'), 'base64').toString('utf8');
+  const psOccurrences = raw.match(/PS: liever geen mails meer/gu) || [];
+  assert.equal(psOccurrences.length, 1, 'exactly one PS line — no double-append');
 });
 
 test('listGmailDraftsSummary lists ids then fetches metadata per draft, normalising the To header', async () => {

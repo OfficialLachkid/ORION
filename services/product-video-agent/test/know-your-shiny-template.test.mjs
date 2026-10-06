@@ -1,8 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { planPokemonTypeChallenge } from '../src/pokemon-type-challenge-planner.mjs';
 import { buildPokeQuizzRenderPlan } from '../src/poke-quizz-renderer.mjs';
 import { buildAudioFilterScript } from '../src/domains/pokemon/templates/know-your-shiny/render/audio-filter-script.mjs';
+import {
+  applyLocalizedDecoyAssetsToRound,
+  resolveLocalizedDecoyMutationConfig,
+} from '../src/domains/pokemon/templates/know-your-shiny/render/render-executor.mjs';
 import { buildVisualFilterScript } from '../src/domains/pokemon/templates/know-your-shiny/render/visual-filter-script.mjs';
 import { buildVisualInputs } from '../src/domains/pokemon/templates/know-your-shiny/render/visual-inputs.mjs';
 
@@ -28,8 +34,8 @@ const template = {
   question_contract: {
     hook_text: 'Do you know your shiny?',
     hook_text_variants: ['Do you know your shiny?'],
-    prompt_text: 'Which one\u2019s shiny?',
-    prompt_text_variants: ['Which one\u2019s shiny?'],
+    prompt_text: 'Which one is the Real Shiny?',
+    prompt_text_variants: ['Which one is the Real Shiny?'],
     reveal_text: '',
     reveal_text_variants: [],
   },
@@ -41,14 +47,16 @@ const template = {
       hook_y: 300,
       hook_font_size: 136,
       prompt_y: 300,
-      prompt_font_size: 98,
+      prompt_font_size: 92,
       reveal_y: 300,
       reveal_font_size: 110,
       counter_x: 72,
       counter_y: 144,
       counter_font_size: 96,
       highlight_color: '0xFFD60A',
-      highlight_keywords: ['shiny'],
+      highlight_x_offset_px: 0,
+      highlight_y_offset_px: 0,
+      highlight_keywords: ['real shiny', 'real'],
     },
     sprite_grid: {
       rows: 2,
@@ -123,12 +131,22 @@ const template = {
   },
 };
 
+const TEMPLATE_CONFIG_PATH = resolve(
+  import.meta.dirname,
+  '..',
+  'config',
+  'templates',
+  'pokemon',
+  'know-your-shiny.v1.json',
+);
+
 const pokedexRows = [
   { id: 'pokedex-0006', national_dex_number: 6, name: 'Charizard', generation: 1, region: 'kanto', types: ['fire', 'flying'], sprite_path: '/tmp/charizard.png', shiny_sprite_path: '/tmp/charizard-shiny.png', shiny_animated_sprite_path: '/tmp/charizard-shiny.gif' },
   { id: 'pokedex-0094', national_dex_number: 94, name: 'Gengar', generation: 1, region: 'kanto', types: ['ghost', 'poison'], sprite_path: '/tmp/gengar.png', shiny_sprite_path: '/tmp/gengar-shiny.png', shiny_animated_sprite_path: '/tmp/gengar-shiny.gif' },
   { id: 'pokedex-0130', national_dex_number: 130, name: 'Gyarados', generation: 1, region: 'kanto', types: ['water', 'flying'], sprite_path: '/tmp/gyarados.png', shiny_sprite_path: '/tmp/gyarados-shiny.png', shiny_animated_sprite_path: '/tmp/gyarados-shiny.gif' },
   { id: 'pokedex-0197', national_dex_number: 197, name: 'Umbreon', generation: 2, region: 'johto', types: ['dark'], sprite_path: '/tmp/umbreon.png', shiny_sprite_path: '/tmp/umbreon-shiny.png', shiny_animated_sprite_path: '/tmp/umbreon-shiny.gif' },
   { id: 'pokedex-0038', national_dex_number: 38, name: 'Ninetales', generation: 1, region: 'kanto', types: ['fire'], sprite_path: '/tmp/ninetales.png', shiny_sprite_path: '/tmp/ninetales-shiny.png', shiny_animated_sprite_path: '/tmp/ninetales-shiny.gif' },
+  { id: 'pokedex-0025', national_dex_number: 25, name: 'Pikachu', generation: 1, region: 'kanto', types: ['electric'], sprite_path: '/tmp/pikachu.png', shiny_sprite_path: '/tmp/pikachu-shiny.png', shiny_animated_sprite_path: '/tmp/pikachu-shiny.gif' },
 ];
 
 const assetInventory = {
@@ -155,6 +173,26 @@ const assetInventory = {
   overlays: ['/tmp/timer.gif', '/tmp/timer-countdown.gif', '/tmp/timer-alarm.gif', '/tmp/grass-plateau.png', '/tmp/shiny-sparkle.gif'],
   transitions: [],
 };
+
+test('know-your-shiny config defines easy, medium, and hard mutation difficulty profiles', async () => {
+  const configuredTemplate = JSON.parse(await readFile(TEMPLATE_CONFIG_PATH, 'utf8'));
+  const levels = configuredTemplate.selection_rules.round_count_levels;
+  assert.deepEqual(configuredTemplate.selection_rules.round_count_weights, {
+    easy: 1,
+    medium: 1,
+    hard: 1,
+  });
+  assert.equal(levels.easy.round_count, 3);
+  assert.equal(levels.medium.round_count, 4);
+  assert.equal(levels.hard.round_count, 6);
+  assert.equal(configuredTemplate.renderer.localized_decoy_color_mutation.ideal_min_percent, 0.05);
+  assert.equal(configuredTemplate.renderer.localized_decoy_color_mutation.ideal_max_percent, 0.3);
+  assert.equal(levels.medium.localized_decoy_color_mutation.selection_target_percent, 0.1);
+  assert.equal(levels.medium.localized_decoy_color_mutation.ideal_max_percent, 0.16);
+  assert.equal(levels.hard.localized_decoy_color_mutation.selection_target_percent, 0.04);
+  assert.equal(levels.hard.localized_decoy_color_mutation.ideal_max_percent, 0.07);
+  assert.equal(levels.hard.localized_decoy_color_mutation.broad_max_percent, 0.1);
+});
 
 test('generic planner dispatch builds a know-your-shiny plan with three rounds and four candidates per round', async () => {
   const plan = await planPokemonTypeChallenge({
@@ -183,7 +221,7 @@ test('generic planner dispatch builds a know-your-shiny plan with three rounds a
   }
 });
 
-test('know-your-shiny can build a hard five-round variant when configured', async () => {
+test('know-your-shiny builds a hard six-round variant with the harder color profile', async () => {
   const hardTemplate = JSON.parse(JSON.stringify(template));
   hardTemplate.selection_rules.generation_scope = [];
   hardTemplate.selection_rules.round_count_weights = {
@@ -191,8 +229,24 @@ test('know-your-shiny can build a hard five-round variant when configured', asyn
   };
   hardTemplate.selection_rules.round_count_levels = {
     hard: {
-      round_count: 5,
+      round_count: 6,
+      localized_decoy_color_mutation: {
+        selection_target_percent: 0.04,
+        ideal_min_percent: 0.01,
+        ideal_max_percent: 0.07,
+        broad_min_percent: 0.005,
+        broad_max_percent: 0.1,
+        hue_tolerance_degrees: 16,
+      },
     },
+  };
+  hardTemplate.renderer.localized_decoy_color_mutation = {
+    enabled: true,
+    ideal_min_percent: 0.05,
+    ideal_max_percent: 0.3,
+    broad_min_percent: 0.02,
+    broad_max_percent: 0.45,
+    hue_tolerance_degrees: 28,
   };
   const plan = await planPokemonTypeChallenge({
     template: hardTemplate,
@@ -202,10 +256,33 @@ test('know-your-shiny can build a hard five-round variant when configured', asyn
   });
 
   assert.equal(plan.selection.difficulty_id, 'hard');
-  assert.equal(plan.selection.round_count, 5);
-  assert.equal(plan.rounds.length, 5);
-  assert.equal(plan.rounds[0].round_label, '1/5');
-  assert.equal(plan.rounds.at(-1)?.round_label, '5/5');
+  assert.equal(plan.selection.round_count, 6);
+  assert.equal(plan.rounds.length, 6);
+  assert.equal(plan.rounds[0].round_label, '1/6');
+  assert.equal(plan.rounds.at(-1)?.round_label, '6/6');
+  assert.equal(plan.selection.localized_decoy_color_mutation.selection_target_percent, 0.04);
+  assert.equal(plan.selection.localized_decoy_color_mutation.ideal_max_percent, 0.07);
+  assert.equal(plan.selection.localized_decoy_color_mutation.broad_max_percent, 0.1);
+  assert.deepEqual(
+    resolveLocalizedDecoyMutationConfig(plan, hardTemplate),
+    plan.selection.localized_decoy_color_mutation,
+  );
+});
+
+test('know-your-shiny includes shared pixel backgrounds in its selection pool', async () => {
+  const plan = await planPokemonTypeChallenge({
+    template,
+    pokedexRows,
+    seed: 'know-your-shiny-pixel-background',
+    assetInventory: {
+      ...assetInventory,
+      backgrounds: [],
+      pixel_backgrounds: ['/tmp/pixel-backgrounds/route.png'],
+    },
+  });
+
+  assert.equal(plan.assets.background.selected_path, '/tmp/pixel-backgrounds/route.png');
+  assert.equal(plan.assets.background.expected_directories.length, 2);
 });
 
 test('know-your-shiny render plan and input builders stay deterministic for slide rounds', async () => {
@@ -232,8 +309,11 @@ test('know-your-shiny render plan and input builders stay deterministic for slid
   assert.equal(renderPlan.grid_layout.sprite_scale_multiplier, 1.5);
   assert.equal(renderPlan.reveal_sprite.sprite_scale_multiplier, 1.38);
   assert.equal(renderPlan.grid_layout.cells[0].center_y, 597);
-  assert.equal(visualInputs.length, 6);
+  assert.equal(visualInputs.length, 15);
   assert.equal(visualInputs[0].role, 'background');
+  assert.equal(visualInputs[1].role, 'round-1-candidate-0');
+  assert.equal(visualInputs[4].role, 'round-1-candidate-3');
+  assert.equal(visualInputs[13].role, 'grass-platform');
   assert.equal(visualInputs.at(-1).role, 'shiny-sparkle');
 });
 
@@ -255,13 +335,27 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
     renderPlan,
     {
       background: 0,
-      rounds: [
-        { sprite: 1 },
-        { sprite: 2 },
-        { sprite: 3 },
-      ],
-      grassPlatform: 4,
-      shinySparkle: 5,
+      rounds: renderPlan.rounds.map((round, roundIndex) => ({
+        candidates: round.candidates.map((_, candidateIndex) => 1 + (roundIndex * 4) + candidateIndex),
+      })),
+      grassPlatform: 13,
+      shinySparkle: 14,
+    },
+    null,
+  );
+  const visibleBottomTemplate = structuredClone(template);
+  visibleBottomTemplate.layout.sprite_platform.visible_bottom_alignment_enabled = true;
+  const visibleBottomVisualFilter = buildVisualFilterScript(
+    plan,
+    visibleBottomTemplate,
+    renderPlan,
+    {
+      background: 0,
+      rounds: renderPlan.rounds.map((round, roundIndex) => ({
+        candidates: round.candidates.map((_, candidateIndex) => 1 + (roundIndex * 4) + candidateIndex),
+      })),
+      grassPlatform: 13,
+      shinySparkle: 14,
     },
     null,
   );
@@ -289,8 +383,11 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(visualFilter.script, /enable='between\(t,4\.34,5\.34\)'/u);
   assert.match(visualFilter.script, /overlay=x='540-overlay_w\/2'/u);
   assert.match(visualFilter.script, /647-h\/2/u);
+  assert.match(visibleBottomVisualFilter.script, /838\.25-h/u);
   assert.match(visualFilter.script, /colorchannelmixer=/u);
   assert.match(visualFilter.script, /fontcolor=0xFFD60A/u);
+  assert.match(visualFilter.script, /text='Which one is the'/u);
+  assert.match(visualFilter.script, /text='Real Shiny\?'.*fontcolor=0xFFD60A/u);
   assert.match(visualFilter.script, /shiny-sparkle|scene0sparkle|scene0ss/u);
   assert.doesNotMatch(visualFilter.script, /color=c=[^:]+:s=\d+x\d+\.\d+/u);
   assert.doesNotMatch(visualFilter.script, /color=c=[^:]+:s=\d+\.\d+x\d+/u);
@@ -299,4 +396,37 @@ test('know-your-shiny audio and visual filters include countdowns, grayscale dec
   assert.match(audioFilter, /volume=0\.35\[shiny0\]/u);
   assert.match(audioFilter, /shiny0/u);
   assert.match(audioFilter, /shiny2/u);
+});
+
+test('know-your-shiny assigns normalized source gif to correct candidate when decoys are generated', () => {
+  const round = {
+    round_number: 1,
+    candidates: [
+      { index: 0, is_correct: false, color_mix: 'rr=1' },
+      { index: 1, is_correct: true, color_mix: 'rr=0.8' },
+      { index: 2, is_correct: false, color_mix: 'rr=0.7' },
+      { index: 3, is_correct: false, color_mix: 'rr=0.6' },
+    ],
+  };
+  const updated = applyLocalizedDecoyAssetsToRound(round, '/tmp/source-shiny.gif', {
+    created: [
+      { path: '/tmp/decoy-a.gif', mutation: { target: { id: 'cyan' } } },
+      { path: '/tmp/decoy-b.gif', mutation: { target: { id: 'rose' } } },
+      { path: '/tmp/decoy-c.gif', mutation: { target: { id: 'gold' } } },
+    ],
+    source: {
+      path: '/tmp/source-shiny-normalized.gif',
+      normalized_from: '/tmp/source-shiny.gif',
+    },
+    selected_family: { key: 'green' },
+  });
+
+  assert.equal(updated.localized_decoy_generation.status, 'generated');
+  assert.equal(updated.localized_decoy_generation.normalized_source_path, '/tmp/source-shiny-normalized.gif');
+  assert.equal(updated.candidates[1].render_sprite_path, '/tmp/source-shiny-normalized.gif');
+  assert.equal(updated.candidates[1].normalized_from_sprite_path, '/tmp/source-shiny.gif');
+  assert.equal(updated.candidates[1].color_mix, null);
+  assert.equal(updated.candidates[0].render_sprite_path, '/tmp/decoy-a.gif');
+  assert.equal(updated.candidates[2].render_sprite_path, '/tmp/decoy-b.gif');
+  assert.equal(updated.candidates[3].render_sprite_path, '/tmp/decoy-c.gif');
 });

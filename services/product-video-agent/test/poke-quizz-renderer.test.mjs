@@ -121,14 +121,14 @@ test('hook type icon layout starts larger and centered before settling', () => {
   assert.deepEqual(layout[1], { x: 570, y: 684, width: 328, height: 328 });
 });
 
-test('badge-style hook icons render directly without a synthetic white backdrop layer', () => {
+test('self-contained hook icon styles render directly without a synthetic white backdrop layer', () => {
   const badgePlan = {
     ...plan,
     assets: {
       ...plan.assets,
       type_icons: [
-        { type: 'grass', local_path: '/tmp/badge-style/grass.png' },
-        { type: 'poison', local_path: '/tmp/badge-style/poison.png' },
+        { type: 'grass', style_variant: 'original-style', local_path: '/tmp/original-style/grass.png' },
+        { type: 'poison', style_variant: 'original-style', local_path: '/tmp/original-style/poison.png' },
       ],
       pokemon: [],
       overlays: {
@@ -468,6 +468,6 @@ test('escaped enable windows are safe for ffmpeg filter parsing', () => {
 test('drawtext escaping preserves apostrophes for ffmpeg filter parsing', () => {
   assert.equal(
     escapeDrawtextText("Who's that Pokemon?"),
-    "Who\\'s that Pokemon?",
+    "Who'\\''s that Pokemon?",
   );
 });

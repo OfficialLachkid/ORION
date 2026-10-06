@@ -12,6 +12,137 @@ import { buildPokeQuizzRenderPlan } from './render-plan.mjs';
 import { buildVisualFilterScript } from './visual-filter-script.mjs';
 import { buildVisualInputs } from './visual-inputs.mjs';
 import { resolveFontPath } from '../../dual-type-reveal/render/drawtext-artifacts.mjs';
+import { createLocalizedColorVariantAssets } from '../../shared/render/localized-color-mutation.mjs';
+import { writeChannelWatermarkedVisualFilterScript } from '../../shared/render/channel-watermark.mjs';
+import { buildVisualInputGroundingRatios } from '../../shared/render/sprite-alpha-grounding.mjs';
+
+export function applyLocalizedDecoyAssetsToRound(round, sourceSpritePath, generated) {
+  if (!Array.isArray(generated?.created) || generated.created.length === 0) {
+    return {
+      ...round,
+      localized_decoy_generation: {
+        status: 'fallback_global_filter',
+        reason: generated?.reason || 'no_decoy_assets_created',
+      },
+    };
+  }
+
+  const normalizedSourcePath = String(generated?.source?.path || '').trim() || sourceSpritePath;
+  let decoyAssetIndex = 0;
+  return {
+    ...round,
+    localized_decoy_generation: {
+      status: 'generated',
+      selected_family: generated.selected_family || null,
+      normalized_source_path: normalizedSourcePath,
+    },
+    candidates: round.candidates.map((candidate) => {
+      if (candidate?.is_correct) {
+        return {
+          ...candidate,
+          render_sprite_path: normalizedSourcePath,
+          color_mix: null,
+          saturation: 1,
+          brightness: 0,
+          contrast: 1,
+          normalized_from_sprite_path: normalizedSourcePath === sourceSpritePath ? null : sourceSpritePath,
+        };
+      }
+      const decoyAsset = generated.created[decoyAssetIndex];
+      decoyAssetIndex += 1;
+      if (!decoyAsset?.path) {
+        return candidate;
+      }
+      return {
+        ...candidate,
+        render_sprite_path: decoyAsset.path,
+        color_mix: null,
+        saturation: 1,
+        brightness: 0,
+        contrast: 1,
+        localized_color_mutation: decoyAsset.mutation || null,
+      };
+    }),
+  };
+}
+
+export function resolveLocalizedDecoyMutationConfig(plan, template) {
+  const plannedConfig = plan?.selection?.localized_decoy_color_mutation;
+  if (plannedConfig && typeof plannedConfig === 'object' && Object.keys(plannedConfig).length > 0) {
+    return { ...plannedConfig };
+  }
+  const baseConfig = template?.renderer?.localized_decoy_color_mutation;
+  const difficultyId = String(plan?.selection?.difficulty_id || '').trim();
+  const difficultyConfig = difficultyId
+    ? template?.selection_rules?.round_count_levels?.[difficultyId]?.localized_decoy_color_mutation
+    : null;
+  return {
+    ...(baseConfig && typeof baseConfig === 'object' ? baseConfig : {}),
+    ...(difficultyConfig && typeof difficultyConfig === 'object' ? difficultyConfig : {}),
+  };
+}
+
+async function prepareLocalizedDecoyRenderPlan({
+  renderPlan,
+  plan,
+  template,
+  runtimeRoot,
+  projectRoot,
+  ffmpegExecutable,
+}) {
+  if (template?.renderer?.localized_decoy_color_mutation?.enabled === false) {
+    return renderPlan;
+  }
+
+  const decoyRoot = resolve(
+    runtimeRoot,
+    'know-your-shiny-decoys',
+    slugify(plan.seed || 'preview'),
+  );
+  const mutationConfig = resolveLocalizedDecoyMutationConfig(plan, template);
+  const rounds = await Promise.all((Array.isArray(renderPlan.rounds) ? renderPlan.rounds : [])
+    .map(async (round) => {
+      const sourceSpritePath = String(
+        round?.subject?.render_sprite_path
+        || round?.subject?.shiny_sprite_path
+        || round?.subject?.sprite_path
+        || '',
+      ).trim();
+      const decoys = (Array.isArray(round?.candidates) ? round.candidates : [])
+        .filter((candidate) => !candidate?.is_correct);
+      if (!sourceSpritePath || decoys.length === 0) {
+        return round;
+      }
+
+      try {
+        const generated = await createLocalizedColorVariantAssets({
+          inputPath: sourceSpritePath,
+          outputDirectory: decoyRoot,
+          outputBasename: `round-${round.round_number}-${slugify(round?.subject?.name || 'pokemon')}`,
+          variantCount: decoys.length,
+          seed: `${plan.seed || 'know-your-shiny'}:${round?.subject?.pokedex_id || round?.subject?.name || round.round_number}`,
+          config: mutationConfig,
+          ffmpegExecutable,
+          cwd: projectRoot,
+          includeSourceCopy: true,
+        });
+        return applyLocalizedDecoyAssetsToRound(round, sourceSpritePath, generated);
+      } catch (error) {
+        return {
+          ...round,
+          localized_decoy_generation: {
+            status: 'fallback_global_filter',
+            reason: error?.message || String(error),
+          },
+        };
+      }
+    }));
+
+  return {
+    ...renderPlan,
+    rounds,
+  };
+}
 
 export async function renderPokeQuizzVideo({
   plan,
@@ -23,7 +154,7 @@ export async function renderPokeQuizzVideo({
   runtimeRoot,
   fontCandidates = DEFAULT_FONT_CANDIDATES,
 }) {
-  const renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath });
+  let renderPlan = buildPokeQuizzRenderPlan({ plan, template, outputPath });
   const outputAbsolutePath = resolve(projectRoot, outputPath);
   const slugBase = `${slugify(plan.template_key || 'know-your-shiny')}-${slugify(plan.selection.mode || 'random')}-${slugify(plan.seed)}`;
   const audioMixPath = resolve(runtimeRoot, `${slugBase}-audio.m4a`);
@@ -104,13 +235,32 @@ export async function renderPokeQuizzVideo({
     timeoutMs: 300_000,
   });
 
+  renderPlan = await prepareLocalizedDecoyRenderPlan({
+    renderPlan,
+    plan,
+    template,
+    runtimeRoot,
+    projectRoot,
+    ffmpegExecutable,
+  });
+
   const visualInputs = buildVisualInputs(plan, renderPlan);
   await verifyReadableFiles(visualInputs.map((input) => input.path));
   const inputRoleIndex = new Map(visualInputs.map((input, index) => [input.role, index]));
+  const groundingRatios = await buildVisualInputGroundingRatios(visualInputs, {
+    enabled: template?.layout?.sprite_platform?.alpha_grounding_enabled === true,
+    rolePattern: /candidate/iu,
+  });
   const inputRefs = {
     background: inputRoleIndex.get('background'),
     rounds: renderPlan.rounds.map((round) => ({
-      sprite: inputRoleIndex.get(`round-${round.round_number}-sprite`),
+      candidates: round.candidates.map((candidate) => (
+        inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`)
+      )),
+      bottom_transparent_ratios: round.candidates.map((candidate) => {
+        const inputIndex = inputRoleIndex.get(`round-${round.round_number}-candidate-${candidate.index}`);
+        return groundingRatios.get(inputIndex) || 0;
+      }),
     })),
     grassPlatform: inputRoleIndex.has('grass-platform') ? inputRoleIndex.get('grass-platform') : null,
     shinySparkle: inputRoleIndex.has('shiny-sparkle') ? inputRoleIndex.get('shiny-sparkle') : null,
@@ -126,7 +276,11 @@ export async function renderPokeQuizzVideo({
     : fontCandidates;
   const fontPath = await resolveFontPath(effectiveFontCandidates);
   const visualFilter = buildVisualFilterScript(plan, template, renderPlan, inputRefs, fontPath);
-  await writeFile(filterScriptPath, visualFilter.script, 'utf8');
+  await writeChannelWatermarkedVisualFilterScript(filterScriptPath, visualFilter, {
+    plan,
+    renderPlan,
+    fontPath,
+  });
 
   await mkdir(dirname(outputAbsolutePath), { recursive: true });
   await runLocalProcess({

@@ -65,18 +65,21 @@ export function resolvePublishQueueThreadId(runtimeConfig) {
 async function resolveVideoTemplateRuntimeCached({
   channelConfigPath = DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
   channelSelector = '',
+  templateId = '',
 } = {}) {
   const normalizedChannelConfigPath = String(channelConfigPath || '').trim();
   if (!normalizedChannelConfigPath) {
     return null;
   }
-  const cacheKey = `${normalizeComparablePath(normalizedChannelConfigPath)}::${String(channelSelector || '').trim().toLowerCase()}`;
+  const normalizedTemplateId = String(templateId || '').trim();
+  const cacheKey = `${normalizeComparablePath(normalizedChannelConfigPath)}::${String(channelSelector || '').trim().toLowerCase()}::${normalizedTemplateId.toLowerCase()}`;
   if (!runtimeCache.has(cacheKey)) {
     runtimeCache.set(cacheKey, (
       resolveVideoTemplateRuntime({
         projectRoot,
         channelConfigPath: normalizedChannelConfigPath,
         channelSelector,
+        templateId: normalizedTemplateId,
       }).catch(() => null)
     ));
   }
@@ -138,6 +141,7 @@ export async function resolvePublicationReviewTemplateRuntime({
     const fallbackRuntime = await resolveVideoTemplateRuntimeCached({
       channelConfigPath: fallbackChannelConfigPath,
       channelSelector,
+      templateId: desiredTemplateId,
     });
     if (fallbackRuntime?.channelConfigPath) {
       candidateChannelConfigPaths.add(fallbackRuntime.channelConfigPath);
@@ -160,6 +164,7 @@ export async function resolvePublicationReviewTemplateRuntime({
       .map((channelConfigPath) => resolveVideoTemplateRuntimeCached({
         channelConfigPath,
         channelSelector,
+        templateId: desiredTemplateId,
       })),
   )).filter((runtime) => Boolean(runtime));
 

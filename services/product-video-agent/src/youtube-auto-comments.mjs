@@ -425,6 +425,26 @@ export async function syncYoutubeAutoCommentState({
     };
   };
 
+  const contentSurface = normalizeText(publication?.metadata?.content_surface || 'youtube_shorts');
+  const publicationAllowsAutoComment = publication?.metadata?.publication_policy?.auto_comment_enabled !== false;
+  if (contentSurface !== 'youtube_shorts' || !publicationAllowsAutoComment) {
+    const reason = contentSurface !== 'youtube_shorts'
+      ? 'content_surface_not_youtube_shorts'
+      : 'publication_policy_disabled';
+    const result = await upsertRecord({
+      enabled: false,
+      status: 'skipped',
+      reason,
+      last_error: '',
+    });
+    return {
+      ...result,
+      action: 'disabled',
+      status: 'skipped',
+      reason,
+    };
+  }
+
   if (!config.enabled) {
     if (!existingRecord.status) {
       return {

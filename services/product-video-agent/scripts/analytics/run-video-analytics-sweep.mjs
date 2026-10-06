@@ -15,9 +15,13 @@ import {
   buildChannelVideoAnalyticsDigest,
   buildVideoAnalyticsOverviewDigest,
   buildVideoAnalyticsThreadName,
-  indexLatestAnalyticsSnapshotsByPublicationId,
   resolveVideoAnalyticsCapturePlan,
 } from '../../src/video-analytics.mjs';
+import {
+  appendAnalyticsSnapshot,
+  fetchAnalyticsSnapshotHistory,
+  retryAnalyticsOperation,
+} from '../../src/analytics/snapshot-reader.mjs';
 import {
   createYoutubeAnalyticsAccessToken,
   fetchYoutubePublicationMetrics,
@@ -42,6 +46,8 @@ const DEFAULT_DIGEST_WEEKDAY = 1;
 const DEFAULT_DIGEST_HOUR = 9;
 const DEFAULT_DIGEST_MODE = 'weekly';
 const DEFAULT_POST_TARGET = 'shared';
+const DEFAULT_REQUEST_MAX_ATTEMPTS = 4;
+const DEFAULT_RETRY_BASE_DELAY_MS = 1500;
 const THREAD_AUTO_ARCHIVE_DURATION_MINUTES = 10080;
 
 function getNumberOption(options, key, fallbackValue) {
@@ -63,6 +69,9 @@ function toDateOrNull(value) {
 }
 
 function formatNumber(value, options = {}) {
+  if (value === null || value === undefined || value === '') {
+    return 'n/a';
+  }
   const number = Number(value);
   if (!Number.isFinite(number)) {
     return 'n/a';
@@ -71,6 +80,9 @@ function formatNumber(value, options = {}) {
 }
 
 function formatMetric(value, digits = 1) {
+  if (value === null || value === undefined || value === '') {
+    return 'n/a';
+  }
   const number = Number(value);
   if (!Number.isFinite(number)) {
     return 'n/a';
@@ -79,6 +91,14 @@ function formatMetric(value, digits = 1) {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   }).format(number);
+}
+
+function hasFiniteMetric(value) {
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+}
+
+function formatMetricWithSuffix(value, suffix, digits = 1) {
+  return hasFiniteMetric(value) ? `${formatMetric(value, digits)}${suffix}` : 'n/a';
 }
 
 function formatDigestDate(value) {
@@ -126,10 +146,10 @@ function formatVideoMetricLine(video = {}, options = {}) {
     formatVideoLink(video),
     `${formatNumber(video?.views)} views`,
   ];
-  if (Number.isFinite(Number(video?.avg_view_duration_sec))) {
+  if (hasFiniteMetric(video?.avg_view_duration_sec)) {
     segments.push(`AVD ${formatMetric(video.avg_view_duration_sec)}s`);
   }
-  if (Number.isFinite(Number(video?.avg_view_percentage))) {
+  if (hasFiniteMetric(video?.avg_view_percentage)) {
     segments.push(`AVP ${formatMetric(video.avg_view_percentage)}%`);
   }
   if (options.includeTemplate && video?.template_label && video.template_label !== 'Unknown') {
@@ -159,7 +179,7 @@ function formatInsightGroupLine(group = {}) {
     `${group.label} (n=${formatNumber(group.video_count)})`,
     `avg ${formatNumber(group.average_views)} views`,
   ];
-  if (Number.isFinite(Number(group.median_avg_view_percentage))) {
+  if (hasFiniteMetric(group.median_avg_view_percentage)) {
     segments.push(`AVP ${formatMetric(group.median_avg_view_percentage)}%`);
   }
   return `- ${segments.join(' | ')}`;
@@ -206,6 +226,42 @@ function normalizeChannelProfiles(profiles, channelSelector = '') {
   ));
 }
 
+function formatCollectionWarnings(warnings = []) {
+  if (!Array.isArray(warnings) || warnings.length === 0) {
+    return '';
+  }
+  return warnings.slice(0, 10).map((warning) => {
+    const label = warning.account_key || warning.channel_id || 'unknown channel';
+    const detail = String(warning.error || warning.reason || 'collection incomplete').slice(0, 180);
+    return `- ${label}: ${detail}`;
+  }).join('\n').slice(0, 1000);
+}
+
+function formatThresholdCrossings(crossings = []) {
+  if (!Array.isArray(crossings) || crossings.length === 0) {
+    return 'No newly observed 10k milestones in this window.';
+  }
+  return crossings.slice(0, 10).map((crossing) => (
+    `${formatVideoMetricLine(crossing)} | reached 10k ${formatDigestDate(crossing.crossed_at)}`
+  )).join('\n').slice(0, 1000);
+}
+
+function buildSignalQualityText(digest) {
+  const warnings = [];
+  if (digest.videos_with_snapshots_count < digest.new_videos_count) {
+    warnings.push(`${digest.new_videos_count - digest.videos_with_snapshots_count} video(s) missing snapshots`);
+  }
+  if (digest.retention_metrics_pending_count > 0) {
+    warnings.push(`${digest.retention_metrics_pending_count} recent video(s) awaiting YouTube retention data`);
+  }
+  if (warnings.length > 0) {
+    return `Partial signal: ${warnings.join('; ')}.`;
+  }
+  return digest.insufficient_data
+    ? 'Insufficient data. Treat the thread insights as directional only.'
+    : 'Usable signal. Keep this recommendation-only until more windows confirm the pattern.';
+}
+
 function buildOverviewEmbed(overview, channelDigests = [], options = {}) {
   const digestMode = normalizeDigestMode(options.digestMode);
   const windowLabel = `${overview.window_days}D`;
@@ -223,12 +279,23 @@ function buildOverviewEmbed(overview, channelDigests = [], options = {}) {
       `- Views (all time): ${formatNumber(digest.all_time_views)}`,
       formatBestPerformerLine(digest.best_performer, overview.window_days),
       `- Median views: ${formatNumber(digest.median_views)}`,
-      `- Median AVD: ${formatMetric(digest.median_avg_view_duration_sec)}s`,
-      `- Median AVP: ${formatMetric(digest.median_avg_view_percentage)}%`,
-      `- Signal: ${digest.insufficient_data ? 'insufficient data' : 'usable'}`,
+      `- Median AVD: ${formatMetricWithSuffix(digest.median_avg_view_duration_sec, 's')}`,
+      `- Median AVP: ${formatMetricWithSuffix(digest.median_avg_view_percentage, '%')}`,
+      `- Snapshot coverage: ${formatNumber(digest.videos_with_snapshots_count)}/${formatNumber(digest.new_videos_count)}`,
+      `- Retention pending: ${formatNumber(digest.retention_metrics_pending_count)}`,
+      `- Latest capture: ${formatDigestDateTime(digest.latest_snapshot_at)} UTC`,
+      `- Signal: ${digest.retention_metrics_pending_count > 0 || digest.videos_with_snapshots_count < digest.new_videos_count ? 'partial' : (digest.insufficient_data ? 'insufficient data' : 'usable')}`,
     ].join('\n'),
     inline: false,
   }));
+  const collectionWarnings = Array.isArray(options.collectionWarnings) ? options.collectionWarnings : [];
+  if (collectionWarnings.length > 0) {
+    fields.unshift({
+      name: 'Collection warnings',
+      value: formatCollectionWarnings(collectionWarnings),
+      inline: false,
+    });
+  }
 
   return {
     embeds: [
@@ -238,11 +305,13 @@ function buildOverviewEmbed(overview, channelDigests = [], options = {}) {
           `Channels: **${overview.channel_count}**`,
           `New videos (${windowLabel}): **${formatNumber(overview.total_new_videos_count)}**`,
           `Videos with snapshots (${windowLabel}): **${formatNumber(overview.total_videos_with_snapshots_count)}**`,
-          `Crossed 10k views (${windowLabel}): **${formatNumber(overview.total_crossed_10k_views_count)}**`,
+          `Reached 10k views (${windowLabel}): **${formatNumber(overview.total_crossed_10k_views_count)}**`,
+          `Retention metrics pending: **${formatNumber(overview.total_retention_metrics_pending_count)}**`,
           `Combined views (${windowLabel}): **${formatNumber(overview.total_views)}**`,
           `Total views (all time): **${formatNumber(overview.total_all_time_views)}**`,
+          `Collection status: **${collectionWarnings.length > 0 ? 'degraded - automatic retry pending' : 'complete'}**`,
         ].join('\n'),
-        color: 0x1f7a3a,
+        color: collectionWarnings.length > 0 ? 0xd4a017 : 0x1f7a3a,
         fields,
       },
     ],
@@ -275,18 +344,25 @@ function buildChannelDigestEmbed(digest) {
             value: [
               `- New videos (${windowLabel}): ${formatNumber(digest.new_videos_count)}`,
               `- Videos with snapshots: ${formatNumber(digest.videos_with_snapshots_count)}`,
-              `- Crossed 10k views: ${formatNumber(digest.crossed_10k_views_count)}`,
+              `- Reached 10k views: ${formatNumber(digest.crossed_10k_views_count)}`,
+              `- Retention metrics pending: ${formatNumber(digest.retention_metrics_pending_count)}`,
+              `- Latest capture: ${formatDigestDateTime(digest.latest_snapshot_at)} UTC`,
               `- Combined views (${windowLabel}): ${formatNumber(digest.total_views)}`,
               `- Total views (all time): ${formatNumber(digest.all_time_views)}`,
             ].join('\n'),
             inline: false,
           },
           {
+            name: '10k Milestones',
+            value: formatThresholdCrossings(digest.crossed_10k_views),
+            inline: false,
+          },
+          {
             name: 'Median Performance',
             value: [
               `- Median views: ${formatNumber(digest.median_views)}`,
-              `- Median AVD: ${formatMetric(digest.median_avg_view_duration_sec)}s`,
-              `- Median AVP: ${formatMetric(digest.median_avg_view_percentage)}%`,
+              `- Median AVD: ${formatMetricWithSuffix(digest.median_avg_view_duration_sec, 's')}`,
+              `- Median AVP: ${formatMetricWithSuffix(digest.median_avg_view_percentage, '%')}`,
             ].join('\n'),
             inline: false,
           },
@@ -312,9 +388,7 @@ function buildChannelDigestEmbed(digest) {
           },
           {
             name: 'Signal Quality',
-            value: digest.insufficient_data
-              ? 'Insufficient data. Treat the thread insights as directional only.'
-              : 'Usable signal. Keep this recommendation-only until more windows confirm the pattern.',
+            value: buildSignalQualityText(digest),
             inline: false,
           },
         ],
@@ -554,6 +628,8 @@ async function postWeeklyDigest({
   fetchImpl = globalThis.fetch,
   digestMode = DEFAULT_DIGEST_MODE,
   postTarget = DEFAULT_POST_TARGET,
+  collectionWarnings = [],
+  markWeeklyComplete = true,
 }) {
   const overview = buildVideoAnalyticsOverviewDigest({
     channelDigests,
@@ -581,12 +657,12 @@ async function postWeeklyDigest({
   await sendDiscordMessage(
     runtimeConfig,
     postedChannelId,
-    buildOverviewEmbed(overview, channelDigests, { digestMode }),
+    buildOverviewEmbed(overview, channelDigests, { digestMode, collectionWarnings }),
     { fetch: fetchImpl },
   );
 
   if (!postChannelThreads) {
-    if (normalizeDigestMode(digestMode) === 'weekly') {
+    if (normalizeDigestMode(digestMode) === 'weekly' && markWeeklyComplete) {
       state.last_weekly_digest_at = asOf;
     }
     return {
@@ -615,7 +691,7 @@ async function postWeeklyDigest({
     );
   }
 
-  if (normalizeDigestMode(digestMode) === 'weekly') {
+  if (normalizeDigestMode(digestMode) === 'weekly' && markWeeklyComplete) {
     state.last_weekly_digest_at = asOf;
   }
   return {
@@ -642,6 +718,8 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
   const forceDigest = getBooleanOption(options, 'force-digest', false);
   const digestWeekday = getNumberOption(options, 'digest-weekday', DEFAULT_DIGEST_WEEKDAY);
   const digestHour = getNumberOption(options, 'digest-hour', DEFAULT_DIGEST_HOUR);
+  const requestMaxAttempts = getNumberOption(options, 'request-attempts', DEFAULT_REQUEST_MAX_ATTEMPTS);
+  const retryBaseDelayMs = getNumberOption(options, 'retry-base-delay-ms', DEFAULT_RETRY_BASE_DELAY_MS);
   const digestMode = normalizeDigestMode(getStringOption(options, 'digest-mode', DEFAULT_DIGEST_MODE));
   const postTarget = normalizePostTarget(getStringOption(options, 'post-target', DEFAULT_POST_TARGET));
   const postChannelThreads = getBooleanOption(
@@ -667,6 +745,21 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
   const publicationsByChannelId = new Map();
   const videoRowsByChannelId = new Map();
   const latestSnapshotsByPublicationId = new Map();
+  const analyticsSnapshotsByPublicationId = new Map();
+  const completedChannelIds = new Set();
+  const collectionWarnings = [];
+  const sleepImpl = dependencies.sleep;
+
+  const runWithRetry = (operation, label, channelProfile) => retryAnalyticsOperation(operation, {
+    maxAttempts: requestMaxAttempts,
+    baseDelayMs: retryBaseDelayMs,
+    sleep: sleepImpl,
+    onRetry: ({ attempt, delayMs, error }) => {
+      printWarn(
+        `Retrying ${label} for ${channelProfile.account_key} after attempt ${attempt} in ${delayMs}ms: ${error.message}`,
+      );
+    },
+  });
 
   for (const channelProfile of profiles) {
     const refreshToken = runtimeConfig.env[channelProfile.youtube.oauth_refresh_token_env] || '';
@@ -678,99 +771,160 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
         action: 'skipped',
         reason: 'youtube_oauth_not_configured',
       });
-      publicationsByChannelId.set(channelProfile.id, []);
-      continue;
-    }
-
-    const publications = await store.fetchPublishedPublicationsByChannel({
-      platform: channelProfile.platform,
-      accountKey: channelProfile.account_key,
-    });
-    publicationsByChannelId.set(channelProfile.id, publications || []);
-    videoRowsByChannelId.set(
-      channelProfile.id,
-      await fetchVideoRowsById(store, publications || []),
-    );
-
-    const latestSnapshots = await Promise.all((publications || []).map((publication) => (
-      store.fetchLatestAnalyticsSnapshot(publication.id)
-    )));
-    const latestByPublicationId = indexLatestAnalyticsSnapshotsByPublicationId(latestSnapshots);
-    for (const [publicationId, snapshot] of latestByPublicationId.entries()) {
-      latestSnapshotsByPublicationId.set(publicationId, snapshot);
-    }
-
-    const capturePlan = resolveVideoAnalyticsCapturePlan({
-      publications,
-      latestSnapshotsByPublicationId: latestByPublicationId,
-      capturedAt: asOf,
-    });
-    const duePublications = capturePlan.filter((entry) => entry.due && String(entry.publication?.external_id || '').trim());
-
-    if (duePublications.length === 0) {
-      sweepResults.push({
+      collectionWarnings.push({
         channel_id: channelProfile.id,
         account_key: channelProfile.account_key,
-        action: 'no_due_publications',
-        publication_count: publications.length,
+        reason: 'YouTube OAuth is not configured.',
       });
       continue;
     }
 
-    const clientConfig = await loadClientCredentials(
-      channelProfile.youtube.oauth_client_secret_path,
-      projectRoot,
-    );
-    const accessToken = await createAccessToken({
-      clientConfig,
-      refreshToken,
-      fetchImpl,
-    });
-    const { statisticsByVideoId } = await fetchStatisticsMap({
-      externalIds: duePublications.map((entry) => entry.publication.external_id),
-      accessToken,
-      fetchImpl,
-    });
+    try {
+      const publications = await runWithRetry(
+        () => store.fetchPublishedPublicationsByChannel({
+          platform: channelProfile.platform,
+          accountKey: channelProfile.account_key,
+        }),
+        'published-publication lookup',
+        channelProfile,
+      );
+      publicationsByChannelId.set(channelProfile.id, publications || []);
+      videoRowsByChannelId.set(
+        channelProfile.id,
+        await runWithRetry(
+          () => fetchVideoRowsById(store, publications || []),
+          'video metadata lookup',
+          channelProfile,
+        ),
+      );
 
-    for (const entry of duePublications) {
-      try {
-        const analyticsSnapshot = await fetchPublicationMetrics({
-          publication: entry.publication,
+      const snapshotHistory = await fetchAnalyticsSnapshotHistory({
+        store,
+        publications: publications || [],
+        maxAttempts: requestMaxAttempts,
+        baseDelayMs: retryBaseDelayMs,
+        sleep: sleepImpl,
+        onRetry: ({ attempt, delayMs, error }) => {
+          printWarn(
+            `Retrying analytics snapshot batch for ${channelProfile.account_key} after attempt ${attempt} in ${delayMs}ms: ${error.message}`,
+          );
+        },
+      });
+      for (const [publicationId, snapshot] of snapshotHistory.latestByPublicationId.entries()) {
+        latestSnapshotsByPublicationId.set(publicationId, snapshot);
+      }
+      for (const [publicationId, snapshots] of snapshotHistory.snapshotsByPublicationId.entries()) {
+        analyticsSnapshotsByPublicationId.set(publicationId, snapshots.slice());
+      }
+
+      const capturePlan = resolveVideoAnalyticsCapturePlan({
+        publications,
+        latestSnapshotsByPublicationId: snapshotHistory.latestByPublicationId,
+        capturedAt: asOf,
+      });
+      const duePublications = capturePlan.filter((entry) => (
+        entry.due && String(entry.publication?.external_id || '').trim()
+      ));
+
+      if (duePublications.length === 0) {
+        sweepResults.push({
+          channel_id: channelProfile.id,
+          account_key: channelProfile.account_key,
+          action: 'no_due_publications',
+          publication_count: publications.length,
+        });
+        completedChannelIds.add(channelProfile.id);
+        continue;
+      }
+
+      const clientConfig = await loadClientCredentials(
+        channelProfile.youtube.oauth_client_secret_path,
+        projectRoot,
+      );
+      const accessToken = await runWithRetry(
+        () => createAccessToken({ clientConfig, refreshToken, fetchImpl }),
+        'YouTube access-token refresh',
+        channelProfile,
+      );
+      const { statisticsByVideoId } = await runWithRetry(
+        () => fetchStatisticsMap({
+          externalIds: duePublications.map((entry) => entry.publication.external_id),
           accessToken,
-          statistics: statisticsByVideoId.get(String(entry.publication?.external_id || '').trim()) || null,
           fetchImpl,
-          capturedAt: asOf,
-        });
-        const savedSnapshot = await store.upsertVideoAnalyticsSnapshot({
-          publication_id: entry.publication.id,
-          captured_at: asOf,
-          metrics: analyticsSnapshot.metrics,
-          raw_payload: analyticsSnapshot.raw_payload,
-        });
-        latestSnapshotsByPublicationId.set(entry.publication.id, savedSnapshot || {
-          publication_id: entry.publication.id,
-          captured_at: asOf,
-          metrics: analyticsSnapshot.metrics,
-          raw_payload: analyticsSnapshot.raw_payload,
-        });
-        sweepResults.push({
+        }),
+        'YouTube statistics lookup',
+        channelProfile,
+      );
+
+      let captureFailureCount = 0;
+      for (const entry of duePublications) {
+        try {
+          const analyticsSnapshot = await runWithRetry(
+            () => fetchPublicationMetrics({
+              publication: entry.publication,
+              accessToken,
+              statistics: statisticsByVideoId.get(String(entry.publication?.external_id || '').trim()) || null,
+              fetchImpl,
+              capturedAt: asOf,
+            }),
+            `YouTube analytics lookup for ${entry.publication.external_id}`,
+            channelProfile,
+          );
+          const snapshotCandidate = {
+            publication_id: entry.publication.id,
+            captured_at: asOf,
+            metrics: analyticsSnapshot.metrics,
+            raw_payload: analyticsSnapshot.raw_payload,
+          };
+          const savedSnapshot = await runWithRetry(
+            () => store.upsertVideoAnalyticsSnapshot(snapshotCandidate),
+            `analytics snapshot write for ${entry.publication.external_id}`,
+            channelProfile,
+          );
+          const effectiveSnapshot = savedSnapshot || snapshotCandidate;
+          latestSnapshotsByPublicationId.set(entry.publication.id, effectiveSnapshot);
+          appendAnalyticsSnapshot(analyticsSnapshotsByPublicationId, effectiveSnapshot);
+          sweepResults.push({
+            channel_id: channelProfile.id,
+            account_key: channelProfile.account_key,
+            publication_id: entry.publication.id,
+            external_id: entry.publication.external_id,
+            action: 'captured',
+            cadence_hours: entry.cadence_hours,
+          });
+        } catch (error) {
+          captureFailureCount += 1;
+          sweepResults.push({
+            channel_id: channelProfile.id,
+            account_key: channelProfile.account_key,
+            publication_id: entry.publication.id,
+            external_id: entry.publication.external_id,
+            action: 'failed',
+            error: error.message,
+          });
+        }
+      }
+      if (captureFailureCount > 0) {
+        collectionWarnings.push({
           channel_id: channelProfile.id,
           account_key: channelProfile.account_key,
-          publication_id: entry.publication.id,
-          external_id: entry.publication.external_id,
-          action: 'captured',
-          cadence_hours: entry.cadence_hours,
-        });
-      } catch (error) {
-        sweepResults.push({
-          channel_id: channelProfile.id,
-          account_key: channelProfile.account_key,
-          publication_id: entry.publication.id,
-          external_id: entry.publication.external_id,
-          action: 'failed',
-          error: error.message,
+          error: `${captureFailureCount} publication capture(s) failed; last-known snapshots were used.`,
         });
       }
+      completedChannelIds.add(channelProfile.id);
+    } catch (error) {
+      printWarn(`Analytics collection failed for ${channelProfile.account_key}: ${error.message}`);
+      collectionWarnings.push({
+        channel_id: channelProfile.id,
+        account_key: channelProfile.account_key,
+        error: error.message,
+      });
+      sweepResults.push({
+        channel_id: channelProfile.id,
+        account_key: channelProfile.account_key,
+        action: 'channel_failed',
+        error: error.message,
+      });
     }
   }
 
@@ -787,12 +941,17 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
         digestHour,
       })
   );
+  const digestComplete = collectionWarnings.length === 0;
+  const retryRecommended = digestDue && digestMode === 'weekly' && !digestComplete;
   if (digestDue) {
-    const channelDigests = profiles.map((channelProfile) => ({
+    const channelDigests = profiles.filter((channelProfile) => (
+      completedChannelIds.has(channelProfile.id)
+    )).map((channelProfile) => ({
       ...buildChannelVideoAnalyticsDigest({
         channelProfile,
         publications: publicationsByChannelId.get(channelProfile.id) || [],
         latestSnapshotsByPublicationId,
+        analyticsSnapshotsByPublicationId,
         videoRowsById: videoRowsByChannelId.get(channelProfile.id) || new Map(),
         asOf,
         windowDays,
@@ -811,6 +970,8 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
       fetchImpl,
       digestMode,
       postTarget,
+      collectionWarnings,
+      markWeeklyComplete: digestComplete,
     });
     postedChannelId = postResult?.postedChannelId || '';
     await saveState(statePath, state);
@@ -827,8 +988,11 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
     analytics_channel_id: analyticsChannelId || null,
     posted_channel_id: postedChannelId || null,
     digest_posted: digestPosted,
+    digest_complete: digestComplete,
+    retry_recommended: retryRecommended,
     digest_mode: digestMode,
     post_target: postTarget,
+    collection_warnings: collectionWarnings,
     state_path: statePath,
     results: sweepResults,
   };
@@ -851,6 +1015,8 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       `  --digest-window-days <n>     Window size for the weekly digest. Default: ${DEFAULT_DIGEST_WINDOW_DAYS}`,
       `  --digest-weekday <0-6>       Local weekday for the digest. Default: ${DEFAULT_DIGEST_WEEKDAY} (Monday=1)`,
       `  --digest-hour <0-23>         Local hour gate for digest posting. Default: ${DEFAULT_DIGEST_HOUR}`,
+      `  --request-attempts <n>       Retries for transient API failures. Default: ${DEFAULT_REQUEST_MAX_ATTEMPTS}`,
+      `  --retry-base-delay-ms <n>    Initial exponential retry delay. Default: ${DEFAULT_RETRY_BASE_DELAY_MS}`,
       `  --post-target <target>       Digest post target: shared or corresponding. Default: ${DEFAULT_POST_TARGET}`,
       '  --analytics-channel-id <id>  Override the Discord analytics channel id.',
       `  --state-path <path>          Digest thread/state file. Default: ${DEFAULT_STATE_PATH}`,

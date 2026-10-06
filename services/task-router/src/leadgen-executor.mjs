@@ -1,5 +1,36 @@
+import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
+import process from 'node:process';
+import { projectRoot } from '../../lib/runtime-config.mjs';
 import { runLeadgenSearch } from '../../leadgen-scraper/src/worker.mjs';
 import { runLeadgenSweepRound } from '../../../scripts/run-scheduled-leadgen.mjs';
+
+function clampQualificationLimit(value) {
+  const parsed = Number.parseInt(String(value ?? 3), 10);
+  return Math.max(1, Math.min(Number.isFinite(parsed) ? parsed : 3, 100));
+}
+
+function launchLeadQualification(request, config) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const limit = clampQualificationLimit(request?.limit);
+    const child = spawn(
+      process.execPath,
+      [resolve(projectRoot, 'scripts', 'run-lead-qualification.mjs'), '--limit', String(limit)],
+      {
+        cwd: projectRoot,
+        env: { ...process.env, ...(config?.env || {}) },
+        detached: true,
+        stdio: ['ignore', 'inherit', 'inherit'],
+      },
+    );
+
+    child.once('error', rejectPromise);
+    child.once('spawn', () => {
+      child.unref();
+      resolvePromise({ pid: child.pid || 0 });
+    });
+  });
+}
 
 export function describeExplicitLeadgenAction(task) {
   const action = String(task?.runtime_action || '').trim();
@@ -15,6 +46,12 @@ export function describeExplicitLeadgenAction(task) {
       description: 'Run the rotating leadgen sweep across all configured niches.',
     };
   }
+  if (action === 'lead_qualification') {
+    return {
+      action,
+      description: 'Start the existing lead qualification workflow for new leads.',
+    };
+  }
 
   return null;
 }
@@ -22,6 +59,25 @@ export function describeExplicitLeadgenAction(task) {
 export async function executeLeadgenAction(task, config, options = {}) {
   const request = task?.leadgen_request;
   const action = String(task?.runtime_action || '').trim();
+
+  if (action === 'lead_qualification' || String(request?.mode || '').trim().toLowerCase() === 'qualification') {
+    const limit = clampQualificationLimit(request?.limit);
+    const launcher = options.launchLeadQualification
+      || ((launchRequest) => launchLeadQualification(launchRequest, config));
+    const launched = await launcher({ limit });
+
+    return {
+      rawStdout: '',
+      report: {
+        state: 'started',
+        severity: 'info',
+        summary: `Started lead qualification for up to ${limit} new lead(s). Live progress and the final report will appear in the lead qualification channel.`,
+        mode: 'qualification',
+        limit,
+        pid: Number(launched?.pid || 0),
+      },
+    };
+  }
 
   if (action === 'leadgen_sweep' || String(request?.mode || '').trim().toLowerCase() === 'sweep') {
     const rounds = Math.max(1, Number.parseInt(String(request?.rounds ?? 1), 10) || 1);

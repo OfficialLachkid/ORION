@@ -591,8 +591,9 @@ function selectBackgroundForTypePair(backgrounds, typePair, random, selectionSta
   );
 }
 
-function buildSubjectAssetRecord(subject, renderSpritePath) {
+function buildSubjectAssetRecord(subject, renderSpritePath, cellIndex, isShinyReveal) {
   return {
+    cell_index: cellIndex,
     pokedex_id: subject.id,
     national_dex_number: subject.national_dex_number,
     name: subject.name,
@@ -605,8 +606,8 @@ function buildSubjectAssetRecord(subject, renderSpritePath) {
     shiny_sprite_source_url: subject.shiny_sprite_source_url,
     silhouette_source_url: subject.silhouette_source_url,
     cry_source_url: subject.cry_source_url,
-    reveal_variant: 'shiny',
-    is_shiny_reveal: true,
+    reveal_variant: isShinyReveal ? 'shiny' : 'normal',
+    is_shiny_reveal: isShinyReveal,
   };
 }
 
@@ -709,23 +710,55 @@ function buildFindTheShinyLayout(template, difficulty, random) {
 function buildShinyRevealState({
   template,
   inventory,
-  selectedSubject,
+  selectedSubjects,
   gridLayout,
   random,
 }) {
   const configured = template?.reveal?.shiny && typeof template.reveal.shiny === 'object'
     ? template.reveal.shiny
     : {};
+  const maximumShinies = Math.max(1, ensurePositiveInteger(configured.max_per_video, 1));
+  const multipleShinyGridSize = Math.max(
+    2,
+    ensurePositiveInteger(configured.multiple_shiny_grid_size, 9),
+  );
+  const multipleShinyChance = Math.min(
+    1,
+    Math.max(0, Number(configured.multiple_shiny_chance ?? 0.5)),
+  );
+  const shinyCount = gridLayout.cells.length >= multipleShinyGridSize
+    && maximumShinies > 1
+    && random() < multipleShinyChance
+    ? Math.min(2, maximumShinies, gridLayout.cells.length)
+    : 1;
+  const selectedCellIndices = sampleArray(
+    gridLayout.cells.map((cell) => cell.index),
+    shinyCount,
+    random,
+  ).sort((left, right) => left - right);
+  const selectedShinySubjects = selectedCellIndices
+    .map((cellIndex) => selectedSubjects[cellIndex])
+    .filter(Boolean);
+  const primaryCellIndex = selectedCellIndices[0] ?? 0;
+  const primarySubject = selectedSubjects[primaryCellIndex] || selectedSubjects[0];
   return {
     enabled: configured.enabled !== false,
     active: true,
-    max_per_video: 1,
-    selected_subject_index: 0,
-    selected_cell_index: Math.floor(random() * Math.max(1, gridLayout.cells.length)),
-    selected_pokedex_id: selectedSubject.id,
-    selected_national_dex_number: selectedSubject.national_dex_number,
-    selected_name: selectedSubject.name,
-    selected_sprite_path: selectedSubject.shiny_sprite_path,
+    max_per_video: maximumShinies,
+    shiny_count: shinyCount,
+    selected_subject_index: primaryCellIndex,
+    selected_subject_indices: selectedCellIndices,
+    selected_cell_index: primaryCellIndex,
+    selected_cell_indices: selectedCellIndices,
+    selected_pokedex_id: primarySubject.id,
+    selected_pokedex_ids: selectedShinySubjects.map((subject) => subject.id),
+    selected_national_dex_number: primarySubject.national_dex_number,
+    selected_national_dex_numbers: selectedShinySubjects
+      .map((subject) => subject.national_dex_number),
+    selected_name: primarySubject.name,
+    selected_names: selectedShinySubjects.map((subject) => subject.name),
+    selected_sprite_path: primarySubject.shiny_sprite_path,
+    selected_sprite_paths: selectedShinySubjects.map((subject) => subject.shiny_sprite_path),
     sparkle_overlay_path: inventory?.overlay_presets?.shiny_sparkle || null,
     sound_effect_path: inventory?.sound_effects?.shiny || null,
     sparkle_duration_seconds: Number(
@@ -759,21 +792,26 @@ export async function planFindTheShinyChallenge({
     ? HP_BAR_TIMER_DISPLAY_MODE
     : NUMERIC_TIMER_DISPLAY_MODE;
   const fallbackTimerPath = inventory.overlay_presets?.timer_countdown || inventory.overlay_presets?.timer || null;
-  const selectableSubjects = collapseSubjectVariants(selectedPair.matches);
-  const prioritizedSelectableSubjects = prioritizeSelectableSubjects(selectableSubjects, random);
-  const selectedSubject = prioritizedSelectableSubjects[0] || null;
-  if (!selectedSubject) {
-    throw new Error(`No localized Pokemon with normal and shiny sprites are available for ${selectedPair.pair.join(' / ')}.`);
-  }
-  const selectedRenderSpritePath = await resolveFindTheShinySpritePath(selectedSubject.sprite_path);
-
   const selectedDifficulty = chooseDifficulty(config.difficultyCatalog, random);
   const spriteGridLayout = buildFindTheShinyLayout(template, selectedDifficulty, random);
+  const selectableSubjects = collapseSubjectVariants(
+    pairCatalog.flatMap((entry) => entry.matches),
+  );
+  const prioritizedSelectableSubjects = prioritizeSelectableSubjects(selectableSubjects, random);
+  const selectedSubjects = prioritizedSelectableSubjects.slice(0, spriteGridLayout.sprite_count);
+  if (selectedSubjects.length < spriteGridLayout.sprite_count) {
+    throw new Error(
+      `Find the Shiny requires ${spriteGridLayout.sprite_count} different Pokemon with normal and shiny sprites, found ${selectedSubjects.length}.`,
+    );
+  }
+  const selectedRenderSpritePaths = await Promise.all(
+    selectedSubjects.map((subject) => resolveFindTheShinySpritePath(subject.sprite_path)),
+  );
   const questionContractTexts = resolveQuestionContractTexts(template, random);
   const shinyReveal = buildShinyRevealState({
     template,
     inventory,
-    selectedSubject,
+    selectedSubjects,
     gridLayout: spriteGridLayout,
     random,
   });
@@ -799,8 +837,12 @@ export async function planFindTheShinyChallenge({
   typePairUsageCounts[selectedTypePairKey] += 1;
 
   const requiredAssetGaps = [];
-  if (!selectedSubject.sprite_path) requiredAssetGaps.push('pokemon_normal_sprite_local_asset_missing');
-  if (!selectedSubject.shiny_sprite_path) requiredAssetGaps.push('pokemon_shiny_sprite_local_asset_missing');
+  if (selectedSubjects.some((subject) => !subject.sprite_path)) {
+    requiredAssetGaps.push('pokemon_normal_sprite_local_asset_missing');
+  }
+  if (selectedSubjects.some((subject) => !subject.shiny_sprite_path)) {
+    requiredAssetGaps.push('pokemon_shiny_sprite_local_asset_missing');
+  }
   if (!inventory.backgrounds.length) requiredAssetGaps.push('background_missing');
   if (!inventory.sound_effects.countdown_tick) requiredAssetGaps.push('countdown_sfx_missing');
   if (!inventory.sound_effects.timer_end) requiredAssetGaps.push('timer_end_sfx_missing');
@@ -830,25 +872,25 @@ export async function planFindTheShinyChallenge({
       catalog_match_count: selectedPair.matches.length,
       compatible_display_count: spriteGridLayout.sprite_count,
       display_subject_count: spriteGridLayout.sprite_count,
-      selected_subject_count: 1,
-      selected_subjects: [
-        {
-          pokedex_id: selectedSubject.id,
-          national_dex_number: selectedSubject.national_dex_number,
-          name: selectedSubject.name,
-          generation: selectedSubject.generation,
-          region: selectedSubject.region,
-          types: selectedSubject.types,
-          reveal_variant: 'shiny',
-          is_shiny_reveal: true,
-        },
-      ],
+      selected_subject_count: selectedSubjects.length,
+      selected_subjects: selectedSubjects.map((subject, cellIndex) => ({
+        pokedex_id: subject.id,
+        national_dex_number: subject.national_dex_number,
+        name: subject.name,
+        generation: subject.generation,
+        region: subject.region,
+        types: subject.types,
+        cell_index: cellIndex,
+        reveal_variant: shinyReveal.selected_cell_indices.includes(cellIndex) ? 'shiny' : 'normal',
+        is_shiny_reveal: shinyReveal.selected_cell_indices.includes(cellIndex),
+      })),
       grid: {
         difficulty_id: spriteGridLayout.difficulty_id,
         sprite_count: spriteGridLayout.sprite_count,
         rows: spriteGridLayout.rows,
         columns: spriteGridLayout.columns,
         shiny_cell_index: shinyReveal.selected_cell_index,
+        shiny_cell_indices: shinyReveal.selected_cell_indices,
       },
     },
     shiny_reveal: shinyReveal,
@@ -893,9 +935,12 @@ export async function planFindTheShinyChallenge({
         selected_path: selectedBackgroundPath,
       },
       type_icons: [],
-      pokemon: [
-        buildSubjectAssetRecord(selectedSubject, selectedRenderSpritePath),
-      ],
+      pokemon: selectedSubjects.map((subject, cellIndex) => buildSubjectAssetRecord(
+        subject,
+        selectedRenderSpritePaths[cellIndex],
+        cellIndex,
+        shinyReveal.selected_cell_indices.includes(cellIndex),
+      )),
       overlays: {
         expected_directory: POKE_QUIZZ_ASSET_LAYOUT.overlays,
         selected_primary_pokeball_overlay_path: inventory.overlay_presets?.pokeball_primary || null,

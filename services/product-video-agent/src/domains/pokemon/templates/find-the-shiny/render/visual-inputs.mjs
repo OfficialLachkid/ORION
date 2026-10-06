@@ -75,19 +75,31 @@ export function buildVisualInputs(plan, renderPlan) {
     ],
   });
 
-  const selectedPokemon = plan.assets.pokemon?.[0] || {};
   const revealDuration = String(Math.max(0.5, renderPlan.phases.reveal?.duration_seconds || 0));
-  const normalSpritePath = selectedPokemon.render_sprite_path || selectedPokemon.sprite_path;
-  inputs.push({
-    role: 'normal-sprite',
-    path: normalSpritePath,
-    args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', revealDuration, '-i', normalSpritePath],
-  });
-  inputs.push({
-    role: 'shiny-sprite',
-    path: selectedPokemon.shiny_sprite_path || selectedPokemon.reveal_sprite_path || selectedPokemon.sprite_path,
-    args: ['-loop', '1', '-framerate', String(renderPlan.canvas.fps), '-t', revealDuration, '-i', selectedPokemon.shiny_sprite_path || selectedPokemon.reveal_sprite_path || selectedPokemon.sprite_path],
-  });
+  const pokemonAssets = [...(Array.isArray(plan.assets.pokemon) ? plan.assets.pokemon : [])]
+    .sort((left, right) => Number(left?.cell_index || 0) - Number(right?.cell_index || 0));
+  for (const [fallbackIndex, pokemon] of pokemonAssets.entries()) {
+    const cellIndex = Number.isInteger(Number(pokemon?.cell_index))
+      ? Number(pokemon.cell_index)
+      : fallbackIndex;
+    const spritePath = pokemon?.is_shiny_reveal
+      ? pokemon.shiny_sprite_path || pokemon.reveal_sprite_path || pokemon.sprite_path
+      : pokemon.render_sprite_path || pokemon.sprite_path;
+    inputs.push({
+      role: `cell-${cellIndex}-sprite`,
+      path: spritePath,
+      args: [
+        '-loop',
+        '1',
+        '-framerate',
+        String(renderPlan.canvas.fps),
+        '-t',
+        revealDuration,
+        '-i',
+        spritePath,
+      ],
+    });
+  }
 
   if (plan.assets.overlays?.selected_shiny_sparkle_path) {
     inputs.push({

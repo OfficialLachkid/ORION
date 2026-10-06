@@ -6,6 +6,8 @@ import { normalizePublicationChannelProfile } from '../src/publication-channels.
 const originalArgv1 = process.argv[1];
 process.argv[1] = '';
 const {
+  blockMissingPreviewPublication,
+  isMissingPreviewRenderError,
   reconcilePreviewPublications,
   reconcilePublishedPublications,
   reconcileScheduledPublications,
@@ -76,6 +78,51 @@ function createStore(initialPublication, videoRow = null) {
     },
   };
 }
+
+test('missing preview renders are marked blocked so they are not retried', async () => {
+  const publication = {
+    id: 'pub-missing-render',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'approved',
+    metadata: {
+      workflow_state: 'preview_upload_pending',
+      render_path: '/Volumes/T7/missing-preview.mp4',
+    },
+  };
+  const store = createStore(publication);
+  const error = Object.assign(new Error('render file missing'), {
+    code: 'ENOENT',
+    path: '/Volumes/T7/missing-preview.mp4',
+  });
+
+  assert.equal(isMissingPreviewRenderError(error), true);
+  assert.equal(isMissingPreviewRenderError(new Error('network failed')), false);
+
+  const blocked = await blockMissingPreviewPublication({
+    store,
+    runtimeConfig: { env: {} },
+    publication,
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    renderPath: publication.metadata.render_path,
+    error,
+    blockedAt: '2026-09-28T12:05:00.000Z',
+  });
+
+  assert.equal(store.current().status, 'blocked');
+  assert.equal(store.current().metadata.workflow_state, 'blocked');
+  assert.equal(store.current().metadata.preview_upload_blocked_reason, 'render_file_missing');
+  assert.equal(store.current().metadata.preview_upload_blocked_at, '2026-09-28T12:05:00.000Z');
+  assert.equal(store.current().metadata.preview_upload_missing_render_path, '/Volumes/T7/missing-preview.mp4');
+  assert.deepEqual(blocked.result, {
+    publication_id: 'pub-missing-render',
+    action: 'preview_upload_blocked',
+    workflow_state: 'blocked',
+    reason: 'render_file_missing',
+    render_path: '/Volumes/T7/missing-preview.mp4',
+  });
+});
 
 test('scheduled queue reconciliation reopens a missing YouTube video for approval', async () => {
   const publication = {
@@ -740,6 +787,49 @@ test('related-video refresh is a no-op when the channel does not have related_vi
   assert.deepEqual(refreshed.results, []);
   assert.equal(applyImplCalled, false, 'apply should not be called for disabled channels');
   assert.equal(store.updateCalls.length, 0, 'no metadata should be written for disabled channels');
+});
+
+test('related-video refresh excludes long-form publications even when stale policy enables them', async () => {
+  const longFormPublication = {
+    id: 'pub-long-form',
+    video_id: 'video-long-form',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-long-form',
+    metadata: {
+      workflow_state: 'published',
+      content_surface: 'youtube_watch',
+      publication_policy: { related_video_enabled: true },
+      related_video: {
+        selection_status: 'planned',
+        target_external_id: 'yt-short-target',
+        apply_status: 'login_required',
+      },
+    },
+  };
+  const store = createStore(longFormPublication);
+  let applyImplCalled = false;
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [longFormPublication],
+    includePublished: true,
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-10-05T12:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async () => {
+      applyImplCalled = true;
+      return { capability: { status: 'configured' }, applyStatus: 'applied' };
+    },
+  });
+
+  assert.deepEqual(refreshed.results, []);
+  assert.equal(applyImplCalled, false, 'Studio automation must never run for long-form publications');
+  assert.equal(store.updateCalls.length, 0, 'long-form related-video metadata must remain untouched');
 });
 
 test('related-video --include-published preserves the existing target on backfill', async () => {

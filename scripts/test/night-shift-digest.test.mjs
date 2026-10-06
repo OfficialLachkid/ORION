@@ -68,10 +68,44 @@ test('pokemon night shift digest combines maintenance, fallback, replenish, and 
         { reason: 'rate_limit_retry_exhausted' },
       ],
     },
+    reviewThreadReconciliation: {
+      status: 'completed',
+      candidates: 10,
+      present: 7,
+      missing: 2,
+      errors: 1,
+      withdrawnPublicationIds: ['pub-a', 'pub-b'],
+      unresolvedPublicationIds: ['pub-c'],
+      channels: [],
+      channelErrors: [],
+    },
   });
 
   assert.match(digest, /Video queue maintenance: \*\*2\*\* scheduled item\(s\) checked, \*\*1\*\* marked live, \*\*1\*\* withdrawn, \*\*1\*\* schedule\(s\) corrected\./u);
   assert.match(digest, /Preview fallback storage: moved \*\*1\*\* back to SSD\./u);
   assert.match(digest, /Review backlog replenish: generated \*\*3\*\* preview\(s\), review queue now holds \*\*10\/10\*\* ready for approval, with \*\*1\*\* failed attempt\(s\)\./u);
   assert.match(digest, /Review card refresh updated \*\*7\*\* card\(s\); \*\*1\*\* stored review card\(s\) are missing in Discord, \*\*1\*\* still need another pass\./u);
+  assert.match(digest, /Review-thread reconcile withdrew \*\*2\*\* orphan preview\(s\) \(Discord message was 404\); \*\*1\*\* pending re-check next pass\./u);
+});
+
+test('pokemon night shift digest omits reconcile line when nothing to report', () => {
+  const digest = buildPokemonNightShiftDigest({
+    reviewThreadReconciliation: {
+      status: 'completed', candidates: 5, present: 5, missing: 0, errors: 0,
+      withdrawnPublicationIds: [], unresolvedPublicationIds: [], channels: [], channelErrors: [],
+    },
+  });
+  assert.doesNotMatch(digest, /Review-thread reconcile/u);
+});
+
+test('pokemon night shift digest surfaces reconcile failures', () => {
+  const digest = buildPokemonNightShiftDigest({
+    reviewThreadReconciliation: {
+      status: 'failed', candidates: 0, present: 0, missing: 0, errors: 0,
+      withdrawnPublicationIds: [], unresolvedPublicationIds: [],
+      channels: [],
+      channelErrors: [{ channelKey: 'poke-quizz-youtube', error: 'Supabase 500' }],
+    },
+  });
+  assert.match(digest, /Review-thread reconcile failed: Supabase 500/u);
 });

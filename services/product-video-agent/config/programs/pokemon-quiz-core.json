@@ -16,8 +16,20 @@
       "path": "../templates/pokemon/know-your-shiny.v1.json"
     },
     {
+      "template_id": "pokemon.progressive-reveal.v1",
+      "path": "../templates/pokemon/progressive-reveal.v1.json"
+    },
+    {
+      "template_id": "pokemon.pixelated-reveal.v1",
+      "path": "../templates/pokemon/pixelated-reveal.v1.json"
+    },
+    {
       "template_id": "pokemon.stat-clash.v1",
       "path": "../templates/pokemon/stat-clash.v1.json"
+    },
+    {
+      "template_id": "pokemon.build-your-team.v1",
+      "path": "../templates/pokemon/build-your-team.v1.json"
     },
     {
       "template_id": "pokemon.tournament.v1",
@@ -30,6 +42,10 @@
     {
       "template_id": "pokemon.type-quiz.v1",
       "path": "../templates/pokemon/type-quiz.v1.json"
+    },
+    {
+      "template_id": "pokemon.cry-match.v1",
+      "path": "../templates/pokemon/cry-match.v1.json"
     }
   ]
 }
