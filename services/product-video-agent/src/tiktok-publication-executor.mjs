@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { open, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { upsertEnvValues } from '../../lib/env-file.mjs';
@@ -5,12 +7,17 @@ import {
   TIKTOK_VIDEO_INIT_ENDPOINT,
   buildTikTokDirectPostInitRequest,
   buildTikTokStatusFetchRequest,
+  resolveTikTokDirectPostApproval,
+  validateTikTokCreatorCapabilities,
 } from './tiktok-publication.mjs';
 import {
   buildTikTokCredentialEnvValues,
+  fetchTikTokCreatorInfo,
   refreshTikTokAccessToken,
   resolveTikTokCredentialEnvKeys,
 } from './tiktok-oauth.mjs';
+import { probeMediaDurationSeconds } from './media-duration.mjs';
+import { resolveFfmpegExecutable } from './runtime-executables.mjs';
 
 export class TikTokPublicationAuthRequiredError extends Error {
   constructor(message, details = {}) {
@@ -99,7 +106,7 @@ async function resolveAccessToken(target = {}, runtimeEnv = {}, options = {}) {
   };
 }
 
-function resolveRenderPath(publication = {}, videoRow = {}, projectRoot = process.cwd()) {
+export function resolveTikTokRenderPath(publication = {}, videoRow = {}, projectRoot = process.cwd()) {
   const renderPath = normalizeText(
     publication.metadata?.render_path
       || videoRow.render?.output_path
@@ -190,6 +197,120 @@ async function uploadFileInChunks({
   }
 }
 
+export async function hashFileSha256(filePath) {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk);
+  }
+  return hash.digest('hex');
+}
+
+async function prepareTikTokDirectPost({
+  publication,
+  videoRow,
+  target,
+  runtimeEnv,
+  projectRoot,
+  fetchImpl,
+  statImpl,
+  asOf,
+  persistEnvValues,
+  fetchCreatorInfoImpl,
+  probeDurationImpl,
+  hashFileImpl,
+}) {
+  assertFetch(fetchImpl);
+  const { token, tokenEnv } = await resolveAccessToken(target, runtimeEnv, {
+    fetchImpl,
+    projectRoot,
+    now: new Date(asOf),
+    persistEnvValues,
+  });
+  const renderPath = resolveTikTokRenderPath(publication, videoRow, projectRoot);
+  const fileStats = await statImpl(renderPath);
+  const videoSha256 = await hashFileImpl(renderPath);
+  const postSettings = resolveTikTokDirectPostApproval({
+    publication,
+    target,
+    renderPath,
+    videoSizeBytes: fileStats.size,
+    videoSha256,
+  });
+  const creatorInfo = await fetchCreatorInfoImpl(token, { fetch: fetchImpl });
+  const ffmpegExecutable = resolveFfmpegExecutable(
+    { executable: 'auto' },
+    { environment: runtimeEnv },
+  );
+  const videoDurationSeconds = await probeDurationImpl({
+    ffmpegExecutable,
+    mediaPath: renderPath,
+    cwd: projectRoot,
+  });
+  const capabilities = validateTikTokCreatorCapabilities({
+    postSettings,
+    creatorInfo,
+    target,
+    videoDurationSeconds,
+  });
+  const request = buildTikTokDirectPostInitRequest({
+    postSettings,
+    target,
+    videoSizeBytes: fileStats.size,
+  });
+  return {
+    capabilities,
+    creatorInfo,
+    fileStats,
+    postSettings,
+    renderPath,
+    request,
+    token,
+    tokenEnv,
+  };
+}
+
+export async function preflightTikTokVideo({
+  publication,
+  videoRow,
+  target,
+  runtimeEnv = {},
+  projectRoot = process.cwd(),
+  fetchImpl = globalThis.fetch,
+  statImpl = stat,
+  asOf = new Date().toISOString(),
+  persistEnvValues,
+  fetchCreatorInfoImpl = fetchTikTokCreatorInfo,
+  probeDurationImpl = probeMediaDurationSeconds,
+  hashFileImpl = hashFileSha256,
+}) {
+  const prepared = await prepareTikTokDirectPost({
+    publication,
+    videoRow,
+    target,
+    runtimeEnv,
+    projectRoot,
+    fetchImpl,
+    statImpl,
+    asOf,
+    persistEnvValues,
+    fetchCreatorInfoImpl,
+    probeDurationImpl,
+    hashFileImpl,
+  });
+  return {
+    platform: 'tiktok_video',
+    action: 'preflight',
+    creatorUsername: prepared.capabilities.creatorUsername,
+    creatorNickname: prepared.capabilities.creatorNickname,
+    privacyOptions: prepared.capabilities.privacyOptions,
+    videoDurationSeconds: prepared.capabilities.videoDurationSeconds,
+    maxVideoPostDurationSeconds: prepared.capabilities.maxVideoPostDurationSeconds,
+    renderPath: prepared.renderPath,
+    videoSizeBytes: prepared.fileStats.size,
+    request: prepared.request.body,
+  };
+}
+
 export async function publishTikTokVideo({
   publication,
   videoRow,
@@ -201,21 +322,31 @@ export async function publishTikTokVideo({
   openImpl = open,
   asOf = new Date().toISOString(),
   persistEnvValues,
+  fetchCreatorInfoImpl = fetchTikTokCreatorInfo,
+  probeDurationImpl = probeMediaDurationSeconds,
+  hashFileImpl = hashFileSha256,
 }) {
-  assertFetch(fetchImpl);
-  const { token, tokenEnv } = await resolveAccessToken(target, runtimeEnv, {
-    fetchImpl,
-    projectRoot,
-    now: new Date(asOf),
-    persistEnvValues,
-  });
-  const renderPath = resolveRenderPath(publication, videoRow, projectRoot);
-  const fileStats = await statImpl(renderPath);
-  const request = buildTikTokDirectPostInitRequest({
+  const prepared = await prepareTikTokDirectPost({
     publication,
+    videoRow,
     target,
-    videoSizeBytes: fileStats.size,
+    runtimeEnv,
+    projectRoot,
+    fetchImpl,
+    statImpl,
+    asOf,
+    persistEnvValues,
+    fetchCreatorInfoImpl,
+    probeDurationImpl,
+    hashFileImpl,
   });
+  const {
+    fileStats,
+    renderPath,
+    request,
+    token,
+    tokenEnv,
+  } = prepared;
 
   const initResponse = await fetchImpl(request.endpoint || TIKTOK_VIDEO_INIT_ENDPOINT, {
     method: 'POST',

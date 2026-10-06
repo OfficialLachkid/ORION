@@ -12,6 +12,7 @@ import {
   fetchTikTokPublicationStatus,
   publishTikTokVideo,
 } from '../../../../src/tiktok-publication-executor.mjs';
+import { TikTokDirectPostValidationError } from '../../../../src/tiktok-publication.mjs';
 import {
   getBooleanOption,
   getStringOption,
@@ -256,8 +257,13 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
     } catch (error) {
       const isAuthRequired = error instanceof TikTokPublicationAuthRequiredError
         || error?.code === 'tiktok_auth_required';
-      const workflowState = isAuthRequired ? 'auth_required' : 'failed';
-      const status = isAuthRequired ? 'blocked' : 'failed';
+      const isValidationBlocked = error instanceof TikTokDirectPostValidationError;
+      const workflowState = isAuthRequired
+        ? 'auth_required'
+        : isValidationBlocked
+          ? 'approval_required'
+          : 'failed';
+      const status = isAuthRequired || isValidationBlocked ? 'blocked' : 'failed';
       publishingPublication = await store.updatePublication(publication.id, {
         status,
         metadata: buildMetadataPatch(publishingPublication, {
@@ -272,7 +278,11 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
         account_key: publication.account_key,
         action: 'tiktok_publish_failed',
         workflow_state: workflowState,
-        reason: isAuthRequired ? 'auth_required' : 'publish_failed',
+        reason: isAuthRequired
+          ? 'auth_required'
+          : isValidationBlocked
+            ? error.code || 'tiktok_direct_post_validation_failed'
+            : 'publish_failed',
         error: error.message || String(error),
       });
     }
