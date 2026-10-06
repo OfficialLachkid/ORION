@@ -1,10 +1,16 @@
 import { open, stat } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { upsertEnvValues } from '../../lib/env-file.mjs';
 import {
   TIKTOK_VIDEO_INIT_ENDPOINT,
   buildTikTokDirectPostInitRequest,
   buildTikTokStatusFetchRequest,
 } from './tiktok-publication.mjs';
+import {
+  buildTikTokCredentialEnvValues,
+  refreshTikTokAccessToken,
+  resolveTikTokCredentialEnvKeys,
+} from './tiktok-oauth.mjs';
 
 export class TikTokPublicationAuthRequiredError extends Error {
   constructor(message, details = {}) {
@@ -28,25 +34,68 @@ function normalizeText(value) {
   return String(value || '').trim();
 }
 
-function resolveAccessToken(target = {}, runtimeEnv = {}) {
-  const tokenEnv = normalizeText(
-    target.tiktok?.access_token_env
-      || target.tiktok?.accessTokenEnv
-      || target.metadata?.access_token_env
-      || '',
+async function resolveAccessToken(target = {}, runtimeEnv = {}, options = {}) {
+  const keys = resolveTikTokCredentialEnvKeys(target);
+  const token = normalizeText(runtimeEnv[keys.accessToken]);
+  const expiresAt = Date.parse(normalizeText(runtimeEnv[keys.accessTokenExpiresAt]));
+  const now = options.now instanceof Date ? options.now : new Date();
+  const refreshSkewMs = Number.isFinite(options.refreshSkewMs)
+    ? options.refreshSkewMs
+    : 10 * 60 * 1000;
+  const accessTokenIsFresh = token && (
+    !Number.isFinite(expiresAt)
+    || expiresAt > now.getTime() + refreshSkewMs
   );
-  const token = tokenEnv ? normalizeText(runtimeEnv[tokenEnv]) : '';
-  if (!token) {
+  if (accessTokenIsFresh) {
+    return { token, tokenEnv: keys.accessToken };
+  }
+
+  const refreshToken = normalizeText(runtimeEnv[keys.refreshToken]);
+  const clientConfig = {
+    clientKey: normalizeText(runtimeEnv.TIKTOK_CLIENT_KEY),
+    clientSecret: normalizeText(runtimeEnv.TIKTOK_CLIENT_SECRET),
+  };
+  if (!refreshToken || !clientConfig.clientKey || !clientConfig.clientSecret) {
     throw new TikTokPublicationAuthRequiredError(
-      tokenEnv
-        ? `Missing TikTok access token env value: ${tokenEnv}`
-        : 'Missing TikTok access token env configuration.',
-      { tokenEnv },
+      token
+        ? `TikTok access token ${keys.accessToken} expired and cannot be refreshed.`
+        : `Missing TikTok access token env value: ${keys.accessToken}`,
+      {
+        tokenEnv: keys.accessToken,
+        refreshTokenEnv: keys.refreshToken,
+      },
     );
   }
+
+  let refreshed;
+  try {
+    refreshed = await refreshTikTokAccessToken(clientConfig, refreshToken, {
+      fetch: options.fetchImpl,
+    });
+  } catch (error) {
+    throw new TikTokPublicationAuthRequiredError(
+      `TikTok access-token refresh failed: ${error.message}`,
+      {
+        tokenEnv: keys.accessToken,
+        refreshTokenEnv: keys.refreshToken,
+      },
+    );
+  }
+
+  const credentialValues = buildTikTokCredentialEnvValues(target, {
+    ...refreshed,
+    openId: refreshed.openId || runtimeEnv[keys.openId],
+    scope: refreshed.scope || runtimeEnv[keys.scopes],
+  }, { now });
+  const persistEnvValues = options.persistEnvValues || upsertEnvValues;
+  const envFilePath = resolve(options.projectRoot || process.cwd(), 'config', 'product-video', '.env');
+  persistEnvValues(envFilePath, credentialValues);
+  Object.assign(runtimeEnv, credentialValues);
+
   return {
-    token,
-    tokenEnv,
+    token: refreshed.accessToken,
+    tokenEnv: keys.accessToken,
+    refreshed: true,
   };
 }
 
@@ -151,9 +200,15 @@ export async function publishTikTokVideo({
   statImpl = stat,
   openImpl = open,
   asOf = new Date().toISOString(),
+  persistEnvValues,
 }) {
   assertFetch(fetchImpl);
-  const { token, tokenEnv } = resolveAccessToken(target, runtimeEnv);
+  const { token, tokenEnv } = await resolveAccessToken(target, runtimeEnv, {
+    fetchImpl,
+    projectRoot,
+    now: new Date(asOf),
+    persistEnvValues,
+  });
   const renderPath = resolveRenderPath(publication, videoRow, projectRoot);
   const fileStats = await statImpl(renderPath);
   const request = buildTikTokDirectPostInitRequest({
@@ -226,9 +281,17 @@ export async function fetchTikTokPublicationStatus({
   target,
   runtimeEnv = {},
   fetchImpl = globalThis.fetch,
+  projectRoot = process.cwd(),
+  asOf = new Date().toISOString(),
+  persistEnvValues,
 }) {
   assertFetch(fetchImpl);
-  const { token } = resolveAccessToken(target, runtimeEnv);
+  const { token } = await resolveAccessToken(target, runtimeEnv, {
+    fetchImpl,
+    projectRoot,
+    now: new Date(asOf),
+    persistEnvValues,
+  });
   const request = buildTikTokStatusFetchRequest(publishId);
   const response = await fetchImpl(request.endpoint, {
     method: 'POST',
