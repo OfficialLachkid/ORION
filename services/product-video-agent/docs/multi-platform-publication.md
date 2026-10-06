@@ -6,7 +6,7 @@ This is the phase-1 structure for publishing an already approved ORION short to 
 
 - Tracking issue: [#95 — ORION Multi-Platform Social Publisher, Phase 1: TikTok](https://github.com/OfficialLachkid/ORION/issues/95)
 - Implementation PR: [#97 — scaffold TikTok social publisher](https://github.com/OfficialLachkid/ORION/pull/97)
-- State: the publishing scaffold and Desktop OAuth client are implemented and tested, but the live sandbox authorization is still pending and the publication target remains disabled.
+- State: the publishing scaffold and Desktop OAuth client are implemented and tested. The sandbox account is connected and verified, while the publication target remains disabled pending the remaining safety work.
 - Operator update: the dedicated Poke Quiz TikTok account, the `ORION` TikTok developer organization, and the `ORION Publisher` app now exist. The sandbox includes `pokequizz7` as a target user. Public app metadata, legal-policy URLs, URL-prefix ownership verification, Login Kit, Content Posting API Direct Post, and the Desktop redirect URI are configured. TikTok issued the client credentials; no credential value is recorded in Git.
 - The PR branch has been brought forward to current `main`; the scheduler conflict was resolved by retaining current per-channel error isolation and adding isolated social-publication execution.
 - The original Runtime Validation failure was only `git diff --check`: this file and `src/tiktok-publication-executor.mjs` had an extra blank line at EOF. Both are fixed.
@@ -29,7 +29,7 @@ This is not production-ready yet. A TikTok account and developer app are require
 
 These are blockers for a live rollout, not optional cleanup:
 
-1. **OAuth rollout:** Desktop authorization now uses PKCE and anti-forgery state, verifies the authorized creator, stores access and rotating refresh tokens only in the ignored Mac runtime environment, and refreshes expired access tokens. The first live sandbox authorization still needs to be completed and reconciled with `pokequizz7`.
+1. **Production merge/deployment:** Desktop authorization now uses PKCE and anti-forgery state, verifies the authorized creator, stores access and rotating refresh tokens only in the ignored Mac runtime environment, and refreshes expired access tokens. The live sandbox authorization succeeded for `pokequizz7`, but this implementation must pass PR validation, merge to `main`, and be pulled by the Mac scheduler before scheduled jobs can use the refresh path.
 2. **Creator capability validation at publication time:** onboarding verifies the creator with TikTok's creator-info endpoint, but Direct Post must query creator info again immediately before every post. The current publication request does not yet validate the latest privacy levels, interaction settings, or maximum duration.
 3. **Crash-safe idempotency and leasing:** a crash after TikTok creates a `publish_id` but before Supabase stores it can cause a duplicate upload. Parallel scheduler workers can also claim the same row because there is no atomic lease.
 4. **Retry without regeneration:** failed and `auth_required` rows are not selected again, and there is no retry command to reset a delivery safely. This is still an open requirement from issue #95.
@@ -92,11 +92,11 @@ Current portal decisions:
 
 Application work that must land before step 4 is useful for automation:
 
-1. Complete the Desktop authorization for `poke-quizz-tiktok` and verify TikTok returns creator username `pokequizz7` with `user.info.basic,video.publish`.
+1. Merge the OAuth implementation to `main`, pull it on the Mac mini, and re-run the focused production preflight without re-authorizing.
 2. Add creator-info querying immediately before every Direct Post and validate privacy, interaction, and duration choices before init.
 3. Add atomic publication claiming, persist `publish_id` before upload where the API flow permits it, and make retries idempotent.
 4. Add an explicit operator retry/re-auth command and preserve structured TikTok failure details.
-5. Run one `SELF_ONLY` end-to-end upload of an existing approved video, poll it to completion, and verify the stored delivery row.
+5. Run one operator-triggered `SELF_ONLY` end-to-end upload of an existing approved video, poll it to completion, and verify the stored delivery row.
 6. Only then change the target to `enabled: true`; reinstall/reload the Mac publication schedule if its active slots change.
 
 Desktop authorization command on the Mac mini:
@@ -106,6 +106,14 @@ npm run product-video:authorize-tiktok -- --account poke-quizz-tiktok --expect-u
 ```
 
 For a headless SSH session, add `--no-open` and forward local port `53684` to the Mac mini before opening the printed TikTok URL in the operator's browser. The command does not publish content and keeps the target disabled.
+
+Live sandbox validation on 2026-10-06:
+
+- The Windows browser completed TikTok consent through an SSH loopback tunnel to the Mac callback.
+- TikTok returned creator username `pokequizz7`, nickname `PokeQuizz`, and the exact scopes `user.info.basic,video.publish`.
+- The access token, rotating refresh token, expiries, Open ID, and granted scopes were written only to the active Mac runtime `.env`; values were not printed or committed.
+- The active `.env` was verified as owner-only (`0600`, `Agent:staff`).
+- No upload or publication request was made, and the TikTok target remains disabled.
 
 Official references:
 
@@ -174,7 +182,7 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [x] TikTok URL-prefix signature deployed and ownership verification completed.
 - [x] Login Kit, Content Posting API Direct Post, Desktop redirect URI, and `video.publish` scope configured in sandbox.
 - [x] OAuth callback, PKCE/state validation, owner-only refresh-token storage, rotation, and automatic access-token refresh implemented.
-- [ ] Live sandbox OAuth authorization completed and creator identity verified as `pokequizz7`.
+- [x] Live sandbox OAuth authorization completed and creator identity verified as `pokequizz7` with the required scopes.
 - [ ] Creator-info validation implemented.
 - [ ] Atomic claim/idempotency and operator retry implemented.
 - [ ] Final status/failure/public-post fields persisted.
