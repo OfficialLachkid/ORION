@@ -186,7 +186,8 @@ async function main() {
   printInfo(`Requested scopes: ${TIKTOK_DEFAULT_SCOPES.join(',')}`);
 
   const callbackPromise = captureAuthorizationCode(redirectUri, state);
-  if (!getBooleanOption(options, 'no-open', false) && openInBrowser(authorizeUrl)) {
+  const shouldOpen = getBooleanOption(options, 'open', true);
+  if (shouldOpen && openInBrowser(authorizeUrl)) {
     printInfo('Opened the TikTok consent screen in the default browser.');
   } else {
     printWarn('Open this URL in the browser that can reach the callback URI:');
