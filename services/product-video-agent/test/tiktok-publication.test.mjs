@@ -8,6 +8,7 @@ import {
 } from '../src/tiktok-publication.mjs';
 import {
   TikTokPublicationAuthRequiredError,
+  fetchTikTokPublicationStatus,
   mapTikTokPublishStatus,
   publishTikTokVideo,
 } from '../src/tiktok-publication-executor.mjs';
@@ -76,6 +77,69 @@ test('publishTikTokVideo maps missing token to auth required before reading the 
     }),
     TikTokPublicationAuthRequiredError,
   );
+});
+
+test('TikTok status polling refreshes an expired access token and persists rotation', async () => {
+  const runtimeEnv = {
+    TIKTOK_CLIENT_KEY: 'client-key',
+    TIKTOK_CLIENT_SECRET: 'client-secret',
+    TIKTOK_POKE_QUIZZ_ACCESS_TOKEN: 'expired-access',
+    TIKTOK_POKE_QUIZZ_REFRESH_TOKEN: 'refresh-one',
+    TIKTOK_POKE_QUIZZ_ACCESS_TOKEN_EXPIRES_AT: '2026-10-06T10:00:00.000Z',
+    TIKTOK_POKE_QUIZZ_REFRESH_TOKEN_EXPIRES_AT: '2027-10-06T10:00:00.000Z',
+    TIKTOK_POKE_QUIZZ_OPEN_ID: 'open-id-one',
+    TIKTOK_POKE_QUIZZ_SCOPES: 'user.info.basic,video.publish',
+  };
+  let persisted;
+  const result = await fetchTikTokPublicationStatus({
+    publishId: 'publish-123',
+    target: {
+      tiktok: { access_token_env: 'TIKTOK_POKE_QUIZZ_ACCESS_TOKEN' },
+    },
+    runtimeEnv,
+    asOf: '2026-10-06T12:00:00.000Z',
+    persistEnvValues: (_filePath, values) => {
+      persisted = values;
+    },
+    fetchImpl: async (url, request) => {
+      if (url === 'https://open.tiktokapis.com/v2/oauth/token/') {
+        const body = new URLSearchParams(request.body);
+        assert.equal(body.get('refresh_token'), 'refresh-one');
+        return {
+          ok: true,
+          status: 200,
+          async text() {
+            return JSON.stringify({
+              access_token: 'access-two',
+              refresh_token: 'refresh-two',
+              open_id: 'open-id-one',
+              expires_in: 86400,
+              refresh_expires_in: 31536000,
+              scope: 'user.info.basic,video.publish',
+            });
+          },
+        };
+      }
+
+      assert.equal(request.headers.Authorization, 'Bearer access-two');
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return JSON.stringify({
+            data: { status: 'PROCESSING_UPLOAD' },
+            error: { code: 'ok', message: '', log_id: 'log-one' },
+          });
+        },
+      };
+    },
+  });
+
+  assert.equal(result.status, 'publishing');
+  assert.equal(runtimeEnv.TIKTOK_POKE_QUIZZ_ACCESS_TOKEN, 'access-two');
+  assert.equal(runtimeEnv.TIKTOK_POKE_QUIZZ_REFRESH_TOKEN, 'refresh-two');
+  assert.equal(persisted.TIKTOK_POKE_QUIZZ_ACCESS_TOKEN, 'access-two');
+  assert.equal(persisted.TIKTOK_POKE_QUIZZ_REFRESH_TOKEN, 'refresh-two');
 });
 
 test('mapTikTokPublishStatus normalizes terminal and in-flight states', () => {
