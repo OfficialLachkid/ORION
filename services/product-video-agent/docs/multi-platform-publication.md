@@ -7,6 +7,7 @@ This is the phase-1 structure for publishing an already approved ORION short to 
 - Tracking issue: [#95 — ORION Multi-Platform Social Publisher, Phase 1: TikTok](https://github.com/OfficialLachkid/ORION/issues/95)
 - Implementation PR: [#97 — scaffold TikTok social publisher](https://github.com/OfficialLachkid/ORION/pull/97)
 - State: the code scaffold is implemented and tested, but no live TikTok account is connected and the target remains disabled.
+- Operator update: the dedicated Poke Quiz TikTok account has been created; developer-app registration and OAuth connection are still pending.
 - The PR branch has been brought forward to current `main`; the scheduler conflict was resolved by retaining current per-channel error isolation and adding isolated social-publication execution.
 - The original Runtime Validation failure was only `git diff --check`: this file and `src/tiktok-publication-executor.mjs` had an extra blank line at EOF. Both are fixed.
 - Local verification on 2026-10-06: runtime-config validation passed, the product-video suite passed (454 passed, 1 skipped), the Discord/runtime suite passed (369 passed), and the focused TikTok/scheduler/task-router suite passed (31 passed).
@@ -139,7 +140,7 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [x] Scheduler integration and YouTube failure isolation.
 - [x] Merge conflict and original Runtime Validation whitespace failure fixed.
 - [x] Product-video, focused integration, and Discord/runtime test suites pass locally.
-- [ ] TikTok account selected/created.
+- [x] TikTok account selected/created for Poke Quiz.
 - [ ] TikTok developer app, products, redirect URI, and `video.publish` scope configured.
 - [ ] OAuth callback, secure refresh-token storage, and automatic refresh implemented.
 - [ ] Creator-info validation implemented.
