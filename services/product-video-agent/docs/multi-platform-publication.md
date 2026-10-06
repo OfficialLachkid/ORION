@@ -76,12 +76,16 @@ Current portal decisions:
 - App name: `ORION Publisher`.
 - App type: `Other` (the type that includes Content Posting API integrations).
 - The client secret must remain outside Git and must never be placed in a portal URL field or documentation.
-- The app's public information and legal pages are versioned under `orion-publisher/` and included in the existing GitHub Pages workflow. They become live after the change reaches `main` and the Pages deployment succeeds:
+- The app's public information and legal pages are versioned under `orion-publisher/`, deployed by the existing GitHub Pages workflow, and confirmed live:
   - Website: `https://officiallachkid.github.io/ORION/orion-publisher/`
   - Terms: `https://officiallachkid.github.io/ORION/orion-publisher/terms/`
   - Privacy: `https://officiallachkid.github.io/ORION/orion-publisher/privacy/`
+- Public account-disconnection and data-deletion instructions are available at `https://officiallachkid.github.io/ORION/orion-publisher/data-deletion/` after the follow-up Pages deployment.
 - The policies identify `Valentijn Jacobs` in the Netherlands as the operator/controller and use `vbjtechservices@gmail.com` as the public contact. ORION is not described as a registered company.
+- The public notices now include an explicit request-based disconnection/deletion flow, GDPR rights and response timing, processing sources and legal bases, retention criteria, provider categories, international-processing disclosure, cookie/log disclosure, and confirmation that no solely automated significant decisions are made.
+- Before a production launch, obtain Dutch legal review and decide whether to publish a correspondence address. If ORION later becomes a registered business, update the operator identity, KVK number, VAT details where applicable, and contact address across the policies before the next TikTok review.
 - For TikTok URL ownership, use **URL prefix** verification for the ORION Publisher Pages path rather than claiming ownership of the shared `github.io` domain. Commit TikTok's generated signature file to the exact requested path and redeploy Pages before completing verification.
+- TikTok generated `tiktok99Ofd50KTfnADzBHf8Y8z9KmT5MLgzWR.txt` for the ORION Publisher URL prefix. The exact file is versioned at the root of `orion-publisher/`; click TikTok's final **Verify** only after that file returns HTTP 200 from the public Pages URL.
 - The repository does not yet contain a TikTok OAuth callback. The platform and redirect URI must match the implementation that lands; the local Mac mini architecture is a candidate for TikTok's Desktop loopback flow with PKCE.
 
 Application work that must land before step 4 is useful for automation:
@@ -156,7 +160,8 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [x] Product-video, focused integration, and Discord/runtime test suites pass locally.
 - [x] TikTok account selected/created for Poke Quiz.
 - [x] `ORION` TikTok developer organization and `ORION Publisher` app created; client credentials issued and kept out of Git.
-- [ ] Public app metadata, Terms of Service, and Privacy Policy URLs published.
+- [x] Public app metadata, Terms of Service, and Privacy Policy URLs published and entered in TikTok.
+- [ ] TikTok URL-prefix signature deployed and ownership verification completed.
 - [ ] Login Kit, Content Posting API Direct Post, redirect URI, and `video.publish` scope configured.
 - [ ] OAuth callback, secure refresh-token storage, and automatic refresh implemented.
 - [ ] Creator-info validation implemented.
