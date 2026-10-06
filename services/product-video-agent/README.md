@@ -12,6 +12,8 @@ The default dry run executes no marketplace API, browser automation, model, TTS,
 
 The active targets are YouTube Shorts, Instagram Reels, and TikTok. Script jobs are limited to 10-60 seconds. Long-form output is disabled and deferred; its current planning target is 2-5 minutes.
 
+Multi-platform publication details live in `docs/multi-platform-publication.md`. YouTube remains the preview/review surface; additional platforms are fanned out only from approved publication rows.
+
 ## Run
 
 From the repository root:

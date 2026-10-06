@@ -78,6 +78,7 @@ const previewApproved = {
 
 test('runVideoPublicationScheduler executes preview uploads and schedule updates for active channels', async () => {
   const executionCalls = [];
+  const socialExecutionCalls = [];
   const result = await runVideoPublicationScheduler({
     channels: 'services/product-video-agent/publication-channels.example.json',
     'as-of': '2026-08-01T10:01:00.000Z',
@@ -90,6 +91,10 @@ test('runVideoPublicationScheduler executes preview uploads and schedule updates
       return scheduleApproved
         ? [{ publication_id: 'pub-approved', action: 'schedule_update' }]
         : [{ publication_id: 'pub-preview', action: 'preview_upload' }];
+    },
+    executeSocialPublicationPhase: async ({ asOf }) => {
+      socialExecutionCalls.push({ asOf });
+      return [{ publication_id: 'pub-tiktok', action: 'tiktok_publish_due' }];
     },
   });
 
@@ -105,10 +110,17 @@ test('runVideoPublicationScheduler executes preview uploads and schedule updates
   assert.deepEqual(result.execution_results[0].schedule_update_results, [
     { publication_id: 'pub-approved', action: 'schedule_update' },
   ]);
+  assert.deepEqual(socialExecutionCalls, [
+    { asOf: '2026-08-01T10:01:00.000Z' },
+  ]);
+  assert.deepEqual(result.social_publication_results, [
+    { publication_id: 'pub-tiktok', action: 'tiktok_publish_due' },
+  ]);
 });
 
 test('runVideoPublicationScheduler skips execution in plan-only mode', async () => {
   let executionCallCount = 0;
+  let socialExecutionCallCount = 0;
   const result = await runVideoPublicationScheduler({
     channels: 'services/product-video-agent/publication-channels.example.json',
     'as-of': '2026-08-01T10:01:00.000Z',
@@ -121,10 +133,16 @@ test('runVideoPublicationScheduler skips execution in plan-only mode', async () 
       executionCallCount += 1;
       return [];
     },
+    executeSocialPublicationPhase: async () => {
+      socialExecutionCallCount += 1;
+      return [];
+    },
   });
 
   assert.equal(executionCallCount, 0);
+  assert.equal(socialExecutionCallCount, 0);
   assert.deepEqual(result.execution_results, []);
+  assert.deepEqual(result.social_publication_results, []);
   assert.equal(result.queue_plan.channels[0].scheduled_publish_queue.length, 1);
 });
 
@@ -147,6 +165,7 @@ test('runVideoPublicationScheduler isolates each channel and phase while reconci
       }
       return [{ channelSelector, scheduleApproved }];
     },
+    executeSocialPublicationPhase: async () => [],
   });
 
   assert.deepEqual(executionCalls, [
@@ -167,6 +186,7 @@ test('runVideoPublicationScheduler isolates each channel and phase while reconci
 
 test('runVideoPublicationScheduler reconciliation-only mode skips preview upload phases', async () => {
   const executionCalls = [];
+  let socialExecutionCallCount = 0;
   const result = await runVideoPublicationScheduler({
     channels: 'services/product-video-agent/publication-channels.example.json',
     'as-of': '2026-08-01T10:05:00.000Z',
@@ -179,6 +199,10 @@ test('runVideoPublicationScheduler reconciliation-only mode skips preview upload
       executionCalls.push(phase);
       return [{ action: 'reconcile_published' }];
     },
+    executeSocialPublicationPhase: async () => {
+      socialExecutionCallCount += 1;
+      return [];
+    },
   });
 
   assert.equal(executionCalls.length, 1);
@@ -188,5 +212,30 @@ test('runVideoPublicationScheduler reconciliation-only mode skips preview upload
   assert.deepEqual(result.execution_results[0].schedule_update_results, [
     { action: 'reconcile_published' },
   ]);
+  assert.equal(socialExecutionCallCount, 0);
+  assert.deepEqual(result.social_publication_results, []);
   assert.deepEqual(result.execution_errors, []);
+});
+
+test('runVideoPublicationScheduler reports social failures without discarding YouTube results', async () => {
+  const result = await runVideoPublicationScheduler({
+    channels: 'services/product-video-agent/publication-channels.example.json',
+    'as-of': '2026-08-01T10:05:00.000Z',
+  }, {
+    runtimeConfig: { env: {} },
+    loadPublicationChannelProfiles: async () => [activeChannelProfile],
+    loadQueuedPublications: async () => [previewPending, previewApproved],
+    executePublicationPhase: async () => [],
+    executeSocialPublicationPhase: async () => {
+      throw new Error('TikTok is unavailable');
+    },
+  });
+
+  assert.equal(result.execution_results.length, 1);
+  assert.deepEqual(result.social_publication_results, []);
+  assert.deepEqual(result.execution_errors, [{
+    channel: 'social',
+    phase: 'social_publication',
+    error: 'TikTok is unavailable',
+  }]);
 });

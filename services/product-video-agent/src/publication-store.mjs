@@ -130,6 +130,21 @@ export class SupabasePublicationStore {
     });
   }
 
+  async fetchPublicationsByPlatform({
+    platform,
+    order = 'created_at.asc',
+    limit = null,
+  }) {
+    return this.request('video_publications', {
+      params: {
+        select: '*',
+        platform: `eq.${platform}`,
+        order,
+        limit,
+      },
+    });
+  }
+
   async updatePublication(id, patch) {
     const rows = await this.request('video_publications', {
       method: 'PATCH',
