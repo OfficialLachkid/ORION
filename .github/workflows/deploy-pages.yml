@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - 'websites/**'
+      - 'orion-publisher/**'
       - 'index.html'
       - 'scripts/publish-websites.mjs'
       - '.github/workflows/deploy-pages.yml'
@@ -59,6 +60,7 @@ jobs:
         run: |
           mkdir -p _site
           cp index.html _site/index.html
+          cp -R orion-publisher _site/orion-publisher
           cp -R sites _site/sites
 
       - name: Configure Pages

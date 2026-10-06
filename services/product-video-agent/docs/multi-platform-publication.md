@@ -7,7 +7,7 @@ This is the phase-1 structure for publishing an already approved ORION short to 
 - Tracking issue: [#95 — ORION Multi-Platform Social Publisher, Phase 1: TikTok](https://github.com/OfficialLachkid/ORION/issues/95)
 - Implementation PR: [#97 — scaffold TikTok social publisher](https://github.com/OfficialLachkid/ORION/pull/97)
 - State: the code scaffold is implemented and tested, but no live TikTok account is connected and the target remains disabled.
-- Operator update: the dedicated Poke Quiz TikTok account has been created; developer-app registration and OAuth connection are still pending.
+- Operator update: the dedicated Poke Quiz TikTok account, the `ORION` TikTok developer organization, and the `ORION Publisher` app now exist. TikTok issued the client credentials; no credential value is recorded in Git. Public app metadata, legal-policy URLs, products/scopes, and OAuth connection are still pending.
 - The PR branch has been brought forward to current `main`; the scheduler conflict was resolved by retaining current per-channel error isolation and adding isolated social-publication execution.
 - The original Runtime Validation failure was only `git diff --check`: this file and `src/tiktok-publication-executor.mjs` had an extra blank line at EOF. Both are fixed.
 - Local verification on 2026-10-06: runtime-config validation passed, the product-video suite passed (454 passed, 1 skipped), the Discord/runtime suite passed (369 passed), and the focused TikTok/scheduler/task-router suite passed (31 passed).
@@ -69,6 +69,20 @@ Operator/external steps:
 3. Register the production OAuth redirect URI for the Mac-hosted ORION auth flow.
 4. Request the `video.publish` scope and complete user authorization for each TikTok account.
 5. Keep posts `SELF_ONLY` while the client is unaudited; complete TikTok app review before enabling public posts.
+
+Current portal decisions:
+
+- App owner: `ORION` organization.
+- App name: `ORION Publisher`.
+- App type: `Other` (the type that includes Content Posting API integrations).
+- The client secret must remain outside Git and must never be placed in a portal URL field or documentation.
+- The app's public information and legal pages are versioned under `orion-publisher/` and included in the existing GitHub Pages workflow. They become live after the change reaches `main` and the Pages deployment succeeds:
+  - Website: `https://officiallachkid.github.io/ORION/orion-publisher/`
+  - Terms: `https://officiallachkid.github.io/ORION/orion-publisher/terms/`
+  - Privacy: `https://officiallachkid.github.io/ORION/orion-publisher/privacy/`
+- The policies identify `Valentijn Jacobs` in the Netherlands as the operator/controller and use `vbjtechservices@gmail.com` as the public contact. ORION is not described as a registered company.
+- For TikTok URL ownership, use **URL prefix** verification for the ORION Publisher Pages path rather than claiming ownership of the shared `github.io` domain. Commit TikTok's generated signature file to the exact requested path and redeploy Pages before completing verification.
+- The repository does not yet contain a TikTok OAuth callback. The platform and redirect URI must match the implementation that lands; the local Mac mini architecture is a candidate for TikTok's Desktop loopback flow with PKCE.
 
 Application work that must land before step 4 is useful for automation:
 
@@ -141,7 +155,9 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [x] Merge conflict and original Runtime Validation whitespace failure fixed.
 - [x] Product-video, focused integration, and Discord/runtime test suites pass locally.
 - [x] TikTok account selected/created for Poke Quiz.
-- [ ] TikTok developer app, products, redirect URI, and `video.publish` scope configured.
+- [x] `ORION` TikTok developer organization and `ORION Publisher` app created; client credentials issued and kept out of Git.
+- [ ] Public app metadata, Terms of Service, and Privacy Policy URLs published.
+- [ ] Login Kit, Content Posting API Direct Post, redirect URI, and `video.publish` scope configured.
 - [ ] OAuth callback, secure refresh-token storage, and automatic refresh implemented.
 - [ ] Creator-info validation implemented.
 - [ ] Atomic claim/idempotency and operator retry implemented.
