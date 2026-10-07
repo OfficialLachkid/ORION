@@ -28,7 +28,12 @@ const sourceChannelProfile = {
           visibility: 'private',
           tiktok: {
             access_token_env: 'TIKTOK_POKE_QUIZZ_ACCESS_TOKEN',
+            expected_username: 'pokequizz7',
             privacy_level: 'SELF_ONLY',
+            comments_enabled: false,
+            duet_enabled: false,
+            stitch_enabled: false,
+            is_aigc: true,
           },
         },
         {
@@ -131,10 +136,68 @@ test('upsertAdditionalPlatformPublicationTargets stores enabled additional targe
     videoRow,
     sourceChannelProfile,
     scheduledFor: '2026-09-08T10:00:00.000Z',
+    projectRoot: '/workspace',
+    statImpl: async () => ({ size: 4000 }),
+    hashFileImpl: async () => 'a'.repeat(64),
+    approval: {
+      approvedAt: '2026-09-07T12:00:00.000Z',
+      approvedBy: 'Lachkid',
+      approvedById: 'operator-1',
+      reviewTaskId: 'TASK-REVIEW',
+      tiktokDirectPost: {
+        accountKey: 'poke-quizz-tiktok',
+        creatorUsername: 'pokequizz7',
+        caption: 'Guess the Pokemon!\n\n#pokemon #shorts',
+        privacyLevel: 'SELF_ONLY',
+        allowComment: false,
+        allowDuet: false,
+        allowStitch: false,
+        brandContentToggle: false,
+        brandOrganicToggle: false,
+        isAigc: true,
+        videoCoverTimestampMs: 1000,
+      },
+    },
   });
 
   assert.equal(upsertedRows.length, 1);
   assert.equal(results.length, 1);
   assert.equal(results[0].platform, TIKTOK_VIDEO_PLATFORM);
   assert.equal(results[0].workflow_state, 'scheduled');
+  assert.equal(upsertedRows[0].metadata.tiktok_direct_post_approval.approved, true);
+  assert.equal(upsertedRows[0].metadata.tiktok_direct_post_approval.creator_username, 'pokequizz7');
+  assert.equal(upsertedRows[0].metadata.tiktok_direct_post_approval.allow_comment, false);
+  assert.equal(upsertedRows[0].metadata.tiktok_direct_post_approval.video_sha256, 'a'.repeat(64));
+});
+
+test('upsertAdditionalPlatformPublicationTargets preserves an existing delivery row', async () => {
+  const [existing] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+  });
+  existing.status = 'publishing';
+  existing.external_id = 'publish-123';
+  existing.metadata.workflow_state = 'publishing';
+  let upsertCalls = 0;
+
+  const results = await upsertAdditionalPlatformPublicationTargets({
+    store: {
+      async fetchPublicationById() {
+        return existing;
+      },
+      async upsertPublication() {
+        upsertCalls += 1;
+      },
+    },
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor: '2026-09-09T10:00:00.000Z',
+  });
+
+  assert.equal(upsertCalls, 0);
+  assert.equal(results[0].preserved, true);
+  assert.equal(results[0].workflow_state, 'publishing');
 });

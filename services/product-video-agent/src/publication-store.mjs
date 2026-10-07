@@ -158,6 +158,21 @@ export class SupabasePublicationStore {
     return rows?.[0] || null;
   }
 
+  async claimPublicationForUpload(id, patch) {
+    const rows = await this.request('video_publications', {
+      method: 'PATCH',
+      params: {
+        id: `eq.${id}`,
+        status: 'in.(queued,scheduled)',
+        external_id: 'is.null',
+        select: '*',
+      },
+      prefer: 'return=representation',
+      body: patch,
+    });
+    return rows?.[0] || null;
+  }
+
   async fetchPublishedPublicationsByChannel({
     platform,
     accountKey,

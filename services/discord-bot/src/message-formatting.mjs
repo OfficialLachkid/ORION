@@ -477,7 +477,7 @@ function buildApprovalRequestPayload(outboundEvent) {
   const actionText = metadata.emailTo
     ? 'Approve sends the current Gmail draft. Reject opens a feedback form for revisions.'
     : isPublicationReview
-      ? 'Publish adds this preview to the publish queue. Give Feedback opens a revision form and generates a new preview in the same review thread.'
+      ? 'Publish approves the exact reviewed video and settings for every listed destination, then adds it to the shared publish queue. Give Feedback opens a revision form and generates a new preview in the same review thread.'
     : isProductVideoApproval && metadata.approvalBlocked
       ? 'Approval is disabled until every listed blocker is resolved. Reject remains available.'
       : isProductVideoApproval && metadata.approvalResolved
@@ -504,6 +504,8 @@ function buildApprovalRequestPayload(outboundEvent) {
       true
     ),
     createField('Preview', metadata.previewUrl ? `[Open Preview](${metadata.previewUrl})` : '', true),
+    createField('Destinations', metadata.destinationsLabel || '', false),
+    createField('TikTok Direct Post', metadata.tiktokDirectPostLabel || '', false),
     createField('Type Pair', metadata.typePairLabel || '', true),
     createField('Seed', metadata.seed ? `\`${metadata.seed}\`` : '', true),
     createField('Busy Time', metadata.generationDurationLabel || '', true),
