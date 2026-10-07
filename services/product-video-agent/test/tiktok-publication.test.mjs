@@ -364,6 +364,43 @@ test('TikTok status polling refreshes an expired access token and persists rotat
   assert.equal(persisted.TIKTOK_POKE_QUIZZ_REFRESH_TOKEN, 'refresh-two');
 });
 
+test('TikTok status polling returns terminal failure and published-post details', async () => {
+  const runtimeEnv = {
+    TIKTOK_POKE_QUIZZ_ACCESS_TOKEN: 'access-token',
+    TIKTOK_POKE_QUIZZ_ACCESS_TOKEN_EXPIRES_AT: '2027-10-06T10:00:00.000Z',
+  };
+  const result = await fetchTikTokPublicationStatus({
+    publishId: 'publish-123',
+    target: {
+      tiktok: {
+        access_token_env: 'TIKTOK_POKE_QUIZZ_ACCESS_TOKEN',
+        expected_username: 'pokequizz7',
+      },
+    },
+    runtimeEnv,
+    asOf: '2026-10-06T12:00:00.000Z',
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      async text() {
+        return JSON.stringify({
+          data: {
+            status: 'PUBLISH_COMPLETE',
+            fail_reason: '',
+            publicaly_available_post_id: ['7420000000000000001'],
+          },
+          error: { code: 'ok', message: '', log_id: 'log-two' },
+        });
+      },
+    }),
+  });
+
+  assert.equal(result.status, 'published');
+  assert.equal(result.failReason, '');
+  assert.equal(result.postId, '7420000000000000001');
+  assert.equal(result.publicUrl, 'https://www.tiktok.com/@pokequizz7/video/7420000000000000001');
+});
+
 test('mapTikTokPublishStatus normalizes terminal and in-flight states', () => {
   assert.equal(mapTikTokPublishStatus('PUBLISH_COMPLETE'), 'published');
   assert.equal(mapTikTokPublishStatus('FAILED'), 'failed');

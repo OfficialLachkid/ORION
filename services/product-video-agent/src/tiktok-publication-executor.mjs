@@ -41,6 +41,10 @@ function normalizeText(value) {
   return String(value || '').trim();
 }
 
+function normalizeUsername(value) {
+  return normalizeText(value).replace(/^@/u, '').toLowerCase();
+}
+
 async function resolveAccessToken(target = {}, runtimeEnv = {}, options = {}) {
   const keys = resolveTikTokCredentialEnvKeys(target);
   const token = normalizeText(runtimeEnv[keys.accessToken]);
@@ -419,6 +423,14 @@ export function mapTikTokPublishStatus(rawStatus) {
   return 'publishing';
 }
 
+function resolveTikTokPublishedPostId(data = {}) {
+  const value = data.publicaly_available_post_id
+    || data.publicly_available_post_id
+    || data.post_id
+    || '';
+  return normalizeText(Array.isArray(value) ? value[0] : value);
+}
+
 export async function fetchTikTokPublicationStatus({
   publishId,
   target,
@@ -450,12 +462,22 @@ export async function fetchTikTokPublicationStatus({
   }
   throwForTikTokError(payload, response, 'TikTok status fetch');
 
-  const rawStatus = normalizeText(payload.data?.status || payload.data?.publish_status);
+  const responseData = payload.data || {};
+  const rawStatus = normalizeText(responseData.status || responseData.publish_status);
+  const postId = resolveTikTokPublishedPostId(responseData);
+  const creatorUsername = normalizeUsername(
+    target?.tiktok?.expected_username || target?.tiktok?.expectedUsername,
+  );
   return {
     platform: 'tiktok_video',
     action: 'status_fetch',
     status: mapTikTokPublishStatus(rawStatus),
     rawStatus,
+    failReason: normalizeText(responseData.fail_reason),
+    postId,
+    publicUrl: postId && creatorUsername
+      ? `https://www.tiktok.com/@${creatorUsername}/video/${postId}`
+      : '',
     payload,
   };
 }

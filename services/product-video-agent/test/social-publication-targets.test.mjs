@@ -4,6 +4,7 @@ import {
   TIKTOK_VIDEO_PLATFORM,
   buildAdditionalPlatformPublicationRows,
   listEnabledAdditionalPublicationTargets,
+  reconcileAdditionalPlatformPublicationLifecycles,
   upsertAdditionalPlatformPublicationTargets,
 } from '../src/social-publication-targets.mjs';
 
@@ -222,4 +223,135 @@ test('upsertAdditionalPlatformPublicationTargets preserves an existing delivery 
   assert.equal(upsertCalls, 0);
   assert.equal(results[0].preserved, true);
   assert.equal(results[0].workflow_state, 'publishing');
+});
+
+test('lifecycle reconciliation copies a changed source schedule to a pending child', async () => {
+  const [child] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+  });
+  const source = {
+    ...sourcePublication,
+    status: 'scheduled',
+    scheduled_for: '2026-09-09T14:30:00.000Z',
+    metadata: { ...sourcePublication.metadata, workflow_state: 'scheduled' },
+  };
+  let storedPatch = null;
+  const reconciliation = await reconcileAdditionalPlatformPublicationLifecycles({
+    store: {
+      async fetchPublicationById() { return source; },
+      async updatePublication(_id, patch) {
+        storedPatch = patch;
+        return { ...child, ...patch };
+      },
+    },
+    publications: [child],
+    asOf: '2026-09-08T12:00:00.000Z',
+  });
+
+  assert.equal(storedPatch.scheduled_for, source.scheduled_for);
+  assert.equal(storedPatch.metadata.source_lifecycle_reason, 'source_schedule_changed');
+  assert.equal(reconciliation.publications[0].scheduled_for, source.scheduled_for);
+  assert.equal(reconciliation.results[0].action, 'source_schedule_synchronized');
+});
+
+test('lifecycle reconciliation withdraws an unstarted child when its source is revised', async () => {
+  const [child] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+  });
+  const source = {
+    ...sourcePublication,
+    status: 'deleted',
+    scheduled_for: null,
+    metadata: { ...sourcePublication.metadata, workflow_state: 'revision_requested' },
+  };
+  let storedPatch = null;
+  const reconciliation = await reconcileAdditionalPlatformPublicationLifecycles({
+    store: {
+      async fetchPublicationById() { return source; },
+      async updatePublication(_id, patch) {
+        storedPatch = patch;
+        return { ...child, ...patch };
+      },
+    },
+    publications: [child],
+    asOf: '2026-09-08T12:00:00.000Z',
+  });
+
+  assert.equal(storedPatch.status, 'withdrawn');
+  assert.equal(storedPatch.scheduled_for, null);
+  assert.equal(storedPatch.metadata.source_workflow_state, 'revision_requested');
+  assert.equal(reconciliation.results[0].action, 'source_lifecycle_withdrawn');
+});
+
+test('lifecycle reconciliation requests manual action after platform delivery started', async () => {
+  const [child] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+  });
+  child.status = 'publishing';
+  child.external_id = 'publish-123';
+  child.metadata.workflow_state = 'publishing';
+  const source = {
+    ...sourcePublication,
+    status: 'deleted',
+    metadata: { ...sourcePublication.metadata, workflow_state: 'deleted' },
+  };
+  let storedPatch = null;
+  const reconciliation = await reconcileAdditionalPlatformPublicationLifecycles({
+    store: {
+      async fetchPublicationById() { return source; },
+      async updatePublication(_id, patch) {
+        storedPatch = patch;
+        return { ...child, metadata: patch.metadata };
+      },
+    },
+    publications: [child],
+    asOf: '2026-09-08T12:00:00.000Z',
+  });
+
+  assert.equal(storedPatch.status, undefined);
+  assert.equal(storedPatch.metadata.source_lifecycle_action_required, true);
+  assert.equal(reconciliation.results[0].action, 'source_lifecycle_manual_action_required');
+});
+
+test('lifecycle reconciliation leaves an already withdrawn unstarted child unchanged', async () => {
+  const [child] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+  });
+  child.status = 'withdrawn';
+  child.scheduled_for = null;
+  child.metadata.workflow_state = 'withdrawn';
+  const source = {
+    ...sourcePublication,
+    status: 'deleted',
+    scheduled_for: null,
+    metadata: { ...sourcePublication.metadata, workflow_state: 'revision_requested' },
+  };
+  let updateCalls = 0;
+  const reconciliation = await reconcileAdditionalPlatformPublicationLifecycles({
+    store: {
+      async fetchPublicationById() { return source; },
+      async updatePublication() {
+        updateCalls += 1;
+        return child;
+      },
+    },
+    publications: [child],
+    asOf: '2026-09-08T12:05:00.000Z',
+  });
+
+  assert.equal(updateCalls, 0);
+  assert.deepEqual(reconciliation.results, []);
+  assert.equal(reconciliation.publications[0].status, 'withdrawn');
 });
