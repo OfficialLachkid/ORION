@@ -61,7 +61,7 @@ const channelProfile = {
           stitch_enabled: false,
           brand_content_toggle: false,
           brand_organic_toggle: false,
-          is_aigc: true,
+          is_aigc: false,
         },
       }],
     },
@@ -105,6 +105,8 @@ test('buildPokeQuizzPublicationReviewTask creates an approval-gated publish task
   assert.equal(task.poke_quizz_publication_review.destinationsLabel, 'YouTube Shorts + TikTok @pokequizz7');
   assert.equal(task.poke_quizz_publication_review.tiktokDirectPost.privacyLevel, 'SELF_ONLY');
   assert.equal(task.poke_quizz_publication_review.tiktokDirectPost.allowComment, false);
+  assert.equal(task.poke_quizz_publication_review.tiktokDirectPost.isAigc, false);
+  assert.match(task.poke_quizz_publication_review.tiktokDirectPostLabel, /AI-generated label: off/u);
 });
 
 test('buildPokeQuizzPublicationReviewTask keeps the same task id when mutable review fields change', () => {

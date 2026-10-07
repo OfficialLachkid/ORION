@@ -28,6 +28,7 @@ This is not approved for public TikTok delivery. OAuth refresh, creator validati
 - A fail-closed Direct Post preflight that re-queries creator capabilities, verifies creator identity/privacy/interactions/duration, and requires explicit per-publication choices including commercial-content and AI-generated-content disclosures.
 - One shared Discord approval: the existing Publish action displays and freezes the exact TikTok account, caption, privacy, interactions, disclosures, file size, and SHA-256 alongside the YouTube schedule.
 - An atomic Supabase claim for due uploads, pre-upload `publish_id` persistence, and a guarded retry command that refuses to re-upload a row with an existing TikTok publish id.
+- Channel-driven schedule inheritance: additional-platform rows copy the exact `scheduled_for` assigned from their source channel's `schedule_slots`; TikTok has no duplicated per-channel timetable.
 
 ## Not Implemented Yet
 
@@ -37,19 +38,29 @@ These are blockers for a live rollout, not optional cleanup:
 2. **Complete status persistence:** normal scheduler polling does not yet retain every TikTok `fail_reason`, the publicly available post id, or the final public URL. `external_id` remains the upload `publish_id`.
 3. **Platform adapter boundary:** the row model is reusable, but the generic social wrapper currently dispatches only TikTok and the target model embeds TikTok-specific settings. Introduce an adapter registry before Instagram/Facebook work.
 4. **TikTok analytics:** analytics ingestion remains YouTube-only.
-5. **Scheduling semantics:** `schedule_mode` is normalized and stored but is not acted on; all additional targets currently inherit the YouTube schedule.
-6. **Decision record:** issue #95 requested an OSS/browser/API comparison, but the branch records only the selected official API approach. Capture the alternatives, licenses, operational risks, and final rationale before closing the issue.
+5. **Cross-platform related content:** YouTube related-video selection exists, but no generic related-content contract or TikTok adapter exists yet. Preserve the current selector as a reusable policy boundary, investigate the official capability for each destination, and implement platform adapters without importing YouTube Studio/browser logic into the shared publisher.
+6. **Scheduling modes:** `schedule_mode` is normalized and stored, but only `orion` inheritance is implemented. A future `immediate` mode must be explicit and tested rather than silently sharing the inherited path.
+7. **Decision record:** issue #95 requested an OSS/browser/API comparison, but the branch records only the selected official API approach. Capture the alternatives, licenses, operational risks, and final rationale before closing the issue.
 
 ## Current Flow
 
 YouTube remains the review and preview surface.
 
-1. A rendered video is uploaded to YouTube as the preview/review copy.
+1. A rendered video is uploaded to YouTube as the preview/review copy. TikTok receives no preview upload.
 2. The Discord card shows every destination plus the exact TikTok Direct Post settings. The existing Publish button is the single approval for that exact video and those settings.
-3. The approval schedules YouTube and fans out additional `video_publications` rows for enabled social targets. TikTok approval is bound to the MP4 size and SHA-256; a changed file fails closed.
-4. The publication scheduler uploads due social rows when their `scheduled_for` time is reached.
+3. The approval assigns the next slot from that source channel's `schedule_slots`, schedules the existing YouTube preview, and creates additional `video_publications` rows for enabled social targets with the same exact `scheduled_for`. TikTok approval is bound to the MP4 size and SHA-256; a changed file fails closed.
+4. At the inherited due time, the shared publication scheduler uploads the TikTok row. Until then, the MP4 remains local and nothing is sent to TikTok.
 
 This keeps one Discord approval/reject flow. There is no separate TikTok editorial gate. Extra platforms are delivery records linked to the same `videos` row, not duplicated video jobs.
+
+Automatic approval uses this same path. If a channel's existing policy invokes the normal Publish action automatically, enabled additional targets fan out from that action and inherit the assigned slot. Auto scheduling does not bypass the exact-file approval record or introduce a TikTok-only approval path.
+
+### Channel-driven scheduling
+
+- Each source channel owns one `schedule_slots` list. Additional platforms do not repeat those hours in their target configuration.
+- The scheduler installer derives its macOS wake-up times from the deduplicated union of every active channel's slots. The currently loaded `08:00`, `12:00`, `14:00`, and `18:00` list is a machine-wide wake-up union, not the Poke Quiz TikTok schedule.
+- A wake-up processes only rows that are due. For example, Poke Quiz currently owns `08:00`, `12:00`, and `14:00`; an `18:00` wake-up required by another channel does not create an extra Poke Quiz or TikTok post.
+- Changing a channel's slots changes both its YouTube assignment and every inherited TikTok delivery time. No TikTok scheduling code or target timetable needs to be rewritten. After changing tracked channel slots, redeploy and rerun `npm run product-video:install-publication-schedule` so launchd receives the new union.
 
 ## TikTok V1
 
@@ -65,9 +76,9 @@ TikTok uses the official Content Posting API shape with local `FILE_UPLOAD`.
 
 Database-backed facts, existing visual assets, deterministic rendering, and using AI to select or arrange those inputs do not by themselves require ORION to mark a post as AI-generated. The disclosure applies to the media in the finished post, not merely to automation in the production workflow.
 
-The current Poke Quiz renderers do, however, generate their spoken narration with the Kokoro machine-learning text-to-speech model. The exported MP4 therefore contains AI-generated audio. Keep `is_aigc: true` for these renders and show that choice in the shared review card. Do not turn the flag off merely because the visuals come from the database.
+The current Poke Quiz renderers generate some spoken narration with the Kokoro machine-learning text-to-speech model. TikTok's broad AIGC guidance may therefore apply to the exported audio even though the facts and visuals are database-backed. The operator has chosen `is_aigc: false` for future private Sandbox posts and will restore the label if TikTok treats that choice as non-compliant. The shared review card must continue to show and freeze that explicit choice.
 
-The flag may be set to `false` for a future render only after confirming that the exact reviewed file contains no AI-generated or materially AI-modified visual, audio, or video content—for example, after replacing neural narration with human-recorded or appropriately licensed non-AI audio. Treat this as per-render provenance rather than a permanent channel-wide assumption.
+If TikTok flags the content, changes its guidance, or requires disclosure during review, restore `is_aigc: true`. A later provenance implementation should derive a recommended value from the exact render while still making the submitted choice visible at approval time. Existing approved or uploaded delivery rows keep their frozen historical value.
 
 ### Sandbox and Production Lifecycle
 
@@ -129,7 +140,8 @@ Application work before enabling automation:
 
 1. Preserve structured TikTok terminal failure details and public-post identifiers in a later lifecycle follow-up.
 2. Implement child-row reschedule, withdrawal, deletion, and source-replacement propagation before relying on unattended multi-platform delivery.
-3. Replace the channel-wide AIGC setting with render-provenance-derived disclosure before mixing synthetic-narration and non-synthetic formats on the same target.
+3. Replace the channel-wide AIGC setting with render-provenance-derived guidance before mixing synthetic-narration and non-synthetic formats on the same target.
+4. Add a generic related-content contract and per-platform adapters after confirming what each official publishing API supports; reuse the existing selector policy without coupling other destinations to YouTube Studio automation.
 
 Desktop authorization command on the Mac mini:
 
@@ -142,7 +154,7 @@ For a headless SSH session, add `--no-open` and forward local port `53684` to th
 The standalone command remains available only for supervised backfills of videos approved before the shared review fields existed:
 
 ```bash
-npm run product-video:approve-tiktok-post -- --publication <publication-id> --aigc
+npm run product-video:approve-tiktok-post -- --publication <publication-id> --no-aigc
 ```
 
 Normal new videos do not use a second TikTok approval. Their existing Discord Publish action records the same choices for YouTube and TikTok. The backfill command never uploads content.
@@ -213,7 +225,7 @@ Add enabled targets under a YouTube channel profile:
             "stitch_enabled": false,
             "brand_content_toggle": false,
             "brand_organic_toggle": false,
-            "is_aigc": true,
+            "is_aigc": false,
             "video_cover_timestamp_ms": 1000
           }
         }
@@ -249,6 +261,7 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [ ] Public-posting app review completed, if public delivery is required.
 - [x] Private Sandbox target enabled in tracked configuration for the first account.
 - [x] Mac scheduler and reconciler reloaded after merge; focused validation passed (41/41, 2026-10-07).
+- [ ] Generic related-content contract and TikTok capability/adapter investigated after core publication lifecycle is stable.
 - [ ] TikTok analytics adapter planned after publication is stable.
 
 ## Validation Commands

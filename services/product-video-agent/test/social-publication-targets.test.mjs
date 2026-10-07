@@ -104,6 +104,28 @@ test('buildAdditionalPlatformPublicationRows creates a scheduled TikTok publicat
   assert.equal(row.metadata.publisher_target.tiktok.privacy_level, 'SELF_ONLY');
 });
 
+test('additional targets inherit each channel-assigned source slot without a platform schedule copy', () => {
+  const firstSlot = '2026-09-08T06:00:00.000Z';
+  const changedChannelSlot = '2026-09-08T16:30:00.000Z';
+  const [firstRow] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor: firstSlot,
+  });
+  const [changedRow] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor: changedChannelSlot,
+  });
+
+  assert.equal(firstRow.scheduled_for, firstSlot);
+  assert.equal(firstRow.metadata.source_scheduled_for, firstSlot);
+  assert.equal(changedRow.scheduled_for, changedChannelSlot);
+  assert.equal(changedRow.metadata.source_scheduled_for, changedChannelSlot);
+});
+
 test('upsertAdditionalPlatformPublicationTargets is a no-op when no target is enabled', async () => {
   const results = await upsertAdditionalPlatformPublicationTargets({
     store: {},
