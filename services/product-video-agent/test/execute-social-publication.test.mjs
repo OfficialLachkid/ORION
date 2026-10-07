@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { executeDueSocialPublications } from '../scripts/publication/social/tiktok/execute-due-publications.mjs';
+import {
+  executeDueSocialPublications,
+  retryTikTokPublication,
+} from '../scripts/publication/social/tiktok/execute-due-publications.mjs';
 import {
   TikTokPublicationAuthRequiredError,
 } from '../src/tiktok-publication-executor.mjs';
@@ -22,6 +25,16 @@ function createStore(publications, videos = {}) {
     },
     async fetchVideoById(id) {
       return structuredClone(videos[id] || null);
+    },
+    async fetchPublicationById(id) {
+      return structuredClone(rows.get(id) || null);
+    },
+    async claimPublicationForUpload(id, patch) {
+      const current = rows.get(id);
+      if (!current || !['queued', 'scheduled'].includes(current.status) || current.external_id) {
+        return null;
+      }
+      return this.updatePublication(id, patch);
     },
     async updatePublication(id, patch) {
       const current = rows.get(id);
@@ -121,10 +134,16 @@ test('executeDueSocialPublications uploads a due TikTok row and stores publish i
       },
     },
     publicationStore: store,
-    publishTikTokVideo: async ({ publication, videoRow, target }) => {
+    publishTikTokVideo: async ({ publication, videoRow, target, onInitialized }) => {
       assert.equal(publication.id, 'publication-target-tiktok');
       assert.equal(videoRow.id, 'video-1');
       assert.equal(target.tiktok.access_token_env, 'TIKTOK_POKE_QUIZZ_ACCESS_TOKEN');
+      await onInitialized({
+        publishId: 'publish-123',
+        externalId: 'publish-123',
+        initializedAt: '2026-09-07T12:00:00.000Z',
+        tokenEnv: 'TIKTOK_POKE_QUIZZ_ACCESS_TOKEN',
+      });
       return {
         status: 'publishing',
         workflowState: 'publishing',
@@ -234,4 +253,78 @@ test('executeDueSocialPublications blocks a TikTok row that needs renewed approv
   assert.equal(results[0].reason, 'tiktok_consent_required');
   assert.equal(store.current('publication-target-tiktok').status, 'blocked');
   assert.equal(store.current('publication-target-tiktok').metadata.workflow_state, 'approval_required');
+});
+
+test('executeDueSocialPublications preserves publish id when upload fails after initialization', async () => {
+  const store = createStore([dueTikTokPublication], {
+    'video-1': { id: 'video-1', render: { output_path: 'example.mp4' } },
+  });
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-07T12:00:00.000Z',
+  }, {
+    runtimeConfig: { env: { TIKTOK_POKE_QUIZZ_ACCESS_TOKEN: 'token' } },
+    publicationStore: store,
+    publishTikTokVideo: async ({ onInitialized }) => {
+      await onInitialized({
+        publishId: 'publish-interrupted',
+        externalId: 'publish-interrupted',
+        initializedAt: '2026-09-07T12:00:00.000Z',
+      });
+      throw new Error('connection reset during upload');
+    },
+  });
+
+  assert.equal(results[0].action, 'tiktok_upload_interrupted');
+  assert.equal(results[0].reason, 'upload_interrupted_after_init');
+  assert.equal(store.current('publication-target-tiktok').status, 'publishing');
+  assert.equal(store.current('publication-target-tiktok').external_id, 'publish-interrupted');
+  assert.ok(store.current('publication-target-tiktok').metadata.next_status_poll_at);
+});
+
+test('retryTikTokPublication requeues only an approved row without a publish id', async () => {
+  const store = createStore([{
+    ...dueTikTokPublication,
+    status: 'failed',
+    metadata: {
+      ...dueTikTokPublication.metadata,
+      workflow_state: 'failed',
+      tiktok_direct_post_approval: { approved: true },
+    },
+  }]);
+
+  const result = await retryTikTokPublication({
+    'retry-publication-id': 'publication-target-tiktok',
+    'as-of': '2026-09-07T13:00:00.000Z',
+  }, {
+    runtimeConfig: { env: {} },
+    publicationStore: store,
+  });
+
+  assert.equal(result.action, 'tiktok_upload_retry_queued');
+  assert.equal(store.current('publication-target-tiktok').status, 'scheduled');
+  assert.equal(store.current('publication-target-tiktok').metadata.publish_retry_requested_at, '2026-09-07T13:00:00.000Z');
+});
+
+test('retryTikTokPublication refuses a row that already has a publish id', async () => {
+  const store = createStore([{
+    ...dueTikTokPublication,
+    status: 'publishing',
+    external_id: 'publish-existing',
+    metadata: {
+      ...dueTikTokPublication.metadata,
+      workflow_state: 'publishing',
+      tiktok_direct_post_approval: { approved: true },
+    },
+  }]);
+
+  await assert.rejects(
+    () => retryTikTokPublication({
+      'retry-publication-id': 'publication-target-tiktok',
+    }, {
+      runtimeConfig: { env: {} },
+      publicationStore: store,
+    }),
+    /poll status instead of retrying/u,
+  );
 });

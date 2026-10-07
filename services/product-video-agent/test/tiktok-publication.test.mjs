@@ -210,6 +210,97 @@ test('preflightTikTokVideo performs live checks without initializing an upload',
   assert.equal(result.request.post_info.privacy_level, 'SELF_ONLY');
 });
 
+test('publishTikTokVideo persists the publish id callback before uploading bytes', async () => {
+  const projectRoot = resolve('workspace');
+  const renderPath = resolve(projectRoot, 'video.mp4');
+  const publication = {
+    id: 'pub-callback',
+    video_id: 'video-callback',
+    metadata: {
+      render_path: 'video.mp4',
+      tiktok_direct_post_approval: {
+        version: TIKTOK_DIRECT_POST_APPROVAL_VERSION,
+        approved: true,
+        approved_at: '2026-10-07T10:00:00.000Z',
+        publication_id: 'pub-callback',
+        video_id: 'video-callback',
+        account_key: 'poke-quizz-tiktok',
+        creator_username: 'pokequizz7',
+        render_path: renderPath,
+        video_size_bytes: 4,
+        video_sha256: 'a'.repeat(64),
+        caption: 'Guess the Pokemon!\n\n#pokemon',
+        privacy_level: 'SELF_ONLY',
+        allow_comment: false,
+        allow_duet: false,
+        allow_stitch: false,
+        brand_content_toggle: false,
+        brand_organic_toggle: false,
+        is_aigc: true,
+      },
+    },
+  };
+  let initialized = false;
+  let uploadObservedInitialization = false;
+  const result = await publishTikTokVideo({
+    publication,
+    videoRow: {},
+    target: {
+      accountKey: 'poke-quizz-tiktok',
+      tiktok: {
+        access_token_env: 'TIKTOK_POKE_QUIZZ_ACCESS_TOKEN',
+        environment: 'sandbox',
+        expected_username: 'pokequizz7',
+      },
+    },
+    runtimeEnv: { TIKTOK_POKE_QUIZZ_ACCESS_TOKEN: 'access-token' },
+    projectRoot,
+    asOf: '2026-10-07T10:00:00.000Z',
+    statImpl: async () => ({ size: 4 }),
+    hashFileImpl: async () => 'a'.repeat(64),
+    probeDurationImpl: async () => 10,
+    fetchCreatorInfoImpl: async () => ({
+      creator_username: 'pokequizz7',
+      creator_nickname: 'PokeQuizz',
+      privacy_level_options: ['SELF_ONLY'],
+      comment_disabled: false,
+      duet_disabled: false,
+      stitch_disabled: false,
+      max_video_post_duration_sec: 60,
+    }),
+    fetchImpl: async (url) => {
+      if (url.includes('/video/init/')) {
+        return {
+          ok: true,
+          status: 200,
+          async text() {
+            return JSON.stringify({
+              data: { publish_id: 'publish-callback', upload_url: 'https://upload.example/video' },
+              error: { code: 'ok', message: '', log_id: 'log-callback' },
+            });
+          },
+        };
+      }
+      uploadObservedInitialization = initialized;
+      return { ok: true, status: 200, async text() { return ''; } };
+    },
+    openImpl: async () => ({
+      async read(buffer) {
+        buffer.set([1, 2, 3, 4]);
+        return { bytesRead: 4 };
+      },
+      async close() {},
+    }),
+    onInitialized: async ({ publishId }) => {
+      assert.equal(publishId, 'publish-callback');
+      initialized = true;
+    },
+  });
+
+  assert.equal(uploadObservedInitialization, true);
+  assert.equal(result.publishId, 'publish-callback');
+});
+
 test('TikTok status polling refreshes an expired access token and persists rotation', async () => {
   const runtimeEnv = {
     TIKTOK_CLIENT_KEY: 'client-key',

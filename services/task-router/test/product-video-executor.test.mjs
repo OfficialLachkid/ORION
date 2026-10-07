@@ -446,6 +446,7 @@ test('publish approval triggers an immediate scheduling pass and returns the sch
           publication: options.publication,
         };
       },
+      upsertAdditionalPlatformPublicationTargets: async () => [],
       queueStatusChannelProfile: {
         platform: 'youtube_shorts',
         account_key: 'poke-quizz-youtube',
@@ -531,6 +532,11 @@ test('publish approval fans out scheduled publications to configured additional 
       poke_quizz_publication_review: {
         publicationId: 'publication-platform-fanout',
         channelSelector: 'poke-quizz-youtube',
+        tiktokDirectPost: {
+          accountKey: 'poke-quizz-tiktok',
+          creatorUsername: 'pokequizz7',
+          privacyLevel: 'SELF_ONLY',
+        },
       },
     },
     { env: {} },
@@ -580,6 +586,9 @@ test('publish approval fans out scheduled publications to configured additional 
   assert.equal(fanOutCalls.length, 1);
   assert.equal(fanOutCalls[0].sourcePublication.id, 'publication-platform-fanout');
   assert.equal(fanOutCalls[0].scheduledFor, '2026-09-08T10:00:00.000Z');
+  assert.equal(fanOutCalls[0].approval.approvedBy, 'Lachkid');
+  assert.equal(fanOutCalls[0].approval.reviewTaskId, 'TASK-ORION-PQ-PUBLISH-FANOUT');
+  assert.equal(fanOutCalls[0].approval.tiktokDirectPost.privacyLevel, 'SELF_ONLY');
   assert.deepEqual(result.report.platformPublicationResults, [{
     platform: 'tiktok_video',
     account_key: 'poke-quizz-tiktok',
@@ -667,6 +676,7 @@ test('publish approval forwards an optional max-scheduled-days cap to the schedu
         };
       },
       syncQueueStatusMessage: async () => ({ posted: true }),
+      upsertAdditionalPlatformPublicationTargets: async () => [],
       queueStatusChannelProfile: {
         platform: 'youtube_shorts',
         account_key: 'poke-quizz-youtube',

@@ -373,6 +373,14 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
         sourceChannelProfile: channelProfile,
         scheduledFor,
         asOf: approvedAt,
+        projectRoot,
+        approval: {
+          approvedAt,
+          approvedBy: task.approved_by || '',
+          approvedById: task.approved_by_id || '',
+          reviewTaskId: task.task_id || '',
+          tiktokDirectPost: review.tiktokDirectPost || null,
+        },
       });
     } catch (error) {
       platformPublicationError = error.message || String(error);

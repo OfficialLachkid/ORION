@@ -15,6 +15,8 @@ import {
 const publication = {
   id: 'publication-123',
   video_id: 'video-123',
+  title: 'Guess the Pokemon!',
+  hashtags: ['#pokemon', '#shorts'],
   preview_url: 'https://youtube.com/shorts/preview-123',
   metadata: {
     type_pair: ['water', 'flying'],
@@ -45,6 +47,24 @@ const channelProfile = {
   },
   metadata: {
     related_video: { enabled: true },
+    publisher: {
+      targets: [{
+        platform: 'tiktok_video',
+        account_key: 'poke-quizz-tiktok',
+        enabled: true,
+        visibility: 'private',
+        tiktok: {
+          expected_username: 'pokequizz7',
+          privacy_level: 'SELF_ONLY',
+          comments_enabled: false,
+          duet_enabled: false,
+          stitch_enabled: false,
+          brand_content_toggle: false,
+          brand_organic_toggle: false,
+          is_aigc: true,
+        },
+      }],
+    },
   },
 };
 
@@ -82,6 +102,9 @@ test('buildPokeQuizzPublicationReviewTask creates an approval-gated publish task
   assert.equal(task.poke_quizz_publication_review.relatedVideoLabel, 'Guess the Pokemon: Bug / Ground');
   assert.equal(task.poke_quizz_publication_review.relatedVideoUrl, 'https://youtube.com/shorts/yt-456');
   assert.equal(task.poke_quizz_publication_review.relatedVideoStatusLabel, 'planned');
+  assert.equal(task.poke_quizz_publication_review.destinationsLabel, 'YouTube Shorts + TikTok @pokequizz7');
+  assert.equal(task.poke_quizz_publication_review.tiktokDirectPost.privacyLevel, 'SELF_ONLY');
+  assert.equal(task.poke_quizz_publication_review.tiktokDirectPost.allowComment, false);
 });
 
 test('buildPokeQuizzPublicationReviewTask keeps the same task id when mutable review fields change', () => {
@@ -164,6 +187,8 @@ test('buildPokeQuizzPublicationReviewEvent adds preview-review metadata and labe
   assert.equal(event.metadata.generationDurationLabel, '2 min');
   assert.equal(event.metadata.relatedVideoLabel, 'Guess the Pokemon: Bug / Ground');
   assert.equal(event.metadata.relatedVideoReason.includes('same content lane'), true);
+  assert.equal(event.metadata.destinationsLabel, 'YouTube Shorts + TikTok @pokequizz7');
+  assert.match(event.metadata.tiktokDirectPostLabel, /Privacy: SELF_ONLY/u);
 });
 
 test('buildPokeQuizzPublicationReviewPayload renders Publish, Give Feedback, and Delete buttons', () => {

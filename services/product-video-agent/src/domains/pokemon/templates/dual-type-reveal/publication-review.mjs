@@ -3,6 +3,11 @@ import { buildApprovalButtons } from '../../../../../../discord-bot/src/approval
 import { buildOutboundEventDiscordPayload } from '../../../../../../discord-bot/src/message-formatting.mjs';
 import { formatYoutubeAutoCommentStatusLabel } from '../../../../youtube-auto-comments.mjs';
 import {
+  TIKTOK_VIDEO_PLATFORM,
+  listEnabledAdditionalPublicationTargets,
+} from '../../../../social-publication-targets.mjs';
+import { buildTikTokCaption } from '../../../../tiktok-publication.mjs';
+import {
   DEFAULT_CHANNEL_SELECTOR,
   DEFAULT_CONFIG_PATH,
   DEFAULT_REVIEW_PRESENTATION,
@@ -248,6 +253,50 @@ function normalizeReviewPaths(review = {}) {
   };
 }
 
+function buildDestinationReview(publication = {}, channelProfile = {}) {
+  const additionalTargets = listEnabledAdditionalPublicationTargets(channelProfile);
+  const destinationLabels = ['YouTube Shorts'];
+  const tiktokTarget = additionalTargets.find((target) => target.platform === TIKTOK_VIDEO_PLATFORM);
+  if (!tiktokTarget) {
+    return {
+      destinationsLabel: destinationLabels.join(' + '),
+      tiktokDirectPost: null,
+      tiktokDirectPostLabel: '',
+    };
+  }
+
+  const config = tiktokTarget.tiktok || {};
+  const creatorUsername = String(config.expected_username || config.expectedUsername || '')
+    .trim()
+    .replace(/^@/u, '')
+    .toLowerCase();
+  const tiktokDirectPost = {
+    accountKey: tiktokTarget.accountKey,
+    creatorUsername,
+    caption: buildTikTokCaption(publication, tiktokTarget),
+    privacyLevel: String(config.privacy_level || 'SELF_ONLY').trim(),
+    allowComment: config.comments_enabled === true,
+    allowDuet: config.duet_enabled === true,
+    allowStitch: config.stitch_enabled === true,
+    brandContentToggle: config.brand_content_toggle === true,
+    brandOrganicToggle: config.brand_organic_toggle === true,
+    isAigc: config.is_aigc === true,
+    videoCoverTimestampMs: Number(config.video_cover_timestamp_ms || 1000),
+  };
+  destinationLabels.push(creatorUsername ? `TikTok @${creatorUsername}` : 'TikTok');
+  return {
+    destinationsLabel: destinationLabels.join(' + '),
+    tiktokDirectPost,
+    tiktokDirectPostLabel: [
+      `Account: @${creatorUsername || 'not configured'}`,
+      `Privacy: ${tiktokDirectPost.privacyLevel}`,
+      `Comments: ${tiktokDirectPost.allowComment ? 'on' : 'off'}; Duet: ${tiktokDirectPost.allowDuet ? 'on' : 'off'}; Stitch: ${tiktokDirectPost.allowStitch ? 'on' : 'off'}`,
+      `Commercial content: ${tiktokDirectPost.brandContentToggle || tiktokDirectPost.brandOrganicToggle ? 'yes' : 'no'}; AI-generated label: ${tiktokDirectPost.isAigc ? 'on' : 'off'}`,
+      `Caption: ${tiktokDirectPost.caption}`,
+    ].join('\n'),
+  };
+}
+
 function buildCollapsedReviewContent(task) {
   const review = task?.poke_quizz_publication_review || {};
   const reviewPresentation = normalizeReviewPresentation(review.reviewPresentation);
@@ -302,6 +351,7 @@ export function buildPokeQuizzPublicationReviewTask({
     ...reviewPresentation,
     genre_label: genreLabel || reviewPresentation?.genre_label || DEFAULT_GENRE_LABEL,
   });
+  const destinationReview = buildDestinationReview(publication, channelProfile || {});
   const reviewPayload = {
     publicationId: publication?.id || '',
     videoId: publication?.video_id || video?.id || '',
@@ -355,6 +405,9 @@ export function buildPokeQuizzPublicationReviewTask({
     ),
     autoCommentStatusLabel: formatYoutubeAutoCommentStatusLabel(publication?.metadata?.youtube_auto_comment || {}),
     autoCommentNote: formatYoutubeAutoCommentNote(publication?.metadata?.youtube_auto_comment || {}),
+    destinationsLabel: destinationReview.destinationsLabel,
+    tiktokDirectPost: destinationReview.tiktokDirectPost,
+    tiktokDirectPostLabel: destinationReview.tiktokDirectPostLabel,
   };
 
   return {
@@ -505,6 +558,8 @@ export function buildPokeQuizzPublicationReviewEvent(task) {
       relatedVideoReason: review.relatedVideoReason || '',
       autoCommentStatusLabel: review.autoCommentStatusLabel || '',
       autoCommentNote: review.autoCommentNote || '',
+      destinationsLabel: review.destinationsLabel || '',
+      tiktokDirectPostLabel: review.tiktokDirectPostLabel || '',
       approveLabel: reviewPresentation.approve_label,
       rejectLabel: reviewPresentation.reject_label,
       deleteLabel: reviewPresentation.delete_label,

@@ -325,6 +325,7 @@ export async function publishTikTokVideo({
   fetchCreatorInfoImpl = fetchTikTokCreatorInfo,
   probeDurationImpl = probeMediaDurationSeconds,
   hashFileImpl = hashFileSha256,
+  onInitialized = null,
 }) {
   const prepared = await prepareTikTokDirectPost({
     publication,
@@ -367,6 +368,17 @@ export async function publishTikTokVideo({
   if (!publishId || !uploadUrl) {
     throw new TikTokPublicationApiError('TikTok Direct Post init did not return publish_id and upload_url.', {
       payload: initPayload,
+    });
+  }
+
+  if (typeof onInitialized === 'function') {
+    await onInitialized({
+      publishId,
+      externalId: publishId,
+      initializedAt: asOf,
+      tokenEnv,
+      renderPath,
+      videoSizeBytes: fileStats.size,
     });
   }
 

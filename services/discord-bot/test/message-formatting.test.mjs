@@ -341,6 +341,8 @@ test('buildOutboundEventDiscordPayload renders Poke Quizz publication review car
       relatedVideoReason: 'Selected for same content lane, same template; the recent related-target reuse guard was respected.',
       publicationTitle: 'Can You Guess These Water / Flying Pokemon?',
       publicationDescription: 'Beat the timer and wait for the reveal.',
+      destinationsLabel: 'YouTube Shorts + TikTok @pokequizz7',
+      tiktokDirectPostLabel: 'Account: @pokequizz7\nPrivacy: SELF_ONLY\nComments: off; Duet: off; Stitch: off',
       renderPath: '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Previews/water-flying.mp4',
       planPath: 'data/runtime/product-video-agent/poke-quizz/example-plan.json',
     },
@@ -355,6 +357,8 @@ test('buildOutboundEventDiscordPayload renders Poke Quizz publication review car
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Title' && /Water \/ Flying/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Description' && /Beat the timer/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Preview' && /Open Preview/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Destinations' && /TikTok @pokequizz7/u.test(field.value)), true);
+  assert.equal(payload.embeds[0].fields.some((field) => field.name === 'TikTok Direct Post' && /SELF_ONLY/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Related Video' && /Bug \/ Ground/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Related State' && /planned/u.test(field.value)), true);
   assert.equal(payload.embeds[0].fields.some((field) => field.name === 'Action'), false);

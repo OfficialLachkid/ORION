@@ -169,7 +169,7 @@
             {
               "platform": "tiktok_video",
               "account_key": "poke-quizz-tiktok",
-              "enabled": false,
+              "enabled": true,
               "schedule_mode": "orion",
               "visibility": "private",
               "tiktok": {
@@ -178,9 +178,13 @@
                 "direct_post_audit": "unaudited",
                 "expected_username": "pokequizz7",
                 "privacy_level": "SELF_ONLY",
-                "comments_enabled": true,
+                "comments_enabled": false,
                 "duet_enabled": false,
-                "stitch_enabled": false
+                "stitch_enabled": false,
+                "brand_content_toggle": false,
+                "brand_organic_toggle": false,
+                "is_aigc": true,
+                "video_cover_timestamp_ms": 1000
               }
             }
           ]

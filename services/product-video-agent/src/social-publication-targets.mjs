@@ -1,4 +1,10 @@
+import { stat } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { createStableId } from './ids.mjs';
+import {
+  TIKTOK_DIRECT_POST_APPROVAL_VERSION,
+} from './tiktok-publication.mjs';
+import { hashFileSha256 } from './tiktok-publication-executor.mjs';
 
 export const YOUTUBE_SHORTS_PLATFORM = 'youtube_shorts';
 export const TIKTOK_VIDEO_PLATFORM = 'tiktok_video';
@@ -116,6 +122,72 @@ function serializeTargetForMetadata(target = {}) {
   };
 }
 
+function requireTikTokApprovalIdentity(target = {}, reviewedSettings = {}) {
+  const creatorUsername = normalizeText(
+    reviewedSettings.creatorUsername
+      || target.tiktok?.expected_username
+      || target.tiktok?.expectedUsername,
+  ).replace(/^@/u, '').toLowerCase();
+  if (!creatorUsername) {
+    throw new Error(`TikTok target ${target.accountKey || ''} requires tiktok.expected_username.`);
+  }
+  return creatorUsername;
+}
+
+async function addTikTokDirectPostApproval({
+  row,
+  target,
+  approval,
+  projectRoot = process.cwd(),
+  statImpl = stat,
+  hashFileImpl = hashFileSha256,
+}) {
+  if (row.platform !== TIKTOK_VIDEO_PLATFORM || !approval?.approvedAt) {
+    return row;
+  }
+
+  const reviewedSettings = approval.tiktokDirectPost;
+  if (!reviewedSettings || normalizeText(reviewedSettings.accountKey) !== row.account_key) {
+    throw new Error(
+      `TikTok target ${row.account_key} was not included in the shared publication review.`,
+    );
+  }
+
+  const renderPath = resolve(projectRoot, normalizeText(row.metadata?.render_path));
+  const fileStats = await statImpl(renderPath);
+  const videoSha256 = await hashFileImpl(renderPath);
+  return {
+    ...row,
+    metadata: {
+      ...(row.metadata || {}),
+      tiktok_direct_post_approval: {
+        version: TIKTOK_DIRECT_POST_APPROVAL_VERSION,
+        approved: true,
+        approved_at: approval.approvedAt,
+        approved_by: normalizeText(approval.approvedBy),
+        approved_by_id: normalizeText(approval.approvedById),
+        source_review_task_id: normalizeText(approval.reviewTaskId),
+        publication_id: row.id,
+        video_id: row.video_id,
+        account_key: row.account_key,
+        creator_username: requireTikTokApprovalIdentity(target, reviewedSettings),
+        render_path: renderPath,
+        video_size_bytes: Number(fileStats.size),
+        video_sha256: videoSha256,
+        caption: String(reviewedSettings.caption ?? ''),
+        privacy_level: normalizeText(reviewedSettings.privacyLevel),
+        allow_comment: reviewedSettings.allowComment === true,
+        allow_duet: reviewedSettings.allowDuet === true,
+        allow_stitch: reviewedSettings.allowStitch === true,
+        brand_content_toggle: reviewedSettings.brandContentToggle === true,
+        brand_organic_toggle: reviewedSettings.brandOrganicToggle === true,
+        is_aigc: reviewedSettings.isAigc === true,
+        video_cover_timestamp_ms: Number(reviewedSettings.videoCoverTimestampMs || 1000),
+      },
+    },
+  };
+}
+
 export function buildAdditionalPlatformPublicationRow({
   sourcePublication,
   videoRow,
@@ -201,6 +273,10 @@ export async function upsertAdditionalPlatformPublicationTargets({
   sourceChannelProfile,
   scheduledFor = '',
   asOf = new Date().toISOString(),
+  approval = null,
+  projectRoot = process.cwd(),
+  statImpl = stat,
+  hashFileImpl = hashFileSha256,
 }) {
   const rows = buildAdditionalPlatformPublicationRows({
     sourcePublication,
@@ -217,7 +293,30 @@ export async function upsertAdditionalPlatformPublicationTargets({
   }
 
   const results = [];
-  for (const row of rows) {
+  for (const candidate of rows) {
+    const existing = typeof store.fetchPublicationById === 'function'
+      ? await store.fetchPublicationById(candidate.id)
+      : null;
+    if (existing) {
+      results.push({
+        platform: existing.platform || candidate.platform,
+        account_key: existing.account_key || candidate.account_key,
+        publication_id: existing.id || candidate.id,
+        workflow_state: existing?.metadata?.workflow_state || existing.status || '',
+        scheduled_for: existing.scheduled_for || '',
+        preserved: true,
+      });
+      continue;
+    }
+
+    const row = await addTikTokDirectPostApproval({
+      row: candidate,
+      target: candidate.metadata.publisher_target,
+      approval,
+      projectRoot,
+      statImpl,
+      hashFileImpl,
+    });
     const stored = await store.upsertPublication(row);
     results.push({
       platform: row.platform,
@@ -225,6 +324,7 @@ export async function upsertAdditionalPlatformPublicationTargets({
       publication_id: stored?.id || row.id,
       workflow_state: stored?.metadata?.workflow_state || row.metadata.workflow_state,
       scheduled_for: stored?.scheduled_for || row.scheduled_for || '',
+      preserved: false,
     });
   }
   return results;
