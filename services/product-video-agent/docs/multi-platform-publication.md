@@ -6,13 +6,13 @@ This is the phase-1 structure for publishing an already approved ORION short to 
 
 - Tracking issue: [#95 — ORION Multi-Platform Social Publisher, Phase 1: TikTok](https://github.com/OfficialLachkid/ORION/issues/95)
 - Implementation PR: [#97 — scaffold TikTok social publisher](https://github.com/OfficialLachkid/ORION/pull/97)
-- State: PR #151 is merged. The sandbox account is connected and verified. The current follow-up binds TikTok consent to the existing Discord Publish action, adds atomic upload claims, persists the TikTok `publish_id` before bytes are uploaded, and adds a guarded retry command. The Poke Quiz target is enabled only for private `SELF_ONLY` Sandbox delivery.
+- State: PR #151 is merged. [PR #152](https://github.com/OfficialLachkid/ORION/pull/152) is open and Runtime Validation is green. It binds TikTok consent to the existing Discord Publish action, adds atomic upload claims, persists the TikTok `publish_id` before bytes are uploaded, and adds a guarded retry command. The Poke Quiz target is enabled only for private `SELF_ONLY` Sandbox delivery.
 - Operator update: the dedicated Poke Quiz TikTok account, the `ORION` TikTok developer organization, and the `ORION Publisher` app now exist. The sandbox includes `pokequizz7` as a target user. Public app metadata, legal-policy URLs, URL-prefix ownership verification, Login Kit, Content Posting API Direct Post, and the Desktop redirect URI are configured. TikTok issued the client credentials; no credential value is recorded in Git.
 - The PR branch has been brought forward to current `main`; the scheduler conflict was resolved by retaining current per-channel error isolation and adding isolated social-publication execution.
 - The original Runtime Validation failure was only `git diff --check`: this file and `src/tiktok-publication-executor.mjs` had an extra blank line at EOF. Both are fixed.
 - Local verification on 2026-10-06: runtime-config validation passed, the product-video suite passed (454 passed, 1 skipped), the Discord/runtime suite passed (369 passed), and the focused TikTok/scheduler/task-router suite passed (31 passed).
 
-This is not approved for public TikTok delivery. OAuth refresh, creator validation, shared-review consent, and crash-safe upload handling are implemented. A supervised `SELF_ONLY` smoke test and final status reconciliation remain required before the Sandbox rollout is considered proven.
+This is not approved for public TikTok delivery. OAuth refresh, creator validation, shared-review consent, and crash-safe upload handling are implemented. A supervised `SELF_ONLY` smoke test completed successfully on 2026-10-07; merging PR #152 and reloading the Mac scheduler remain before future approvals can use the shared path automatically.
 
 ## Implemented
 
@@ -33,9 +33,9 @@ This is not approved for public TikTok delivery. OAuth refresh, creator validati
 
 These are blockers for a live rollout, not optional cleanup:
 
-1. **Supervised smoke and reconciliation:** complete one private `SELF_ONLY` upload from the Mac mini, poll it to a terminal state, and verify the stored delivery row.
+1. **Merge and deploy PR #152:** the successful smoke used its isolated Mac worktree; the active scheduler remains on `main` until the PR is reviewed and merged.
 2. **Full child-publication lifecycle:** the approval path creates TikTok rows, but later rescheduling, rejection, withdrawal, deletion, or source replacement does not yet propagate to child rows.
-3. **Complete status persistence:** status polling does not yet retain TikTok `fail_reason`, the publicly available post id, or the final public URL. `external_id` remains the upload `publish_id`.
+3. **Complete status persistence:** normal scheduler polling does not yet retain every TikTok `fail_reason`, the publicly available post id, or the final public URL. `external_id` remains the upload `publish_id`.
 4. **Platform adapter boundary:** the row model is reusable, but the generic social wrapper currently dispatches only TikTok and the target model embeds TikTok-specific settings. Introduce an adapter registry before Instagram/Facebook work.
 5. **TikTok analytics:** analytics ingestion remains YouTube-only.
 6. **Scheduling semantics:** `schedule_mode` is normalized and stored but is not acted on; all additional targets currently inherit the YouTube schedule.
@@ -149,6 +149,14 @@ Live sandbox validation on 2026-10-06:
 - The active `.env` was verified as owner-only (`0600`, `Agent:staff`).
 - No upload or publication request was made during OAuth authorization.
 
+Private Direct Post smoke on 2026-10-07:
+
+- Source publication: `publication-0f5a57bcaf1027cf` (`Easy to Impossible Pokemon Pixels!`), using the retained archived master because the normal post-publication render path had already been cleared by retention.
+- TikTok delivery row: `publication-target-87c842a2e1500bda`, linked to the same `videos` row as YouTube.
+- Exact settings: `SELF_ONLY`; comments, Duet, Stitch, and both commercial-content toggles disabled; AI-generated-content label enabled.
+- Live preflight re-confirmed creator `pokequizz7`, duration `28.6s`, file size `6,638,795` bytes, and creator availability for `SELF_ONLY`.
+- TikTok returned publish id `v_pub_file~v2-1.7693854270151591958`; the first status poll returned `PUBLISH_COMPLETE` with no failure reason, and the delivery row was marked `published`.
+
 Official references:
 
 - [Content Posting API get started](https://developers.tiktok.com/docs/en/content-posting-api-get-started)
@@ -231,7 +239,7 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [x] Shared Discord approval records exact TikTok consent without a second editorial gate.
 - [x] Atomic claim/idempotency and guarded operator retry implemented on the current follow-up branch.
 - [ ] Final status/failure/public-post fields persisted.
-- [ ] One `SELF_ONLY` Mac mini smoke publication completed and reconciled.
+- [x] One `SELF_ONLY` Mac mini smoke publication completed and reconciled (`PUBLISH_COMPLETE`, 2026-10-07).
 - [ ] Public-posting app review completed, if public delivery is required.
 - [x] Private Sandbox target enabled in tracked configuration for the first account.
 - [ ] Mac scheduler reloaded after merge.
