@@ -4,6 +4,7 @@ import { executeDueSocialPublications } from '../scripts/publication/social/tikt
 import {
   TikTokPublicationAuthRequiredError,
 } from '../src/tiktok-publication-executor.mjs';
+import { TikTokDirectPostValidationError } from '../src/tiktok-publication.mjs';
 
 function createStore(publications, videos = {}) {
   const rows = new Map(publications.map((publication) => [publication.id, structuredClone(publication)]));
@@ -203,4 +204,34 @@ test('executeDueSocialPublications marks missing TikTok auth as auth_required', 
   assert.equal(results[0].workflow_state, 'auth_required');
   assert.equal(store.current('publication-target-tiktok').status, 'blocked');
   assert.equal(store.current('publication-target-tiktok').metadata.workflow_state, 'auth_required');
+});
+
+test('executeDueSocialPublications blocks a TikTok row that needs renewed approval', async () => {
+  const store = createStore([dueTikTokPublication], {
+    'video-1': {
+      id: 'video-1',
+      render: {
+        output_path: 'data/runtime/product-video-agent/poke-quizz/example.mp4',
+      },
+    },
+  });
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-07T12:00:00.000Z',
+  }, {
+    runtimeConfig: { env: {} },
+    publicationStore: store,
+    publishTikTokVideo: async () => {
+      throw new TikTokDirectPostValidationError(
+        'TikTok post approval is missing.',
+        { code: 'tiktok_consent_required' },
+      );
+    },
+  });
+
+  assert.equal(results[0].action, 'tiktok_publish_failed');
+  assert.equal(results[0].workflow_state, 'approval_required');
+  assert.equal(results[0].reason, 'tiktok_consent_required');
+  assert.equal(store.current('publication-target-tiktok').status, 'blocked');
+  assert.equal(store.current('publication-target-tiktok').metadata.workflow_state, 'approval_required');
 });
