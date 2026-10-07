@@ -183,7 +183,7 @@
                 "stitch_enabled": false,
                 "brand_content_toggle": false,
                 "brand_organic_toggle": false,
-                "is_aigc": true,
+                "is_aigc": false,
                 "video_cover_timestamp_ms": 1000
               }
             }

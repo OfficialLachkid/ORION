@@ -58,7 +58,7 @@ test('publication reconciliation plist runs lightweight follow-ups at 08:05, 12:
   }
 });
 
-test('follow-up times are derived from active channel publication slots and handle rollover', () => {
+test('scheduler wake times are derived from all active channel slots and handle rollover', () => {
   const profiles = [
     {
       status: 'active',
