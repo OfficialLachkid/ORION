@@ -358,6 +358,12 @@ function buildSourceLifecyclePatch(childPublication = {}, sourcePublication = {}
     if (hasExternalId || CHILD_DELIVERY_STARTED_STATES.has(childState)) {
       const reason = `source_${sourceState}_after_delivery_started`;
       if (
+        childPublication.metadata?.source_lifecycle_action_required === false
+        && normalizeText(childPublication.metadata?.source_lifecycle_resolved_at)
+      ) {
+        return null;
+      }
+      if (
         childPublication.metadata?.source_lifecycle_action_required === true
         && childPublication.metadata?.source_lifecycle_reason === reason
       ) {
@@ -369,6 +375,8 @@ function buildSourceLifecyclePatch(childPublication = {}, sourcePublication = {}
             ...lifecycleMetadata,
             source_lifecycle_action_required: true,
             source_lifecycle_reason: reason,
+            source_lifecycle_alert_status: 'pending',
+            source_lifecycle_alert_requested_at: asOf,
           },
         },
         action: 'source_lifecycle_manual_action_required',

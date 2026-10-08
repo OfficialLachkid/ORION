@@ -319,6 +319,8 @@ test('lifecycle reconciliation requests manual action after platform delivery st
 
   assert.equal(storedPatch.status, undefined);
   assert.equal(storedPatch.metadata.source_lifecycle_action_required, true);
+  assert.equal(storedPatch.metadata.source_lifecycle_alert_status, 'pending');
+  assert.equal(storedPatch.metadata.source_lifecycle_alert_requested_at, '2026-09-08T12:00:00.000Z');
   assert.equal(reconciliation.results[0].action, 'source_lifecycle_manual_action_required');
 });
 
@@ -354,4 +356,42 @@ test('lifecycle reconciliation leaves an already withdrawn unstarted child uncha
   assert.equal(updateCalls, 0);
   assert.deepEqual(reconciliation.results, []);
   assert.equal(reconciliation.publications[0].status, 'withdrawn');
+});
+
+test('lifecycle reconciliation does not reopen a resolved post-start action', async () => {
+  const [child] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+  });
+  child.status = 'published';
+  child.external_id = 'publish-123';
+  child.metadata = {
+    ...child.metadata,
+    workflow_state: 'published',
+    source_lifecycle_action_required: false,
+    source_lifecycle_resolution: 'made_private',
+    source_lifecycle_resolved_at: '2026-09-08T12:03:00.000Z',
+  };
+  const source = {
+    ...sourcePublication,
+    status: 'deleted',
+    metadata: { ...sourcePublication.metadata, workflow_state: 'deleted' },
+  };
+  let updateCalls = 0;
+  const reconciliation = await reconcileAdditionalPlatformPublicationLifecycles({
+    store: {
+      async fetchPublicationById() { return source; },
+      async updatePublication() {
+        updateCalls += 1;
+        return child;
+      },
+    },
+    publications: [child],
+    asOf: '2026-09-08T12:05:00.000Z',
+  });
+
+  assert.equal(updateCalls, 0);
+  assert.deepEqual(reconciliation.results, []);
 });

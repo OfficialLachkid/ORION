@@ -122,6 +122,7 @@
     "product-video:register-poke-quizz-publication": "node services/product-video-agent/scripts/register-poke-quizz-publication.mjs",
     "product-video:execute-youtube-publication": "node services/product-video-agent/scripts/execute-youtube-publication.mjs",
     "product-video:execute-tiktok-publication": "node services/product-video-agent/scripts/publication/social/tiktok/execute-due-publications.mjs",
+    "product-video:resolve-tiktok-lifecycle-action": "node services/product-video-agent/scripts/publication/social/tiktok/execute-due-publications.mjs",
     "product-video:authorize-tiktok": "node scripts/tiktok-authorize.mjs",
     "product-video:approve-tiktok-post": "node scripts/tiktok-approve-publication.mjs",
     "product-video:localize-poke-quizz-assets": "node services/product-video-agent/scripts/localize-poke-quizz-assets.mjs",
