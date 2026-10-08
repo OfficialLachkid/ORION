@@ -20,7 +20,7 @@ test('provisionBucket creates the isolated public MP4 bucket', async () => {
     maxFileBytes: 50_000_000,
     fetchImpl: async (url, options) => {
       requests.push({ url: String(url), options });
-      if (options.method === 'GET') return jsonResponse(404, { message: 'not found' });
+      if (options.method === 'GET') return jsonResponse(400, { message: 'Bucket not found' });
       return jsonResponse(200, { name: 'orion-publication-staging' });
     },
   });
@@ -37,6 +37,16 @@ test('provisionBucket creates the isolated public MP4 bucket', async () => {
     file_size_limit: 50_000_000,
     allowed_mime_types: ['video/mp4'],
   });
+});
+
+test('inspectBucket does not hide unrelated Supabase 400 responses', async () => {
+  const staging = new SupabasePublicationStaging({
+    supabaseUrl: 'https://project.supabase.co',
+    apiKey: 'secret',
+    fetchImpl: async () => jsonResponse(400, { message: 'Invalid bucket name' }),
+  });
+
+  await assert.rejects(() => staging.inspectBucket(), /Invalid bucket name/u);
 });
 
 test('stageFile uploads a never-overwritten object and returns its direct public URL', async () => {
