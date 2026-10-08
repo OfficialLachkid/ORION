@@ -8,6 +8,8 @@ import { hashFileSha256 } from './tiktok-publication-executor.mjs';
 
 export const YOUTUBE_SHORTS_PLATFORM = 'youtube_shorts';
 export const TIKTOK_VIDEO_PLATFORM = 'tiktok_video';
+export const TIKTOK_DIRECT_DELIVERY_PROVIDER = 'tiktok_direct';
+export const BUFFER_DELIVERY_PROVIDER = 'buffer';
 const SOURCE_CANCELLED_STATES = new Set(['deleted', 'revision_requested', 'withdrawn']);
 const CHILD_PENDING_STATES = new Set(['queued', 'scheduled']);
 const CHILD_DELIVERY_STARTED_STATES = new Set(['publishing', 'published']);
@@ -31,6 +33,13 @@ function normalizeScheduleMode(value) {
   const text = normalizeText(value).toLowerCase();
   if (text === 'immediate') return 'immediate';
   return 'orion';
+}
+
+function normalizeDeliveryProvider(value, platform) {
+  const text = normalizeText(value).toLowerCase().replace(/[-\s]+/gu, '_');
+  if (platform !== TIKTOK_VIDEO_PLATFORM) return text;
+  if (text === BUFFER_DELIVERY_PROVIDER) return BUFFER_DELIVERY_PROVIDER;
+  return TIKTOK_DIRECT_DELIVERY_PROVIDER;
 }
 
 function normalizeVisibility(value, platform) {
@@ -66,12 +75,19 @@ export function normalizePlatformPublicationTarget(target = {}, channelProfile =
     accountKey,
     enabled: target.enabled === true,
     scheduleMode: normalizeScheduleMode(target.schedule_mode || target.scheduleMode),
+    deliveryProvider: normalizeDeliveryProvider(
+      target.delivery_provider || target.deliveryProvider,
+      platform,
+    ),
     visibility: normalizeVisibility(target.visibility, platform),
     metadata: target.metadata && typeof target.metadata === 'object'
       ? { ...target.metadata }
       : {},
     tiktok: target.tiktok && typeof target.tiktok === 'object'
       ? { ...target.tiktok }
+      : {},
+    buffer: target.buffer && typeof target.buffer === 'object'
+      ? { ...target.buffer }
       : {},
     sourceAccountKey: normalizeText(channelProfile.account_key),
   };
@@ -119,8 +135,10 @@ function serializeTargetForMetadata(target = {}) {
     platform: target.platform || '',
     account_key: target.accountKey || '',
     schedule_mode: target.scheduleMode || 'orion',
+    delivery_provider: target.deliveryProvider || '',
     visibility: target.visibility || '',
     tiktok: target.tiktok || {},
+    buffer: target.buffer || {},
     metadata: target.metadata || {},
   };
 }
@@ -132,6 +150,8 @@ function normalizeWorkflowState(publication = {}) {
 function requireTikTokApprovalIdentity(target = {}, reviewedSettings = {}) {
   const creatorUsername = normalizeText(
     reviewedSettings.creatorUsername
+      || target.buffer?.expected_username
+      || target.buffer?.expectedUsername
       || target.tiktok?.expected_username
       || target.tiktok?.expectedUsername,
   ).replace(/^@/u, '').toLowerCase();
@@ -177,6 +197,13 @@ async function addTikTokDirectPostApproval({
         publication_id: row.id,
         video_id: row.video_id,
         account_key: row.account_key,
+        delivery_provider: target.delivery_provider
+          || target.deliveryProvider
+          || TIKTOK_DIRECT_DELIVERY_PROVIDER,
+        buffer_organization_id: normalizeText(
+          target.buffer?.organization_id || target.buffer?.organizationId,
+        ),
+        buffer_channel_id: normalizeText(target.buffer?.channel_id || target.buffer?.channelId),
         creator_username: requireTikTokApprovalIdentity(target, reviewedSettings),
         render_path: renderPath,
         video_size_bytes: Number(fileStats.size),

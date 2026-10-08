@@ -82,6 +82,37 @@ test('listEnabledAdditionalPublicationTargets returns enabled non-source platfor
   assert.equal(targets[0].platform, TIKTOK_VIDEO_PLATFORM);
   assert.equal(targets[0].accountKey, 'poke-quizz-tiktok');
   assert.equal(targets[0].tiktok.access_token_env, 'TIKTOK_POKE_QUIZZ_ACCESS_TOKEN');
+  assert.equal(targets[0].deliveryProvider, 'tiktok_direct');
+});
+
+test('Buffer targets retain provider and channel identity in publication metadata', () => {
+  const profile = structuredClone(sourceChannelProfile);
+  profile.metadata.publisher.targets[1] = {
+    platform: 'tiktok_video',
+    account_key: 'poke-quizz-tiktok',
+    enabled: true,
+    schedule_mode: 'orion',
+    delivery_provider: 'buffer',
+    buffer: {
+      organization_id: 'organization-1',
+      channel_id: 'channel-1',
+      expected_service: 'tiktok',
+      expected_username: 'pokequizz7',
+    },
+  };
+
+  const [target] = listEnabledAdditionalPublicationTargets(profile);
+  const [row] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile: profile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+  });
+
+  assert.equal(target.deliveryProvider, 'buffer');
+  assert.equal(target.buffer.channel_id, 'channel-1');
+  assert.equal(row.metadata.publisher_target.delivery_provider, 'buffer');
+  assert.equal(row.metadata.publisher_target.buffer.organization_id, 'organization-1');
 });
 
 test('buildAdditionalPlatformPublicationRows creates a scheduled TikTok publication row from a YouTube source', () => {
@@ -188,9 +219,63 @@ test('upsertAdditionalPlatformPublicationTargets stores enabled additional targe
   assert.equal(results[0].platform, TIKTOK_VIDEO_PLATFORM);
   assert.equal(results[0].workflow_state, 'scheduled');
   assert.equal(upsertedRows[0].metadata.tiktok_direct_post_approval.approved, true);
+  assert.equal(
+    upsertedRows[0].metadata.tiktok_direct_post_approval.delivery_provider,
+    'tiktok_direct',
+  );
   assert.equal(upsertedRows[0].metadata.tiktok_direct_post_approval.creator_username, 'pokequizz7');
   assert.equal(upsertedRows[0].metadata.tiktok_direct_post_approval.allow_comment, false);
   assert.equal(upsertedRows[0].metadata.tiktok_direct_post_approval.video_sha256, 'a'.repeat(64));
+});
+
+test('shared approval binds a Buffer delivery to its exact organization and channel', async () => {
+  const profile = structuredClone(sourceChannelProfile);
+  profile.metadata.publisher.targets[1] = {
+    platform: 'tiktok_video',
+    account_key: 'poke-quizz-tiktok',
+    enabled: true,
+    delivery_provider: 'buffer',
+    buffer: {
+      organization_id: 'organization-1',
+      channel_id: 'channel-1',
+      expected_service: 'tiktok',
+      expected_username: 'pokequizz7',
+    },
+  };
+  let storedRow;
+
+  await upsertAdditionalPlatformPublicationTargets({
+    store: {
+      async upsertPublication(row) {
+        storedRow = row;
+        return row;
+      },
+    },
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile: profile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+    projectRoot: '/workspace',
+    statImpl: async () => ({ size: 4000 }),
+    hashFileImpl: async () => 'a'.repeat(64),
+    approval: {
+      approvedAt: '2026-09-07T12:00:00.000Z',
+      approvedBy: 'Lachkid',
+      reviewTaskId: 'TASK-REVIEW',
+      tiktokDirectPost: {
+        accountKey: 'poke-quizz-tiktok',
+        creatorUsername: 'pokequizz7',
+        caption: 'Guess the Pokemon!',
+        privacyLevel: 'PUBLIC',
+        isAigc: false,
+      },
+    },
+  });
+
+  const approval = storedRow.metadata.tiktok_direct_post_approval;
+  assert.equal(approval.delivery_provider, 'buffer');
+  assert.equal(approval.buffer_organization_id, 'organization-1');
+  assert.equal(approval.buffer_channel_id, 'channel-1');
 });
 
 test('upsertAdditionalPlatformPublicationTargets preserves an existing delivery row', async () => {

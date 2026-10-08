@@ -3,6 +3,7 @@ import { buildApprovalButtons } from '../../../../../../discord-bot/src/approval
 import { buildOutboundEventDiscordPayload } from '../../../../../../discord-bot/src/message-formatting.mjs';
 import { formatYoutubeAutoCommentStatusLabel } from '../../../../youtube-auto-comments.mjs';
 import {
+  BUFFER_DELIVERY_PROVIDER,
   TIKTOK_VIDEO_PLATFORM,
   listEnabledAdditionalPublicationTargets,
 } from '../../../../social-publication-targets.mjs';
@@ -266,15 +267,24 @@ function buildDestinationReview(publication = {}, channelProfile = {}) {
   }
 
   const config = tiktokTarget.tiktok || {};
-  const creatorUsername = String(config.expected_username || config.expectedUsername || '')
+  const bufferConfig = tiktokTarget.buffer || {};
+  const isBuffer = tiktokTarget.deliveryProvider === BUFFER_DELIVERY_PROVIDER;
+  const creatorUsername = String(
+    bufferConfig.expected_username
+      || bufferConfig.expectedUsername
+      || config.expected_username
+      || config.expectedUsername
+      || '',
+  )
     .trim()
     .replace(/^@/u, '')
     .toLowerCase();
   const tiktokDirectPost = {
     accountKey: tiktokTarget.accountKey,
+    deliveryProvider: tiktokTarget.deliveryProvider,
     creatorUsername,
     caption: buildTikTokCaption(publication, tiktokTarget),
-    privacyLevel: String(config.privacy_level || 'SELF_ONLY').trim(),
+    privacyLevel: String(isBuffer ? 'PUBLIC' : config.privacy_level || 'SELF_ONLY').trim(),
     allowComment: config.comments_enabled === true,
     allowDuet: config.duet_enabled === true,
     allowStitch: config.stitch_enabled === true,
@@ -284,13 +294,20 @@ function buildDestinationReview(publication = {}, channelProfile = {}) {
     videoCoverTimestampMs: Number(config.video_cover_timestamp_ms || 1000),
   };
   destinationLabels.push(creatorUsername ? `TikTok @${creatorUsername}` : 'TikTok');
+  const providerLabel = isBuffer ? 'Buffer automatic publish' : 'TikTok Direct Post';
+  const controlsLabel = isBuffer
+    ? 'TikTok interaction settings remain account/post defaults in Buffer.'
+    : `Comments: ${tiktokDirectPost.allowComment ? 'on' : 'off'}; Duet: ${tiktokDirectPost.allowDuet ? 'on' : 'off'}; Stitch: ${tiktokDirectPost.allowStitch ? 'on' : 'off'}`;
   return {
     destinationsLabel: destinationLabels.join(' + '),
     tiktokDirectPost,
     tiktokDirectPostLabel: [
+      `Delivery: ${providerLabel}`,
       `Account: @${creatorUsername || 'not configured'}`,
-      `Privacy: ${tiktokDirectPost.privacyLevel}`,
-      `Comments: ${tiktokDirectPost.allowComment ? 'on' : 'off'}; Duet: ${tiktokDirectPost.allowDuet ? 'on' : 'off'}; Stitch: ${tiktokDirectPost.allowStitch ? 'on' : 'off'}`,
+      isBuffer
+        ? `Visibility: ${tiktokDirectPost.privacyLevel}`
+        : `Privacy: ${tiktokDirectPost.privacyLevel}`,
+      controlsLabel,
       `Commercial content: ${tiktokDirectPost.brandContentToggle || tiktokDirectPost.brandOrganicToggle ? 'yes' : 'no'}; AI-generated label: ${tiktokDirectPost.isAigc ? 'on' : 'off'}`,
       `Caption: ${tiktokDirectPost.caption}`,
     ].join('\n'),

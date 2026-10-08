@@ -171,18 +171,15 @@
               "account_key": "poke-quizz-tiktok",
               "enabled": true,
               "schedule_mode": "orion",
-              "visibility": "private",
+              "delivery_provider": "buffer",
+              "visibility": "public",
+              "buffer": {
+                "organization_id": "6ac791479c11c0b26c69c8d6",
+                "channel_id": "6ac793566a5c39ccb65087fb",
+                "expected_service": "tiktok",
+                "expected_username": "pokequizz7"
+              },
               "tiktok": {
-                "access_token_env": "TIKTOK_POKE_QUIZZ_ACCESS_TOKEN",
-                "environment": "sandbox",
-                "direct_post_audit": "unaudited",
-                "expected_username": "pokequizz7",
-                "privacy_level": "SELF_ONLY",
-                "comments_enabled": false,
-                "duet_enabled": false,
-                "stitch_enabled": false,
-                "brand_content_toggle": false,
-                "brand_organic_toggle": false,
                 "is_aigc": false,
                 "video_cover_timestamp_ms": 1000
               }

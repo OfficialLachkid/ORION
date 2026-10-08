@@ -109,6 +109,38 @@ test('buildPokeQuizzPublicationReviewTask creates an approval-gated publish task
   assert.match(task.poke_quizz_publication_review.tiktokDirectPostLabel, /AI-generated label: off/u);
 });
 
+test('Buffer delivery is disclosed on the same shared publication review', () => {
+  const bufferChannelProfile = structuredClone(channelProfile);
+  bufferChannelProfile.metadata.publisher.targets[0] = {
+    platform: 'tiktok_video',
+    account_key: 'poke-quizz-tiktok',
+    enabled: true,
+    delivery_provider: 'buffer',
+    buffer: {
+      organization_id: 'organization-1',
+      channel_id: 'channel-1',
+      expected_service: 'tiktok',
+      expected_username: 'pokequizz7',
+    },
+    tiktok: { is_aigc: false },
+  };
+
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    channelProfile: bufferChannelProfile,
+    reviewThreadId: '1532709429902839810',
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+
+  const review = task.poke_quizz_publication_review;
+  assert.equal(review.tiktokDirectPost.deliveryProvider, 'buffer');
+  assert.equal(review.tiktokDirectPost.privacyLevel, 'PUBLIC');
+  assert.match(review.tiktokDirectPostLabel, /Delivery: Buffer automatic publish/u);
+  assert.match(review.tiktokDirectPostLabel, /Visibility: PUBLIC/u);
+  assert.doesNotMatch(review.tiktokDirectPostLabel, /Duet:/u);
+});
+
 test('buildPokeQuizzPublicationReviewTask keeps the same task id when mutable review fields change', () => {
   const firstTask = buildPokeQuizzPublicationReviewTask({
     publication,

@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  cleanupBufferStaging,
   executeDueSocialPublications,
+  provisionBufferStaging,
   resolveTikTokLifecycleAction,
   retryTikTokPublication,
 } from '../scripts/publication/social/tiktok/execute-due-publications.mjs';
@@ -79,6 +81,28 @@ const dueTikTokPublication = {
   },
 };
 
+function asBufferPublication(overrides = {}) {
+  return {
+    ...dueTikTokPublication,
+    ...overrides,
+    metadata: {
+      ...dueTikTokPublication.metadata,
+      ...(overrides.metadata || {}),
+      publisher_target: {
+        account_key: 'poke-quizz-tiktok',
+        platform: 'tiktok_video',
+        delivery_provider: 'buffer',
+        buffer: {
+          organization_id: 'organization-1',
+          channel_id: 'channel-1',
+          expected_service: 'tiktok',
+          expected_username: 'pokequizz7',
+        },
+      },
+    },
+  };
+}
+
 test('executeDueSocialPublications dry-runs due TikTok rows only', async () => {
   const store = createStore([
     dueTikTokPublication,
@@ -114,6 +138,57 @@ test('executeDueSocialPublications dry-runs due TikTok rows only', async () => {
       external_id: '',
     },
   ]);
+});
+
+test('Buffer staging provisioning delegates to the isolated storage adapter', async () => {
+  let calls = 0;
+  const result = await provisionBufferStaging({}, {
+    runtimeConfig: { env: {} },
+    stagingClient: {
+      async provisionBucket() {
+        calls += 1;
+        return { created: true, bucket: { name: 'orion-publication-staging' } };
+      },
+    },
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(result.created, true);
+});
+
+test('Buffer staging cleanup protects every object still referenced by publication state', async () => {
+  const store = createStore([
+    asBufferPublication({
+      metadata: {
+        buffer_staging_object_path: 'buffer/active.mp4',
+      },
+    }),
+    asBufferPublication({
+      id: 'published-buffer',
+      metadata: {
+        buffer_staging_object_path: 'buffer/already-removed.mp4',
+        buffer_staging_removed_at: '2026-09-07T11:00:00.000Z',
+      },
+    }),
+  ]);
+  let cleanupInput;
+
+  await cleanupBufferStaging({
+    'as-of': '2026-09-07T12:00:00.000Z',
+    'max-age-hours': '24',
+  }, {
+    runtimeConfig: { env: {} },
+    publicationStore: store,
+    stagingClient: {
+      async cleanupStaleObjects(input) {
+        cleanupInput = input;
+        return { removedPaths: [] };
+      },
+    },
+  });
+
+  assert.equal(cleanupInput.olderThan, '2026-09-06T12:00:00.000Z');
+  assert.deepEqual(cleanupInput.protectedPaths, ['buffer/active.mp4']);
 });
 
 test('executeDueSocialPublications withdraws a due child when its source was cancelled', async () => {
@@ -383,6 +458,156 @@ test('executeDueSocialPublications preserves publish id when upload fails after 
   assert.ok(store.current('publication-target-tiktok').metadata.next_status_poll_at);
 });
 
+test('executeDueSocialPublications blocks new Buffer delivery while the live gate is off', async () => {
+  const publication = asBufferPublication();
+  const store = createStore([publication], {
+    'video-1': { id: 'video-1', render: { output_path: 'example.mp4' } },
+  });
+  let publishCalls = 0;
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-07T12:00:00.000Z',
+  }, {
+    runtimeConfig: { env: { BUFFER_TIKTOK_DELIVERY_ENABLED: 'false' } },
+    publicationStore: store,
+    publishBufferVideo: async () => { publishCalls += 1; },
+  });
+
+  assert.equal(publishCalls, 0);
+  assert.equal(results[0].action, 'buffer_publish_blocked');
+  assert.equal(store.current(publication.id).status, 'scheduled');
+});
+
+test('executeDueSocialPublications rejects a non-targeted Buffer live override', async () => {
+  await assert.rejects(
+    () => executeDueSocialPublications({ 'allow-buffer-live': true }, {
+      runtimeConfig: { env: {} },
+      publicationStore: createStore([]),
+    }),
+    /requires --publication-id/u,
+  );
+});
+
+test('executeDueSocialPublications permits one targeted supervised Buffer delivery', async () => {
+  const publication = asBufferPublication();
+  const store = createStore([publication], {
+    'video-1': { id: 'video-1', render: { output_path: 'example.mp4' } },
+  });
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-07T12:00:00.000Z',
+    'publication-id': publication.id,
+    'allow-buffer-live': true,
+  }, {
+    runtimeConfig: { env: { BUFFER_TIKTOK_DELIVERY_ENABLED: 'false' } },
+    publicationStore: store,
+    publishBufferVideo: async ({ target, onStaged, onInitialized }) => {
+      assert.equal(target.deliveryProvider, 'buffer');
+      assert.equal(target.buffer.channel_id, 'channel-1');
+      await onStaged({
+        objectPath: 'buffer/publication-target-tiktok/random.mp4',
+        publicUrl: 'https://project.supabase.co/video.mp4',
+        stagedAt: '2026-09-07T12:00:00.000Z',
+        videoSha256: 'a'.repeat(64),
+      });
+      await onInitialized({
+        externalId: 'buffer-post-1',
+        postId: 'buffer-post-1',
+        initializedAt: '2026-09-07T12:00:00.000Z',
+        rawStatus: 'sending',
+      });
+      return {
+        status: 'publishing',
+        workflowState: 'publishing',
+        rawStatus: 'sending',
+        externalId: 'buffer-post-1',
+        postId: 'buffer-post-1',
+        uploadedAt: '2026-09-07T12:00:00.000Z',
+        stagingRemoved: false,
+      };
+    },
+  });
+
+  const stored = store.current(publication.id);
+  assert.equal(results[0].action, 'buffer_publish_upload');
+  assert.equal(stored.external_id, 'buffer-post-1');
+  assert.equal(stored.metadata.buffer_post_id, 'buffer-post-1');
+  assert.equal(stored.metadata.buffer_staging_object_path, 'buffer/publication-target-tiktok/random.mp4');
+  assert.equal(stored.metadata.buffer_create_uncertain, false);
+});
+
+test('executeDueSocialPublications keeps an uncertain Buffer create in recovery polling', async () => {
+  const publication = asBufferPublication();
+  const store = createStore([publication], {
+    'video-1': { id: 'video-1', render: { output_path: 'example.mp4' } },
+  });
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-07T12:00:00.000Z',
+  }, {
+    runtimeConfig: { env: { BUFFER_TIKTOK_DELIVERY_ENABLED: 'true' } },
+    publicationStore: store,
+    publishBufferVideo: async ({ onStaged }) => {
+      await onStaged({
+        objectPath: 'buffer/publication-target-tiktok/random.mp4',
+        publicUrl: 'https://project.supabase.co/video.mp4',
+        stagedAt: '2026-09-07T12:00:00.000Z',
+        videoSha256: 'a'.repeat(64),
+      });
+      const error = new Error('create outcome unknown');
+      error.code = 'buffer_create_uncertain';
+      throw error;
+    },
+  });
+
+  const stored = store.current(publication.id);
+  assert.equal(results[0].action, 'buffer_create_uncertain');
+  assert.equal(stored.status, 'publishing');
+  assert.equal(stored.external_id || null, null);
+  assert.equal(stored.metadata.buffer_create_uncertain, true);
+  assert.ok(stored.metadata.next_status_poll_at);
+});
+
+test('executeDueSocialPublications polls Buffer and removes the staging reference after sent', async () => {
+  const publication = asBufferPublication({
+    status: 'publishing',
+    external_id: 'buffer-post-1',
+    metadata: {
+      workflow_state: 'publishing',
+      next_status_poll_at: '2026-09-07T11:59:00.000Z',
+      buffer_staging_object_path: 'buffer/publication-target-tiktok/random.mp4',
+      buffer_staging_public_url: 'https://project.supabase.co/video.mp4',
+    },
+  });
+  const store = createStore([publication]);
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-07T12:00:00.000Z',
+  }, {
+    runtimeConfig: { env: { BUFFER_TIKTOK_DELIVERY_ENABLED: 'false' } },
+    publicationStore: store,
+    fetchBufferPublicationStatus: async ({ postId, target }) => {
+      assert.equal(postId, 'buffer-post-1');
+      assert.equal(target.buffer.organization_id, 'organization-1');
+      return {
+        status: 'published',
+        rawStatus: 'sent',
+        postId: 'buffer-post-1',
+        externalId: 'buffer-post-1',
+        publicUrl: 'https://www.tiktok.com/@pokequizz7/video/123',
+        publishedAt: '2026-09-07T12:00:30.000Z',
+        stagingRemoved: true,
+      };
+    },
+  });
+
+  const stored = store.current(publication.id);
+  assert.equal(results[0].action, 'buffer_status_fetch');
+  assert.equal(stored.status, 'published');
+  assert.equal(stored.published_at, '2026-09-07T12:00:30.000Z');
+  assert.equal(stored.metadata.buffer_staging_removed_at, '2026-09-07T12:00:00.000Z');
+});
+
 test('retryTikTokPublication requeues only an approved row without a publish id', async () => {
   const store = createStore([{
     ...dueTikTokPublication,
@@ -428,6 +653,32 @@ test('retryTikTokPublication refuses a row that already has a publish id', async
     }),
     /poll status instead of retrying/u,
   );
+});
+
+test('retryTikTokPublication requeues a known terminal Buffer error and preserves its prior id', async () => {
+  const publication = asBufferPublication({
+    status: 'failed',
+    external_id: 'buffer-post-failed',
+    metadata: {
+      workflow_state: 'failed',
+      buffer_status: 'error',
+      tiktok_direct_post_approval: { approved: true },
+    },
+  });
+  const store = createStore([publication]);
+
+  const result = await retryTikTokPublication({
+    'retry-publication-id': publication.id,
+    'as-of': '2026-09-07T13:00:00.000Z',
+  }, {
+    runtimeConfig: { env: {} },
+    publicationStore: store,
+  });
+
+  const stored = store.current(publication.id);
+  assert.equal(result.action, 'tiktok_upload_retry_queued');
+  assert.equal(stored.external_id, null);
+  assert.deepEqual(stored.metadata.buffer_previous_post_ids, ['buffer-post-failed']);
 });
 
 test('resolveTikTokLifecycleAction records a manual remote outcome', async () => {

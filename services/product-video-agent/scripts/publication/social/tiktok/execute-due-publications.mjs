@@ -6,9 +6,18 @@ import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../../../lib/runtime-config.mjs';
 import { SupabasePublicationStore } from '../../../../src/publication-store.mjs';
 import {
+  BUFFER_DELIVERY_PROVIDER,
   TIKTOK_VIDEO_PLATFORM,
+  TIKTOK_DIRECT_DELIVERY_PROVIDER,
   reconcileAdditionalPlatformPublicationLifecycles,
 } from '../../../../src/social-publication-targets.mjs';
+import {
+  BufferPublicationUncertainError,
+  BufferPublicationValidationError,
+  createSupabaseStagingClient,
+  fetchBufferPublicationStatus,
+  publishBufferVideo,
+} from '../../../../src/buffer-publication-executor.mjs';
 import {
   TikTokPublicationAuthRequiredError,
   fetchTikTokPublicationStatus,
@@ -48,7 +57,14 @@ function resolveTikTokDueAction(publication = {}, asOf = new Date().toISOString(
     return '';
   }
   const state = normalizeWorkflowState(publication);
-  if (state === 'publishing' && normalizeText(publication.external_id)) {
+  const provider = resolveDeliveryProvider(publication);
+  const canPoll = normalizeText(publication.external_id)
+    || (
+      provider === BUFFER_DELIVERY_PROVIDER
+      && publication.metadata?.buffer_create_uncertain === true
+      && normalizeText(publication.metadata?.buffer_staging_public_url)
+    );
+  if (state === 'publishing' && canPoll) {
     return isDueAt(publication.metadata?.next_status_poll_at, asOf) ? 'status' : '';
   }
   if (!['queued', 'scheduled'].includes(state)) {
@@ -78,15 +94,19 @@ function resolveStoredTarget(publication = {}) {
     ? {
       platform: TIKTOK_VIDEO_PLATFORM,
       accountKey: normalizeText(target.account_key || publication.account_key),
+      deliveryProvider: normalizeText(target.delivery_provider) || TIKTOK_DIRECT_DELIVERY_PROVIDER,
       visibility: normalizeText(target.visibility || publication.visibility || 'private'),
       tiktok: target.tiktok && typeof target.tiktok === 'object' ? target.tiktok : {},
+      buffer: target.buffer && typeof target.buffer === 'object' ? target.buffer : {},
       metadata: target.metadata && typeof target.metadata === 'object' ? target.metadata : {},
     }
     : {
       platform: TIKTOK_VIDEO_PLATFORM,
       accountKey: normalizeText(publication.account_key),
+      deliveryProvider: resolveDeliveryProvider(publication),
       visibility: normalizeText(publication.visibility || 'private'),
       tiktok: {},
+      buffer: {},
       metadata: {},
     };
 }
@@ -106,7 +126,7 @@ function nextStatusPollAt(asOf) {
   return new Date(date.getTime() + 15 * 60 * 1000).toISOString();
 }
 
-function statusPatchForResult(publication, statusResult, asOf) {
+function statusPatchForResult(publication, statusResult, asOf, provider) {
   const status = statusResult.status || 'publishing';
   const workflowState = status === 'published'
     ? 'published'
@@ -115,18 +135,46 @@ function statusPatchForResult(publication, statusResult, asOf) {
       : 'publishing';
   return {
     status,
-    ...(workflowState === 'published' ? { published_at: asOf } : {}),
+    ...(statusResult.externalId ? { external_id: statusResult.externalId } : {}),
+    ...(workflowState === 'published' ? { published_at: statusResult.publishedAt || asOf } : {}),
     ...(statusResult.publicUrl ? { public_url: statusResult.publicUrl } : {}),
-    metadata: buildMetadataPatch(publication, {
-      workflow_state: workflowState,
-      tiktok_status: statusResult.rawStatus || status,
-      tiktok_status_checked_at: asOf,
-      tiktok_fail_reason: statusResult.failReason || '',
-      tiktok_post_id: statusResult.postId || '',
-      tiktok_public_url: statusResult.publicUrl || '',
-      next_status_poll_at: workflowState === 'publishing' ? nextStatusPollAt(asOf) : '',
-    }),
+    metadata: buildMetadataPatch(publication, provider === BUFFER_DELIVERY_PROVIDER
+      ? {
+        workflow_state: workflowState,
+        delivery_provider: BUFFER_DELIVERY_PROVIDER,
+        buffer_status: statusResult.rawStatus || status,
+        buffer_status_checked_at: asOf,
+        buffer_fail_reason: statusResult.failReason || '',
+        buffer_post_id: statusResult.postId || publication.external_id || '',
+        buffer_public_url: statusResult.publicUrl || '',
+        buffer_create_uncertain: false,
+        buffer_staging_removed_at: statusResult.stagingRemoved ? asOf : '',
+        next_status_poll_at: workflowState === 'publishing' ? nextStatusPollAt(asOf) : '',
+      }
+      : {
+        workflow_state: workflowState,
+        tiktok_status: statusResult.rawStatus || status,
+        tiktok_status_checked_at: asOf,
+        tiktok_fail_reason: statusResult.failReason || '',
+        tiktok_post_id: statusResult.postId || '',
+        tiktok_public_url: statusResult.publicUrl || '',
+        next_status_poll_at: workflowState === 'publishing' ? nextStatusPollAt(asOf) : '',
+      }),
   };
+}
+
+function normalizeBoolean(value) {
+  return ['1', 'true', 'yes', 'on'].includes(normalizeText(value).toLowerCase());
+}
+
+function resolveDeliveryProvider(publication = {}) {
+  const provider = normalizeText(
+    publication.metadata?.publisher_target?.delivery_provider
+      || publication.metadata?.tiktok_direct_post_approval?.delivery_provider,
+  ).toLowerCase();
+  return provider === BUFFER_DELIVERY_PROVIDER
+    ? BUFFER_DELIVERY_PROVIDER
+    : TIKTOK_DIRECT_DELIVERY_PROVIDER;
 }
 
 export async function retryTikTokPublication(options = {}, dependencies = {}) {
@@ -141,9 +189,19 @@ export async function retryTikTokPublication(options = {}, dependencies = {}) {
   if (!publication || normalizeText(publication.platform) !== TIKTOK_VIDEO_PLATFORM) {
     throw new Error(`TikTok publication ${publicationId} was not found.`);
   }
-  if (normalizeText(publication.external_id)) {
+  const deliveryProvider = resolveDeliveryProvider(publication);
+  const externalId = normalizeText(publication.external_id);
+  const isKnownBufferFailure = deliveryProvider === BUFFER_DELIVERY_PROVIDER
+    && normalizeWorkflowState(publication) === 'failed'
+    && normalizeText(publication.metadata?.buffer_status).toLowerCase() === 'error';
+  if (externalId && !isKnownBufferFailure) {
     throw new Error(
       `TikTok publication ${publicationId} already has publish id ${publication.external_id}; poll status instead of retrying the upload.`,
+    );
+  }
+  if (publication.metadata?.buffer_create_uncertain === true) {
+    throw new Error(
+      `TikTok publication ${publicationId} has an uncertain Buffer create attempt; recover or resolve it before retrying.`,
     );
   }
   if (publication.metadata?.tiktok_direct_post_approval?.approved !== true) {
@@ -152,6 +210,7 @@ export async function retryTikTokPublication(options = {}, dependencies = {}) {
 
   const updated = await store.updatePublication(publicationId, {
     status: publication.scheduled_for ? 'scheduled' : 'queued',
+    ...(isKnownBufferFailure ? { external_id: null } : {}),
     metadata: buildMetadataPatch(publication, {
       workflow_state: publication.scheduled_for ? 'scheduled' : 'queued',
       publish_claim_token: '',
@@ -159,6 +218,20 @@ export async function retryTikTokPublication(options = {}, dependencies = {}) {
       publish_attempt_error: '',
       publish_retry_requested_at: asOf,
       next_status_poll_at: '',
+      ...(isKnownBufferFailure
+        ? {
+          buffer_previous_post_ids: [
+            ...new Set([
+              ...(Array.isArray(publication.metadata?.buffer_previous_post_ids)
+                ? publication.metadata.buffer_previous_post_ids
+                : []),
+              externalId,
+            ].filter(Boolean)),
+          ],
+          buffer_post_id: '',
+          buffer_create_uncertain: false,
+        }
+        : {}),
     }),
   });
   return {
@@ -181,19 +254,62 @@ export async function resolveTikTokLifecycleAction(options = {}, dependencies = 
   });
 }
 
+export async function provisionBufferStaging(options = {}, dependencies = {}) {
+  const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
+  const stagingClient = dependencies.stagingClient
+    || createSupabaseStagingClient(runtimeConfig.env || {});
+  return stagingClient.provisionBucket();
+}
+
+export async function cleanupBufferStaging(options = {}, dependencies = {}) {
+  const asOf = getStringOption(options, 'as-of', new Date().toISOString());
+  const maxAgeHours = Number(getStringOption(options, 'max-age-hours', '48'));
+  if (!Number.isFinite(maxAgeHours) || maxAgeHours < 1) {
+    throw new Error('Buffer staging cleanup requires --max-age-hours >= 1.');
+  }
+  const cutoff = new Date(new Date(asOf).getTime() - maxAgeHours * 60 * 60 * 1000);
+  if (Number.isNaN(cutoff.getTime())) {
+    throw new Error('Buffer staging cleanup requires a valid --as-of timestamp.');
+  }
+  const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
+  const store = dependencies.publicationStore || createPublicationStore(runtimeConfig);
+  const stagingClient = dependencies.stagingClient
+    || createSupabaseStagingClient(runtimeConfig.env || {});
+  const publications = await store.fetchPublicationsByPlatform({
+    platform: TIKTOK_VIDEO_PLATFORM,
+    order: 'created_at.asc',
+  });
+  const protectedPaths = publications
+    .filter((publication) => !normalizeText(publication.metadata?.buffer_staging_removed_at))
+    .map((publication) => normalizeText(publication.metadata?.buffer_staging_object_path))
+    .filter(Boolean);
+  return stagingClient.cleanupStaleObjects({
+    prefix: 'buffer',
+    olderThan: cutoff.toISOString(),
+    protectedPaths,
+  });
+}
+
 export async function executeDueSocialPublications(options = {}, dependencies = {}) {
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
   const accountKey = getStringOption(options, 'account-key', '');
+  const publicationId = getStringOption(options, 'publication-id', '');
   const limit = getStringOption(options, 'limit', '');
   const dryRun = getBooleanOption(options, 'dry-run', false);
+  if (getBooleanOption(options, 'allow-buffer-live', false) && !publicationId) {
+    throw new Error('--allow-buffer-live requires --publication-id <id>.');
+  }
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
   const store = dependencies.publicationStore || createPublicationStore(runtimeConfig);
   const publishTikTokVideoImpl = dependencies.publishTikTokVideo || publishTikTokVideo;
   const fetchTikTokPublicationStatusImpl =
     dependencies.fetchTikTokPublicationStatus || fetchTikTokPublicationStatus;
+  const publishBufferVideoImpl = dependencies.publishBufferVideo || publishBufferVideo;
+  const fetchBufferPublicationStatusImpl =
+    dependencies.fetchBufferPublicationStatus || fetchBufferPublicationStatus;
   const deliverLifecycleAlertsImpl = dependencies.deliverSocialPublicationLifecycleAlerts
     || deliverSocialPublicationLifecycleAlerts;
-  const storedPublications = accountKey
+  const fetchedPublications = accountKey
     ? await store.fetchPublicationsByChannel({
       platform: TIKTOK_VIDEO_PLATFORM,
       accountKey,
@@ -203,6 +319,9 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       platform: TIKTOK_VIDEO_PLATFORM,
       order: 'scheduled_for.asc.nullsfirst,created_at.asc',
     });
+  const storedPublications = publicationId
+    ? fetchedPublications.filter((publication) => publication.id === publicationId)
+    : fetchedPublications;
   const lifecycleReconciliation = await reconcileAdditionalPlatformPublicationLifecycles({
     store,
     publications: storedPublications,
@@ -236,6 +355,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       ? await store.fetchVideoById(publication.video_id)
       : null;
     const target = resolveStoredTarget(publication);
+    const deliveryProvider = resolveDeliveryProvider(publication);
     if (dryRun) {
       results.push({
         publication_id: publication.id,
@@ -249,22 +369,53 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       continue;
     }
 
+    const bufferLiveOverride = publicationId === publication.id
+      && getBooleanOption(options, 'allow-buffer-live', false);
+    const bufferDeliveryEnabled = normalizeBoolean(
+      runtimeConfig.env?.BUFFER_TIKTOK_DELIVERY_ENABLED,
+    ) || bufferLiveOverride;
+    if (
+      dueAction === 'upload'
+      && deliveryProvider === BUFFER_DELIVERY_PROVIDER
+      && !bufferDeliveryEnabled
+    ) {
+      results.push({
+        publication_id: publication.id,
+        platform: TIKTOK_VIDEO_PLATFORM,
+        account_key: publication.account_key,
+        action: 'buffer_publish_blocked',
+        workflow_state: normalizeWorkflowState(publication),
+        reason: 'buffer_live_delivery_disabled',
+      });
+      continue;
+    }
+
     if (dueAction === 'status') {
       try {
-        const statusResult = await fetchTikTokPublicationStatusImpl({
-          publishId: publication.external_id,
-          target,
-          runtimeEnv: runtimeConfig.env || {},
-        });
+        const statusResult = deliveryProvider === BUFFER_DELIVERY_PROVIDER
+          ? await fetchBufferPublicationStatusImpl({
+            postId: publication.external_id,
+            publication,
+            target,
+            runtimeEnv: runtimeConfig.env || {},
+            asOf,
+          })
+          : await fetchTikTokPublicationStatusImpl({
+            publishId: publication.external_id,
+            target,
+            runtimeEnv: runtimeConfig.env || {},
+          });
         const updatedPublication = await store.updatePublication(
           publication.id,
-          statusPatchForResult(publication, statusResult, asOf),
+          statusPatchForResult(publication, statusResult, asOf, deliveryProvider),
         ) || publication;
         results.push({
           publication_id: publication.id,
           platform: TIKTOK_VIDEO_PLATFORM,
           account_key: publication.account_key,
-          action: 'tiktok_status_fetch',
+          action: deliveryProvider === BUFFER_DELIVERY_PROVIDER
+            ? 'buffer_status_fetch'
+            : 'tiktok_status_fetch',
           workflow_state: updatedPublication.metadata?.workflow_state || statusResult.status || 'publishing',
           external_id: publication.external_id || '',
           tiktok_status: statusResult.rawStatus || statusResult.status || '',
@@ -275,6 +426,8 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       } catch (error) {
         const isAuthRequired = error instanceof TikTokPublicationAuthRequiredError
           || error?.code === 'tiktok_auth_required';
+        const isBufferUncertain = error instanceof BufferPublicationUncertainError
+          || error?.code === 'buffer_create_uncertain';
         const workflowState = isAuthRequired ? 'auth_required' : 'publishing';
         const status = isAuthRequired ? 'blocked' : 'publishing';
         const updatedPublication = await store.updatePublication(publication.id, {
@@ -282,6 +435,12 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
           metadata: buildMetadataPatch(publication, {
             workflow_state: workflowState,
             tiktok_status_check_error: error.message || String(error),
+            ...(deliveryProvider === BUFFER_DELIVERY_PROVIDER
+              ? {
+                buffer_status_check_error: error.message || String(error),
+                buffer_create_uncertain: isBufferUncertain,
+              }
+              : {}),
             tiktok_status_checked_at: asOf,
             next_status_poll_at: isAuthRequired ? '' : nextStatusPollAt(asOf),
           }),
@@ -290,7 +449,9 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
           publication_id: publication.id,
           platform: TIKTOK_VIDEO_PLATFORM,
           account_key: publication.account_key,
-          action: 'tiktok_status_failed',
+          action: deliveryProvider === BUFFER_DELIVERY_PROVIDER
+            ? 'buffer_status_failed'
+            : 'tiktok_status_failed',
           workflow_state: updatedPublication.metadata?.workflow_state || workflowState,
           reason: isAuthRequired ? 'auth_required' : 'status_fetch_failed',
           error: error.message || String(error),
@@ -323,14 +484,62 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
     }
 
     try {
-      const published = await publishTikTokVideoImpl({
+      const commonPublishInput = {
         publication: publishingPublication,
         videoRow,
         target,
         runtimeEnv: runtimeConfig.env || {},
         projectRoot,
         asOf,
-        onInitialized: async (initialized) => {
+      };
+      const published = deliveryProvider === BUFFER_DELIVERY_PROVIDER
+        ? await publishBufferVideoImpl({
+          ...commonPublishInput,
+          onStaged: async (staged) => {
+            const persisted = await store.updatePublication(publication.id, {
+              status: 'publishing',
+              metadata: buildMetadataPatch(publishingPublication, {
+                workflow_state: 'publishing',
+                delivery_provider: BUFFER_DELIVERY_PROVIDER,
+                buffer_staging_object_path: staged.objectPath,
+                buffer_staging_public_url: staged.publicUrl,
+                buffer_staged_at: staged.stagedAt || asOf,
+                buffer_staged_video_sha256: staged.videoSha256 || '',
+                buffer_create_attempted_at: asOf,
+                buffer_create_uncertain: false,
+              }),
+            });
+            if (!persisted?.metadata?.buffer_staging_public_url) {
+              throw new Error('Buffer upload blocked because staging metadata could not be persisted.');
+            }
+            publishingPublication = persisted;
+          },
+          onInitialized: async (initialized) => {
+            const persisted = await store.updatePublication(publication.id, {
+              status: 'publishing',
+              external_id: initialized.externalId,
+              metadata: buildMetadataPatch(publishingPublication, {
+                workflow_state: 'publishing',
+                delivery_provider: BUFFER_DELIVERY_PROVIDER,
+                buffer_post_id: initialized.postId,
+                buffer_status: initialized.rawStatus || 'publishing',
+                buffer_initialized_at: initialized.initializedAt || asOf,
+                buffer_recovered_after_create: initialized.recovered === true,
+                buffer_create_uncertain: false,
+                next_status_poll_at: nextStatusPollAt(asOf),
+              }),
+            });
+            if (!persisted?.external_id) {
+              throw new Error(
+                `Buffer delivery blocked because post id ${initialized.postId} could not be persisted.`,
+              );
+            }
+            publishingPublication = persisted;
+          },
+        })
+        : await publishTikTokVideoImpl({
+          ...commonPublishInput,
+          onInitialized: async (initialized) => {
           const persisted = await store.updatePublication(publication.id, {
             status: 'publishing',
             external_id: initialized.externalId,
@@ -348,26 +557,46 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
             );
           }
           publishingPublication = persisted;
-        },
-      });
+          },
+        });
       publishingPublication = await store.updatePublication(publication.id, {
         status: published.status || 'publishing',
         external_id: publishingPublication.external_id || published.externalId || '',
         uploaded_at: published.uploadedAt || asOf,
-        metadata: buildMetadataPatch(publishingPublication, {
-          workflow_state: published.workflowState || 'publishing',
-          tiktok_publish_id: published.publishId || '',
-          tiktok_status: published.status || 'publishing',
-          tiktok_uploaded_at: published.uploadedAt || asOf,
-          tiktok_token_env: published.tokenEnv || '',
-          next_status_poll_at: nextStatusPollAt(asOf),
-        }),
+        ...(published.workflowState === 'published'
+          ? { published_at: published.publishedAt || asOf }
+          : {}),
+        ...(published.publicUrl ? { public_url: published.publicUrl } : {}),
+        metadata: buildMetadataPatch(publishingPublication,
+          deliveryProvider === BUFFER_DELIVERY_PROVIDER
+            ? {
+              workflow_state: published.workflowState || 'publishing',
+              delivery_provider: BUFFER_DELIVERY_PROVIDER,
+              buffer_post_id: published.postId || published.externalId || '',
+              buffer_status: published.rawStatus || published.status || 'publishing',
+              buffer_uploaded_at: published.uploadedAt || asOf,
+              buffer_create_uncertain: false,
+              buffer_staging_removed_at: published.stagingRemoved ? asOf : '',
+              next_status_poll_at: published.workflowState === 'published'
+                ? ''
+                : nextStatusPollAt(asOf),
+            }
+            : {
+              workflow_state: published.workflowState || 'publishing',
+              tiktok_publish_id: published.publishId || '',
+              tiktok_status: published.status || 'publishing',
+              tiktok_uploaded_at: published.uploadedAt || asOf,
+              tiktok_token_env: published.tokenEnv || '',
+              next_status_poll_at: nextStatusPollAt(asOf),
+            }),
       }) || publishingPublication;
       results.push({
         publication_id: publication.id,
         platform: TIKTOK_VIDEO_PLATFORM,
         account_key: publication.account_key,
-        action: 'tiktok_publish_upload',
+        action: deliveryProvider === BUFFER_DELIVERY_PROVIDER
+          ? 'buffer_publish_upload'
+          : 'tiktok_publish_upload',
         workflow_state: publishingPublication.metadata?.workflow_state || 'publishing',
         external_id: publishingPublication.external_id || '',
       });
@@ -375,15 +604,19 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       const initializedPublishId = normalizeText(publishingPublication.external_id);
       const isAuthRequired = error instanceof TikTokPublicationAuthRequiredError
         || error?.code === 'tiktok_auth_required';
-      const isValidationBlocked = error instanceof TikTokDirectPostValidationError;
-      const workflowState = initializedPublishId
+      const isBufferUncertain = error instanceof BufferPublicationUncertainError
+        || error?.code === 'buffer_create_uncertain';
+      const isValidationBlocked = error instanceof TikTokDirectPostValidationError
+        || error instanceof BufferPublicationValidationError;
+      const deliveryMayExist = initializedPublishId || isBufferUncertain;
+      const workflowState = deliveryMayExist
         ? 'publishing'
         : isAuthRequired
           ? 'auth_required'
           : isValidationBlocked
             ? 'approval_required'
             : 'failed';
-      const status = initializedPublishId
+      const status = deliveryMayExist
         ? 'publishing'
         : isAuthRequired || isValidationBlocked
           ? 'blocked'
@@ -394,16 +627,33 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
           workflow_state: workflowState,
           publish_attempt_error: error.message || String(error),
           publish_failed_at: asOf,
-          next_status_poll_at: initializedPublishId ? nextStatusPollAt(asOf) : '',
+          ...(deliveryProvider === BUFFER_DELIVERY_PROVIDER
+            ? {
+              delivery_provider: BUFFER_DELIVERY_PROVIDER,
+              buffer_create_uncertain: isBufferUncertain,
+              buffer_create_uncertain_at: isBufferUncertain ? asOf : '',
+            }
+            : {}),
+          next_status_poll_at: deliveryMayExist ? nextStatusPollAt(asOf) : '',
         }),
       }) || publishingPublication;
       results.push({
         publication_id: publication.id,
         platform: TIKTOK_VIDEO_PLATFORM,
         account_key: publication.account_key,
-        action: initializedPublishId ? 'tiktok_upload_interrupted' : 'tiktok_publish_failed',
+        action: isBufferUncertain
+          ? 'buffer_create_uncertain'
+          : initializedPublishId
+            ? deliveryProvider === BUFFER_DELIVERY_PROVIDER
+              ? 'buffer_upload_interrupted'
+              : 'tiktok_upload_interrupted'
+            : deliveryProvider === BUFFER_DELIVERY_PROVIDER
+              ? 'buffer_publish_failed'
+              : 'tiktok_publish_failed',
         workflow_state: workflowState,
-        reason: initializedPublishId
+        reason: isBufferUncertain
+          ? 'buffer_create_uncertain'
+          : initializedPublishId
           ? 'upload_interrupted_after_init'
           : isAuthRequired
             ? 'auth_required'
@@ -426,8 +676,13 @@ async function main() {
       '',
       'Options:',
       '  --account-key <key>   Limit TikTok execution to one account key.',
+      '  --publication-id <id> Limit execution to one publication id.',
       '  --limit <n>           Maximum due publications to process.',
       '  --dry-run             Print due TikTok publications without uploading.',
+      '  --allow-buffer-live    Permit one targeted Buffer upload; requires --publication-id.',
+      '  --provision-buffer-staging  Create or validate the isolated Supabase staging bucket.',
+      '  --cleanup-buffer-staging    Remove only stale, unreferenced Buffer staging objects.',
+      '  --max-age-hours <n>     Staging cleanup age threshold. Default: 48.',
       '  --retry-publication-id <id>  Requeue one approved row only when no TikTok publish id exists.',
       '  --resolve-lifecycle-publication-id <id>  Record a completed manual TikTok lifecycle action.',
       '  --resolution <value>  One of: removed, made_private, kept, not_found.',
@@ -446,6 +701,18 @@ async function main() {
 
   if (getStringOption(options, 'resolve-lifecycle-publication-id', '')) {
     const result = await resolveTikTokLifecycleAction(options);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  if (getBooleanOption(options, 'provision-buffer-staging', false)) {
+    const result = await provisionBufferStaging(options);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  if (getBooleanOption(options, 'cleanup-buffer-staging', false)) {
+    const result = await cleanupBufferStaging(options);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
   }
