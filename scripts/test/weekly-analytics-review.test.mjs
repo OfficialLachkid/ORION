@@ -199,7 +199,9 @@ test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bo
   assert.ok(withoutPrior.includes('Scheduling signal'), 'prompt must include a scheduling section');
   assert.ok(withoutPrior.includes('publish_hour_rollup'), 'prompt must reference the publish-hour data field');
   assert.ok(withoutPrior.includes('instrumentation_gaps'), 'prompt must ask analyst to acknowledge missing signals');
-  assert.ok(withoutPrior.includes('08:00, 12:00, 14:00'), 'prompt must state the current 3x/day schedule for context');
+  assert.ok(withoutPrior.includes('08:00/12:00/14:00'), 'prompt must state the 14:00 CEST slot for channels still on that schedule');
+  assert.ok(withoutPrior.includes('08:00/12:00/18:00'), 'prompt must state the 18:00 CEST slot for the 2026-10-08 trivamon/poke-guess/dexguess experiment');
+  assert.ok(/intentional/iu.test(withoutPrior), 'prompt must tell the analyst to treat per-channel slot differences as intentional, not drift');
   // Geo + traffic-source section landed with the adapter enrichment
   assert.ok(withoutPrior.includes('Audience mix'), 'prompt must include the geo + traffic section');
   assert.ok(withoutPrior.includes('viewer_geography'), 'prompt must reference the viewer_geography field');
