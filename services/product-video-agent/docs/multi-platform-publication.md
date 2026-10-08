@@ -124,6 +124,8 @@ With this model:
 4. ORION polls the Buffer post state and removes the staged media only after confirmed delivery. Pre-delivery schedule changes and cancellations remain entirely inside ORION because Buffer receives nothing before the row is due.
 5. The direct TikTok Sandbox adapter remains available for private integration tests only.
 
+The intended operator flow remains one action: clicking **Publish** in the video's existing Discord review thread approves the exact MP4 once. YouTube retains its current preview/scheduling behavior, and an enabled `buffer_tiktok` destination receives a child delivery row with the same `scheduled_for`. Nothing is sent to Buffer early. When that row becomes due, ORION stages the approved file and invokes Buffer automatic publishing; a successful Buffer/TikTok post is expected to be public after TikTok processing. This is the target design, not current production behavior: until the adapter is implemented and validated, the deployed TikTok path remains Sandbox `SELF_ONLY`.
+
 Buffer-specific constraint: its API does not accept local file uploads. It fetches video from an unauthenticated, stable public HTTPS URL when the post goes out, and its documentation warns against expiring signed URLs. The preferred adapter should therefore upload the MP4 only when ORION's own schedule says it is due, use a non-listable public Cloudflare R2 object with an unguessable key, call Buffer with `shareNow`, and delete the object only after Buffer confirms publication. A bounded cleanup policy must retain failed/in-flight objects for retry and remove abandoned objects later. This introduces a brief public staging boundary instead of changing the scheduler or hosting future videos for days, and requires operator approval before implementation.
 
 Buffer also supports `customScheduled` plus a `dueAt` timestamp. That is a fallback if Buffer should own the future schedule, but it would require the public media URL to remain available until that future time and would duplicate part of ORION's existing schedule responsibility. It is not the preferred first implementation.
@@ -136,7 +138,7 @@ Recommended proof of concept:
 4. Decide whether the brief public-but-unguessable staging boundary is acceptable. If it is, implement `buffer_tiktok` as another platform adapter using due-time staging plus `shareNow`, and retain the current direct `tiktok_video` adapter for Sandbox tests.
 5. Validate one end-to-end Poke Quiz post, then enable other owned TikTok accounts one at a time.
 
-Current Buffer documentation says its Free plan includes up to three connected channels, ten scheduled posts per channel, one API key, and 3,000 API requests per month. Treat pricing and limits as external configuration that must be rechecked before rollout.
+Current Buffer documentation says its Free plan includes up to three connected channels, ten scheduled posts per channel, one API key, and 3,000 API requests per month. One dedicated Free account can therefore cover Poke Quiz plus at most two additional connected channels under the current limits. Do not create one Free Buffer account per TikTok account to evade the three-channel allowance: Buffer's API terms prohibit circumventing feature/access controls, the published terms do not expressly authorize that account pattern, and it would multiply credentials, recovery, 2FA, and key-rotation risk. Treat it as unsupported unless Buffer confirms the intended multi-account use in writing. For more than three connected channels, budget for the applicable paid plan or select another compliant provider. Treat all pricing and limits as external configuration that must be rechecked before rollout.
 
 #### Buffer Trust Boundary and Future Capabilities
 
@@ -165,6 +167,8 @@ The zero-subscription-cost choices are therefore:
 2. Add TikTok's Upload-to-Inbox mode: ORION sends the local MP4 as a TikTok draft and the operator opens the inbox notification, reviews it, and completes the public post in TikTok. This uses the separate `video.upload` scope and still requires TikTok approval/authorization; it is a manual-final-step workflow, not guaranteed production access for an internal-only app.
 3. Keep everything local and have ORION send a due-time Discord reminder with the MP4 path/caption for manual TikTok upload or native TikTok scheduling. This is the lowest third-party risk and remains free, but loses unattended delivery.
 4. Use Buffer Free for the first one to three TikTok accounts, subject to its ten-scheduled-posts-per-channel and API limits. This enables public automation through an audited third party but will not remain free when ORION exceeds the free channel allowance.
+
+Multiple Free Buffer accounts are not the scaling plan. The compliant zero-cost scope is one dedicated Free account within its published allowance; more channels require written confirmation from Buffer or a paid/alternative route.
 
 Browser automation or scraping TikTok's upload UI is intentionally excluded: it is brittle, creates account/credential risk, and attempts to bypass the supported API/review model.
 
