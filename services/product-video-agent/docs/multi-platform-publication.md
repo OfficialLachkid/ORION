@@ -138,6 +138,36 @@ Recommended proof of concept:
 
 Current Buffer documentation says its Free plan includes up to three connected channels, ten scheduled posts per channel, one API key, and 3,000 API requests per month. Treat pricing and limits as external configuration that must be rechecked before rollout.
 
+#### Buffer Trust Boundary and Future Capabilities
+
+Buffer would not receive access to the Mac filesystem, T7, Supabase, Discord, YouTube, the ORION repository, or an interactive shell. It would receive only what the adapter sends: the staged video URL, caption/post options, Buffer channel id, and API requests. Buffer separately holds the TikTok authorization for each connected TikTok account.
+
+That still creates a meaningful third-party trust boundary. A compromised Buffer account or credential could read/manage Buffer posts and publish through connected channels within the granted permissions. Buffer may also store post content, metadata, tokens, and operational logs under its privacy policy and subprocessors. Its documentation describes configurable API-key permissions, 2FA, revocation/rotation, and security/privacy controls, but do not assume a certification such as SOC 2 without obtaining a current official assurance document from Buffer.
+
+Required controls for any proof of concept:
+
+- Create a dedicated Buffer account containing only ORION-owned TikTok channels, because a personal API key can access all organizations and channels in its Buffer account and cannot currently be restricted per organization.
+- Enable authenticator-app 2FA and retain recovery codes outside the Mac workspace.
+- Grant only `postsRead`, `postsWrite`, and the minimum account-read permission needed for channel discovery; disable ideas, account-write, and insight permissions unless a later feature requires them.
+- Store `BUFFER_API_KEY` only in the ignored owner-only Mac runtime environment, never in Git, Discord, logs, or chat. Rotate/revoke it on any suspected exposure.
+- Use one destination allow-list in tracked configuration so a compromised/mistyped channel id cannot redirect a publication silently.
+- Keep media staging isolated from ORION infrastructure; the staging credential may upload/delete only within one dedicated bucket/prefix.
+
+Buffer's public API currently supports post creation, retrieval, deletion, scheduling, connected-channel discovery, and limited/experimental metrics. It explicitly does **not** support reading or replying to comments; engagement is handled in Buffer's own UI. No documented Buffer API capability was found for attaching TikTok Shop affiliate products or managing affiliate campaigns. TikTok Shop Affiliate APIs are a separate developer/partner product and should be evaluated independently if ORION later adds affiliate workflows.
+
+#### Free and First-Party Alternatives
+
+There is currently no documented compliant way for an internal/team-only TikTok Direct Post client to auto-publish public videos. Submitting ORION for Production review truthfully is possible and does not require misrepresentation, but the written eligibility rule makes rejection likely even if the implementation is technically complete. Becoming registered at the Dutch Chamber of Commerce would not remove the intended-use restriction.
+
+The zero-subscription-cost choices are therefore:
+
+1. Keep the current Direct Post Sandbox path: ORION uploads at the dynamic due time as `SELF_ONLY`; an operator later makes the account public and changes each post to Everyone. This is local and free but not unattended public posting.
+2. Add TikTok's Upload-to-Inbox mode: ORION sends the local MP4 as a TikTok draft and the operator opens the inbox notification, reviews it, and completes the public post in TikTok. This uses the separate `video.upload` scope and still requires TikTok approval/authorization; it is a manual-final-step workflow, not guaranteed production access for an internal-only app.
+3. Keep everything local and have ORION send a due-time Discord reminder with the MP4 path/caption for manual TikTok upload or native TikTok scheduling. This is the lowest third-party risk and remains free, but loses unattended delivery.
+4. Use Buffer Free for the first one to three TikTok accounts, subject to its ten-scheduled-posts-per-channel and API limits. This enables public automation through an audited third party but will not remain free when ORION exceeds the free channel allowance.
+
+Browser automation or scraping TikTok's upload UI is intentionally excluded: it is brittle, creates account/credential risk, and attempts to bypass the supported API/review model.
+
 ## TikTok Account and App Onboarding
 
 Operator/external steps:
