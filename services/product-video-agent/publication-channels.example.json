@@ -16,11 +16,11 @@
           "minute": 0
         },
         {
-          "hour": 12,
+          "hour": 11,
           "minute": 0
         },
         {
-          "hour": 14,
+          "hour": 12,
           "minute": 0
         }
       ],
@@ -219,6 +219,10 @@
         },
         {
           "hour": 18,
+          "minute": 0
+        },
+        {
+          "hour": 22,
           "minute": 0
         }
       ],
