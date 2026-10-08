@@ -114,24 +114,26 @@ This is a platform-eligibility constraint, not a missing registration at the Dut
 
 ORION's actual requirement is to publish only to accounts owned or managed by ORION. Building an outside-creator product solely to obtain TikTok approval would conflict with that requirement and should not be pursued.
 
-The recommended architecture is to use an already audited social scheduler as a delivery adapter. TikTok identifies established Content and Community Management partners that schedule and publish posts for brands. Buffer is a practical first candidate because its current GraphQL API supports connected TikTok channels, automatic scheduled video posts, and custom `dueAt` timestamps from internal tools.
+The recommended architecture is to use an already audited social scheduler as a delivery adapter. TikTok identifies established Content and Community Management partners that schedule and publish posts for brands. Buffer is a practical first candidate because its current GraphQL API supports connected TikTok channels and automatic video publishing from internal tools.
 
 With this model:
 
 1. ORION remains the private source of truth for rendering, the Discord approval, channel-owned `schedule_slots`, exact-file consent, and delivery state.
 2. Each ORION-owned TikTok account is connected directly to the scheduler. The scheduler holds the TikTok authorization and uses its audited integration; ORION's TikTok developer app is not used for the public post.
-3. After the shared Publish action assigns `scheduled_for`, a scheduler adapter creates one TikTok video post for that exact timestamp. There is still no second editorial approval or duplicated timetable.
-4. ORION stores the scheduler post id on the destination publication row, polls its state, and propagates schedule changes/cancellations before delivery.
+3. After the shared Publish action assigns `scheduled_for`, ORION continues holding the MP4 locally. At the existing due-time scheduler pass, the adapter stages the exact approved MP4, asks Buffer to publish it immediately, and stores Buffer's post id. There is still no second editorial approval or duplicated timetable.
+4. ORION polls the Buffer post state and removes the staged media only after confirmed delivery. Pre-delivery schedule changes and cancellations remain entirely inside ORION because Buffer receives nothing before the row is due.
 5. The direct TikTok Sandbox adapter remains available for private integration tests only.
 
-Buffer-specific constraint: its API does not accept local file uploads. It fetches video from an unauthenticated, stable public HTTPS URL when the scheduled post goes out, potentially days later. Expiring signed URLs are explicitly unsuitable. A Buffer adapter therefore also requires a deliberate media-hosting design, such as a non-listable public Cloudflare R2 object with an unguessable key, followed by deletion only after Buffer confirms publication. This changes the current local-only media boundary and requires operator approval before implementation.
+Buffer-specific constraint: its API does not accept local file uploads. It fetches video from an unauthenticated, stable public HTTPS URL when the post goes out, and its documentation warns against expiring signed URLs. The preferred adapter should therefore upload the MP4 only when ORION's own schedule says it is due, use a non-listable public Cloudflare R2 object with an unguessable key, call Buffer with `shareNow`, and delete the object only after Buffer confirms publication. A bounded cleanup policy must retain failed/in-flight objects for retry and remove abandoned objects later. This introduces a brief public staging boundary instead of changing the scheduler or hosting future videos for days, and requires operator approval before implementation.
+
+Buffer also supports `customScheduled` plus a `dueAt` timestamp. That is a fallback if Buffer should own the future schedule, but it would require the public media URL to remain available until that future time and would duplicate part of ORION's existing schedule responsibility. It is not the preferred first implementation.
 
 Recommended proof of concept:
 
 1. Create a Buffer account and connect only `@pokequizz7`; keep the existing TikTok account Personal unless Buffer's live connection flow requires otherwise.
 2. Use Buffer's UI to confirm one operator-approved public TikTok test can be automatically scheduled with the desired caption/privacy behavior.
 3. Create a personal Buffer API key and store it only in the ignored owner-only Mac runtime environment; never commit it.
-4. Decide whether the public-but-unguessable temporary media-hosting boundary is acceptable. If it is, implement `buffer_tiktok` as another platform adapter and retain the current direct `tiktok_video` adapter for Sandbox tests.
+4. Decide whether the brief public-but-unguessable staging boundary is acceptable. If it is, implement `buffer_tiktok` as another platform adapter using due-time staging plus `shareNow`, and retain the current direct `tiktok_video` adapter for Sandbox tests.
 5. Validate one end-to-end Poke Quiz post, then enable other owned TikTok accounts one at a time.
 
 Current Buffer documentation says its Free plan includes up to three connected channels, ten scheduled posts per channel, one API key, and 3,000 API requests per month. Treat pricing and limits as external configuration that must be rechecked before rollout.
