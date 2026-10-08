@@ -7,8 +7,8 @@ This is the phase-1 structure for publishing an already approved ORION short to 
 - Tracking issue: [#95 — ORION Multi-Platform Social Publisher, Phase 1: TikTok](https://github.com/OfficialLachkid/ORION/issues/95)
 - Implementation PR: [#97 — scaffold TikTok social publisher](https://github.com/OfficialLachkid/ORION/pull/97)
 - State: PRs #151, [#152](https://github.com/OfficialLachkid/ORION/pull/152), #154, and [#155](https://github.com/OfficialLachkid/ORION/pull/155) are merged. PR #152 binds TikTok consent to the existing Discord Publish action, adds atomic upload claims, persists the TikTok `publish_id` before bytes are uploaded, and adds a guarded retry command. PR #154 makes scheduler wake times derive from active channel schedules and sets future Poke Quiz approvals to `is_aigc: false`. PR #155 adds pre-upload source/child lifecycle reconciliation, terminal TikTok post details, and the missing Runtime Validation path trigger for `services/product-video-agent/**`. The Poke Quiz target remains enabled only for private `SELF_ONLY` Sandbox delivery.
-- Deployment: merged `main` at `a29c22b14` (through PR #155) was deployed to the Mac mini on 2026-10-08. Runtime-config validation passed, the full product-video suite passed there (479 passed, 1 skipped), and the dynamic scheduler/reconciler was reinstalled without initiating a publication.
-- Lifecycle-alert follow-up: [PR #156](https://github.com/OfficialLachkid/ORION/pull/156) is open with Runtime Validation passing. It alerts the existing video review thread after a post-start cancellation and adds an audited operator-resolution command; it does not introduce a second approval gate or perform an unverified remote deletion.
+- Deployment: merged `main` at `7db91ea90` (through [PR #156](https://github.com/OfficialLachkid/ORION/pull/156)) was deployed to the Mac mini on 2026-10-08. Runtime-config validation passed, the full product-video suite passed there (488 passed, 1 skipped), and the dynamic scheduler/reconciler was reinstalled without initiating a publication.
+- Lifecycle alerts: PR #156 alerts the existing video review thread after a post-start cancellation and adds an audited operator-resolution command; it does not introduce a second approval gate or perform an unverified remote deletion.
 - Operator update: the dedicated Poke Quiz TikTok account, the `ORION` TikTok developer organization, and the `ORION Publisher` app now exist. The sandbox includes `pokequizz7` as a target user. Public app metadata, legal-policy URLs, URL-prefix ownership verification, Login Kit, Content Posting API Direct Post, and the Desktop redirect URI are configured. TikTok issued the client credentials; no credential value is recorded in Git.
 - The PR branch has been brought forward to current `main`; the scheduler conflict was resolved by retaining current per-channel error isolation and adding isolated social-publication execution.
 - The original Runtime Validation failure was only `git diff --check`: this file and `src/tiktok-publication-executor.mjs` had an extra blank line at EOF. Both are fixed.
@@ -109,6 +109,32 @@ Before seeking public Direct Post access, choose one of these paths:
 - keep ORION's TikTok workflow in private Sandbox/manual mode and do not depend on public automated Direct Post approval.
 
 This is a platform-eligibility constraint, not a missing registration at the Dutch Chamber of Commerce.
+
+### Public Delivery for Internal-Only Accounts
+
+ORION's actual requirement is to publish only to accounts owned or managed by ORION. Building an outside-creator product solely to obtain TikTok approval would conflict with that requirement and should not be pursued.
+
+The recommended architecture is to use an already audited social scheduler as a delivery adapter. TikTok identifies established Content and Community Management partners that schedule and publish posts for brands. Buffer is a practical first candidate because its current GraphQL API supports connected TikTok channels, automatic scheduled video posts, and custom `dueAt` timestamps from internal tools.
+
+With this model:
+
+1. ORION remains the private source of truth for rendering, the Discord approval, channel-owned `schedule_slots`, exact-file consent, and delivery state.
+2. Each ORION-owned TikTok account is connected directly to the scheduler. The scheduler holds the TikTok authorization and uses its audited integration; ORION's TikTok developer app is not used for the public post.
+3. After the shared Publish action assigns `scheduled_for`, a scheduler adapter creates one TikTok video post for that exact timestamp. There is still no second editorial approval or duplicated timetable.
+4. ORION stores the scheduler post id on the destination publication row, polls its state, and propagates schedule changes/cancellations before delivery.
+5. The direct TikTok Sandbox adapter remains available for private integration tests only.
+
+Buffer-specific constraint: its API does not accept local file uploads. It fetches video from an unauthenticated, stable public HTTPS URL when the scheduled post goes out, potentially days later. Expiring signed URLs are explicitly unsuitable. A Buffer adapter therefore also requires a deliberate media-hosting design, such as a non-listable public Cloudflare R2 object with an unguessable key, followed by deletion only after Buffer confirms publication. This changes the current local-only media boundary and requires operator approval before implementation.
+
+Recommended proof of concept:
+
+1. Create a Buffer account and connect only `@pokequizz7`; keep the existing TikTok account Personal unless Buffer's live connection flow requires otherwise.
+2. Use Buffer's UI to confirm one operator-approved public TikTok test can be automatically scheduled with the desired caption/privacy behavior.
+3. Create a personal Buffer API key and store it only in the ignored owner-only Mac runtime environment; never commit it.
+4. Decide whether the public-but-unguessable temporary media-hosting boundary is acceptable. If it is, implement `buffer_tiktok` as another platform adapter and retain the current direct `tiktok_video` adapter for Sandbox tests.
+5. Validate one end-to-end Poke Quiz post, then enable other owned TikTok accounts one at a time.
+
+Current Buffer documentation says its Free plan includes up to three connected channels, ten scheduled posts per channel, one API key, and 3,000 API requests per month. Treat pricing and limits as external configuration that must be rechecked before rollout.
 
 ## TikTok Account and App Onboarding
 
@@ -275,8 +301,10 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [x] Final status/failure/public-post fields persisted by scheduler polling.
 - [x] Pre-upload child schedule, withdrawal, and deletion lifecycle reconciled against the shared source row.
 - [x] Existing-review-thread alerting and audited manual resolution implemented for cancellations after TikTok upload initialization.
+- [x] PR #156 deployed to the Mac mini at `7db91ea90`; runtime config and the full product-video suite passed (488/489 with one expected skip), and the scheduler/reconciler was reinstalled.
 - [x] One `SELF_ONLY` Mac mini smoke publication completed and reconciled (`PUBLISH_COMPLETE`, 2026-10-07).
 - [ ] Public-posting app review completed, if public delivery is required.
+- [ ] Operator decides whether to use an audited scheduler adapter and accept its stable public media-URL requirement for internal-only public delivery.
 - [x] Private Sandbox target enabled in tracked configuration for the first account.
 - [x] Mac scheduler and reconciler reloaded after PR #154; runtime config and focused validation passed (35/35, 2026-10-07).
 - [ ] Generic related-content contract and TikTok capability/adapter investigated after core publication lifecycle is stable.
