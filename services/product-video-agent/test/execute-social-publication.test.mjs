@@ -115,6 +115,52 @@ test('executeDueSocialPublications dry-runs due TikTok rows only', async () => {
   ]);
 });
 
+test('executeDueSocialPublications withdraws a due child when its source was cancelled', async () => {
+  const sourcePublication = {
+    id: 'publication-source-youtube',
+    video_id: 'video-1',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'deleted',
+    scheduled_for: null,
+    metadata: { workflow_state: 'revision_requested' },
+  };
+  const childPublication = {
+    ...dueTikTokPublication,
+    metadata: {
+      ...dueTikTokPublication.metadata,
+      source_publication_id: sourcePublication.id,
+    },
+  };
+  const store = createStore([sourcePublication, childPublication]);
+  let publishCalls = 0;
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-07T12:00:00.000Z',
+  }, {
+    runtimeConfig: { env: {} },
+    publicationStore: store,
+    publishTikTokVideo: async () => {
+      publishCalls += 1;
+      return {};
+    },
+  });
+
+  assert.equal(publishCalls, 0);
+  assert.equal(store.current(childPublication.id).status, 'withdrawn');
+  assert.equal(store.current(childPublication.id).scheduled_for, null);
+  assert.deepEqual(results, [{
+    publication_id: childPublication.id,
+    platform: 'tiktok_video',
+    account_key: 'poke-quizz-tiktok',
+    action: 'source_lifecycle_withdrawn',
+    workflow_state: 'withdrawn',
+    source_publication_id: sourcePublication.id,
+    source_workflow_state: 'revision_requested',
+    scheduled_for: '',
+  }]);
+});
+
 test('executeDueSocialPublications uploads a due TikTok row and stores publish id', async () => {
   const store = createStore([dueTikTokPublication], {
     'video-1': {
@@ -189,6 +235,9 @@ test('executeDueSocialPublications polls an uploaded TikTok row and marks it pub
       return {
         status: 'published',
         rawStatus: 'PUBLISH_COMPLETE',
+        failReason: '',
+        postId: '7420000000000000001',
+        publicUrl: 'https://www.tiktok.com/@pokequizz7/video/7420000000000000001',
       };
     },
   });
@@ -197,6 +246,12 @@ test('executeDueSocialPublications polls an uploaded TikTok row and marks it pub
   assert.equal(results[0].workflow_state, 'published');
   assert.equal(store.current('publication-target-tiktok').status, 'published');
   assert.equal(store.current('publication-target-tiktok').published_at, '2026-09-07T12:00:00.000Z');
+  assert.equal(store.current('publication-target-tiktok').metadata.tiktok_post_id, '7420000000000000001');
+  assert.equal(
+    store.current('publication-target-tiktok').public_url,
+    'https://www.tiktok.com/@pokequizz7/video/7420000000000000001',
+  );
+  assert.equal(results[0].tiktok_post_id, '7420000000000000001');
 });
 
 test('executeDueSocialPublications marks missing TikTok auth as auth_required', async () => {

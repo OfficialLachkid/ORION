@@ -6,13 +6,14 @@ This is the phase-1 structure for publishing an already approved ORION short to 
 
 - Tracking issue: [#95 — ORION Multi-Platform Social Publisher, Phase 1: TikTok](https://github.com/OfficialLachkid/ORION/issues/95)
 - Implementation PR: [#97 — scaffold TikTok social publisher](https://github.com/OfficialLachkid/ORION/pull/97)
-- State: PRs #151 and [#152](https://github.com/OfficialLachkid/ORION/pull/152) are merged. PR #152 binds TikTok consent to the existing Discord Publish action, adds atomic upload claims, persists the TikTok `publish_id` before bytes are uploaded, and adds a guarded retry command. The Poke Quiz target is enabled only for private `SELF_ONLY` Sandbox delivery.
+- State: PRs #151, [#152](https://github.com/OfficialLachkid/ORION/pull/152), and #154 are merged. PR #152 binds TikTok consent to the existing Discord Publish action, adds atomic upload claims, persists the TikTok `publish_id` before bytes are uploaded, and adds a guarded retry command. PR #154 makes scheduler wake times derive from active channel schedules and sets future Poke Quiz approvals to `is_aigc: false`. The Poke Quiz target remains enabled only for private `SELF_ONLY` Sandbox delivery.
+- Lifecycle follow-up: [PR #155](https://github.com/OfficialLachkid/ORION/pull/155) is open and merge-clean. It adds pre-upload source/child lifecycle reconciliation, terminal TikTok post details, and the missing Runtime Validation path trigger for `services/product-video-agent/**`. The automatically triggered Runtime Validation passed on 2026-10-07.
 - Operator update: the dedicated Poke Quiz TikTok account, the `ORION` TikTok developer organization, and the `ORION Publisher` app now exist. The sandbox includes `pokequizz7` as a target user. Public app metadata, legal-policy URLs, URL-prefix ownership verification, Login Kit, Content Posting API Direct Post, and the Desktop redirect URI are configured. TikTok issued the client credentials; no credential value is recorded in Git.
 - The PR branch has been brought forward to current `main`; the scheduler conflict was resolved by retaining current per-channel error isolation and adding isolated social-publication execution.
 - The original Runtime Validation failure was only `git diff --check`: this file and `src/tiktok-publication-executor.mjs` had an extra blank line at EOF. Both are fixed.
 - Local verification on 2026-10-06: runtime-config validation passed, the product-video suite passed (454 passed, 1 skipped), the Discord/runtime suite passed (369 passed), and the focused TikTok/scheduler/task-router suite passed (31 passed).
 
-This is not approved for public TikTok delivery. OAuth refresh, creator validation, shared-review consent, and crash-safe upload handling are implemented. A supervised `SELF_ONLY` smoke test completed successfully on 2026-10-07. PR #152 was then deployed to the Mac mini and the publication scheduler and reconciler were reloaded. Runtime-config validation and the 41 focused publication tests passed on the Mac.
+This is not approved for public TikTok delivery. OAuth refresh, creator validation, shared-review consent, and crash-safe upload handling are implemented. A supervised `SELF_ONLY` smoke test completed successfully on 2026-10-07. PR #154 is deployed to the Mac mini; the publication scheduler and reconciler were reloaded with the dynamic `08:00`, `12:00`, `14:00`, and `18:00` machine wake-up union. Runtime-config validation and the 35 focused publication tests passed on the Mac after deployment.
 
 ## Implemented
 
@@ -29,13 +30,15 @@ This is not approved for public TikTok delivery. OAuth refresh, creator validati
 - One shared Discord approval: the existing Publish action displays and freezes the exact TikTok account, caption, privacy, interactions, disclosures, file size, and SHA-256 alongside the YouTube schedule.
 - An atomic Supabase claim for due uploads, pre-upload `publish_id` persistence, and a guarded retry command that refuses to re-upload a row with an existing TikTok publish id.
 - Channel-driven schedule inheritance: additional-platform rows copy the exact `scheduled_for` assigned from their source channel's `schedule_slots`; TikTok has no duplicated per-channel timetable.
+- Scheduler-time child lifecycle reconciliation: an unstarted TikTok row follows a changed source schedule and is withdrawn or deleted if the shared source is revised, withdrawn, or deleted before delivery starts.
+- Terminal TikTok status persistence: scheduler polling retains TikTok's `fail_reason`, public post id, and derived public post URL while keeping `external_id` as the upload `publish_id`.
 
 ## Not Implemented Yet
 
 These are blockers for a live rollout, not optional cleanup:
 
-1. **Full child-publication lifecycle:** the approval path creates TikTok rows, but later rescheduling, rejection, withdrawal, deletion, or source replacement does not yet propagate to child rows.
-2. **Complete status persistence:** normal scheduler polling does not yet retain every TikTok `fail_reason`, the publicly available post id, or the final public URL. `external_id` remains the upload `publish_id`.
+1. **Post-start child lifecycle:** pre-upload schedule/cancellation propagation is implemented, but TikTok does not expose an ORION-integrated remote-delete path after upload initialization. A later source cancellation is marked for manual action rather than reported as remotely removed.
+2. **Source replacement:** a newly rendered replacement still needs an explicit, tested link-and-supersede policy across all destination rows.
 3. **Platform adapter boundary:** the row model is reusable, but the generic social wrapper currently dispatches only TikTok and the target model embeds TikTok-specific settings. Introduce an adapter registry before Instagram/Facebook work.
 4. **TikTok analytics:** analytics ingestion remains YouTube-only.
 5. **Cross-platform related content:** YouTube related-video selection exists, but no generic related-content contract or TikTok adapter exists yet. Preserve the current selector as a reusable policy boundary, investigate the official capability for each destination, and implement platform adapters without importing YouTube Studio/browser logic into the shared publisher.
@@ -50,6 +53,7 @@ YouTube remains the review and preview surface.
 2. The Discord card shows every destination plus the exact TikTok Direct Post settings. The existing Publish button is the single approval for that exact video and those settings.
 3. The approval assigns the next slot from that source channel's `schedule_slots`, schedules the existing YouTube preview, and creates additional `video_publications` rows for enabled social targets with the same exact `scheduled_for`. TikTok approval is bound to the MP4 size and SHA-256; a changed file fails closed.
 4. At the inherited due time, the shared publication scheduler uploads the TikTok row. Until then, the MP4 remains local and nothing is sent to TikTok.
+5. The scheduler polls TikTok until processing reaches a terminal state and stores the public post id/URL or failure reason. In Sandbox, the account and unaudited app restrict the post to `SELF_ONLY`; after an approved Production migration, the configured creator-supported public privacy value can make the due-time upload public.
 
 This keeps one Discord approval/reject flow. There is no separate TikTok editorial gate. Extra platforms are delivery records linked to the same `videos` row, not duplicated video jobs.
 
@@ -138,8 +142,8 @@ Current portal decisions:
 
 Application work before enabling automation:
 
-1. Preserve structured TikTok terminal failure details and public-post identifiers in a later lifecycle follow-up.
-2. Implement child-row reschedule, withdrawal, deletion, and source-replacement propagation before relying on unattended multi-platform delivery.
+1. Add operator alerting and a documented manual-removal procedure for a source cancelled after TikTok upload initialization.
+2. Implement explicit source-replacement propagation before relying on unattended replacement delivery.
 3. Replace the channel-wide AIGC setting with render-provenance-derived guidance before mixing synthetic-narration and non-synthetic formats on the same target.
 4. Add a generic related-content contract and per-platform adapters after confirming what each official publishing API supports; reuse the existing selector policy without coupling other destinations to YouTube Studio automation.
 
@@ -255,12 +259,13 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [x] Live sandbox OAuth authorization completed and creator identity verified as `pokequizz7` with the required scopes.
 - [x] Creator-info validation and fail-closed per-publication approval merged in PR #151.
 - [x] Shared Discord approval records exact TikTok consent without a second editorial gate.
-- [x] Atomic claim/idempotency and guarded operator retry implemented on the current follow-up branch.
-- [ ] Final status/failure/public-post fields persisted.
+- [x] Atomic claim/idempotency and guarded operator retry merged in PR #152.
+- [x] Final status/failure/public-post fields persisted by scheduler polling.
+- [x] Pre-upload child schedule, withdrawal, and deletion lifecycle reconciled against the shared source row.
 - [x] One `SELF_ONLY` Mac mini smoke publication completed and reconciled (`PUBLISH_COMPLETE`, 2026-10-07).
 - [ ] Public-posting app review completed, if public delivery is required.
 - [x] Private Sandbox target enabled in tracked configuration for the first account.
-- [x] Mac scheduler and reconciler reloaded after merge; focused validation passed (41/41, 2026-10-07).
+- [x] Mac scheduler and reconciler reloaded after PR #154; runtime config and focused validation passed (35/35, 2026-10-07).
 - [ ] Generic related-content contract and TikTok capability/adapter investigated after core publication lifecycle is stable.
 - [ ] TikTok analytics adapter planned after publication is stable.
 
@@ -276,7 +281,7 @@ node --test services/product-video-agent/test/video-publication-scheduler.test.m
 
 ## Primary Vault Context
 
-The Mac mini primary vault confirms the shared scheduler and per-platform delivery-row direction but contains no completed TikTok app/auth setup. Relevant notes under `/Users/Agent/Vault/Jacobs-2/07_Products/Product_Video_Agent/` are:
+The Mac mini primary vault records the completed Sandbox app/auth/smoke setup, shared scheduler behavior, and per-platform delivery-row direction. Relevant notes under `/Users/Agent/Vault/Jacobs-2/07_Products/Product_Video_Agent/` are:
 
 - `Publication_Flow.md` — platform-adapter architecture, approval gating, scheduler isolation, and schedule reload behavior.
 - `Validation_And_Change_Log.md` — one master video with separate per-platform publication rows.

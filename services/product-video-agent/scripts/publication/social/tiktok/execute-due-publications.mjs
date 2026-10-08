@@ -7,6 +7,7 @@ import { loadRuntimeConfig } from '../../../../../lib/runtime-config.mjs';
 import { SupabasePublicationStore } from '../../../../src/publication-store.mjs';
 import {
   TIKTOK_VIDEO_PLATFORM,
+  reconcileAdditionalPlatformPublicationLifecycles,
 } from '../../../../src/social-publication-targets.mjs';
 import {
   TikTokPublicationAuthRequiredError,
@@ -111,10 +112,14 @@ function statusPatchForResult(publication, statusResult, asOf) {
   return {
     status,
     ...(workflowState === 'published' ? { published_at: asOf } : {}),
+    ...(statusResult.publicUrl ? { public_url: statusResult.publicUrl } : {}),
     metadata: buildMetadataPatch(publication, {
       workflow_state: workflowState,
       tiktok_status: statusResult.rawStatus || status,
       tiktok_status_checked_at: asOf,
+      tiktok_fail_reason: statusResult.failReason || '',
+      tiktok_post_id: statusResult.postId || '',
+      tiktok_public_url: statusResult.publicUrl || '',
       next_status_poll_at: workflowState === 'publishing' ? nextStatusPollAt(asOf) : '',
     }),
   };
@@ -169,7 +174,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
   const publishTikTokVideoImpl = dependencies.publishTikTokVideo || publishTikTokVideo;
   const fetchTikTokPublicationStatusImpl =
     dependencies.fetchTikTokPublicationStatus || fetchTikTokPublicationStatus;
-  const publications = accountKey
+  const storedPublications = accountKey
     ? await store.fetchPublicationsByChannel({
       platform: TIKTOK_VIDEO_PLATFORM,
       accountKey,
@@ -179,6 +184,13 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       platform: TIKTOK_VIDEO_PLATFORM,
       order: 'scheduled_for.asc.nullsfirst,created_at.asc',
     });
+  const lifecycleReconciliation = await reconcileAdditionalPlatformPublicationLifecycles({
+    store,
+    publications: storedPublications,
+    asOf,
+    dryRun,
+  });
+  const publications = lifecycleReconciliation.publications;
   const duePublications = withLimit(
     publications
       .map((publication) => ({
@@ -188,7 +200,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       .filter((item) => item.dueAction),
     limit,
   );
-  const results = [];
+  const results = [...lifecycleReconciliation.results];
 
   for (const { publication, dueAction } of duePublications) {
     const videoRow = publication.video_id
@@ -227,6 +239,9 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
           workflow_state: updatedPublication.metadata?.workflow_state || statusResult.status || 'publishing',
           external_id: publication.external_id || '',
           tiktok_status: statusResult.rawStatus || statusResult.status || '',
+          fail_reason: statusResult.failReason || '',
+          tiktok_post_id: statusResult.postId || '',
+          public_url: statusResult.publicUrl || '',
         });
       } catch (error) {
         const isAuthRequired = error instanceof TikTokPublicationAuthRequiredError
