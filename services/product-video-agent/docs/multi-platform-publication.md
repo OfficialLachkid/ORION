@@ -124,19 +124,40 @@ With this model:
 4. ORION polls the Buffer post state and removes the staged media only after confirmed delivery. Pre-delivery schedule changes and cancellations remain entirely inside ORION because Buffer receives nothing before the row is due.
 5. The direct TikTok Sandbox adapter remains available for private integration tests only.
 
-The intended operator flow remains one action: clicking **Publish** in the video's existing Discord review thread approves the exact MP4 once. YouTube retains its current preview/scheduling behavior, and an enabled `buffer_tiktok` destination receives a child delivery row with the same `scheduled_for`. Nothing is sent to Buffer early. When that row becomes due, ORION stages the approved file and invokes Buffer automatic publishing; a successful Buffer/TikTok post is expected to be public after TikTok processing. This is the target design, not current production behavior: until the adapter is implemented and validated, the deployed TikTok path remains Sandbox `SELF_ONLY`.
+The intended operator flow remains one action: clicking **Publish** in the video's existing Discord review thread approves the exact MP4 once. YouTube retains its current preview/scheduling behavior, and an enabled `tiktok_video` destination using the Buffer delivery provider receives a child row with the same `scheduled_for`. Buffer is a transport/provider, not a new social platform; keeping `platform: tiktok_video` prevents provider-specific duplication and permits a later provider change without rewriting scheduling or historical platform data. Nothing is sent to Buffer early. When that row becomes due, ORION stages the approved file and invokes Buffer automatic publishing; a successful Buffer/TikTok post is expected to be public after TikTok processing. This is the target design, not current production behavior: until the provider adapter is implemented and validated, the deployed TikTok path remains Sandbox `SELF_ONLY`.
 
 Buffer-specific constraint: its API does not accept local file uploads. It fetches video from an unauthenticated, stable public HTTPS URL when the post goes out, and its documentation warns against expiring signed URLs. The preferred adapter should therefore upload the MP4 only when ORION's own schedule says it is due, use a non-listable public Cloudflare R2 object with an unguessable key, call Buffer with `shareNow`, and delete the object only after Buffer confirms publication. A bounded cleanup policy must retain failed/in-flight objects for retry and remove abandoned objects later. This introduces a brief public staging boundary instead of changing the scheduler or hosting future videos for days, and requires operator approval before implementation.
 
 Buffer also supports `customScheduled` plus a `dueAt` timestamp. That is a fallback if Buffer should own the future schedule, but it would require the public media URL to remain available until that future time and would duplicate part of ORION's existing schedule responsibility. It is not the preferred first implementation.
 
-Recommended proof of concept:
+#### Accepted Buffer Rollout and Load Budget
 
-1. Create a Buffer account and connect only `@pokequizz7`; keep the existing TikTok account Personal unless Buffer's live connection flow requires otherwise.
-2. Use Buffer's UI to confirm one operator-approved public TikTok test can be automatically scheduled with the desired caption/privacy behavior.
-3. Create a personal Buffer API key and store it only in the ignored owner-only Mac runtime environment; never commit it.
-4. Decide whether the brief public-but-unguessable staging boundary is acceptable. If it is, implement `buffer_tiktok` as another platform adapter using due-time staging plus `shareNow`, and retain the current direct `tiktok_video` adapter for Sandbox tests.
-5. Validate one end-to-end Poke Quiz post, then enable other owned TikTok accounts one at a time.
+The operator accepted Buffer as the public TikTok delivery adapter on 2026-10-08, subject to the one-account proof of concept and the controls below. This aligns with the existing system and is not a material Mac or Supabase workload at the current Poke Quiz cadence:
+
+- No new always-running daemon is required. The adapter runs inside the existing channel-derived publication scheduler; the current main scheduler wakes at the four machine-wide slot times and the existing reconciliation pass follows five minutes later.
+- No local transcoding or additional FFmpeg work is added. Upload the exact already-approved MP4 as a stream with concurrency `1`; Buffer/TikTok performs remote ingestion and processing.
+- At the current three Poke Quiz slots and approximately 6.6 MB smoke-test file size, the new Mac traffic is roughly 20 MB/day plus small JSON requests. Buffer downloads the staged file from Cloudflare, not from the Mac.
+- Reuse the existing `video_publications` row and metadata rather than adding duplicate scheduling tables. Supabase stores state only, never media bytes. A due delivery should normally add one atomic claim, a small number of state updates, and no more than a bounded handful of reads.
+- Implement a server-filtered due query using platform/status/schedule fields instead of repeatedly loading historical platform rows. Existing platform/status and scheduled-publication indexes support this shape; add a more specific index only if measured query plans later justify it.
+- Buffer `createPost` has no idempotency key. Never blindly repeat an uncertain `shareNow` write. On timeout or a dropped response, query Buffer for the target channel and narrow creation window, recover the existing post id if present, and retry creation only when the first write is known not to have succeeded.
+- Poll with bounded backoff, persist the next poll time, process one upload at a time, and leave failed/in-flight R2 objects available for retry. This prevents API loops, Mac contention, and unnecessary Supabase writes.
+
+At this scale the video upload is materially lighter than rendering, narration, captioning, or FFmpeg assembly. The first rollout must still record elapsed time, file size, Buffer request count, Supabase request count, peak memory, and cleanup outcome so the estimate is verified on the Mac rather than assumed.
+
+Exact rollout sequence:
+
+1. Operator: create one dedicated Buffer Free account for ORION, preferably with `vbjtechservices@gmail.com`.
+2. Operator: make `@pokequizz7` public; it may remain a TikTok Personal account.
+3. Operator: while logged into exactly `@pokequizz7` in the same browser, open Buffer **Channels**, choose **Connect a New Channel**, select TikTok, and approve Buffer's requested TikTok access.
+4. Operator: in the connected TikTok channel settings, disable notification publishing by default. In Buffer's composer, verify the delivery type is **Automatic**, not **Notify Me**.
+5. Operator: manually publish one already-approved Poke Quiz MP4 through Buffer using **Automatic**. Confirm it becomes public without a phone action, the baked audio is present, the caption is correct, and no unwanted AI-generated label or interaction setting is introduced. Remove the test afterward only if desired.
+6. Operator: create one personal Buffer API key under **Settings -> API** with only post read/write and the minimum account-read access needed for channel discovery. Do not paste it into chat or commit it. Authenticator-app 2FA is strongly recommended but is not a functional prerequisite.
+7. Operator: create a Cloudflare R2 Standard bucket named `orion-publication-staging`. Scope one R2 Object Read & Write API token to that bucket only. Cloudflare may require enabling R2 billing even when usage remains inside its free allowance.
+8. Engineering: expose read-only, unguessable object paths through a minimal Cloudflare Worker on `workers.dev`; keep the R2 bucket private, support `GET`, `HEAD`, and byte ranges, and reject listing/write/delete requests publicly. Mac-held R2 credentials perform upload and deletion through the S3 endpoint.
+9. Operator: store `BUFFER_API_KEY`, `BUFFER_ORGANIZATION_ID`, `BUFFER_TIKTOK_POKE_QUIZ_CHANNEL_ID`, `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, and `R2_PUBLIC_BASE_URL` only in the ignored owner-only Mac runtime environment after engineering defines and validates those names.
+10. Engineering: introduce a delivery-provider registry and a Buffer provider for `tiktok_video`, plus filtered due-row retrieval, atomic claim, exact-file revalidation, streaming R2 staging, Buffer `shareNow` with `schedulingType: automatic`, uncertain-write recovery, bounded status polling, cleanup, alerts, and focused tests. Preserve the existing direct TikTok driver for Sandbox diagnostics but select Buffer for the Poke Quiz public target.
+11. Engineering: run dry-run and failure-path tests, deploy to the Mac, and perform one manually triggered API smoke against the Poke Quiz target without waiting for the normal slot. Confirm R2 cleanup and state/audit records.
+12. Operator and engineering: approve one real Poke Quiz video through the existing Discord **Publish** action. Verify the same `scheduled_for` reaches YouTube and the Buffer child, that no TikTok preview upload occurs, and that the public TikTok post appears at the due time. Enable unattended operation only after this acceptance passes.
 
 Current Buffer documentation says its Free plan includes up to three connected channels, ten scheduled posts per channel, one API key, and 3,000 API requests per month. One dedicated Free account can therefore cover Poke Quiz plus at most two additional connected channels under the current limits. Do not create one Free Buffer account per TikTok account to evade the three-channel allowance: Buffer's API terms prohibit circumventing feature/access controls, the published terms do not expressly authorize that account pattern, and it would multiply credentials, recovery, 2FA, and key-rotation risk. Treat it as unsupported unless Buffer confirms the intended multi-account use in writing. For more than three connected channels, budget for the applicable paid plan or select another compliant provider. Treat all pricing and limits as external configuration that must be rechecked before rollout.
 
@@ -146,10 +167,10 @@ Buffer would not receive access to the Mac filesystem, T7, Supabase, Discord, Yo
 
 That still creates a meaningful third-party trust boundary. A compromised Buffer account or credential could read/manage Buffer posts and publish through connected channels within the granted permissions. Buffer may also store post content, metadata, tokens, and operational logs under its privacy policy and subprocessors. Its documentation describes configurable API-key permissions, 2FA, revocation/rotation, and security/privacy controls, but do not assume a certification such as SOC 2 without obtaining a current official assurance document from Buffer.
 
-Required controls for any proof of concept:
+Security controls for any proof of concept:
 
 - Create a dedicated Buffer account containing only ORION-owned TikTok channels, because a personal API key can access all organizations and channels in its Buffer account and cannot currently be restricted per organization.
-- Enable authenticator-app 2FA and retain recovery codes outside the Mac workspace.
+- Authenticator-app 2FA and offline recovery-code storage are strongly recommended, but they are not a functional prerequisite for the proof of concept.
 - Grant only `postsRead`, `postsWrite`, and the minimum account-read permission needed for channel discovery; disable ideas, account-write, and insight permissions unless a later feature requires them.
 - Store `BUFFER_API_KEY` only in the ignored owner-only Mac runtime environment, never in Git, Discord, logs, or chat. Rotate/revoke it on any suspected exposure.
 - Use one destination allow-list in tracked configuration so a compromised/mistyped channel id cannot redirect a publication silently.
@@ -340,7 +361,11 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [x] PR #156 deployed to the Mac mini at `7db91ea90`; runtime config and the full product-video suite passed (488/489 with one expected skip), and the scheduler/reconciler was reinstalled.
 - [x] One `SELF_ONLY` Mac mini smoke publication completed and reconciled (`PUBLISH_COMPLETE`, 2026-10-07).
 - [ ] Public-posting app review completed, if public delivery is required.
-- [ ] Operator decides whether to use an audited scheduler adapter and accept its stable public media-URL requirement for internal-only public delivery.
+- [x] Operator selected Buffer as the audited scheduler adapter and accepted brief due-time public media delivery, subject to the one-account proof of concept (2026-10-08).
+- [ ] Dedicated Buffer account created and `@pokequizz7` connected.
+- [ ] One manual Buffer **Automatic** public Poke Quiz post verified without phone intervention.
+- [ ] Buffer key and private R2/Worker staging boundary configured in the owner-only Mac environment.
+- [ ] Buffer delivery provider for `tiktok_video` implemented, failure-tested, deployed, and accepted with one shared-approval due-time post.
 - [x] Private Sandbox target enabled in tracked configuration for the first account.
 - [x] Mac scheduler and reconciler reloaded after PR #154; runtime config and focused validation passed (35/35, 2026-10-07).
 - [ ] Generic related-content contract and TikTok capability/adapter investigated after core publication lifecycle is stable.
