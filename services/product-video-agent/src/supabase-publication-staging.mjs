@@ -108,7 +108,12 @@ export class SupabasePublicationStaging {
     try {
       return await this.request(`bucket/${encodeURIComponent(this.bucketName)}`);
     } catch (error) {
-      if (error?.status === 404) return null;
+      const missingBucket = error?.status === 404
+        || (
+          error?.status === 400
+          && /bucket\s+not\s+found/iu.test(errorDetail(error?.payload))
+        );
+      if (missingBucket) return null;
       throw error;
     }
   }
