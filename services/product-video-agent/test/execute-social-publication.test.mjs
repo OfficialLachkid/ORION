@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   executeDueSocialPublications,
+  resolveTikTokLifecycleAction,
   retryTikTokPublication,
 } from '../scripts/publication/social/tiktok/execute-due-publications.mjs';
 import {
@@ -159,6 +160,51 @@ test('executeDueSocialPublications withdraws a due child when its source was can
     source_workflow_state: 'revision_requested',
     scheduled_for: '',
   }]);
+});
+
+test('executeDueSocialPublications alerts the source review thread after delivery started', async () => {
+  const sourcePublication = {
+    id: 'publication-source-youtube',
+    video_id: 'video-1',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'deleted',
+    scheduled_for: null,
+    metadata: { workflow_state: 'deleted' },
+  };
+  const childPublication = {
+    ...dueTikTokPublication,
+    status: 'publishing',
+    external_id: 'publish-123',
+    metadata: {
+      ...dueTikTokPublication.metadata,
+      workflow_state: 'publishing',
+      source_publication_id: sourcePublication.id,
+      source_review_thread_id: 'review-thread-1',
+      next_status_poll_at: '2026-09-08T12:00:00.000Z',
+    },
+  };
+  const store = createStore([sourcePublication, childPublication]);
+  const messages = [];
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-07T12:00:00.000Z',
+  }, {
+    runtimeConfig: { env: { DISCORD_BOT_TOKEN: 'token' } },
+    publicationStore: store,
+    sendDiscordMessage: async (_config, channelId, payload) => {
+      messages.push({ channelId, payload });
+      return { posted: true, channelId, messageId: 'message-1' };
+    },
+  });
+
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].channelId, 'review-thread-1');
+  assert.equal(store.current(childPublication.id).metadata.source_lifecycle_alert_status, 'sent');
+  assert.deepEqual(results.map((result) => result.action), [
+    'source_lifecycle_manual_action_required',
+    'source_lifecycle_alert_sent',
+  ]);
 });
 
 test('executeDueSocialPublications uploads a due TikTok row and stores publish id', async () => {
@@ -381,5 +427,38 @@ test('retryTikTokPublication refuses a row that already has a publish id', async
       publicationStore: store,
     }),
     /poll status instead of retrying/u,
+  );
+});
+
+test('resolveTikTokLifecycleAction records a manual remote outcome', async () => {
+  const store = createStore([{
+    ...dueTikTokPublication,
+    status: 'published',
+    external_id: 'publish-existing',
+    metadata: {
+      ...dueTikTokPublication.metadata,
+      workflow_state: 'published',
+      source_lifecycle_action_required: true,
+      source_lifecycle_reason: 'source_deleted_after_delivery_started',
+      source_lifecycle_alert_status: 'sent',
+    },
+  }]);
+
+  const result = await resolveTikTokLifecycleAction({
+    'resolve-lifecycle-publication-id': 'publication-target-tiktok',
+    resolution: 'removed',
+    'resolution-note': 'Removed in TikTok app.',
+    'resolved-by': 'Valentijn',
+    'as-of': '2026-10-08T09:30:00.000Z',
+  }, {
+    runtimeConfig: { env: {} },
+    publicationStore: store,
+  });
+
+  assert.equal(result.resolution, 'removed');
+  assert.equal(store.current('publication-target-tiktok').metadata.source_lifecycle_action_required, false);
+  assert.equal(
+    store.current('publication-target-tiktok').metadata.source_lifecycle_resolved_reason,
+    'source_deleted_after_delivery_started',
   );
 });

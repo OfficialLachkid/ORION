@@ -16,6 +16,10 @@ import {
 } from '../../../../src/tiktok-publication-executor.mjs';
 import { TikTokDirectPostValidationError } from '../../../../src/tiktok-publication.mjs';
 import {
+  deliverSocialPublicationLifecycleAlerts,
+  resolveSocialPublicationLifecycleAction,
+} from '../../../../src/social-publication-alerts.mjs';
+import {
   getBooleanOption,
   getStringOption,
   parseArgs,
@@ -164,6 +168,19 @@ export async function retryTikTokPublication(options = {}, dependencies = {}) {
   };
 }
 
+export async function resolveTikTokLifecycleAction(options = {}, dependencies = {}) {
+  const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
+  const store = dependencies.publicationStore || createPublicationStore(runtimeConfig);
+  return resolveSocialPublicationLifecycleAction({
+    store,
+    publicationId: getStringOption(options, 'resolve-lifecycle-publication-id', ''),
+    resolution: getStringOption(options, 'resolution', ''),
+    note: getStringOption(options, 'resolution-note', ''),
+    resolvedBy: getStringOption(options, 'resolved-by', ''),
+    asOf: getStringOption(options, 'as-of', new Date().toISOString()),
+  });
+}
+
 export async function executeDueSocialPublications(options = {}, dependencies = {}) {
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
   const accountKey = getStringOption(options, 'account-key', '');
@@ -174,6 +191,8 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
   const publishTikTokVideoImpl = dependencies.publishTikTokVideo || publishTikTokVideo;
   const fetchTikTokPublicationStatusImpl =
     dependencies.fetchTikTokPublicationStatus || fetchTikTokPublicationStatus;
+  const deliverLifecycleAlertsImpl = dependencies.deliverSocialPublicationLifecycleAlerts
+    || deliverSocialPublicationLifecycleAlerts;
   const storedPublications = accountKey
     ? await store.fetchPublicationsByChannel({
       platform: TIKTOK_VIDEO_PLATFORM,
@@ -190,7 +209,17 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
     asOf,
     dryRun,
   });
-  const publications = lifecycleReconciliation.publications;
+  const lifecycleAlerts = await deliverLifecycleAlertsImpl({
+    store,
+    publications: lifecycleReconciliation.publications,
+    runtimeConfig,
+    asOf,
+    dryRun,
+    ...(dependencies.sendDiscordMessage
+      ? { sendDiscordMessage: dependencies.sendDiscordMessage }
+      : {}),
+  });
+  const publications = lifecycleAlerts.publications;
   const duePublications = withLimit(
     publications
       .map((publication) => ({
@@ -200,7 +229,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       .filter((item) => item.dueAction),
     limit,
   );
-  const results = [...lifecycleReconciliation.results];
+  const results = [...lifecycleReconciliation.results, ...lifecycleAlerts.results];
 
   for (const { publication, dueAction } of duePublications) {
     const videoRow = publication.video_id
@@ -400,6 +429,10 @@ async function main() {
       '  --limit <n>           Maximum due publications to process.',
       '  --dry-run             Print due TikTok publications without uploading.',
       '  --retry-publication-id <id>  Requeue one approved row only when no TikTok publish id exists.',
+      '  --resolve-lifecycle-publication-id <id>  Record a completed manual TikTok lifecycle action.',
+      '  --resolution <value>  One of: removed, made_private, kept, not_found.',
+      '  --resolution-note <text>  Optional operator note for the manual outcome.',
+      '  --resolved-by <name>  Optional operator identity for the audit trail.',
       '  --as-of <ISO>         Deterministic timestamp. Default: now.',
     ]);
     return;
@@ -407,6 +440,12 @@ async function main() {
 
   if (getStringOption(options, 'retry-publication-id', '')) {
     const result = await retryTikTokPublication(options);
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  if (getStringOption(options, 'resolve-lifecycle-publication-id', '')) {
+    const result = await resolveTikTokLifecycleAction(options);
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
   }

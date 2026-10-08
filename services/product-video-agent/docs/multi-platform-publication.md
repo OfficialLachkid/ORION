@@ -2,18 +2,19 @@
 
 This is the phase-1 structure for publishing an already approved ORION short to additional platforms.
 
-## Status (2026-10-07)
+## Status (2026-10-08)
 
 - Tracking issue: [#95 — ORION Multi-Platform Social Publisher, Phase 1: TikTok](https://github.com/OfficialLachkid/ORION/issues/95)
 - Implementation PR: [#97 — scaffold TikTok social publisher](https://github.com/OfficialLachkid/ORION/pull/97)
-- State: PRs #151, [#152](https://github.com/OfficialLachkid/ORION/pull/152), and #154 are merged. PR #152 binds TikTok consent to the existing Discord Publish action, adds atomic upload claims, persists the TikTok `publish_id` before bytes are uploaded, and adds a guarded retry command. PR #154 makes scheduler wake times derive from active channel schedules and sets future Poke Quiz approvals to `is_aigc: false`. The Poke Quiz target remains enabled only for private `SELF_ONLY` Sandbox delivery.
-- Lifecycle follow-up: [PR #155](https://github.com/OfficialLachkid/ORION/pull/155) is open and merge-clean. It adds pre-upload source/child lifecycle reconciliation, terminal TikTok post details, and the missing Runtime Validation path trigger for `services/product-video-agent/**`. The automatically triggered Runtime Validation passed on 2026-10-07.
+- State: PRs #151, [#152](https://github.com/OfficialLachkid/ORION/pull/152), #154, and [#155](https://github.com/OfficialLachkid/ORION/pull/155) are merged. PR #152 binds TikTok consent to the existing Discord Publish action, adds atomic upload claims, persists the TikTok `publish_id` before bytes are uploaded, and adds a guarded retry command. PR #154 makes scheduler wake times derive from active channel schedules and sets future Poke Quiz approvals to `is_aigc: false`. PR #155 adds pre-upload source/child lifecycle reconciliation, terminal TikTok post details, and the missing Runtime Validation path trigger for `services/product-video-agent/**`. The Poke Quiz target remains enabled only for private `SELF_ONLY` Sandbox delivery.
+- Deployment: merged `main` at `a29c22b14` (through PR #155) was deployed to the Mac mini on 2026-10-08. Runtime-config validation passed, the full product-video suite passed there (479 passed, 1 skipped), and the dynamic scheduler/reconciler was reinstalled without initiating a publication.
+- Lifecycle-alert follow-up: [PR #156](https://github.com/OfficialLachkid/ORION/pull/156) is open with Runtime Validation passing. It alerts the existing video review thread after a post-start cancellation and adds an audited operator-resolution command; it does not introduce a second approval gate or perform an unverified remote deletion.
 - Operator update: the dedicated Poke Quiz TikTok account, the `ORION` TikTok developer organization, and the `ORION Publisher` app now exist. The sandbox includes `pokequizz7` as a target user. Public app metadata, legal-policy URLs, URL-prefix ownership verification, Login Kit, Content Posting API Direct Post, and the Desktop redirect URI are configured. TikTok issued the client credentials; no credential value is recorded in Git.
 - The PR branch has been brought forward to current `main`; the scheduler conflict was resolved by retaining current per-channel error isolation and adding isolated social-publication execution.
 - The original Runtime Validation failure was only `git diff --check`: this file and `src/tiktok-publication-executor.mjs` had an extra blank line at EOF. Both are fixed.
 - Local verification on 2026-10-06: runtime-config validation passed, the product-video suite passed (454 passed, 1 skipped), the Discord/runtime suite passed (369 passed), and the focused TikTok/scheduler/task-router suite passed (31 passed).
 
-This is not approved for public TikTok delivery. OAuth refresh, creator validation, shared-review consent, and crash-safe upload handling are implemented. A supervised `SELF_ONLY` smoke test completed successfully on 2026-10-07. PR #154 is deployed to the Mac mini; the publication scheduler and reconciler were reloaded with the dynamic `08:00`, `12:00`, `14:00`, and `18:00` machine wake-up union. Runtime-config validation and the 35 focused publication tests passed on the Mac after deployment.
+This is not approved for public TikTok delivery. OAuth refresh, creator validation, shared-review consent, crash-safe upload handling, and pre-upload lifecycle reconciliation are implemented. A supervised `SELF_ONLY` smoke test completed successfully on 2026-10-07. The publication scheduler and reconciler are loaded with the dynamic `08:00`, `12:00`, `14:00`, and `18:00` machine wake-up union.
 
 ## Implemented
 
@@ -32,18 +33,18 @@ This is not approved for public TikTok delivery. OAuth refresh, creator validati
 - Channel-driven schedule inheritance: additional-platform rows copy the exact `scheduled_for` assigned from their source channel's `schedule_slots`; TikTok has no duplicated per-channel timetable.
 - Scheduler-time child lifecycle reconciliation: an unstarted TikTok row follows a changed source schedule and is withdrawn or deleted if the shared source is revised, withdrawn, or deleted before delivery starts.
 - Terminal TikTok status persistence: scheduler polling retains TikTok's `fail_reason`, public post id, and derived public post URL while keeping `external_id` as the upload `publish_id`.
+- Post-start cancellation handling: if a source is cancelled after TikTok upload initialization, ORION posts a retryable alert into that video's existing Discord review thread and records the operator's eventual remote outcome. This is an operational safeguard, not a claim that ORION deleted the remote post.
 
 ## Not Implemented Yet
 
 These are blockers for a live rollout, not optional cleanup:
 
-1. **Post-start child lifecycle:** pre-upload schedule/cancellation propagation is implemented, but TikTok does not expose an ORION-integrated remote-delete path after upload initialization. A later source cancellation is marked for manual action rather than reported as remotely removed.
-2. **Source replacement:** a newly rendered replacement still needs an explicit, tested link-and-supersede policy across all destination rows.
-3. **Platform adapter boundary:** the row model is reusable, but the generic social wrapper currently dispatches only TikTok and the target model embeds TikTok-specific settings. Introduce an adapter registry before Instagram/Facebook work.
-4. **TikTok analytics:** analytics ingestion remains YouTube-only.
-5. **Cross-platform related content:** YouTube related-video selection exists, but no generic related-content contract or TikTok adapter exists yet. Preserve the current selector as a reusable policy boundary, investigate the official capability for each destination, and implement platform adapters without importing YouTube Studio/browser logic into the shared publisher.
-6. **Scheduling modes:** `schedule_mode` is normalized and stored, but only `orion` inheritance is implemented. A future `immediate` mode must be explicit and tested rather than silently sharing the inherited path.
-7. **Decision record:** issue #95 requested an OSS/browser/API comparison, but the branch records only the selected official API approach. Capture the alternatives, licenses, operational risks, and final rationale before closing the issue.
+1. **Source replacement:** a newly rendered replacement still needs an explicit, tested link-and-supersede policy across all destination rows.
+2. **Platform adapter boundary:** the row model is reusable, but the generic social wrapper currently dispatches only TikTok and the target model embeds TikTok-specific settings. Introduce an adapter registry before Instagram/Facebook work.
+3. **TikTok analytics:** analytics ingestion remains YouTube-only.
+4. **Cross-platform related content:** YouTube related-video selection exists, but no generic related-content contract or TikTok adapter exists yet. Preserve the current selector as a reusable policy boundary, investigate the official capability for each destination, and implement platform adapters without importing YouTube Studio/browser logic into the shared publisher.
+5. **Scheduling modes:** `schedule_mode` is normalized and stored, but only `orion` inheritance is implemented. A future `immediate` mode must be explicit and tested rather than silently sharing the inherited path.
+6. **Decision record:** issue #95 requested an OSS/browser/API comparison, but the branch records only the selected official API approach. Capture the alternatives, licenses, operational risks, and final rationale before closing the issue.
 
 ## Current Flow
 
@@ -100,6 +101,8 @@ Until that approval, keep privacy at `SELF_ONLY`. Sandbox target users are test 
 
 TikTok's Content Sharing Guidelines explicitly list a utility that uploads content only to accounts owned by the developer or their team as an unacceptable use case. The present internal-only description therefore creates a substantial review risk. Do not submit the current internal tool for production review as though approval were routine.
 
+The number of internally owned or managed accounts does not change that classification: one, two, ten, or twenty ORION/team accounts are still an internal-only uploader. A qualifying creator-facing product must genuinely be available to independent creators, let each creator connect and control their own account, and satisfy TikTok's review requirements. Do not expose the product merely as a review pretext if ORION does not intend to serve those creators.
+
 Before seeking public Direct Post access, choose one of these paths:
 
 - turn ORION Publisher into a genuine creator-facing product that lets independent creators authenticate and exercise real control over their own posts; or
@@ -142,10 +145,19 @@ Current portal decisions:
 
 Application work before enabling automation:
 
-1. Add operator alerting and a documented manual-removal procedure for a source cancelled after TikTok upload initialization.
-2. Implement explicit source-replacement propagation before relying on unattended replacement delivery.
-3. Replace the channel-wide AIGC setting with render-provenance-derived guidance before mixing synthetic-narration and non-synthetic formats on the same target.
-4. Add a generic related-content contract and per-platform adapters after confirming what each official publishing API supports; reuse the existing selector policy without coupling other destinations to YouTube Studio automation.
+1. Implement explicit source-replacement propagation before relying on unattended replacement delivery.
+2. Replace the channel-wide AIGC setting with render-provenance-derived guidance before mixing synthetic-narration and non-synthetic formats on the same target.
+3. Add a generic related-content contract and per-platform adapters after confirming what each official publishing API supports; reuse the existing selector policy without coupling other destinations to YouTube Studio automation.
+
+Post-start cancellation procedure:
+
+1. ORION posts one alert in the video's existing Discord review thread when the source is cancelled after a TikTok `publish_id` exists. It includes the destination/account, source and child states, publication ids, and any known TikTok post URL.
+2. An operator opens TikTok and removes the post, makes it private, deliberately keeps it, or confirms that it cannot be found. ORION does not automatically claim remote removal.
+3. Record the observed result so the action is auditable and does not reopen during later reconciliation:
+
+```bash
+npm run product-video:resolve-tiktok-lifecycle-action -- --resolve-lifecycle-publication-id <publication-id> --resolution <removed|made_private|kept|not_found> --resolution-note "What was verified in TikTok" --resolved-by "operator name"
+```
 
 Desktop authorization command on the Mac mini:
 
@@ -262,6 +274,7 @@ The checked-in registry is the active default for the scheduler, not merely samp
 - [x] Atomic claim/idempotency and guarded operator retry merged in PR #152.
 - [x] Final status/failure/public-post fields persisted by scheduler polling.
 - [x] Pre-upload child schedule, withdrawal, and deletion lifecycle reconciled against the shared source row.
+- [x] Existing-review-thread alerting and audited manual resolution implemented for cancellations after TikTok upload initialization.
 - [x] One `SELF_ONLY` Mac mini smoke publication completed and reconciled (`PUBLISH_COMPLETE`, 2026-10-07).
 - [ ] Public-posting app review completed, if public delivery is required.
 - [x] Private Sandbox target enabled in tracked configuration for the first account.
