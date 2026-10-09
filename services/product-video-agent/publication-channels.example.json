@@ -183,6 +183,20 @@
                 "is_aigc": false,
                 "video_cover_timestamp_ms": 1000
               }
+            },
+            {
+              "platform": "instagram_reels",
+              "account_key": "poke-quizzz-instagram",
+              "enabled": false,
+              "schedule_mode": "orion",
+              "delivery_provider": "instagram_graph",
+              "visibility": "public",
+              "instagram": {
+                "user_id": "17841467563066221",
+                "expected_username": "pokequizzz",
+                "access_token_env": "INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN",
+                "share_to_feed": true
+              }
             }
           ]
         },
