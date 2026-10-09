@@ -170,6 +170,18 @@ export class InstagramGraphClient {
       payload,
     };
   }
+
+  async fetchAuthenticatedProfile() {
+    const payload = await this.request('me', {
+      query: { fields: 'id,username,account_type' },
+    });
+    return {
+      id: normalizeText(payload.id),
+      username: normalizeText(payload.username).replace(/^@/u, '').toLowerCase(),
+      accountType: normalizeText(payload.account_type),
+      payload,
+    };
+  }
 }
 
 function resolveStoredTarget(publication = {}, target = {}) {

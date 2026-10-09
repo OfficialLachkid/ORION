@@ -100,7 +100,7 @@ async function executeSocialPublicationPhase({
   const runProcess = options.runProcess || runLocalProcess;
   const executable = options.executable || process.execPath;
   const scriptPath = options.scriptPath
-    || resolve(projectRoot, 'services/product-video-agent/scripts/publication/social/tiktok/execute-due-publications.mjs');
+    || resolve(projectRoot, 'services/product-video-agent/scripts/publication/social/execute-due-publications.mjs');
   const result = await runProcess({
     executable,
     args: [

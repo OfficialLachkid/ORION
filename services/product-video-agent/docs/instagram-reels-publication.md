@@ -14,7 +14,7 @@ The initial scope is creator-owned Instagram professional accounts that are expl
 
 ## Current implementation status
 
-Implemented on `feat/instagram-reels-publisher`:
+Implemented and merged in PR #163:
 
 - `instagram_reels` as a reusable publication target type;
 - one declarative target per Instagram account;
@@ -26,13 +26,26 @@ Implemented on `feat/instagram-reels-publisher`:
 - fail-closed handling when a publish response is uncertain;
 - adapter and integration unit tests.
 
+Implemented on `feat/instagram-scheduler-dispatch`:
+
+- shared scheduler dispatch for TikTok and Instagram without duplicating channel schedules;
+- atomic Instagram upload claiming and lifecycle reconciliation;
+- persistence at the staging, container, and published-media boundaries;
+- a read-only account diagnostic that requires the configured user id and username to match;
+- a one-publication supervised live override while unattended delivery remains disabled;
+- stale Instagram staging cleanup that protects objects referenced by active publications;
+- a disabled Poke Quizzz target for Instagram user `17841467563066221` / `@pokequizzz`.
+
 Deliberately not enabled yet:
 
-- no Instagram target exists in the live channel registry;
+- the Poke Quizzz Instagram target exists but remains disabled;
 - `INSTAGRAM_DELIVERY_ENABLED` defaults to `false`;
-- OAuth/token provisioning is not implemented yet;
-- the shared social scheduler does not dispatch Instagram rows yet;
 - no live Reel has been created.
+
+The Poke Quizzz Creator account is connected as an app tester and its token is stored only in the
+Mac runtime environment. Webhook subscriptions are intentionally disabled. The initial controlled
+test uses Meta's dashboard-generated tester token; a general creator-facing OAuth flow is deferred
+until ORION needs to connect accounts that are not app testers.
 
 ## Account model
 
@@ -41,7 +54,7 @@ Each account is an independent target in the source YouTube channel profile:
 ```json
 {
   "platform": "instagram_reels",
-  "account_key": "poke-quizz-instagram",
+  "account_key": "poke-quizzz-instagram",
   "enabled": false,
   "schedule_mode": "orion",
   "delivery_provider": "instagram_graph",
@@ -72,11 +85,17 @@ Dashboard labels change periodically. Use the option whose description says it p
 7. Request only:
    - `instagram_business_basic`
    - `instagram_business_content_publish`
+   Do not add Meta's bundled messaging/comment permissions for publication-only use.
 8. Keep the app in Development mode during the first controlled integration.
 9. Add the ORION operator/developer account under **App roles** and add the Poke Quiz Instagram account as an Instagram tester when the dashboard requests one.
 10. Accept the tester invitation while logged into that Instagram account.
-11. Do not invent a redirect URI. The next engineering increment will add the ORION OAuth callback helper; its exact URI must be registered byte-for-byte in Meta before authorization.
+11. A redirect URI is not required for the first dashboard-generated tester token. Do not invent one. Register an exact callback only when ORION implements a reusable OAuth connection flow.
 12. Do not send the App Secret or access token through Discord, GitHub, or chat. Store them in `config/product-video/.env` on the Mac only.
+
+Business Login, webhooks, and App Review are not required for the first test-account publication.
+Keep the app in Development mode until the supervised Reel succeeds. The Meta dashboard currently
+directs apps that need hashtag search or Insights to the Facebook Login setup; do not change the
+working authentication model merely to add analytics. Treat analytics as a separate later phase.
 
 The planned environment names are:
 
@@ -106,22 +125,21 @@ If the network drops during `media_publish`, ORION does not blindly repeat the r
 
 ## Remaining engineering phases
 
-### Phase 2: OAuth and account connection
+### Phase 2: account connection and identity validation
 
-- implement a local one-time authorization command;
-- decide and verify the callback URI accepted by the current Meta dashboard;
-- exchange and refresh the account token;
+- use a dashboard-generated tester token for the first owned account;
 - query the authenticated Instagram user id and username;
 - reject target configuration when the authenticated identity differs from the configured account;
-- add a connection diagnostic that performs read-only profile validation.
+- run the read-only connection diagnostic before any live publication;
+- later implement OAuth callback, token exchange, and refresh only when scaling beyond tester accounts.
 
 ### Phase 3: scheduler dispatch
 
-- route `instagram_reels` rows through the shared social publication phase;
-- preserve atomic upload claiming and source lifecycle reconciliation;
-- persist staging, container, and media ids at every irreversible boundary;
-- gate live delivery behind `INSTAGRAM_DELIVERY_ENABLED` and a one-publication supervised override;
-- add stale `instagram/` staging cleanup protection.
+- [x] route `instagram_reels` rows through the shared social publication phase;
+- [x] preserve atomic upload claiming and source lifecycle reconciliation;
+- [x] persist staging, container, and media ids at every irreversible boundary;
+- [x] gate live delivery behind `INSTAGRAM_DELIVERY_ENABLED` and a one-publication supervised override;
+- [x] add stale `instagram/` staging cleanup protection.
 
 ### Phase 4: supervised validation
 

@@ -99,6 +99,31 @@ test('InstagramGraphClient creates, checks, publishes, and resolves a Reel', asy
   assert.doesNotMatch(requests[0].url, /secret-token/u);
 });
 
+test('InstagramGraphClient resolves the authenticated professional account identity', async () => {
+  const client = new InstagramGraphClient({
+    accessToken: 'secret-token',
+    apiVersion: 'v25.0',
+    fetchImpl: async () => graphResponse({
+      id: 'ig-user-1',
+      username: 'PokeQuizzz',
+      account_type: 'CREATOR',
+    }),
+  });
+
+  const profile = await client.fetchAuthenticatedProfile();
+
+  assert.deepEqual(profile, {
+    id: 'ig-user-1',
+    username: 'pokequizzz',
+    accountType: 'CREATOR',
+    payload: {
+      id: 'ig-user-1',
+      username: 'PokeQuizzz',
+      account_type: 'CREATOR',
+    },
+  });
+});
+
 test('prepareInstagramReelPublication binds delivery to exact approved file and account', async () => {
   const result = await prepareInstagramReelPublication({
     publication,
