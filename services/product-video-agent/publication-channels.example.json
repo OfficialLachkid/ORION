@@ -187,7 +187,7 @@
             {
               "platform": "instagram_reels",
               "account_key": "poke-quizzz-instagram",
-              "enabled": false,
+              "enabled": true,
               "schedule_mode": "orion",
               "delivery_provider": "instagram_graph",
               "visibility": "public",

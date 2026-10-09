@@ -34,11 +34,11 @@ Implemented on `feat/instagram-scheduler-dispatch`:
 - a read-only account diagnostic that requires the configured user id and username to match;
 - a one-publication supervised live override while unattended delivery remains disabled;
 - stale Instagram staging cleanup that protects objects referenced by active publications;
-- a disabled Poke Quizzz target for Instagram user `17841467563066221` / `@pokequizzz`.
+- the Poke Quizzz target for Instagram user `17841467563066221` / `@pokequizzz`.
 
 Deliberately not enabled yet:
 
-- the Poke Quizzz Instagram target exists but remains disabled;
+- the target participates in new shared approvals, but live delivery remains gated;
 - `INSTAGRAM_DELIVERY_ENABLED` defaults to `false`;
 - no live Reel has been created.
 
@@ -60,7 +60,7 @@ Each account is an independent target in the source YouTube channel profile:
 {
   "platform": "instagram_reels",
   "account_key": "poke-quizzz-instagram",
-  "enabled": false,
+  "enabled": true,
   "schedule_mode": "orion",
   "delivery_provider": "instagram_graph",
   "visibility": "public",
