@@ -141,6 +141,41 @@ test('Buffer delivery is disclosed on the same shared publication review', () =>
   assert.doesNotMatch(review.tiktokDirectPostLabel, /Duet:/u);
 });
 
+test('Instagram accounts appear in the same shared publication review', () => {
+  const instagramChannelProfile = structuredClone(channelProfile);
+  instagramChannelProfile.metadata.publisher.targets.push({
+    platform: 'instagram_reel',
+    account_key: 'poke-quizz-instagram',
+    enabled: true,
+    delivery_provider: 'instagram_graph',
+    instagram: {
+      user_id: 'ig-user-1',
+      expected_username: 'pokequizz',
+      access_token_env: 'INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN',
+      share_to_feed: true,
+    },
+  });
+
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    channelProfile: instagramChannelProfile,
+    reviewThreadId: '1532709429902839810',
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+
+  const review = task.poke_quizz_publication_review;
+  assert.equal(
+    review.destinationsLabel,
+    'YouTube Shorts + TikTok @pokequizz7 + Instagram @pokequizz',
+  );
+  assert.equal(review.instagramReels.length, 1);
+  assert.equal(review.instagramReels[0].instagramUserId, 'ig-user-1');
+  assert.equal(review.instagramReels[0].shareToFeed, true);
+  assert.match(review.instagramReelsLabel, /Instagram Graph API/u);
+  assert.match(review.instagramReelsLabel, /Share to Feed: yes/u);
+});
+
 test('buildPokeQuizzPublicationReviewTask keeps the same task id when mutable review fields change', () => {
   const firstTask = buildPokeQuizzPublicationReviewTask({
     publication,

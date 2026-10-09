@@ -2,6 +2,9 @@
 
 This is the phase-1 structure for publishing an already approved ORION short to additional platforms.
 
+The direct Instagram Reels design and rollout checklist live in
+[`instagram-reels-publication.md`](./instagram-reels-publication.md).
+
 ## Status (2026-10-08)
 
 - Tracking issue: [#95 — ORION Multi-Platform Social Publisher, Phase 1: TikTok](https://github.com/OfficialLachkid/ORION/issues/95)

@@ -81,6 +81,25 @@ test('stageFile uploads a never-overwritten object and returns its direct public
   assert.equal(requests[0].options.headers['content-type'], 'video/mp4');
 });
 
+test('stageFile isolates objects by delivery adapter prefix', async () => {
+  const staging = new SupabasePublicationStaging({
+    supabaseUrl: 'https://project.supabase.co',
+    apiKey: 'secret',
+    uuidImpl: () => 'random-id',
+    statImpl: async () => ({ size: 4_000 }),
+    createReadStreamImpl: () => new Uint8Array([1, 2, 3]),
+    fetchImpl: async () => jsonResponse(200, {}),
+  });
+
+  const result = await staging.stageFile({
+    publicationId: 'publication-1',
+    filePath: '/tmp/video.mp4',
+    pathPrefix: 'instagram',
+  });
+
+  assert.equal(result.objectPath, 'instagram/publication-1--random-id.mp4');
+});
+
 test('stageFile fails before upload when the exact MP4 exceeds the configured limit', async () => {
   let fetchCalls = 0;
   const staging = new SupabasePublicationStaging({

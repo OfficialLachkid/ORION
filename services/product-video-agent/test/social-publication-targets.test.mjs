@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  INSTAGRAM_REEL_PLATFORM,
   TIKTOK_VIDEO_PLATFORM,
   buildAdditionalPlatformPublicationRows,
   listEnabledAdditionalPublicationTargets,
@@ -113,6 +114,37 @@ test('Buffer targets retain provider and channel identity in publication metadat
   assert.equal(target.buffer.channel_id, 'channel-1');
   assert.equal(row.metadata.publisher_target.delivery_provider, 'buffer');
   assert.equal(row.metadata.publisher_target.buffer.organization_id, 'organization-1');
+});
+
+test('Instagram targets normalize as independent plug-and-play account destinations', () => {
+  const profile = structuredClone(sourceChannelProfile);
+  profile.metadata.publisher.targets.push({
+    platform: 'instagram_reels',
+    account_key: 'poke-quizz-instagram',
+    enabled: true,
+    schedule_mode: 'orion',
+    instagram: {
+      user_id: 'ig-user-1',
+      expected_username: 'pokequizz',
+      access_token_env: 'INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN',
+      share_to_feed: true,
+    },
+  });
+
+  const target = listEnabledAdditionalPublicationTargets(profile)
+    .find((item) => item.platform === INSTAGRAM_REEL_PLATFORM);
+  const row = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile: profile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+  }).find((item) => item.platform === INSTAGRAM_REEL_PLATFORM);
+
+  assert.equal(target.deliveryProvider, 'instagram_graph');
+  assert.equal(target.instagram.user_id, 'ig-user-1');
+  assert.equal(row.account_key, 'poke-quizz-instagram');
+  assert.equal(row.scheduled_for, '2026-09-08T10:00:00.000Z');
+  assert.equal(row.metadata.publisher_target.instagram.access_token_env, 'INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN');
 });
 
 test('buildAdditionalPlatformPublicationRows creates a scheduled TikTok publication row from a YouTube source', () => {
@@ -276,6 +308,59 @@ test('shared approval binds a Buffer delivery to its exact organization and chan
   assert.equal(approval.delivery_provider, 'buffer');
   assert.equal(approval.buffer_organization_id, 'organization-1');
   assert.equal(approval.buffer_channel_id, 'channel-1');
+});
+
+test('shared approval binds an Instagram delivery to the exact account and MP4', async () => {
+  const profile = structuredClone(sourceChannelProfile);
+  profile.metadata.publisher.targets = [{
+    platform: 'instagram_reel',
+    account_key: 'poke-quizz-instagram',
+    enabled: true,
+    schedule_mode: 'orion',
+    instagram: {
+      user_id: 'ig-user-1',
+      expected_username: 'pokequizz',
+      access_token_env: 'INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN',
+      share_to_feed: true,
+    },
+  }];
+  let storedRow;
+
+  await upsertAdditionalPlatformPublicationTargets({
+    store: {
+      async upsertPublication(row) {
+        storedRow = row;
+        return row;
+      },
+    },
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile: profile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+    projectRoot: '/workspace',
+    statImpl: async () => ({ size: 4000 }),
+    hashFileImpl: async () => 'b'.repeat(64),
+    approval: {
+      approvedAt: '2026-09-07T12:00:00.000Z',
+      approvedBy: 'Lachkid',
+      approvedById: 'operator-1',
+      reviewTaskId: 'TASK-REVIEW',
+      instagramReels: [{
+        accountKey: 'poke-quizz-instagram',
+        instagramUserId: 'ig-user-1',
+        creatorUsername: 'pokequizz',
+        caption: 'Guess the Pokemon! #pokemon',
+        shareToFeed: true,
+      }],
+    },
+  });
+
+  const approval = storedRow.metadata.instagram_reel_approval;
+  assert.equal(approval.approved, true);
+  assert.equal(approval.instagram_user_id, 'ig-user-1');
+  assert.equal(approval.creator_username, 'pokequizz');
+  assert.equal(approval.video_sha256, 'b'.repeat(64));
+  assert.equal(approval.share_to_feed, true);
 });
 
 test('upsertAdditionalPlatformPublicationTargets preserves an existing delivery row', async () => {

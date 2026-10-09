@@ -146,8 +146,8 @@ export class SupabasePublicationStaging {
     return { created: true, bucket };
   }
 
-  buildObjectPath(publicationId) {
-    return `buffer/${safePathSegment(publicationId)}--${safePathSegment(this.uuidImpl(), 'object')}.mp4`;
+  buildObjectPath(publicationId, pathPrefix = 'buffer') {
+    return `${safePathSegment(pathPrefix, 'publication')}/${safePathSegment(publicationId)}--${safePathSegment(this.uuidImpl(), 'object')}.mp4`;
   }
 
   getPublicUrl(objectPath) {
@@ -155,7 +155,7 @@ export class SupabasePublicationStaging {
     return String(this.storageUrl(`object/public/${encodedBucket}/${encodeObjectPath(objectPath)}`));
   }
 
-  async stageFile({ publicationId, filePath, objectPath = '' }) {
+  async stageFile({ publicationId, filePath, objectPath = '', pathPrefix = 'buffer' }) {
     this.assertConfigured();
     const normalizedFilePath = normalizeText(filePath);
     if (!normalizedFilePath) {
@@ -172,7 +172,9 @@ export class SupabasePublicationStaging {
       );
     }
 
-    const finalObjectPath = normalizeObjectPath(objectPath || this.buildObjectPath(publicationId));
+    const finalObjectPath = normalizeObjectPath(
+      objectPath || this.buildObjectPath(publicationId, pathPrefix),
+    );
     const body = this.createReadStreamImpl(normalizedFilePath);
     const isStream = body && typeof body === 'object' && typeof body.pipe === 'function';
     await this.request(

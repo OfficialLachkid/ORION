@@ -506,6 +506,7 @@ function buildApprovalRequestPayload(outboundEvent) {
     createField('Preview', metadata.previewUrl ? `[Open Preview](${metadata.previewUrl})` : '', true),
     createField('Destinations', metadata.destinationsLabel || '', false),
     createField('TikTok Direct Post', metadata.tiktokDirectPostLabel || '', false),
+    createField('Instagram Reels', metadata.instagramReelsLabel || '', false),
     createField('Type Pair', metadata.typePairLabel || '', true),
     createField('Seed', metadata.seed ? `\`${metadata.seed}\`` : '', true),
     createField('Busy Time', metadata.generationDurationLabel || '', true),

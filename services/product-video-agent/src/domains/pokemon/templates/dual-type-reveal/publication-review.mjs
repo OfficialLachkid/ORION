@@ -4,9 +4,11 @@ import { buildOutboundEventDiscordPayload } from '../../../../../../discord-bot/
 import { formatYoutubeAutoCommentStatusLabel } from '../../../../youtube-auto-comments.mjs';
 import {
   BUFFER_DELIVERY_PROVIDER,
+  INSTAGRAM_REEL_PLATFORM,
   TIKTOK_VIDEO_PLATFORM,
   listEnabledAdditionalPublicationTargets,
 } from '../../../../social-publication-targets.mjs';
+import { buildInstagramCaption } from '../../../../instagram-publication.mjs';
 import { buildTikTokCaption } from '../../../../tiktok-publication.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
@@ -258,50 +260,42 @@ function buildDestinationReview(publication = {}, channelProfile = {}) {
   const additionalTargets = listEnabledAdditionalPublicationTargets(channelProfile);
   const destinationLabels = ['YouTube Shorts'];
   const tiktokTarget = additionalTargets.find((target) => target.platform === TIKTOK_VIDEO_PLATFORM);
-  if (!tiktokTarget) {
-    return {
-      destinationsLabel: destinationLabels.join(' + '),
-      tiktokDirectPost: null,
-      tiktokDirectPostLabel: '',
+  let tiktokDirectPost = null;
+  let tiktokDirectPostLabel = '';
+  if (tiktokTarget) {
+    const config = tiktokTarget.tiktok || {};
+    const bufferConfig = tiktokTarget.buffer || {};
+    const isBuffer = tiktokTarget.deliveryProvider === BUFFER_DELIVERY_PROVIDER;
+    const creatorUsername = String(
+      bufferConfig.expected_username
+        || bufferConfig.expectedUsername
+        || config.expected_username
+        || config.expectedUsername
+        || '',
+    )
+      .trim()
+      .replace(/^@/u, '')
+      .toLowerCase();
+    tiktokDirectPost = {
+      accountKey: tiktokTarget.accountKey,
+      deliveryProvider: tiktokTarget.deliveryProvider,
+      creatorUsername,
+      caption: buildTikTokCaption(publication, tiktokTarget),
+      privacyLevel: String(isBuffer ? 'PUBLIC' : config.privacy_level || 'SELF_ONLY').trim(),
+      allowComment: config.comments_enabled === true,
+      allowDuet: config.duet_enabled === true,
+      allowStitch: config.stitch_enabled === true,
+      brandContentToggle: config.brand_content_toggle === true,
+      brandOrganicToggle: config.brand_organic_toggle === true,
+      isAigc: config.is_aigc === true,
+      videoCoverTimestampMs: Number(config.video_cover_timestamp_ms || 1000),
     };
-  }
-
-  const config = tiktokTarget.tiktok || {};
-  const bufferConfig = tiktokTarget.buffer || {};
-  const isBuffer = tiktokTarget.deliveryProvider === BUFFER_DELIVERY_PROVIDER;
-  const creatorUsername = String(
-    bufferConfig.expected_username
-      || bufferConfig.expectedUsername
-      || config.expected_username
-      || config.expectedUsername
-      || '',
-  )
-    .trim()
-    .replace(/^@/u, '')
-    .toLowerCase();
-  const tiktokDirectPost = {
-    accountKey: tiktokTarget.accountKey,
-    deliveryProvider: tiktokTarget.deliveryProvider,
-    creatorUsername,
-    caption: buildTikTokCaption(publication, tiktokTarget),
-    privacyLevel: String(isBuffer ? 'PUBLIC' : config.privacy_level || 'SELF_ONLY').trim(),
-    allowComment: config.comments_enabled === true,
-    allowDuet: config.duet_enabled === true,
-    allowStitch: config.stitch_enabled === true,
-    brandContentToggle: config.brand_content_toggle === true,
-    brandOrganicToggle: config.brand_organic_toggle === true,
-    isAigc: config.is_aigc === true,
-    videoCoverTimestampMs: Number(config.video_cover_timestamp_ms || 1000),
-  };
-  destinationLabels.push(creatorUsername ? `TikTok @${creatorUsername}` : 'TikTok');
-  const providerLabel = isBuffer ? 'Buffer automatic publish' : 'TikTok Direct Post';
-  const controlsLabel = isBuffer
-    ? 'TikTok interaction settings remain account/post defaults in Buffer.'
-    : `Comments: ${tiktokDirectPost.allowComment ? 'on' : 'off'}; Duet: ${tiktokDirectPost.allowDuet ? 'on' : 'off'}; Stitch: ${tiktokDirectPost.allowStitch ? 'on' : 'off'}`;
-  return {
-    destinationsLabel: destinationLabels.join(' + '),
-    tiktokDirectPost,
-    tiktokDirectPostLabel: [
+    destinationLabels.push(creatorUsername ? `TikTok @${creatorUsername}` : 'TikTok');
+    const providerLabel = isBuffer ? 'Buffer automatic publish' : 'TikTok Direct Post';
+    const controlsLabel = isBuffer
+      ? 'TikTok interaction settings remain account/post defaults in Buffer.'
+      : `Comments: ${tiktokDirectPost.allowComment ? 'on' : 'off'}; Duet: ${tiktokDirectPost.allowDuet ? 'on' : 'off'}; Stitch: ${tiktokDirectPost.allowStitch ? 'on' : 'off'}`;
+    tiktokDirectPostLabel = [
       `Delivery: ${providerLabel}`,
       `Account: @${creatorUsername || 'not configured'}`,
       isBuffer
@@ -310,7 +304,39 @@ function buildDestinationReview(publication = {}, channelProfile = {}) {
       controlsLabel,
       `Commercial content: ${tiktokDirectPost.brandContentToggle || tiktokDirectPost.brandOrganicToggle ? 'yes' : 'no'}; AI-generated label: ${tiktokDirectPost.isAigc ? 'on' : 'off'}`,
       `Caption: ${tiktokDirectPost.caption}`,
-    ].join('\n'),
+    ].join('\n');
+  }
+
+  const instagramReels = additionalTargets
+    .filter((target) => target.platform === INSTAGRAM_REEL_PLATFORM)
+    .map((target) => {
+      const config = target.instagram || {};
+      const creatorUsername = String(
+        config.expected_username || config.expectedUsername || '',
+      ).trim().replace(/^@/u, '').toLowerCase();
+      const reel = {
+        accountKey: target.accountKey,
+        deliveryProvider: target.deliveryProvider,
+        instagramUserId: String(config.user_id || config.userId || '').trim(),
+        creatorUsername,
+        caption: buildInstagramCaption(publication, target),
+        shareToFeed: config.share_to_feed !== false,
+      };
+      destinationLabels.push(creatorUsername ? `Instagram @${creatorUsername}` : 'Instagram');
+      return reel;
+    });
+  const instagramReelsLabel = instagramReels.map((reel) => [
+    `Account: @${reel.creatorUsername || 'not configured'}`,
+    `Delivery: Instagram Graph API (${reel.deliveryProvider})`,
+    `Share to Feed: ${reel.shareToFeed ? 'yes' : 'no'}`,
+    `Caption: ${reel.caption}`,
+  ].join('\n')).join('\n\n');
+  return {
+    destinationsLabel: destinationLabels.join(' + '),
+    tiktokDirectPost,
+    tiktokDirectPostLabel,
+    instagramReels,
+    instagramReelsLabel,
   };
 }
 
@@ -425,6 +451,8 @@ export function buildPokeQuizzPublicationReviewTask({
     destinationsLabel: destinationReview.destinationsLabel,
     tiktokDirectPost: destinationReview.tiktokDirectPost,
     tiktokDirectPostLabel: destinationReview.tiktokDirectPostLabel,
+    instagramReels: destinationReview.instagramReels,
+    instagramReelsLabel: destinationReview.instagramReelsLabel,
   };
 
   return {
@@ -577,6 +605,7 @@ export function buildPokeQuizzPublicationReviewEvent(task) {
       autoCommentNote: review.autoCommentNote || '',
       destinationsLabel: review.destinationsLabel || '',
       tiktokDirectPostLabel: review.tiktokDirectPostLabel || '',
+      instagramReelsLabel: review.instagramReelsLabel || '',
       approveLabel: reviewPresentation.approve_label,
       rejectLabel: reviewPresentation.reject_label,
       deleteLabel: reviewPresentation.delete_label,
