@@ -104,22 +104,25 @@ test('InstagramGraphClient resolves the authenticated professional account ident
     accessToken: 'secret-token',
     apiVersion: 'v25.0',
     fetchImpl: async () => graphResponse({
-      id: 'ig-user-1',
+      id: 'app-scoped-1',
+      user_id: 'ig-user-1',
       username: 'PokeQuizzz',
-      account_type: 'CREATOR',
+      account_type: 'MEDIA_CREATOR',
     }),
   });
 
   const profile = await client.fetchAuthenticatedProfile();
 
   assert.deepEqual(profile, {
-    id: 'ig-user-1',
+    userId: 'ig-user-1',
+    appScopedId: 'app-scoped-1',
     username: 'pokequizzz',
-    accountType: 'CREATOR',
+    accountType: 'MEDIA_CREATOR',
     payload: {
-      id: 'ig-user-1',
+      id: 'app-scoped-1',
+      user_id: 'ig-user-1',
       username: 'PokeQuizzz',
-      account_type: 'CREATOR',
+      account_type: 'MEDIA_CREATOR',
     },
   });
 });

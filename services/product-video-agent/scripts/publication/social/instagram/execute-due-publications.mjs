@@ -121,15 +121,16 @@ export async function diagnoseInstagramAccount(options = {}, dependencies = {}) 
   const expectedUsername = normalizeText(
     target.instagram?.expected_username || target.instagram?.expectedUsername,
   ).replace(/^@/u, '').toLowerCase();
-  if (!profile.id || profile.id !== expectedId || profile.username !== expectedUsername) {
+  if (!profile.userId || profile.userId !== expectedId || profile.username !== expectedUsername) {
     throw new InstagramPublicationValidationError(
-      `Instagram identity mismatch: expected @${expectedUsername} (${expectedId}), received @${profile.username || 'unknown'} (${profile.id || 'unknown'}).`,
+      `Instagram identity mismatch: expected @${expectedUsername} (${expectedId}), received @${profile.username || 'unknown'} (${profile.userId || 'unknown'}).`,
       { code: 'instagram_identity_mismatch' },
     );
   }
   return {
     account_key: accountKey,
-    instagram_user_id: profile.id,
+    instagram_user_id: profile.userId,
+    app_scoped_user_id: profile.appScopedId,
     username: profile.username,
     account_type: profile.accountType,
     identity_verified: true,

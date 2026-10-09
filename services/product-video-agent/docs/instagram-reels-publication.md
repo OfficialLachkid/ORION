@@ -47,6 +47,11 @@ Mac runtime environment. Webhook subscriptions are intentionally disabled. The i
 test uses Meta's dashboard-generated tester token; a general creator-facing OAuth flow is deferred
 until ORION needs to connect accounts that are not app testers.
 
+Instagram Login returns two different identifiers from `/me`: `user_id` is the professional
+account/publishing id used by the media endpoints, while `id` is app-scoped. For Poke Quizzz,
+the configured publishing id is `17841467563066221`. The connection diagnostic records both but
+must match the target against `user_id`, never the app-scoped `id`.
+
 ## Account model
 
 Each account is an independent target in the source YouTube channel profile:

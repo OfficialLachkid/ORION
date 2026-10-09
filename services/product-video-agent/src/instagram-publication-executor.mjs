@@ -173,10 +173,11 @@ export class InstagramGraphClient {
 
   async fetchAuthenticatedProfile() {
     const payload = await this.request('me', {
-      query: { fields: 'id,username,account_type' },
+      query: { fields: 'id,user_id,username,account_type' },
     });
     return {
-      id: normalizeText(payload.id),
+      userId: normalizeText(payload.user_id),
+      appScopedId: normalizeText(payload.id),
       username: normalizeText(payload.username).replace(/^@/u, '').toLowerCase(),
       accountType: normalizeText(payload.account_type),
       payload,
