@@ -380,6 +380,7 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
           approvedById: task.approved_by_id || '',
           reviewTaskId: task.task_id || '',
           tiktokDirectPost: review.tiktokDirectPost || null,
+          instagramReels: Array.isArray(review.instagramReels) ? review.instagramReels : [],
         },
       });
     } catch (error) {

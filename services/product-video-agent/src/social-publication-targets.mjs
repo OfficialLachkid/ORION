@@ -4,12 +4,15 @@ import { createStableId } from './ids.mjs';
 import {
   TIKTOK_DIRECT_POST_APPROVAL_VERSION,
 } from './tiktok-publication.mjs';
+import { INSTAGRAM_REEL_APPROVAL_VERSION } from './instagram-publication.mjs';
 import { hashFileSha256 } from './tiktok-publication-executor.mjs';
 
 export const YOUTUBE_SHORTS_PLATFORM = 'youtube_shorts';
 export const TIKTOK_VIDEO_PLATFORM = 'tiktok_video';
+export const INSTAGRAM_REEL_PLATFORM = 'instagram_reels';
 export const TIKTOK_DIRECT_DELIVERY_PROVIDER = 'tiktok_direct';
 export const BUFFER_DELIVERY_PROVIDER = 'buffer';
+export const INSTAGRAM_GRAPH_DELIVERY_PROVIDER = 'instagram_graph';
 const SOURCE_CANCELLED_STATES = new Set(['deleted', 'revision_requested', 'withdrawn']);
 const CHILD_PENDING_STATES = new Set(['queued', 'scheduled']);
 const CHILD_DELIVERY_STARTED_STATES = new Set(['publishing', 'published']);
@@ -26,6 +29,9 @@ function normalizePlatform(value) {
   if (text === 'tiktok' || text === 'tiktok_video' || text === 'tiktok_videos') {
     return TIKTOK_VIDEO_PLATFORM;
   }
+  if (text === 'instagram' || text === 'instagram_reel' || text === INSTAGRAM_REEL_PLATFORM) {
+    return INSTAGRAM_REEL_PLATFORM;
+  }
   return text;
 }
 
@@ -37,6 +43,9 @@ function normalizeScheduleMode(value) {
 
 function normalizeDeliveryProvider(value, platform) {
   const text = normalizeText(value).toLowerCase().replace(/[-\s]+/gu, '_');
+  if (platform === INSTAGRAM_REEL_PLATFORM) {
+    return text || INSTAGRAM_GRAPH_DELIVERY_PROVIDER;
+  }
   if (platform !== TIKTOK_VIDEO_PLATFORM) return text;
   if (text === BUFFER_DELIVERY_PROVIDER) return BUFFER_DELIVERY_PROVIDER;
   return TIKTOK_DIRECT_DELIVERY_PROVIDER;
@@ -89,6 +98,9 @@ export function normalizePlatformPublicationTarget(target = {}, channelProfile =
     buffer: target.buffer && typeof target.buffer === 'object'
       ? { ...target.buffer }
       : {},
+    instagram: target.instagram && typeof target.instagram === 'object'
+      ? { ...target.instagram }
+      : {},
     sourceAccountKey: normalizeText(channelProfile.account_key),
   };
 }
@@ -139,6 +151,7 @@ function serializeTargetForMetadata(target = {}) {
     visibility: target.visibility || '',
     tiktok: target.tiktok || {},
     buffer: target.buffer || {},
+    instagram: target.instagram || {},
     metadata: target.metadata || {},
   };
 }
@@ -217,6 +230,77 @@ async function addTikTokDirectPostApproval({
         brand_organic_toggle: reviewedSettings.brandOrganicToggle === true,
         is_aigc: reviewedSettings.isAigc === true,
         video_cover_timestamp_ms: Number(reviewedSettings.videoCoverTimestampMs || 1000),
+      },
+    },
+  };
+}
+
+function requireInstagramApprovalIdentity(target = {}, reviewedSettings = {}) {
+  const instagramUserId = normalizeText(
+    reviewedSettings.instagramUserId
+      || target.instagram?.user_id
+      || target.instagram?.userId,
+  );
+  const creatorUsername = normalizeText(
+    reviewedSettings.creatorUsername
+      || target.instagram?.expected_username
+      || target.instagram?.expectedUsername,
+  ).replace(/^@/u, '').toLowerCase();
+  if (!instagramUserId || !creatorUsername) {
+    throw new Error(
+      `Instagram target ${target.accountKey || target.account_key || ''} requires user_id and expected_username.`,
+    );
+  }
+  return { instagramUserId, creatorUsername };
+}
+
+async function addInstagramReelApproval({
+  row,
+  target,
+  approval,
+  projectRoot = process.cwd(),
+  statImpl = stat,
+  hashFileImpl = hashFileSha256,
+}) {
+  if (row.platform !== INSTAGRAM_REEL_PLATFORM || !approval?.approvedAt) {
+    return row;
+  }
+  const reviewedSettings = (Array.isArray(approval.instagramReels)
+    ? approval.instagramReels
+    : []).find((item) => normalizeText(item?.accountKey) === row.account_key);
+  if (!reviewedSettings) {
+    throw new Error(
+      `Instagram target ${row.account_key} was not included in the shared publication review.`,
+    );
+  }
+  const identity = requireInstagramApprovalIdentity(target, reviewedSettings);
+  const renderPath = resolve(projectRoot, normalizeText(row.metadata?.render_path));
+  const fileStats = await statImpl(renderPath);
+  const videoSha256 = await hashFileImpl(renderPath);
+  return {
+    ...row,
+    metadata: {
+      ...(row.metadata || {}),
+      instagram_reel_approval: {
+        version: INSTAGRAM_REEL_APPROVAL_VERSION,
+        approved: true,
+        approved_at: approval.approvedAt,
+        approved_by: normalizeText(approval.approvedBy),
+        approved_by_id: normalizeText(approval.approvedById),
+        source_review_task_id: normalizeText(approval.reviewTaskId),
+        publication_id: row.id,
+        video_id: row.video_id,
+        account_key: row.account_key,
+        delivery_provider: target.delivery_provider
+          || target.deliveryProvider
+          || INSTAGRAM_GRAPH_DELIVERY_PROVIDER,
+        instagram_user_id: identity.instagramUserId,
+        creator_username: identity.creatorUsername,
+        render_path: renderPath,
+        video_size_bytes: Number(fileStats.size),
+        video_sha256: videoSha256,
+        caption: String(reviewedSettings.caption ?? ''),
+        share_to_feed: reviewedSettings.shareToFeed === true,
       },
     },
   };
@@ -343,8 +427,16 @@ export async function upsertAdditionalPlatformPublicationTargets({
       continue;
     }
 
-    const row = await addTikTokDirectPostApproval({
+    let row = await addTikTokDirectPostApproval({
       row: candidate,
+      target: candidate.metadata.publisher_target,
+      approval,
+      projectRoot,
+      statImpl,
+      hashFileImpl,
+    });
+    row = await addInstagramReelApproval({
+      row,
       target: candidate.metadata.publisher_target,
       approval,
       projectRoot,
