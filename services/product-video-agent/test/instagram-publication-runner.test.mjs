@@ -73,9 +73,10 @@ test('diagnoseInstagramAccount verifies exact configured id and username without
     graphClient: {
       async fetchAuthenticatedProfile() {
         return {
-          id: '17841467563066221',
+          userId: '17841467563066221',
+          appScopedId: '28693385720310895',
           username: 'pokequizzz',
-          accountType: 'CREATOR',
+          accountType: 'MEDIA_CREATOR',
         };
       },
     },
@@ -84,8 +85,9 @@ test('diagnoseInstagramAccount verifies exact configured id and username without
   assert.deepEqual(result, {
     account_key: 'poke-quizzz-instagram',
     instagram_user_id: '17841467563066221',
+    app_scoped_user_id: '28693385720310895',
     username: 'pokequizzz',
-    account_type: 'CREATOR',
+    account_type: 'MEDIA_CREATOR',
     identity_verified: true,
     delivery_enabled: false,
   });

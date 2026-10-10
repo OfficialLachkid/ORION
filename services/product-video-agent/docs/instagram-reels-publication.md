@@ -34,11 +34,11 @@ Implemented on `feat/instagram-scheduler-dispatch`:
 - a read-only account diagnostic that requires the configured user id and username to match;
 - a one-publication supervised live override while unattended delivery remains disabled;
 - stale Instagram staging cleanup that protects objects referenced by active publications;
-- a disabled Poke Quizzz target for Instagram user `17841467563066221` / `@pokequizzz`.
+- the Poke Quizzz target for Instagram user `17841467563066221` / `@pokequizzz`.
 
 Deliberately not enabled yet:
 
-- the Poke Quizzz Instagram target exists but remains disabled;
+- the target participates in new shared approvals, but live delivery remains gated;
 - `INSTAGRAM_DELIVERY_ENABLED` defaults to `false`;
 - no live Reel has been created.
 
@@ -46,6 +46,11 @@ The Poke Quizzz Creator account is connected as an app tester and its token is s
 Mac runtime environment. Webhook subscriptions are intentionally disabled. The initial controlled
 test uses Meta's dashboard-generated tester token; a general creator-facing OAuth flow is deferred
 until ORION needs to connect accounts that are not app testers.
+
+Instagram Login returns two different identifiers from `/me`: `user_id` is the professional
+account/publishing id used by the media endpoints, while `id` is app-scoped. For Poke Quizzz,
+the configured publishing id is `17841467563066221`. The connection diagnostic records both but
+must match the target against `user_id`, never the app-scoped `id`.
 
 ## Account model
 
@@ -55,7 +60,7 @@ Each account is an independent target in the source YouTube channel profile:
 {
   "platform": "instagram_reels",
   "account_key": "poke-quizzz-instagram",
-  "enabled": false,
+  "enabled": true,
   "schedule_mode": "orion",
   "delivery_provider": "instagram_graph",
   "visibility": "public",
