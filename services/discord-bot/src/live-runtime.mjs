@@ -1936,7 +1936,13 @@ export async function runLiveDiscordBot(config) {
           taskId: task.task_id,
           threadIds: [
             config?.channelIds?.outreachWaitingApproval,
-            config?.channelIds?.outreachFollowupsAgent,
+            // Canonical key is `outreachFollowups` (see intake.mjs
+            // VALID_CHANNEL_KEYS). The prior `outreachFollowupsAgent`
+            // name was never populated by runtime-config, so this
+            // fallback silently skipped the follow-ups thread, leaving
+            // every follow-up approval card stranded after send
+            // (operator flagged 2026-10-10, 88-card bulk send).
+            config?.channelIds?.outreachFollowups,
             config?.channelIds?.outreachAgent,
           ],
           fetchChannelMessages: async (threadId, limit, { beforeId } = {}) => sendDiscordApiRequest(
