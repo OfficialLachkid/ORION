@@ -1,6 +1,6 @@
 # Instagram Reels publication
 
-Last updated: 2026-10-09
+Last updated: 2026-10-11
 
 ## Decision
 
@@ -26,7 +26,7 @@ Implemented and merged in PR #163:
 - fail-closed handling when a publish response is uncertain;
 - adapter and integration unit tests.
 
-Implemented on `feat/instagram-scheduler-dispatch`:
+Implemented and merged through PR #165:
 
 - shared scheduler dispatch for TikTok and Instagram without duplicating channel schedules;
 - atomic Instagram upload claiming and lifecycle reconciliation;
@@ -38,9 +38,29 @@ Implemented on `feat/instagram-scheduler-dispatch`:
 
 Deliberately not enabled yet:
 
-- the target participates in new shared approvals, but live delivery remains gated;
+- the target participates in shared approvals and its first supervised delivery is scheduled;
 - `INSTAGRAM_DELIVERY_ENABLED` defaults to `false`;
-- no live Reel has been created.
+- unattended Instagram uploads remain blocked until the supervised Reel and staging cleanup are verified;
+- no live Reel has been created yet.
+
+## Supervised validation checkpoint
+
+The first approved Poke Quiz delivery is prepared without enabling Instagram globally:
+
+- source publication: `publication-880af1d8380e6ffd`;
+- Instagram child: `publication-target-d6dbea768c608c17`;
+- account: `@pokequizzz` through target `poke-quizzz-instagram`;
+- inherited schedule: `2026-10-13T09:00:00Z` / 11:00 Europe/Amsterdam;
+- the child row is bound to the exact approved MP4 SHA-256 and byte size;
+- a dry run reports `instagram_publish_due` at that timestamp;
+- a one-time macOS LaunchAgent invokes only this publication with
+  `--allow-instagram-live`, polls it once more after 16 minutes, and removes itself;
+- the ordinary scheduler still sees `INSTAGRAM_DELIVERY_ENABLED=false`, so no other Instagram
+  publication can be uploaded during this test.
+
+After execution, verify the Reel is public, its caption and Share to Feed behavior are correct,
+the permalink and media id were persisted, and the temporary `instagram/` object was deleted.
+Only then may unattended Instagram delivery be enabled.
 
 The Poke Quizzz Creator account is connected as an app tester and its token is stored only in the
 Mac runtime environment. Webhook subscriptions are intentionally disabled. The initial controlled
@@ -148,9 +168,10 @@ If the network drops during `media_publish`, ORION does not blindly repeat the r
 
 ### Phase 4: supervised validation
 
-- configure Poke Quiz as a disabled target;
-- run a dry-run due-publication check;
-- enable one targeted supervised Reel;
+- [x] configure Poke Quiz as an enabled target while keeping global live delivery disabled;
+- [x] create the Instagram child from the normal shared Discord approval;
+- [x] run a dry-run due-publication check;
+- [x] register a one-publication supervised execution for the inherited schedule;
 - verify public visibility, caption, Share to Feed behavior, permalink, and staging deletion;
 - only then enable unattended delivery.
 
