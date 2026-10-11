@@ -1,0 +1,89 @@
+{
+  "schema_version": "1.0",
+  "opportunity_id": "OPPORTUNITY-0146-PREVIEW",
+  "status": "validated",
+  "title": "Neon Plasma Rifle Essentials",
+  "category": "Pixel Art / Items",
+  "product_type": "Sci-Fi Weapon Item Pack",
+  "theme": "Original neon industrial science fiction",
+  "target_audience": [
+    "indie game developers",
+    "2D action game creators",
+    "science-fiction RPG creators"
+  ],
+  "observed_at": "2026-10-12T00:00:00.000Z",
+  "expires_at": "2027-01-10T00:00:00.000Z",
+  "signals": {
+    "trend_direction": "rising",
+    "demand": "high",
+    "competition": "medium",
+    "cross_marketplace_evidence": "strong",
+    "confidence": 82
+  },
+  "generation": {
+    "medium": "pixel_art",
+    "perspective": "strict side view",
+    "width": 128,
+    "height": 64,
+    "source_width": 1024,
+    "source_height": 1024,
+    "max_palette_colors": 32,
+    "palette": [
+      "#10131d",
+      "#20283a",
+      "#44506b",
+      "#7785a6",
+      "#c8d4ec",
+      "#35d9ff",
+      "#875cff",
+      "#ff4fd8"
+    ],
+    "outline": "Use a one-pixel dark outline at final sprite resolution",
+    "lighting": "Cool cyan plasma core with restrained violet highlights",
+    "background": "transparent",
+    "chroma_key": "#ff00ff",
+    "assets": [
+      {
+        "asset_key": "plasma-rifle-a",
+        "name": "Plasma Rifle A",
+        "kind": "weapon",
+        "description": "a compact futuristic plasma rifle with a readable stock, grip, trigger, energy chamber, barrel, and muzzle",
+        "prompt_notes": [
+          "Keep the silhouette readable at 128x64 pixels",
+          "Use original industrial geometry and avoid recognizable franchise shapes"
+        ]
+      }
+    ]
+  },
+  "commercial": {
+    "base_price": {
+      "amount": 4.99,
+      "currency": "EUR"
+    },
+    "marketplace_candidates": [
+      "itch.io"
+    ]
+  },
+  "risk": {
+    "ip_risk": "low",
+    "prohibited_references": [
+      "Pokemon",
+      "Star Wars",
+      "Halo",
+      "Destiny",
+      "Warhammer",
+      "Cyberpunk 2077",
+      "specific living artists"
+    ],
+    "notes": [
+      "Use demand signals only; do not copy an existing asset pack or weapon design."
+    ]
+  },
+  "evidence": [
+    {
+      "label": "Issue #146 operator-approved technical feasibility preview",
+      "source": "local ORION FLUX.2 Klein preview review",
+      "observed_at": "2026-10-12T00:00:00.000Z"
+    }
+  ]
+}

@@ -93,6 +93,9 @@
     "leadgen:post-qualified-call-leads": "node scripts/post-qualified-call-leads.mjs",
     "task-router:simulate": "node services/task-router/index.mjs",
     "transcription:simulate": "node services/transcription-worker/index.mjs",
+    "digital-assets:plan": "node services/digital-asset-engine/index.mjs plan",
+    "digital-assets:generate": "node services/digital-asset-engine/index.mjs generate",
+    "digital-assets:test": "node --test services/digital-asset-engine/test/*.test.mjs",
     "product-video:dry-run": "node services/product-video-agent/index.mjs",
     "product-video:doctor": "node services/product-video-agent/index.mjs --doctor",
     "product-video:local-preview": "node services/product-video-agent/index.mjs --execute-local-scripts",
@@ -151,6 +154,7 @@
     "@noble/ed25519": "^2.1.0",
     "@ruvector/rabitq-wasm": "^0.1.0",
     "semver": "^7.6.0",
+    "sharp": "^0.33.5",
     "ws": "^8.20.1",
     "zod": "^3.22.4"
   },
