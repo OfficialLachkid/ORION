@@ -228,6 +228,10 @@ export function summarizeOpsEvents(events, options = {}) {
     'claude_runner_stalled_marked_blocked',
     'session_pre_limit_checkpoint_written',
     'mac_reboot_recovery_check',
+    'ecommerce_discovery_validated',
+    'ecommerce_discovery_run',
+    'ecommerce_discovery_failed',
+    'ecommerce_discovery_pilot_complete',
   ].includes(event.type));
   const opsToolCounts = countByType(opsToolEvents);
 
