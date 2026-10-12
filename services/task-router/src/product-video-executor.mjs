@@ -28,7 +28,10 @@ import {
   loadYoutubeClientCredentials,
 } from '../../product-video-agent/src/youtube-publication-executor.mjs';
 import { syncPublicationReviewMessage } from '../../product-video-agent/src/publication-review-message-sync.mjs';
-import { upsertAdditionalPlatformPublicationTargets } from '../../product-video-agent/src/social-publication-targets.mjs';
+import {
+  buildStoredSocialPublicationApproval,
+  upsertAdditionalPlatformPublicationTargets,
+} from '../../product-video-agent/src/social-publication-targets.mjs';
 
 function slugify(value) {
   return String(value || '')
@@ -299,6 +302,14 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
   );
   const channelSelector = review.channelSelector || DEFAULT_CHANNEL_SELECTOR;
   const channelProfile = await resolveChannelProfileForSelector(channelSelector, dependencies);
+  const socialPublicationApproval = {
+    approvedAt,
+    approvedBy: task.approved_by || '',
+    approvedById: task.approved_by_id || '',
+    reviewTaskId: task.task_id || '',
+    tiktokDirectPost: review.tiktokDirectPost || null,
+    instagramReels: Array.isArray(review.instagramReels) ? review.instagramReels : [],
+  };
   const updated = await store.updatePublication(publication.id, {
     status: 'approved',
     metadata: {
@@ -308,6 +319,7 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
       preview_approved_by: task.approved_by || '',
       preview_approved_by_id: task.approved_by_id || '',
       review_task_id: task.task_id,
+      social_publication_approval: buildStoredSocialPublicationApproval(socialPublicationApproval),
     },
   });
 
@@ -359,34 +371,28 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
 
   const refreshedWorkflowState = refreshedPublication?.metadata?.workflow_state || 'preview_approved';
   const scheduledFor = refreshedPublication?.scheduled_for || '';
+  const fanOutPublicationTargets =
+    dependencies.upsertAdditionalPlatformPublicationTargets
+    || upsertAdditionalPlatformPublicationTargets;
+  let platformPublicationResults = [];
+  let platformPublicationError = '';
+  try {
+    platformPublicationResults = await fanOutPublicationTargets({
+      store,
+      sourcePublication: refreshedPublication,
+      videoRow,
+      sourceChannelProfile: channelProfile,
+      scheduledFor,
+      asOf: approvedAt,
+      projectRoot,
+      approval: socialPublicationApproval,
+    });
+  } catch (error) {
+    platformPublicationError = error.message || String(error);
+    process.stderr.write(`Could not create additional platform publication target(s) for ${publication.id}: ${platformPublicationError}\n`);
+  }
+
   if (refreshedWorkflowState === 'scheduled' && scheduledFor) {
-    const fanOutPublicationTargets =
-      dependencies.upsertAdditionalPlatformPublicationTargets
-      || upsertAdditionalPlatformPublicationTargets;
-    let platformPublicationResults = [];
-    let platformPublicationError = '';
-    try {
-      platformPublicationResults = await fanOutPublicationTargets({
-        store,
-        sourcePublication: refreshedPublication,
-        videoRow,
-        sourceChannelProfile: channelProfile,
-        scheduledFor,
-        asOf: approvedAt,
-        projectRoot,
-        approval: {
-          approvedAt,
-          approvedBy: task.approved_by || '',
-          approvedById: task.approved_by_id || '',
-          reviewTaskId: task.task_id || '',
-          tiktokDirectPost: review.tiktokDirectPost || null,
-          instagramReels: Array.isArray(review.instagramReels) ? review.instagramReels : [],
-        },
-      });
-    } catch (error) {
-      platformPublicationError = error.message || String(error);
-      process.stderr.write(`Could not create additional platform publication target(s) for ${publication.id}: ${platformPublicationError}\n`);
-    }
 
     try {
       await refreshPublicationReviewMessage({
@@ -427,34 +433,30 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
     };
   }
 
-  const publishAttemptError = scheduleSyncError
-    || `Publish approval did not move ${publication.id} into a scheduled slot.`;
-  const revertedPublication = await store.updatePublication(publication.id, {
-    status: publication.status,
+  const pendingPublication = await store.updatePublication(publication.id, {
+    status: 'approved',
     metadata: {
-      ...(publication.metadata || {}),
+      ...(refreshedPublication?.metadata || updated?.metadata || publication.metadata || {}),
       review_task_id: task.task_id,
-      workflow_state: publication?.metadata?.workflow_state || 'preview_uploaded',
+      workflow_state: 'preview_approved',
       publish_attempted_at: approvedAt,
-      publish_attempt_error: publishAttemptError,
-      preview_approved_at: '',
-      preview_approved_by: '',
-      preview_approved_by_id: '',
+      publish_attempt_error: scheduleSyncError,
       schedule_sync_error: scheduleSyncError,
+      social_publication_approval: buildStoredSocialPublicationApproval(socialPublicationApproval),
     },
-  }) || publication;
+  }) || refreshedPublication || updated || publication;
 
   try {
     await refreshPublicationReviewMessage({
       config,
       store,
-      publication: revertedPublication,
+      publication: pendingPublication,
       videoRow,
       channelSelector,
       dependencies,
     });
   } catch (error) {
-    process.stderr.write(`Could not restore review card ${publication.id} after failed publish: ${error.message}\n`);
+    process.stderr.write(`Could not refresh approved review card ${publication.id}: ${error.message}\n`);
   }
 
   try {
@@ -467,10 +469,28 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
       dependencies,
     });
   } catch (error) {
-    process.stderr.write(`Could not sync queue status after failed publish ${publication.id}: ${error.message}\n`);
+    process.stderr.write(`Could not sync queue status after queued publish ${publication.id}: ${error.message}\n`);
   }
 
-  throw new Error(publishAttemptError);
+  const warning = scheduleSyncError || platformPublicationError;
+  return {
+    rawStdout: '',
+    report: {
+      state: 'approved_pending_schedule',
+      severity: warning ? 'warning' : 'success',
+      summary: warning
+        ? `Approved ${publication.id}; it remains queued for the next available slot. ${warning}`
+        : `Approved ${publication.id}; it remains queued for the next available slot.`,
+      publicationId: pendingPublication?.id || publication.id,
+      previewUrl: pendingPublication?.preview_url || publication.preview_url || '',
+      workflowState: pendingPublication?.metadata?.workflow_state || 'preview_approved',
+      approvedAt,
+      scheduledFor: '',
+      platformPublicationResults,
+      platformPublicationError,
+      scheduleSyncError,
+    },
+  };
 }
 
 async function buildRevisionPlan({

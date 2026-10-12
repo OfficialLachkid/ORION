@@ -393,6 +393,59 @@ test('upsertAdditionalPlatformPublicationTargets preserves an existing delivery 
   assert.equal(upsertCalls, 0);
   assert.equal(results[0].preserved, true);
   assert.equal(results[0].workflow_state, 'publishing');
+  assert.equal(results[0].schedule_synchronized, false);
+});
+
+test('upsertAdditionalPlatformPublicationTargets schedules an existing queued delivery row', async () => {
+  const [existing] = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile,
+  });
+  existing.metadata.tiktok_direct_post_approval = {
+    approved: true,
+    video_sha256: 'a'.repeat(64),
+  };
+  const scheduledFor = '2026-09-09T10:00:00.000Z';
+  let storedPatch = null;
+
+  const results = await upsertAdditionalPlatformPublicationTargets({
+    store: {
+      async fetchPublicationById() {
+        return existing;
+      },
+      async updatePublication(_id, patch) {
+        storedPatch = patch;
+        return {
+          ...existing,
+          ...patch,
+          metadata: patch.metadata,
+        };
+      },
+      async upsertPublication() {
+        throw new Error('an existing queued row must not be recreated');
+      },
+    },
+    sourcePublication: {
+      ...sourcePublication,
+      scheduled_for: scheduledFor,
+    },
+    videoRow,
+    sourceChannelProfile,
+    scheduledFor,
+    asOf: '2026-09-08T12:00:00.000Z',
+  });
+
+  assert.equal(storedPatch.status, 'scheduled');
+  assert.equal(storedPatch.scheduled_for, scheduledFor);
+  assert.equal(storedPatch.metadata.workflow_state, 'scheduled');
+  assert.deepEqual(
+    storedPatch.metadata.tiktok_direct_post_approval,
+    existing.metadata.tiktok_direct_post_approval,
+  );
+  assert.equal(results[0].preserved, true);
+  assert.equal(results[0].schedule_synchronized, true);
+  assert.equal(results[0].scheduled_for, scheduledFor);
 });
 
 test('lifecycle reconciliation copies a changed source schedule to a pending child', async () => {

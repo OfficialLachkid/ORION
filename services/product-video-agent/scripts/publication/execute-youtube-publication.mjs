@@ -17,7 +17,15 @@ import {
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
-import { syncPublicationReviewMessage } from '../../src/publication-review-message-sync.mjs';
+import {
+  buildPublicationReviewTaskAndPayload,
+  syncPublicationReviewMessage,
+} from '../../src/publication-review-message-sync.mjs';
+import {
+  buildStoredSocialPublicationApproval,
+  readStoredSocialPublicationApproval,
+  upsertAdditionalPlatformPublicationTargets,
+} from '../../src/social-publication-targets.mjs';
 import { isRelatedVideoEligiblePublication } from '../../src/related-video/eligibility.mjs';
 import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs';
 import { applyYoutubeRelatedVideoSelection } from '../../src/related-video/youtube-studio-automation.mjs';
@@ -67,6 +75,101 @@ function normalizeWorkflowState(publication = {}) {
     return String(publication.metadata.workflow_state).trim().toLowerCase();
   }
   return String(publication.status || '').trim().toLowerCase();
+}
+
+function hasLegacyPublishApproval(publication = {}) {
+  return Boolean(String(publication?.metadata?.publish_attempted_at || '').trim())
+    && Boolean(String(publication?.metadata?.review_task_id || '').trim());
+}
+
+function approvalFromReviewTask(reviewTask = {}, publication = {}) {
+  const review = reviewTask?.poke_quizz_publication_review || {};
+  return {
+    approvedAt: String(
+      publication?.metadata?.preview_approved_at
+      || publication?.metadata?.publish_attempted_at
+      || '',
+    ).trim(),
+    approvedBy: String(publication?.metadata?.preview_approved_by || '').trim(),
+    approvedById: String(publication?.metadata?.preview_approved_by_id || '').trim(),
+    reviewTaskId: String(
+      publication?.metadata?.review_task_id
+      || reviewTask?.task_id
+      || '',
+    ).trim(),
+    tiktokDirectPost: review.tiktokDirectPost || null,
+    instagramReels: Array.isArray(review.instagramReels) ? review.instagramReels : [],
+  };
+}
+
+export async function reconcileScheduledAdditionalPlatformTargets({
+  store,
+  publication,
+  videoRow,
+  channelProfile,
+  channelSelector,
+  asOf = new Date().toISOString(),
+  projectRootPath = projectRoot,
+}, dependencies = {}) {
+  const scheduledFor = String(publication?.scheduled_for || '').trim();
+  const scheduledTime = new Date(scheduledFor).getTime();
+  const asOfTime = new Date(asOf).getTime();
+  if (!scheduledFor || !Number.isFinite(scheduledTime) || scheduledTime <= asOfTime) {
+    return { action: 'social_target_reconciliation_skipped', reason: 'not_future_scheduled' };
+  }
+
+  let sourcePublication = publication;
+  let approval = readStoredSocialPublicationApproval(sourcePublication);
+  let migratedLegacyApproval = false;
+  if (!approval && hasLegacyPublishApproval(sourcePublication)) {
+    const buildReviewTask = dependencies.buildPublicationReviewTaskAndPayload
+      || buildPublicationReviewTaskAndPayload;
+    const rebuilt = await buildReviewTask({
+      publication: sourcePublication,
+      videoRow,
+      channelProfile,
+      channelSelector,
+    });
+    approval = approvalFromReviewTask(rebuilt.reviewTask, sourcePublication);
+    const storedApproval = buildStoredSocialPublicationApproval(approval);
+    sourcePublication = await store.updatePublication(sourcePublication.id, {
+      metadata: {
+        ...(sourcePublication.metadata || {}),
+        social_publication_approval: storedApproval,
+        social_publication_approval_migrated_at: asOf,
+      },
+    }) || {
+      ...sourcePublication,
+      metadata: {
+        ...(sourcePublication.metadata || {}),
+        social_publication_approval: storedApproval,
+        social_publication_approval_migrated_at: asOf,
+      },
+    };
+    migratedLegacyApproval = true;
+  }
+
+  if (!approval) {
+    return { action: 'social_target_reconciliation_skipped', reason: 'approval_not_recorded' };
+  }
+
+  const upsertTargets = dependencies.upsertAdditionalPlatformPublicationTargets
+    || upsertAdditionalPlatformPublicationTargets;
+  const results = await upsertTargets({
+    store,
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile: channelProfile,
+    scheduledFor,
+    asOf,
+    projectRoot: projectRootPath,
+    approval,
+  });
+  return {
+    action: 'social_targets_reconciled',
+    migrated_legacy_approval: migratedLegacyApproval,
+    results,
+  };
 }
 
 function isWithinScheduledPublishGrace(
@@ -1611,6 +1714,23 @@ async function main() {
         workflow_state: 'scheduled',
       },
     };
+    let additionalTargetReconciliation = null;
+    let additionalTargetReconciliationError = '';
+    try {
+      additionalTargetReconciliation = await reconcileScheduledAdditionalPlatformTargets({
+        store,
+        publication: updatedPublication,
+        videoRow,
+        channelProfile,
+        channelSelector,
+        asOf,
+      });
+    } catch (error) {
+      additionalTargetReconciliationError = error.message || String(error);
+      process.stderr.write(
+        `Additional platform target reconciliation failed for ${publication.id}: ${additionalTargetReconciliationError}\n`,
+      );
+    }
     const autoCommentResult = await syncPublicationYoutubeAutoComment({
       store,
       runtimeConfig,
@@ -1666,6 +1786,8 @@ async function main() {
         external_id: publication.external_id,
         scheduled_for: scheduled.scheduledFor,
         workflow_state: updatedPublication?.metadata?.workflow_state || 'scheduled',
+        social_target_reconciliation: additionalTargetReconciliation?.action || '',
+        social_target_reconciliation_error: additionalTargetReconciliationError,
         related_video_capability_status: 'youtube_api_quota_exhausted',
         related_video_apply_status: 'skipped_quota',
       });
@@ -1705,6 +1827,8 @@ async function main() {
       external_id: publication.external_id,
       scheduled_for: scheduled.scheduledFor,
       workflow_state: updatedPublication?.metadata?.workflow_state || 'scheduled',
+      social_target_reconciliation: additionalTargetReconciliation?.action || '',
+      social_target_reconciliation_error: additionalTargetReconciliationError,
       related_video_selection_status: updatedPublication?.metadata?.related_video?.selection_status || '',
       related_video_target_publication_id: updatedPublication?.metadata?.related_video?.target_publication_id || '',
       related_video_capability_status: updatedPublication?.metadata?.related_video?.capability_status || '',
