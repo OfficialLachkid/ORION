@@ -99,12 +99,14 @@ function loadRuntimeEnv(explicitEnvFilePath) {
   const supabaseEnvPath = resolve(projectRoot, 'config/supabase/.env');
   const gmailEnvPath = resolve(projectRoot, 'config/gmail/.env');
   const productVideoEnvPath = resolve(projectRoot, 'config/product-video/.env');
+  const ecommerceEnvPath = resolve(projectRoot, 'config/ecommerce/.env');
 
   return {
     ...parseDotEnvFile(envFilePath),
     ...parseDotEnvFile(supabaseEnvPath),
     ...parseDotEnvFile(gmailEnvPath),
     ...parseDotEnvFile(productVideoEnvPath),
+    ...parseDotEnvFile(ecommerceEnvPath),
     ...process.env,
   };
 }
