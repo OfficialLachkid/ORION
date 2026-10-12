@@ -693,7 +693,7 @@ test('publish approval forwards an optional max-scheduled-days cap to the schedu
   );
 });
 
-test('publish approval restores the actionable state when scheduling fails before a slot is assigned', async () => {
+test('publish approval remains durable when scheduling fails before a slot is assigned', async () => {
   const initialPublication = {
     id: 'publication-trivamon-review-2',
     video_id: 'video-trivamon-review-2',
@@ -715,6 +715,7 @@ test('publish approval restores the actionable state when scheduling fails befor
   };
   const updateCalls = [];
   const queueSyncCalls = [];
+  const fanOutCalls = [];
   let currentPublication = structuredClone(initialPublication);
   const publicationStore = {
     async fetchPublicationById(id) {
@@ -740,8 +741,7 @@ test('publish approval restores the actionable state when scheduling fails befor
     },
   };
 
-  await assert.rejects(
-    () => executeProductVideoAction(
+  const result = await executeProductVideoAction(
       'poke_quizz_publish_preview',
       {
         task_id: 'TASK-ORION-PQ-PUBLISH-TRIVAMON',
@@ -750,6 +750,11 @@ test('publish approval restores the actionable state when scheduling fails befor
         poke_quizz_publication_review: {
           publicationId: 'publication-trivamon-review-2',
           channelSelector: 'trivamon-youtube',
+          tiktokDirectPost: {
+            accountKey: 'trivamon-tiktok',
+            creatorUsername: 'trivamon',
+            privacyLevel: 'PUBLIC_TO_EVERYONE',
+          },
         },
       },
       { env: {} },
@@ -763,6 +768,15 @@ test('publish approval restores the actionable state when scheduling fails befor
               oauth_client_secret_path: 'config/youtube/client-secret.json',
               oauth_refresh_token_env: 'YOUTUBE_TRIVAMON_REFRESH_TOKEN',
             },
+            metadata: {
+              publisher: {
+                targets: [{
+                  platform: 'tiktok_video',
+                  account_key: 'trivamon-tiktok',
+                  enabled: true,
+                }],
+              },
+            },
           },
         ]),
         findPublicationChannelProfile: (profiles) => profiles[0],
@@ -773,22 +787,39 @@ test('publish approval restores the actionable state when scheduling fails befor
           queueSyncCalls.push(options);
           return { posted: true };
         },
+        upsertAdditionalPlatformPublicationTargets: async (options) => {
+          fanOutCalls.push(options);
+          return [{
+            platform: 'tiktok_video',
+            account_key: 'trivamon-tiktok',
+            publication_id: 'publication-target-trivamon-tiktok',
+            workflow_state: 'queued',
+            scheduled_for: '',
+          }];
+        },
         queueStatusChannelProfile: {
           platform: 'youtube_shorts',
           account_key: 'trivamon-youtube',
         },
         executePublicationScriptPath: '/tmp/execute-youtube-publication.mjs',
       },
-    ),
-    /schedule sync crashed/u,
   );
 
   assert.equal(updateCalls.length, 2);
   assert.equal(updateCalls[0].patch.metadata.workflow_state, 'preview_approved');
-  assert.equal(updateCalls[1].patch.metadata.workflow_state, 'preview_uploaded');
-  assert.equal(currentPublication.metadata.workflow_state, 'preview_uploaded');
-  assert.equal(currentPublication.status, 'pending');
+  assert.equal(updateCalls[1].patch.metadata.workflow_state, 'preview_approved');
+  assert.equal(currentPublication.metadata.workflow_state, 'preview_approved');
+  assert.equal(currentPublication.status, 'approved');
   assert.equal(currentPublication.metadata.publish_attempt_error, 'schedule sync crashed');
+  assert.equal(
+    currentPublication.metadata.social_publication_approval.version,
+    'social-publication-approval.v1',
+  );
+  assert.equal(result.report.state, 'approved_pending_schedule');
+  assert.equal(result.report.severity, 'warning');
+  assert.equal(fanOutCalls.length, 1);
+  assert.equal(fanOutCalls[0].scheduledFor, '');
+  assert.equal(fanOutCalls[0].approval.tiktokDirectPost.accountKey, 'trivamon-tiktok');
   assert.equal(queueSyncCalls.length, 1);
   assert.equal(queueSyncCalls[0].channelSelector, 'trivamon-youtube');
 });

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import process from 'node:process';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
+import { buildStoredSocialPublicationApproval } from '../src/social-publication-targets.mjs';
 
 const originalArgv1 = process.argv[1];
 process.argv[1] = '';
@@ -10,6 +11,7 @@ const {
   isMissingPreviewRenderError,
   reconcilePreviewPublications,
   reconcilePublishedPublications,
+  reconcileScheduledAdditionalPlatformTargets,
   reconcileScheduledPublications,
   refreshRelatedVideoAssignments,
 } = await import('../scripts/execute-youtube-publication.mjs');
@@ -78,6 +80,121 @@ function createStore(initialPublication, videoRow = null) {
     },
   };
 }
+
+test('future scheduling idempotently reconciles targets from the stored shared approval', async () => {
+  const approval = {
+    approvedAt: '2026-10-12T10:00:00.000Z',
+    approvedBy: 'operator',
+    approvedById: 'operator-1',
+    reviewTaskId: 'review-1',
+    tiktokDirectPost: { accountKey: 'poke-quizz-tiktok' },
+    instagramReels: [],
+  };
+  const publication = {
+    id: 'publication-delayed-targets',
+    video_id: 'video-delayed-targets',
+    status: 'scheduled',
+    scheduled_for: '2026-10-13T09:00:00.000Z',
+    metadata: {
+      workflow_state: 'scheduled',
+      social_publication_approval: buildStoredSocialPublicationApproval(approval),
+    },
+  };
+  const store = createStore(publication);
+  const calls = [];
+
+  const result = await reconcileScheduledAdditionalPlatformTargets({
+    store,
+    publication,
+    videoRow: { id: publication.video_id },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-10-12T12:00:00.000Z',
+  }, {
+    upsertAdditionalPlatformPublicationTargets: async (options) => {
+      calls.push(options);
+      return [{ publication_id: 'publication-target-tiktok', preserved: true }];
+    },
+  });
+
+  assert.equal(result.action, 'social_targets_reconciled');
+  assert.equal(result.migrated_legacy_approval, false);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].scheduledFor, '2026-10-13T09:00:00.000Z');
+  assert.equal(calls[0].approval.reviewTaskId, 'review-1');
+  assert.equal(store.updateCalls.length, 0);
+});
+
+test('future scheduling migrates a legacy failed-slot approval without backfilling past posts', async () => {
+  const publication = {
+    id: 'publication-legacy-delayed-targets',
+    video_id: 'video-legacy-delayed-targets',
+    status: 'approved',
+    scheduled_for: '2026-10-13T09:00:00.000Z',
+    metadata: {
+      workflow_state: 'scheduled',
+      publish_attempted_at: '2026-10-11T02:00:00.000Z',
+      review_task_id: 'legacy-review-1',
+    },
+  };
+  const store = createStore(publication);
+  const calls = [];
+  const buildCalls = [];
+
+  const result = await reconcileScheduledAdditionalPlatformTargets({
+    store,
+    publication,
+    videoRow: { id: publication.video_id },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-10-12T12:00:00.000Z',
+  }, {
+    buildPublicationReviewTaskAndPayload: async (options) => {
+      buildCalls.push(options);
+      return {
+        reviewTask: {
+          task_id: 'rebuilt-review-1',
+          poke_quizz_publication_review: {
+            tiktokDirectPost: { accountKey: 'poke-quizz-tiktok' },
+            instagramReels: [{ accountKey: 'poke-quizzz-instagram' }],
+          },
+        },
+      };
+    },
+    upsertAdditionalPlatformPublicationTargets: async (options) => {
+      calls.push(options);
+      return [{ publication_id: 'publication-target-tiktok', preserved: false }];
+    },
+  });
+
+  assert.equal(result.action, 'social_targets_reconciled');
+  assert.equal(result.migrated_legacy_approval, true);
+  assert.equal(buildCalls.length, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].approval.reviewTaskId, 'legacy-review-1');
+  assert.equal(store.updateCalls.length, 1);
+  assert.equal(
+    store.current().metadata.social_publication_approval.version,
+    'social-publication-approval.v1',
+  );
+
+  const pastResult = await reconcileScheduledAdditionalPlatformTargets({
+    store,
+    publication: {
+      ...publication,
+      scheduled_for: '2026-10-12T10:00:00.000Z',
+    },
+    videoRow: { id: publication.video_id },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-10-12T12:00:00.000Z',
+  }, {
+    upsertAdditionalPlatformPublicationTargets: async () => {
+      throw new Error('past publications must not be backfilled');
+    },
+  });
+  assert.equal(pastResult.reason, 'not_future_scheduled');
+});
 
 test('missing preview renders are marked blocked so they are not retried', async () => {
   const publication = {

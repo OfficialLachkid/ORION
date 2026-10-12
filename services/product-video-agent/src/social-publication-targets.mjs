@@ -13,12 +13,48 @@ export const INSTAGRAM_REEL_PLATFORM = 'instagram_reels';
 export const TIKTOK_DIRECT_DELIVERY_PROVIDER = 'tiktok_direct';
 export const BUFFER_DELIVERY_PROVIDER = 'buffer';
 export const INSTAGRAM_GRAPH_DELIVERY_PROVIDER = 'instagram_graph';
+export const SOCIAL_PUBLICATION_APPROVAL_VERSION = 'social-publication-approval.v1';
 const SOURCE_CANCELLED_STATES = new Set(['deleted', 'revision_requested', 'withdrawn']);
 const CHILD_PENDING_STATES = new Set(['queued', 'scheduled']);
 const CHILD_DELIVERY_STARTED_STATES = new Set(['publishing', 'published']);
 
 function normalizeText(value) {
   return String(value || '').trim();
+}
+
+export function buildStoredSocialPublicationApproval(approval = {}) {
+  return {
+    version: SOCIAL_PUBLICATION_APPROVAL_VERSION,
+    approved_at: normalizeText(approval.approvedAt || approval.approved_at),
+    approved_by: normalizeText(approval.approvedBy || approval.approved_by),
+    approved_by_id: normalizeText(approval.approvedById || approval.approved_by_id),
+    review_task_id: normalizeText(approval.reviewTaskId || approval.review_task_id),
+    tiktok_direct_post: approval.tiktokDirectPost && typeof approval.tiktokDirectPost === 'object'
+      ? { ...approval.tiktokDirectPost }
+      : null,
+    instagram_reels: Array.isArray(approval.instagramReels)
+      ? approval.instagramReels.map((item) => ({ ...item }))
+      : [],
+  };
+}
+
+export function readStoredSocialPublicationApproval(publication = {}) {
+  const stored = publication?.metadata?.social_publication_approval;
+  if (!stored || stored.version !== SOCIAL_PUBLICATION_APPROVAL_VERSION) {
+    return null;
+  }
+  return {
+    approvedAt: normalizeText(stored.approved_at),
+    approvedBy: normalizeText(stored.approved_by),
+    approvedById: normalizeText(stored.approved_by_id),
+    reviewTaskId: normalizeText(stored.review_task_id),
+    tiktokDirectPost: stored.tiktok_direct_post && typeof stored.tiktok_direct_post === 'object'
+      ? { ...stored.tiktok_direct_post }
+      : null,
+    instagramReels: Array.isArray(stored.instagram_reels)
+      ? stored.instagram_reels.map((item) => ({ ...item }))
+      : [],
+  };
 }
 
 function normalizePlatform(value) {
@@ -416,13 +452,36 @@ export async function upsertAdditionalPlatformPublicationTargets({
       ? await store.fetchPublicationById(candidate.id)
       : null;
     if (existing) {
+      const existingState = normalizeWorkflowState(existing);
+      const candidateScheduledFor = normalizeText(candidate.scheduled_for);
+      const existingScheduledFor = normalizeText(existing.scheduled_for);
+      const shouldSyncPendingSchedule = CHILD_PENDING_STATES.has(existingState)
+        && !normalizeText(existing.external_id)
+        && candidateScheduledFor
+        && candidateScheduledFor !== existingScheduledFor
+        && typeof store.updatePublication === 'function';
+      const synchronized = shouldSyncPendingSchedule
+        ? await store.updatePublication(existing.id, {
+          status: 'scheduled',
+          scheduled_for: candidateScheduledFor,
+          metadata: {
+            ...(existing.metadata || {}),
+            workflow_state: 'scheduled',
+            source_scheduled_for: candidateScheduledFor,
+            source_lifecycle_action_required: false,
+            source_lifecycle_reason: 'source_schedule_changed',
+            source_lifecycle_applied_at: asOf,
+          },
+        }) || existing
+        : existing;
       results.push({
-        platform: existing.platform || candidate.platform,
-        account_key: existing.account_key || candidate.account_key,
-        publication_id: existing.id || candidate.id,
-        workflow_state: existing?.metadata?.workflow_state || existing.status || '',
-        scheduled_for: existing.scheduled_for || '',
+        platform: synchronized.platform || candidate.platform,
+        account_key: synchronized.account_key || candidate.account_key,
+        publication_id: synchronized.id || candidate.id,
+        workflow_state: synchronized?.metadata?.workflow_state || synchronized.status || '',
+        scheduled_for: synchronized.scheduled_for || '',
         preserved: true,
+        schedule_synchronized: shouldSyncPendingSchedule,
       });
       continue;
     }
