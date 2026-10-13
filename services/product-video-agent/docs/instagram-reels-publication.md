@@ -1,6 +1,6 @@
 # Instagram Reels publication
 
-Last updated: 2026-10-11
+Last updated: 2026-10-13
 
 ## Decision
 
@@ -43,24 +43,47 @@ Deliberately not enabled yet:
 - unattended Instagram uploads remain blocked until the supervised Reel and staging cleanup are verified;
 - no live Reel has been created yet.
 
+## Operational update: 2026-10-13
+
+- The first supervised Instagram row (`publication-target-d6dbea768c608c17`) failed before any
+  Meta request because its approved MP4 had been moved into the adjacent
+  `Older Generated Videos` directory. It has no Instagram container id, media id, or permalink.
+- PR #171 added fail-closed resolution of that known preview relocation for both approval creation
+  and delivery. The merged fix was deployed to the Mac mini at `673e71948`.
+- Three already-approved, future-scheduled Poke Quiz publications had durable Instagram consent
+  but were missing their Instagram child rows. A bounded one-time reconciliation created them at
+  the exact inherited YouTube times:
+  - `publication-target-2a068641299792f1`: 2026-10-13 12:00 Europe/Amsterdam;
+  - `publication-target-980f0d7aca6e10ec`: 2026-10-14 08:00 Europe/Amsterdam;
+  - `publication-target-c03a2cc6bd135088`: 2026-10-14 11:00 Europe/Amsterdam.
+- The corresponding TikTok children were preserved; withdrawn or already-published legacy rows
+  were not backfilled. A deterministic Instagram dry run reports the first new row as
+  `instagram_publish_due` at its inherited slot.
+- Unattended delivery remains disabled. A read-only `/me` identity check currently returns Meta
+  Graph error code `200`, type `OAuthException`, message `API access blocked.` The configured token
+  is present, but Meta app/account access must be restored and the identity diagnostic must pass
+  before setting `INSTAGRAM_DELIVERY_ENABLED=true`. With delivery disabled, due rows stay scheduled
+  and can be released through the supervised one-publication override after the blocker is cleared.
+
 ## Supervised validation checkpoint
 
-The first approved Poke Quiz delivery is prepared without enabling Instagram globally:
+The original approved Poke Quiz delivery was prepared without enabling Instagram globally:
 
 - source publication: `publication-880af1d8380e6ffd`;
 - Instagram child: `publication-target-d6dbea768c608c17`;
 - account: `@pokequizzz` through target `poke-quizzz-instagram`;
 - inherited schedule: `2026-10-13T09:00:00Z` / 11:00 Europe/Amsterdam;
 - the child row is bound to the exact approved MP4 SHA-256 and byte size;
-- a dry run reports `instagram_publish_due` at that timestamp;
-- a one-time macOS LaunchAgent invokes only this publication with
-  `--allow-instagram-live`, polls it once more after 16 minutes, and removes itself;
+- a dry run reported `instagram_publish_due` at that timestamp;
+- a one-time macOS LaunchAgent invoked only this publication with
+  `--allow-instagram-live`, but the missing source path stopped execution before Meta received it;
 - the ordinary scheduler still sees `INSTAGRAM_DELIVERY_ENABLED=false`, so no other Instagram
   publication can be uploaded during this test.
 
-After execution, verify the Reel is public, its caption and Share to Feed behavior are correct,
-the permalink and media id were persisted, and the temporary `instagram/` object was deleted.
-Only then may unattended Instagram delivery be enabled.
+The replacement supervised validation must first pass the `/me` identity diagnostic. After
+execution, verify the Reel is public, its caption and Share to Feed behavior are correct, the
+permalink and media id were persisted, and the temporary `instagram/` object was deleted. Only then
+may unattended Instagram delivery be enabled.
 
 The Poke Quizzz Creator account is connected as an app tester and its token is stored only in the
 Mac runtime environment. Webhook subscriptions are intentionally disabled. The initial controlled
