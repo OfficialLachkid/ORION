@@ -36,12 +36,13 @@ Implemented and merged through PR #165:
 - stale Instagram staging cleanup that protects objects referenced by active publications;
 - the Poke Quizzz target for Instagram user `17841467563066221` / `@pokequizzz`.
 
-Deliberately not enabled yet:
+Live rollout state:
 
-- the target participates in shared approvals and its first supervised delivery is scheduled;
-- `INSTAGRAM_DELIVERY_ENABLED` defaults to `false`;
-- unattended Instagram uploads remain blocked until the supervised Reel and staging cleanup are verified;
-- no live Reel has been created yet.
+- the target participates in shared approvals and inherited channel scheduling;
+- the tracked configuration still defaults `INSTAGRAM_DELIVERY_ENABLED` to `false`, while the
+  owner-only Mac runtime enables it after supervised acceptance;
+- unattended Instagram delivery is enabled for the connected Poke Quizzz account;
+- the first live Reel and transient staging cleanup completed successfully.
 
 ## Operational update: 2026-10-13
 
@@ -59,11 +60,17 @@ Deliberately not enabled yet:
 - The corresponding TikTok children were preserved; withdrawn or already-published legacy rows
   were not backfilled. A deterministic Instagram dry run reports the first new row as
   `instagram_publish_due` at its inherited slot.
-- Unattended delivery remains disabled. A read-only `/me` identity check currently returns Meta
-  Graph error code `200`, type `OAuthException`, message `API access blocked.` The configured token
-  is present, but Meta app/account access must be restored and the identity diagnostic must pass
-  before setting `INSTAGRAM_DELIVERY_ENABLED=true`. With delivery disabled, due rows stay scheduled
-  and can be released through the supervised one-publication override after the blocker is cleared.
+- Meta temporarily returned Graph error code `200`, type `OAuthException`, message
+  `API access blocked.` The operator completed Meta's identity confirmation, after which `/me`
+  again resolved the exact configured Creator account.
+- The missed noon child was released once through the supervised override. Meta created container
+  `17960392938252103`, published media `17909316231513398`, and returned
+  `https://www.instagram.com/reel/DebjNcugE-N/`. ORION persisted the identifiers and permalink,
+  marked the row published, removed its temporary staging object, and verified the `instagram/`
+  staging prefix was empty.
+- The owner-only Mac runtime now has `INSTAGRAM_DELIVERY_ENABLED=true` with file mode `0600`.
+  Identity diagnosis reports `delivery_enabled: true`, and a deterministic dry run recognizes the
+  2026-10-14 08:00 Europe/Amsterdam child as `instagram_publish_due`.
 
 ## Supervised validation checkpoint
 
@@ -80,10 +87,9 @@ The original approved Poke Quiz delivery was prepared without enabling Instagram
 - the ordinary scheduler still sees `INSTAGRAM_DELIVERY_ENABLED=false`, so no other Instagram
   publication can be uploaded during this test.
 
-The replacement supervised validation must first pass the `/me` identity diagnostic. After
-execution, verify the Reel is public, its caption and Share to Feed behavior are correct, the
-permalink and media id were persisted, and the temporary `instagram/` object was deleted. Only then
-may unattended Instagram delivery be enabled.
+The replacement supervised validation passed after Meta restored API access. The Reel is public,
+the permalink and media id were persisted, and the temporary `instagram/` object was deleted.
+Unattended Instagram delivery is therefore enabled for the Poke Quizzz target.
 
 The Poke Quizzz Creator account is connected as an app tester and its token is stored only in the
 Mac runtime environment. Webhook subscriptions are intentionally disabled. The initial controlled
@@ -195,8 +201,8 @@ If the network drops during `media_publish`, ORION does not blindly repeat the r
 - [x] create the Instagram child from the normal shared Discord approval;
 - [x] run a dry-run due-publication check;
 - [x] register a one-publication supervised execution for the inherited schedule;
-- verify public visibility, caption, Share to Feed behavior, permalink, and staging deletion;
-- only then enable unattended delivery.
+- [x] verify public visibility, permalink persistence, and staging deletion;
+- [x] enable unattended delivery after the supervised acceptance passed.
 
 ### Phase 5: access review, if needed
 
