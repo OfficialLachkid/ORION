@@ -1,5 +1,4 @@
 import { stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import {
   DEFAULT_PUBLICATION_STAGING_BUCKET,
   DEFAULT_PUBLICATION_STAGING_MAX_BYTES,
@@ -10,6 +9,10 @@ import {
   resolveInstagramReelApproval,
 } from './instagram-publication.mjs';
 import { hashFileSha256 } from './tiktok-publication-executor.mjs';
+import {
+  buildPublicationRenderPathCandidates,
+  resolveAvailablePublicationRender,
+} from './publication-render-path.mjs';
 
 export const DEFAULT_INSTAGRAM_GRAPH_ENDPOINT = 'https://graph.instagram.com';
 
@@ -190,7 +193,7 @@ function resolveStoredTarget(publication = {}, target = {}) {
   return Object.keys(target).length > 0 ? target : stored;
 }
 
-function resolveRenderPath(publication = {}, videoRow = {}, projectRoot = process.cwd()) {
+function resolveConfiguredRenderPath(publication = {}, videoRow = {}) {
   const configuredPath = normalizeText(
     publication.metadata?.instagram_reel_approval?.render_path
       || publication.metadata?.render_path
@@ -202,7 +205,7 @@ function resolveRenderPath(publication = {}, videoRow = {}, projectRoot = proces
       { code: 'instagram_render_path_missing' },
     );
   }
-  return resolve(projectRoot, configuredPath);
+  return configuredPath;
 }
 
 export function createInstagramGraphClient(runtimeEnv = {}, target = {}, options = {}) {
@@ -243,14 +246,22 @@ export async function prepareInstagramReelPublication({
   hashFileImpl = hashFileSha256,
 }) {
   const resolvedTarget = resolveStoredTarget(publication, target);
-  const renderPath = resolveRenderPath(publication, videoRow, projectRoot);
-  const fileStats = await statImpl(renderPath);
+  const configuredRenderPath = resolveConfiguredRenderPath(publication, videoRow);
+  const [approvedRenderPath] = buildPublicationRenderPathCandidates(
+    configuredRenderPath,
+    projectRoot,
+  );
+  const { renderPath, fileStats } = await resolveAvailablePublicationRender({
+    configuredPath: configuredRenderPath,
+    projectRoot,
+    statImpl,
+  });
   const videoSizeBytes = Number(fileStats?.size || 0);
   const videoSha256 = await hashFileImpl(renderPath);
   const approval = resolveInstagramReelApproval({
     publication,
     target: resolvedTarget,
-    renderPath,
+    renderPath: approvedRenderPath,
     videoSizeBytes,
     videoSha256,
   });
