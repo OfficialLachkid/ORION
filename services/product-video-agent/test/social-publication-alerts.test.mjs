@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildPublicationFailureAlertMetadata,
+  buildPublicationFailureAlertPayload,
   buildSocialPublicationLifecycleAlertPayload,
+  deliverPublicationFailureAlerts,
   deliverSocialPublicationLifecycleAlerts,
   resolveSocialPublicationLifecycleAction,
 } from '../src/social-publication-alerts.mjs';
@@ -63,6 +66,100 @@ test('lifecycle alert payload identifies the remote post and required manual act
   assert.equal(embed.fields.find((field) => field.name === 'Account').value, '@pokequizz7');
   assert.match(embed.fields.find((field) => field.name === 'Post').value, /tiktok\.com/u);
   assert.deepEqual(payload.allowed_mentions, { parse: [] });
+});
+
+test('publication failure alert payload identifies the failed destination', () => {
+  const publication = buildPublication({
+    status: 'failed',
+    metadata: buildPublicationFailureAlertMetadata(buildPublication(), {
+      action: 'buffer_delivery_failed',
+      workflowState: 'failed',
+      reason: 'remote_delivery_failed',
+      error: 'TikTok rejected the post.',
+      asOf: '2026-10-13T10:00:00.000Z',
+    }),
+  });
+  const payload = buildPublicationFailureAlertPayload(publication);
+  const embed = payload.embeds[0];
+
+  assert.equal(embed.title, 'TikTok publication needs attention');
+  assert.match(embed.description, /Other platform deliveries continue independently/u);
+  assert.equal(embed.fields.find((field) => field.name === 'Account').value, '@pokequizz7');
+  assert.equal(embed.fields.find((field) => field.name === 'Reason').value, 'remote_delivery_failed');
+  assert.equal(embed.fields.find((field) => field.name === 'Error').value, 'TikTok rejected the post.');
+});
+
+test('publication failure alert posts once to #alerts and persists audit fields', async () => {
+  const base = buildPublication({ status: 'failed' });
+  const publication = {
+    ...base,
+    metadata: buildPublicationFailureAlertMetadata(base, {
+      action: 'buffer_delivery_failed',
+      workflowState: 'failed',
+      reason: 'remote_delivery_failed',
+      error: 'TikTok rejected the post.',
+      asOf: '2026-10-13T10:00:00.000Z',
+    }),
+  };
+  const store = createStore(publication);
+  const sent = [];
+  const first = await deliverPublicationFailureAlerts({
+    store,
+    publications: [publication],
+    runtimeConfig: {
+      env: { DISCORD_BOT_TOKEN: 'token' },
+      channelIds: { alerts: 'alerts-channel-1' },
+    },
+    asOf: '2026-10-13T10:01:00.000Z',
+    sendDiscordMessage: async (_config, channelId, payload) => {
+      sent.push({ channelId, payload });
+      return { posted: true, channelId, messageId: 'failure-alert-1' };
+    },
+  });
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].channelId, 'alerts-channel-1');
+  assert.equal(store.current().metadata.publication_failure_alert_status, 'sent');
+  assert.equal(store.current().metadata.publication_failure_alert_message_id, 'failure-alert-1');
+  assert.equal(first.results[0].action, 'publication_failure_alert_sent');
+
+  let repeatedSends = 0;
+  const second = await deliverPublicationFailureAlerts({
+    store,
+    publications: first.publications,
+    runtimeConfig: { channelIds: { alerts: 'alerts-channel-1' } },
+    asOf: '2026-10-13T10:02:00.000Z',
+    sendDiscordMessage: async () => {
+      repeatedSends += 1;
+      return { posted: true };
+    },
+  });
+  assert.equal(repeatedSends, 0);
+  assert.deepEqual(second.results, []);
+});
+
+test('failed publication alert remains pending when #alerts delivery fails', async () => {
+  const base = buildPublication({ status: 'failed' });
+  const publication = {
+    ...base,
+    metadata: buildPublicationFailureAlertMetadata(base, {
+      action: 'instagram_publish_failed',
+      workflowState: 'failed',
+      reason: 'publish_failed',
+      error: 'Meta API unavailable.',
+    }),
+  };
+  const store = createStore(publication);
+  const delivery = await deliverPublicationFailureAlerts({
+    store,
+    publications: [publication],
+    runtimeConfig: { channelIds: { alerts: 'alerts-channel-1' } },
+    sendDiscordMessage: async () => ({ posted: false, reason: 'no_token' }),
+  });
+
+  assert.equal(store.current().metadata.publication_failure_alert_status, 'pending');
+  assert.equal(store.current().metadata.publication_failure_alert_delivery_error, 'no_token');
+  assert.equal(delivery.results[0].action, 'publication_failure_alert_pending');
 });
 
 test('lifecycle alert delivery posts once and persists Discord audit fields', async () => {

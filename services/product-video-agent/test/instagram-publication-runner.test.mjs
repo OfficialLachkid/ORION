@@ -188,6 +188,48 @@ test('executeDueInstagramPublications persists every irreversible delivery bound
   assert.ok(patches.some((patch) => patch.metadata?.instagram_media_id === 'media-1'));
 });
 
+test('executeDueInstagramPublications alerts #alerts when publishing fails', async () => {
+  let stored = publication();
+  const sent = [];
+  const store = {
+    async fetchPublicationsByPlatform() { return [stored]; },
+    async fetchPublicationById() { return null; },
+    async fetchVideoById() { return { id: 'video-1' }; },
+    async claimPublicationForUpload(_id, patch) {
+      stored = { ...stored, ...patch, metadata: patch.metadata };
+      return stored;
+    },
+    async updatePublication(_id, patch) {
+      stored = { ...stored, ...patch, metadata: patch.metadata || stored.metadata };
+      return stored;
+    },
+  };
+
+  const results = await executeDueInstagramPublications({
+    'as-of': '2026-10-09T10:00:00.000Z',
+  }, {
+    runtimeConfig: {
+      env: { INSTAGRAM_DELIVERY_ENABLED: 'true' },
+      channelIds: { alerts: 'alerts-channel-1' },
+    },
+    publicationStore: store,
+    deliverSocialPublicationLifecycleAlerts: passThroughAlerts,
+    publishInstagramReel: async () => {
+      throw new Error('Meta rejected the Reel.');
+    },
+    sendDiscordMessage: async (_config, channelId, payload) => {
+      sent.push({ channelId, payload });
+      return { posted: true, channelId, messageId: 'instagram-alert-1' };
+    },
+  });
+
+  assert.equal(results.at(-2).action, 'instagram_publish_failed');
+  assert.equal(results.at(-1).action, 'publication_failure_alert_sent');
+  assert.equal(stored.metadata.publication_failure_alert_status, 'sent');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].channelId, 'alerts-channel-1');
+});
+
 test('generic social runner executes every registered platform adapter', async () => {
   const calls = [];
   const results = await executeDueSocialPublications({ 'as-of': '2026-10-09T10:00:00.000Z' }, {

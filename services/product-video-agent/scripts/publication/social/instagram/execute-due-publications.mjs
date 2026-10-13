@@ -19,7 +19,9 @@ import {
 } from '../../../../src/instagram-publication-executor.mjs';
 import { InstagramPublicationValidationError } from '../../../../src/instagram-publication.mjs';
 import {
+  deliverPublicationFailureAlerts,
   deliverSocialPublicationLifecycleAlerts,
+  persistAndDeliverPublicationFailureAlert,
 } from '../../../../src/social-publication-alerts.mjs';
 import { loadPublicationChannelProfiles } from '../../../../src/publication-channels.mjs';
 import {
@@ -179,6 +181,8 @@ export async function executeDueInstagramPublications(options = {}, dependencies
   const publishImpl = dependencies.publishInstagramReel || publishInstagramReel;
   const deliverAlerts = dependencies.deliverSocialPublicationLifecycleAlerts
     || deliverSocialPublicationLifecycleAlerts;
+  const deliverFailureAlerts = dependencies.deliverPublicationFailureAlerts
+    || deliverPublicationFailureAlerts;
   const fetched = accountKey
     ? await store.fetchPublicationsByChannel({
       platform: INSTAGRAM_REEL_PLATFORM,
@@ -198,9 +202,19 @@ export async function executeDueInstagramPublications(options = {}, dependencies
     asOf,
     dryRun,
   });
-  const alerts = await deliverAlerts({
+  const failureAlerts = await deliverFailureAlerts({
     store,
     publications: lifecycle.publications,
+    runtimeConfig,
+    asOf,
+    dryRun,
+    ...(dependencies.sendDiscordMessage
+      ? { sendDiscordMessage: dependencies.sendDiscordMessage }
+      : {}),
+  });
+  const alerts = await deliverAlerts({
+    store,
+    publications: failureAlerts.publications,
     runtimeConfig,
     asOf,
     dryRun,
@@ -217,7 +231,7 @@ export async function executeDueInstagramPublications(options = {}, dependencies
       .filter((item) => item.dueAction),
     limit,
   );
-  const results = [...lifecycle.results, ...alerts.results];
+  const results = [...lifecycle.results, ...failureAlerts.results, ...alerts.results];
 
   for (const { publication, dueAction } of due) {
     if (dryRun) {
@@ -372,18 +386,33 @@ export async function executeDueInstagramPublications(options = {}, dependencies
       const status = ['auth_required', 'approval_required', 'reconciliation_required'].includes(workflowState)
         ? 'blocked'
         : workflowState;
-      activePublication = await store.updatePublication(publication.id, {
-        status,
-        metadata: buildMetadataPatch(activePublication, {
-          workflow_state: workflowState,
-          publish_attempt_error: error.message || String(error),
-          instagram_publish_uncertain: uncertain,
-          instagram_publish_uncertain_at: uncertain ? asOf : '',
-          instagram_graph_error: error instanceof InstagramGraphApiError,
-          next_status_poll_at: hasContainer && !uncertain ? nextStatusPollAt(asOf) : '',
-        }),
-      }) || activePublication;
-      results.push({
+      const failureMetadata = buildMetadataPatch(activePublication, {
+        workflow_state: workflowState,
+        publish_attempt_error: error.message || String(error),
+        instagram_publish_uncertain: uncertain,
+        instagram_publish_uncertain_at: uncertain ? asOf : '',
+        instagram_graph_error: error instanceof InstagramGraphApiError,
+        next_status_poll_at: hasContainer && !uncertain ? nextStatusPollAt(asOf) : '',
+      });
+      const failureAlert = await persistAndDeliverPublicationFailureAlert({
+        store,
+        publication: activePublication,
+        patch: { status, metadata: failureMetadata },
+        failure: {
+          action: uncertain ? 'instagram_publish_uncertain' : 'instagram_publish_failed',
+          workflowState,
+          reason: error.code || 'instagram_publish_failed',
+          error: error.message || String(error),
+        },
+        runtimeConfig,
+        asOf,
+        dryRun,
+        ...(dependencies.sendDiscordMessage
+          ? { sendDiscordMessage: dependencies.sendDiscordMessage }
+          : {}),
+      });
+      activePublication = failureAlert.publication;
+      const failureResult = {
         publication_id: publication.id,
         platform: INSTAGRAM_REEL_PLATFORM,
         account_key: publication.account_key,
@@ -391,7 +420,9 @@ export async function executeDueInstagramPublications(options = {}, dependencies
         workflow_state: workflowState,
         reason: error.code || 'instagram_publish_failed',
         error: error.message || String(error),
-      });
+      };
+      results.push(failureResult);
+      results.push(...failureAlert.results);
     }
   }
   return results;
