@@ -160,7 +160,7 @@ Status: **in progress**
 - [x] Define the first coherent eight-item `Neon Plasma Armory` pilot.
 - [x] Make generation resumable using each candidate's final SHA-256 validation record.
 - [x] Add deterministic internal-preview packaging with actual-asset cover, sprite sheet, file inventory, and manifest hash.
-- [ ] Generate and visually review all eight candidates on the Mac/T7.
+- [x] Generate and visually review all eight candidates on the Mac/T7.
 - [ ] Upload the export to a new hidden itch.io Butler channel and verify the returned build.
 - Add a master style reference and shared seed/prompt vocabulary.
 - Add silhouette, scale, outline, and perceptual-similarity checks.
@@ -211,11 +211,11 @@ Status: **deferred**
 
 1. Read this document and `services/digital-asset-engine/README.md`.
 2. Run `npm run digital-assets:test`.
-3. Run the example `plan` command and inspect the canonical product directory.
-4. On the Mac, verify `ollama list` includes `x/flux2-klein:4b` and `/api/ps` shows no conflicting loaded model.
-5. Set the T7 archive root and run one explicit generation.
-6. Open the transparency preview and validation report.
-7. Record the human verdict before expanding to a pack.
+3. Confirm the hidden itch.io `assets-preview` build has finished processing, then inspect it from the Edit game page without making it public.
+4. Record per-asset human decisions and the pack-level creative decision against the exact manifest hash.
+5. Replace the draft license with reviewed customer terms.
+6. Prepare and approve the itch.io listing copy, price, tags, screenshots, cover, and built-in theme.
+7. Keep publication blocked until a separate distribution approval is recorded.
 
 ## Deferred decisions
 
@@ -261,3 +261,35 @@ The pipeline generated the example rifle through the Mac's local Ollama runtime 
 - distribution: blocked.
 
 The first processing attempt exposed a false-positive validation case: FLUX produced a flat pink near the requested `#FF00FF`, leaving a halo when removal used only the requested color. The implementation now detects the actual median border color, verifies that the border is sufficiently flat and resembles the requested chroma family, removes only edge-connected background pixels, and rejects excessive residual chroma. The repeated live run produced a visually clean transparent asset.
+
+## Live V0.2 pack verification - 2026-10-13
+
+The Mac generated and packaged the complete `Neon Plasma Armory` pilot on the T7:
+
+- eight of eight side-view weapon sprites passed the current automated checks;
+- elapsed generation time: 8 minutes 40.77 seconds (about 65.1 seconds per asset);
+- local API/per-image cost: EUR 0;
+- deterministic cover and sprite sheet were assembled only from included assets;
+- package manifest hash: `417a98420c193c931c631f0e6f2dd1525d0500fd3dfc7db0384a313cd04abca6`;
+- Butler accepted a first hidden upload to `vbjservices/asset-pack-test:assets-preview`;
+- a repeat push was rejected because the latest build was still processing, so the upload remains unverified until the Edit game page or a later remote-signature comparison shows the completed build.
+
+## Research-engine boundary - issue #149
+
+Issue #149 remains valuable as the architecture charter for answering *what should ORION make?* It must stay separate from this engine, which answers *how do we generate, review, package, and distribute an approved opportunity?*
+
+Before implementation, split the epic into bounded work items for source capability research, historical observations, opportunity scoring, Discord research digests, the handoff contract, and first-party sales feedback. Do not assume that public competitor sales or download counts are available: each source adapter must distinguish observed evidence from inferred proxies and document its allowed access method and cadence. Research creates proposals; only human-promoted opportunities enter the generation backlog.
+
+## itch.io product-page presentation
+
+Butler owns build/channel uploads only. The official itch.io API does not currently provide documented operations for creating a project or changing its title, description, price, screenshots, cover, or visual theme. Those page fields must be managed through the authenticated Edit game and Theme editor interfaces.
+
+For the pilot, use itch.io's built-in theme editor before requesting custom CSS access:
+
+- keep the generated 630x500 cover as the honest product thumbnail;
+- add three to five deterministic screenshots made from the included assets;
+- use a dark navy background with cyan and violet accents matching the pack palette;
+- provide a short benefit-led description, exact file inventory, dimensions, format, license, engine compatibility, and the statement `Side-view sprites; one direction, horizontally mirrorable.`;
+- keep the page and upload private/hidden until creative, license, pricing, and distribution approval are complete.
+
+ORION can generate all copy and visual presentation assets deterministically. Applying them can later be browser-automated in an authenticated session, but publication remains an explicit human-approved action.
