@@ -25,7 +25,9 @@ import {
 } from '../../../../src/tiktok-publication-executor.mjs';
 import { TikTokDirectPostValidationError } from '../../../../src/tiktok-publication.mjs';
 import {
+  deliverPublicationFailureAlerts,
   deliverSocialPublicationLifecycleAlerts,
+  persistAndDeliverPublicationFailureAlert,
   resolveSocialPublicationLifecycleAction,
 } from '../../../../src/social-publication-alerts.mjs';
 import {
@@ -307,6 +309,8 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
   const publishBufferVideoImpl = dependencies.publishBufferVideo || publishBufferVideo;
   const fetchBufferPublicationStatusImpl =
     dependencies.fetchBufferPublicationStatus || fetchBufferPublicationStatus;
+  const deliverFailureAlertsImpl = dependencies.deliverPublicationFailureAlerts
+    || deliverPublicationFailureAlerts;
   const deliverLifecycleAlertsImpl = dependencies.deliverSocialPublicationLifecycleAlerts
     || deliverSocialPublicationLifecycleAlerts;
   const fetchedPublications = accountKey
@@ -328,9 +332,19 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
     asOf,
     dryRun,
   });
-  const lifecycleAlerts = await deliverLifecycleAlertsImpl({
+  const failureAlerts = await deliverFailureAlertsImpl({
     store,
     publications: lifecycleReconciliation.publications,
+    runtimeConfig,
+    asOf,
+    dryRun,
+    ...(dependencies.sendDiscordMessage
+      ? { sendDiscordMessage: dependencies.sendDiscordMessage }
+      : {}),
+  });
+  const lifecycleAlerts = await deliverLifecycleAlertsImpl({
+    store,
+    publications: failureAlerts.publications,
     runtimeConfig,
     asOf,
     dryRun,
@@ -348,7 +362,11 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       .filter((item) => item.dueAction),
     limit,
   );
-  const results = [...lifecycleReconciliation.results, ...lifecycleAlerts.results];
+  const results = [
+    ...lifecycleReconciliation.results,
+    ...failureAlerts.results,
+    ...lifecycleAlerts.results,
+  ];
 
   for (const { publication, dueAction } of duePublications) {
     const videoRow = publication.video_id
@@ -405,10 +423,37 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
             target,
             runtimeEnv: runtimeConfig.env || {},
           });
-        const updatedPublication = await store.updatePublication(
-          publication.id,
-          statusPatchForResult(publication, statusResult, asOf, deliveryProvider),
-        ) || publication;
+        const statusPatch = statusPatchForResult(
+          publication,
+          statusResult,
+          asOf,
+          deliveryProvider,
+        );
+        const failed = statusPatch.metadata?.workflow_state === 'failed';
+        const failureAlert = failed
+          ? await persistAndDeliverPublicationFailureAlert({
+            store,
+            publication,
+            patch: statusPatch,
+            failure: {
+              action: deliveryProvider === BUFFER_DELIVERY_PROVIDER
+                ? 'buffer_delivery_failed'
+                : 'tiktok_delivery_failed',
+              workflowState: 'failed',
+              reason: statusResult.failReason || 'remote_delivery_failed',
+              error: statusResult.failReason || 'The remote platform reported a failed delivery.',
+            },
+            runtimeConfig,
+            asOf,
+            dryRun,
+            ...(dependencies.sendDiscordMessage
+              ? { sendDiscordMessage: dependencies.sendDiscordMessage }
+              : {}),
+          })
+          : null;
+        const updatedPublication = failureAlert?.publication
+          || await store.updatePublication(publication.id, statusPatch)
+          || publication;
         results.push({
           publication_id: publication.id,
           platform: TIKTOK_VIDEO_PLATFORM,
@@ -423,6 +468,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
           tiktok_post_id: statusResult.postId || '',
           public_url: statusResult.publicUrl || '',
         });
+        results.push(...(failureAlert?.results || []));
       } catch (error) {
         const isAuthRequired = error instanceof TikTokPublicationAuthRequiredError
           || error?.code === 'tiktok_auth_required';
@@ -430,21 +476,38 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
           || error?.code === 'buffer_create_uncertain';
         const workflowState = isAuthRequired ? 'auth_required' : 'publishing';
         const status = isAuthRequired ? 'blocked' : 'publishing';
-        const updatedPublication = await store.updatePublication(publication.id, {
-          status,
-          metadata: buildMetadataPatch(publication, {
-            workflow_state: workflowState,
-            tiktok_status_check_error: error.message || String(error),
-            ...(deliveryProvider === BUFFER_DELIVERY_PROVIDER
-              ? {
-                buffer_status_check_error: error.message || String(error),
-                buffer_create_uncertain: isBufferUncertain,
-              }
-              : {}),
-            tiktok_status_checked_at: asOf,
-            next_status_poll_at: isAuthRequired ? '' : nextStatusPollAt(asOf),
-          }),
-        }) || publication;
+        const failureMetadata = buildMetadataPatch(publication, {
+          workflow_state: workflowState,
+          tiktok_status_check_error: error.message || String(error),
+          ...(deliveryProvider === BUFFER_DELIVERY_PROVIDER
+            ? {
+              buffer_status_check_error: error.message || String(error),
+              buffer_create_uncertain: isBufferUncertain,
+            }
+            : {}),
+          tiktok_status_checked_at: asOf,
+          next_status_poll_at: isAuthRequired ? '' : nextStatusPollAt(asOf),
+        });
+        const failureAlert = await persistAndDeliverPublicationFailureAlert({
+          store,
+          publication,
+          patch: { status, metadata: failureMetadata },
+          failure: {
+            action: deliveryProvider === BUFFER_DELIVERY_PROVIDER
+              ? 'buffer_status_failed'
+              : 'tiktok_status_failed',
+            workflowState,
+            reason: isAuthRequired ? 'auth_required' : 'status_fetch_failed',
+            error: error.message || String(error),
+          },
+          runtimeConfig,
+          asOf,
+          dryRun,
+          ...(dependencies.sendDiscordMessage
+            ? { sendDiscordMessage: dependencies.sendDiscordMessage }
+            : {}),
+        });
+        const updatedPublication = failureAlert.publication;
         results.push({
           publication_id: publication.id,
           platform: TIKTOK_VIDEO_PLATFORM,
@@ -456,6 +519,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
           reason: isAuthRequired ? 'auth_required' : 'status_fetch_failed',
           error: error.message || String(error),
         });
+        results.push(...failureAlert.results);
       }
       continue;
     }
@@ -621,47 +685,65 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
         : isAuthRequired || isValidationBlocked
           ? 'blocked'
           : 'failed';
-      publishingPublication = await store.updatePublication(publication.id, {
-        status,
-        metadata: buildMetadataPatch(publishingPublication, {
-          workflow_state: workflowState,
-          publish_attempt_error: error.message || String(error),
-          publish_failed_at: asOf,
-          ...(deliveryProvider === BUFFER_DELIVERY_PROVIDER
-            ? {
-              delivery_provider: BUFFER_DELIVERY_PROVIDER,
-              buffer_create_uncertain: isBufferUncertain,
-              buffer_create_uncertain_at: isBufferUncertain ? asOf : '',
-            }
-            : {}),
-          next_status_poll_at: deliveryMayExist ? nextStatusPollAt(asOf) : '',
-        }),
-      }) || publishingPublication;
-      results.push({
-        publication_id: publication.id,
-        platform: TIKTOK_VIDEO_PLATFORM,
-        account_key: publication.account_key,
-        action: isBufferUncertain
-          ? 'buffer_create_uncertain'
-          : initializedPublishId
-            ? deliveryProvider === BUFFER_DELIVERY_PROVIDER
-              ? 'buffer_upload_interrupted'
-              : 'tiktok_upload_interrupted'
-            : deliveryProvider === BUFFER_DELIVERY_PROVIDER
-              ? 'buffer_publish_failed'
-              : 'tiktok_publish_failed',
-        workflow_state: workflowState,
-        reason: isBufferUncertain
-          ? 'buffer_create_uncertain'
-          : initializedPublishId
+      const failureAction = isBufferUncertain
+        ? 'buffer_create_uncertain'
+        : initializedPublishId
+          ? deliveryProvider === BUFFER_DELIVERY_PROVIDER
+            ? 'buffer_upload_interrupted'
+            : 'tiktok_upload_interrupted'
+          : deliveryProvider === BUFFER_DELIVERY_PROVIDER
+            ? 'buffer_publish_failed'
+            : 'tiktok_publish_failed';
+      const failureReason = isBufferUncertain
+        ? 'buffer_create_uncertain'
+        : initializedPublishId
           ? 'upload_interrupted_after_init'
           : isAuthRequired
             ? 'auth_required'
             : isValidationBlocked
               ? error.code || 'tiktok_direct_post_validation_failed'
-              : 'publish_failed',
+              : 'publish_failed';
+      const failureMetadata = buildMetadataPatch(publishingPublication, {
+        workflow_state: workflowState,
+        publish_attempt_error: error.message || String(error),
+        publish_failed_at: asOf,
+        ...(deliveryProvider === BUFFER_DELIVERY_PROVIDER
+          ? {
+            delivery_provider: BUFFER_DELIVERY_PROVIDER,
+            buffer_create_uncertain: isBufferUncertain,
+            buffer_create_uncertain_at: isBufferUncertain ? asOf : '',
+          }
+          : {}),
+        next_status_poll_at: deliveryMayExist ? nextStatusPollAt(asOf) : '',
+      });
+      const failureAlert = await persistAndDeliverPublicationFailureAlert({
+        store,
+        publication: publishingPublication,
+        patch: { status, metadata: failureMetadata },
+        failure: {
+          action: failureAction,
+          workflowState,
+          reason: failureReason,
+          error: error.message || String(error),
+        },
+        runtimeConfig,
+        asOf,
+        dryRun,
+        ...(dependencies.sendDiscordMessage
+          ? { sendDiscordMessage: dependencies.sendDiscordMessage }
+          : {}),
+      });
+      publishingPublication = failureAlert.publication;
+      results.push({
+        publication_id: publication.id,
+        platform: TIKTOK_VIDEO_PLATFORM,
+        account_key: publication.account_key,
+        action: failureAction,
+        workflow_state: workflowState,
+        reason: failureReason,
         error: error.message || String(error),
       });
+      results.push(...failureAlert.results);
     }
   }
 

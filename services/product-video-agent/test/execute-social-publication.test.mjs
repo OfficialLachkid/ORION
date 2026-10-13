@@ -608,6 +608,49 @@ test('executeDueSocialPublications polls Buffer and removes the staging referenc
   assert.equal(stored.metadata.buffer_staging_removed_at, '2026-09-07T12:00:00.000Z');
 });
 
+test('executeDueSocialPublications alerts #alerts once when Buffer reports terminal failure', async () => {
+  const publication = asBufferPublication({
+    status: 'publishing',
+    external_id: 'buffer-post-failed',
+    metadata: {
+      workflow_state: 'publishing',
+      next_status_poll_at: '2026-09-07T11:59:00.000Z',
+    },
+  });
+  const store = createStore([publication]);
+  const sent = [];
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-07T12:00:00.000Z',
+  }, {
+    runtimeConfig: {
+      env: { BUFFER_TIKTOK_DELIVERY_ENABLED: 'true' },
+      channelIds: { alerts: 'alerts-channel-1' },
+    },
+    publicationStore: store,
+    fetchBufferPublicationStatus: async () => ({
+      status: 'failed',
+      rawStatus: 'error',
+      postId: 'buffer-post-failed',
+      externalId: 'buffer-post-failed',
+      failReason: 'TikTok rejected the video.',
+      stagingRemoved: false,
+    }),
+    sendDiscordMessage: async (_config, channelId, payload) => {
+      sent.push({ channelId, payload });
+      return { posted: true, channelId, messageId: 'failure-alert-1' };
+    },
+  });
+
+  const stored = store.current(publication.id);
+  assert.equal(results[0].action, 'buffer_status_fetch');
+  assert.equal(results[1].action, 'publication_failure_alert_sent');
+  assert.equal(stored.status, 'failed');
+  assert.equal(stored.metadata.publication_failure_alert_status, 'sent');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].channelId, 'alerts-channel-1');
+});
+
 test('retryTikTokPublication requeues only an approved row without a publish id', async () => {
   const store = createStore([{
     ...dueTikTokPublication,

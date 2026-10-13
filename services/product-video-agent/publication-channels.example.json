@@ -378,6 +378,28 @@
             ]
           }
         },
+        "publisher": {
+          "targets": [
+            {
+              "platform": "tiktok_video",
+              "account_key": "trivamon-tiktok",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "buffer",
+              "visibility": "public",
+              "buffer": {
+                "organization_id": "6ac791479c11c0b26c69c8d6",
+                "channel_id": "6ace11ee778b240e2ff6013c",
+                "expected_service": "tiktok",
+                "expected_username": "trivamon"
+              },
+              "tiktok": {
+                "is_aigc": false,
+                "video_cover_timestamp_ms": 1000
+              }
+            }
+          ]
+        },
         "review_thread_id": "1536146358749233222",
         "queue_status_message_id": "1536308134337974303",
         "related_video": {
@@ -553,6 +575,28 @@
               }
             ]
           }
+        },
+        "publisher": {
+          "targets": [
+            {
+              "platform": "tiktok_video",
+              "account_key": "poke-guess-tiktok",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "buffer",
+              "visibility": "public",
+              "buffer": {
+                "organization_id": "6ac791479c11c0b26c69c8d6",
+                "channel_id": "6ace1238778b240e2ff60476",
+                "expected_service": "tiktok",
+                "expected_username": "poke.guesss"
+              },
+              "tiktok": {
+                "is_aigc": false,
+                "video_cover_timestamp_ms": 1000
+              }
+            }
+          ]
         },
         "review_thread_id": "1536721345440780339",
         "queue_status_message_id": "1536753013538947257",
