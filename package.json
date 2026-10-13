@@ -95,6 +95,7 @@
     "transcription:simulate": "node services/transcription-worker/index.mjs",
     "digital-assets:plan": "node services/digital-asset-engine/index.mjs plan",
     "digital-assets:generate": "node services/digital-asset-engine/index.mjs generate",
+    "digital-assets:package": "node services/digital-asset-engine/index.mjs package",
     "digital-assets:test": "node --test services/digital-asset-engine/test/*.test.mjs",
     "product-video:dry-run": "node services/product-video-agent/index.mjs",
     "product-video:doctor": "node services/product-video-agent/index.mjs --doctor",

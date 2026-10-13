@@ -1,5 +1,6 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, relative } from 'node:path';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, relative, resolve } from 'node:path';
 import { validateGeneratedAsset } from './asset-validator.mjs';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { withGenerationLock } from './generation-lock.mjs';
@@ -25,12 +26,63 @@ export async function planDigitalAssetProduct(options) {
   }
   const product = createProductSpecification(validation, options.config, { now: options.now });
   const store = options.store || new CanonicalProductStore(options.outputRoot);
+  if (options.resume === true) {
+    const existing = await store.loadProductIfExists(product.slug);
+    if (existing) {
+      const expectedKeys = product.assets.map((asset) => asset.asset_key);
+      const existingKeys = existing.assets.map((asset) => asset.asset_key);
+      if (existing.product_id !== product.product_id || JSON.stringify(existingKeys) !== JSON.stringify(expectedKeys)) {
+        throw new Error(`Existing product ${product.slug} does not match the current opportunity definition.`);
+      }
+      return {
+        validation,
+        product: existing,
+        persistence: {
+          root: store.productRoot(existing),
+          manifestPath: `${store.productRoot(existing)}/product.json`,
+          resumed: true,
+        },
+        store,
+      };
+    }
+  }
   const persistence = await store.initialize(product, validation);
   return { validation, product, persistence, store };
 }
 
+async function loadReusableAsset(store, product, asset) {
+  if (asset.status !== 'generated' || !asset.final_path || !asset.validation_path) return null;
+  try {
+    const root = store.productRoot(product);
+    const [buffer, validationText] = await Promise.all([
+      readFile(resolve(root, asset.final_path)),
+      readFile(resolve(root, asset.validation_path), 'utf8'),
+    ]);
+    const validation = JSON.parse(validationText);
+    const actualHash = createHash('sha256').update(buffer).digest('hex');
+    if (validation.status !== 'passed' || validation.metrics?.content_sha256 !== actualHash) return null;
+    return {
+      asset_id: asset.asset_id,
+      status: 'passed',
+      validation,
+      source_path: asset.source_path,
+      final_path: asset.final_path,
+      validation_path: asset.validation_path,
+      preview_path: `previews/${asset.asset_key}-transparency.png`,
+      provider: product.generation_provider.provider,
+      model: product.generation_provider.model,
+      seed: asset.seed,
+      estimated_cost: 0,
+      resumed: true,
+    };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 export async function generateDigitalAssetProduct(options) {
-  const planned = await planDigitalAssetProduct(options);
+  const planned = await planDigitalAssetProduct({ ...options, resume: true });
   const adapter = options.adapter || new OllamaImageAdapter(options.config.generation);
   const readiness = await adapter.checkReadiness();
   if (readiness.status !== 'ready') throw new Error(readiness.detail);
@@ -49,6 +101,11 @@ export async function generateDigitalAssetProduct(options) {
 
     const results = [];
     for (const asset of product.assets) {
+      const reusable = await loadReusableAsset(planned.store, product, asset);
+      if (reusable) {
+        results.push(reusable);
+        continue;
+      }
       const generated = await adapter.generateAsset({
         asset,
         sourceWidth: options.opportunity.generation.source_width,
@@ -100,6 +157,21 @@ export async function generateDigitalAssetProduct(options) {
         seed: generated.seed,
         estimated_cost: 0,
       });
+      const latest = results.at(-1);
+      product = ProductSpecificationSchema.parse({
+        ...product,
+        assets: product.assets.map((item) => item.asset_id === asset.asset_id
+          ? {
+            ...item,
+            status: latest.status === 'passed' ? 'generated' : 'failed',
+            source_path: latest.source_path,
+            final_path: latest.final_path,
+            validation_path: latest.validation_path,
+          }
+          : item),
+        updated_at: options.now || new Date().toISOString(),
+      });
+      await planned.store.saveProduct(product);
     }
 
     const resultById = new Map(results.map((result) => [result.asset_id, result]));

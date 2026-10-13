@@ -155,9 +155,13 @@ Status: **in progress**
 
 ### Phase 2 — First coherent asset pack
 
-Status: **not started**
+Status: **in progress**
 
-- Expand from one rifle to a deliberately designed 8–16 item mini-pack.
+- [x] Define the first coherent eight-item `Neon Plasma Armory` pilot.
+- [x] Make generation resumable using each candidate's final SHA-256 validation record.
+- [x] Add deterministic internal-preview packaging with actual-asset cover, sprite sheet, file inventory, and manifest hash.
+- [ ] Generate and visually review all eight candidates on the Mac/T7.
+- [ ] Upload the export to a new hidden itch.io Butler channel and verify the returned build.
 - Add a master style reference and shared seed/prompt vocabulary.
 - Add silhouette, scale, outline, and perceptual-similarity checks.
 - Add duplicate and near-duplicate detection.
@@ -166,6 +170,15 @@ Status: **not started**
 - Replace the draft product license with reviewed terms.
 
 Exit criterion: one coherent, useful, original pack whose files can be imported into a game engine without manual repair.
+
+### Retention decision
+
+- T7 is the canonical large-file store; Supabase stores metadata, hashes, decisions, and publication state only.
+- Keep approved individual assets, release manifests, covers, sprite sheets, and exact marketplace exports while the product remains supported.
+- Delete Mac scratch copies only after a byte-for-byte SHA-256 match against T7.
+- Retain raw model sources and rejected candidates through review and revisions, then make them eligible for a later verified retention sweep.
+- Never treat itch.io or another marketplace as the backup of record.
+- Add a second backup target before the catalog becomes commercially important because one T7 remains a single point of failure.
 
 ### Phase 3 — itch.io adapter
 

@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { loadEngineConfig } from '../src/config.mjs';
+import { packageDigitalAssetPreview } from '../src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from '../src/pipeline.mjs';
 
 const testDirectory = resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -69,9 +70,11 @@ test('pipeline produces a transparent, validated candidate while blocking distri
   const config = await loadConfig(outputRoot);
   const opportunity = await loadFixture();
   const source = await syntheticSourceImage();
+  let generationCalls = 0;
   const adapter = {
     async checkReadiness() { return { status: 'ready', detail: 'fixture ready' }; },
     async generateAsset({ asset }) {
+      generationCalls += 1;
       return {
         buffer: source,
         format: 'png',
@@ -106,4 +109,34 @@ test('pipeline produces a transparent, validated candidate while blocking distri
   assert.equal(result.gates.human_review_required, true);
   assert.equal(result.gates.distribution_ready, false);
   assert.equal(result.cost.incurred, 0);
+  assert.equal(generationCalls, 1);
+
+  const resumed = await generateDigitalAssetProduct({
+    config,
+    opportunity,
+    outputRoot,
+    projectRoot: outputRoot,
+    adapter,
+    now: '2026-10-12T12:05:00.000Z',
+    async fetchImpl() {
+      return { ok: true, async json() { return { models: [] }; } };
+    },
+  });
+  assert.equal(generationCalls, 1);
+  assert.equal(resumed.generation[0].resumed, true);
+
+  const packaged = await packageDigitalAssetPreview({
+    outputRoot,
+    slug: result.product.slug,
+    now: '2026-10-12T12:10:00.000Z',
+  });
+  const coverMetadata = await sharp(packaged.coverPath).metadata();
+  const storedManifest = JSON.parse(await readFile(packaged.manifestPath, 'utf8'));
+  assert.equal(coverMetadata.width, 630);
+  assert.equal(coverMetadata.height, 500);
+  assert.equal(storedManifest.asset_count, 1);
+  assert.equal(storedManifest.release_state, 'internal_preview');
+  assert.equal(storedManifest.distribution_ready, false);
+  assert.match(storedManifest.manifest_hash, /^[a-f0-9]{64}$/u);
+  assert.equal(storedManifest.files.some((file) => file.path.startsWith('assets/source/')), false);
 });

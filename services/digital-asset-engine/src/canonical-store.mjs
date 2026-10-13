@@ -92,4 +92,13 @@ export class CanonicalProductStore {
     const path = resolveInside(this.outputRoot, `${slug}/product.json`, 'Product manifest');
     return ProductSpecificationSchema.parse(JSON.parse(await readFile(path, 'utf8')));
   }
+
+  async loadProductIfExists(slug) {
+    try {
+      return await this.loadProduct(slug);
+    } catch (error) {
+      if (error?.code === 'ENOENT') return null;
+      throw error;
+    }
+  }
 }

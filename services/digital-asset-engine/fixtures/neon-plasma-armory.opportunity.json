@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.0",
+  "opportunity_id": "OPPORTUNITY-0146-ARMORY-PILOT",
+  "status": "validated",
+  "title": "Neon Plasma Armory",
+  "category": "Pixel Art / Items",
+  "product_type": "Sci-Fi Weapon Sprite Pack",
+  "theme": "Original neon industrial science fiction with dark gunmetal bodies, compact cyan energy chambers, and restrained violet accents",
+  "target_audience": [
+    "indie game developers",
+    "2D action game creators",
+    "science-fiction RPG creators"
+  ],
+  "observed_at": "2026-10-12T00:00:00.000Z",
+  "expires_at": "2027-01-10T00:00:00.000Z",
+  "signals": {
+    "trend_direction": "rising",
+    "demand": "high",
+    "competition": "medium",
+    "cross_marketplace_evidence": "strong",
+    "confidence": 82
+  },
+  "generation": {
+    "medium": "pixel_art",
+    "perspective": "strict side view, muzzle pointing right, one direction only",
+    "width": 128,
+    "height": 64,
+    "source_width": 1024,
+    "source_height": 1024,
+    "max_palette_colors": 32,
+    "palette": [
+      "#10131d",
+      "#20283a",
+      "#44506b",
+      "#7785a6",
+      "#c8d4ec",
+      "#35d9ff",
+      "#875cff",
+      "#ff4fd8"
+    ],
+    "outline": "Use a one-pixel dark outline at final sprite resolution and the same outline weight on every weapon",
+    "lighting": "Cool cyan energy core, upper-left neutral rim light, restrained violet highlights, no cast shadow",
+    "background": "transparent",
+    "chroma_key": "#ff00ff",
+    "assets": [
+      {
+        "asset_key": "plasma-pistol",
+        "name": "Plasma Pistol",
+        "kind": "weapon",
+        "description": "a compact one-handed plasma pistol with a short barrel, readable grip, trigger guard, and cyan energy chamber",
+        "prompt_notes": ["Compact silhouette occupying about sixty percent of the shared canvas width", "No stock and no extra accessories"]
+      },
+      {
+        "asset_key": "ion-pistol",
+        "name": "Ion Pistol",
+        "kind": "weapon",
+        "description": "a sturdy one-handed ion pistol with a squared muzzle, readable grip, trigger guard, and small violet capacitor",
+        "prompt_notes": ["Distinct from the plasma pistol through a heavier squared front section", "No stock and no extra accessories"]
+      },
+      {
+        "asset_key": "plasma-carbine",
+        "name": "Plasma Carbine",
+        "kind": "weapon",
+        "description": "a compact two-handed plasma carbine with a short stock, grip, trigger, cyan energy chamber, and medium barrel",
+        "prompt_notes": ["Balanced compact rifle silhouette", "Keep all functional parts readable at 128 by 64 pixels"]
+      },
+      {
+        "asset_key": "pulse-rifle",
+        "name": "Pulse Rifle",
+        "kind": "weapon",
+        "description": "a long two-handed pulse rifle with a slim stock, grip, trigger, segmented energy rail, barrel, and muzzle",
+        "prompt_notes": ["Long clean silhouette with one continuous upper energy rail", "Avoid scopes and separate attachments"]
+      },
+      {
+        "asset_key": "energy-shotgun",
+        "name": "Energy Shotgun",
+        "kind": "weapon",
+        "description": "a broad two-handed energy shotgun with a reinforced stock, grip, trigger, twin cyan chambers, thick barrel, and wide muzzle",
+        "prompt_notes": ["Heavier silhouette than the rifles", "Use two integrated energy chambers rather than separate objects"]
+      },
+      {
+        "asset_key": "rail-rifle",
+        "name": "Rail Rifle",
+        "kind": "weapon",
+        "description": "a precision rail rifle with a skeletal stock, grip, trigger, long metallic accelerator rails, and narrow muzzle",
+        "prompt_notes": ["Long precision silhouette", "No detached scope and no bipod"]
+      },
+      {
+        "asset_key": "arc-launcher",
+        "name": "Arc Launcher",
+        "kind": "weapon",
+        "description": "a heavy arc launcher with a compact rear stock, grip, trigger, large circular violet capacitor, reinforced body, and short emitter",
+        "prompt_notes": ["Make the circular capacitor part of the weapon body", "Heavy but still completely visible inside the shared canvas"]
+      },
+      {
+        "asset_key": "ion-cannon",
+        "name": "Ion Cannon",
+        "kind": "weapon",
+        "description": "a heavy two-handed ion cannon with a braced stock, two grips, trigger, large cyan core, armored body, and wide forward emitter",
+        "prompt_notes": ["Largest silhouette in the pack", "Keep the weapon horizontal and fully contained with generous edge padding"]
+      }
+    ]
+  },
+  "commercial": {
+    "base_price": {
+      "amount": 4.99,
+      "currency": "EUR"
+    },
+    "marketplace_candidates": ["itch.io"]
+  },
+  "risk": {
+    "ip_risk": "low",
+    "prohibited_references": [
+      "Pokemon",
+      "Star Wars",
+      "Halo",
+      "Destiny",
+      "Warhammer",
+      "Cyberpunk 2077",
+      "specific living artists"
+    ],
+    "notes": ["Use the approved ORION palette and functional vocabulary without copying an existing weapon design or asset pack."]
+  },
+  "evidence": [
+    {
+      "label": "Issue #146 operator-approved local weapon feasibility preview",
+      "source": "local ORION FLUX.2 Klein preview review",
+      "observed_at": "2026-10-12T00:00:00.000Z"
+    }
+  ]
+}
