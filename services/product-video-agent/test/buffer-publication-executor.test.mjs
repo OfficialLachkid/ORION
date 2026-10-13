@@ -5,6 +5,7 @@ import {
   BufferApiClient,
   BufferPublicationUncertainError,
   fetchBufferPublicationStatus,
+  prepareBufferPublication,
   publishBufferVideo,
 } from '../src/buffer-publication-executor.mjs';
 
@@ -138,6 +139,33 @@ test('publishBufferVideo validates the exact approved file before staging and cr
   assert.equal(result.externalId, 'buffer-post-1');
   assert.equal(result.workflowState, 'publishing');
   assert.equal(result.stagingObjectPath, 'buffer/publication-target-buffer/random.mp4');
+});
+
+test('prepareBufferPublication accepts the known relocated preview only after hash verification', async () => {
+  const checked = [];
+  const prepared = await prepareBufferPublication({
+    publication,
+    videoRow: { id: 'video-1' },
+    target,
+    projectRoot: '/workspace',
+    statImpl: async (filePath) => {
+      checked.push(filePath);
+      if (!filePath.includes('Older Generated Videos')) {
+        const error = new Error('missing');
+        error.code = 'ENOENT';
+        throw error;
+      }
+      return { size: 6_638_795 };
+    },
+    hashFileImpl: async (filePath) => {
+      assert.match(filePath, /Older Generated Videos[/\\]video\.mp4$/u);
+      return 'a'.repeat(64);
+    },
+  });
+
+  assert.equal(checked.length, 2);
+  assert.match(prepared.renderPath, /Older Generated Videos[/\\]video\.mp4$/u);
+  assert.equal(prepared.videoSha256, 'a'.repeat(64));
 });
 
 test('publishBufferVideo fails closed when the file no longer matches shared approval', async () => {

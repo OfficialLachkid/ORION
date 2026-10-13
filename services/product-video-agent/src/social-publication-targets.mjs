@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { createStableId } from './ids.mjs';
+import { resolveAvailablePublicationRender } from './publication-render-path.mjs';
 import {
   TIKTOK_DIRECT_POST_APPROVAL_VERSION,
 } from './tiktok-publication.mjs';
@@ -229,13 +229,17 @@ async function addTikTokDirectPostApproval({
     );
   }
 
-  const renderPath = resolve(projectRoot, normalizeText(row.metadata?.render_path));
-  const fileStats = await statImpl(renderPath);
+  const { renderPath, fileStats } = await resolveAvailablePublicationRender({
+    configuredPath: row.metadata?.render_path,
+    projectRoot,
+    statImpl,
+  });
   const videoSha256 = await hashFileImpl(renderPath);
   return {
     ...row,
     metadata: {
       ...(row.metadata || {}),
+      render_path: renderPath,
       tiktok_direct_post_approval: {
         version: TIKTOK_DIRECT_POST_APPROVAL_VERSION,
         approved: true,
@@ -310,13 +314,17 @@ async function addInstagramReelApproval({
     );
   }
   const identity = requireInstagramApprovalIdentity(target, reviewedSettings);
-  const renderPath = resolve(projectRoot, normalizeText(row.metadata?.render_path));
-  const fileStats = await statImpl(renderPath);
+  const { renderPath, fileStats } = await resolveAvailablePublicationRender({
+    configuredPath: row.metadata?.render_path,
+    projectRoot,
+    statImpl,
+  });
   const videoSha256 = await hashFileImpl(renderPath);
   return {
     ...row,
     metadata: {
       ...(row.metadata || {}),
+      render_path: renderPath,
       instagram_reel_approval: {
         version: INSTAGRAM_REEL_APPROVAL_VERSION,
         approved: true,

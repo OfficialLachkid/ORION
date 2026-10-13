@@ -1,6 +1,6 @@
 import { stat } from 'node:fs/promises';
-import { resolve } from 'node:path';
 import { hashFileSha256 } from './tiktok-publication-executor.mjs';
+import { resolveAvailablePublicationRender } from './publication-render-path.mjs';
 import {
   DEFAULT_PUBLICATION_STAGING_BUCKET,
   DEFAULT_PUBLICATION_STAGING_MAX_BYTES,
@@ -45,7 +45,7 @@ function resolveApproval(publication = {}) {
   return approval;
 }
 
-function resolveRenderPath(publication = {}, videoRow = {}, projectRoot = process.cwd()) {
+function resolveConfiguredRenderPath(publication = {}, videoRow = {}) {
   const configuredPath = normalizeText(
     publication.metadata?.render_path || videoRow.render?.output_path,
   );
@@ -54,7 +54,7 @@ function resolveRenderPath(publication = {}, videoRow = {}, projectRoot = proces
       code: 'buffer_render_path_missing',
     });
   }
-  return resolve(projectRoot, configuredPath);
+  return configuredPath;
 }
 
 function mapBufferStatus(status) {
@@ -320,8 +320,11 @@ export async function prepareBufferPublication({
       { code: 'buffer_approval_creator_mismatch' },
     );
   }
-  const renderPath = resolveRenderPath(publication, videoRow, projectRoot);
-  const fileStats = await statImpl(renderPath);
+  const { renderPath, fileStats } = await resolveAvailablePublicationRender({
+    configuredPath: resolveConfiguredRenderPath(publication, videoRow),
+    projectRoot,
+    statImpl,
+  });
   const videoSizeBytes = Number(fileStats?.size || 0);
   if (videoSizeBytes !== Number(approval.video_size_bytes)) {
     throw new BufferPublicationValidationError(

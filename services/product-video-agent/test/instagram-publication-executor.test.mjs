@@ -144,6 +144,46 @@ test('prepareInstagramReelPublication binds delivery to exact approved file and 
   assert.equal(result.videoSha256, sha256);
 });
 
+test('prepareInstagramReelPublication accepts the known relocated preview after exact-file checks', async () => {
+  const originalPath = resolve('/workspace/Previews/Stat Clash/video.mp4');
+  const relocatedPublication = {
+    ...publication,
+    metadata: {
+      ...publication.metadata,
+      render_path: originalPath,
+      instagram_reel_approval: {
+        ...publication.metadata.instagram_reel_approval,
+        render_path: originalPath,
+      },
+    },
+  };
+  const checked = [];
+  const result = await prepareInstagramReelPublication({
+    publication: relocatedPublication,
+    videoRow: {},
+    target,
+    runtimeEnv,
+    projectRoot: '/workspace',
+    statImpl: async (filePath) => {
+      checked.push(filePath);
+      if (!filePath.includes('Older Generated Videos')) {
+        const error = new Error('missing');
+        error.code = 'ENOENT';
+        throw error;
+      }
+      return { size: 4_000 };
+    },
+    hashFileImpl: async (filePath) => {
+      assert.match(filePath, /Older Generated Videos[/\\]video\.mp4$/u);
+      return sha256;
+    },
+  });
+
+  assert.equal(checked.length, 2);
+  assert.match(result.renderPath, /Older Generated Videos[/\\]video\.mp4$/u);
+  assert.equal(result.videoSha256, sha256);
+});
+
 test('publishInstagramReel stages once, persists container id, then publishes and cleans up', async () => {
   const events = [];
   const stagingClient = {
