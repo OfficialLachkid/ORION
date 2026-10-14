@@ -103,7 +103,7 @@ async (page) => {
   if (input.editUrl) {
     await page.goto(input.editUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   } else if (!page.url().includes('/game/edit/')) {
-    const projectSlug = new URL(input.publicUrl).pathname.split('/').filter(Boolean)[0];
+    const projectSlug = input.publicUrl.split('?')[0].split('/').filter(Boolean).at(-1);
     const projectTitle = String(input.listing.title || '').trim();
     const card = page.locator('a[href*="/game/edit/"]').filter({ hasText: projectTitle }).first();
     const direct = await card.count().catch(() => 0) ? card : page.locator('a[href*="/game/edit/"]').filter({ hasText: projectSlug }).first();
