@@ -58,7 +58,8 @@ test('Playwright draft script includes listing fields, uploads, save, and draft 
     screenshotPath: '/tmp/verified.png',
   });
   assert.match(code, /short_description/u);
-  assert.match(code, /setInputFiles/u);
+  assert.match(code, /waitForEvent\('filechooser'/u);
+  assert.match(code, /setFiles/u);
   assert.match(code, /isDraft/u);
   assert.match(code, /verification_failed/u);
   assert.match(code, /page\.url\(\)\.includes\('\/login'\)/u);

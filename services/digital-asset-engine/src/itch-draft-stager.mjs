@@ -125,51 +125,69 @@ async (page) => {
 
   const changes = [];
   changes.push(await fill('title', [
-    page.locator('input[name="title"]'),
+    page.locator('input[name="title"], input[name="game[title]"]'),
     page.getByLabel(/^title$/i),
   ], input.listing.title));
   changes.push(await fill('short_description', [
-    page.locator('input[name="short_text"], textarea[name="short_text"]'),
+    page.locator('input[name="short_text"], textarea[name="short_text"], input[name="game[short_text]"]'),
     page.getByLabel(/short description/i),
   ], input.listing.short_description));
   changes.push(await fill('description', [
-    page.locator('textarea[name="description"]'),
+    page.locator('textarea[name="description"], textarea[name="game[description]"]'),
     page.getByLabel(/description/i),
     page.locator('[contenteditable="true"]').first(),
   ], input.listing.description));
+
+  const paidButton = await firstVisible([
+    page.locator('button.payment_mode_paid'),
+    page.getByRole('button', { name: /^paid$/i }),
+  ]);
+  if (paidButton) {
+    await paidButton.click({ timeout: 5000 });
+    await wait(250);
+  }
   changes.push(await fill('price', [
-    page.locator('input[name="min_price"], input[name="price"]'),
+    page.locator('input[name="min_price"], input[name="price"], input[name="game[min_price]"]'),
     page.getByLabel(/minimum price|price/i),
   ], Number(input.listing.suggested_price.amount).toFixed(2)));
 
   const tagField = await firstVisible([
     page.locator('input[name="tags"]'),
+    page.locator('input[placeholder*="type to filter"]'),
     page.getByLabel(/^tags$/i),
   ]);
   if (tagField) {
-    await tagField.fill(input.listing.tags.join(', '));
+    await page.locator('input[name="game[tags]"]').evaluate((field) => field.selectize?.clear()).catch(() => {});
+    for (const tag of input.listing.tags) {
+      await tagField.fill(String(tag));
+      await tagField.press('Enter');
+    }
     changes.push({ name: 'tags', ok: true });
   } else {
     changes.push({ name: 'tags', ok: false, reason: 'not_found' });
   }
 
-  const coverInput = page.locator('input[type="file"][name*="cover" i], input[type="file"][data-upload_type="cover"]').first();
-  if (await coverInput.count().catch(() => 0)) {
-    await coverInput.setInputFiles(input.coverPath);
-    changes.push({ name: 'cover', ok: true });
-    await wait(1000);
-  } else {
-    changes.push({ name: 'cover', ok: false, reason: 'not_found' });
-  }
-
-  const screenshotInput = page.locator('input[type="file"][name*="screenshot" i], input[type="file"][multiple]').first();
-  if (input.screenshotPaths.length && await screenshotInput.count().catch(() => 0)) {
-    await screenshotInput.setInputFiles(input.screenshotPaths);
-    changes.push({ name: 'screenshots', ok: true });
-    await wait(1000);
-  } else {
-    changes.push({ name: 'screenshots', ok: input.screenshotPaths.length === 0, reason: 'not_found' });
-  }
+  const uploadFromButton = async (name, locators, paths) => {
+    if (!paths.length) return { name, ok: true };
+    const button = await firstVisible(locators);
+    if (!button) return { name, ok: false, reason: 'not_found' };
+    try {
+      const chooserPromise = page.waitForEvent('filechooser', { timeout: 5000 });
+      await button.click({ timeout: 5000 });
+      const chooser = await chooserPromise;
+      await chooser.setFiles(paths);
+      await wait(2500);
+      return { name, ok: true };
+    } catch (error) {
+      return { name, ok: false, reason: 'upload_failed', error: String(error?.message || error).slice(0, 160) };
+    }
+  };
+  changes.push(await uploadFromButton('cover', [
+    page.getByRole('button', { name: /upload cover image|change cover/i }),
+  ], [input.coverPath]));
+  changes.push(await uploadFromButton('screenshots', [
+    page.getByRole('button', { name: /add screenshots/i }),
+  ], input.screenshotPaths));
 
   const missing = changes.filter((change) => !change.ok);
   if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
@@ -184,17 +202,27 @@ async (page) => {
   await wait(2500);
 
   const after = await bodyText();
-  const titleValue = await page.locator('input[name="title"]').first().inputValue().catch(() => '');
-  const shortValue = await page.locator('input[name="short_text"], textarea[name="short_text"]').first().inputValue().catch(() => '');
-  const isDraft = after.toLowerCase().includes('draft');
+  const titleValue = await page.locator('input[name="title"], input[name="game[title]"]').first().inputValue().catch(() => '');
+  const shortValue = await page.locator('input[name="short_text"], textarea[name="short_text"], input[name="game[short_text]"]').first().inputValue().catch(() => '');
+  const descriptionValue = await page.locator('textarea[name="description"], textarea[name="game[description]"]').first().inputValue().catch(() => '');
+  const priceValue = await page.locator('input[name="min_price"], input[name="game[min_price]"]').first().inputValue().catch(() => '');
+  const numericPrice = Number(String(priceValue).replace(/[^0-9.]/gu, ''));
+  const expectedPrice = Number(input.listing.suggested_price.amount);
+  const isDraft = await page.locator('input[name="game[published]"][value="draft"]').isChecked().catch(() => after.toLowerCase().includes('draft'));
   await page.screenshot({ path: input.screenshotPath, fullPage: true }).catch(() => {});
   return {
-    status: titleValue === input.listing.title && shortValue === input.listing.short_description && isDraft
+    status: titleValue === input.listing.title
+      && shortValue === input.listing.short_description
+      && descriptionValue === input.listing.description
+      && Math.abs(numericPrice - expectedPrice) < 0.001
+      && isDraft
       ? 'verified'
       : 'verification_failed',
     url: page.url(),
     titleValue,
     shortValue,
+    descriptionMatches: descriptionValue === input.listing.description,
+    priceValue,
     isDraft,
     changes,
   };
