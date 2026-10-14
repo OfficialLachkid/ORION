@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "operator": "orion-operator",
+  "output_root": "data/runtime/digital-asset-engine/products",
+  "validation": {
+    "minimum_confidence": 70,
+    "maximum_opportunity_age_days": 90,
+    "maximum_assets_per_product": 24,
+    "minimum_transparent_ratio": 0.1
+  },
+  "generation": {
+    "provider": "ollama",
+    "endpoint": "http://127.0.0.1:11434",
+    "model": "x/flux2-klein:4b",
+    "timeout_ms": 1200000,
+    "keep_alive": 0,
+    "steps": 4,
+    "seed": 146,
+    "chroma_tolerance": 105,
+    "negative_prompt": "photorealistic, smooth vector art, gradient background, scenery, text, logo, watermark, border, frame, multiple objects, cropped object, floor, cast shadow",
+    "require_local_endpoint": true
+  }
+}

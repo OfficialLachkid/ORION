@@ -1,0 +1,141 @@
+#!/usr/bin/env node
+import { readFile } from 'node:fs/promises';
+import process from 'node:process';
+import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
+import { loadEngineConfig, resolveOutputRoot } from './src/config.mjs';
+import { postDigitalAssetReview } from './src/discord-review.mjs';
+import { packageDigitalAssetPreview } from './src/packager.mjs';
+import { generateDigitalAssetProduct, planDigitalAssetProduct } from './src/pipeline.mjs';
+import { slugify } from './src/product-planner.mjs';
+
+const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
+const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
+
+function parseArguments(argv) {
+  const args = {
+    command: argv[2] || 'help',
+    execute: false,
+    internalPreview: false,
+    postToDiscord: false,
+    categoryName: 'DIGITAL ASSETS',
+  };
+  for (let index = 3; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === '--execute') args.execute = true;
+    else if (token === '--internal-preview') args.internalPreview = true;
+    else if (token === '--post-to-discord') args.postToDiscord = true;
+    else if (token === '--config') args.config = argv[++index];
+    else if (token === '--opportunity') args.opportunity = argv[++index];
+    else if (token === '--output-root') args.outputRoot = argv[++index];
+    else if (token === '--now') args.now = argv[++index];
+    else if (token === '--category-name') args.categoryName = argv[++index];
+    else if (token === '--itch-url') args.itchUrl = argv[++index];
+    else if (token === '--runtime-env') args.runtimeEnv = argv[++index];
+    else throw new Error(`Unknown argument: ${token}`);
+  }
+  return args;
+}
+
+function printHelp() {
+  process.stdout.write([
+    'ORION Digital Asset Engine',
+    '',
+    'Commands:',
+    '  plan      Validate an opportunity and create a canonical product plan.',
+    '  generate  Generate and post-process assets locally; requires --execute.',
+    '  package   Assemble a deterministic internal itch preview export.',
+    '  discord-review  Create the pack review channel/thread and post previews.',
+    '',
+    'Options:',
+    `  --config <path>       Default: ${DEFAULT_CONFIG}`,
+    `  --opportunity <path>  Default: ${DEFAULT_OPPORTUNITY}`,
+    '  --output-root <path>  Override canonical product storage.',
+    '  --now <ISO datetime>  Deterministic validation/testing time.',
+    '  --execute             Required for image generation.',
+    '  --internal-preview    Required for packaging unapproved candidates.',
+    '  --post-to-discord     Required for live Discord posting.',
+    '  --category-name <name>  Discord category. Default: DIGITAL ASSETS.',
+    '  --itch-url <url>      Existing itch.io draft URL shown to reviewers.',
+    '  --runtime-env <path>  Existing ORION Discord .env; useful from an isolated worktree.',
+    '',
+  ].join('\n'));
+}
+
+async function main() {
+  const args = parseArguments(process.argv);
+  if (args.command === 'help' || args.command === '--help') {
+    printHelp();
+    return;
+  }
+  if (!['plan', 'generate', 'package', 'discord-review'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (args.command === 'generate' && !args.execute) {
+    throw new Error('Image generation requires --execute. Planning remains the safe default.');
+  }
+  if (args.command === 'package' && !args.internalPreview) {
+    throw new Error('Packaging unapproved candidates requires --internal-preview.');
+  }
+  if (args.command === 'discord-review' && !args.postToDiscord) {
+    throw new Error('Live Discord review posting requires --post-to-discord.');
+  }
+  if (args.command === 'discord-review' && !args.itchUrl) {
+    throw new Error('Discord review posting requires --itch-url for the existing itch.io draft.');
+  }
+
+  let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
+  if (args.outputRoot) config = { ...config, output_root: args.outputRoot };
+  const opportunityPath = args.opportunity || DEFAULT_OPPORTUNITY;
+  const opportunity = JSON.parse(await readFile(opportunityPath, 'utf8'));
+  const common = {
+    config,
+    opportunity,
+    outputRoot: resolveOutputRoot(config),
+    projectRoot: process.cwd(),
+    now: args.now,
+  };
+
+  const result = args.command === 'generate'
+    ? await generateDigitalAssetProduct(common)
+    : args.command === 'package'
+      ? await packageDigitalAssetPreview({
+        outputRoot: common.outputRoot,
+        slug: slugify(opportunity.title),
+      })
+      : args.command === 'discord-review'
+        ? {
+          product: await (async () => {
+            const review = await postDigitalAssetReview({
+              runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
+              outputRoot: common.outputRoot,
+              slug: slugify(opportunity.title),
+              categoryName: args.categoryName,
+              itchUrl: args.itchUrl,
+              now: args.now,
+            });
+            return {
+              product_id: review.product_id,
+              title: opportunity.title,
+              status: 'awaiting_asset_review',
+              discord_review: review,
+            };
+          })(),
+        }
+      : await planDigitalAssetProduct(common);
+  process.stdout.write(`${JSON.stringify({
+    command: args.command,
+    product_id: result.product.product_id,
+    title: result.product.title,
+    status: result.product.status,
+    output_root: common.outputRoot,
+    generation: result.generation || [],
+    export_root: result.exportRoot,
+    manifest_hash: result.manifest?.manifest_hash,
+    discord_review: result.product.discord_review,
+    gates: result.gates || { human_review_required: true, distribution_ready: false },
+    cost: result.cost || { currency: 'EUR', incurred: 0, estimated: 0 },
+  }, null, 2)}\n`);
+}
+
+main().catch((error) => {
+  process.stderr.write(`Digital Asset Engine failed: ${error.message}\n`);
+  process.exitCode = 1;
+});

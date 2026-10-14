@@ -57,6 +57,15 @@ import {
   loadPublicationChannelProfiles,
   resolvePublicationReviewThreadId,
 } from '../../product-video-agent/src/publication-channels.mjs';
+import {
+  buildDigitalAssetReviewModal,
+  getDigitalAssetReviewModalRequest,
+  isDigitalAssetReviewInteraction,
+} from '../../digital-asset-engine/src/review-components.mjs';
+import {
+  buildResolvedDigitalAssetReviewEmbeds,
+  recordDigitalAssetReviewDecision,
+} from '../../digital-asset-engine/src/review-decisions.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -1203,6 +1212,69 @@ export async function runLiveDiscordBot(config) {
 
             if (result.route === 'command') {
               ensureExecutionDrain();
+            }
+            return;
+          }
+
+          const digitalAssetModalRequest = getDigitalAssetReviewModalRequest(payload.d);
+          if (digitalAssetModalRequest) {
+            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+              type: DISCORD_INTERACTION_CALLBACK_MODAL,
+              data: buildDigitalAssetReviewModal(digitalAssetModalRequest),
+            });
+            return;
+          }
+
+          if (isDigitalAssetReviewInteraction(payload.d)) {
+            let recorded;
+            try {
+              recorded = await recordDigitalAssetReviewDecision({
+                interaction: payload.d,
+                config,
+              });
+              if (!recorded) throw new Error('Unsupported digital asset review action.');
+            } catch (error) {
+              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                  content: truncateMessage(`Digital asset decision was not recorded: ${error.message}`),
+                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+                },
+              });
+              return;
+            }
+
+            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                content: `Recorded ${recorded.row.decision.toUpperCase()} for ${recorded.row.asset_id}.`,
+                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+              },
+            });
+            try {
+              const currentMessage = await sendDiscordApiRequest(
+                token,
+                `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+                undefined,
+                'GET',
+              );
+              await sendDiscordApiRequest(
+                token,
+                `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+                {
+                  ...recorded.messagePatch,
+                  embeds: buildResolvedDigitalAssetReviewEmbeds(
+                    currentMessage?.embeds,
+                    recorded.decision,
+                    recorded.actor,
+                  ),
+                },
+                'PATCH',
+              );
+            } catch (error) {
+              process.stderr.write(
+                `Could not update digital asset review message ${recorded.messageId}: ${error.message}\n`,
+              );
             }
             return;
           }
