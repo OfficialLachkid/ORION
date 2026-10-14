@@ -98,12 +98,24 @@ async function createCover(candidates, product) {
     `<text x="315" y="66" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="38" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
     `<text x="315" y="96" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${candidates.length} SIDE-VIEW WEAPON SPRITES</text>`,
     labels,
-    `<text x="315" y="456" text-anchor="middle" fill="#7785a6" font-family="Arial, sans-serif" font-size="14">Actual included assets · transparent PNG · ${product.style.width} × ${product.style.height} px</text>`,
+    `<text x="315" y="456" text-anchor="middle" fill="#7785a6" font-family="Arial, sans-serif" font-size="14">Protected preview · clean transparent PNG files in download · ${product.style.width} × ${product.style.height} px</text>`,
+    '</svg>',
+  ].join(''));
+  const protectionMarks = candidates.map((_, index) => {
+    const column = index % 4;
+    const row = Math.floor(index / 4);
+    const centerX = gridLeft + (column * cellWidth) + (cellWidth / 2);
+    const centerY = gridTop + (row * cellHeight) + 55;
+    return `<text x="${centerX}" y="${centerY}" text-anchor="middle" fill="#ffffff" fill-opacity="0.34" stroke="#10131d" stroke-opacity="0.55" stroke-width="1" font-family="Arial, sans-serif" font-size="15" font-weight="700" transform="rotate(-17 ${centerX} ${centerY})">PREVIEW</text>`;
+  }).join('');
+  const protectionOverlay = Buffer.from([
+    `<svg width="${COVER_WIDTH}" height="${COVER_HEIGHT}" xmlns="http://www.w3.org/2000/svg">`,
+    protectionMarks,
     '</svg>',
   ].join(''));
   return sharp({
     create: { width: COVER_WIDTH, height: COVER_HEIGHT, channels: 3, background: '#10131d' },
-  }).composite([{ input: overlay }, ...composites])
+  }).composite([{ input: overlay }, ...composites, { input: protectionOverlay }])
     .flatten({ background: '#10131d' })
     .removeAlpha()
     .png({ compressionLevel: 9 })
