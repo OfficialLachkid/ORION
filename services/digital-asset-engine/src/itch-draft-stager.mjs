@@ -66,10 +66,10 @@ function parseCliJson(value) {
   }
 }
 
-export function buildItchDraftRunCode({ listing, publicUrl, editUrl }) {
+export function buildItchDraftRunCode({ listing, publicUrl, editUrl, save = false }) {
   return `
 async (page) => {
-  const input = ${JSON.stringify({ listing, publicUrl, editUrl })};
+  const input = ${JSON.stringify({ listing, publicUrl, editUrl, save })};
   const wait = (ms) => page.waitForTimeout(ms);
   const bodyText = async () => page.locator('body').innerText({ timeout: 3000 }).catch(() => '');
   const visible = async (locator) => locator.isVisible().catch(() => false);
@@ -166,6 +166,15 @@ async (page) => {
 
   const missing = changes.filter((change) => !change.ok);
   if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
+  if (input.save) {
+    const saveButton = page.locator('button.save_btn').first();
+    if (!(await saveButton.count().catch(() => 0))) {
+      return { status: 'save_not_found', url: page.url(), changes };
+    }
+    await saveButton.click({ timeout: 5000 });
+    await wait(2500);
+    return { status: 'submitted', url: page.url(), changes };
+  }
   return { status: 'prepared', url: page.url(), changes };
 }`.trim();
 }
@@ -207,16 +216,6 @@ async (page) => {
   }
   await button.click({ timeout: 5000 });
   return { status: 'chooser_opened', kind };
-}`.trim();
-}
-
-function buildSaveRunCode() {
-  return `
-async (page) => {
-  const save = page.locator('button.save_btn').first();
-  if (!(await save.count().catch(() => 0))) return { status: 'save_not_found', url: page.url() };
-  await save.click({ timeout: 5000 });
-  return { status: 'submitted', url: page.url() };
 }`.trim();
 }
 
@@ -356,13 +355,15 @@ export async function stageItchDraft(options) {
         : String(result.stdout || result.stderr || result.error || 'empty browser response')).slice(0, 800);
     };
 
-    const prepareDraft = () => {
+    const prepareDraft = (save = false) => {
       const prepared = runBrowserCode('draft preparation', buildItchDraftRunCode({
         listing,
         publicUrl,
         editUrl: String(options.itchEditUrl || '').trim(),
+        save,
       }));
-      if (prepared.details.status !== 'prepared') {
+      const expectedStatus = save ? 'submitted' : 'prepared';
+      if (prepared.details.status !== expectedStatus) {
         throw new Error(`itch.io draft preparation failed (${prepared.details.status || 'unknown'}): ${diagnostic(prepared)}`);
       }
       return prepared;
@@ -402,12 +403,7 @@ export async function stageItchDraft(options) {
     };
     uploadMedia('screenshots', screenshotPaths);
     uploadMedia('cover', [coverPath]);
-    prepareDraft();
-
-    const saved = runBrowserCode('draft save', buildSaveRunCode());
-    if (saved.details.status === 'save_not_found') {
-      throw new Error(`itch.io draft save failed: ${diagnostic(saved)}`);
-    }
+    prepareDraft(true);
 
     const verified = runBrowserCode('draft verification', buildVerifyRunCode({
       listing,

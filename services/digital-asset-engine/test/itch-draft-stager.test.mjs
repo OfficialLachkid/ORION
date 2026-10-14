@@ -75,9 +75,10 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
     calls.push({ executable, args });
     if (args.includes('run-code')) {
       const code = args.at(-2);
-      const status = code.includes("status: 'prepared'")
-        ? 'prepared'
-        : code.includes('Object.values(checks)') ? 'verified' : 'submitted';
+      const status = code.includes('Object.values(checks)')
+        ? 'verified'
+        : code.includes('"save":true') ? 'submitted'
+          : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
       return {
         ok: true,
         stdout: JSON.stringify({ result: JSON.stringify({
@@ -119,9 +120,10 @@ test('fails closed when browser verification does not confirm draft state', asyn
   const fixture = await createFixture();
   const cliRunner = (executable, args) => {
     const code = args.includes('run-code') ? args.at(-2) : '';
-    const status = code.includes("status: 'prepared'")
-      ? 'prepared'
-      : code.includes('Object.values(checks)') ? 'verification_failed' : 'submitted';
+    const status = code.includes('Object.values(checks)')
+      ? 'verification_failed'
+      : code.includes('"save":true') ? 'submitted'
+        : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
     return {
       ok: true,
       stdout: args.includes('run-code')
