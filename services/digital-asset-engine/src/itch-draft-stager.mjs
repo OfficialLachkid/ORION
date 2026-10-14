@@ -125,17 +125,13 @@ async (page) => {
 
   const changes = [];
   changes.push(await fill('title', [
-    page.locator('input[name="title"], input[name="game[title]"]'),
-    page.getByLabel(/^title$/i),
+    page.locator('input[name="game[title]"]'),
   ], input.listing.title));
   changes.push(await fill('short_description', [
-    page.locator('input[name="short_text"], textarea[name="short_text"], input[name="game[short_text]"]'),
-    page.getByLabel(/short description/i),
+    page.locator('input[name="game[short_text]"]'),
   ], input.listing.short_description));
   changes.push(await fill('description', [
-    page.locator('textarea[name="description"], textarea[name="game[description]"]'),
-    page.getByLabel(/description/i),
-    page.locator('[contenteditable="true"]').first(),
+    page.locator('.redactor-layer[contenteditable="true"]').first(),
   ], input.listing.description));
 
   const paidButton = await firstVisible([
@@ -217,7 +213,7 @@ async (page) => {
 function buildSaveRunCode() {
   return `
 async (page) => {
-  const save = page.locator('button.save_btn').last();
+  const save = page.locator('button.save_btn').first();
   if (!(await save.count().catch(() => 0))) return { status: 'save_not_found', url: page.url() };
   await save.click({ timeout: 5000 });
   return { status: 'submitted', url: page.url() };
@@ -229,18 +225,22 @@ function buildVerifyRunCode({ listing, screenshotCount, screenshotPath }) {
 async (page) => {
   const input = ${JSON.stringify({ listing, screenshotCount, screenshotPath })};
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(2500);
   const titleValue = await page.locator('input[name="game[title]"]').first().inputValue().catch(() => '');
   const shortValue = await page.locator('input[name="game[short_text]"]').first().inputValue().catch(() => '');
-  const descriptionValue = await page.locator('textarea[name="game[description]"]').first().inputValue().catch(() => '');
+  const descriptionValue = await page.locator('.redactor-layer[contenteditable="true"]').first().innerText().catch(() => '');
   const priceValue = await page.locator('input[name="game[min_price]"]').first().inputValue().catch(() => '');
   const paymentMode = await page.locator('input[name="game[payment_mode]"]').first().inputValue().catch(() => '');
   const numericPrice = Number(String(priceValue).replace(/[^0-9.]/gu, ''));
   const expectedPrice = Number(input.listing.suggested_price.amount);
-  const actualTags = (await page.locator('.selectize-input .item').allTextContents().catch(() => []))
-    .map((tag) => tag.trim().toLowerCase()).filter(Boolean);
+  const actualTags = await page.locator('input').evaluateAll((nodes) => {
+    const field = nodes.find((node) => node.name === 'game[tags]');
+    return [...(field?.selectize?.items || [])];
+  }).catch(() => []);
   const expectedTags = input.listing.tags.map((tag) => String(tag).trim().toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '')).filter(Boolean);
+    .replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, ''))
+    .map((tag) => tag === 'sci-fi' ? 'science-fiction' : tag).filter(Boolean);
   const tagsMatch = expectedTags.length === actualTags.length
     && expectedTags.every((tag) => actualTags.includes(tag));
   const coverId = await page.locator('input[name="game[cover_image_id]"]').first().inputValue().catch(() => '');
@@ -250,7 +250,8 @@ async (page) => {
   const checks = {
     title: titleValue === input.listing.title,
     short_description: shortValue === input.listing.short_description,
-    description: descriptionValue === input.listing.description,
+    description: descriptionValue.replace(/\s+/gu, ' ').trim()
+      === input.listing.description.replace(/\s+/gu, ' ').trim(),
     price: paymentMode === 'paid' && Math.abs(numericPrice - expectedPrice) < 0.001,
     tags: tagsMatch,
     cover: Boolean(coverId),
