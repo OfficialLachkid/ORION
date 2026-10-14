@@ -184,7 +184,7 @@ async (page) => {
   const missing = changes.filter((change) => !change.ok);
   if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
   if (input.save) {
-    const saveButton = page.locator('button.save_btn').first();
+    const saveButton = page.locator('form.game_edit_form button.save_btn').first();
     if (!(await saveButton.count().catch(() => 0))) {
       return { status: 'save_not_found', url: page.url(), changes };
     }
