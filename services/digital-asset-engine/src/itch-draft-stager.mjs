@@ -130,27 +130,6 @@ async (page) => {
   changes.push(await fill('short_description', [
     page.locator('input[name="game[short_text]"]'),
   ], input.listing.short_description));
-  const descriptionResult = await page.locator('textarea').evaluateAll((nodes, description) => {
-    const field = nodes.find((node) => node.name === 'game[description]');
-    const redactor = field && window.jQuery?.(field).data('redactor');
-    if (!field || !redactor?.code) return { ok: false, reason: 'redactor_not_found' };
-    const escape = (value) => {
-      const element = document.createElement('div');
-      element.textContent = value;
-      return element.innerHTML;
-    };
-    const html = String(description).split(/\\n{2,}/gu)
-      .map((block) => \`<p>\${escape(block).replace(/\\n/gu, '<br>')}</p>\`).join('\\n');
-    redactor.code.set(html);
-    redactor.code.sync();
-    redactor.code.flushSync();
-    return { ok: Boolean(field.value), length: field.value.length };
-  }, input.listing.description).catch((error) => ({
-    ok: false,
-    reason: String(error?.message || error).slice(0, 160),
-  }));
-  changes.push({ name: 'description', ...descriptionResult });
-
   const paidButton = await firstVisible([
     page.locator('button.payment_mode_paid'),
     page.getByRole('button', { name: /^paid$/i }),
@@ -180,6 +159,33 @@ async (page) => {
     return { ok: slugs.every((slug) => widget.items.includes(slug)), items: [...widget.items] };
   }, tagSlugs).catch((error) => ({ ok: false, reason: String(error?.message || error).slice(0, 160) }));
   changes.push({ name: 'tags', ...tagResult });
+
+  const descriptionResult = await page.locator('textarea').evaluateAll((nodes, description) => {
+    const field = nodes.find((node) => node.name === 'game[description]');
+    const redactor = field && window.jQuery?.(field).data('redactor');
+    if (!field || !redactor?.code) return { ok: false, reason: 'redactor_not_found' };
+    const escape = (value) => {
+      const element = document.createElement('div');
+      element.textContent = value;
+      return element.innerHTML;
+    };
+    const html = String(description).split(/\\n{2,}/gu)
+      .map((block) => \`<p>\${escape(block).replace(/\\n/gu, '<br>')}</p>\`).join('\\n');
+    redactor.code.set(html);
+    redactor.code.sync();
+    redactor.code.flushSync();
+    const visibleText = field.parentElement?.querySelector('[contenteditable="true"]')?.innerText || '';
+    const normalize = (value) => String(value).replace(/\\s+/gu, ' ').trim();
+    return {
+      ok: normalize(visibleText) === normalize(description) && Boolean(field.value),
+      length: field.value.length,
+      visibleLength: visibleText.length,
+    };
+  }, input.listing.description).catch((error) => ({
+    ok: false,
+    reason: String(error?.message || error).slice(0, 160),
+  }));
+  changes.push({ name: 'description', ...descriptionResult });
 
   const missing = changes.filter((change) => !change.ok);
   if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
