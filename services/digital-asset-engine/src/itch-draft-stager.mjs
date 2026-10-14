@@ -369,7 +369,6 @@ export async function stageItchDraft(options) {
     };
     prepareDraft();
 
-    let removedScreenshots = 0;
     let counted = runBrowserCode('screenshot count', buildScreenshotCountRunCode());
     while (Number(counted.details.count) > 0) {
       const before = Number(counted.details.count);
@@ -385,9 +384,7 @@ export async function stageItchDraft(options) {
       if (Number(counted.details.count) >= before) {
         throw new Error(`itch.io screenshot replacement made no progress: ${diagnostic(counted)}`);
       }
-      removedScreenshots += before - Number(counted.details.count);
     }
-    if (removedScreenshots) prepareDraft();
 
     const uploadMedia = (kind, paths) => {
       if (!paths.length) return;
@@ -403,8 +400,9 @@ export async function stageItchDraft(options) {
         throw new Error(`itch.io ${kind} upload failed: ${uploadDetails.error || uploaded.stderr || uploaded.stdout || uploaded.error}`);
       }
     };
-    uploadMedia('cover', [coverPath]);
     uploadMedia('screenshots', screenshotPaths);
+    uploadMedia('cover', [coverPath]);
+    prepareDraft();
 
     const saved = runBrowserCode('draft save', buildSaveRunCode());
     if (saved.details.status === 'save_not_found') {
