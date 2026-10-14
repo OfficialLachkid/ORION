@@ -93,7 +93,7 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   const staged = await stageItchDraft(options);
   assert.equal(staged.status, 'verified');
   assert.equal(staged.butler_target, 'vbjservices/asset-pack-test:assets');
-  const butler = calls.find((call) => call.executable === 'butler');
+  const butler = calls.find((call) => call.args[0] === 'push');
   assert.ok(butler);
   assert.ok(butler.args.includes('--if-changed'));
   const browserRun = calls.find((call) => call.args.includes('run-code'));
