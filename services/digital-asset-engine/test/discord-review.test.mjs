@@ -6,7 +6,12 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { loadEngineConfig } from '../src/config.mjs';
-import { buildAssetReviewEmbed, buildPackReviewEmbed, postDigitalAssetReview } from '../src/discord-review.mjs';
+import {
+  buildAssetReviewEmbed,
+  buildPackReviewEmbed,
+  discordRequest,
+  postDigitalAssetReview,
+} from '../src/discord-review.mjs';
 import { planDigitalAssetProduct } from '../src/pipeline.mjs';
 
 const testDirectory = resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -102,6 +107,26 @@ test('Discord embeds use bold numbered assets and explain the manifest receipt',
   assert.match(pack.fields.find((field) => field.name === 'Attached manifest.json').value, /SHA-256/u);
   assert.match(asset.description, /\*\*01\*\* of \*\*08\*\*/u);
   assert.equal(asset.image.url, 'attachment://rail-rifle.png');
+});
+
+test('Discord requests honor the supplied retry interval for old-message edit limits', async () => {
+  let attempts = 0;
+  const waits = [];
+  const result = await discordRequest('test-token', '/channels/channel-1/messages/message-1', {
+    method: 'PATCH',
+    body: { content: 'updated' },
+    async fetchImpl() {
+      attempts += 1;
+      return attempts === 1
+        ? jsonResponse({ message: 'edit limit', retry_after: 0.25, code: 30046 }, 429)
+        : jsonResponse({ id: 'message-1' });
+    },
+    async sleepImpl(milliseconds) { waits.push(milliseconds); },
+  });
+
+  assert.equal(result.id, 'message-1');
+  assert.equal(attempts, 2);
+  assert.deepEqual(waits, [350]);
 });
 
 test('Discord review requires a verified itch.io draft for the exact hashes', async () => {

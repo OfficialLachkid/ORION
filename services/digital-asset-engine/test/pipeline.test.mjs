@@ -172,6 +172,7 @@ test('pipeline produces a transparent, validated candidate while blocking distri
   assert.match(storedManifest.manifest_hash, /^[a-f0-9]{64}$/u);
   assert.match(storedManifest.listing_hash, /^[a-f0-9]{64}$/u);
   assert.equal(storedManifest.listing_hash, storedListing.listing_hash);
+  assert.doesNotMatch(storedListing.description, /cover and screenshots|human review/iu);
   assert.deepEqual(storedListing.screenshot_paths, ['cover.png', 'marketplace-preview.png']);
   assert.equal(storedListing.screenshot_paths.some((path) => path.startsWith('download/')), false);
   assert.ok(storedManifest.files.some((file) => file.path === 'marketplace-preview.png'));
