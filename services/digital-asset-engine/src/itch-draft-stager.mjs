@@ -96,7 +96,7 @@ async (page) => {
 
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
   let text = await bodyText();
-  if (/log in|sign in/i.test(text) && (page.url().includes('/login') || page.url().includes('/register'))) {
+  if (page.url().includes('/login') || page.url().includes('/register')) {
     return { status: 'login_required', url: page.url() };
   }
 
@@ -115,7 +115,8 @@ async (page) => {
   }
 
   text = await bodyText();
-  if (/log in|sign in/i.test(text) && !/edit game|edit project|uploads/i.test(text)) {
+  if (page.url().includes('/login') || page.url().includes('/register')
+    || (/log in|sign in/i.test(text) && !/edit game|edit project|uploads/i.test(text))) {
     return { status: 'login_required', url: page.url() };
   }
   if (!page.url().includes('itch.io/game/edit/') && !/edit game|edit project/i.test(text)) {
