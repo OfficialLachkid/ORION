@@ -109,12 +109,19 @@ test('Discord review creates one pack channel and thread, posts assets, and resu
   const fixture = await createReviewFixture();
   const calls = [];
   let messageNumber = 0;
+  let channelCreated = false;
   const fetchImpl = async (url, options = {}) => {
     calls.push({ url: String(url), options });
     if (options.method === 'GET' && String(url).endsWith('/guilds/guild-1/channels')) {
-      return jsonResponse([{ id: 'category-1', name: 'DIGITAL ASSETS', type: 4 }]);
+      return jsonResponse([
+        { id: 'category-1', name: 'DIGITAL ASSETS', type: 4 },
+        ...(channelCreated
+          ? [{ id: 'channel-1', name: fixture.product.slug, type: 0, parent_id: 'category-1' }]
+          : []),
+      ]);
     }
     if (options.method === 'POST' && String(url).endsWith('/guilds/guild-1/channels')) {
+      channelCreated = true;
       return jsonResponse({ id: 'channel-1', name: fixture.product.slug, type: 0, parent_id: 'category-1' });
     }
     if (options.method === 'POST' && String(url).endsWith('/messages/overview-1/threads')) {
@@ -124,7 +131,20 @@ test('Discord review creates one pack channel and thread, posts assets, and resu
       messageNumber += 1;
       const payload = JSON.parse(options.body.get('payload_json'));
       assert.ok(payload.attachments.length >= 1);
+      if (messageNumber === 2) {
+        assert.deepEqual(payload.components[0].components.map((button) => button.label), [
+          'Approve',
+          'Request Changes',
+          'Reject',
+          'Open Manifest',
+        ]);
+      }
       return jsonResponse({ id: messageNumber === 1 ? 'overview-1' : `asset-message-${messageNumber}` });
+    }
+    if (options.method === 'PATCH' && String(url).endsWith('/channels/thread-1/messages/asset-message-2')) {
+      const payload = JSON.parse(options.body);
+      assert.equal(payload.components[0].components.length, 4);
+      return jsonResponse({ id: 'asset-message-2' });
     }
     return jsonResponse({ message: 'unexpected request' }, 500);
   };
@@ -145,6 +165,22 @@ test('Discord review creates one pack channel and thread, posts assets, and resu
   assert.equal(posted.category_id, 'category-1');
   assert.equal(posted.reused, false);
   assert.equal(calls.filter((call) => call.options.method === 'POST').length, 4);
+
+  const statePath = resolve(
+    fixture.outputRoot,
+    fixture.product.slug,
+    'review',
+    'discord.json',
+  );
+  const legacyState = JSON.parse(await readFile(statePath, 'utf8'));
+  delete legacyState.component_schema_version;
+  await writeFile(statePath, `${JSON.stringify(legacyState)}\n`, 'utf8');
+
+  const beforeReconcile = calls.length;
+  const reconciled = await postDigitalAssetReview(options);
+  assert.equal(reconciled.reused, false);
+  assert.equal(calls.length, beforeReconcile + 2);
+  assert.equal(calls.at(-1).options.method, 'PATCH');
 
   const beforeResume = calls.length;
   const resumed = await postDigitalAssetReview(options);

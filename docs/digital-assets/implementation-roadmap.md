@@ -231,9 +231,9 @@ None of these deferred decisions block validating the first local generation pip
 
 ## Proposed Discord pack approval
 
-Status: **preview posting implemented; interactive decisions remain**
+Status: **asset-level interactions implemented; live migration and verification remain**
 
-The current vertical slice can discover the `DIGITAL ASSETS` category, create or reuse one pack channel, post the pack overview and manifest, create an asset-review thread, and attach each individual asset with its exact hash. It persists the Discord IDs and manifest hash beside the canonical T7 product and is idempotent for the same manifest. Approval buttons and Supabase review records are deliberately deferred to the next slice.
+The current vertical slice can discover the `DIGITAL ASSETS` category, create or reuse one pack channel, post the pack overview and manifest, create an asset-review thread, and attach each individual asset with its exact hash. It persists the Discord IDs and manifest hash beside the canonical T7 product and is idempotent for the same manifest. Each asset message now supports `Approve`, `Request Changes`, `Reject`, and `Open Manifest`. Decisions are accepted only from configured operators and are written append-only to the service-role-protected `digital_asset_review_decisions` Supabase table after the bot revalidates the T7 product, manifest, asset hash, Discord thread, and message.
 
 The first live attempt on 2026-10-14 reached the configured guild and category but Discord rejected channel creation with `403 Missing Permissions` (`50013`). After `Manage Channels` was granted at the category level, the retry created `#neon-plasma-armory`, posted the overview, created the `asset-review` thread, and attached all eight sprites. The exact channel, thread, message, and manifest identifiers are stored in `review/discord.json` on the T7. The pack remains at `awaiting_asset_review`; this preview does not authorize marketplace publication.
 

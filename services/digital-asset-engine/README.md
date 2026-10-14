@@ -55,10 +55,12 @@ npm run digital-assets:discord-review -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-This first Discord slice posts previews only. It deliberately does not add approval buttons or write approval decisions to Supabase yet. Discord channel, thread, message IDs, and the exact manifest hash are persisted beside the canonical T7 product so the same command is idempotent.
+Each individual asset message has `Approve`, `Request Changes`, `Reject`, and `Open Manifest` actions. Change requests and rejections require a reason. Before a decision is stored, the live bot verifies the operator allowlist, guild, thread, Discord message, product, full manifest hash, and exported asset hash against the canonical T7 files. It then appends the decision to Supabase and resolves the buttons for that exact review message. This does not approve marketplace distribution.
+
+Apply `supabase/migrations/20261014_create_digital_asset_review_decisions.sql` before enabling the buttons. The Discord runtime requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DIGITAL_ASSET_ARCHIVE_ROOT`. Do not use the publishable key for this service-role-only table.
 
 The ORION bot needs `View Channel`, `Send Messages`, `Embed Links`, `Attach Files`, `Create Public Threads`, and `Send Messages in Threads` in the `DIGITAL ASSETS` category. It also needs `Manage Channels` when ORION is expected to create the per-pack channel itself. Grant these as category permissions so each new pack channel inherits them.
 
-Set `DIGITAL_ASSET_ARCHIVE_ROOT` to place canonical products on the T7, for example `/Volumes/T7/O.R.I.O.N. Digital Assets`.
+Set `DIGITAL_ASSET_ARCHIVE_ROOT` for both generation and the live Discord bot, for example `/Volumes/T7/O.R.I.O.N. Digital Assets`.
 
 Canonical approved assets, release manifests, covers, sprite sheets, and marketplace exports remain on the T7 while a product is supported. Mac working copies can be removed after their T7 hashes are verified. Model source images and rejected candidates are retention-managed separately; marketplace uploads are delivery copies, not backups.

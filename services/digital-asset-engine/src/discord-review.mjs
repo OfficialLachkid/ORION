@@ -1,11 +1,13 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
+import { buildDigitalAssetReviewComponents } from './review-components.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_CATEGORY_TYPE = 4;
 const DISCORD_TEXT_CHANNEL_TYPE = 0;
 const REVIEW_COLOR = 0x35d9ff;
+const REVIEW_COMPONENT_SCHEMA_VERSION = '1.0';
 
 function cleanText(value, maximum = 1024) {
   const normalized = String(value || '').replace(/\s+/gu, ' ').trim();
@@ -125,6 +127,19 @@ export function buildAssetReviewEmbed({ asset, validation, index, total }) {
   };
 }
 
+function buildManifestMessageUrl(guildId, state) {
+  return `https://discord.com/channels/${guildId}/${state.channel_id}/${state.overview_message_id}`;
+}
+
+function buildAssetComponents({ guildId, state, product, asset, manifest }) {
+  return buildDigitalAssetReviewComponents({
+    productSlug: product.slug,
+    assetId: asset.asset_id,
+    manifestHash: manifest.manifest_hash,
+    manifestUrl: buildManifestMessageUrl(guildId, state),
+  });
+}
+
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
@@ -160,7 +175,9 @@ export async function postDigitalAssetReview(options) {
   const itchUrl = validateItchUrl(options.itchUrl);
   const statePath = resolve(productRoot, 'review', 'discord.json');
   const existingState = await loadState(statePath);
-  if (existingState?.manifest_hash === manifest.manifest_hash && existingState?.completed_at) {
+  if (existingState?.manifest_hash === manifest.manifest_hash
+    && existingState?.completed_at
+    && existingState?.component_schema_version === REVIEW_COMPONENT_SCHEMA_VERSION) {
     return { ...existingState, reused: true, statePath };
   }
   if (existingState?.manifest_hash && existingState.manifest_hash !== manifest.manifest_hash) {
@@ -188,6 +205,7 @@ export async function postDigitalAssetReview(options) {
     overview_message_id: null,
     thread_id: null,
     asset_messages: {},
+    component_schema_version: null,
     created_at: options.now || new Date().toISOString(),
     completed_at: null,
   };
@@ -230,11 +248,28 @@ export async function postDigitalAssetReview(options) {
 
   for (let index = 0; index < product.assets.length; index += 1) {
     const asset = product.assets[index];
-    if (state.asset_messages[asset.asset_id]) continue;
     const validation = await readJson(resolve(productRoot, asset.validation_path));
+    const components = buildAssetComponents({
+      guildId,
+      state,
+      product,
+      asset,
+      manifest,
+    });
+    if (state.asset_messages[asset.asset_id]) {
+      if (state.component_schema_version !== REVIEW_COMPONENT_SCHEMA_VERSION) {
+        await discordRequest(token, `/channels/${state.thread_id}/messages/${state.asset_messages[asset.asset_id]}`, {
+          method: 'PATCH',
+          body: { components },
+          fetchImpl: options.fetchImpl,
+        });
+      }
+      continue;
+    }
     const filename = basename(asset.final_path);
     const message = await sendMessageWithFiles(token, state.thread_id, {
       embeds: [buildAssetReviewEmbed({ asset, validation, index, total: product.assets.length })],
+      components,
     }, [{
       filename,
       contentType: 'image/png',
@@ -245,6 +280,7 @@ export async function postDigitalAssetReview(options) {
     await saveState(statePath, state);
   }
 
+  state.component_schema_version = REVIEW_COMPONENT_SCHEMA_VERSION;
   state.completed_at = options.now || new Date().toISOString();
   await saveState(statePath, state);
   return { ...state, reused: false, statePath };
