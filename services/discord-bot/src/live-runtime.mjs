@@ -58,12 +58,13 @@ import {
   resolvePublicationReviewThreadId,
 } from '../../product-video-agent/src/publication-channels.mjs';
 import {
-  buildDigitalAssetReviewModal,
   getDigitalAssetReviewModalRequest,
   isDigitalAssetReviewInteraction,
 } from '../../digital-asset-engine/src/review-components.mjs';
 import {
+  buildResolvedAssetReviewEmbeds,
   buildResolvedDigitalAssetReviewEmbeds,
+  prepareDigitalAssetReviewModal,
   recordDigitalAssetReviewDecision,
 } from '../../digital-asset-engine/src/review-decisions.mjs';
 
@@ -1218,10 +1219,21 @@ export async function runLiveDiscordBot(config) {
 
           const digitalAssetModalRequest = getDigitalAssetReviewModalRequest(payload.d);
           if (digitalAssetModalRequest) {
-            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-              type: DISCORD_INTERACTION_CALLBACK_MODAL,
-              data: buildDigitalAssetReviewModal(digitalAssetModalRequest),
-            });
+            try {
+              const modal = await prepareDigitalAssetReviewModal({ interaction: payload.d, config });
+              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+                type: DISCORD_INTERACTION_CALLBACK_MODAL,
+                data: modal,
+              });
+            } catch (error) {
+              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                  content: truncateMessage(`Could not open package review: ${error.message}`),
+                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+                },
+              });
+            }
             return;
           }
 
@@ -1247,7 +1259,7 @@ export async function runLiveDiscordBot(config) {
             await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
               type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
               data: {
-                content: `Recorded ${recorded.row.decision.toUpperCase()} for ${recorded.row.asset_id}.`,
+                content: `Recorded ${recorded.row.decision.toUpperCase()} for package revision ${recorded.row.review_revision}.`,
                 flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
               },
             });
@@ -1271,6 +1283,28 @@ export async function runLiveDiscordBot(config) {
                 },
                 'PATCH',
               );
+              for (const assetPatch of recorded.assetMessagePatches || []) {
+                if (!assetPatch.messageId) continue;
+                const assetMessage = await sendDiscordApiRequest(
+                  token,
+                  `/channels/${recorded.threadId}/messages/${assetPatch.messageId}`,
+                  undefined,
+                  'GET',
+                );
+                await sendDiscordApiRequest(
+                  token,
+                  `/channels/${recorded.threadId}/messages/${assetPatch.messageId}`,
+                  {
+                    embeds: buildResolvedAssetReviewEmbeds(
+                      assetMessage?.embeds,
+                      assetPatch,
+                      recorded.actor,
+                    ),
+                    components: [],
+                  },
+                  'PATCH',
+                );
+              }
             } catch (error) {
               process.stderr.write(
                 `Could not update digital asset review message ${recorded.messageId}: ${error.message}\n`,

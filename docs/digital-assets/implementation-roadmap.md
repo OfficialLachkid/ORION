@@ -231,17 +231,19 @@ None of these deferred decisions block validating the first local generation pip
 
 ## Proposed Discord pack approval
 
-Status: **asset-level interactions and Supabase migration implemented; activation awaits PR merge**
+Status: **package-level interaction and verified itch.io draft staging implemented on the feature branch**
 
-The current vertical slice can discover the `DIGITAL ASSETS` category, create or reuse one pack channel, post the pack overview and manifest, create an asset-review thread, and attach each individual asset with its exact hash. It persists the Discord IDs and manifest hash beside the canonical T7 product and is idempotent for the same manifest. Each asset message now supports `Approve`, `Request Changes`, `Reject`, and `Open Manifest`. Decisions are accepted only from configured operators and are written append-only to the service-role-protected `digital_asset_review_decisions` Supabase table after the bot revalidates the T7 product, manifest, asset hash, Discord thread, and message.
+The current vertical slice discovers or reuses the pack channel, edits one overview message, maintains one asset-review thread, and attaches each numbered asset with its exact hash. The overview owns the only approval gate. Its actions are `Approve Pack`, `Request Changes`, `Reject Pack`, `Open itch.io Draft`, and `Open Manifest`. Individual asset messages are visual references without approval buttons. The change-request modal contains a selectable/deselectable numbered asset list and one shared feedback field; selected assets require changes and unselected assets are accepted for that revision.
 
 The first live attempt on 2026-10-14 reached the configured guild and category but Discord rejected channel creation with `403 Missing Permissions` (`50013`). After `Manage Channels` was granted at the category level, the retry created `#neon-plasma-armory`, posted the overview, created the `asset-review` thread, and attached all eight sprites. The exact channel, thread, message, and manifest identifiers are stored in `review/discord.json` on the T7. The pack remains at `awaiting_asset_review`; this preview does not authorize marketplace publication.
 
-The `digital_asset_review_decisions` migration was applied and verified on 2026-10-14. Row-level security is enabled; `anon` has no read access; `service_role` has insert and select access but cannot update prior decisions. The Mac bot has its T7 archive root configured. Because the LaunchAgent intentionally runs the main checkout and PR #168 remains unmerged, the existing eight messages have not yet been given clickable actions. After merge and bot restart, rerunning the idempotent Discord review command will reconcile the buttons onto those messages without reposting the pack.
+The first asset-level decisions remain immutable in `digital_asset_review_decisions`. New reviews use `digital_asset_release_reviews`, which records the exact manifest hash, listing hash, review revision, package decision, affected asset IDs, and every asset's resulting decision in one append-only row. Row-level security denies anonymous access and permits the service role to select and insert but not rewrite prior decisions.
 
-The recommended shape is one pack-level review card in ORION's existing Discord operations environment, with a thread for individual asset previews and feedback. The card should show the product/version, overview preview, asset count, automated validation state, local generation cost, intended marketplaces, and manifest hash.
+Before Discord review is created, Butler updates the existing itch.io package channel and Playwright populates the existing draft with the generated title, descriptions, price, tags, cover, and screenshots. ORION reads the page back and stores a verified listing hash in `review/itch.json`. Discord fails closed if the draft is missing, unverified, public, or belongs to another manifest. A corrected revision updates the same itch.io draft and the existing Discord overview and asset messages; it does not create duplicate review messages.
 
-Suggested actions are `Approve pack`, `Request changes`, `Reject`, and `Open manifest`. Each decision must record the Discord actor, timestamp, reason, product version, and exact manifest hash. Any change to an asset, metadata, pricing, license, or manifest invalidates the earlier approval.
+The review card shows the revision, overview preview, bold numbered asset list, asset count, local generation cost, populated draft link, listing hash, and manifest hash. The attached `manifest.json` is a machine-readable receipt of the exact file list and SHA-256 hashes covered by the decision; it is not buyer-facing marketing content.
+
+Any change to an asset, metadata, pricing, license, listing hash, or manifest invalidates the earlier approval and creates a new revision on the same review surfaces.
 
 Creative approval and distribution approval should remain separate gates:
 

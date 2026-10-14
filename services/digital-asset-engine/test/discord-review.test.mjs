@@ -6,11 +6,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { loadEngineConfig } from '../src/config.mjs';
-import {
-  buildAssetReviewEmbed,
-  buildPackReviewEmbed,
-  postDigitalAssetReview,
-} from '../src/discord-review.mjs';
+import { buildAssetReviewEmbed, buildPackReviewEmbed, postDigitalAssetReview } from '../src/discord-review.mjs';
 import { planDigitalAssetProduct } from '../src/pipeline.mjs';
 
 const testDirectory = resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -50,48 +46,51 @@ async function createReviewFixture() {
     final_path: 'assets/items/plasma-rifle.png',
     validation_path: 'validation/plasma-rifle.json',
   };
-  const product = {
-    ...planned.product,
-    status: 'awaiting_asset_review',
-    assets: [asset],
-  };
+  const product = { ...planned.product, status: 'awaiting_asset_review', assets: [asset] };
   await planned.store.saveProduct(product);
   const productRoot = planned.store.productRoot(product);
   const exportRoot = resolve(productRoot, 'exports', 'itch-preview');
   await mkdir(resolve(exportRoot, 'assets', 'individual'), { recursive: true });
+  await mkdir(resolve(productRoot, 'review'), { recursive: true });
   const sprite = await sharp({
     create: { width: 128, height: 64, channels: 4, background: '#35d9ff' },
   }).png().toBuffer();
   const validation = {
     status: 'passed',
-    metrics: {
-      width: 128,
-      height: 64,
-      content_sha256: 'b'.repeat(64),
-    },
+    metrics: { width: 128, height: 64, content_sha256: 'b'.repeat(64) },
   };
   const manifest = {
     release_state: 'internal_preview',
     distribution_ready: false,
     asset_count: 1,
     manifest_hash: 'a'.repeat(64),
+    listing_hash: 'c'.repeat(64),
+  };
+  const itchState = {
+    status: 'verified',
+    manifest_hash: manifest.manifest_hash,
+    listing_hash: manifest.listing_hash,
+    public_url: 'https://vbjservices.itch.io/asset-pack-test',
+    staged_at: '2026-10-14T08:30:00.000Z',
   };
   await Promise.all([
     writeFile(resolve(productRoot, asset.final_path), sprite),
     writeFile(resolve(productRoot, asset.validation_path), `${JSON.stringify(validation)}\n`, 'utf8'),
     writeFile(resolve(exportRoot, 'cover.png'), sprite),
     writeFile(resolve(exportRoot, 'manifest.json'), `${JSON.stringify(manifest)}\n`, 'utf8'),
+    writeFile(resolve(productRoot, 'review', 'itch.json'), `${JSON.stringify(itchState)}\n`, 'utf8'),
   ]);
-  return { outputRoot, product, manifest, validation };
+  return { outputRoot, product, productRoot, exportRoot, manifest, validation, itchState };
 }
 
-test('Discord review embeds show exact hashes and avoid mirror marketing copy', () => {
-  const product = { title: 'Neon Plasma Armory' };
-  const manifest = { asset_count: 8, manifest_hash: 'a'.repeat(64) };
+test('Discord embeds use bold numbered assets and explain the manifest receipt', () => {
+  const product = { title: 'Neon Plasma Armory', assets: [{ name: 'Rail Rifle' }, { name: 'Arc Launcher' }] };
+  const manifest = { asset_count: 2, manifest_hash: 'a'.repeat(64), listing_hash: 'c'.repeat(64) };
   const pack = buildPackReviewEmbed({
     product,
     manifest,
     itchUrl: 'https://vbjservices.itch.io/asset-pack-test',
+    revision: 2,
   });
   const asset = buildAssetReviewEmbed({
     asset: { name: 'Rail Rifle', asset_id: 'asset-1', final_path: 'assets/items/rail-rifle.png' },
@@ -99,13 +98,26 @@ test('Discord review embeds show exact hashes and avoid mirror marketing copy', 
     index: 0,
     total: 8,
   });
-
-  assert.match(pack.fields.find((field) => field.name === 'Manifest').value, /a{64}/u);
-  assert.doesNotMatch(JSON.stringify(pack), /mirrorable/iu);
+  assert.match(pack.fields.find((field) => field.name === 'Included assets').value, /\*\*01\*\* — Rail Rifle/u);
+  assert.match(pack.fields.find((field) => field.name === 'Attached manifest.json').value, /SHA-256/u);
+  assert.match(asset.description, /\*\*01\*\* of \*\*08\*\*/u);
   assert.equal(asset.image.url, 'attachment://rail-rifle.png');
 });
 
-test('Discord review creates one pack channel and thread, posts assets, and resumes by manifest hash', async () => {
+test('Discord review requires a verified itch.io draft for the exact hashes', async () => {
+  const fixture = await createReviewFixture();
+  fixture.itchState.listing_hash = 'd'.repeat(64);
+  await assert.rejects(postDigitalAssetReview({
+    runtimeConfig: { env: { DISCORD_BOT_TOKEN: 'test-token' }, guildId: 'guild-1' },
+    outputRoot: fixture.outputRoot,
+    slug: fixture.product.slug,
+    categoryName: 'DIGITAL ASSETS',
+    itchUrl: fixture.itchState.public_url,
+    itchState: fixture.itchState,
+  }), /different package revision/u);
+});
+
+test('review revision updates the existing pack and asset messages instead of reposting', async () => {
   const fixture = await createReviewFixture();
   const calls = [];
   let messageNumber = 0;
@@ -115,9 +127,7 @@ test('Discord review creates one pack channel and thread, posts assets, and resu
     if (options.method === 'GET' && String(url).endsWith('/guilds/guild-1/channels')) {
       return jsonResponse([
         { id: 'category-1', name: 'DIGITAL ASSETS', type: 4 },
-        ...(channelCreated
-          ? [{ id: 'channel-1', name: fixture.product.slug, type: 0, parent_id: 'category-1' }]
-          : []),
+        ...(channelCreated ? [{ id: 'channel-1', name: fixture.product.slug, type: 0, parent_id: 'category-1' }] : []),
       ]);
     }
     if (options.method === 'POST' && String(url).endsWith('/guilds/guild-1/channels')) {
@@ -129,22 +139,25 @@ test('Discord review creates one pack channel and thread, posts assets, and resu
     }
     if (options.method === 'POST' && String(url).endsWith('/messages')) {
       messageNumber += 1;
-      const payload = JSON.parse(options.body.get('payload_json'));
-      assert.ok(payload.attachments.length >= 1);
-      if (messageNumber === 2) {
-        assert.deepEqual(payload.components[0].components.map((button) => button.label), [
-          'Approve',
-          'Request Changes',
-          'Reject',
-          'Open Manifest',
-        ]);
-      }
-      return jsonResponse({ id: messageNumber === 1 ? 'overview-1' : `asset-message-${messageNumber}` });
+      return jsonResponse({ id: messageNumber === 1 ? 'overview-1' : 'asset-message-1' });
     }
-    if (options.method === 'PATCH' && String(url).endsWith('/channels/thread-1/messages/asset-message-2')) {
-      const payload = JSON.parse(options.body);
-      assert.equal(payload.components[0].components.length, 4);
-      return jsonResponse({ id: 'asset-message-2' });
+    if (options.method === 'PATCH') {
+      if (options.body instanceof FormData) {
+        const payload = JSON.parse(options.body.get('payload_json'));
+        if (String(url).includes('/channels/channel-1/messages/overview-1')) {
+          assert.deepEqual(payload.components[0].components.map((component) => component.label), [
+            'Approve Pack',
+            'Request Changes',
+            'Reject Pack',
+            'Open itch.io Draft',
+            'Open Manifest',
+          ]);
+        }
+        if (String(url).includes('/channels/thread-1/messages/asset-message-1')) {
+          assert.deepEqual(payload.components, []);
+        }
+      }
+      return jsonResponse({ id: String(url).includes('overview') ? 'overview-1' : 'asset-message-1' });
     }
     return jsonResponse({ message: 'unexpected request' }, 500);
   };
@@ -153,37 +166,39 @@ test('Discord review creates one pack channel and thread, posts assets, and resu
     outputRoot: fixture.outputRoot,
     slug: fixture.product.slug,
     categoryName: 'DIGITAL ASSETS',
-    itchUrl: 'https://vbjservices.itch.io/asset-pack-test',
+    itchUrl: fixture.itchState.public_url,
     fetchImpl,
     now: '2026-10-14T09:00:00.000Z',
   };
 
   const posted = await postDigitalAssetReview(options);
-  assert.equal(posted.channel_id, 'channel-1');
-  assert.equal(posted.thread_id, 'thread-1');
-  assert.equal(Object.keys(posted.asset_messages).length, 1);
-  assert.equal(posted.category_id, 'category-1');
-  assert.equal(posted.reused, false);
+  assert.equal(posted.overview_message_id, 'overview-1');
+  assert.equal(posted.asset_messages[fixture.product.assets[0].asset_id], 'asset-message-1');
+  assert.equal(posted.review_revision, 1);
   assert.equal(calls.filter((call) => call.options.method === 'POST').length, 4);
 
-  const statePath = resolve(
-    fixture.outputRoot,
-    fixture.product.slug,
-    'review',
-    'discord.json',
-  );
-  const legacyState = JSON.parse(await readFile(statePath, 'utf8'));
-  delete legacyState.component_schema_version;
-  await writeFile(statePath, `${JSON.stringify(legacyState)}\n`, 'utf8');
-
-  const beforeReconcile = calls.length;
-  const reconciled = await postDigitalAssetReview(options);
-  assert.equal(reconciled.reused, false);
-  assert.equal(calls.length, beforeReconcile + 2);
-  assert.equal(calls.at(-1).options.method, 'PATCH');
+  const revisedManifest = { ...fixture.manifest, manifest_hash: 'e'.repeat(64), listing_hash: 'f'.repeat(64) };
+  const revisedItch = {
+    ...fixture.itchState,
+    manifest_hash: revisedManifest.manifest_hash,
+    listing_hash: revisedManifest.listing_hash,
+    staged_at: '2026-10-14T10:00:00.000Z',
+  };
+  await Promise.all([
+    writeFile(resolve(fixture.exportRoot, 'manifest.json'), `${JSON.stringify(revisedManifest)}\n`, 'utf8'),
+    writeFile(resolve(fixture.productRoot, 'review', 'itch.json'), `${JSON.stringify(revisedItch)}\n`, 'utf8'),
+  ]);
+  const beforeRevision = calls.length;
+  const revised = await postDigitalAssetReview({ ...options, itchState: revisedItch });
+  const revisionCalls = calls.slice(beforeRevision);
+  assert.equal(revised.review_revision, 2);
+  assert.equal(revised.overview_message_id, 'overview-1');
+  assert.equal(revised.asset_messages[fixture.product.assets[0].asset_id], 'asset-message-1');
+  assert.equal(revisionCalls.filter((call) => call.options.method === 'POST').length, 0);
+  assert.equal(revisionCalls.filter((call) => call.options.method === 'PATCH').length, 2);
 
   const beforeResume = calls.length;
-  const resumed = await postDigitalAssetReview(options);
+  const resumed = await postDigitalAssetReview({ ...options, itchState: revisedItch });
   assert.equal(resumed.reused, true);
   assert.equal(calls.length, beforeResume);
 });

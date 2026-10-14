@@ -1,6 +1,9 @@
 const ACTION_ROW = 1;
 const BUTTON = 2;
+const STRING_SELECT = 3;
 const TEXT_INPUT = 4;
+const TEXT_DISPLAY = 10;
+const LABEL = 18;
 const BUTTON_SECONDARY = 2;
 const BUTTON_SUCCESS = 3;
 const BUTTON_DANGER = 4;
@@ -8,13 +11,9 @@ const BUTTON_LINK = 5;
 const TEXT_INPUT_PARAGRAPH = 2;
 const MESSAGE_COMPONENT = 3;
 const MODAL_SUBMIT = 5;
-const BUTTON_PREFIX = 'dar';
-const MODAL_PREFIX = 'darm';
-const ACTION_CODES = Object.freeze({
-  approve: 'a',
-  request_changes: 'c',
-  reject: 'r',
-});
+const BUTTON_PREFIX = 'dpr';
+const MODAL_PREFIX = 'dprm';
+const ACTION_CODES = Object.freeze({ approve: 'a', request_changes: 'c', reject: 'r' });
 const CODE_ACTIONS = Object.freeze(Object.fromEntries(
   Object.entries(ACTION_CODES).map(([action, code]) => [code, action]),
 ));
@@ -34,7 +33,6 @@ function buildReference(prefix, action, context) {
     prefix,
     code,
     compactPart(context.productSlug, 'Product slug'),
-    compactPart(context.assetId, 'Asset ID'),
     compactPart(String(context.manifestHash || context.manifestHashPrefix || '').slice(0, 16), 'Manifest hash prefix'),
   ].join('|');
   if (value.length > 100) throw new Error('Digital asset review custom ID exceeds Discord\'s 100 character limit.');
@@ -43,34 +41,28 @@ function buildReference(prefix, action, context) {
 
 function parseReference(value, expectedPrefix) {
   const parts = String(value || '').split('|');
-  if (parts.length !== 5 || parts[0] !== expectedPrefix || !CODE_ACTIONS[parts[1]]) return null;
-  if (!/^[a-z0-9-]+$/u.test(parts[2]) || !/^asset-[a-z0-9-]+$/u.test(parts[3])) return null;
-  if (!/^[a-f0-9]{16}$/u.test(parts[4])) return null;
+  if (parts.length !== 4 || parts[0] !== expectedPrefix || !CODE_ACTIONS[parts[1]]) return null;
+  if (!/^[a-z0-9-]+$/u.test(parts[2])) return null;
+  if (!/^[a-f0-9]{16}$/u.test(parts[3])) return null;
   return {
     decision: CODE_ACTIONS[parts[1]],
     productSlug: parts[2],
-    assetId: parts[3],
-    manifestHashPrefix: parts[4],
+    manifestHashPrefix: parts[3],
   };
 }
 
-function manifestLinkButton(manifestUrl) {
-  return {
-    type: BUTTON,
-    style: BUTTON_LINK,
-    label: 'Open Manifest',
-    url: String(manifestUrl || ''),
-  };
+function linkButton(label, url) {
+  return { type: BUTTON, style: BUTTON_LINK, label, url: String(url || '') };
 }
 
-export function buildDigitalAssetReviewComponents(context) {
+export function buildDigitalAssetPackReviewComponents(context) {
   return [{
     type: ACTION_ROW,
     components: [
       {
         type: BUTTON,
         style: BUTTON_SUCCESS,
-        label: 'Approve',
+        label: 'Approve Pack',
         custom_id: buildReference(BUTTON_PREFIX, 'approve', context),
       },
       {
@@ -82,16 +74,23 @@ export function buildDigitalAssetReviewComponents(context) {
       {
         type: BUTTON,
         style: BUTTON_DANGER,
-        label: 'Reject',
+        label: 'Reject Pack',
         custom_id: buildReference(BUTTON_PREFIX, 'reject', context),
       },
-      manifestLinkButton(context.manifestUrl),
+      linkButton('Open itch.io Draft', context.itchUrl),
+      linkButton('Open Manifest', context.manifestUrl),
     ],
   }];
 }
 
-export function buildResolvedDigitalAssetReviewComponents(manifestUrl) {
-  return [{ type: ACTION_ROW, components: [manifestLinkButton(manifestUrl)] }];
+export function buildResolvedDigitalAssetReviewComponents(context) {
+  return [{
+    type: ACTION_ROW,
+    components: [
+      linkButton('Open itch.io Draft', context.itchUrl),
+      linkButton('Open Manifest', context.manifestUrl),
+    ],
+  }];
 }
 
 export function parseDigitalAssetReviewCustomId(customId) {
@@ -104,54 +103,117 @@ export function getDigitalAssetReviewModalRequest(interaction) {
   return request && ['request_changes', 'reject'].includes(request.decision) ? request : null;
 }
 
-export function buildDigitalAssetReviewModal(request) {
+function numberedAssetLines(assets) {
+  const width = Math.max(2, String(assets.length).length);
+  return assets.map((asset, index) => (
+    `**${String(index + 1).padStart(width, '0')}** — ${asset.name}`
+  )).join('\n');
+}
+
+function assetSelect(assets) {
+  if (!assets.length || assets.length > 25) {
+    throw new Error('Discord package feedback supports between 1 and 25 assets.');
+  }
+  const width = Math.max(2, String(assets.length).length);
+  return {
+    type: LABEL,
+    label: 'Which assets need changes?',
+    description: 'Select one or more numbered assets. Unselected assets are accepted for this revision.',
+    component: {
+      type: STRING_SELECT,
+      custom_id: 'affected_assets',
+      placeholder: 'Select assets to revise',
+      min_values: 1,
+      max_values: assets.length,
+      required: true,
+      options: assets.map((asset, index) => ({
+        label: `${String(index + 1).padStart(width, '0')} · ${asset.name}`.slice(0, 100),
+        value: asset.asset_id,
+        description: String(asset.description || 'View the matching numbered preview in the thread.').slice(0, 100),
+      })),
+    },
+  };
+}
+
+function reasonInput(requestingChanges) {
+  return {
+    type: LABEL,
+    label: requestingChanges ? 'What should be changed?' : 'Why is this pack rejected?',
+    description: requestingChanges
+      ? 'One shared instruction may cover every selected asset.'
+      : 'Explain why this release should not proceed.',
+    component: {
+      type: TEXT_INPUT,
+      custom_id: 'reason',
+      style: TEXT_INPUT_PARAGRAPH,
+      placeholder: requestingChanges
+        ? 'Describe the concrete revision needed.'
+        : 'Explain why this pack should not proceed.',
+      min_length: 3,
+      max_length: 1000,
+      required: true,
+    },
+  };
+}
+
+export function buildDigitalAssetReviewModal(request, assets = []) {
   if (!request || !['request_changes', 'reject'].includes(request.decision)) return null;
   const requestingChanges = request.decision === 'request_changes';
   return {
     custom_id: buildReference(MODAL_PREFIX, request.decision, request),
-    title: requestingChanges ? 'Request Asset Changes' : 'Reject Asset',
-    components: [{
-      type: ACTION_ROW,
-      components: [{
-        type: TEXT_INPUT,
-        custom_id: 'reason',
-        style: TEXT_INPUT_PARAGRAPH,
-        label: requestingChanges ? 'What should be changed?' : 'Why is this asset rejected?',
-        placeholder: requestingChanges
-          ? 'Describe the concrete revision needed.'
-          : 'Explain why this asset should not be included.',
-        min_length: 3,
-        max_length: 1000,
-        required: true,
-      }],
-    }],
+    title: requestingChanges ? 'Request Pack Changes' : 'Reject Asset Pack',
+    components: [
+      ...(requestingChanges ? [
+        {
+          type: TEXT_DISPLAY,
+          content: `Select the matching numbered previews below.\n${numberedAssetLines(assets)}`.slice(0, 4000),
+        },
+        assetSelect(assets),
+      ] : []),
+      reasonInput(requestingChanges),
+    ],
   };
 }
 
-function extractReason(components = []) {
-  for (const row of Array.isArray(components) ? components : []) {
-    for (const component of Array.isArray(row?.components) ? row.components : []) {
-      if (component?.custom_id === 'reason') {
-        return String(component.value || '').replace(/\s+/gu, ' ').trim();
-      }
-    }
+function walkComponents(components, callback) {
+  for (const component of Array.isArray(components) ? components : []) {
+    callback(component);
+    if (component?.component) walkComponents([component.component], callback);
+    if (component?.components) walkComponents(component.components, callback);
   }
-  return '';
+}
+
+function extractModalValues(components = []) {
+  let reason = '';
+  let affectedAssetIds = [];
+  walkComponents(components, (component) => {
+    if (component?.custom_id === 'reason') {
+      reason = String(component.value || '').replace(/\s+/gu, ' ').trim();
+    }
+    if (component?.custom_id === 'affected_assets') {
+      affectedAssetIds = [...new Set((component.values || [])
+        .map((value) => String(value || '').trim()).filter(Boolean))];
+    }
+  });
+  return { reason, affectedAssetIds };
 }
 
 export function parseDigitalAssetReviewDecision(interaction) {
   const direct = interaction?.type === MESSAGE_COMPONENT
     ? parseReference(interaction?.data?.custom_id, BUTTON_PREFIX)
     : null;
-  if (direct?.decision === 'approve') return { ...direct, reason: '' };
+  if (direct?.decision === 'approve') return { ...direct, reason: '', affectedAssetIds: [] };
 
   const modal = interaction?.type === MODAL_SUBMIT
     ? parseReference(interaction?.data?.custom_id, MODAL_PREFIX)
     : null;
   if (!modal || !['request_changes', 'reject'].includes(modal.decision)) return null;
-  const reason = extractReason(interaction?.data?.components);
-  if (!reason) throw new Error('A reason is required for this asset decision.');
-  return { ...modal, reason };
+  const { reason, affectedAssetIds } = extractModalValues(interaction?.data?.components);
+  if (!reason) throw new Error('A reason is required for this package decision.');
+  if (modal.decision === 'request_changes' && affectedAssetIds.length === 0) {
+    throw new Error('Select at least one asset that needs changes.');
+  }
+  return { ...modal, reason, affectedAssetIds };
 }
 
 export function isDigitalAssetReviewInteraction(interaction) {
