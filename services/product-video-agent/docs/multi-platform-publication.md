@@ -5,7 +5,7 @@ This is the phase-1 structure for publishing an already approved ORION short to 
 The direct Instagram Reels design and rollout checklist live in
 [`instagram-reels-publication.md`](./instagram-reels-publication.md).
 
-## Status (2026-10-13)
+## Status (2026-10-14)
 
 - Tracking issue: [#95 — ORION Multi-Platform Social Publisher, Phase 1: TikTok](https://github.com/OfficialLachkid/ORION/issues/95)
 - Implementation PR: [#97 — scaffold TikTok social publisher](https://github.com/OfficialLachkid/ORION/pull/97)
@@ -16,6 +16,7 @@ The direct Instagram Reels design and rollout checklist live in
 - Additional Buffer channels: the same Buffer organization now has three verified, connected, and unlocked TikTok channels: `pokequizz7`, `trivamon`, and `poke.guesss`. The tracked TrivaMon and Poke Guess source profiles map to `trivamon-tiktok` and `poke-guess-tiktok`; neither target duplicates its source channel's schedule.
 - TrivaMon/Poke Guess backfill: on 2026-10-13, explicit operator approval created 10 TrivaMon and 6 Poke Guess exact-file-bound TikTok child rows. Every row preserved its already-assigned future YouTube slot. A live-time dry run returned no due work, while a deterministic `2026-10-13T16:00:01Z` dry run selected exactly one 18:00 Europe/Amsterdam row for each new account.
 - Delivery-failure alerts: TikTok/Buffer and Instagram failures are marked with an idempotent fingerprint and sent to the configured Discord `#alerts` channel. The alert identifies the destination, account, source publication, schedule, state, and error. Failed Discord sends remain pending and are retried by later scheduler passes; successful alerts are not duplicated.
+- Instagram processing reconciliation: the 2026-10-14 08:00 Poke Quiz Reel container remained ready-but-unpublished because the five-minute reconciliation pass skipped social adapters while Instagram's stored poll time was fifteen minutes. The existing container was safely published without re-uploading. Reconciliation passes now include the idempotent social runner, and Instagram status follow-up becomes due after four minutes so the scheduled five-minute pass can complete a ready Reel promptly.
 - Lifecycle alerts: PR #156 alerts the existing video review thread after a post-start cancellation and adds an audited operator-resolution command; it does not introduce a second approval gate or perform an unverified remote deletion.
 - Operator update: the dedicated Poke Quiz TikTok account, the `ORION` TikTok developer organization, and the `ORION Publisher` app now exist. The sandbox includes `pokequizz7` as a target user. Public app metadata, legal-policy URLs, URL-prefix ownership verification, Login Kit, Content Posting API Direct Post, and the Desktop redirect URI are configured. TikTok issued the client credentials; no credential value is recorded in Git.
 - The PR branch has been brought forward to current `main`; the scheduler conflict was resolved by retaining current per-channel error isolation and adding isolated social-publication execution.

@@ -58,7 +58,7 @@ function nextStatusPollAt(asOf) {
   const date = new Date(asOf);
   return Number.isNaN(date.getTime())
     ? ''
-    : new Date(date.getTime() + 15 * 60 * 1000).toISOString();
+    : new Date(date.getTime() + 4 * 60 * 1000).toISOString();
 }
 
 function createPublicationStore(config) {

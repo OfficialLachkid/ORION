@@ -184,7 +184,7 @@ test('runVideoPublicationScheduler isolates each channel and phase while reconci
   ]);
 });
 
-test('runVideoPublicationScheduler reconciliation-only mode skips preview upload phases', async () => {
+test('runVideoPublicationScheduler reconciliation-only mode skips previews and reconciles social delivery', async () => {
   const executionCalls = [];
   let socialExecutionCallCount = 0;
   const result = await runVideoPublicationScheduler({
@@ -199,9 +199,9 @@ test('runVideoPublicationScheduler reconciliation-only mode skips preview upload
       executionCalls.push(phase);
       return [{ action: 'reconcile_published' }];
     },
-    executeSocialPublicationPhase: async () => {
+    executeSocialPublicationPhase: async ({ asOf }) => {
       socialExecutionCallCount += 1;
-      return [];
+      return [{ action: 'instagram_published', asOf }];
     },
   });
 
@@ -212,8 +212,11 @@ test('runVideoPublicationScheduler reconciliation-only mode skips preview upload
   assert.deepEqual(result.execution_results[0].schedule_update_results, [
     { action: 'reconcile_published' },
   ]);
-  assert.equal(socialExecutionCallCount, 0);
-  assert.deepEqual(result.social_publication_results, []);
+  assert.equal(socialExecutionCallCount, 1);
+  assert.deepEqual(result.social_publication_results, [{
+    action: 'instagram_published',
+    asOf: '2026-08-01T10:05:00.000Z',
+  }]);
   assert.deepEqual(result.execution_errors, []);
 });
 
