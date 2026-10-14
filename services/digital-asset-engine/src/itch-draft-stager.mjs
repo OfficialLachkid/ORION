@@ -151,18 +151,25 @@ async (page) => {
     page.getByLabel(/minimum price|price/i),
   ], Number(input.listing.suggested_price.amount).toFixed(2)));
 
-  const tagField = await firstVisible([
+  const tagLocators = () => [
     page.locator('input[name="tags"]'),
     page.locator('input[placeholder*="type to filter"]'),
     page.getByLabel(/^tags$/i),
-  ]);
+  ];
+  const tagField = await firstVisible(tagLocators());
   if (tagField) {
     await page.locator('input[name="game[tags]"]').evaluate((field) => field.selectize?.clear()).catch(() => {});
+    let tagsOk = true;
     for (const tag of input.listing.tags) {
-      await tagField.fill(String(tag));
-      await tagField.press('Enter');
+      const currentTagField = await firstVisible(tagLocators());
+      if (!currentTagField) {
+        tagsOk = false;
+        break;
+      }
+      await currentTagField.fill(String(tag));
+      await currentTagField.press('Enter');
     }
-    changes.push({ name: 'tags', ok: true });
+    changes.push({ name: 'tags', ok: tagsOk, ...(tagsOk ? {} : { reason: 'input_disappeared' }) });
   } else {
     changes.push({ name: 'tags', ok: false, reason: 'not_found' });
   }
