@@ -40,6 +40,9 @@ function createPublicationStore(config) {
   });
 }
 
+// Lazy-import to keep this file under the script-size guardrail.
+import { fireBrowserSessionAlert } from './pokemon-maintenance-auth-alerts.mjs';
+
 function summarizeVideoQueueMaintenance(profiles, runs) {
   const summary = {
     attemptedChannels: profiles.length,
@@ -410,15 +413,12 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
       }
     }
 
-    // Related-video catch-up sweep — runs for every channel with
-    // related_video.enabled, independent of publication_automation. The
-    // refresh guard skips rows already marked apply_status='applied' so
-    // it's a cheap no-op when there's nothing to catch up.
+    // Related-video catch-up sweep: cheap no-op when nothing to catch
+    // up; onLoginRequired alerts #alerts on a dead Playwright profile.
     if (profile?.metadata?.related_video?.enabled === true) {
       runResult.relatedVideoSweep = runNightShiftRelatedVideoRefresh({
-        profile,
-        asOf,
-        runNodeScript,
+        profile, asOf, runNodeScript,
+        onLoginRequired: ({ channelKey, count }) => fireBrowserSessionAlert(runtimeConfig, channelKey, count),
       });
       if (runResult.relatedVideoSweep?.errors?.length > 0) {
         runResult.error = [runResult.error, ...runResult.relatedVideoSweep.errors].filter(Boolean).join(' | ');

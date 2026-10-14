@@ -142,7 +142,11 @@ export async function uploadYoutubePreviewVideo({
 }) {
   const renderPath = resolvePublicationRenderPath(publication, videoRow);
   const fileBuffer = await readFile(renderPath);
-  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, { fetch: fetchImpl });
+  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, {
+    fetch: fetchImpl,
+    channelKey: channelProfile?.account_key,
+    action: 'video_upload',
+  });
   const requestPlan = buildYoutubePreviewUploadPlan(publication, channelProfile);
   const boundary = `orion-youtube-${Date.now().toString(16)}`;
   const mimeType = resolveVideoMimeType(renderPath);
@@ -184,7 +188,11 @@ export async function scheduleYoutubePublication({
   refreshToken,
   fetchImpl = globalThis.fetch,
 }) {
-  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, { fetch: fetchImpl });
+  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, {
+    fetch: fetchImpl,
+    channelKey: publication?.account_key,
+    action: 'video_schedule',
+  });
   const requestPlan = buildYoutubeScheduleUpdatePlan(publication, scheduledFor);
   const response = await fetchImpl(`${YOUTUBE_VIDEOS_ENDPOINT}?part=${requestPlan.part.join(',')}`, {
     method: 'PUT',
@@ -350,6 +358,7 @@ export async function deleteYoutubeVideo({
   externalId,
   clientConfig,
   refreshToken,
+  channelKey = '',
   fetchImpl = globalThis.fetch,
 }) {
   const videoId = String(externalId || '').trim();
@@ -357,7 +366,11 @@ export async function deleteYoutubeVideo({
     throw new Error('YouTube delete requires a video id.');
   }
 
-  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, { fetch: fetchImpl });
+  const accessToken = await refreshYoutubeAccessToken(clientConfig, refreshToken, {
+    fetch: fetchImpl,
+    channelKey,
+    action: 'video_delete',
+  });
   const response = await fetchImpl(`${YOUTUBE_VIDEOS_ENDPOINT}?id=${encodeURIComponent(videoId)}`, {
     method: 'DELETE',
     headers: {

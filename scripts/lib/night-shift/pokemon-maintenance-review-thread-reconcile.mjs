@@ -131,7 +131,7 @@ export async function reconcilePokeQuizzReviewThreads(
           store,
           deleteYoutubeVideo: async ({ externalId }) => {
             const clientConfig = await ensureYoutubeClientConfig();
-            return deleteYoutube({ externalId, clientConfig, refreshToken });
+            return deleteYoutube({ externalId, clientConfig, refreshToken, channelKey });
           },
           deleteRenderFile,
         }),

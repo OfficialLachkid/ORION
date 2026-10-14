@@ -9,12 +9,20 @@ const DEFAULT_SWEEP_TIMEOUT_MS = 45 * 60 * 1000;
 // cheap no-op on channels where everything is already covered. Rolls
 // the per-row outcomes into a compact status summary the night-shift
 // digest can surface without dumping the whole JSON payload.
+//
+// `onLoginRequired({ channelKey, count })` is invoked once per sweep
+// (not per row) when the automation returns `apply_status: 'login_required'`
+// for any row — the Playwright user-data-dir profile for this channel
+// has expired. Caller wires it to the YouTube channel auth alerter;
+// dedup lives there (24h window per channel+authType) so a sweep that
+// hits 30 videos against a dead session only posts once.
 export function runNightShiftRelatedVideoRefresh({
   profile,
   asOf,
   runNodeScript,
   channelsPath = DEFAULT_PUBLICATION_CHANNELS_PATH,
   timeoutMs = DEFAULT_SWEEP_TIMEOUT_MS,
+  onLoginRequired = null,
 } = {}) {
   const child = runNodeScript(
     'services/product-video-agent/scripts/execute-youtube-publication.mjs',
@@ -33,6 +41,16 @@ export function runNightShiftRelatedVideoRefresh({
   const errors = [];
   const stderrOut = collectChildError(child);
   if (stderrOut) errors.push(`related-video refresh error for ${profile.account_key}: ${stderrOut}`);
+  const loginRequired = parsed.filter((r) => r?.related_video_apply_status === 'login_required').length;
+  if (loginRequired > 0 && typeof onLoginRequired === 'function') {
+    try {
+      // Fire-and-forget: the alerter is non-throwing on its own, but
+      // we belt-and-brace so a bug in the hook can't tank the sweep.
+      Promise.resolve(onLoginRequired({ channelKey: profile.account_key, count: loginRequired })).catch(() => {});
+    } catch {
+      // Hook failed to even enqueue — ignore; still return the count below.
+    }
+  }
   return {
     status: errors.length > 0 && parsed.length === 0 ? 'failed' : 'completed',
     exitCode: child.status ?? 0,
@@ -41,6 +59,7 @@ export function runNightShiftRelatedVideoRefresh({
     manualActionRequired: parsed.filter((r) => r?.related_video_apply_status === 'manual_action_required').length,
     skippedQuota: parsed.filter((r) => r?.related_video_apply_status === 'skipped_quota').length,
     featureUnavailable: parsed.filter((r) => r?.related_video_apply_status === 'feature_unavailable').length,
+    loginRequired,
     errors,
   };
 }

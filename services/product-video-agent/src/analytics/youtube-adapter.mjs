@@ -100,9 +100,14 @@ function mapAnalyticsRow(columnHeaders = [], rows = []) {
 export async function createYoutubeAnalyticsAccessToken({
   clientConfig,
   refreshToken,
+  channelKey = '',
   fetchImpl = globalThis.fetch,
 }) {
-  const refreshed = await refreshYoutubeAccessToken(clientConfig, refreshToken, { fetch: fetchImpl });
+  const refreshed = await refreshYoutubeAccessToken(clientConfig, refreshToken, {
+    fetch: fetchImpl,
+    channelKey,
+    action: 'analytics_fetch',
+  });
   return refreshed.accessToken;
 }
 

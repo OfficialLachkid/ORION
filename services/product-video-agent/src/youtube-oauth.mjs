@@ -162,6 +162,14 @@ export async function refreshYoutubeAccessToken(clientConfig, refreshToken, opti
   });
   const { bodyText, payload } = await readJsonResponse(response);
   if (!response.ok) {
+    // If the caller provided alert context (channelKey + action), notify
+    // Discord #alerts on fatal auth classes (invalid_grant / invalid_client /
+    // unauthorized / invalid_scope) BEFORE re-throwing. The alerter is
+    // non-throwing and deduped per channel+authType per 24h so a night-shift
+    // run that burns through 30 videos doesn't flood the channel. Transient
+    // errors (5xx, 429, network) skip the alert — Google blips aren't a
+    // relogin signal.
+    await maybeAlertRefreshAuthFailure(options, response.status, bodyText);
     throw new Error(`YouTube access-token refresh failed (${response.status}): ${bodyText || 'no body'}`);
   }
   if (!payload.access_token) {
@@ -175,6 +183,43 @@ export async function refreshYoutubeAccessToken(clientConfig, refreshToken, opti
     tokenType: payload.token_type || 'Bearer',
     obtainedAtUtc: new Date().toISOString(),
   };
+}
+
+async function maybeAlertRefreshAuthFailure(options, status, bodyText) {
+  const channelKey = String(options?.channelKey || '').trim();
+  if (!channelKey) return;
+  const action = String(options?.action || '').trim();
+  try {
+    const [{ classifyYoutubeAuthError, isFatalAuthClassification, AUTH_TYPE_OAUTH }, { createYoutubeAuthAlerter }] = await Promise.all([
+      import('./youtube-channel-auth-alert.mjs'),
+      import('./youtube-channel-auth-alert.mjs'),
+    ]);
+    const classification = classifyYoutubeAuthError({ status, bodyText });
+    if (!isFatalAuthClassification(classification)) return;
+    const fire = options.alerter || await buildDefaultAlerter(createYoutubeAuthAlerter);
+    if (!fire) return;
+    await fire({
+      channelKey,
+      authType: AUTH_TYPE_OAUTH,
+      action,
+      errorDetail: `${classification}: ${bodyText}`.slice(0, 400),
+    });
+  } catch {
+    // Alerting must never mask the underlying auth failure — any issue
+    // in the alerter is swallowed, the caller still gets the thrown error.
+  }
+}
+
+async function buildDefaultAlerter(createYoutubeAuthAlerter) {
+  try {
+    const [{ loadRuntimeConfig, projectRoot }] = await Promise.all([
+      import('../../lib/runtime-config.mjs'),
+    ]);
+    const config = loadRuntimeConfig();
+    return createYoutubeAuthAlerter({ config, projectRoot });
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchYoutubeMineChannel(accessToken, options = {}) {
