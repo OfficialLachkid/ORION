@@ -42,7 +42,7 @@ async function createFixture() {
   };
 }
 
-test('Playwright draft preparation includes listing fields and deterministic screenshot replacement', () => {
+test('Playwright draft preparation includes listing fields and exact price controls', () => {
   const code = buildItchDraftRunCode({
     listing: {
       title: 'Neon Plasma Armory',
@@ -58,7 +58,7 @@ test('Playwright draft preparation includes listing fields and deterministic scr
     screenshotPath: '/tmp/verified.png',
   });
   assert.match(code, /short_description/u);
-  assert.match(code, /existing_screenshots_removed/u);
+  assert.match(code, /tagLocators/u);
   assert.match(code, /button\.payment_mode_paid/u);
   assert.match(code, /status: 'prepared'/u);
   assert.match(code, /page\.url\(\)\.includes\('\/login'\)/u);

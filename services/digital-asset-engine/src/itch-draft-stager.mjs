@@ -174,24 +174,34 @@ async (page) => {
     changes.push({ name: 'tags', ok: false, reason: 'not_found' });
   }
 
-  const acceptDialog = (dialog) => dialog.accept();
-  page.on('dialog', acceptDialog);
-  let removedScreenshots = 0;
-  try {
-    const deleteButtons = page.locator('button.delete_screen_btn');
-    while (await deleteButtons.count().catch(() => 0)) {
-      await deleteButtons.first().click({ timeout: 5000 });
-      removedScreenshots += 1;
-      await wait(500);
-    }
-  } finally {
-    page.off('dialog', acceptDialog);
-  }
-  changes.push({ name: 'existing_screenshots_removed', ok: true, count: removedScreenshots });
-
   const missing = changes.filter((change) => !change.ok);
   if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
   return { status: 'prepared', url: page.url(), changes };
+}`.trim();
+}
+
+function buildScreenshotCountRunCode() {
+  return `
+async (page) => {
+  await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(750);
+  return {
+    status: 'screenshots_counted',
+    count: await page.locator('button.delete_screen_btn').count().catch(() => 0),
+    url: page.url(),
+  };
+}`.trim();
+}
+
+function buildDeleteScreenshotRunCode() {
+  return `
+async (page) => {
+  const button = page.locator('button.delete_screen_btn').first();
+  if (!(await button.count().catch(() => 0))) {
+    return { status: 'screenshot_not_found', url: page.url() };
+  }
+  await button.click({ timeout: 5000 });
+  return { status: 'screenshot_delete_requested' };
 }`.trim();
 }
 
@@ -350,14 +360,31 @@ export async function stageItchDraft(options) {
         : String(result.stdout || result.stderr || result.error || 'empty browser response')).slice(0, 800);
     };
 
-    const prepared = runBrowserCode('draft preparation', buildItchDraftRunCode({
-      listing,
-      publicUrl,
-      editUrl: String(options.itchEditUrl || '').trim(),
-    }));
-    if (prepared.details.status !== 'prepared') {
-      throw new Error(`itch.io draft preparation failed (${prepared.details.status || 'unknown'}): ${diagnostic(prepared)}`);
+    const prepareDraft = () => {
+      const prepared = runBrowserCode('draft preparation', buildItchDraftRunCode({
+        listing,
+        publicUrl,
+        editUrl: String(options.itchEditUrl || '').trim(),
+      }));
+      if (prepared.details.status !== 'prepared') {
+        throw new Error(`itch.io draft preparation failed (${prepared.details.status || 'unknown'}): ${diagnostic(prepared)}`);
+      }
+      return prepared;
+    };
+    prepareDraft();
+
+    let removedScreenshots = 0;
+    let counted = runBrowserCode('screenshot count', buildScreenshotCountRunCode());
+    while (Number(counted.details.count) > 0) {
+      const before = Number(counted.details.count);
+      runBrowserCode('screenshot replacement', buildDeleteScreenshotRunCode());
+      counted = runBrowserCode('screenshot recount', buildScreenshotCountRunCode());
+      if (Number(counted.details.count) >= before) {
+        throw new Error(`itch.io screenshot replacement made no progress: ${diagnostic(counted)}`);
+      }
+      removedScreenshots += before - Number(counted.details.count);
     }
+    if (removedScreenshots) prepareDraft();
 
     const uploadMedia = (kind, paths) => {
       if (!paths.length) return;
