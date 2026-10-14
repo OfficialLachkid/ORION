@@ -153,6 +153,10 @@ test('pipeline produces a transparent, validated candidate while blocking distri
   const coverMetadata = await sharp(packaged.coverPath).metadata();
   const sheetMetadata = await sharp(packaged.sheetPath).metadata();
   const storedManifest = JSON.parse(await readFile(packaged.manifestPath, 'utf8'));
+  const storedListing = JSON.parse(await readFile(resolve(
+    packaged.exportRoot,
+    'itch-listing-preview.json',
+  ), 'utf8'));
   assert.equal(coverMetadata.width, 630);
   assert.equal(coverMetadata.height, 500);
   assert.equal(sheetMetadata.width, 160);
@@ -161,5 +165,9 @@ test('pipeline produces a transparent, validated candidate while blocking distri
   assert.equal(storedManifest.release_state, 'internal_preview');
   assert.equal(storedManifest.distribution_ready, false);
   assert.match(storedManifest.manifest_hash, /^[a-f0-9]{64}$/u);
+  assert.match(storedManifest.listing_hash, /^[a-f0-9]{64}$/u);
+  assert.equal(storedManifest.listing_hash, storedListing.listing_hash);
+  assert.ok(storedListing.screenshot_paths.every((path) => path.startsWith('download/')));
+  assert.ok(storedManifest.files.some((file) => file.path.startsWith('download/assets/individual/')));
   assert.equal(storedManifest.files.some((file) => file.path.startsWith('assets/source/')), false);
 });

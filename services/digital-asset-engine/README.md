@@ -42,7 +42,19 @@ npm run digital-assets:package -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-The preview export contains only distributable candidates, a sprite sheet, an actual-asset cover, listing metadata, hashes, and explicit draft-license warnings. It never includes the full-resolution model source images.
+The preview export contains a buyer-download directory with only distributable candidates, a sprite sheet, README, and draft license. The marketplace cover, listing metadata, and review hashes remain beside that directory and are not uploaded as buyer files. Full-resolution model source images are never included.
+
+Upload the buyer package with Butler, populate the existing itch.io draft through the dedicated authenticated Playwright profile, and verify the saved page before opening Discord review:
+
+```bash
+npm run digital-assets:itch-draft -- \
+  --stage-itch-draft \
+  --itch-url "https://vbjservices.itch.io/asset-pack-test?secret=..." \
+  --opportunity services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The command updates the same Butler channel and the same itch.io project on every revision. It writes `review/itch.json` only after title, descriptions, price, tags, cover, screenshots, and draft visibility have been read back successfully. A first run may stop with `login_required`; log into itch.io once in the dedicated `~/.orion/playwright-profile-itch` browser profile and rerun it.
 
 Post the packaged pilot into a pack channel under the existing `DIGITAL ASSETS` Discord category, create its asset-review thread, and attach every individual sprite:
 
@@ -55,9 +67,13 @@ npm run digital-assets:discord-review -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-Each individual asset message has `Approve`, `Request Changes`, `Reject`, and `Open Manifest` actions. Change requests and rejections require a reason. Before a decision is stored, the live bot verifies the operator allowlist, guild, thread, Discord message, product, full manifest hash, and exported asset hash against the canonical T7 files. It then appends the decision to Supabase and resolves the buttons for that exact review message. This does not approve marketplace distribution.
+The overview message owns the single package gate: `Approve Pack`, `Request Changes`, `Reject Pack`, `Open itch.io Draft`, and `Open Manifest`. Individual thread messages are numbered visual previews without decision buttons. `Request Changes` opens one form with a selectable/deselectable numbered asset list and one shared feedback field. Unselected assets are accepted for that revision; selected assets receive `request_changes`.
 
-Apply `supabase/migrations/20261014_create_digital_asset_review_decisions.sql` before enabling the buttons. The Discord runtime requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DIGITAL_ASSET_ARCHIVE_ROOT`. Do not use the publishable key for this service-role-only table.
+Before a decision is stored, the live bot verifies the operator allowlist, overview message, populated itch.io listing hash, package manifest hash, and every exported asset hash against the canonical T7 files. It appends one atomic decision to `digital_asset_release_reviews`, including each asset's resulting outcome. This creative decision does not approve marketplace distribution.
+
+When a corrected package is staged, ORION increments the review revision and edits the existing itch.io draft, Discord overview message, and numbered asset messages. It does not create another channel, thread, or message set.
+
+Apply `supabase/migrations/20261014_create_digital_asset_release_reviews.sql` before enabling the package gate. The earlier `digital_asset_review_decisions` table remains as immutable audit history for the first asset-level pilot. The Discord runtime requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DIGITAL_ASSET_ARCHIVE_ROOT`. Do not use the publishable key for these service-role-only tables.
 
 The ORION bot needs `View Channel`, `Send Messages`, `Embed Links`, `Attach Files`, `Create Public Threads`, and `Send Messages in Threads` in the `DIGITAL ASSETS` category. It also needs `Manage Channels` when ORION is expected to create the per-pack channel itself. Grant these as category permissions so each new pack channel inherits them.
 

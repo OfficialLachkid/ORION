@@ -20,3 +20,19 @@ test('digital asset review migration is append-only, constrained, and service-ro
   assert.match(sql, /revoke all .* from anon, authenticated, service_role/u);
   assert.match(sql, /grant select, insert .* to service_role/u);
 });
+
+test('package review migration stores manifest, listing, and per-asset outcomes atomically', async () => {
+  const sql = await readFile(resolve(
+    projectRoot,
+    'supabase/migrations/20261014_create_digital_asset_release_reviews.sql',
+  ), 'utf8');
+
+  assert.match(sql, /create table if not exists public\.digital_asset_release_reviews/iu);
+  assert.match(sql, /listing_hash text not null/u);
+  assert.match(sql, /affected_asset_ids jsonb not null/u);
+  assert.match(sql, /asset_decisions jsonb not null/u);
+  assert.match(sql, /decision in \('approve', 'request_changes', 'reject'\)/u);
+  assert.match(sql, /discord_interaction_id text not null unique/u);
+  assert.match(sql, /enable row level security/u);
+  assert.match(sql, /grant select, insert .* to service_role/u);
+});

@@ -4,6 +4,7 @@ import process from 'node:process';
 import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
 import { loadEngineConfig, resolveOutputRoot } from './src/config.mjs';
 import { postDigitalAssetReview } from './src/discord-review.mjs';
+import { stageItchDraft } from './src/itch-draft-stager.mjs';
 import { packageDigitalAssetPreview } from './src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from './src/pipeline.mjs';
 import { slugify } from './src/product-planner.mjs';
@@ -17,6 +18,7 @@ function parseArguments(argv) {
     execute: false,
     internalPreview: false,
     postToDiscord: false,
+    stageItchDraft: false,
     categoryName: 'DIGITAL ASSETS',
   };
   for (let index = 3; index < argv.length; index += 1) {
@@ -24,12 +26,16 @@ function parseArguments(argv) {
     if (token === '--execute') args.execute = true;
     else if (token === '--internal-preview') args.internalPreview = true;
     else if (token === '--post-to-discord') args.postToDiscord = true;
+    else if (token === '--stage-itch-draft') args.stageItchDraft = true;
+    else if (token === '--headless') args.headed = false;
     else if (token === '--config') args.config = argv[++index];
     else if (token === '--opportunity') args.opportunity = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
     else if (token === '--category-name') args.categoryName = argv[++index];
     else if (token === '--itch-url') args.itchUrl = argv[++index];
+    else if (token === '--itch-edit-url') args.itchEditUrl = argv[++index];
+    else if (token === '--playwright-profile') args.playwrightProfile = argv[++index];
     else if (token === '--runtime-env') args.runtimeEnv = argv[++index];
     else throw new Error(`Unknown argument: ${token}`);
   }
@@ -44,6 +50,7 @@ function printHelp() {
     '  plan      Validate an opportunity and create a canonical product plan.',
     '  generate  Generate and post-process assets locally; requires --execute.',
     '  package   Assemble a deterministic internal itch preview export.',
+    '  itch-draft  Upload the package and populate/verify the existing itch.io draft.',
     '  discord-review  Create the pack review channel/thread and post previews.',
     '',
     'Options:',
@@ -54,8 +61,12 @@ function printHelp() {
     '  --execute             Required for image generation.',
     '  --internal-preview    Required for packaging unapproved candidates.',
     '  --post-to-discord     Required for live Discord posting.',
+    '  --stage-itch-draft    Required for live itch.io draft changes.',
     '  --category-name <name>  Discord category. Default: DIGITAL ASSETS.',
     '  --itch-url <url>      Existing itch.io draft URL shown to reviewers.',
+    '  --itch-edit-url <url> Authenticated itch.io editor URL; dashboard discovery is the default.',
+    '  --playwright-profile <path>  Dedicated authenticated itch.io browser profile.',
+    '  --headless            Run itch.io browser automation without a visible window.',
     '  --runtime-env <path>  Existing ORION Discord .env; useful from an isolated worktree.',
     '',
   ].join('\n'));
@@ -67,7 +78,7 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'discord-review'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   if (args.command === 'generate' && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
@@ -77,8 +88,11 @@ async function main() {
   if (args.command === 'discord-review' && !args.postToDiscord) {
     throw new Error('Live Discord review posting requires --post-to-discord.');
   }
-  if (args.command === 'discord-review' && !args.itchUrl) {
-    throw new Error('Discord review posting requires --itch-url for the existing itch.io draft.');
+  if (args.command === 'itch-draft' && !args.stageItchDraft) {
+    throw new Error('Live itch.io draft staging requires --stage-itch-draft.');
+  }
+  if (['itch-draft', 'discord-review'].includes(args.command) && !args.itchUrl) {
+    throw new Error(`${args.command} requires --itch-url for the existing itch.io draft.`);
   }
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
@@ -100,7 +114,27 @@ async function main() {
         outputRoot: common.outputRoot,
         slug: slugify(opportunity.title),
       })
-      : args.command === 'discord-review'
+      : args.command === 'itch-draft'
+        ? {
+          product: await (async () => {
+            const staging = await stageItchDraft({
+              outputRoot: common.outputRoot,
+              slug: slugify(opportunity.title),
+              itchUrl: args.itchUrl,
+              itchEditUrl: args.itchEditUrl,
+              profileDir: args.playwrightProfile,
+              headed: args.headed,
+              now: args.now,
+            });
+            return {
+              product_id: staging.product_id,
+              title: opportunity.title,
+              status: 'itch_draft_verified',
+              itch_staging: staging,
+            };
+          })(),
+        }
+        : args.command === 'discord-review'
         ? {
           product: await (async () => {
             const review = await postDigitalAssetReview({
@@ -130,6 +164,7 @@ async function main() {
     export_root: result.exportRoot,
     manifest_hash: result.manifest?.manifest_hash,
     discord_review: result.product.discord_review,
+    itch_staging: result.product.itch_staging,
     gates: result.gates || { human_review_required: true, distribution_ready: false },
     cost: result.cost || { currency: 'EUR', incurred: 0, estimated: 0 },
   }, null, 2)}\n`);

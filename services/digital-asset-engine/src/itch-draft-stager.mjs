@@ -1,0 +1,299 @@
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import { dirname, resolve } from 'node:path';
+import { CanonicalProductStore } from './canonical-store.mjs';
+
+function readJson(path) {
+  return readFile(path, 'utf8').then((value) => JSON.parse(value));
+}
+
+function normalizeItchUrl(value) {
+  const parsed = new URL(String(value || ''));
+  if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.itch.io')) {
+    throw new Error('The itch.io draft URL must be an https://*.itch.io URL.');
+  }
+  if (parsed.username || parsed.password) throw new Error('The itch.io URL cannot contain credentials.');
+  return parsed;
+}
+
+function butlerTargetFromUrl(value) {
+  const url = normalizeItchUrl(value);
+  const account = url.hostname.slice(0, -'.itch.io'.length);
+  const slug = url.pathname.split('/').filter(Boolean)[0];
+  if (!account || !slug || !/^[a-z0-9-]+$/u.test(account) || !/^[a-z0-9-]+$/u.test(slug)) {
+    throw new Error('Could not derive the itch.io account and project slug from the draft URL.');
+  }
+  return `${account}/${slug}`;
+}
+
+function expandHomeDirectory(path) {
+  const value = String(path || '').trim();
+  if (!value) return '';
+  if (value === '~') return os.homedir();
+  if (value.startsWith('~/')) return resolve(os.homedir(), value.slice(2));
+  return resolve(value);
+}
+
+function runnerResult(executable, args, result) {
+  return {
+    executable,
+    args,
+    ok: result.status === 0 && !result.error,
+    exitCode: result.status ?? null,
+    stdout: String(result.stdout || '').trim(),
+    stderr: String(result.stderr || '').trim(),
+    error: result.error ? String(result.error.message || result.error) : '',
+  };
+}
+
+function defaultCliRunner(executable, args, options = {}) {
+  return runnerResult(executable, args, spawnSync(executable, args, {
+    encoding: 'utf8',
+    timeout: Number(options.timeoutMs) || 60_000,
+    cwd: options.cwd || process.cwd(),
+    env: options.env || process.env,
+  }));
+}
+
+function parseCliJson(value) {
+  try {
+    const parsed = JSON.parse(String(value || '').trim());
+    return typeof parsed?.result === 'string' ? JSON.parse(parsed.result) : parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function buildItchDraftRunCode({ listing, publicUrl, editUrl, coverPath, screenshotPaths, screenshotPath }) {
+  return `
+async (page) => {
+  const input = ${JSON.stringify({ listing, publicUrl, editUrl, coverPath, screenshotPaths, screenshotPath })};
+  const wait = (ms) => page.waitForTimeout(ms);
+  const bodyText = async () => page.locator('body').innerText({ timeout: 3000 }).catch(() => '');
+  const visible = async (locator) => locator.isVisible().catch(() => false);
+  const firstVisible = async (locators) => {
+    for (const locator of locators) {
+      const count = await locator.count().catch(() => 0);
+      for (let i = 0; i < count; i += 1) {
+        const item = locator.nth(i);
+        if (await visible(item)) return item;
+      }
+    }
+    return null;
+  };
+  const fill = async (name, locators, value) => {
+    const field = await firstVisible(locators);
+    if (!field) return { name, ok: false, reason: 'not_found' };
+    await field.fill(String(value), { timeout: 5000 }).catch(async () => {
+      await field.click({ timeout: 2000 });
+      await page.keyboard.press('ControlOrMeta+A');
+      await page.keyboard.type(String(value));
+    });
+    return { name, ok: true };
+  };
+
+  await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+  let text = await bodyText();
+  if (/log in|sign in/i.test(text) && /itch\.io\/(login|register)/i.test(page.url())) {
+    return { status: 'login_required', url: page.url() };
+  }
+
+  if (input.editUrl) {
+    await page.goto(input.editUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  } else if (!/\/game\/edit\//i.test(page.url())) {
+    const projectSlug = new URL(input.publicUrl).pathname.split('/').filter(Boolean)[0];
+    const projectTitle = String(input.listing.title || '').trim();
+    const card = page.locator('a[href*="/game/edit/"]').filter({ hasText: projectTitle }).first();
+    const direct = await card.count().catch(() => 0) ? card : page.locator('a[href*="/game/edit/"]').filter({ hasText: projectSlug }).first();
+    if (!(await direct.count().catch(() => 0))) {
+      return { status: 'project_not_found', url: page.url() };
+    }
+    await direct.click({ timeout: 5000 });
+    await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+  }
+
+  text = await bodyText();
+  if (/log in|sign in/i.test(text) && !/edit game|edit project|uploads/i.test(text)) {
+    return { status: 'login_required', url: page.url() };
+  }
+  if (!/itch\.io\/game\/edit\//i.test(page.url()) && !/edit game|edit project/i.test(text)) {
+    return { status: 'unexpected_page', url: page.url(), body: text.slice(0, 500) };
+  }
+
+  const changes = [];
+  changes.push(await fill('title', [
+    page.locator('input[name="title"]'),
+    page.getByLabel(/^title$/i),
+  ], input.listing.title));
+  changes.push(await fill('short_description', [
+    page.locator('input[name="short_text"], textarea[name="short_text"]'),
+    page.getByLabel(/short description/i),
+  ], input.listing.short_description));
+  changes.push(await fill('description', [
+    page.locator('textarea[name="description"]'),
+    page.getByLabel(/description/i),
+    page.locator('[contenteditable="true"]').first(),
+  ], input.listing.description));
+  changes.push(await fill('price', [
+    page.locator('input[name="min_price"], input[name="price"]'),
+    page.getByLabel(/minimum price|price/i),
+  ], Number(input.listing.suggested_price.amount).toFixed(2)));
+
+  const tagField = await firstVisible([
+    page.locator('input[name="tags"]'),
+    page.getByLabel(/^tags$/i),
+  ]);
+  if (tagField) {
+    await tagField.fill(input.listing.tags.join(', '));
+    changes.push({ name: 'tags', ok: true });
+  } else {
+    changes.push({ name: 'tags', ok: false, reason: 'not_found' });
+  }
+
+  const coverInput = page.locator('input[type="file"][name*="cover" i], input[type="file"][data-upload_type="cover"]').first();
+  if (await coverInput.count().catch(() => 0)) {
+    await coverInput.setInputFiles(input.coverPath);
+    changes.push({ name: 'cover', ok: true });
+    await wait(1000);
+  } else {
+    changes.push({ name: 'cover', ok: false, reason: 'not_found' });
+  }
+
+  const screenshotInput = page.locator('input[type="file"][name*="screenshot" i], input[type="file"][multiple]').first();
+  if (input.screenshotPaths.length && await screenshotInput.count().catch(() => 0)) {
+    await screenshotInput.setInputFiles(input.screenshotPaths);
+    changes.push({ name: 'screenshots', ok: true });
+    await wait(1000);
+  } else {
+    changes.push({ name: 'screenshots', ok: input.screenshotPaths.length === 0, reason: 'not_found' });
+  }
+
+  const missing = changes.filter((change) => !change.ok);
+  if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
+
+  const save = await firstVisible([
+    page.getByRole('button', { name: /^save$/i }),
+    page.locator('button, input[type="submit"]').filter({ hasText: /^save$/i }),
+    page.locator('input[type="submit"][value*="save" i]'),
+  ]);
+  if (!save) return { status: 'save_not_found', url: page.url(), changes };
+  await save.click({ timeout: 5000 });
+  await wait(2500);
+
+  const after = await bodyText();
+  const titleValue = await page.locator('input[name="title"]').first().inputValue().catch(() => '');
+  const shortValue = await page.locator('input[name="short_text"], textarea[name="short_text"]').first().inputValue().catch(() => '');
+  const isDraft = /\bdraft\b/i.test(after);
+  await page.screenshot({ path: input.screenshotPath, fullPage: true }).catch(() => {});
+  return {
+    status: titleValue === input.listing.title && shortValue === input.listing.short_description && isDraft
+      ? 'verified'
+      : 'verification_failed',
+    url: page.url(),
+    titleValue,
+    shortValue,
+    isDraft,
+    changes,
+  };
+}`.trim();
+}
+
+export async function stageItchDraft(options) {
+  const store = options.store || new CanonicalProductStore(options.outputRoot);
+  const product = options.product || await store.loadProduct(options.slug);
+  const productRoot = store.productRoot(product);
+  const exportRoot = resolve(productRoot, 'exports', 'itch-preview');
+  const [manifest, listing] = await Promise.all([
+    readJson(resolve(exportRoot, 'manifest.json')),
+    readJson(resolve(exportRoot, 'itch-listing-preview.json')),
+  ]);
+  if (manifest.listing_hash !== listing.listing_hash) {
+    throw new Error('The itch.io listing hash does not match the packaged manifest.');
+  }
+  const publicUrl = normalizeItchUrl(options.itchUrl).toString();
+  const target = butlerTargetFromUrl(publicUrl);
+  const downloadRoot = resolve(exportRoot, 'download');
+  if (!existsSync(downloadRoot)) {
+    throw new Error('The packaged buyer download directory is missing; run the package step first.');
+  }
+  const statePath = resolve(productRoot, 'review', 'itch.json');
+  let previous = null;
+  try { previous = await readJson(statePath); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
+  if (previous?.status === 'verified'
+    && previous.manifest_hash === manifest.manifest_hash
+    && previous.listing_hash === listing.listing_hash) {
+    return { ...previous, reused: true, statePath };
+  }
+
+  const cliRunner = options.cliRunner || defaultCliRunner;
+  const env = options.env || process.env;
+  const homeButler = resolve(os.homedir(), 'bin', 'butler');
+  const butlerExecutable = options.butlerExecutable
+    || env.ITCH_BUTLER_EXECUTABLE
+    || (existsSync(homeButler) ? homeButler : 'butler');
+  const butler = cliRunner(butlerExecutable, [
+    'push',
+    downloadRoot,
+    `${target}:assets`,
+    '--userversion',
+    `review-${manifest.manifest_hash.slice(0, 12)}`,
+    '--if-changed',
+  ], { cwd: options.cwd, env, timeoutMs: 15 * 60_000 });
+  if (!butler.ok) {
+    throw new Error(`Butler could not stage the package: ${butler.stderr || butler.stdout || butler.error}`);
+  }
+
+  const profileDir = expandHomeDirectory(
+    options.profileDir || env.ITCH_PLAYWRIGHT_PROFILE || '~/.orion/playwright-profile-itch',
+  );
+  const reviewRoot = resolve(productRoot, 'review');
+  const screenshotPath = resolve(reviewRoot, 'itch-draft.png');
+  await mkdir(reviewRoot, { recursive: true });
+  const executable = options.playwrightExecutable || env.PLAYWRIGHT_CLI || 'playwright-cli';
+  const sessionName = options.sessionName || `orion-itch-${product.slug}`;
+  const openUrl = String(options.itchEditUrl || '').trim() || 'https://itch.io/dashboard';
+  const openArgs = ['-s', sessionName, 'open', openUrl, '--browser', 'chrome', '--persistent', '--profile', profileDir, '--json'];
+  if (options.headed !== false && env.ITCH_PLAYWRIGHT_HEADED !== 'false') openArgs.splice(-1, 0, '--headed');
+
+  const opened = cliRunner(executable, openArgs, { cwd: options.cwd, env, timeoutMs: 90_000 });
+  if (!opened.ok) throw new Error(`Could not open the itch.io editor: ${opened.stderr || opened.stdout || opened.error}`);
+  try {
+    const screenshotPaths = (listing.screenshot_paths || []).map((path) => resolve(exportRoot, path));
+    const missingFiles = [resolve(exportRoot, listing.cover_path), ...screenshotPaths].filter((path) => !existsSync(path));
+    if (missingFiles.length) throw new Error(`Missing itch.io listing media: ${missingFiles.join(', ')}`);
+    const run = cliRunner(executable, [
+      '-s', sessionName, 'run-code', buildItchDraftRunCode({
+        listing,
+        publicUrl,
+        editUrl: String(options.itchEditUrl || '').trim(),
+        coverPath: resolve(exportRoot, listing.cover_path),
+        screenshotPaths,
+        screenshotPath,
+      }), '--json',
+    ], { cwd: options.cwd, env, timeoutMs: 3 * 60_000 });
+    if (!run.ok) throw new Error(`itch.io draft automation failed: ${run.stderr || run.stdout || run.error}`);
+    const details = parseCliJson(run.stdout) || {};
+    if (details.status !== 'verified') {
+      throw new Error(`itch.io draft was not verified (${details.status || 'unknown'}).`);
+    }
+    const state = {
+      schema_version: '1.0',
+      status: 'verified',
+      product_id: product.product_id,
+      product_slug: product.slug,
+      manifest_hash: manifest.manifest_hash,
+      listing_hash: listing.listing_hash,
+      public_url: publicUrl,
+      edit_url: details.url,
+      butler_target: `${target}:assets`,
+      screenshot_path: screenshotPath,
+      staged_at: options.now || new Date().toISOString(),
+    };
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+    return { ...state, reused: false, statePath, details };
+  } finally {
+    cliRunner(executable, ['-s', sessionName, 'close'], { cwd: options.cwd, env, timeoutMs: 15_000 });
+  }
+}

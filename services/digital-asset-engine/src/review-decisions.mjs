@@ -1,20 +1,22 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import {
+  buildDigitalAssetReviewModal,
   buildResolvedDigitalAssetReviewComponents,
+  getDigitalAssetReviewModalRequest,
   parseDigitalAssetReviewDecision,
 } from './review-components.mjs';
 
-const DECISION_TABLE = 'digital_asset_review_decisions';
+const DECISION_TABLE = 'digital_asset_release_reviews';
 const DECISION_COLORS = Object.freeze({
   approve: 0x57f287,
   request_changes: 0xfee75c,
   reject: 0xed4245,
 });
 const DECISION_LABELS = Object.freeze({
-  approve: 'APPROVED',
-  request_changes: 'CHANGES REQUESTED',
-  reject: 'REJECTED',
+  approve: 'PACK APPROVED',
+  request_changes: 'PACK CHANGES REQUESTED',
+  reject: 'PACK REJECTED',
 });
 
 async function readJson(path) {
@@ -27,6 +29,15 @@ function isAuthorizedOperator(interaction, config) {
   if (userId && (config.operatorUserIds || []).includes(userId)) return true;
   if (config.operatorRoleId && roles.includes(config.operatorRoleId)) return true;
   return false;
+}
+
+function assertAuthorized(interaction, config) {
+  if (config.guildId && String(interaction.guild_id || '') !== String(config.guildId)) {
+    throw new Error('Digital asset decision came from an unexpected Discord guild.');
+  }
+  if (!isAuthorizedOperator(interaction, config)) {
+    throw new Error('Only an approved ORION operator can review digital assets.');
+  }
 }
 
 function createHeaders(apiKey) {
@@ -58,7 +69,7 @@ export class DigitalAssetReviewDecisionStore {
     });
     const bodyText = await response.text();
     if (!response.ok) {
-      throw new Error(`Supabase digital asset decision insert failed (${response.status}): ${bodyText}`);
+      throw new Error(`Supabase digital asset release review insert failed (${response.status}): ${bodyText}`);
     }
     return bodyText ? JSON.parse(bodyText) : [];
   }
@@ -70,39 +81,52 @@ function resolveArchiveRoot(options, config) {
   return resolve(root);
 }
 
+function exportedAssetHash(manifest, asset) {
+  const filename = basename(asset.final_path);
+  return manifest.files?.find((file) => (
+    file.path === `assets/individual/${filename}`
+    || file.path.endsWith(`/assets/individual/${filename}`)
+  ))?.content_sha256;
+}
+
 async function loadReviewContext({ archiveRoot, reference, interaction }) {
   const productRoot = resolve(archiveRoot, reference.productSlug);
-  const [product, reviewState, manifest] = await Promise.all([
+  const [product, reviewState, manifest, itchState] = await Promise.all([
     readJson(resolve(productRoot, 'product.json')),
     readJson(resolve(productRoot, 'review', 'discord.json')),
     readJson(resolve(productRoot, 'exports', 'itch-preview', 'manifest.json')),
+    readJson(resolve(productRoot, 'review', 'itch.json')),
   ]);
   if (product.slug !== reference.productSlug || reviewState.product_slug !== reference.productSlug) {
     throw new Error('The Discord review reference does not match the canonical product.');
   }
   if (manifest.manifest_hash !== reviewState.manifest_hash
     || !manifest.manifest_hash.startsWith(reference.manifestHashPrefix)) {
-    throw new Error('This asset button belongs to a stale manifest.');
+    throw new Error('This package action belongs to a stale manifest.');
   }
-  if (String(reviewState.thread_id) !== String(interaction.channel_id || '')) {
-    throw new Error('This asset decision came from an unexpected Discord thread.');
+  if (manifest.listing_hash !== reviewState.listing_hash
+    || itchState.status !== 'verified'
+    || itchState.manifest_hash !== manifest.manifest_hash
+    || itchState.listing_hash !== manifest.listing_hash) {
+    throw new Error('The populated itch.io draft no longer matches this package review.');
   }
-  const messageId = String(reviewState.asset_messages?.[reference.assetId] || '');
-  if (!messageId) throw new Error('The asset is not registered in this Discord review.');
-  if (interaction.message?.id && String(interaction.message.id) !== messageId) {
-    throw new Error('The Discord message does not match the canonical asset review message.');
+  if (String(reviewState.channel_id) !== String(interaction.channel_id || '')) {
+    throw new Error('This package decision came from an unexpected Discord channel.');
   }
-  const asset = product.assets.find((candidate) => candidate.asset_id === reference.assetId);
-  if (!asset) throw new Error('The asset no longer exists in the canonical product.');
-  const validation = await readJson(resolve(productRoot, asset.validation_path));
-  const assetHash = String(validation?.metrics?.content_sha256 || '');
-  const exportedAsset = manifest.files?.find((file) => (
-    file.path === `assets/individual/${basename(asset.final_path)}`
-  ));
-  if (!/^[a-f0-9]{64}$/u.test(assetHash) || exportedAsset?.content_sha256 !== assetHash) {
-    throw new Error('The canonical asset hash does not match the reviewed export.');
+  if (interaction.message?.id
+    && String(interaction.message.id) !== String(reviewState.overview_message_id)) {
+    throw new Error('The Discord message does not match the canonical package review message.');
   }
-  return { product, reviewState, manifest, asset, assetHash, messageId };
+  const assets = [];
+  for (const asset of product.assets) {
+    const validation = await readJson(resolve(productRoot, asset.validation_path));
+    const assetHash = String(validation?.metrics?.content_sha256 || '');
+    if (!/^[a-f0-9]{64}$/u.test(assetHash) || exportedAssetHash(manifest, asset) !== assetHash) {
+      throw new Error(`The canonical hash for ${asset.asset_id} does not match the reviewed export.`);
+    }
+    assets.push({ ...asset, asset_hash: assetHash });
+  }
+  return { productRoot, product, reviewState, manifest, itchState, assets };
 }
 
 function actorFromInteraction(interaction) {
@@ -114,8 +138,11 @@ function actorFromInteraction(interaction) {
 }
 
 function decisionFieldValue(decision, actor) {
+  const selected = decision.affectedAssetIds?.length
+    ? `\nSelected assets: ${decision.affectedAssetIds.join(', ')}`
+    : '';
   const reason = decision.reason ? `\n${decision.reason}` : '';
-  return `${DECISION_LABELS[decision.decision]} by ${actor.displayName}${reason}`.slice(0, 1024);
+  return `${DECISION_LABELS[decision.decision]} by ${actor.displayName}${selected}${reason}`.slice(0, 1024);
 }
 
 export function buildResolvedDigitalAssetReviewEmbeds(embeds, decision, actor) {
@@ -124,8 +151,8 @@ export function buildResolvedDigitalAssetReviewEmbeds(embeds, decision, actor) {
     ...embed,
     color: DECISION_COLORS[decision.decision],
     ...(index === 0 ? {
-      title: `${String(embed.title || 'Asset Review').replace(/ · (APPROVED|CHANGES REQUESTED|REJECTED)$/u, '')} · ${DECISION_LABELS[decision.decision]}`,
-      description: 'Decision recorded for this exact asset and manifest.',
+      title: `${String(embed.title || 'Pack Review').replace(/ · (PACK APPROVED|PACK CHANGES REQUESTED|PACK REJECTED)$/u, '')} · ${DECISION_LABELS[decision.decision]}`,
+      description: 'Decision recorded for this exact package manifest and populated listing.',
       fields: [
         ...(Array.isArray(embed.fields) ? embed.fields.filter((field) => field?.name !== 'Decision') : []),
         { name: 'Decision', value: decisionFieldValue(decision, actor), inline: false },
@@ -134,31 +161,79 @@ export function buildResolvedDigitalAssetReviewEmbeds(embeds, decision, actor) {
   }));
 }
 
+export function buildResolvedAssetReviewEmbeds(embeds, assetDecision, actor) {
+  const labels = {
+    approve: 'ACCEPTED IN PACK REVIEW',
+    request_changes: 'CHANGES REQUESTED',
+    reject: 'PACK REJECTED',
+  };
+  return (Array.isArray(embeds) ? embeds : []).map((embed, index) => ({
+    ...embed,
+    color: DECISION_COLORS[assetDecision.decision],
+    ...(index === 0 ? {
+      title: `${String(embed.title || 'Asset').replace(/ · (ACCEPTED IN PACK REVIEW|CHANGES REQUESTED|PACK REJECTED)$/u, '')} · ${labels[assetDecision.decision]}`,
+      fields: [
+        ...(Array.isArray(embed.fields) ? embed.fields.filter((field) => field?.name !== 'Package review') : []),
+        {
+          name: 'Package review',
+          value: `${labels[assetDecision.decision]} by ${actor.displayName}`,
+          inline: false,
+        },
+      ],
+    } : {}),
+  }));
+}
+
+export async function prepareDigitalAssetReviewModal(options) {
+  const request = getDigitalAssetReviewModalRequest(options.interaction);
+  if (!request) return null;
+  const config = options.config || {};
+  assertAuthorized(options.interaction, config);
+  const archiveRoot = resolveArchiveRoot(options, config);
+  const context = await loadReviewContext({ archiveRoot, reference: request, interaction: options.interaction });
+  return buildDigitalAssetReviewModal(request, context.assets);
+}
+
+function decisionsForAssets(decision, assets) {
+  const affected = new Set(decision.affectedAssetIds || []);
+  const unknown = [...affected].filter((assetId) => !assets.some((asset) => asset.asset_id === assetId));
+  if (unknown.length) throw new Error(`Unknown assets were selected: ${unknown.join(', ')}`);
+  return assets.map((asset) => ({
+    asset_id: asset.asset_id,
+    asset_hash: asset.asset_hash,
+    decision: decision.decision === 'approve'
+      ? 'approve'
+      : decision.decision === 'reject'
+        ? 'reject'
+        : affected.has(asset.asset_id) ? 'request_changes' : 'approve',
+  }));
+}
+
 export async function recordDigitalAssetReviewDecision(options) {
   const reference = parseDigitalAssetReviewDecision(options.interaction);
   if (!reference) return null;
   const config = options.config || {};
-  if (config.guildId && String(options.interaction.guild_id || '') !== String(config.guildId)) {
-    throw new Error('Digital asset decision came from an unexpected Discord guild.');
-  }
-  if (!isAuthorizedOperator(options.interaction, config)) {
-    throw new Error('Only an approved ORION operator can review digital assets.');
-  }
+  assertAuthorized(options.interaction, config);
   const archiveRoot = resolveArchiveRoot(options, config);
   const context = await loadReviewContext({ archiveRoot, reference, interaction: options.interaction });
   const actor = actorFromInteraction(options.interaction);
   const decidedAt = options.now || new Date().toISOString();
+  const assetDecisions = decisionsForAssets(reference, context.assets);
   const row = {
     product_id: context.product.product_id,
     release_id: `asset-release-${context.manifest.manifest_hash.slice(0, 24)}`,
+    review_revision: Number(context.reviewState.review_revision) || 1,
     manifest_hash: context.manifest.manifest_hash,
-    asset_id: context.asset.asset_id,
-    asset_hash: context.assetHash,
+    listing_hash: context.manifest.listing_hash,
     decision: reference.decision,
+    affected_asset_ids: reference.decision === 'reject'
+      ? context.assets.map((asset) => asset.asset_id)
+      : reference.affectedAssetIds,
+    asset_decisions: assetDecisions,
     reviewer_discord_id: actor.id,
     reason: reference.reason,
     decided_at: decidedAt,
-    discord_message_id: context.messageId,
+    discord_message_id: String(context.reviewState.overview_message_id),
     discord_interaction_id: String(options.interaction.id || ''),
   };
   if (!row.discord_interaction_id) throw new Error('Discord interaction ID is required for idempotent persistence.');
@@ -168,15 +243,32 @@ export async function recordDigitalAssetReviewDecision(options) {
     fetchImpl: options.fetchImpl,
   });
   await store.insert(row);
+  context.reviewState.last_decision = {
+    decision: row.decision,
+    affected_asset_ids: row.affected_asset_ids,
+    reviewer_discord_id: row.reviewer_discord_id,
+    reason: row.reason,
+    decided_at: row.decided_at,
+    discord_interaction_id: row.discord_interaction_id,
+  };
+  await writeFile(
+    resolve(context.productRoot, 'review', 'discord.json'),
+    `${JSON.stringify(context.reviewState, null, 2)}\n`,
+    'utf8',
+  );
   const manifestUrl = `https://discord.com/channels/${config.guildId}/${context.reviewState.channel_id}/${context.reviewState.overview_message_id}`;
+  const linkContext = { manifestUrl, itchUrl: context.itchState.public_url };
   return {
     row,
     decision: reference,
     actor,
-    channelId: context.reviewState.thread_id,
-    messageId: context.messageId,
-    messagePatch: {
-      components: buildResolvedDigitalAssetReviewComponents(manifestUrl),
-    },
+    channelId: context.reviewState.channel_id,
+    messageId: context.reviewState.overview_message_id,
+    threadId: context.reviewState.thread_id,
+    messagePatch: { components: buildResolvedDigitalAssetReviewComponents(linkContext) },
+    assetMessagePatches: assetDecisions.map((assetDecision) => ({
+      ...assetDecision,
+      messageId: context.reviewState.asset_messages[assetDecision.asset_id],
+    })),
   };
 }

@@ -124,13 +124,58 @@ function packReadme(product, candidates) {
   ].join('\n');
 }
 
+function buildItchListing(product, candidates) {
+  const assetNames = candidates.map(({ asset }, index) => (
+    `${String(index + 1).padStart(2, '0')}. ${asset.name}`
+  ));
+  const technicalInformation = [
+    `${product.style.width}x${product.style.height} pixel canvas per sprite`,
+    'Transparent PNG files',
+    'Strict side-view presentation',
+    'One supplied direction',
+    'No baked root motion',
+    `Palette limited to ${product.style.max_palette_colors} colors`,
+  ];
+  const description = [
+    `${product.title} is a coordinated pack of ${candidates.length} original science-fiction weapon sprites for 2D games.`,
+    '',
+    'Included assets:',
+    ...assetNames.map((name) => `- ${name}`),
+    '',
+    'Technical information:',
+    ...technicalInformation.map((line) => `- ${line}`),
+    '',
+    'The cover and screenshots are assembled from the exact included assets.',
+    'Contains locally generated AI-assisted artwork with deterministic post-processing and human review.',
+  ].join('\n');
+  const listing = {
+    schema_version: '1.0',
+    title: product.title,
+    short_description: `${candidates.length} original side-view sci-fi weapon sprites for 2D games.`,
+    description,
+    suggested_price: product.pricing.base_price,
+    tags: ['2D', 'Pixel Art', 'Sci-fi', 'Weapons', 'Sprites'],
+    classification: 'assets',
+    visibility: 'draft',
+    cover_path: 'cover.png',
+    screenshot_paths: [`download/assets/${product.slug}-sprite-sheet.png`],
+    technical_information: technicalInformation,
+    ai_disclosure: 'AI Assisted, Graphics',
+  };
+  return {
+    ...listing,
+    listing_hash: sha256(Buffer.from(JSON.stringify(listing))),
+  };
+}
+
 export async function packageDigitalAssetPreview(options) {
   const store = options.store || new CanonicalProductStore(options.outputRoot);
   const product = options.product || await store.loadProduct(options.slug);
   const candidates = await loadApprovedCandidates(store, product);
   const productRoot = store.productRoot(product);
   const exportRoot = resolve(productRoot, 'exports', 'itch-preview');
-  const assetsRoot = resolve(exportRoot, 'assets', 'individual');
+  const downloadRoot = resolve(exportRoot, 'download');
+  const assetsRoot = resolve(downloadRoot, 'assets', 'individual');
   await mkdir(assetsRoot, { recursive: true });
 
   const knownFiles = [];
@@ -145,25 +190,18 @@ export async function packageDigitalAssetPreview(options) {
     createSpriteSheet(candidates, product),
   ]);
   const coverPath = resolve(exportRoot, 'cover.png');
-  const sheetPath = resolve(exportRoot, 'assets', `${product.slug}-sprite-sheet.png`);
-  const readmePath = resolve(exportRoot, 'README.md');
-  const licensePath = resolve(exportRoot, 'LICENSE-DRAFT.md');
+  const sheetPath = resolve(downloadRoot, 'assets', `${product.slug}-sprite-sheet.png`);
+  const readmePath = resolve(downloadRoot, 'README.md');
+  const licensePath = resolve(downloadRoot, 'LICENSE-DRAFT.md');
   const listingPath = resolve(exportRoot, 'itch-listing-preview.json');
-  await mkdir(resolve(exportRoot, 'assets'), { recursive: true });
+  await mkdir(resolve(downloadRoot, 'assets'), { recursive: true });
+  const listing = buildItchListing(product, candidates);
   await Promise.all([
     writeFile(coverPath, cover),
     writeFile(sheetPath, spriteSheet),
     writeFile(readmePath, packReadme(product, candidates), 'utf8'),
     writeFile(licensePath, '# Draft License\n\nInternal connection test only. Not approved for public distribution or resale.\n', 'utf8'),
-    writeFile(listingPath, `${JSON.stringify({
-      title: product.title,
-      short_description: `${candidates.length} original side-view sci-fi weapon sprites.`,
-      description_disclosure: 'Contains locally generated AI-assisted artwork with deterministic post-processing and human review.',
-      asset_description: 'Right-facing side-view weapon sprites supplied as transparent PNG files.',
-      suggested_price: product.pricing.base_price,
-      tags: ['2D', 'Pixel Art', 'Sci-fi', 'Weapons', 'Sprites'],
-      visibility: 'draft',
-    }, null, 2)}\n`, 'utf8'),
+    writeFile(listingPath, `${JSON.stringify(listing, null, 2)}\n`, 'utf8'),
   ]);
   knownFiles.push(coverPath, sheetPath, readmePath, licensePath, listingPath);
 
@@ -186,11 +224,12 @@ export async function packageDigitalAssetPreview(options) {
     title: product.title,
     asset_count: candidates.length,
     manifest_hash: manifestHash,
+    listing_hash: listing.listing_hash,
     generated_at: options.now || new Date().toISOString(),
     files,
   };
   const manifestPath = resolve(exportRoot, 'manifest.json');
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
-  return { product, exportRoot, manifestPath, manifest, coverPath, sheetPath };
+  return { product, exportRoot, downloadRoot, manifestPath, manifest, coverPath, sheetPath };
 }
