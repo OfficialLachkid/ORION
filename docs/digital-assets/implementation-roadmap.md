@@ -278,11 +278,15 @@ The Mac generated and packaged the complete `Neon Plasma Armory` pilot on the T7
 
 Human visual review on 2026-10-14 rejected this first package as a release candidate. Enclosed chroma-colored regions inside trigger guards and skeletal stocks remained opaque because V0.1 removed only chroma connected to the outer border, and the sprite sheet used zero gutter between cells. The hidden itch.io upload is therefore superseded and must not be published. Processing V2 removes detected chroma globally, requires zero residual chroma pixels, reprocesses saved source images without calling the model again, and gives every sprite-sheet cell 16 transparent pixels of padding on each side.
 
+The saved source images were reprocessed and repackaged on 2026-10-14 without another model call. All eight candidates passed with zero residual chroma pixels. The corrected manifest hash is `12e8fcf449c9cd2170c3311b5409505615aa0552ba7f0f34ed4985619f87a536`, and Butler accepted it as hidden version `0.2.0-internal-preview`. This version remains awaiting human visual review and is not distribution-ready.
+
 ## Research-engine boundary - issue #149
 
 Issue #149 remains valuable as the architecture charter for answering *what should ORION make?* It must stay separate from this engine, which answers *how do we generate, review, package, and distribute an approved opportunity?*
 
 Before implementation, split the epic into bounded work items for source capability research, historical observations, opportunity scoring, Discord research digests, the handoff contract, and first-party sales feedback. Do not assume that public competitor sales or download counts are available: each source adapter must distinguish observed evidence from inferred proxies and document its allowed access method and cadence. Research creates proposals; only human-promoted opportunities enter the generation backlog.
+
+Do not create those child issues yet. Finish the issue #146 pilot first and keep #149 as one parked architecture epic. When research work actually starts, create at most two implementation issues initially: one for the research foundation plus first source, and one for scoring, digest, handoff, and first-party feedback. Split further only when an active implementation becomes too large to review safely.
 
 ## itch.io product-page presentation
 
