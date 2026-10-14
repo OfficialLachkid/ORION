@@ -231,11 +231,13 @@ None of these deferred decisions block validating the first local generation pip
 
 ## Proposed Discord pack approval
 
-Status: **asset-level interactions implemented; live migration and verification remain**
+Status: **asset-level interactions and Supabase migration implemented; activation awaits PR merge**
 
 The current vertical slice can discover the `DIGITAL ASSETS` category, create or reuse one pack channel, post the pack overview and manifest, create an asset-review thread, and attach each individual asset with its exact hash. It persists the Discord IDs and manifest hash beside the canonical T7 product and is idempotent for the same manifest. Each asset message now supports `Approve`, `Request Changes`, `Reject`, and `Open Manifest`. Decisions are accepted only from configured operators and are written append-only to the service-role-protected `digital_asset_review_decisions` Supabase table after the bot revalidates the T7 product, manifest, asset hash, Discord thread, and message.
 
 The first live attempt on 2026-10-14 reached the configured guild and category but Discord rejected channel creation with `403 Missing Permissions` (`50013`). After `Manage Channels` was granted at the category level, the retry created `#neon-plasma-armory`, posted the overview, created the `asset-review` thread, and attached all eight sprites. The exact channel, thread, message, and manifest identifiers are stored in `review/discord.json` on the T7. The pack remains at `awaiting_asset_review`; this preview does not authorize marketplace publication.
+
+The `digital_asset_review_decisions` migration was applied and verified on 2026-10-14. Row-level security is enabled; `anon` has no read access; `service_role` has insert and select access but cannot update prior decisions. The Mac bot has its T7 archive root configured. Because the LaunchAgent intentionally runs the main checkout and PR #168 remains unmerged, the existing eight messages have not yet been given clickable actions. After merge and bot restart, rerunning the idempotent Discord review command will reconcile the buttons onto those messages without reposting the pack.
 
 The recommended shape is one pack-level review card in ORION's existing Discord operations environment, with a thread for individual asset previews and feedback. The card should show the product/version, overview preview, asset count, automated validation state, local generation cost, intended marketplaces, and manifest hash.
 
