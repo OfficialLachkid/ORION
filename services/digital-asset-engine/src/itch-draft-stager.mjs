@@ -103,10 +103,10 @@ async (page) => {
   if (input.editUrl) {
     await page.goto(input.editUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   } else if (!page.url().includes('/game/edit/')) {
-    const projectSlug = input.publicUrl.split('?')[0].split('/').filter(Boolean).at(-1);
-    const projectTitle = String(input.listing.title || '').trim();
-    const card = page.locator('a[href*="/game/edit/"]').filter({ hasText: projectTitle }).first();
-    const direct = await card.count().catch(() => 0) ? card : page.locator('a[href*="/game/edit/"]').filter({ hasText: projectSlug }).first();
+    const projectUrl = input.publicUrl.split('?')[0].replace(/\\/$/u, '');
+    const projectLink = page.locator(\`a[href="\${projectUrl}"], a[href="\${projectUrl}/"]\`).first();
+    const projectRow = page.locator('.game_row').filter({ has: projectLink }).first();
+    const direct = projectRow.locator('a[href*="/game/edit/"]').first();
     if (!(await direct.count().catch(() => 0))) {
       return { status: 'project_not_found', url: page.url() };
     }

@@ -62,6 +62,8 @@ test('Playwright draft script includes listing fields, uploads, save, and draft 
   assert.match(code, /isDraft/u);
   assert.match(code, /verification_failed/u);
   assert.match(code, /page\.url\(\)\.includes\('\/login'\)/u);
+  assert.match(code, /\.game_row/u);
+  assert.match(code, /projectUrl/u);
   assert.doesNotMatch(code, /new URL/u);
   assert.doesNotThrow(() => new Function(`return (${code})`));
 });
