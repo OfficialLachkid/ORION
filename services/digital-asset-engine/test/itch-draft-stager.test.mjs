@@ -77,12 +77,15 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
       const code = args.at(-2);
       const status = code.includes('Object.values(checks)')
         ? 'verified'
+        : code.includes("status: 'media_ready'") ? 'media_ready'
         : code.includes('"save":true') ? 'submitted'
           : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
+      const media = status === 'media_ready' ? { coverId: 'cover-1', screenshotCount: 1 } : {};
       return {
         ok: true,
         stdout: JSON.stringify({ result: JSON.stringify({
           status,
+          ...media,
           url: 'https://itch.io/game/edit/12345',
           isDraft: true,
         }) }),
@@ -122,12 +125,14 @@ test('fails closed when browser verification does not confirm draft state', asyn
     const code = args.includes('run-code') ? args.at(-2) : '';
     const status = code.includes('Object.values(checks)')
       ? 'verification_failed'
+      : code.includes("status: 'media_ready'") ? 'media_ready'
       : code.includes('"save":true') ? 'submitted'
         : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
+    const media = status === 'media_ready' ? { coverId: 'cover-1', screenshotCount: 1 } : {};
     return {
       ok: true,
       stdout: args.includes('run-code')
-        ? JSON.stringify({ result: JSON.stringify({ status }) })
+        ? JSON.stringify({ result: JSON.stringify({ status, ...media }) })
         : '',
       stderr: '',
     };

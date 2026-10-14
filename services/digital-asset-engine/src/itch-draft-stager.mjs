@@ -130,9 +130,26 @@ async (page) => {
   changes.push(await fill('short_description', [
     page.locator('input[name="game[short_text]"]'),
   ], input.listing.short_description));
-  changes.push(await fill('description', [
-    page.locator('.redactor-layer[contenteditable="true"]').first(),
-  ], input.listing.description));
+  const descriptionResult = await page.locator('textarea').evaluateAll((nodes, description) => {
+    const field = nodes.find((node) => node.name === 'game[description]');
+    const redactor = field && window.jQuery?.(field).data('redactor');
+    if (!field || !redactor?.code) return { ok: false, reason: 'redactor_not_found' };
+    const escape = (value) => {
+      const element = document.createElement('div');
+      element.textContent = value;
+      return element.innerHTML;
+    };
+    const html = String(description).split(/\\n{2,}/gu)
+      .map((block) => \`<p>\${escape(block).replace(/\\n/gu, '<br>')}</p>\`).join('\\n');
+    redactor.code.set(html);
+    redactor.code.sync();
+    redactor.code.flushSync();
+    return { ok: Boolean(field.value), length: field.value.length };
+  }, input.listing.description).catch((error) => ({
+    ok: false,
+    reason: String(error?.message || error).slice(0, 160),
+  }));
+  changes.push({ name: 'description', ...descriptionResult });
 
   const paidButton = await firstVisible([
     page.locator('button.payment_mode_paid'),
@@ -216,6 +233,19 @@ async (page) => {
   }
   await button.click({ timeout: 5000 });
   return { status: 'chooser_opened', kind };
+}`.trim();
+}
+
+function buildMediaStateRunCode() {
+  return `
+async (page) => {
+  await page.waitForTimeout(4000);
+  return {
+    status: 'media_ready',
+    coverId: await page.locator('input[name="game[cover_image_id]"]').first().inputValue().catch(() => ''),
+    screenshotCount: await page.locator('button.delete_screen_btn').count().catch(() => 0),
+    url: page.url(),
+  };
 }`.trim();
 }
 
@@ -403,6 +433,10 @@ export async function stageItchDraft(options) {
     };
     uploadMedia('screenshots', screenshotPaths);
     uploadMedia('cover', [coverPath]);
+    const media = runBrowserCode('media readiness', buildMediaStateRunCode());
+    if (!media.details.coverId || Number(media.details.screenshotCount) !== screenshotPaths.length) {
+      throw new Error(`itch.io media did not settle before save: ${diagnostic(media)}`);
+    }
     prepareDraft(true);
 
     const verified = runBrowserCode('draft verification', buildVerifyRunCode({
