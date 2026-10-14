@@ -433,17 +433,20 @@ export async function stageItchDraft(options) {
     }
 
     const uploadMedia = (kind, paths) => {
-      if (!paths.length) return;
-      const triggered = runBrowserCode(`${kind} chooser`, buildMediaTriggerRunCode(kind));
-      if (triggered.details.status === 'media_button_not_found') {
-        throw new Error(`itch.io ${kind} upload failed: ${diagnostic(triggered)}`);
-      }
-      const uploaded = cliRunner(executable, [
-        '-s', sessionName, 'upload', ...paths, '--json',
-      ], { cwd: options.cwd, env, timeoutMs: 3 * 60_000 });
-      const uploadDetails = parseCliJson(uploaded.stdout) || {};
-      if (!uploaded.ok || uploadDetails.isError) {
-        throw new Error(`itch.io ${kind} upload failed: ${uploadDetails.error || uploaded.stderr || uploaded.stdout || uploaded.error}`);
+      for (const path of paths) {
+        const triggered = runBrowserCode(`${kind} chooser`, buildMediaTriggerRunCode(kind));
+        if (triggered.details.status === 'media_button_not_found') {
+          throw new Error(`itch.io ${kind} upload failed: ${diagnostic(triggered)}`);
+        }
+        // playwright-cli documents multiple files but currently accepts one positional
+        // argument, so repeat the chooser/upload cycle for deterministic compatibility.
+        const uploaded = cliRunner(executable, [
+          '-s', sessionName, 'upload', path, '--json',
+        ], { cwd: options.cwd, env, timeoutMs: 3 * 60_000 });
+        const uploadDetails = parseCliJson(uploaded.stdout) || {};
+        if (!uploaded.ok || uploadDetails.isError) {
+          throw new Error(`itch.io ${kind} upload failed: ${uploadDetails.error || uploaded.stderr || uploaded.stdout || uploaded.error}`);
+        }
       }
     };
     uploadMedia('screenshots', screenshotPaths);

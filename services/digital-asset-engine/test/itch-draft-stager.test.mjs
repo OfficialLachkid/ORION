@@ -22,7 +22,7 @@ async function createFixture() {
     suggested_price: { amount: 4.99, currency: 'EUR' },
     tags: ['2D', 'Pixel Art'],
     cover_path: 'cover.png',
-    screenshot_paths: ['download/assets/neon-plasma-armory-sprite-sheet.png'],
+    screenshot_paths: ['cover.png', 'marketplace-preview.png'],
     listing_hash: 'c'.repeat(64),
   };
   const manifest = { manifest_hash: 'a'.repeat(64), listing_hash: listing.listing_hash };
@@ -30,7 +30,7 @@ async function createFixture() {
     writeFile(resolve(exportRoot, 'manifest.json'), JSON.stringify(manifest)),
     writeFile(resolve(exportRoot, 'itch-listing-preview.json'), JSON.stringify(listing)),
     writeFile(resolve(exportRoot, 'cover.png'), 'cover'),
-    writeFile(resolve(exportRoot, 'download', 'assets', 'neon-plasma-armory-sprite-sheet.png'), 'sheet'),
+    writeFile(resolve(exportRoot, 'marketplace-preview.png'), 'preview'),
   ]);
   return {
     outputRoot,
@@ -82,7 +82,7 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
         : code.includes("status: 'media_ready'") ? 'media_ready'
         : code.includes('"save":true') ? 'submitted'
           : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
-      const media = status === 'media_ready' ? { coverId: 'cover-1', screenshotCount: 1 } : {};
+      const media = status === 'media_ready' ? { coverId: 'cover-1', screenshotCount: 2 } : {};
       return {
         ok: true,
         stdout: JSON.stringify({ result: JSON.stringify({
@@ -113,7 +113,9 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   assert.ok(butler.args.includes('--if-changed'));
   const browserRun = calls.find((call) => call.args.includes('run-code'));
   assert.match(browserRun.args.at(-2), /Neon Plasma Armory/u);
-  assert.equal(calls.filter((call) => call.args.includes('upload')).length, 2);
+  const uploads = calls.filter((call) => call.args.includes('upload'));
+  assert.equal(uploads.length, 3);
+  assert.ok(uploads.every((call) => call.args.indexOf('--json') - call.args.indexOf('upload') === 2));
 
   const beforeReuse = calls.length;
   const reused = await stageItchDraft(options);
@@ -130,7 +132,7 @@ test('fails closed when browser verification does not confirm draft state', asyn
       : code.includes("status: 'media_ready'") ? 'media_ready'
       : code.includes('"save":true') ? 'submitted'
         : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
-    const media = status === 'media_ready' ? { coverId: 'cover-1', screenshotCount: 1 } : {};
+    const media = status === 'media_ready' ? { coverId: 'cover-1', screenshotCount: 2 } : {};
     return {
       ok: true,
       stdout: args.includes('run-code')
