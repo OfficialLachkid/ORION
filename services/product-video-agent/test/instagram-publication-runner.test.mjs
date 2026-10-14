@@ -188,6 +188,45 @@ test('executeDueInstagramPublications persists every irreversible delivery bound
   assert.ok(patches.some((patch) => patch.metadata?.instagram_media_id === 'media-1'));
 });
 
+test('executeDueInstagramPublications schedules processing follow-up before the five-minute reconciler', async () => {
+  let stored = publication();
+  const store = {
+    async fetchPublicationsByPlatform() { return [stored]; },
+    async fetchPublicationById() { return null; },
+    async fetchVideoById() { return { id: 'video-1' }; },
+    async claimPublicationForUpload(_id, patch) {
+      stored = { ...stored, ...patch, metadata: patch.metadata };
+      return stored;
+    },
+    async updatePublication(_id, patch) {
+      stored = { ...stored, ...patch, metadata: patch.metadata || stored.metadata };
+      return stored;
+    },
+  };
+
+  const results = await executeDueInstagramPublications({
+    'as-of': '2026-10-09T10:00:00.000Z',
+  }, {
+    runtimeConfig: { env: { INSTAGRAM_DELIVERY_ENABLED: 'true' } },
+    publicationStore: store,
+    deliverSocialPublicationLifecycleAlerts: passThroughAlerts,
+    publishInstagramReel: async ({ onInitialized }) => {
+      await onInitialized({ containerId: 'container-1' });
+      return {
+        workflowState: 'publishing',
+        status: 'IN_PROGRESS',
+        externalId: 'container-1',
+        containerId: 'container-1',
+        stagingRemoved: false,
+      };
+    },
+  });
+
+  assert.equal(results.at(-1).action, 'instagram_processing');
+  assert.equal(stored.metadata.next_status_poll_at, '2026-10-09T10:04:00.000Z');
+  assert.equal(resolveInstagramDueAction(stored, '2026-10-09T10:05:00.000Z'), 'status');
+});
+
 test('executeDueInstagramPublications alerts #alerts when publishing fails', async () => {
   let stored = publication();
   const sent = [];

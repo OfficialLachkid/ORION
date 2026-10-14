@@ -241,23 +241,21 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
         + `${result.schedule_update_results.length} schedule/reconciliation update(s).`
       );
     }
-    if (!reconcileOnly) {
-      try {
-        socialPublicationResults = await executeSocialPhase({
-          asOf,
-        }, {
-          runProcess: dependencies.runProcess,
-          executable: dependencies.executable,
-          scriptPath: dependencies.socialScriptPath,
-        });
-        printInfo(`Processed ${socialPublicationResults.length} social publication task(s).`);
-      } catch (error) {
-        executionErrors.push({
-          channel: 'social',
-          phase: 'social_publication',
-          error: String(error?.message || error),
-        });
-      }
+    try {
+      socialPublicationResults = await executeSocialPhase({
+        asOf,
+      }, {
+        runProcess: dependencies.runProcess,
+        executable: dependencies.executable,
+        scriptPath: dependencies.socialScriptPath,
+      });
+      printInfo(`Processed ${socialPublicationResults.length} social publication task(s).`);
+    } catch (error) {
+      executionErrors.push({
+        channel: 'social',
+        phase: 'social_publication',
+        error: String(error?.message || error),
+      });
     }
   }
 
