@@ -25,20 +25,41 @@ function validateItchUrl(value) {
   return parsed.toString();
 }
 
-async function discordRequest(token, path, options = {}) {
+function wait(milliseconds) {
+  return new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
+}
+
+export async function discordRequest(token, path, options = {}) {
   const fetchImpl = options.fetchImpl || fetch;
-  const response = await fetchImpl(`${DISCORD_API_BASE_URL}${path}`, {
-    method: options.method || 'GET',
-    headers: {
-      Authorization: `Bot ${token}`,
-      ...(options.body instanceof FormData ? {} : options.body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    ...(options.body ? { body: options.body instanceof FormData ? options.body : JSON.stringify(options.body) } : {}),
-  });
-  if (!response.ok) {
-    throw new Error(`Discord ${options.method || 'GET'} ${path} failed (${response.status}): ${await response.text()}`);
+  const sleepImpl = options.sleepImpl || wait;
+  const maxAttempts = Math.max(1, Number(options.maxAttempts) || 5);
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetchImpl(`${DISCORD_API_BASE_URL}${path}`, {
+      method: options.method || 'GET',
+      headers: {
+        Authorization: `Bot ${token}`,
+        ...(options.body instanceof FormData ? {} : options.body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(options.body ? { body: options.body instanceof FormData ? options.body : JSON.stringify(options.body) } : {}),
+    });
+    if (response.ok) return response.status === 204 ? null : response.json();
+
+    const errorText = await response.text();
+    if (response.status === 429 && attempt < maxAttempts) {
+      let retryAfterSeconds = 1;
+      try {
+        const rateLimit = JSON.parse(errorText);
+        const suppliedDelay = Number(rateLimit.retry_after);
+        if (Number.isFinite(suppliedDelay) && suppliedDelay >= 0) retryAfterSeconds = suppliedDelay;
+      } catch {
+        // Discord normally supplies JSON; use the bounded fallback when it does not.
+      }
+      await sleepImpl(Math.ceil(retryAfterSeconds * 1000) + 100);
+      continue;
+    }
+    throw new Error(`Discord ${options.method || 'GET'} ${path} failed (${response.status}): ${errorText}`);
   }
-  return response.status === 204 ? null : response.json();
+  throw new Error(`Discord ${options.method || 'GET'} ${path} exhausted its retry budget.`);
 }
 
 async function sendMessageWithFiles(token, channelId, payload, files, options = {}) {
