@@ -151,6 +151,7 @@ test('pipeline produces a transparent, validated candidate while blocking distri
     now: '2026-10-12T12:10:00.000Z',
   });
   const coverMetadata = await sharp(packaged.coverPath).metadata();
+  const marketplacePreviewMetadata = await sharp(packaged.marketplacePreviewPath).metadata();
   const sheetMetadata = await sharp(packaged.sheetPath).metadata();
   const storedManifest = JSON.parse(await readFile(packaged.manifestPath, 'utf8'));
   const storedListing = JSON.parse(await readFile(resolve(
@@ -159,6 +160,10 @@ test('pipeline produces a transparent, validated candidate while blocking distri
   ), 'utf8'));
   assert.equal(coverMetadata.width, 630);
   assert.equal(coverMetadata.height, 500);
+  assert.equal(coverMetadata.hasAlpha, false);
+  assert.equal(marketplacePreviewMetadata.width, 960);
+  assert.equal(marketplacePreviewMetadata.height, 540);
+  assert.equal(marketplacePreviewMetadata.hasAlpha, false);
   assert.equal(sheetMetadata.width, 160);
   assert.equal(sheetMetadata.height, 96);
   assert.equal(storedManifest.asset_count, 1);
@@ -167,7 +172,9 @@ test('pipeline produces a transparent, validated candidate while blocking distri
   assert.match(storedManifest.manifest_hash, /^[a-f0-9]{64}$/u);
   assert.match(storedManifest.listing_hash, /^[a-f0-9]{64}$/u);
   assert.equal(storedManifest.listing_hash, storedListing.listing_hash);
-  assert.ok(storedListing.screenshot_paths.every((path) => path.startsWith('download/')));
+  assert.deepEqual(storedListing.screenshot_paths, ['cover.png', 'marketplace-preview.png']);
+  assert.equal(storedListing.screenshot_paths.some((path) => path.startsWith('download/')), false);
+  assert.ok(storedManifest.files.some((file) => file.path === 'marketplace-preview.png'));
   assert.ok(storedManifest.files.some((file) => file.path.startsWith('download/assets/individual/')));
   assert.equal(storedManifest.files.some((file) => file.path.startsWith('assets/source/')), false);
 });
