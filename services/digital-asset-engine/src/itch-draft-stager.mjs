@@ -151,28 +151,22 @@ async (page) => {
     page.getByLabel(/minimum price|price/i),
   ], Number(input.listing.suggested_price.amount).toFixed(2)));
 
-  const tagLocators = () => [
-    page.locator('input[name="tags"]'),
-    page.locator('input[placeholder*="type to filter"]'),
-    page.getByLabel(/^tags$/i),
-  ];
-  const tagField = await firstVisible(tagLocators());
-  if (tagField) {
-    await page.locator('input[name="game[tags]"]').evaluate((field) => field.selectize?.clear()).catch(() => {});
-    let tagsOk = true;
-    for (const tag of input.listing.tags) {
-      const currentTagField = await firstVisible(tagLocators());
-      if (!currentTagField) {
-        tagsOk = false;
-        break;
-      }
-      await currentTagField.fill(String(tag));
-      await currentTagField.press('Enter');
+  const tagSlugs = input.listing.tags.map((tag) => String(tag).trim().toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '')).filter(Boolean);
+  const tagResult = await page.locator('input').evaluateAll((nodes, slugs) => {
+    const field = nodes.find((node) => node.name === 'game[tags]');
+    const widget = field?.selectize;
+    if (!widget) return { ok: false, reason: 'widget_not_found' };
+    widget.clear(true);
+    for (const slug of slugs) {
+      if (!widget.options[slug]) widget.addOption({ slug });
+      widget.addItem(slug, true);
     }
-    changes.push({ name: 'tags', ok: tagsOk, ...(tagsOk ? {} : { reason: 'input_disappeared' }) });
-  } else {
-    changes.push({ name: 'tags', ok: false, reason: 'not_found' });
-  }
+    widget.refreshItems();
+    widget.updateOriginalInput({ silent: true });
+    return { ok: slugs.every((slug) => widget.items.includes(slug)), items: [...widget.items] };
+  }, tagSlugs).catch((error) => ({ ok: false, reason: String(error?.message || error).slice(0, 160) }));
+  changes.push({ name: 'tags', ...tagResult });
 
   const missing = changes.filter((change) => !change.ok);
   if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
@@ -245,7 +239,8 @@ async (page) => {
   const expectedPrice = Number(input.listing.suggested_price.amount);
   const actualTags = (await page.locator('.selectize-input .item').allTextContents().catch(() => []))
     .map((tag) => tag.trim().toLowerCase()).filter(Boolean);
-  const expectedTags = input.listing.tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean);
+  const expectedTags = input.listing.tags.map((tag) => String(tag).trim().toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '')).filter(Boolean);
   const tagsMatch = expectedTags.length === actualTags.length
     && expectedTags.every((tag) => actualTags.includes(tag));
   const coverId = await page.locator('input[name="game[cover_image_id]"]').first().inputValue().catch(() => '');

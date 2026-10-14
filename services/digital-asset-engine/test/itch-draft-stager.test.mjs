@@ -58,7 +58,7 @@ test('Playwright draft preparation includes listing fields and exact price contr
     screenshotPath: '/tmp/verified.png',
   });
   assert.match(code, /short_description/u);
-  assert.match(code, /tagLocators/u);
+  assert.match(code, /widget\.updateOriginalInput/u);
   assert.match(code, /button\.payment_mode_paid/u);
   assert.match(code, /status: 'prepared'/u);
   assert.match(code, /page\.url\(\)\.includes\('\/login'\)/u);
