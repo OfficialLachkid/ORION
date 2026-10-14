@@ -374,6 +374,13 @@ export async function stageItchDraft(options) {
     while (Number(counted.details.count) > 0) {
       const before = Number(counted.details.count);
       runBrowserCode('screenshot replacement', buildDeleteScreenshotRunCode());
+      const accepted = cliRunner(executable, [
+        '-s', sessionName, 'dialog-accept', '--json',
+      ], { cwd: options.cwd, env, timeoutMs: 15_000 });
+      const acceptedDetails = parseCliJson(accepted.stdout) || {};
+      if (!accepted.ok || acceptedDetails.isError) {
+        throw new Error(`itch.io screenshot confirmation failed: ${acceptedDetails.error || accepted.stderr || accepted.stdout || accepted.error}`);
+      }
       counted = runBrowserCode('screenshot recount', buildScreenshotCountRunCode());
       if (Number(counted.details.count) >= before) {
         throw new Error(`itch.io screenshot replacement made no progress: ${diagnostic(counted)}`);
