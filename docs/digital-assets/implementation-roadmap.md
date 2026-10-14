@@ -233,6 +233,8 @@ None of these deferred decisions block validating the first local generation pip
 
 Status: **decision pending; not implemented**
 
+No Discord channel, thread, buttons, or Supabase review records are created by the current vertical slice. The current implementation stops at `awaiting_asset_review`; the workflow below is the approved direction, not shipped behavior.
+
 The recommended shape is one pack-level review card in ORION's existing Discord operations environment, with a thread for individual asset previews and feedback. The card should show the product/version, overview preview, asset count, automated validation state, local generation cost, intended marketplaces, and manifest hash.
 
 Suggested actions are `Approve pack`, `Request changes`, `Reject`, and `Open manifest`. Each decision must record the Discord actor, timestamp, reason, product version, and exact manifest hash. Any change to an asset, metadata, pricing, license, or manifest invalidates the earlier approval.
@@ -274,6 +276,8 @@ The Mac generated and packaged the complete `Neon Plasma Armory` pilot on the T7
 - Butler accepted a first hidden upload to `vbjservices/asset-pack-test:assets-preview`;
 - a repeat push was rejected because the latest build was still processing, so the upload remains unverified until the Edit game page or a later remote-signature comparison shows the completed build.
 
+Human visual review on 2026-10-14 rejected this first package as a release candidate. Enclosed chroma-colored regions inside trigger guards and skeletal stocks remained opaque because V0.1 removed only chroma connected to the outer border, and the sprite sheet used zero gutter between cells. The hidden itch.io upload is therefore superseded and must not be published. Processing V2 removes detected chroma globally, requires zero residual chroma pixels, reprocesses saved source images without calling the model again, and gives every sprite-sheet cell 16 transparent pixels of padding on each side.
+
 ## Research-engine boundary - issue #149
 
 Issue #149 remains valuable as the architecture charter for answering *what should ORION make?* It must stay separate from this engine, which answers *how do we generate, review, package, and distribute an approved opportunity?*
@@ -289,7 +293,7 @@ For the pilot, use itch.io's built-in theme editor before requesting custom CSS 
 - keep the generated 630x500 cover as the honest product thumbnail;
 - add three to five deterministic screenshots made from the included assets;
 - use a dark navy background with cyan and violet accents matching the pack palette;
-- provide a short benefit-led description, exact file inventory, dimensions, format, license, engine compatibility, and the statement `Side-view sprites; one direction, horizontally mirrorable.`;
+- provide a short benefit-led description, exact file inventory, dimensions, format, license, engine compatibility, and the neutral statement `Right-facing side-view sprites supplied as transparent PNG files.`;
 - keep the page and upload private/hidden until creative, license, pricing, and distribution approval are complete.
 
 ORION can generate all copy and visual presentation assets deterministically. Applying them can later be browser-automated in an authenticated session, but publication remains an explicit human-approved action.

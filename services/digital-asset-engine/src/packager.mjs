@@ -7,6 +7,7 @@ import { CanonicalProductStore } from './canonical-store.mjs';
 const COVER_WIDTH = 630;
 const COVER_HEIGHT = 500;
 const SHEET_COLUMNS = 4;
+const SHEET_PADDING = 16;
 
 function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex');
@@ -46,15 +47,18 @@ async function loadApprovedCandidates(store, product) {
 }
 
 async function createSpriteSheet(candidates, product) {
+  const columns = Math.min(SHEET_COLUMNS, candidates.length);
   const rows = Math.ceil(candidates.length / SHEET_COLUMNS);
-  const width = product.style.width * SHEET_COLUMNS;
-  const height = product.style.height * rows;
+  const cellWidth = product.style.width + (SHEET_PADDING * 2);
+  const cellHeight = product.style.height + (SHEET_PADDING * 2);
+  const width = cellWidth * columns;
+  const height = cellHeight * rows;
   return sharp({
     create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
   }).composite(candidates.map(({ buffer }, index) => ({
     input: buffer,
-    left: (index % SHEET_COLUMNS) * product.style.width,
-    top: Math.floor(index / SHEET_COLUMNS) * product.style.height,
+    left: ((index % SHEET_COLUMNS) * cellWidth) + SHEET_PADDING,
+    top: (Math.floor(index / SHEET_COLUMNS) * cellHeight) + SHEET_PADDING,
   }))).png({ compressionLevel: 9 }).toBuffer();
 }
 
@@ -92,7 +96,7 @@ async function createCover(candidates, product) {
     `<text x="315" y="66" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="38" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
     `<text x="315" y="96" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${candidates.length} SIDE-VIEW WEAPON SPRITES</text>`,
     labels,
-    '<text x="315" y="456" text-anchor="middle" fill="#7785a6" font-family="Arial, sans-serif" font-size="14">Actual included assets · transparent PNG · horizontally mirrorable</text>',
+    `<text x="315" y="456" text-anchor="middle" fill="#7785a6" font-family="Arial, sans-serif" font-size="14">Actual included assets · transparent PNG · ${product.style.width} × ${product.style.height} px</text>`,
     '</svg>',
   ].join(''));
   return sharp({
@@ -109,7 +113,7 @@ function packReadme(product, candidates) {
     `${candidates.length} original science-fiction weapon sprites are included as individual transparent PNG files and one sprite sheet.`,
     '',
     '- View: strict side view',
-    '- Direction: one direction, horizontally mirrorable',
+    '- Facing: right-facing side view',
     `- Canvas: ${product.style.width}x${product.style.height} per sprite`,
     `- Palette limit: ${product.style.max_palette_colors} colors`,
     '- Root motion: none',
@@ -155,7 +159,7 @@ export async function packageDigitalAssetPreview(options) {
       title: product.title,
       short_description: `${candidates.length} original side-view sci-fi weapon sprites.`,
       description_disclosure: 'Contains locally generated AI-assisted artwork with deterministic post-processing and human review.',
-      asset_description: 'Side-view sprites; one direction, horizontally mirrorable.',
+      asset_description: 'Right-facing side-view weapon sprites supplied as transparent PNG files.',
       suggested_price: product.pricing.base_price,
       tags: ['2D', 'Pixel Art', 'Sci-fi', 'Weapons', 'Sprites'],
       visibility: 'draft',

@@ -1,5 +1,7 @@
 import sharp from 'sharp';
 
+export const PIXEL_ART_PROCESSING_VERSION = '2.0';
+
 function parseHexColor(value) {
   const normalized = value.replace('#', '');
   return {
@@ -63,45 +65,18 @@ function detectBorderChroma(data, width, height, expectedKey, tolerance) {
   return { color: detected, hex: colorToHex(detected), matchRatio, expectedDistance };
 }
 
-function removeConnectedChroma(data, width, height, key, tolerance) {
-  const matched = new Uint8Array(width * height);
-  const queued = new Uint8Array(width * height);
-  const queue = [];
+function removeChroma(data, width, height, key, tolerance) {
   const threshold = tolerance ** 2;
-
-  function enqueue(x, y) {
-    const pixel = (y * width) + x;
-    if (queued[pixel]) return;
+  let removedPixels = 0;
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
     const offset = pixel * 4;
-    if (colorDistanceSquared(data[offset], data[offset + 1], data[offset + 2], key) > threshold) return;
-    queued[pixel] = 1;
-    queue.push(pixel);
+    if (data[offset + 3] === 0) continue;
+    if (colorDistanceSquared(data[offset], data[offset + 1], data[offset + 2], key) <= threshold) {
+      data[offset + 3] = 0;
+      removedPixels += 1;
+    }
   }
-
-  for (let x = 0; x < width; x += 1) {
-    enqueue(x, 0);
-    enqueue(x, height - 1);
-  }
-  for (let y = 1; y < height - 1; y += 1) {
-    enqueue(0, y);
-    enqueue(width - 1, y);
-  }
-
-  for (let cursor = 0; cursor < queue.length; cursor += 1) {
-    const pixel = queue[cursor];
-    matched[pixel] = 1;
-    const x = pixel % width;
-    const y = Math.floor(pixel / width);
-    if (x > 0) enqueue(x - 1, y);
-    if (x + 1 < width) enqueue(x + 1, y);
-    if (y > 0) enqueue(x, y - 1);
-    if (y + 1 < height) enqueue(x, y + 1);
-  }
-
-  for (let pixel = 0; pixel < matched.length; pixel += 1) {
-    if (matched[pixel]) data[(pixel * 4) + 3] = 0;
-  }
-  return matched;
+  return removedPixels;
 }
 
 function findOpaqueBounds(data, width, height) {
@@ -137,7 +112,13 @@ export async function processPixelArtAsset(inputBuffer, options) {
     expectedKey,
     options.chromaTolerance,
   );
-  removeConnectedChroma(rgba, width, height, detected.color, options.chromaTolerance);
+  const removedChromaPixels = removeChroma(
+    rgba,
+    width,
+    height,
+    detected.color,
+    options.chromaTolerance,
+  );
   const bounds = findOpaqueBounds(rgba, width, height);
 
   const output = await sharp(rgba, { raw: { width, height, channels: 4 } })
@@ -157,8 +138,10 @@ export async function processPixelArtAsset(inputBuffer, options) {
 
   return {
     buffer: output,
+    processing_version: PIXEL_ART_PROCESSING_VERSION,
     source: { width, height },
     extracted_bounds: bounds,
+    removed_chroma_pixels: removedChromaPixels,
     detected_chroma_key: detected.hex,
     border_chroma_match_ratio: Number(detected.matchRatio.toFixed(4)),
     requested_chroma_distance: Number(detected.expectedDistance.toFixed(2)),

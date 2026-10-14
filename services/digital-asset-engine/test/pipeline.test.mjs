@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,7 +35,9 @@ async function syntheticSourceImage() {
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const offset = ((y * width) + x) * channels;
-      const objectPixel = x >= 10 && x <= 53 && y >= 24 && y <= 39;
+      const insideObject = x >= 10 && x <= 53 && y >= 24 && y <= 39;
+      const enclosedChromaHole = x >= 28 && x <= 35 && y >= 28 && y <= 35;
+      const objectPixel = insideObject && !enclosedChromaHole;
       data[offset] = objectPixel ? 53 : 217;
       data[offset + 1] = objectPixel ? 217 : 22;
       data[offset + 2] = objectPixel ? 255 : 145;
@@ -125,15 +127,36 @@ test('pipeline produces a transparent, validated candidate while blocking distri
   assert.equal(generationCalls, 1);
   assert.equal(resumed.generation[0].resumed, true);
 
+  const validationPath = resolve(result.persistence.root, result.product.assets[0].validation_path);
+  const staleValidation = JSON.parse(await readFile(validationPath, 'utf8'));
+  staleValidation.processing.version = '1.0';
+  await writeFile(validationPath, `${JSON.stringify(staleValidation, null, 2)}\n`, 'utf8');
+  const reprocessed = await generateDigitalAssetProduct({
+    config,
+    opportunity,
+    outputRoot,
+    projectRoot: outputRoot,
+    adapter,
+    now: '2026-10-12T12:07:00.000Z',
+    async fetchImpl() {
+      return { ok: true, async json() { return { models: [] }; } };
+    },
+  });
+  assert.equal(generationCalls, 1);
+  assert.equal(reprocessed.generation[0].reprocessed, true);
+
   const packaged = await packageDigitalAssetPreview({
     outputRoot,
     slug: result.product.slug,
     now: '2026-10-12T12:10:00.000Z',
   });
   const coverMetadata = await sharp(packaged.coverPath).metadata();
+  const sheetMetadata = await sharp(packaged.sheetPath).metadata();
   const storedManifest = JSON.parse(await readFile(packaged.manifestPath, 'utf8'));
   assert.equal(coverMetadata.width, 630);
   assert.equal(coverMetadata.height, 500);
+  assert.equal(sheetMetadata.width, 160);
+  assert.equal(sheetMetadata.height, 96);
   assert.equal(storedManifest.asset_count, 1);
   assert.equal(storedManifest.release_state, 'internal_preview');
   assert.equal(storedManifest.distribution_ready, false);

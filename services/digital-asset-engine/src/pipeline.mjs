@@ -4,7 +4,11 @@ import { dirname, relative, resolve } from 'node:path';
 import { validateGeneratedAsset } from './asset-validator.mjs';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { withGenerationLock } from './generation-lock.mjs';
-import { createTransparencyPreview, processPixelArtAsset } from './image-processor.mjs';
+import {
+  createTransparencyPreview,
+  PIXEL_ART_PROCESSING_VERSION,
+  processPixelArtAsset,
+} from './image-processor.mjs';
 import { validateOpportunity } from './opportunity-validator.mjs';
 import { OllamaImageAdapter } from './ollama-image-adapter.mjs';
 import { createProductSpecification } from './product-planner.mjs';
@@ -60,7 +64,11 @@ async function loadReusableAsset(store, product, asset) {
     ]);
     const validation = JSON.parse(validationText);
     const actualHash = createHash('sha256').update(buffer).digest('hex');
-    if (validation.status !== 'passed' || validation.metrics?.content_sha256 !== actualHash) return null;
+    if (
+      validation.status !== 'passed'
+      || validation.metrics?.content_sha256 !== actualHash
+      || validation.processing?.version !== PIXEL_ART_PROCESSING_VERSION
+    ) return null;
     return {
       asset_id: asset.asset_id,
       status: 'passed',
@@ -74,6 +82,24 @@ async function loadReusableAsset(store, product, asset) {
       seed: asset.seed,
       estimated_cost: 0,
       resumed: true,
+    };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function loadExistingSource(store, product, asset) {
+  if (!asset.source_path) return null;
+  try {
+    return {
+      buffer: await readFile(resolve(store.productRoot(product), asset.source_path)),
+      format: asset.source_path.split('.').at(-1) || 'png',
+      provider: product.generation_provider.provider,
+      model: product.generation_provider.model,
+      seed: asset.seed,
+      estimated_cost: 0,
+      reprocessed: true,
     };
   } catch (error) {
     if (error?.code === 'ENOENT') return null;
@@ -106,13 +132,14 @@ export async function generateDigitalAssetProduct(options) {
         results.push(reusable);
         continue;
       }
-      const generated = await adapter.generateAsset({
-        asset,
-        sourceWidth: options.opportunity.generation.source_width,
-        sourceHeight: options.opportunity.generation.source_height,
-      });
+      const generated = await loadExistingSource(planned.store, product, asset)
+        || await adapter.generateAsset({
+          asset,
+          sourceWidth: options.opportunity.generation.source_width,
+          sourceHeight: options.opportunity.generation.source_height,
+        });
       const paths = planned.store.assetPaths(product, asset, generated.format);
-      await writeBuffer(paths.source, generated.buffer);
+      if (!generated.reprocessed) await writeBuffer(paths.source, generated.buffer);
 
       const processed = await processPixelArtAsset(generated.buffer, {
         width: product.style.width,
@@ -129,13 +156,15 @@ export async function generateDigitalAssetProduct(options) {
         minimumTransparentRatio: options.config.validation.minimum_transparent_ratio,
         forbiddenChroma: processed.detected_chroma_key,
         chromaTolerance: 45,
-        maximumChromaRatio: 0.05,
+        maximumChromaRatio: 0,
       });
       await writeFile(paths.validation, `${JSON.stringify({
         ...report,
         processing: {
+          version: processed.processing_version,
           source: processed.source,
           extracted_bounds: processed.extracted_bounds,
+          removed_chroma_pixels: processed.removed_chroma_pixels,
           detected_chroma_key: processed.detected_chroma_key,
           border_chroma_match_ratio: processed.border_chroma_match_ratio,
           requested_chroma_distance: processed.requested_chroma_distance,
@@ -156,6 +185,7 @@ export async function generateDigitalAssetProduct(options) {
         model: generated.model,
         seed: generated.seed,
         estimated_cost: 0,
+        reprocessed: generated.reprocessed === true,
       });
       const latest = results.at(-1);
       product = ProductSpecificationSchema.parse({
