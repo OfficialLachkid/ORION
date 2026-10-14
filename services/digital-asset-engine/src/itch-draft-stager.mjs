@@ -188,9 +188,16 @@ async (page) => {
     if (!(await saveButton.count().catch(() => 0))) {
       return { status: 'save_not_found', url: page.url(), changes };
     }
+    const responsePromise = page.waitForResponse((response) => response.request().method() === 'POST'
+      && response.url().includes('/game/edit/'), { timeout: 15000 }).catch(() => null);
     await saveButton.click({ timeout: 5000 });
+    const response = await responsePromise;
+    if (!response) return { status: 'save_response_not_seen', url: page.url(), changes };
+    if (!response.ok()) {
+      return { status: 'save_failed', url: page.url(), httpStatus: response.status(), changes };
+    }
     await wait(2500);
-    return { status: 'submitted', url: page.url(), changes };
+    return { status: 'submitted', url: page.url(), httpStatus: response.status(), changes };
   }
   return { status: 'prepared', url: page.url(), changes };
 }`.trim();

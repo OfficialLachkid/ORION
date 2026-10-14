@@ -61,6 +61,7 @@ test('Playwright draft preparation includes listing fields and exact price contr
   assert.match(code, /widget\.updateOriginalInput/u);
   assert.match(code, /button\.payment_mode_paid/u);
   assert.match(code, /form\.game_edit_form button\.save_btn/u);
+  assert.match(code, /waitForResponse/u);
   assert.match(code, /status: 'prepared'/u);
   assert.match(code, /page\.url\(\)\.includes\('\/login'\)/u);
   assert.match(code, /\.game_row/u);
