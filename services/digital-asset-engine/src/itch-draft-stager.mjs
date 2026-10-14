@@ -195,6 +195,7 @@ async (page) => {
       return { status: 'save_not_found', url: page.url(), changes };
     }
     const responsePromise = page.waitForResponse((response) => response.request().method() === 'POST'
+      && response.request().isNavigationRequest()
       && response.url().includes('/game/edit/'), { timeout: 15000 }).catch(() => null);
     await saveButton.click({ timeout: 5000 });
     const response = await responsePromise;
