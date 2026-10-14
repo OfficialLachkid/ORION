@@ -239,9 +239,6 @@ function buildItchListing(product, candidates) {
     '',
     'Technical information:',
     ...technicalInformation.map((line) => `- ${line}`),
-    '',
-    'The cover and screenshots are assembled from the exact included assets.',
-    'Contains locally generated AI-assisted artwork with deterministic post-processing and human review.',
   ].join('\n');
   const listing = {
     schema_version: '1.0',
