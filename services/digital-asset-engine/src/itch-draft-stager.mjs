@@ -312,7 +312,10 @@ export async function stageItchDraft(options) {
     if (!run.ok) throw new Error(`itch.io draft automation failed: ${run.stderr || run.stdout || run.error}`);
     const details = parseCliJson(run.stdout) || {};
     if (details.status !== 'verified') {
-      const diagnostic = JSON.stringify(details).slice(0, 800);
+      const parsedDiagnostic = JSON.stringify(details);
+      const diagnostic = (parsedDiagnostic !== '{}'
+        ? parsedDiagnostic
+        : String(run.stdout || run.stderr || run.error || 'empty browser response')).slice(0, 800);
       throw new Error(`itch.io draft was not verified (${details.status || 'unknown'}): ${diagnostic}`);
     }
     const state = {
