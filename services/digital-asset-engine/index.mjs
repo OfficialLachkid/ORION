@@ -30,6 +30,7 @@ function parseArguments(argv) {
     else if (token === '--now') args.now = argv[++index];
     else if (token === '--category-name') args.categoryName = argv[++index];
     else if (token === '--itch-url') args.itchUrl = argv[++index];
+    else if (token === '--runtime-env') args.runtimeEnv = argv[++index];
     else throw new Error(`Unknown argument: ${token}`);
   }
   return args;
@@ -55,6 +56,7 @@ function printHelp() {
     '  --post-to-discord     Required for live Discord posting.',
     '  --category-name <name>  Discord category. Default: DIGITAL ASSETS.',
     '  --itch-url <url>      Existing itch.io draft URL shown to reviewers.',
+    '  --runtime-env <path>  Existing ORION Discord .env; useful from an isolated worktree.',
     '',
   ].join('\n'));
 }
@@ -102,7 +104,7 @@ async function main() {
         ? {
           product: await (async () => {
             const review = await postDigitalAssetReview({
-              runtimeConfig: loadRuntimeConfig(),
+              runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
               outputRoot: common.outputRoot,
               slug: slugify(opportunity.title),
               categoryName: args.categoryName,

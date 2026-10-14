@@ -50,11 +50,14 @@ Post the packaged pilot into a pack channel under the existing `DIGITAL ASSETS` 
 npm run digital-assets:discord-review -- \
   --post-to-discord \
   --itch-url "https://vbjservices.itch.io/asset-pack-test" \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env" \
   --opportunity services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
 This first Discord slice posts previews only. It deliberately does not add approval buttons or write approval decisions to Supabase yet. Discord channel, thread, message IDs, and the exact manifest hash are persisted beside the canonical T7 product so the same command is idempotent.
+
+The ORION bot needs `View Channel`, `Send Messages`, `Embed Links`, `Attach Files`, `Create Public Threads`, and `Send Messages in Threads` in the `DIGITAL ASSETS` category. It also needs `Manage Channels` when ORION is expected to create the per-pack channel itself. Grant these as category permissions so each new pack channel inherits them.
 
 Set `DIGITAL_ASSET_ARCHIVE_ROOT` to place canonical products on the T7, for example `/Volumes/T7/O.R.I.O.N. Digital Assets`.
 

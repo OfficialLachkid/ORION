@@ -231,9 +231,11 @@ None of these deferred decisions block validating the first local generation pip
 
 ## Proposed Discord pack approval
 
-Status: **decision pending; not implemented**
+Status: **preview posting implemented; interactive decisions remain**
 
-No Discord channel, thread, buttons, or Supabase review records are created by the current vertical slice. The current implementation stops at `awaiting_asset_review`; the workflow below is the approved direction, not shipped behavior.
+The current vertical slice can discover the `DIGITAL ASSETS` category, create or reuse one pack channel, post the pack overview and manifest, create an asset-review thread, and attach each individual asset with its exact hash. It persists the Discord IDs and manifest hash beside the canonical T7 product and is idempotent for the same manifest. Approval buttons and Supabase review records are deliberately deferred to the next slice.
+
+The first live attempt on 2026-10-14 reached the configured guild and category but Discord rejected channel creation with `403 Missing Permissions` (`50013`). No channel or message was created. Grant the ORION bot `Manage Channels` plus its normal view, send, embed, attachment, public-thread, and thread-message permissions at the category level, then rerun the post command.
 
 The recommended shape is one pack-level review card in ORION's existing Discord operations environment, with a thread for individual asset previews and feedback. The card should show the product/version, overview preview, asset count, automated validation state, local generation cost, intended marketplaces, and manifest hash.
 
