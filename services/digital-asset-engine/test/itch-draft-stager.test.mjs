@@ -42,7 +42,7 @@ async function createFixture() {
   };
 }
 
-test('Playwright draft script includes listing fields, uploads, save, and draft verification', () => {
+test('Playwright draft preparation includes listing fields and deterministic screenshot replacement', () => {
   const code = buildItchDraftRunCode({
     listing: {
       title: 'Neon Plasma Armory',
@@ -58,10 +58,9 @@ test('Playwright draft script includes listing fields, uploads, save, and draft 
     screenshotPath: '/tmp/verified.png',
   });
   assert.match(code, /short_description/u);
-  assert.match(code, /waitForEvent\('filechooser'/u);
-  assert.match(code, /setFiles/u);
-  assert.match(code, /isDraft/u);
-  assert.match(code, /verification_failed/u);
+  assert.match(code, /existing_screenshots_removed/u);
+  assert.match(code, /button\.payment_mode_paid/u);
+  assert.match(code, /status: 'prepared'/u);
   assert.match(code, /page\.url\(\)\.includes\('\/login'\)/u);
   assert.match(code, /\.game_row/u);
   assert.match(code, /projectUrl/u);
@@ -75,10 +74,14 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   const cliRunner = (executable, args) => {
     calls.push({ executable, args });
     if (args.includes('run-code')) {
+      const code = args.at(-2);
+      const status = code.includes("status: 'prepared'")
+        ? 'prepared'
+        : code.includes('Object.values(checks)') ? 'verified' : 'submitted';
       return {
         ok: true,
         stdout: JSON.stringify({ result: JSON.stringify({
-          status: 'verified',
+          status,
           url: 'https://itch.io/game/edit/12345',
           isDraft: true,
         }) }),
@@ -104,6 +107,7 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   assert.ok(butler.args.includes('--if-changed'));
   const browserRun = calls.find((call) => call.args.includes('run-code'));
   assert.match(browserRun.args.at(-2), /Neon Plasma Armory/u);
+  assert.equal(calls.filter((call) => call.args.includes('upload')).length, 2);
 
   const beforeReuse = calls.length;
   const reused = await stageItchDraft(options);
@@ -113,13 +117,19 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
 
 test('fails closed when browser verification does not confirm draft state', async () => {
   const fixture = await createFixture();
-  const cliRunner = (executable, args) => ({
-    ok: true,
-    stdout: args.includes('run-code')
-      ? JSON.stringify({ result: JSON.stringify({ status: 'verification_failed' }) })
-      : '',
-    stderr: '',
-  });
+  const cliRunner = (executable, args) => {
+    const code = args.includes('run-code') ? args.at(-2) : '';
+    const status = code.includes("status: 'prepared'")
+      ? 'prepared'
+      : code.includes('Object.values(checks)') ? 'verification_failed' : 'submitted';
+    return {
+      ok: true,
+      stdout: args.includes('run-code')
+        ? JSON.stringify({ result: JSON.stringify({ status }) })
+        : '',
+      stderr: '',
+    };
+  };
   await assert.rejects(stageItchDraft({
     outputRoot: fixture.outputRoot,
     slug: fixture.product.slug,

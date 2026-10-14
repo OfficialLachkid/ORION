@@ -66,10 +66,10 @@ function parseCliJson(value) {
   }
 }
 
-export function buildItchDraftRunCode({ listing, publicUrl, editUrl, coverPath, screenshotPaths, screenshotPath }) {
+export function buildItchDraftRunCode({ listing, publicUrl, editUrl }) {
   return `
 async (page) => {
-  const input = ${JSON.stringify({ listing, publicUrl, editUrl, coverPath, screenshotPaths, screenshotPath })};
+  const input = ${JSON.stringify({ listing, publicUrl, editUrl })};
   const wait = (ms) => page.waitForTimeout(ms);
   const bodyText = async () => page.locator('body').innerText({ timeout: 3000 }).catch(() => '');
   const visible = async (locator) => locator.isVisible().catch(() => false);
@@ -174,64 +174,95 @@ async (page) => {
     changes.push({ name: 'tags', ok: false, reason: 'not_found' });
   }
 
-  const uploadFromButton = async (name, locators, paths) => {
-    if (!paths.length) return { name, ok: true };
-    const button = await firstVisible(locators);
-    if (!button) return { name, ok: false, reason: 'not_found' };
-    try {
-      const chooserPromise = page.waitForEvent('filechooser', { timeout: 5000 });
-      await button.click({ timeout: 5000 });
-      const chooser = await chooserPromise;
-      await chooser.setFiles(paths);
-      await wait(2500);
-      return { name, ok: true };
-    } catch (error) {
-      return { name, ok: false, reason: 'upload_failed', error: String(error?.message || error).slice(0, 160) };
+  const acceptDialog = (dialog) => dialog.accept();
+  page.on('dialog', acceptDialog);
+  let removedScreenshots = 0;
+  try {
+    const deleteButtons = page.locator('button.delete_screen_btn');
+    while (await deleteButtons.count().catch(() => 0)) {
+      await deleteButtons.first().click({ timeout: 5000 });
+      removedScreenshots += 1;
+      await wait(500);
     }
-  };
-  changes.push(await uploadFromButton('cover', [
-    page.getByRole('button', { name: /upload cover image|change cover/i }),
-  ], [input.coverPath]));
-  changes.push(await uploadFromButton('screenshots', [
-    page.getByRole('button', { name: /add screenshots/i }),
-  ], input.screenshotPaths));
+  } finally {
+    page.off('dialog', acceptDialog);
+  }
+  changes.push({ name: 'existing_screenshots_removed', ok: true, count: removedScreenshots });
 
   const missing = changes.filter((change) => !change.ok);
   if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
+  return { status: 'prepared', url: page.url(), changes };
+}`.trim();
+}
 
-  const save = await firstVisible([
-    page.getByRole('button', { name: /^save$/i }),
-    page.locator('button, input[type="submit"]').filter({ hasText: /^save$/i }),
-    page.locator('input[type="submit"][value*="save" i]'),
-  ]);
-  if (!save) return { status: 'save_not_found', url: page.url(), changes };
+function buildMediaTriggerRunCode(kind) {
+  return `
+async (page) => {
+  const kind = ${JSON.stringify(kind)};
+  const button = kind === 'cover'
+    ? page.getByRole('button', { name: /upload cover image|replace cover image|change cover/i }).first()
+    : page.getByRole('button', { name: /add screenshots/i }).first();
+  if (!(await button.count().catch(() => 0))) {
+    return { status: 'media_button_not_found', kind, url: page.url() };
+  }
+  await button.click({ timeout: 5000 });
+  return { status: 'chooser_opened', kind };
+}`.trim();
+}
+
+function buildSaveRunCode() {
+  return `
+async (page) => {
+  const save = page.locator('button.save_btn').last();
+  if (!(await save.count().catch(() => 0))) return { status: 'save_not_found', url: page.url() };
   await save.click({ timeout: 5000 });
-  await wait(2500);
+  return { status: 'submitted', url: page.url() };
+}`.trim();
+}
 
-  const after = await bodyText();
-  const titleValue = await page.locator('input[name="title"], input[name="game[title]"]').first().inputValue().catch(() => '');
-  const shortValue = await page.locator('input[name="short_text"], textarea[name="short_text"], input[name="game[short_text]"]').first().inputValue().catch(() => '');
-  const descriptionValue = await page.locator('textarea[name="description"], textarea[name="game[description]"]').first().inputValue().catch(() => '');
-  const priceValue = await page.locator('input[name="min_price"], input[name="game[min_price]"]').first().inputValue().catch(() => '');
+function buildVerifyRunCode({ listing, screenshotCount, screenshotPath }) {
+  return `
+async (page) => {
+  const input = ${JSON.stringify({ listing, screenshotCount, screenshotPath })};
+  await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(2500);
+  const titleValue = await page.locator('input[name="game[title]"]').first().inputValue().catch(() => '');
+  const shortValue = await page.locator('input[name="game[short_text]"]').first().inputValue().catch(() => '');
+  const descriptionValue = await page.locator('textarea[name="game[description]"]').first().inputValue().catch(() => '');
+  const priceValue = await page.locator('input[name="game[min_price]"]').first().inputValue().catch(() => '');
+  const paymentMode = await page.locator('input[name="game[payment_mode]"]').first().inputValue().catch(() => '');
   const numericPrice = Number(String(priceValue).replace(/[^0-9.]/gu, ''));
   const expectedPrice = Number(input.listing.suggested_price.amount);
-  const isDraft = await page.locator('input[name="game[published]"][value="draft"]').isChecked().catch(() => after.toLowerCase().includes('draft'));
+  const actualTags = (await page.locator('.selectize-input .item').allTextContents().catch(() => []))
+    .map((tag) => tag.trim().toLowerCase()).filter(Boolean);
+  const expectedTags = input.listing.tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean);
+  const tagsMatch = expectedTags.length === actualTags.length
+    && expectedTags.every((tag) => actualTags.includes(tag));
+  const coverId = await page.locator('input[name="game[cover_image_id]"]').first().inputValue().catch(() => '');
+  const actualScreenshotCount = await page.locator('button.delete_screen_btn').count().catch(() => 0);
+  const isDraft = await page.locator('input[name="game[published]"][value="draft"]').isChecked().catch(() => false);
   await page.screenshot({ path: input.screenshotPath, fullPage: true }).catch(() => {});
+  const checks = {
+    title: titleValue === input.listing.title,
+    short_description: shortValue === input.listing.short_description,
+    description: descriptionValue === input.listing.description,
+    price: paymentMode === 'paid' && Math.abs(numericPrice - expectedPrice) < 0.001,
+    tags: tagsMatch,
+    cover: Boolean(coverId),
+    screenshots: actualScreenshotCount === input.screenshotCount,
+    draft: isDraft,
+  };
   return {
-    status: titleValue === input.listing.title
-      && shortValue === input.listing.short_description
-      && descriptionValue === input.listing.description
-      && Math.abs(numericPrice - expectedPrice) < 0.001
-      && isDraft
-      ? 'verified'
-      : 'verification_failed',
+    status: Object.values(checks).every(Boolean) ? 'verified' : 'verification_failed',
     url: page.url(),
+    checks,
     titleValue,
     shortValue,
-    descriptionMatches: descriptionValue === input.listing.description,
     priceValue,
-    isDraft,
-    changes,
+    paymentMode,
+    actualTags,
+    coverId,
+    actualScreenshotCount,
   };
 }`.trim();
 }
@@ -297,26 +328,67 @@ export async function stageItchDraft(options) {
   if (!opened.ok) throw new Error(`Could not open the itch.io editor: ${opened.stderr || opened.stdout || opened.error}`);
   try {
     const screenshotPaths = (listing.screenshot_paths || []).map((path) => resolve(exportRoot, path));
-    const missingFiles = [resolve(exportRoot, listing.cover_path), ...screenshotPaths].filter((path) => !existsSync(path));
+    const coverPath = resolve(exportRoot, listing.cover_path);
+    const missingFiles = [coverPath, ...screenshotPaths].filter((path) => !existsSync(path));
     if (missingFiles.length) throw new Error(`Missing itch.io listing media: ${missingFiles.join(', ')}`);
-    const run = cliRunner(executable, [
-      '-s', sessionName, 'run-code', buildItchDraftRunCode({
-        listing,
-        publicUrl,
-        editUrl: String(options.itchEditUrl || '').trim(),
-        coverPath: resolve(exportRoot, listing.cover_path),
-        screenshotPaths,
-        screenshotPath,
-      }), '--json',
-    ], { cwd: options.cwd, env, timeoutMs: 3 * 60_000 });
-    if (!run.ok) throw new Error(`itch.io draft automation failed: ${run.stderr || run.stdout || run.error}`);
-    const details = parseCliJson(run.stdout) || {};
+
+    const runBrowserCode = (label, code) => {
+      const result = cliRunner(executable, [
+        '-s', sessionName, 'run-code', code, '--json',
+      ], { cwd: options.cwd, env, timeoutMs: 3 * 60_000 });
+      if (!result.ok) {
+        throw new Error(`itch.io ${label} failed: ${result.stderr || result.stdout || result.error}`);
+      }
+      const details = parseCliJson(result.stdout) || {};
+      if (details.isError) throw new Error(`itch.io ${label} failed: ${details.error || result.stdout}`);
+      return { details, result };
+    };
+    const diagnostic = ({ details, result }) => {
+      const parsed = JSON.stringify(details);
+      return (parsed !== '{}'
+        ? parsed
+        : String(result.stdout || result.stderr || result.error || 'empty browser response')).slice(0, 800);
+    };
+
+    const prepared = runBrowserCode('draft preparation', buildItchDraftRunCode({
+      listing,
+      publicUrl,
+      editUrl: String(options.itchEditUrl || '').trim(),
+    }));
+    if (prepared.details.status !== 'prepared') {
+      throw new Error(`itch.io draft preparation failed (${prepared.details.status || 'unknown'}): ${diagnostic(prepared)}`);
+    }
+
+    const uploadMedia = (kind, paths) => {
+      if (!paths.length) return;
+      const triggered = runBrowserCode(`${kind} chooser`, buildMediaTriggerRunCode(kind));
+      if (triggered.details.status === 'media_button_not_found') {
+        throw new Error(`itch.io ${kind} upload failed: ${diagnostic(triggered)}`);
+      }
+      const uploaded = cliRunner(executable, [
+        '-s', sessionName, 'upload', ...paths, '--json',
+      ], { cwd: options.cwd, env, timeoutMs: 3 * 60_000 });
+      const uploadDetails = parseCliJson(uploaded.stdout) || {};
+      if (!uploaded.ok || uploadDetails.isError) {
+        throw new Error(`itch.io ${kind} upload failed: ${uploadDetails.error || uploaded.stderr || uploaded.stdout || uploaded.error}`);
+      }
+    };
+    uploadMedia('cover', [coverPath]);
+    uploadMedia('screenshots', screenshotPaths);
+
+    const saved = runBrowserCode('draft save', buildSaveRunCode());
+    if (saved.details.status === 'save_not_found') {
+      throw new Error(`itch.io draft save failed: ${diagnostic(saved)}`);
+    }
+
+    const verified = runBrowserCode('draft verification', buildVerifyRunCode({
+      listing,
+      screenshotCount: screenshotPaths.length,
+      screenshotPath,
+    }));
+    const details = verified.details;
     if (details.status !== 'verified') {
-      const parsedDiagnostic = JSON.stringify(details);
-      const diagnostic = (parsedDiagnostic !== '{}'
-        ? parsedDiagnostic
-        : String(run.stdout || run.stderr || run.error || 'empty browser response')).slice(0, 800);
-      throw new Error(`itch.io draft was not verified (${details.status || 'unknown'}): ${diagnostic}`);
+      throw new Error(`itch.io draft was not verified (${details.status || 'unknown'}): ${diagnostic(verified)}`);
     }
     const state = {
       schema_version: '1.0',
