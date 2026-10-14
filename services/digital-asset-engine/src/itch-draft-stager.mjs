@@ -96,13 +96,13 @@ async (page) => {
 
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
   let text = await bodyText();
-  if (/log in|sign in/i.test(text) && /itch\.io\/(login|register)/i.test(page.url())) {
+  if (/log in|sign in/i.test(text) && (page.url().includes('/login') || page.url().includes('/register'))) {
     return { status: 'login_required', url: page.url() };
   }
 
   if (input.editUrl) {
     await page.goto(input.editUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  } else if (!/\/game\/edit\//i.test(page.url())) {
+  } else if (!page.url().includes('/game/edit/')) {
     const projectSlug = new URL(input.publicUrl).pathname.split('/').filter(Boolean)[0];
     const projectTitle = String(input.listing.title || '').trim();
     const card = page.locator('a[href*="/game/edit/"]').filter({ hasText: projectTitle }).first();
@@ -118,7 +118,7 @@ async (page) => {
   if (/log in|sign in/i.test(text) && !/edit game|edit project|uploads/i.test(text)) {
     return { status: 'login_required', url: page.url() };
   }
-  if (!/itch\.io\/game\/edit\//i.test(page.url()) && !/edit game|edit project/i.test(text)) {
+  if (!page.url().includes('itch.io/game/edit/') && !/edit game|edit project/i.test(text)) {
     return { status: 'unexpected_page', url: page.url(), body: text.slice(0, 500) };
   }
 
@@ -185,7 +185,7 @@ async (page) => {
   const after = await bodyText();
   const titleValue = await page.locator('input[name="title"]').first().inputValue().catch(() => '');
   const shortValue = await page.locator('input[name="short_text"], textarea[name="short_text"]').first().inputValue().catch(() => '');
-  const isDraft = /\bdraft\b/i.test(after);
+  const isDraft = after.toLowerCase().includes('draft');
   await page.screenshot({ path: input.screenshotPath, fullPage: true }).catch(() => {});
   return {
     status: titleValue === input.listing.title && shortValue === input.listing.short_description && isDraft
@@ -276,7 +276,8 @@ export async function stageItchDraft(options) {
     if (!run.ok) throw new Error(`itch.io draft automation failed: ${run.stderr || run.stdout || run.error}`);
     const details = parseCliJson(run.stdout) || {};
     if (details.status !== 'verified') {
-      throw new Error(`itch.io draft was not verified (${details.status || 'unknown'}).`);
+      const diagnostic = JSON.stringify(details).slice(0, 800);
+      throw new Error(`itch.io draft was not verified (${details.status || 'unknown'}): ${diagnostic}`);
     }
     const state = {
       schema_version: '1.0',

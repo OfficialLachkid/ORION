@@ -61,6 +61,7 @@ test('Playwright draft script includes listing fields, uploads, save, and draft 
   assert.match(code, /setInputFiles/u);
   assert.match(code, /isDraft/u);
   assert.match(code, /verification_failed/u);
+  assert.doesNotThrow(() => new Function(`return (${code})`));
 });
 
 test('stages package with Butler, populates itch.io, verifies it, and reuses exact revision', async () => {
