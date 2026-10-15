@@ -194,8 +194,8 @@ test('projectile travel preview keeps the weapon fixed and moves only the previe
       muzzle_anchor: { x: 16, y: 4 },
       projectile_travel_preview: {
         canvas: { width: 48, height: 16 },
-        start_offset_x: 2,
-        end_origin_x: 42,
+        start_gap_px: 0,
+        end_margin_right_px: 0,
         frame_count: 3,
         frame_duration_ms: 70,
       },
@@ -222,7 +222,7 @@ test('projectile travel preview keeps the weapon fixed and moves only the previe
   }
 
   assert.deepEqual(await redPixelBounds(frames[0]), { left: 18, right: 21 });
-  assert.deepEqual(await redPixelBounds(frames[2]), { left: 40, right: 43 });
+  assert.deepEqual(await redPixelBounds(frames[2]), { left: 44, right: 47 });
 });
 
 test('muzzle detection follows the terminal barrel pixels at different vertical positions', async () => {

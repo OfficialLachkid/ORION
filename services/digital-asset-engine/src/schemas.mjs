@@ -206,8 +206,8 @@ export const EffectPilotSchema = z.object({
         width: z.number().int().positive(),
         height: z.number().int().positive(),
       }),
-      start_offset_x: z.number().int().nonnegative().default(0),
-      end_origin_x: z.number().int().positive(),
+      start_gap_px: z.number().int().nonnegative().default(0),
+      end_margin_right_px: z.number().int().nonnegative().default(0),
       frame_count: z.number().int().min(2).max(32),
       frame_duration_ms: z.number().int().min(20).max(2000),
     }).optional(),
@@ -237,25 +237,12 @@ export const EffectPilotSchema = z.object({
   })).min(1).max(12),
 }).superRefine((pilot, context) => {
   const travelPreview = pilot.weapon_preview.projectile_travel_preview;
-  if (travelPreview) {
-    const configuredAnchor = pilot.weapon_preview.muzzle_anchor;
-    const configuredStartX = 'x' in configuredAnchor
-      ? pilot.weapon_preview.weapon_position.x + configuredAnchor.x + travelPreview.start_offset_x
-      : null;
-    if (configuredStartX !== null && travelPreview.end_origin_x <= configuredStartX) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Projectile travel preview must end to the right of its muzzle start.',
-        path: ['weapon_preview', 'projectile_travel_preview', 'end_origin_x'],
-      });
-    }
-    if (travelPreview.end_origin_x >= travelPreview.canvas.width) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Projectile travel preview end origin must be inside its canvas.',
-        path: ['weapon_preview', 'projectile_travel_preview', 'end_origin_x'],
-      });
-    }
+  if (travelPreview && travelPreview.end_margin_right_px >= travelPreview.canvas.width) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Projectile travel preview right margin must be smaller than its canvas.',
+      path: ['weapon_preview', 'projectile_travel_preview', 'end_margin_right_px'],
+    });
   }
   const keys = new Set();
   for (const effect of pilot.effects) {

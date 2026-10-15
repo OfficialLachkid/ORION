@@ -118,6 +118,25 @@ async function resolveWeaponMuzzleAnchor(weaponBuffer, specification) {
   return detectWeaponMuzzleAnchor(weaponBuffer, specification);
 }
 
+async function inspectOpaqueBounds(buffer, alphaThreshold = 128) {
+  const { data, info } = await sharp(buffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let minX = info.width;
+  let maxX = -1;
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      if (data[((y * info.width) + x) * 4 + 3] >= alphaThreshold) {
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+      }
+    }
+  }
+  if (maxX === -1) throw new Error('Cannot compose a fully transparent projectile preview.');
+  return { min_x: minX, max_x: maxX };
+}
+
 function generationFingerprint(pilot, effect, frame) {
   return sha256(JSON.stringify({
     processing_version: PIXEL_ART_PROCESSING_VERSION,
@@ -276,12 +295,18 @@ export async function composeProjectileTravelPreviewFrames({
     x: pilot.weapon_preview.weapon_position.x + pilot.weapon_preview.muzzle_anchor.x,
     y: pilot.weapon_preview.weapon_position.y + pilot.weapon_preview.muzzle_anchor.y,
   };
-  const startOriginX = muzzleAnchor.x + travel.start_offset_x;
+  const projectileBounds = await inspectOpaqueBounds(projectileBuffer);
+  const startLeft = muzzleAnchor.x + travel.start_gap_px - projectileBounds.min_x;
+  const endLeft = travel.canvas.width
+    - 1
+    - travel.end_margin_right_px
+    - projectileBounds.max_x;
+  if (endLeft <= startLeft) {
+    throw new Error('Projectile travel preview canvas does not provide positive travel distance.');
+  }
   return Promise.all(Array.from({ length: travel.frame_count }, async (unused, index) => {
     const progress = index / (travel.frame_count - 1);
-    const projectileOriginX = Math.round(
-      startOriginX + ((travel.end_origin_x - startOriginX) * progress),
-    );
+    const projectileLeft = Math.round(startLeft + ((endLeft - startLeft) * progress));
     return sharp({
       create: {
         width: travel.canvas.width,
@@ -297,7 +322,7 @@ export async function composeProjectileTravelPreviewFrames({
       },
       {
         input: projectileBuffer,
-        left: projectileOriginX - effect.origin.x,
+        left: projectileLeft,
         top: muzzleAnchor.y - effect.origin.y,
       },
     ]).png({ compressionLevel: 9 }).toBuffer();
@@ -411,15 +436,6 @@ export async function generateEffectPilot(options) {
     ...pilot,
     weapon_preview: { ...pilot.weapon_preview, muzzle_anchor: muzzle.anchor },
   };
-  const travel = previewPilot.weapon_preview.projectile_travel_preview;
-  if (travel) {
-    const startOriginX = previewPilot.weapon_preview.weapon_position.x
-      + muzzle.anchor.x
-      + travel.start_offset_x;
-    if (travel.end_origin_x <= startOriginX) {
-      throw new Error('Projectile travel preview must end to the right of its detected muzzle start.');
-    }
-  }
   const experimentRoot = resolveInside(productRoot, `experiments/${pilot.pilot_id}`, 'Effect pilot path');
   const adapter = options.adapter || new OllamaImageAdapter(options.config.generation);
   const readiness = await adapter.checkReadiness();
