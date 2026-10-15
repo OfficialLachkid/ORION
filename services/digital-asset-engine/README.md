@@ -119,3 +119,16 @@ npm run digital-assets:effects-review -- \
 ```
 
 This creates one effects overview and an `effects-review-v1` thread. Each numbered weapon message attaches its complete firing cycle plus the separate muzzle-flash, projectile-travel, and impact/decay GIFs. The exact experiment manifests are combined into one hashed review receipt. This presentation intentionally has no approval buttons yet; it does not reuse the package-release decision for an unversioned extension.
+
+Prepare an immutable `0.2.0` package-extension candidate after the base package and effects presentation have been verified:
+
+```bash
+npm run digital-assets:prepare-extension -- \
+  --internal-preview \
+  --extension-plan services/digital-asset-engine/fixtures/neon-plasma-armory-effects.extension.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The command verifies the exact approved base manifest, its persisted package approval, the effects review bundle, every canonical weapon hash, and every copied effect frame/sheet/metadata hash. It writes a content-addressed candidate below `releases/0.2.0/candidates/` and never changes `product.json`, the current itch.io export, or the Discord package decision. Rerunning the same inputs verifies and reuses the same immutable candidate; changed proof inputs create a new candidate directory.
+
+Buyer files contain the original weapon package plus independent transparent muzzle-flash, stationary-projectile, and impact/decay frames, sprite sheets, animation JSON, and `weapon-anchors.json`. Model source images, validation internals, and review-only GIFs are excluded. Open quality holds set the candidate state to `blocked_quality_review` and prevent it from being treated as distribution-ready. After the holds are resolved, the later staging slice will populate the existing itch.io draft from this candidate and reconcile the existing Discord package review in place.

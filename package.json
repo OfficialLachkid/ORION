@@ -101,6 +101,7 @@
     "digital-assets:effects-pilot": "node services/digital-asset-engine/index.mjs effects-pilot",
     "digital-assets:effects-batch": "node services/digital-asset-engine/index.mjs effects-batch",
     "digital-assets:effects-review": "node services/digital-asset-engine/index.mjs effects-review",
+    "digital-assets:prepare-extension": "node services/digital-asset-engine/index.mjs prepare-extension",
     "digital-assets:package": "node services/digital-asset-engine/index.mjs package",
     "digital-assets:itch-draft": "node services/digital-asset-engine/index.mjs itch-draft",
     "digital-assets:discord-review": "node services/digital-asset-engine/index.mjs discord-review",

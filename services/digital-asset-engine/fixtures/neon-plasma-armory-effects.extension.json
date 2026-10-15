@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0",
+  "extension_id": "neon-plasma-armory-effects-v1",
+  "product_slug": "neon-plasma-armory",
+  "title": "Neon Plasma Armory Effects Extension",
+  "base_version": "0.1.0",
+  "target_version": "0.2.0",
+  "base_manifest_hash": "b5ef97a02c229dc70aaf036aca6bd3f10bf9fa7caab0bd76558649e1f6e1b00a",
+  "effects_review_id": "neon-plasma-armory-effects-v1",
+  "effects_bundle_hash": "29e85c222181795a781f44cac2a85a0a9b55acb5ea18c1e54cb7fdeef8720861",
+  "release_notes": [
+    "Added an independent muzzle-flash animation for every weapon.",
+    "Added a stationary projectile sprite for every weapon; travel remains controlled by the game engine.",
+    "Added an independent impact and decay animation for every weapon.",
+    "Added dynamically detected weapon-local muzzle anchors and zero-root-motion animation metadata."
+  ],
+  "quality_holds": [
+    {
+      "hold_id": "identify-weapon-like-impact-decays",
+      "status": "open",
+      "affected_asset_keys": [],
+      "note": "Operator reported that two impact/decay sequences resemble shrunken weapons. Identify the affected weapons and accept or replace those sequences before staging this revision."
+    }
+  ]
+}

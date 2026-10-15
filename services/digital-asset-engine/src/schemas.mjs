@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const IdentifierSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/u);
 const HexColorSchema = z.string().regex(/^#[0-9a-f]{6}$/iu);
+const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
+const SemanticVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/u);
 
 export const AssetRequestSchema = z.object({
   asset_key: IdentifierSchema,
@@ -312,5 +314,38 @@ export const EffectBatchPlanSchema = z.object({
       });
     }
     keys.add(weapon.source_asset_key);
+  }
+});
+
+export const ProductExtensionPlanSchema = z.object({
+  schema_version: z.literal('1.0'),
+  extension_id: IdentifierSchema,
+  product_slug: IdentifierSchema,
+  title: z.string().min(1),
+  base_version: SemanticVersionSchema,
+  target_version: SemanticVersionSchema,
+  base_manifest_hash: Sha256Schema,
+  effects_review_id: IdentifierSchema,
+  effects_bundle_hash: Sha256Schema,
+  release_notes: z.array(z.string().min(1)).min(1),
+  quality_holds: z.array(z.object({
+    hold_id: IdentifierSchema,
+    status: z.literal('open'),
+    affected_asset_keys: z.array(IdentifierSchema).default([]),
+    note: z.string().min(3),
+  })).default([]),
+}).superRefine((plan, context) => {
+  const parse = (value) => value.split('.').map(Number);
+  const base = parse(plan.base_version);
+  const target = parse(plan.target_version);
+  const isLater = target.some((value, index) => (
+    value > base[index] && target.slice(0, index).every((part, partIndex) => part === base[partIndex])
+  ));
+  if (!isLater) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Extension target version must be later than its base version.',
+      path: ['target_version'],
+    });
   }
 });
