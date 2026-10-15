@@ -80,3 +80,16 @@ The ORION bot needs `View Channel`, `Send Messages`, `Embed Links`, `Attach File
 Set `DIGITAL_ASSET_ARCHIVE_ROOT` for both generation and the live Discord bot, for example `/Volumes/T7/O.R.I.O.N. Digital Assets`.
 
 Canonical approved assets, release manifests, covers, sprite sheets, and marketplace exports remain on the T7 while a product is supported. Mac working copies can be removed after their T7 hashes are verified. Model source images and rejected candidates are retention-managed separately; marketplace uploads are delivery copies, not backups.
+
+## Isolated effects proof
+
+Generate the Arc Launcher effects proof without changing the approved product, Discord review, or itch.io draft:
+
+```bash
+npm run digital-assets:effects-pilot -- \
+  --execute \
+  --pilot services/digital-asset-engine/fixtures/arc-launcher-effects-v2.pilot.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The proof writes to `neon-plasma-armory/experiments/arc-launcher-effects-proof-v2`. The local model generates the projectile plus one peak keyframe for each animation; ORION derives the remaining phases deterministically around the fixed origin to prevent identity drift. It produces four fixed-origin muzzle-flash frames, four fixed-center impact/decay frames, transparent PNG sprite sheets, `animation.json` metadata, isolated GIF previews, a weapon-composited muzzle GIF, and a wider looping weapon-and-projectile travel GIF for review. By default, ORION detects the barrel exit from the rightmost opaque terminal band and stores the resolved weapon-local anchor plus its detection evidence in the manifest; a manual anchor remains available for unusual silhouettes. Compositing uses that resolved anchor without baking movement into either asset. GIF files and projectile travel are previews only; buyer/runtime formats are the stationary transparent PNG frames, PNG sprite sheets, and animation metadata. All animation metadata declares zero root motion. The approved pack is extended only through a later versioned-release workflow after this proof receives human approval.
