@@ -49,12 +49,13 @@ function packInteraction(componentIndex = 0, overrides = {}) {
   };
 }
 
-async function createArchiveFixture() {
+async function createArchiveFixture(options = {}) {
   const archiveRoot = await mkdtemp(resolve(tmpdir(), 'orion-release-review-'));
   const productRoot = resolve(archiveRoot, context.productSlug);
+  const packageRoot = options.packageRoot || 'exports/itch-preview';
   await Promise.all([
     mkdir(resolve(productRoot, 'review'), { recursive: true }),
-    mkdir(resolve(productRoot, 'exports', 'itch-preview'), { recursive: true }),
+    mkdir(resolve(productRoot, packageRoot), { recursive: true }),
     mkdir(resolve(productRoot, 'validation'), { recursive: true }),
   ]);
   const productAssets = assets.map((asset, index) => ({
@@ -79,13 +80,18 @@ async function createArchiveFixture() {
       'asset-rail-rifle': 'asset-message-1',
       'asset-arc-launcher': 'asset-message-2',
     },
+    ...(options.targetVersion ? {
+      target_version: options.targetVersion,
+      package_root: packageRoot,
+    } : {}),
   };
   const hashes = ['b'.repeat(64), 'd'.repeat(64)];
   const manifest = {
     manifest_hash: manifestHash,
     listing_hash: listingHash,
+    ...(options.targetVersion ? { target_version: options.targetVersion } : {}),
     files: productAssets.map((asset, index) => ({
-      path: `assets/individual/${asset.final_path.split('/').at(-1)}`,
+      path: `${options.targetVersion ? 'download/' : ''}assets/individual/${asset.final_path.split('/').at(-1)}`,
       content_sha256: hashes[index],
     })),
   };
@@ -98,7 +104,7 @@ async function createArchiveFixture() {
       listing_hash: listingHash,
       public_url: context.itchUrl,
     })),
-    writeFile(resolve(productRoot, 'exports', 'itch-preview', 'manifest.json'), JSON.stringify(manifest)),
+    writeFile(resolve(productRoot, packageRoot, 'manifest.json'), JSON.stringify(manifest)),
     ...productAssets.map((asset, index) => writeFile(
       resolve(productRoot, asset.validation_path),
       JSON.stringify({ metrics: { content_sha256: hashes[index] } }),
@@ -173,6 +179,37 @@ test('approves every exact asset hash in one package decision', async () => {
     result.actor,
   );
   assert.match(resolved[0].title, /PACK APPROVED/u);
+});
+
+test('approves the exact immutable versioned candidate stored in the Discord review state', async () => {
+  const packageRoot = 'releases/0.2.0/candidates/0123456789abcdef';
+  const archiveRoot = await createArchiveFixture({ packageRoot, targetVersion: '0.2.0' });
+  const inserted = [];
+  const result = await recordDigitalAssetReviewDecision({
+    interaction: packInteraction(),
+    archiveRoot,
+    config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+    store: { async insert(row) { inserted.push(row); } },
+  });
+  assert.equal(inserted.length, 1);
+  assert.equal(result.row.manifest_hash, manifestHash);
+  assert.deepEqual(result.row.asset_decisions.map((item) => item.decision), ['approve', 'approve']);
+});
+
+test('rejects a versioned package path outside its target version candidate directory', async () => {
+  const archiveRoot = await createArchiveFixture({
+    packageRoot: 'releases/0.3.0/candidates/0123456789abcdef',
+    targetVersion: '0.2.0',
+  });
+  await assert.rejects(
+    recordDigitalAssetReviewDecision({
+      interaction: packInteraction(),
+      archiveRoot,
+      config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+      store: { async insert() { throw new Error('must not be called'); } },
+    }),
+    /not an immutable release candidate/u,
+  );
 });
 
 test('request changes accepts unselected assets and flags only selected assets', async () => {
