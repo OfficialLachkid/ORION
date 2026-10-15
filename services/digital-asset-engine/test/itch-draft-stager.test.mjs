@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { buildItchDraftRunCode, stageItchDraft } from '../src/itch-draft-stager.mjs';
+
+function suppliedBrowserCode(args) {
+  const filenameIndex = args.indexOf('--filename');
+  return filenameIndex >= 0 ? readFileSync(args[filenameIndex + 1], 'utf8') : '';
+}
 
 async function createFixture() {
   const outputRoot = await mkdtemp(resolve(tmpdir(), 'orion-itch-stage-'));
@@ -121,7 +127,7 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   const cliRunner = (executable, args) => {
     calls.push({ executable, args });
     if (args.includes('run-code')) {
-      const code = args.at(-2);
+      const code = suppliedBrowserCode(args);
       const status = code.includes('Object.values(checks)')
         ? 'verified'
         : code.includes("status: 'media_ready'") ? 'media_ready'
@@ -157,7 +163,7 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   assert.ok(butler);
   assert.ok(butler.args.includes('--if-changed'));
   const browserRun = calls.find((call) => call.args.includes('run-code'));
-  assert.match(browserRun.args.at(-2), /Neon Plasma Armory/u);
+  assert.ok(browserRun.args.includes('--filename'));
   const uploads = calls.filter((call) => call.args.includes('upload'));
   assert.equal(uploads.length, 3);
   assert.ok(uploads.every((call) => call.args.indexOf('--json') - call.args.indexOf('upload') === 2));
@@ -171,7 +177,7 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
 test('fails closed when browser verification does not confirm draft state', async () => {
   const fixture = await createFixture();
   const cliRunner = (executable, args) => {
-    const code = args.includes('run-code') ? args.at(-2) : '';
+    const code = args.includes('run-code') ? suppliedBrowserCode(args) : '';
     const status = code.includes('Object.values(checks)')
       ? 'verification_failed'
       : code.includes("status: 'media_ready'") ? 'media_ready'
@@ -203,7 +209,7 @@ test('stages a quality-cleared immutable release candidate instead of the base p
   const cliRunner = (executable, args) => {
     calls.push({ executable, args });
     if (args.includes('run-code')) {
-      const code = args.at(-2);
+      const code = suppliedBrowserCode(args);
       const status = code.includes('Object.values(checks)')
         ? 'verified'
         : code.includes("status: 'media_ready'") ? 'media_ready'

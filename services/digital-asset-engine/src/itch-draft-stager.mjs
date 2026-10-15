@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { dirname, relative, resolve } from 'node:path';
@@ -375,6 +375,8 @@ export async function stageItchDraft(options) {
 
   const opened = cliRunner(executable, openArgs, { cwd: options.cwd, env, timeoutMs: 90_000 });
   if (!opened.ok) throw new Error(`Could not open the itch.io editor: ${opened.stderr || opened.stdout || opened.error}`);
+  const browserCodeRoot = mkdtempSync(resolve(os.tmpdir(), 'orion-itch-playwright-'));
+  let browserCodeIndex = 0;
   try {
     const screenshotPaths = (listing.screenshot_paths || []).map((path) => resolve(exportRoot, path));
     const coverPath = resolve(exportRoot, listing.cover_path);
@@ -382,8 +384,11 @@ export async function stageItchDraft(options) {
     if (missingFiles.length) throw new Error(`Missing itch.io listing media: ${missingFiles.join(', ')}`);
 
     const runBrowserCode = (label, code) => {
+      browserCodeIndex += 1;
+      const codePath = resolve(browserCodeRoot, `${String(browserCodeIndex).padStart(2, '0')}.js`);
+      writeFileSync(codePath, code, 'utf8');
       const result = cliRunner(executable, [
-        '-s', sessionName, 'run-code', code, '--json',
+        '-s', sessionName, 'run-code', '--filename', codePath, '--json',
       ], { cwd: options.cwd, env, timeoutMs: 3 * 60_000 });
       if (!result.ok) {
         throw new Error(`itch.io ${label} failed: ${result.stderr || result.stdout || result.error}`);
@@ -484,5 +489,6 @@ export async function stageItchDraft(options) {
     return { ...state, reused: false, statePath, details };
   } finally {
     cliRunner(executable, ['-s', sessionName, 'close'], { cwd: options.cwd, env, timeoutMs: 15_000 });
+    rmSync(browserCodeRoot, { recursive: true, force: true });
   }
 }
