@@ -6,6 +6,7 @@ import { buildReleaseMarketingMedia, RELEASE_MARKETING_VERSION } from './release
 import { ProductExtensionPlanSchema } from './schemas.mjs';
 
 const REQUIRED_EFFECT_KINDS = Object.freeze(['muzzle_flash', 'projectile', 'impact_decay']);
+const RELEASE_EXTENSION_VERSION = '1.1.0';
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -271,6 +272,7 @@ export async function prepareVersionedPackageExtension(options) {
     base_listing_hash: baseListing.listing_hash,
     effect_manifests: effectsBundle.experiments.map((item) => item.manifest_hash),
     marketing_version: RELEASE_MARKETING_VERSION,
+    extension_packaging_version: RELEASE_EXTENSION_VERSION,
   })));
   const versionRoot = resolveInside(productRoot, `releases/${plan.target_version}`, 'Release version path');
   const candidateRoot = resolveInside(versionRoot, `candidates/${inputHash.slice(0, 16)}`, 'Candidate path');
@@ -334,6 +336,8 @@ export async function prepareVersionedPackageExtension(options) {
     schema_version: '1.0',
     release_id: `${product.product_id}-v${plan.target_version.replaceAll('.', '-')}-${inputHash.slice(0, 12)}`,
     release_state: plan.quality_holds.length ? 'blocked_quality_review' : 'awaiting_extension_review',
+    distribution_ready: false,
+    human_review_required: true,
     product_id: product.product_id,
     product_slug: product.slug,
     base_version: plan.base_version,
@@ -350,6 +354,7 @@ export async function prepareVersionedPackageExtension(options) {
     effect_animation_count: effectSets.length * REQUIRED_EFFECT_KINDS.length,
     marketing_media: marketingMedia,
     marketing_version: RELEASE_MARKETING_VERSION,
+    extension_packaging_version: RELEASE_EXTENSION_VERSION,
     listing_hash: listing.listing_hash,
     quality_holds: plan.quality_holds,
     gates,
