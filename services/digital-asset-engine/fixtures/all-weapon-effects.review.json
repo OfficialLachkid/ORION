@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "review_id": "neon-plasma-armory-effects-v1",
+  "product_slug": "neon-plasma-armory",
+  "title": "Neon Plasma Armory Effects Extension",
+  "experiments": [
+    { "source_asset_key": "plasma-pistol", "name": "Plasma Pistol", "pilot_id": "plasma-pistol-effects-proof-v1" },
+    { "source_asset_key": "ion-pistol", "name": "Ion Pistol", "pilot_id": "ion-pistol-effects-proof-v1" },
+    { "source_asset_key": "plasma-carbine", "name": "Plasma Carbine", "pilot_id": "plasma-carbine-effects-proof-v1" },
+    { "source_asset_key": "pulse-rifle", "name": "Pulse Rifle", "pilot_id": "pulse-rifle-effects-proof-v1" },
+    { "source_asset_key": "energy-shotgun", "name": "Energy Shotgun", "pilot_id": "energy-shotgun-effects-proof-v1" },
+    { "source_asset_key": "rail-rifle", "name": "Rail Rifle", "pilot_id": "rail-rifle-effects-proof-v1" },
+    { "source_asset_key": "arc-launcher", "name": "Arc Launcher", "pilot_id": "arc-launcher-effects-proof-v2" },
+    { "source_asset_key": "ion-cannon", "name": "Ion Cannon", "pilot_id": "ion-cannon-effects-proof-v1" }
+  ]
+}

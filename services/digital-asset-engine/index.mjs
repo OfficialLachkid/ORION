@@ -4,6 +4,8 @@ import process from 'node:process';
 import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
 import { loadEngineConfig, resolveOutputRoot } from './src/config.mjs';
 import { postDigitalAssetReview } from './src/discord-review.mjs';
+import { generateEffectBatch } from './src/effect-batch.mjs';
+import { postEffectsDiscordReview } from './src/effect-discord-review.mjs';
 import { generateEffectPilot } from './src/effect-pilot.mjs';
 import { stageItchDraft } from './src/itch-draft-stager.mjs';
 import { packageDigitalAssetPreview } from './src/packager.mjs';
@@ -13,6 +15,8 @@ import { slugify } from './src/product-planner.mjs';
 const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
 const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
 const DEFAULT_EFFECT_PILOT = 'services/digital-asset-engine/fixtures/arc-launcher-effects-v2.pilot.json';
+const DEFAULT_EFFECT_BATCH = 'services/digital-asset-engine/fixtures/remaining-weapon-effects.batch.json';
+const DEFAULT_EFFECT_REVIEW = 'services/digital-asset-engine/fixtures/all-weapon-effects.review.json';
 
 function parseArguments(argv) {
   const args = {
@@ -33,6 +37,8 @@ function parseArguments(argv) {
     else if (token === '--config') args.config = argv[++index];
     else if (token === '--opportunity') args.opportunity = argv[++index];
     else if (token === '--pilot') args.pilot = argv[++index];
+    else if (token === '--batch') args.batch = argv[++index];
+    else if (token === '--review-plan') args.reviewPlan = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
     else if (token === '--category-name') args.categoryName = argv[++index];
@@ -56,11 +62,15 @@ function printHelp() {
     '  itch-draft  Upload the package and populate/verify the existing itch.io draft.',
     '  discord-review  Create the pack review channel/thread and post previews.',
     '  effects-pilot  Generate isolated fixed-anchor effects without changing the approved pack.',
+    '  effects-batch  Generate sequential isolated weapon-effect proofs from a compact batch plan.',
+    '  effects-review  Post or update the isolated effects presentation in the existing pack channel.',
     '',
     'Options:',
     `  --config <path>       Default: ${DEFAULT_CONFIG}`,
     `  --opportunity <path>  Default: ${DEFAULT_OPPORTUNITY}`,
     `  --pilot <path>       Default: ${DEFAULT_EFFECT_PILOT}`,
+    `  --batch <path>       Default: ${DEFAULT_EFFECT_BATCH}`,
+    `  --review-plan <path> Default: ${DEFAULT_EFFECT_REVIEW}`,
     '  --output-root <path>  Override canonical product storage.',
     '  --now <ISO datetime>  Deterministic validation/testing time.',
     '  --execute             Required for image generation.',
@@ -83,14 +93,14 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'effects-pilot'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
-  if (['generate', 'effects-pilot'].includes(args.command) && !args.execute) {
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'effects-pilot', 'effects-batch', 'effects-review'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (['generate', 'effects-pilot', 'effects-batch'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
   if (args.command === 'package' && !args.internalPreview) {
     throw new Error('Packaging unapproved candidates requires --internal-preview.');
   }
-  if (args.command === 'discord-review' && !args.postToDiscord) {
+  if (['discord-review', 'effects-review'].includes(args.command) && !args.postToDiscord) {
     throw new Error('Live Discord review posting requires --post-to-discord.');
   }
   if (args.command === 'itch-draft' && !args.stageItchDraft) {
@@ -102,6 +112,59 @@ async function main() {
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
   if (args.outputRoot) config = { ...config, output_root: args.outputRoot };
+  if (args.command === 'effects-review') {
+    const plan = JSON.parse(await readFile(args.reviewPlan || DEFAULT_EFFECT_REVIEW, 'utf8'));
+    const review = await postEffectsDiscordReview({
+      runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
+      outputRoot: resolveOutputRoot(config),
+      plan,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      review_id: review.review_id,
+      bundle_hash: review.bundle_hash,
+      channel_id: review.channel_id,
+      thread_id: review.thread_id,
+      overview_message_id: review.overview_message_id,
+      weapon_messages: review.weapon_messages,
+      reused: review.reused,
+    }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'effects-batch') {
+    const plan = JSON.parse(await readFile(args.batch || DEFAULT_EFFECT_BATCH, 'utf8'));
+    const outputRoot = resolveOutputRoot(config);
+    const batch = await generateEffectBatch({
+      config,
+      plan,
+      outputRoot,
+      projectRoot: process.cwd(),
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      batch_id: batch.batch_id,
+      product_slug: batch.product_slug,
+      total_generation_calls: batch.total_generation_calls,
+      total_duration_ms: batch.total_duration_ms,
+      incurred_cost: batch.incurred_cost,
+      results: batch.results.map((result) => ({
+        pilot_id: result.pilot.pilot_id,
+        source_asset_key: result.pilot.source_asset_key,
+        experiment_root: result.experimentRoot,
+        manifest_hash: result.manifest.manifest_hash,
+        muzzle_anchor: result.manifest.source_weapon_muzzle_anchor,
+        attack_cycle_preview_path: result.attack_cycle_preview_path,
+        timing: {
+          total_duration_ms: result.timing.total_duration_ms,
+          generation_calls: result.timing.generation_calls,
+          derived_frames: result.timing.derived_frames,
+        },
+      })),
+    }, null, 2)}\n`);
+    return;
+  }
   if (args.command === 'effects-pilot') {
     const pilot = JSON.parse(await readFile(args.pilot || DEFAULT_EFFECT_PILOT, 'utf8'));
     const outputRoot = resolveOutputRoot(config);
@@ -129,6 +192,7 @@ async function main() {
       })),
       composite_preview_path: result.composite_preview_path,
       projectile_travel_preview_path: result.projectile_travel_preview_path,
+      attack_cycle_preview_path: result.attack_cycle_preview_path,
       timing: result.timing,
       manifest_hash: result.manifest.manifest_hash,
       gates: result.gates,

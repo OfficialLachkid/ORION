@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import { loadEngineConfig } from '../src/config.mjs';
 import {
   assembleEffectSpriteSheet,
+  composeAttackCyclePreviewFrames,
   composeProjectileTravelPreviewFrames,
   detectWeaponMuzzleAnchor,
   generateEffectPilot,
@@ -225,6 +226,60 @@ test('projectile travel preview keeps the weapon fixed and moves only the previe
   assert.deepEqual(await redPixelBounds(frames[2]), { left: 44, right: 47 });
 });
 
+test('attack-cycle preview combines muzzle, projectile travel, and endpoint impact', async () => {
+  const weaponBuffer = await sharp({
+    create: { width: 16, height: 8, channels: 4, background: '#204060' },
+  }).png().toBuffer();
+  const projectileBuffer = await sharp({
+    create: { width: 4, height: 2, channels: 4, background: '#ff0000' },
+  }).png().toBuffer();
+  const muzzleBuffer = await sharp({
+    create: { width: 4, height: 4, channels: 4, background: '#00ff00' },
+  }).png().toBuffer();
+  const impactBuffer = await sharp({
+    create: { width: 6, height: 6, channels: 4, background: '#ffff00' },
+  }).png().toBuffer();
+  const pilot = {
+    weapon_preview: {
+      weapon_position: { x: 2, y: 4 },
+      muzzle_anchor: { x: 16, y: 4 },
+      projectile_travel_preview: {
+        canvas: { width: 48, height: 16 },
+        start_gap_px: 0,
+        end_margin_right_px: 0,
+        frame_count: 3,
+        frame_duration_ms: 70,
+      },
+    },
+  };
+  const frames = await composeAttackCyclePreviewFrames({
+    weaponBuffer,
+    projectileBuffer,
+    muzzleFrameBuffers: [muzzleBuffer, muzzleBuffer],
+    impactFrameBuffers: [impactBuffer, impactBuffer],
+    pilot,
+    projectileEffect: { origin: { x: 2, y: 1 } },
+    muzzleEffect: { origin: { x: 0, y: 2 } },
+    impactEffect: { canvas: { width: 6, height: 6 }, origin: { x: 3, y: 3 } },
+  });
+  assert.equal(frames.length, 5);
+
+  async function containsColor(buffer, red, green, blue) {
+    const { data } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    for (let offset = 0; offset < data.length; offset += 4) {
+      if (data[offset] === red && data[offset + 1] === green && data[offset + 2] === blue) return true;
+    }
+    return false;
+  }
+
+  assert.equal(await containsColor(frames[0], 0, 255, 0), true);
+  assert.equal(await containsColor(frames[0], 255, 0, 0), true);
+  assert.equal(await containsColor(frames[2], 0, 255, 0), false);
+  assert.equal(await containsColor(frames[2], 255, 0, 0), true);
+  assert.equal(await containsColor(frames[4], 255, 0, 0), false);
+  assert.equal(await containsColor(frames[4], 255, 255, 0), true);
+});
+
 test('muzzle detection follows the terminal barrel pixels at different vertical positions', async () => {
   async function weaponAt(top, height) {
     return sharp({
@@ -251,6 +306,23 @@ test('muzzle detection follows the terminal barrel pixels at different vertical 
     max_y: 9,
     opaque_pixels: 24,
   });
+});
+
+test('boundary weapon effect specifications validate independently', async () => {
+  const fixtures = [
+    'services/digital-asset-engine/fixtures/plasma-pistol-effects.pilot.json',
+    'services/digital-asset-engine/fixtures/ion-cannon-effects.pilot.json',
+  ];
+  const pilots = await Promise.all(fixtures.map(async (path) => (
+    EffectPilotSchema.parse(await readFixture(path))
+  )));
+  assert.deepEqual(pilots.map((pilot) => pilot.source_asset_key), [
+    'plasma-pistol',
+    'ion-cannon',
+  ]);
+  assert.equal(new Set(pilots.flatMap((pilot) => pilot.effects.map((effect) => (
+    effect.effect_key
+  )))).size, 6);
 });
 
 test('effects pilot creates review-only proofs and leaves the canonical product unchanged', async () => {
@@ -316,7 +388,9 @@ test('effects pilot creates review-only proofs and leaves the canonical product 
     result.projectile_travel_preview_path,
     'previews/arc-launcher-projectile-travel.gif',
   );
+  assert.equal(result.attack_cycle_preview_path, 'previews/arc-launcher-attack-cycle.gif');
   assert.equal(result.manifest.projectile_travel_role, 'preview_only');
+  assert.equal(result.manifest.attack_cycle_role, 'preview_only');
   assert.equal(result.timing.derived_frames, 6);
   assert.equal(await readFile(productPath, 'utf8'), productBefore);
 
