@@ -9,6 +9,7 @@ import { loadEngineConfig } from '../src/config.mjs';
 import {
   assembleEffectSpriteSheet,
   composeProjectileTravelPreviewFrames,
+  detectWeaponMuzzleAnchor,
   generateEffectPilot,
   writeAnimatedGifPreview,
 } from '../src/effect-pilot.mjs';
@@ -224,6 +225,34 @@ test('projectile travel preview keeps the weapon fixed and moves only the previe
   assert.deepEqual(await redPixelBounds(frames[2]), { left: 40, right: 43 });
 });
 
+test('muzzle detection follows the terminal barrel pixels at different vertical positions', async () => {
+  async function weaponAt(top, height) {
+    return sharp({
+      create: {
+        width: 32,
+        height: 32,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    }).composite([{
+      input: Buffer.from(`<svg width="20" height="${height}"><rect width="20" height="${height}" fill="#35d9ff"/></svg>`),
+      left: 4,
+      top,
+    }]).png().toBuffer();
+  }
+
+  const highBarrel = await detectWeaponMuzzleAnchor(await weaponAt(4, 6));
+  const lowBarrel = await detectWeaponMuzzleAnchor(await weaponAt(18, 10));
+  assert.deepEqual(highBarrel.anchor, { x: 24, y: 7 });
+  assert.deepEqual(lowBarrel.anchor, { x: 24, y: 23 });
+  assert.equal(highBarrel.detection.strategy, 'rightmost_opaque');
+  assert.deepEqual(highBarrel.detection.selected_run, {
+    min_y: 4,
+    max_y: 9,
+    opaque_pixels: 24,
+  });
+});
+
 test('effects pilot creates review-only proofs and leaves the canonical product unchanged', async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), 'orion-effect-pilot-'));
   const { config, productPath } = await prepareCanonicalProduct(outputRoot);
@@ -275,7 +304,8 @@ test('effects pilot creates review-only proofs and leaves the canonical product 
   assert.equal(result.manifest.canonical_release_mutated, false);
   assert.equal(result.manifest.marketplace_listing_mutated, false);
   assert.equal(result.manifest.gif_role, 'preview_only');
-  assert.deepEqual(result.manifest.source_weapon_muzzle_anchor, { x: 128, y: 21 });
+  assert.deepEqual(result.manifest.source_weapon_muzzle_anchor, { x: 120, y: 32 });
+  assert.equal(result.manifest.source_weapon_muzzle_anchor_detection.strategy, 'rightmost_opaque');
   assert.deepEqual(result.manifest.buyer_runtime_formats, [
     'transparent_png_frames',
     'transparent_png_sprite_sheet',

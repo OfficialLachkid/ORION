@@ -156,6 +156,15 @@ const EffectAnchorSchema = z.object({
   y: z.number().int().nonnegative(),
 });
 
+const WeaponMuzzleAnchorSchema = z.union([
+  EffectAnchorSchema,
+  z.object({
+    strategy: z.literal('rightmost_opaque'),
+    terminal_band_width: z.number().int().min(1).max(32).default(4),
+    alpha_threshold: z.number().int().min(1).max(255).default(128),
+  }),
+]);
+
 const EffectFrameSchema = z.object({
   frame: z.number().int().nonnegative(),
   duration_ms: z.number().int().min(20).max(10_000),
@@ -191,7 +200,7 @@ export const EffectPilotSchema = z.object({
       height: z.number().int().positive(),
     }),
     weapon_position: EffectAnchorSchema,
-    muzzle_anchor: EffectAnchorSchema,
+    muzzle_anchor: WeaponMuzzleAnchorSchema,
     projectile_travel_preview: z.object({
       canvas: z.object({
         width: z.number().int().positive(),
@@ -229,10 +238,11 @@ export const EffectPilotSchema = z.object({
 }).superRefine((pilot, context) => {
   const travelPreview = pilot.weapon_preview.projectile_travel_preview;
   if (travelPreview) {
-    const startOriginX = pilot.weapon_preview.weapon_position.x
-      + pilot.weapon_preview.muzzle_anchor.x
-      + travelPreview.start_offset_x;
-    if (travelPreview.end_origin_x <= startOriginX) {
+    const configuredAnchor = pilot.weapon_preview.muzzle_anchor;
+    const configuredStartX = 'x' in configuredAnchor
+      ? pilot.weapon_preview.weapon_position.x + configuredAnchor.x + travelPreview.start_offset_x
+      : null;
+    if (configuredStartX !== null && travelPreview.end_origin_x <= configuredStartX) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'Projectile travel preview must end to the right of its muzzle start.',

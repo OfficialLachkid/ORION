@@ -47,6 +47,77 @@ function frameName(frameNumber) {
   return String(frameNumber).padStart(2, '0');
 }
 
+export async function detectWeaponMuzzleAnchor(weaponBuffer, options = {}) {
+  const terminalBandWidth = options.terminal_band_width ?? 4;
+  const alphaThreshold = options.alpha_threshold ?? 128;
+  const { data, info } = await sharp(weaponBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let rightmostX = -1;
+  for (let x = info.width - 1; x >= 0 && rightmostX === -1; x -= 1) {
+    for (let y = 0; y < info.height; y += 1) {
+      if (data[((y * info.width) + x) * 4 + 3] >= alphaThreshold) {
+        rightmostX = x;
+        break;
+      }
+    }
+  }
+  if (rightmostX === -1) throw new Error('Cannot detect a muzzle anchor on a fully transparent weapon.');
+
+  const bandStartX = Math.max(0, rightmostX - terminalBandWidth + 1);
+  const rowCoverage = Array.from({ length: info.height }, () => 0);
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = bandStartX; x <= rightmostX; x += 1) {
+      if (data[((y * info.width) + x) * 4 + 3] >= alphaThreshold) rowCoverage[y] += 1;
+    }
+  }
+
+  const runs = [];
+  let current = null;
+  for (let y = 0; y <= rowCoverage.length; y += 1) {
+    if (y < rowCoverage.length && rowCoverage[y] > 0) {
+      if (!current) current = { min_y: y, max_y: y, opaque_pixels: 0, weighted_y: 0 };
+      current.max_y = y;
+      current.opaque_pixels += rowCoverage[y];
+      current.weighted_y += y * rowCoverage[y];
+    } else if (current) {
+      runs.push(current);
+      current = null;
+    }
+  }
+  runs.sort((left, right) => (
+    right.opaque_pixels - left.opaque_pixels
+    || (right.max_y - right.min_y) - (left.max_y - left.min_y)
+  ));
+  const barrelRun = runs[0];
+  if (!barrelRun) throw new Error('Cannot detect opaque pixels in the weapon terminal band.');
+
+  return {
+    anchor: {
+      x: rightmostX + 1,
+      y: Math.round(barrelRun.weighted_y / barrelRun.opaque_pixels),
+    },
+    detection: {
+      strategy: 'rightmost_opaque',
+      alpha_threshold: alphaThreshold,
+      terminal_band: { min_x: bandStartX, max_x: rightmostX },
+      selected_run: {
+        min_y: barrelRun.min_y,
+        max_y: barrelRun.max_y,
+        opaque_pixels: barrelRun.opaque_pixels,
+      },
+    },
+  };
+}
+
+async function resolveWeaponMuzzleAnchor(weaponBuffer, specification) {
+  if ('x' in specification) {
+    return { anchor: specification, detection: { strategy: 'manual' } };
+  }
+  return detectWeaponMuzzleAnchor(weaponBuffer, specification);
+}
+
 function generationFingerprint(pilot, effect, frame) {
   return sha256(JSON.stringify({
     processing_version: PIXEL_ART_PROCESSING_VERSION,
@@ -331,10 +402,24 @@ export async function generateEffectPilot(options) {
   const productRoot = store.productRoot(product);
   const weaponBuffer = await readFile(resolveInside(productRoot, sourceAsset.final_path, 'Source weapon path'));
   const weaponMetadata = await sharp(weaponBuffer).metadata();
+  const muzzle = await resolveWeaponMuzzleAnchor(weaponBuffer, pilot.weapon_preview.muzzle_anchor);
   if (
-    pilot.weapon_preview.muzzle_anchor.x > weaponMetadata.width
-    || pilot.weapon_preview.muzzle_anchor.y >= weaponMetadata.height
+    muzzle.anchor.x > weaponMetadata.width
+    || muzzle.anchor.y >= weaponMetadata.height
   ) throw new Error('Weapon muzzle anchor must be on or inside the source weapon canvas edge.');
+  const previewPilot = {
+    ...pilot,
+    weapon_preview: { ...pilot.weapon_preview, muzzle_anchor: muzzle.anchor },
+  };
+  const travel = previewPilot.weapon_preview.projectile_travel_preview;
+  if (travel) {
+    const startOriginX = previewPilot.weapon_preview.weapon_position.x
+      + muzzle.anchor.x
+      + travel.start_offset_x;
+    if (travel.end_origin_x <= startOriginX) {
+      throw new Error('Projectile travel preview must end to the right of its detected muzzle start.');
+    }
+  }
   const experimentRoot = resolveInside(productRoot, `experiments/${pilot.pilot_id}`, 'Effect pilot path');
   const adapter = options.adapter || new OllamaImageAdapter(options.config.generation);
   const readiness = await adapter.checkReadiness();
@@ -528,7 +613,7 @@ export async function generateEffectPilot(options) {
       const compositeBuffers = await composeWeaponPreviewFrames({
         weaponBuffer,
         frameBuffers,
-        pilot,
+        pilot: previewPilot,
         effect: muzzleEffect,
       });
       compositePreviewPath = resolveInside(experimentRoot, 'previews/arc-launcher-composite.gif', 'Composite preview path');
@@ -552,7 +637,7 @@ export async function generateEffectPilot(options) {
       const travelBuffers = await composeProjectileTravelPreviewFrames({
         weaponBuffer,
         projectileBuffer,
-        pilot,
+        pilot: previewPilot,
         effect: projectileEffect,
       });
       const travel = pilot.weapon_preview.projectile_travel_preview;
@@ -601,7 +686,8 @@ export async function generateEffectPilot(options) {
       product_version: product.version,
       source_asset_key: pilot.source_asset_key,
       source_asset_sha256: sha256(weaponBuffer),
-      source_weapon_muzzle_anchor: pilot.weapon_preview.muzzle_anchor,
+      source_weapon_muzzle_anchor: muzzle.anchor,
+      source_weapon_muzzle_anchor_detection: muzzle.detection,
       status: 'awaiting_effects_review',
       canonical_release_mutated: false,
       marketplace_listing_mutated: false,
