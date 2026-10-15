@@ -163,18 +163,18 @@ test('GIF preview assembly preserves frame delays and uses a transparency palett
     outputPath,
     ffmpegExecutable: '/fixture/ffmpeg',
     async runProcess(options) {
-      invocation = {
-        ...options,
-        concat: await readFile(options.args[options.args.indexOf('-i') + 1], 'utf8'),
-      };
+      invocation = options;
       await writeFile(outputPath, 'gif');
       return { code: 0, stdout: '', stderr: '' };
     },
   });
   assert.equal(invocation.executable, '/fixture/ffmpeg');
-  assert.deepEqual(invocation.args.slice(4, 6), ['-r', '100']);
-  assert.match(invocation.concat, /duration 0\.070/u);
-  assert.match(invocation.concat, /duration 0\.110/u);
+  assert.equal(invocation.args.filter((value) => value === '-framerate').length, 2);
+  assert.equal(invocation.args.includes('0.070'), true);
+  assert.equal(invocation.args.includes('0.110'), true);
+  assert.equal(invocation.args.includes('11'), true);
+  assert.equal(invocation.args.some((value) => String(value).includes('concat=n=2')), true);
+  assert.equal(invocation.args.some((value) => String(value).includes('mpdecimate')), true);
   assert.equal(invocation.args.some((value) => String(value).includes('reserve_transparent=1')), true);
   assert.equal(await readFile(outputPath, 'utf8'), 'gif');
 });

@@ -133,44 +133,38 @@ export async function assembleEffectSpriteSheet(frameBuffers, effect, options = 
   };
 }
 
-function quoteConcatPath(path) {
-  return `'${path.replaceAll('\\', '/').replaceAll("'", "'\\''")}'`;
-}
-
 export async function writeAnimatedGifPreview(options) {
   if (options.framePaths.length < 2) throw new Error('Animated GIF preview requires at least two frames.');
   if (options.delays.length !== options.framePaths.length) {
     throw new Error('Animated GIF preview requires one delay per frame.');
   }
   const runProcess = options.runProcess || runLocalProcess;
-  const temporaryDirectory = await mkdtemp(join(tmpdir(), 'orion-effect-gif-'));
-  const concatPath = join(temporaryDirectory, 'frames.txt');
-  try {
-    const lines = [];
-    options.framePaths.forEach((path, index) => {
-      lines.push(`file ${quoteConcatPath(resolve(path))}`);
-      lines.push(`duration ${(options.delays[index] / 1000).toFixed(3)}`);
-    });
-    lines.push(`file ${quoteConcatPath(resolve(options.framePaths.at(-1)))}`);
-    await writeFile(concatPath, `${lines.join('\n')}\n`, 'utf8');
-    await mkdir(dirname(options.outputPath), { recursive: true });
-    await runProcess({
-      executable: options.ffmpegExecutable || resolveFfmpegExecutable({ executable: 'auto' }),
-      args: [
-        '-hide_banner', '-loglevel', 'error', '-y',
-        '-r', '100',
-        '-f', 'concat', '-safe', '0', '-i', concatPath,
-        '-filter_complex',
-        '[0:v]split[s0][s1];[s0]palettegen=reserve_transparent=1:transparency_color=000000[p];[s1][p]paletteuse=alpha_threshold=128',
-        '-vsync', 'vfr', '-loop', '0', options.outputPath,
-      ],
-      cwd: options.cwd,
-      timeoutMs: 120_000,
-    });
-    return options.outputPath;
-  } finally {
-    await rm(temporaryDirectory, { recursive: true, force: true });
-  }
+  const inputs = options.framePaths.flatMap((path, index) => [
+    '-framerate', '100',
+    '-loop', '1',
+    '-t', (options.delays[index] / 1000).toFixed(3),
+    '-i', resolve(path),
+  ]);
+  const inputLabels = options.framePaths.map((unused, index) => `[${index}:v]`).join('');
+  const filter = [
+    `${inputLabels}concat=n=${options.framePaths.length}:v=1:a=0,mpdecimate,split[s0][s1]`,
+    '[s0]palettegen=reserve_transparent=1:transparency_color=000000[p]',
+    '[s1][p]paletteuse=alpha_threshold=128',
+  ].join(';');
+  await mkdir(dirname(options.outputPath), { recursive: true });
+  await runProcess({
+    executable: options.ffmpegExecutable || resolveFfmpegExecutable({ executable: 'auto' }),
+    args: [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      ...inputs,
+      '-filter_complex', filter,
+      '-final_delay', String(Math.round(options.delays.at(-1) / 10)),
+      '-loop', '0', options.outputPath,
+    ],
+    cwd: options.cwd,
+    timeoutMs: 120_000,
+  });
+  return options.outputPath;
 }
 
 async function composeWeaponPreviewFrames({ weaponBuffer, frameBuffers, pilot, effect }) {
