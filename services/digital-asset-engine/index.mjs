@@ -4,6 +4,7 @@ import process from 'node:process';
 import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
 import { loadEngineConfig, resolveOutputRoot } from './src/config.mjs';
 import { postDigitalAssetReview } from './src/discord-review.mjs';
+import { generateEffectPilot } from './src/effect-pilot.mjs';
 import { stageItchDraft } from './src/itch-draft-stager.mjs';
 import { packageDigitalAssetPreview } from './src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from './src/pipeline.mjs';
@@ -11,6 +12,7 @@ import { slugify } from './src/product-planner.mjs';
 
 const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
 const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
+const DEFAULT_EFFECT_PILOT = 'services/digital-asset-engine/fixtures/arc-launcher-effects.pilot.json';
 
 function parseArguments(argv) {
   const args = {
@@ -30,6 +32,7 @@ function parseArguments(argv) {
     else if (token === '--headless') args.headed = false;
     else if (token === '--config') args.config = argv[++index];
     else if (token === '--opportunity') args.opportunity = argv[++index];
+    else if (token === '--pilot') args.pilot = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
     else if (token === '--category-name') args.categoryName = argv[++index];
@@ -52,10 +55,12 @@ function printHelp() {
     '  package   Assemble a deterministic internal itch preview export.',
     '  itch-draft  Upload the package and populate/verify the existing itch.io draft.',
     '  discord-review  Create the pack review channel/thread and post previews.',
+    '  effects-pilot  Generate isolated fixed-anchor effects without changing the approved pack.',
     '',
     'Options:',
     `  --config <path>       Default: ${DEFAULT_CONFIG}`,
     `  --opportunity <path>  Default: ${DEFAULT_OPPORTUNITY}`,
+    `  --pilot <path>       Default: ${DEFAULT_EFFECT_PILOT}`,
     '  --output-root <path>  Override canonical product storage.',
     '  --now <ISO datetime>  Deterministic validation/testing time.',
     '  --execute             Required for image generation.',
@@ -78,8 +83,8 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
-  if (args.command === 'generate' && !args.execute) {
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'effects-pilot'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (['generate', 'effects-pilot'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
   if (args.command === 'package' && !args.internalPreview) {
@@ -97,6 +102,39 @@ async function main() {
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
   if (args.outputRoot) config = { ...config, output_root: args.outputRoot };
+  if (args.command === 'effects-pilot') {
+    const pilot = JSON.parse(await readFile(args.pilot || DEFAULT_EFFECT_PILOT, 'utf8'));
+    const outputRoot = resolveOutputRoot(config);
+    const result = await generateEffectPilot({
+      config,
+      pilot,
+      outputRoot,
+      projectRoot: process.cwd(),
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      pilot_id: result.pilot.pilot_id,
+      product_id: result.product.product_id,
+      product_version: result.product.version,
+      status: result.manifest.status,
+      output_root: outputRoot,
+      experiment_root: result.experimentRoot,
+      effects: result.effects.map((effect) => ({
+        effect_key: effect.effect_key,
+        frame_count: effect.frame_count,
+        sheet_path: effect.sheet_path,
+        animation_path: effect.animation_path,
+        preview_gif_path: effect.preview_gif_path,
+      })),
+      composite_preview_path: result.composite_preview_path,
+      timing: result.timing,
+      manifest_hash: result.manifest.manifest_hash,
+      gates: result.gates,
+      cost: result.cost,
+    }, null, 2)}\n`);
+    return;
+  }
   const opportunityPath = args.opportunity || DEFAULT_OPPORTUNITY;
   const opportunity = JSON.parse(await readFile(opportunityPath, 'utf8'));
   const common = {

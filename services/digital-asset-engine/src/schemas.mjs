@@ -150,3 +150,85 @@ export const ProductSpecificationSchema = z.object({
   created_at: z.string().datetime({ offset: true }),
   updated_at: z.string().datetime({ offset: true }),
 });
+
+const EffectAnchorSchema = z.object({
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+});
+
+const EffectFrameSchema = z.object({
+  frame: z.number().int().nonnegative(),
+  duration_ms: z.number().int().min(20).max(10_000),
+  phase: z.string().min(1),
+  prompt: z.string().min(1),
+  seed: z.number().int().nonnegative(),
+});
+
+export const EffectPilotSchema = z.object({
+  schema_version: z.literal('1.0'),
+  pilot_id: IdentifierSchema,
+  product_slug: IdentifierSchema,
+  source_asset_key: IdentifierSchema,
+  status: z.literal('planned'),
+  purpose: z.string().min(1),
+  style: z.object({
+    medium: z.literal('pixel_art'),
+    perspective: z.string().min(1),
+    palette: z.array(HexColorSchema).min(2).max(256),
+    max_palette_colors: z.number().int().min(2).max(256),
+    chroma_key: HexColorSchema,
+    source_width: z.number().int().min(64).max(4096),
+    source_height: z.number().int().min(64).max(4096),
+  }),
+  weapon_preview: z.object({
+    canvas: z.object({
+      width: z.number().int().positive(),
+      height: z.number().int().positive(),
+    }),
+    weapon_position: EffectAnchorSchema,
+    muzzle_anchor: EffectAnchorSchema,
+  }),
+  effects: z.array(z.object({
+    effect_key: IdentifierSchema,
+    name: z.string().min(1),
+    kind: z.enum(['projectile', 'muzzle_flash', 'impact_decay']),
+    canvas: z.object({
+      width: z.number().int().min(8).max(1024),
+      height: z.number().int().min(8).max(1024),
+      padding: z.number().int().min(0).max(128),
+    }),
+    placement: z.enum(['center', 'west_center']),
+    origin: EffectAnchorSchema,
+    origin_contact_required: z.boolean().default(false),
+    origin_tolerance: z.number().int().min(0).max(64).default(6),
+    playback: z.enum(['once', 'loop']),
+    frames: z.array(EffectFrameSchema).min(1).max(32),
+  })).min(1).max(12),
+}).superRefine((pilot, context) => {
+  const keys = new Set();
+  for (const effect of pilot.effects) {
+    if (keys.has(effect.effect_key)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate effect key: ${effect.effect_key}`,
+        path: ['effects'],
+      });
+    }
+    keys.add(effect.effect_key);
+    if (effect.origin.x >= effect.canvas.width || effect.origin.y >= effect.canvas.height) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Effect origin must be inside the ${effect.effect_key} canvas.`,
+        path: ['effects'],
+      });
+    }
+    const expectedFrames = Array.from({ length: effect.frames.length }, (_, index) => index);
+    if (JSON.stringify(effect.frames.map((frame) => frame.frame)) !== JSON.stringify(expectedFrames)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${effect.effect_key} frame numbers must be contiguous and zero-based.`,
+        path: ['effects'],
+      });
+    }
+  }
+});

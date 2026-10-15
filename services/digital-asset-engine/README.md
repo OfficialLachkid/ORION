@@ -80,3 +80,16 @@ The ORION bot needs `View Channel`, `Send Messages`, `Embed Links`, `Attach File
 Set `DIGITAL_ASSET_ARCHIVE_ROOT` for both generation and the live Discord bot, for example `/Volumes/T7/O.R.I.O.N. Digital Assets`.
 
 Canonical approved assets, release manifests, covers, sprite sheets, and marketplace exports remain on the T7 while a product is supported. Mac working copies can be removed after their T7 hashes are verified. Model source images and rejected candidates are retention-managed separately; marketplace uploads are delivery copies, not backups.
+
+## Isolated effects proof
+
+Generate the Arc Launcher effects proof without changing the approved product, Discord review, or itch.io draft:
+
+```bash
+npm run digital-assets:effects-pilot -- \
+  --execute \
+  --pilot services/digital-asset-engine/fixtures/arc-launcher-effects.pilot.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The proof writes to `neon-plasma-armory/experiments/arc-launcher-effects-proof`. It produces one standalone projectile, four fixed-origin muzzle-flash frames, four fixed-center impact/decay frames, transparent PNG sprite sheets, `animation.json` metadata, isolated GIF previews, and an optional weapon-composited GIF for review. The muzzle anchor is stored in weapon-local coordinates; compositing adds the preview placement without baking movement into either asset. GIF files are previews only; buyer/runtime formats are the PNG frames, PNG sprite sheets, and animation metadata. All animation metadata declares zero root motion. The approved pack is extended only through a later versioned-release workflow after this proof receives human approval.

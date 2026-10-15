@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0",
+  "pilot_id": "arc-launcher-effects-proof",
+  "product_slug": "neon-plasma-armory",
+  "source_asset_key": "arc-launcher",
+  "status": "planned",
+  "purpose": "Prove isolated, fixed-anchor weapon effects before creating a versioned extension of the approved pack.",
+  "style": {
+    "medium": "pixel_art",
+    "perspective": "strict side view, effect travels or emits toward the right",
+    "palette": [
+      "#10131d",
+      "#20283a",
+      "#44506b",
+      "#7785a6",
+      "#c8d4ec",
+      "#35d9ff",
+      "#875cff",
+      "#ff4fd8"
+    ],
+    "max_palette_colors": 32,
+    "chroma_key": "#00ff00",
+    "source_width": 1024,
+    "source_height": 1024
+  },
+  "weapon_preview": {
+    "canvas": { "width": 208, "height": 96 },
+    "weapon_position": { "x": 16, "y": 16 },
+    "muzzle_anchor": { "x": 120, "y": 31 }
+  },
+  "effects": [
+    {
+      "effect_key": "arc-projectile",
+      "name": "Arc Projectile",
+      "kind": "projectile",
+      "canvas": { "width": 48, "height": 24, "padding": 3 },
+      "placement": "center",
+      "origin": { "x": 24, "y": 12 },
+      "origin_contact_required": false,
+      "origin_tolerance": 6,
+      "playback": "once",
+      "frames": [
+        {
+          "frame": 0,
+          "duration_ms": 100,
+          "phase": "projectile",
+          "seed": 14610,
+          "prompt": "Create one original isolated pixel-art Arc Launcher projectile sprite, strict side view travelling right. A compact elongated cyan plasma core with a restrained violet electrical halo and two short trailing sparks, readable at 48x24 pixels. Use crisp hard pixel clusters, no gradients, no antialiasing, no weapon, no character, no text, no shadow, no floor, no border, and no other objects. Center the projectile. Use only dark gunmetal, cyan, violet, pale blue, and white. The entire background, including every enclosed empty area, must be a perfectly flat solid pure green #00ff00 chroma field."
+        }
+      ]
+    },
+    {
+      "effect_key": "arc-muzzle-flash",
+      "name": "Arc Muzzle Flash",
+      "kind": "muzzle_flash",
+      "canvas": { "width": 64, "height": 64, "padding": 4 },
+      "placement": "west_center",
+      "origin": { "x": 4, "y": 32 },
+      "origin_contact_required": true,
+      "origin_tolerance": 8,
+      "playback": "once",
+      "frames": [
+        {
+          "frame": 0,
+          "duration_ms": 70,
+          "phase": "ignition",
+          "seed": 14620,
+          "prompt": "Create frame 1 of 4 of one isolated pixel-art Arc Launcher muzzle flash, strict side view emitting right. Ignition phase: a tiny concentrated cyan-white spark begins at the exact left-center edge, with one restrained violet arc. Crisp hard pixel clusters, no gradients, no antialiasing, no weapon, no projectile, no character, no text, no shadow, no floor, no border, no other objects. Keep all energy connected to the left-center emission point and leave generous empty space. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00."
+        },
+        {
+          "frame": 1,
+          "duration_ms": 80,
+          "phase": "expansion",
+          "seed": 14621,
+          "prompt": "Create frame 2 of 4 of one isolated pixel-art Arc Launcher muzzle flash, strict side view emitting right. Expansion phase: a medium narrow cyan-white electrical cone grows rightward from the exact left-center edge, with two restrained violet branches. Crisp hard pixel clusters, no gradients, no antialiasing, no weapon, no projectile, no character, no text, no shadow, no floor, no border, no other objects. Keep all energy connected to the same left-center emission point and fully inside the canvas. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00."
+        },
+        {
+          "frame": 2,
+          "duration_ms": 90,
+          "phase": "peak",
+          "seed": 14622,
+          "prompt": "Create frame 3 of 4 of one isolated pixel-art Arc Launcher muzzle flash, strict side view emitting right. Peak phase: the largest bright cyan-white branching electrical discharge extends rightward from the exact left-center edge, surrounded by a restrained violet glow made of hard pixel clusters. No gradients, no antialiasing, no weapon, no projectile, no character, no text, no shadow, no floor, no border, no other objects. Keep all energy connected to the same left-center emission point and fully inside the canvas. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00."
+        },
+        {
+          "frame": 3,
+          "duration_ms": 110,
+          "phase": "dissipation",
+          "seed": 14623,
+          "prompt": "Create frame 4 of 4 of one isolated pixel-art Arc Launcher muzzle flash, strict side view emitting right. Dissipation phase: a small fading broken cyan and violet electrical discharge remains connected to the exact left-center edge, visibly weaker than the peak with sparse pixel sparks. Crisp hard pixel clusters, no gradients, no antialiasing, no weapon, no projectile, no character, no text, no shadow, no floor, no border, no other objects. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00."
+        }
+      ]
+    },
+    {
+      "effect_key": "arc-impact-decay",
+      "name": "Arc Impact and Decay",
+      "kind": "impact_decay",
+      "canvas": { "width": 64, "height": 64, "padding": 4 },
+      "placement": "center",
+      "origin": { "x": 32, "y": 32 },
+      "origin_contact_required": false,
+      "origin_tolerance": 8,
+      "playback": "once",
+      "frames": [
+        {
+          "frame": 0,
+          "duration_ms": 70,
+          "phase": "contact",
+          "seed": 14630,
+          "prompt": "Create frame 1 of 4 of one isolated stationary pixel-art Arc projectile impact effect. Contact phase: a compact centered cyan-white energy point with a tiny violet cross-shaped spark. The effect does not translate on x or y. Crisp hard pixel clusters, no gradients, no antialiasing, no projectile, no weapon, no character, no surface, no text, no shadow, no floor, no border, no other objects. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00."
+        },
+        {
+          "frame": 1,
+          "duration_ms": 90,
+          "phase": "burst",
+          "seed": 14631,
+          "prompt": "Create frame 2 of 4 of one isolated stationary pixel-art Arc projectile impact effect. Burst phase: a bright centered cyan-white electrical burst expands evenly around the same fixed center, with restrained violet branches. The effect does not translate on x or y. Crisp hard pixel clusters, no gradients, no antialiasing, no projectile, no weapon, no character, no surface, no text, no shadow, no floor, no border, no other objects. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00."
+        },
+        {
+          "frame": 2,
+          "duration_ms": 110,
+          "phase": "ring",
+          "seed": 14632,
+          "prompt": "Create frame 3 of 4 of one isolated stationary pixel-art Arc projectile impact effect. Decay-ring phase: a wider broken cyan and violet electrical ring surrounds the same fixed center, with a dimmer center and several short inward sparks. The effect does not translate on x or y. Crisp hard pixel clusters, no gradients, no antialiasing, no projectile, no weapon, no character, no surface, no text, no shadow, no floor, no border, no other objects. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00."
+        },
+        {
+          "frame": 3,
+          "duration_ms": 140,
+          "phase": "fade",
+          "seed": 14633,
+          "prompt": "Create frame 4 of 4 of one isolated stationary pixel-art Arc projectile impact effect. Final fade phase: only a few faint centered cyan and violet electrical embers remain around the same fixed center, clearly less energetic than earlier frames. The effect does not translate on x or y. Crisp hard pixel clusters, no gradients, no antialiasing, no projectile, no weapon, no character, no surface, no text, no shadow, no floor, no border, no other objects. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00."
+        }
+      ]
+    }
+  ]
+}

@@ -148,6 +148,108 @@ export async function processPixelArtAsset(inputBuffer, options) {
   };
 }
 
+function placedCoordinates(placement, canvas, image) {
+  const top = Math.round((canvas.height - image.height) / 2);
+  if (placement === 'west_center') return { left: canvas.padding, top };
+  return {
+    left: Math.round((canvas.width - image.width) / 2),
+    top,
+  };
+}
+
+export async function processPixelArtEffectFrame(inputBuffer, options) {
+  const decoded = await sharp(inputBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const { width, height } = decoded.info;
+  const rgba = Buffer.from(decoded.data);
+  const expectedKey = parseHexColor(options.chromaKey);
+  const detected = detectBorderChroma(
+    rgba,
+    width,
+    height,
+    expectedKey,
+    options.chromaTolerance,
+  );
+  const removedChromaPixels = removeChroma(
+    rgba,
+    width,
+    height,
+    detected.color,
+    options.chromaTolerance,
+  );
+  const extractedBounds = findOpaqueBounds(rgba, width, height);
+  const availableWidth = options.width - (options.padding * 2);
+  const availableHeight = options.height - (options.padding * 2);
+  if (availableWidth <= 0 || availableHeight <= 0) {
+    throw new Error('Effect frame padding leaves no drawable canvas area.');
+  }
+  const resized = await sharp(rgba, { raw: { width, height, channels: 4 } })
+    .extract(extractedBounds)
+    .resize(availableWidth, availableHeight, {
+      fit: 'inside',
+      kernel: sharp.kernel.nearest,
+      withoutEnlargement: false,
+    })
+    .png()
+    .toBuffer({ resolveWithObject: true });
+  const position = placedCoordinates(options.placement, {
+    width: options.width,
+    height: options.height,
+    padding: options.padding,
+  }, resized.info);
+  const output = await sharp({
+    create: {
+      width: options.width,
+      height: options.height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: resized.data, ...position }])
+    .png({
+      palette: true,
+      colours: options.maxPaletteColors,
+      dither: 0,
+      compressionLevel: 9,
+    })
+    .toBuffer();
+
+  return {
+    buffer: output,
+    processing_version: PIXEL_ART_PROCESSING_VERSION,
+    source: { width, height },
+    extracted_bounds: extractedBounds,
+    placed_bounds: {
+      left: position.left,
+      top: position.top,
+      width: resized.info.width,
+      height: resized.info.height,
+    },
+    removed_chroma_pixels: removedChromaPixels,
+    detected_chroma_key: detected.hex,
+    border_chroma_match_ratio: Number(detected.matchRatio.toFixed(4)),
+    requested_chroma_distance: Number(detected.expectedDistance.toFixed(2)),
+  };
+}
+
+export async function inspectAnchorContact(assetBuffer, origin, tolerance) {
+  const decoded = await sharp(assetBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (let y = 0; y < decoded.info.height; y += 1) {
+    for (let x = 0; x < decoded.info.width; x += 1) {
+      if (decoded.data[((y * decoded.info.width) + x) * 4 + 3] === 0) continue;
+      nearestDistance = Math.min(nearestDistance, Math.hypot(x - origin.x, y - origin.y));
+    }
+  }
+  return {
+    passed: nearestDistance <= tolerance,
+    nearest_opaque_distance: Number(nearestDistance.toFixed(2)),
+    tolerance,
+  };
+}
+
 export async function createTransparencyPreview(assetBuffer, options = {}) {
   const tileSize = options.tileSize || 8;
   const metadata = await sharp(assetBuffer).metadata();
