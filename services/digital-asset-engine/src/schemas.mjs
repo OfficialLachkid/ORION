@@ -237,6 +237,11 @@ export const EffectPilotSchema = z.object({
     playback: z.enum(['once', 'loop']),
     frames: z.array(EffectFrameSchema).min(1).max(32),
   })).min(1).max(12),
+  revision: z.object({
+    source_pilot_id: IdentifierSchema,
+    reason: z.string().min(3),
+    regenerated_kinds: z.array(z.enum(['projectile', 'muzzle_flash', 'impact_decay'])).min(1),
+  }).optional(),
 }).superRefine((pilot, context) => {
   const travelPreview = pilot.weapon_preview.projectile_travel_preview;
   if (travelPreview && travelPreview.end_margin_right_px >= travelPreview.canvas.width) {
@@ -314,6 +319,50 @@ export const EffectBatchPlanSchema = z.object({
       });
     }
     keys.add(weapon.source_asset_key);
+  }
+});
+
+export const EffectRevisionBatchPlanSchema = z.object({
+  schema_version: z.literal('1.0'),
+  batch_id: IdentifierSchema,
+  product_slug: IdentifierSchema,
+  revisions: z.array(z.object({
+    source_asset_key: IdentifierSchema,
+    source_pilot_id: IdentifierSchema,
+    target_pilot_id: IdentifierSchema,
+    reason: z.string().min(3),
+    effects: z.array(z.object({
+      kind: z.enum(['projectile', 'muzzle_flash', 'impact_decay']),
+      prompt: z.string().min(1),
+      seed_offset: z.number().int().positive(),
+    })).min(1).max(3),
+  })).min(1).max(25),
+}).superRefine((plan, context) => {
+  const targetIds = new Set();
+  for (const revision of plan.revisions) {
+    if (revision.source_pilot_id === revision.target_pilot_id) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Effect revision target must differ from its source pilot.',
+        path: ['revisions'],
+      });
+    }
+    if (targetIds.has(revision.target_pilot_id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate effect revision target: ${revision.target_pilot_id}`,
+        path: ['revisions'],
+      });
+    }
+    targetIds.add(revision.target_pilot_id);
+    const kinds = revision.effects.map((effect) => effect.kind);
+    if (new Set(kinds).size !== kinds.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate regenerated effect kind for ${revision.target_pilot_id}.`,
+        path: ['revisions'],
+      });
+    }
   }
 });
 

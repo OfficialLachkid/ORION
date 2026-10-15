@@ -100,6 +100,7 @@
     "digital-assets:generate": "node services/digital-asset-engine/index.mjs generate",
     "digital-assets:effects-pilot": "node services/digital-asset-engine/index.mjs effects-pilot",
     "digital-assets:effects-batch": "node services/digital-asset-engine/index.mjs effects-batch",
+    "digital-assets:revise-effects": "node services/digital-asset-engine/index.mjs revise-effects",
     "digital-assets:effects-review": "node services/digital-asset-engine/index.mjs effects-review",
     "digital-assets:prepare-extension": "node services/digital-asset-engine/index.mjs prepare-extension",
     "digital-assets:package": "node services/digital-asset-engine/index.mjs package",

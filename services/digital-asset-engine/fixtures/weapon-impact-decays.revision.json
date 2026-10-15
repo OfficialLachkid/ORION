@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "neon-plasma-armory-impact-decays-v2",
+  "product_slug": "neon-plasma-armory",
+  "revisions": [
+    {
+      "source_asset_key": "ion-pistol",
+      "source_pilot_id": "ion-pistol-effects-proof-v1",
+      "target_pilot_id": "ion-pistol-effects-proof-v2",
+      "reason": "Replace a weapon-like decay silhouette with a clearly abstract ion-energy impact.",
+      "effects": [
+        {
+          "kind": "impact_decay",
+          "seed_offset": 1000,
+          "prompt": "Create one isolated side-view pixel-art impact keyframe on a flat chroma green background. Draw a compact circular pale-blue ion discharge with a bright cyan center, a broken thin violet ring, and short irregular radial electrical sparks. The shape must read only as an abstract energy collision: radial, asymmetric, and centered. No projectile, gun, weapon, barrel, stock, grip, trigger, handle, rectangular body, or recognizable equipment silhouette. No text, ground, shadow, border, UI, or scenery. Crisp hard-edged pixels, limited palette, no antialiasing."
+        }
+      ]
+    },
+    {
+      "source_asset_key": "energy-shotgun",
+      "source_pilot_id": "energy-shotgun-effects-proof-v1",
+      "target_pilot_id": "energy-shotgun-effects-proof-v2",
+      "reason": "Replace a weapon-like decay silhouette with a clearly abstract multi-pellet impact.",
+      "effects": [
+        {
+          "kind": "impact_decay",
+          "seed_offset": 1000,
+          "prompt": "Create one isolated side-view pixel-art impact keyframe on a flat chroma green background. Draw a broad irregular cluster of five small cyan-white pellet bursts, overlapping lightly around a shared center with violet arcs and scattered short sparks. The shape must read only as an abstract multi-point energy collision: dispersed, uneven, and radial. No projectile, gun, weapon, barrel, stock, grip, trigger, handle, rectangular body, or recognizable equipment silhouette. No text, ground, shadow, border, UI, or scenery. Crisp hard-edged pixels, limited palette, no antialiasing."
+        }
+      ]
+    }
+  ]
+}

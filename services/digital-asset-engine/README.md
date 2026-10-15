@@ -109,12 +109,23 @@ npm run digital-assets:effects-batch -- \
 
 The batch stops on the first failed proof, preserves every previously completed experiment, and prints a per-weapon manifest, muzzle anchor, attack-cycle path, generation-call count, and duration. It does not mutate the canonical release, Discord package decision, or marketplace listing.
 
+If review finds a problem in only selected effect kinds, create new immutable proof revisions while inheriting the accepted artifacts. The current targeted revision regenerates only the Ion Pistol and Energy Shotgun impact/decay keyframes, then derives their decay frames deterministically:
+
+```bash
+npm run digital-assets:revise-effects -- \
+  --execute \
+  --revision-plan services/digital-asset-engine/fixtures/weapon-impact-decays.revision.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The original `-v1` experiments remain unchanged. The `-v2` experiments inherit the approved projectile and muzzle artifacts byte-for-byte, record their source pilot and revision reason, and make one local model call per replacement impact. A target pilot ID is immutable: a changed specification must use a new revision ID.
+
 After all eight experiments exist, post or reconcile the read-only effects presentation in the existing pack channel:
 
 ```bash
 npm run digital-assets:effects-review -- \
   --post-to-discord \
-  --review-plan services/digital-asset-engine/fixtures/all-weapon-effects.review.json \
+  --review-plan services/digital-asset-engine/fixtures/all-weapon-effects-v2.review.json \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 

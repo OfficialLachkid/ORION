@@ -843,6 +843,7 @@ export async function generateEffectPilot(options) {
       source_asset_sha256: sha256(weaponBuffer),
       source_weapon_muzzle_anchor: muzzle.anchor,
       source_weapon_muzzle_anchor_detection: muzzle.detection,
+      revision: pilot.revision || null,
       status: 'awaiting_effects_review',
       canonical_release_mutated: false,
       marketplace_listing_mutated: false,

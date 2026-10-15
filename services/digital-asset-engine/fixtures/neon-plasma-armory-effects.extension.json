@@ -18,8 +18,8 @@
     {
       "hold_id": "identify-weapon-like-impact-decays",
       "status": "open",
-      "affected_asset_keys": [],
-      "note": "Operator reported that two impact/decay sequences resemble shrunken weapons. Identify the affected weapons and accept or replace those sequences before staging this revision."
+      "affected_asset_keys": ["ion-pistol", "energy-shotgun"],
+      "note": "Ion Pistol and Energy Shotgun impact/decay sequences resemble shrunken weapons. Replace and approve those two sequences before staging this revision."
     }
   ]
 }
