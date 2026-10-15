@@ -158,6 +158,7 @@ export async function writeAnimatedGifPreview(options) {
       executable: options.ffmpegExecutable || resolveFfmpegExecutable({ executable: 'auto' }),
       args: [
         '-hide_banner', '-loglevel', 'error', '-y',
+        '-r', '100',
         '-f', 'concat', '-safe', '0', '-i', concatPath,
         '-filter_complex',
         '[0:v]split[s0][s1];[s0]palettegen=reserve_transparent=1:transparency_color=000000[p];[s1][p]paletteuse=alpha_threshold=128',
@@ -242,6 +243,18 @@ async function buildManifest(experimentRoot, base) {
   }
   const payload = { ...base, files };
   return { ...payload, manifest_hash: sha256(JSON.stringify(payload)) };
+}
+
+async function loadTimingHistory(path) {
+  try {
+    const existing = JSON.parse(await readFile(path, 'utf8'));
+    if (Array.isArray(existing.runs)) return existing.runs;
+    const { runs, ...legacyRun } = existing;
+    return [legacyRun];
+  } catch (error) {
+    if (error?.code === 'ENOENT') return [];
+    throw error;
+  }
 }
 
 function animationMetadata(effect, sheet) {
@@ -494,7 +507,8 @@ export async function generateEffectPilot(options) {
     }
 
     const completedAt = new Date().toISOString();
-    const timing = {
+    const timingPath = resolveInside(experimentRoot, 'timing.json', 'Pilot timing path');
+    const currentRun = {
       started_at: startedAt,
       completed_at: completedAt,
       total_duration_ms: Date.now() - startedMs,
@@ -512,7 +526,11 @@ export async function generateEffectPilot(options) {
         derived: frame.derived,
       }))),
     };
-    await writeJson(resolveInside(experimentRoot, 'timing.json', 'Pilot timing path'), timing);
+    const timing = {
+      ...currentRun,
+      runs: [...await loadTimingHistory(timingPath), currentRun],
+    };
+    await writeJson(timingPath, timing);
     const manifest = await buildManifest(experimentRoot, {
       schema_version: '1.0',
       pilot_id: pilot.pilot_id,

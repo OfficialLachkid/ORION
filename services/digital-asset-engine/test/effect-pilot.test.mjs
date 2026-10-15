@@ -172,6 +172,7 @@ test('GIF preview assembly preserves frame delays and uses a transparency palett
     },
   });
   assert.equal(invocation.executable, '/fixture/ffmpeg');
+  assert.deepEqual(invocation.args.slice(4, 6), ['-r', '100']);
   assert.match(invocation.concat, /duration 0\.070/u);
   assert.match(invocation.concat, /duration 0\.110/u);
   assert.equal(invocation.args.some((value) => String(value).includes('reserve_transparent=1')), true);
@@ -256,4 +257,6 @@ test('effects pilot creates review-only proofs and leaves the canonical product 
   assert.equal(generationCalls, 3);
   assert.equal(resumed.timing.generation_calls, 0);
   assert.equal(resumed.timing.resumed_frames, 9);
+  assert.equal(resumed.timing.runs.length, 2);
+  assert.equal(resumed.timing.runs[0].generation_calls, 3);
 });
