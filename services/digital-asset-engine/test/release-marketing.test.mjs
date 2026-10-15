@@ -13,6 +13,21 @@ async function sprite(width, height, color) {
   }).png().toBuffer();
 }
 
+async function transparentProjectile() {
+  return sharp({
+    create: {
+      width: 40,
+      height: 20,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).composite([{
+    input: Buffer.from('<svg width="24" height="6"><rect width="24" height="6" fill="#875cff"/></svg>'),
+    left: 8,
+    top: 7,
+  }]).png().toBuffer();
+}
+
 test('builds protected cover, inventory, effects board, and firing-cycle montage', async () => {
   const candidateRoot = await mkdtemp(join(tmpdir(), 'orion-release-marketing-'));
   const assets = [];
@@ -31,7 +46,12 @@ test('builds protected cover, inventory, effects board, and firing-cycle montage
       for (let frame = 0; frame < frameCount; frame += 1) {
         const framePath = resolve(candidateRoot, 'download', path, 'frames', `${String(frame).padStart(2, '0')}.png`);
         await mkdir(resolve(framePath, '..'), { recursive: true });
-        await writeFile(framePath, await sprite(64, 64, { r: 135, g: 92, b: 255 }));
+        await writeFile(
+          framePath,
+          kind === 'projectile'
+            ? await transparentProjectile()
+            : await sprite(64, 64, { r: 135, g: 92, b: 255 }),
+        );
       }
     }
     const attackCyclePath = resolve(candidateRoot, `${key}-attack-cycle.gif`);
@@ -72,6 +92,9 @@ test('builds protected cover, inventory, effects board, and firing-cycle montage
     { width: 960, height: 540 },
   );
   assert.equal((await readFile(resolve(candidateRoot, media.screenshot_paths[2]), 'utf8')), 'rendered-gif');
+  const board = await sharp(resolve(candidateRoot, media.screenshot_paths[1])).removeAlpha().raw().toBuffer();
+  const paddingOffset = ((200 * 960) + 110) * 3;
+  assert.deepEqual([...board.subarray(paddingOffset, paddingOffset + 3)], [21, 29, 45]);
   assert.equal(ffmpegArgs.filter((value) => value === '-stream_loop').length, 8);
   assert.match(ffmpegArgs[ffmpegArgs.indexOf('-filter_complex') + 1], /palettegen/u);
   assert.match(ffmpegArgs[ffmpegArgs.indexOf('-filter_complex') + 1], /trim=duration=4/u);

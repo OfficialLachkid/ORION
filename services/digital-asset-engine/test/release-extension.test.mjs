@@ -178,6 +178,7 @@ test('builds an immutable extension candidate with buyer runtime effects and an 
   assert.equal(result.manifest.target_version, '0.2.0');
   assert.equal(result.manifest.release_state, 'blocked_quality_review');
   assert.equal(result.manifest.effect_animation_count, 3);
+  assert.equal(result.manifest.marketing_version, '1.0.1');
   assert.deepEqual(result.manifest.marketing_media.screenshot_paths, [
     'weapon-inventory.png',
     'effects-breakdown.png',

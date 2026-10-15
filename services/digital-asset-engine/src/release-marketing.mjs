@@ -6,6 +6,7 @@ import sharp from 'sharp';
 
 const WIDTH = 960;
 const HEIGHT = 540;
+export const RELEASE_MARKETING_VERSION = '1.0.1';
 
 function escapeXml(value) {
   return String(value)
@@ -18,7 +19,12 @@ function escapeXml(value) {
 
 async function contained(buffer, width, height) {
   return sharp(buffer)
-    .resize(width, height, { fit: 'contain', kernel: sharp.kernel.nearest })
+    .resize(width, height, {
+      fit: 'contain',
+      kernel: sharp.kernel.nearest,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .ensureAlpha()
     .png()
     .toBuffer();
 }

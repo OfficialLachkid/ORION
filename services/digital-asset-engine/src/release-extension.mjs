@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
-import { buildReleaseMarketingMedia } from './release-marketing.mjs';
+import { buildReleaseMarketingMedia, RELEASE_MARKETING_VERSION } from './release-marketing.mjs';
 import { ProductExtensionPlanSchema } from './schemas.mjs';
 
 const REQUIRED_EFFECT_KINDS = Object.freeze(['muzzle_flash', 'projectile', 'impact_decay']);
@@ -270,6 +270,7 @@ export async function prepareVersionedPackageExtension(options) {
     product_id: product.product_id,
     base_listing_hash: baseListing.listing_hash,
     effect_manifests: effectsBundle.experiments.map((item) => item.manifest_hash),
+    marketing_version: RELEASE_MARKETING_VERSION,
   })));
   const versionRoot = resolveInside(productRoot, `releases/${plan.target_version}`, 'Release version path');
   const candidateRoot = resolveInside(versionRoot, `candidates/${inputHash.slice(0, 16)}`, 'Candidate path');
@@ -348,6 +349,7 @@ export async function prepareVersionedPackageExtension(options) {
     effect_set_count: effectSets.length,
     effect_animation_count: effectSets.length * REQUIRED_EFFECT_KINDS.length,
     marketing_media: marketingMedia,
+    marketing_version: RELEASE_MARKETING_VERSION,
     listing_hash: listing.listing_hash,
     quality_holds: plan.quality_holds,
     gates,
