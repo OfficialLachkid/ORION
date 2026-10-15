@@ -180,6 +180,8 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   assert.ok(butler.args.includes('--if-changed'));
   const browserRun = calls.find((call) => call.args.includes('run-code'));
   assert.ok(browserRun.args.includes('--filename'));
+  assert.ok(calls.findIndex((call) => call.args.includes('dialog-dismiss'))
+    < calls.findIndex((call) => call.args.includes('run-code')));
   assert.equal(readinessAttempts, 2);
   assert.equal(preparationAttempts, 2);
   const uploads = calls.filter((call) => call.args.includes('upload'));

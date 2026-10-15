@@ -379,6 +379,11 @@ export async function stageItchDraft(options) {
 
   const opened = cliRunner(executable, openArgs, { cwd: options.cwd, env, timeoutMs: 90_000 });
   if (!opened.ok) throw new Error(`Could not open the itch.io editor: ${opened.stderr || opened.stdout || opened.error}`);
+  // A previously interrupted edit can leave a native confirmation dialog attached to
+  // the persistent browser. Dismissing it is non-mutating and restores automation.
+  cliRunner(executable, [
+    '-s', sessionName, 'dialog-dismiss', '--json',
+  ], { cwd: options.cwd, env, timeoutMs: 15_000 });
   const browserCodeRoot = mkdtempSync(resolve(os.tmpdir(), 'orion-itch-playwright-'));
   let browserCodeIndex = 0;
   try {
