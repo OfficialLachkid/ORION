@@ -161,13 +161,13 @@ Status: **in progress**
 - [x] Make generation resumable using each candidate's final SHA-256 validation record.
 - [x] Add deterministic internal-preview packaging with actual-asset cover, sprite sheet, file inventory, and manifest hash.
 - [x] Generate and visually review all eight candidates on the Mac/T7.
-- [ ] Upload the export to a new hidden itch.io Butler channel and verify the returned build.
+- [x] Upload the export to the existing hidden itch.io Butler channel and verify the returned build and draft page.
 - Add a master style reference and shared seed/prompt vocabulary.
 - Add silhouette, scale, outline, and perceptual-similarity checks.
 - Add duplicate and near-duplicate detection.
-- Add sprite-sheet assembly and inventory validation.
-- Review every asset and record accepted/rejected reasons.
-- Replace the draft product license with reviewed terms.
+- [x] Add sprite-sheet assembly and inventory validation.
+- [x] Review every weapon and effect proof and resolve the identified quality holds.
+- Add the review-ready customer license to the immutable package and approve its exact hash with the final package.
 
 Exit criterion: one coherent, useful, original pack whose files can be imported into a game engine without manual repair.
 
@@ -182,14 +182,16 @@ Exit criterion: one coherent, useful, original pack whose files can be imported 
 
 ### Phase 3 — itch.io adapter
 
-Status: **blocked by Phase 2**
+Status: **in progress; draft staging and verification implemented**
 
 - Verify current itch.io seller requirements and AI-generated-content policies.
 - Implement capability declaration rather than assuming full API support.
-- Create generic and itch-specific ZIP exports from the canonical product.
-- Generate honest listing copy and previews from the included assets.
-- Require explicit approval before any upload or publication.
-- Persist external product ID, URL, version, status, price, and errors.
+- [x] Upload the buyer directory through Butler as an itch.io build.
+- [x] Generate honest listing copy and protected previews from the included assets.
+- [x] Populate and read the itch.io draft back through an authenticated browser session.
+- [x] Require exact package approval while keeping publication separately blocked.
+- Persist the external product ID, URL, version, publication status, price, and errors as marketplace release state.
+- Implement explicit distribution approval and public-state verification.
 
 ### Phase 4 — Second marketplace
 
@@ -211,15 +213,15 @@ Status: **deferred**
 
 1. Read this document and `services/digital-asset-engine/README.md`.
 2. Run `npm run digital-assets:test`.
-3. Confirm the hidden itch.io `assets-preview` build has finished processing, then inspect it from the Edit game page without making it public.
-4. Record per-asset human decisions and the pack-level creative decision against the exact manifest hash.
-5. Replace the draft license with reviewed customer terms.
-6. Prepare and approve the itch.io listing copy, price, tags, screenshots, cover, and built-in theme.
-7. Keep publication blocked until a separate distribution approval is recorded.
+3. Build the sale-ready immutable candidate with corrected runtime metadata and the review-ready customer license.
+4. Update and verify the existing itch.io draft, then reconcile the existing Discord package message in place.
+5. Approve the exact package manifest, including its buyer files, listing, price, previews, and license hash.
+6. Implement and record a separate distribution approval before changing itch.io visibility.
+7. Publish, verify the public page and buyer download, and persist the external marketplace release state.
 
 ## Deferred decisions
 
-- Final ORION customer license language.
+- Whether the review-ready VBJServices Digital Asset License 1.0 needs legal revision before final package approval.
 - Whether canonical products live permanently on T7 or are mirrored there.
 - Supabase schema for product and marketplace state.
 - Discord review-card design and approval roles.
