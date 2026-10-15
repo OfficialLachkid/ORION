@@ -11,6 +11,18 @@ function suppliedBrowserCode(args) {
   return filenameIndex >= 0 ? readFileSync(args[filenameIndex + 1], 'utf8') : '';
 }
 
+function browserStatus(code) {
+  return code.includes("status: 'ready'")
+    ? 'ready'
+    : code.includes('Object.values(checks)')
+      ? 'verified'
+      : code.includes("status: 'media_ready'")
+        ? 'media_ready'
+        : code.includes('"save":true')
+          ? 'submitted'
+          : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
+}
+
 async function createFixture() {
   const outputRoot = await mkdtemp(resolve(tmpdir(), 'orion-itch-stage-'));
   const product = {
@@ -124,15 +136,15 @@ test('Playwright draft preparation includes listing fields and exact price contr
 test('stages package with Butler, populates itch.io, verifies it, and reuses exact revision', async () => {
   const fixture = await createFixture();
   const calls = [];
+  let readinessAttempts = 0;
   const cliRunner = (executable, args) => {
     calls.push({ executable, args });
     if (args.includes('run-code')) {
       const code = suppliedBrowserCode(args);
-      const status = code.includes('Object.values(checks)')
-        ? 'verified'
-        : code.includes("status: 'media_ready'") ? 'media_ready'
-        : code.includes('"save":true') ? 'submitted'
-          : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
+      const status = browserStatus(code);
+      if (status === 'ready' && ++readinessAttempts === 1) {
+        return { ok: true, stdout: '{}', stderr: '' };
+      }
       const media = status === 'media_ready' ? { coverId: 'cover-1', screenshotCount: 2 } : {};
       return {
         ok: true,
@@ -164,6 +176,7 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   assert.ok(butler.args.includes('--if-changed'));
   const browserRun = calls.find((call) => call.args.includes('run-code'));
   assert.ok(browserRun.args.includes('--filename'));
+  assert.equal(readinessAttempts, 2);
   const uploads = calls.filter((call) => call.args.includes('upload'));
   assert.equal(uploads.length, 3);
   assert.ok(uploads.every((call) => call.args.indexOf('--json') - call.args.indexOf('upload') === 2));
@@ -178,11 +191,7 @@ test('fails closed when browser verification does not confirm draft state', asyn
   const fixture = await createFixture();
   const cliRunner = (executable, args) => {
     const code = args.includes('run-code') ? suppliedBrowserCode(args) : '';
-    const status = code.includes('Object.values(checks)')
-      ? 'verification_failed'
-      : code.includes("status: 'media_ready'") ? 'media_ready'
-      : code.includes('"save":true') ? 'submitted'
-        : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
+    const status = code.includes('Object.values(checks)') ? 'verification_failed' : browserStatus(code);
     const media = status === 'media_ready' ? { coverId: 'cover-1', screenshotCount: 2 } : {};
     return {
       ok: true,
@@ -210,11 +219,7 @@ test('stages a quality-cleared immutable release candidate instead of the base p
     calls.push({ executable, args });
     if (args.includes('run-code')) {
       const code = suppliedBrowserCode(args);
-      const status = code.includes('Object.values(checks)')
-        ? 'verified'
-        : code.includes("status: 'media_ready'") ? 'media_ready'
-          : code.includes('"save":true') ? 'submitted'
-            : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
+      const status = browserStatus(code);
       return {
         ok: true,
         stdout: JSON.stringify({ result: JSON.stringify({

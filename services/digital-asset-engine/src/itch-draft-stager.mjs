@@ -67,6 +67,10 @@ function parseCliJson(value) {
   }
 }
 
+function pause(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
 export function buildItchDraftRunCode({ listing, publicUrl, editUrl, save = false }) {
   return `
 async (page) => {
@@ -383,19 +387,25 @@ export async function stageItchDraft(options) {
     const missingFiles = [coverPath, ...screenshotPaths].filter((path) => !existsSync(path));
     if (missingFiles.length) throw new Error(`Missing itch.io listing media: ${missingFiles.join(', ')}`);
 
-    const runBrowserCode = (label, code) => {
+    const runBrowserCode = (label, code, maxAttempts = 1) => {
       browserCodeIndex += 1;
       const codePath = resolve(browserCodeRoot, `${String(browserCodeIndex).padStart(2, '0')}.js`);
       writeFileSync(codePath, code, 'utf8');
-      const result = cliRunner(executable, [
-        '-s', sessionName, 'run-code', '--filename', codePath, '--json',
-      ], { cwd: options.cwd, env, timeoutMs: 3 * 60_000 });
-      if (!result.ok) {
-        throw new Error(`itch.io ${label} failed: ${result.stderr || result.stdout || result.error}`);
+      let lastResult;
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        const result = cliRunner(executable, [
+          '-s', sessionName, 'run-code', '--filename', codePath, '--json',
+        ], { cwd: options.cwd, env, timeoutMs: 3 * 60_000 });
+        lastResult = result;
+        if (!result.ok) {
+          throw new Error(`itch.io ${label} failed: ${result.stderr || result.stdout || result.error}`);
+        }
+        const details = parseCliJson(result.stdout) || {};
+        if (details.isError) throw new Error(`itch.io ${label} failed: ${details.error || result.stdout}`);
+        if (Object.keys(details).length) return { details, result };
+        if (attempt < maxAttempts) pause(750);
       }
-      const details = parseCliJson(result.stdout) || {};
-      if (details.isError) throw new Error(`itch.io ${label} failed: ${details.error || result.stdout}`);
-      return { details, result };
+      return { details: {}, result: lastResult };
     };
     const diagnostic = ({ details, result }) => {
       const parsed = JSON.stringify(details);
@@ -403,6 +413,16 @@ export async function stageItchDraft(options) {
         ? parsed
         : String(result.stdout || result.stderr || result.error || 'empty browser response')).slice(0, 800);
     };
+
+    const readiness = runBrowserCode('browser readiness', `
+async (page) => {
+  await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(750);
+  return { status: 'ready', url: page.url() };
+}`.trim(), 3);
+    if (readiness.details.status !== 'ready') {
+      throw new Error(`itch.io browser readiness failed: ${diagnostic(readiness)}`);
+    }
 
     const prepareDraft = (save = false) => {
       const prepared = runBrowserCode('draft preparation', buildItchDraftRunCode({
