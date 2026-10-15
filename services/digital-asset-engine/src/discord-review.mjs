@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, relative, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
@@ -127,6 +128,11 @@ function numberedAssetList(assets) {
 }
 
 export function buildPackReviewEmbed({ product, manifest, itchUrl, revision = 1 }) {
+  const licenseField = manifest.buyer_license ? [{
+    name: 'Customer license',
+    value: `\`${manifest.buyer_license.license_id} ${manifest.buyer_license.version}\`\nSHA-256: \`${manifest.buyer_license.content_sha256}\`\nAttached as \`LICENSE.md\`; approval covers these exact terms.`,
+    inline: false,
+  }] : [];
   return {
     title: `${product.title} · Pack Review · Revision ${revision}`,
     url: itchUrl,
@@ -140,6 +146,7 @@ export function buildPackReviewEmbed({ product, manifest, itchUrl, revision = 1 
       { name: 'Included assets', value: numberedAssetList(product.assets), inline: false },
       { name: 'Manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
       { name: 'Listing', value: `\`${manifest.listing_hash}\``, inline: false },
+      ...licenseField,
       {
         name: 'Attached manifest.json',
         value: 'Machine-readable review receipt with the exact file list and SHA-256 hashes. It proves which files this decision covers; it is not buyer-facing marketing content.',
@@ -301,6 +308,19 @@ export async function postDigitalAssetReview(options) {
       buffer: await readFile(manifestPath),
     },
   ];
+  if (manifest.buyer_license) {
+    const licenseBuffer = await readFile(resolve(exportRoot, 'download', 'LICENSE.md'));
+    const licenseHash = createHash('sha256').update(licenseBuffer).digest('hex');
+    if (licenseHash !== manifest.buyer_license.content_sha256) {
+      throw new Error('The buyer license no longer matches the immutable package manifest.');
+    }
+    overviewFiles.push({
+      filename: 'LICENSE.md',
+      contentType: 'text/markdown',
+      description: `${manifest.buyer_license.license_id} ${manifest.buyer_license.version}`,
+      buffer: licenseBuffer,
+    });
+  }
   if (!state.overview_message_id) {
     const overview = await sendMessageWithFiles(token, state.channel_id, overviewPayload, overviewFiles, {
       fetchImpl: options.fetchImpl,
