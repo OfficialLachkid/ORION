@@ -193,6 +193,46 @@ async function composeWeaponPreviewFrames({ weaponBuffer, frameBuffers, pilot, e
   ]).png({ compressionLevel: 9 }).toBuffer()));
 }
 
+export async function composeProjectileTravelPreviewFrames({
+  weaponBuffer,
+  projectileBuffer,
+  pilot,
+  effect,
+}) {
+  const travel = pilot.weapon_preview.projectile_travel_preview;
+  if (!travel) return [];
+  const muzzleAnchor = {
+    x: pilot.weapon_preview.weapon_position.x + pilot.weapon_preview.muzzle_anchor.x,
+    y: pilot.weapon_preview.weapon_position.y + pilot.weapon_preview.muzzle_anchor.y,
+  };
+  const startOriginX = muzzleAnchor.x + travel.start_offset_x;
+  return Promise.all(Array.from({ length: travel.frame_count }, async (unused, index) => {
+    const progress = index / (travel.frame_count - 1);
+    const projectileOriginX = Math.round(
+      startOriginX + ((travel.end_origin_x - startOriginX) * progress),
+    );
+    return sharp({
+      create: {
+        width: travel.canvas.width,
+        height: travel.canvas.height,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    }).composite([
+      {
+        input: weaponBuffer,
+        left: pilot.weapon_preview.weapon_position.x,
+        top: pilot.weapon_preview.weapon_position.y,
+      },
+      {
+        input: projectileBuffer,
+        left: projectileOriginX - effect.origin.x,
+        top: muzzleAnchor.y - effect.origin.y,
+      },
+    ]).png({ compressionLevel: 9 }).toBuffer();
+  }));
+}
+
 async function writeGifFromBuffers(buffers, delays, outputPath, options) {
   const temporaryDirectory = await mkdtemp(join(tmpdir(), 'orion-effect-composite-'));
   try {
@@ -292,9 +332,9 @@ export async function generateEffectPilot(options) {
   const weaponBuffer = await readFile(resolveInside(productRoot, sourceAsset.final_path, 'Source weapon path'));
   const weaponMetadata = await sharp(weaponBuffer).metadata();
   if (
-    pilot.weapon_preview.muzzle_anchor.x >= weaponMetadata.width
+    pilot.weapon_preview.muzzle_anchor.x > weaponMetadata.width
     || pilot.weapon_preview.muzzle_anchor.y >= weaponMetadata.height
-  ) throw new Error('Weapon muzzle anchor must be inside the source weapon canvas.');
+  ) throw new Error('Weapon muzzle anchor must be on or inside the source weapon canvas edge.');
   const experimentRoot = resolveInside(productRoot, `experiments/${pilot.pilot_id}`, 'Effect pilot path');
   const adapter = options.adapter || new OllamaImageAdapter(options.config.generation);
   const readiness = await adapter.checkReadiness();
@@ -500,6 +540,35 @@ export async function generateEffectPilot(options) {
       );
     }
 
+    const projectileEffect = pilot.effects.find((effect) => effect.kind === 'projectile');
+    const projectileResult = effects.find((effect) => effect.effect_key === projectileEffect?.effect_key);
+    let projectileTravelPreviewPath = null;
+    if (pilot.weapon_preview.projectile_travel_preview && projectileEffect && projectileResult) {
+      const projectileBuffer = await readFile(resolveInside(
+        experimentRoot,
+        projectileResult.frames[0].final_path,
+        'Projectile frame path',
+      ));
+      const travelBuffers = await composeProjectileTravelPreviewFrames({
+        weaponBuffer,
+        projectileBuffer,
+        pilot,
+        effect: projectileEffect,
+      });
+      const travel = pilot.weapon_preview.projectile_travel_preview;
+      projectileTravelPreviewPath = resolveInside(
+        experimentRoot,
+        'previews/arc-launcher-projectile-travel.gif',
+        'Projectile travel preview path',
+      );
+      await writeGifFromBuffers(
+        travelBuffers,
+        Array.from({ length: travel.frame_count }, () => travel.frame_duration_ms),
+        projectileTravelPreviewPath,
+        options,
+      );
+    }
+
     const completedAt = new Date().toISOString();
     const timingPath = resolveInside(experimentRoot, 'timing.json', 'Pilot timing path');
     const currentRun = {
@@ -539,6 +608,7 @@ export async function generateEffectPilot(options) {
       distribution_ready: false,
       human_review_required: true,
       gif_role: 'preview_only',
+      projectile_travel_role: projectileTravelPreviewPath ? 'preview_only' : null,
       buyer_runtime_formats: ['transparent_png_frames', 'transparent_png_sprite_sheet', 'animation_json'],
       created_at: completedAt,
     });
@@ -552,6 +622,9 @@ export async function generateEffectPilot(options) {
       timing,
       composite_preview_path: compositePreviewPath
         ? relative(experimentRoot, compositePreviewPath).replaceAll('\\', '/')
+        : null,
+      projectile_travel_preview_path: projectileTravelPreviewPath
+        ? relative(experimentRoot, projectileTravelPreviewPath).replaceAll('\\', '/')
         : null,
       resource_preflight: resourceReport,
       gates: {

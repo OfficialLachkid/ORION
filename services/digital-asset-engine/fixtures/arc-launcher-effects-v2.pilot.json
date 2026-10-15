@@ -17,7 +17,14 @@
   "weapon_preview": {
     "canvas": { "width": 208, "height": 96 },
     "weapon_position": { "x": 16, "y": 16 },
-    "muzzle_anchor": { "x": 120, "y": 31 }
+    "muzzle_anchor": { "x": 128, "y": 21 },
+    "projectile_travel_preview": {
+      "canvas": { "width": 320, "height": 96 },
+      "start_offset_x": 20,
+      "end_origin_x": 296,
+      "frame_count": 10,
+      "frame_duration_ms": 70
+    }
   },
   "effects": [
     {

@@ -192,6 +192,16 @@ export const EffectPilotSchema = z.object({
     }),
     weapon_position: EffectAnchorSchema,
     muzzle_anchor: EffectAnchorSchema,
+    projectile_travel_preview: z.object({
+      canvas: z.object({
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
+      }),
+      start_offset_x: z.number().int().nonnegative().default(0),
+      end_origin_x: z.number().int().positive(),
+      frame_count: z.number().int().min(2).max(32),
+      frame_duration_ms: z.number().int().min(20).max(2000),
+    }).optional(),
   }),
   effects: z.array(z.object({
     effect_key: IdentifierSchema,
@@ -217,6 +227,26 @@ export const EffectPilotSchema = z.object({
     frames: z.array(EffectFrameSchema).min(1).max(32),
   })).min(1).max(12),
 }).superRefine((pilot, context) => {
+  const travelPreview = pilot.weapon_preview.projectile_travel_preview;
+  if (travelPreview) {
+    const startOriginX = pilot.weapon_preview.weapon_position.x
+      + pilot.weapon_preview.muzzle_anchor.x
+      + travelPreview.start_offset_x;
+    if (travelPreview.end_origin_x <= startOriginX) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Projectile travel preview must end to the right of its muzzle start.',
+        path: ['weapon_preview', 'projectile_travel_preview', 'end_origin_x'],
+      });
+    }
+    if (travelPreview.end_origin_x >= travelPreview.canvas.width) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Projectile travel preview end origin must be inside its canvas.',
+        path: ['weapon_preview', 'projectile_travel_preview', 'end_origin_x'],
+      });
+    }
+  }
   const keys = new Set();
   for (const effect of pilot.effects) {
     if (keys.has(effect.effect_key)) {

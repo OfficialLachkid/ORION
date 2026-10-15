@@ -128,6 +128,7 @@ async function main() {
         preview_gif_path: effect.preview_gif_path,
       })),
       composite_preview_path: result.composite_preview_path,
+      projectile_travel_preview_path: result.projectile_travel_preview_path,
       timing: result.timing,
       manifest_hash: result.manifest.manifest_hash,
       gates: result.gates,

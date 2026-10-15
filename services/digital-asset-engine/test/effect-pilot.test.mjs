@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import { loadEngineConfig } from '../src/config.mjs';
 import {
   assembleEffectSpriteSheet,
+  composeProjectileTravelPreviewFrames,
   generateEffectPilot,
   writeAnimatedGifPreview,
 } from '../src/effect-pilot.mjs';
@@ -179,6 +180,50 @@ test('GIF preview assembly preserves frame delays and uses a transparency palett
   assert.equal(await readFile(outputPath, 'utf8'), 'gif');
 });
 
+test('projectile travel preview keeps the weapon fixed and moves only the preview projectile', async () => {
+  const weaponBuffer = await sharp({
+    create: { width: 16, height: 8, channels: 4, background: '#204060' },
+  }).png().toBuffer();
+  const projectileBuffer = await sharp({
+    create: { width: 4, height: 2, channels: 4, background: '#ff0000' },
+  }).png().toBuffer();
+  const pilot = {
+    weapon_preview: {
+      weapon_position: { x: 2, y: 4 },
+      muzzle_anchor: { x: 16, y: 4 },
+      projectile_travel_preview: {
+        canvas: { width: 48, height: 16 },
+        start_offset_x: 2,
+        end_origin_x: 42,
+        frame_count: 3,
+        frame_duration_ms: 70,
+      },
+    },
+  };
+  const frames = await composeProjectileTravelPreviewFrames({
+    weaponBuffer,
+    projectileBuffer,
+    pilot,
+    effect: { origin: { x: 2, y: 1 } },
+  });
+  assert.equal(frames.length, 3);
+
+  async function redPixelBounds(buffer) {
+    const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const xs = [];
+    for (let y = 0; y < info.height; y += 1) {
+      for (let x = 0; x < info.width; x += 1) {
+        const offset = ((y * info.width) + x) * 4;
+        if (data[offset] === 255 && data[offset + 1] === 0 && data[offset + 2] === 0) xs.push(x);
+      }
+    }
+    return { left: Math.min(...xs), right: Math.max(...xs) };
+  }
+
+  assert.deepEqual(await redPixelBounds(frames[0]), { left: 18, right: 21 });
+  assert.deepEqual(await redPixelBounds(frames[2]), { left: 40, right: 43 });
+});
+
 test('effects pilot creates review-only proofs and leaves the canonical product unchanged', async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), 'orion-effect-pilot-'));
   const { config, productPath } = await prepareCanonicalProduct(outputRoot);
@@ -230,13 +275,18 @@ test('effects pilot creates review-only proofs and leaves the canonical product 
   assert.equal(result.manifest.canonical_release_mutated, false);
   assert.equal(result.manifest.marketplace_listing_mutated, false);
   assert.equal(result.manifest.gif_role, 'preview_only');
-  assert.deepEqual(result.manifest.source_weapon_muzzle_anchor, { x: 120, y: 31 });
+  assert.deepEqual(result.manifest.source_weapon_muzzle_anchor, { x: 128, y: 21 });
   assert.deepEqual(result.manifest.buyer_runtime_formats, [
     'transparent_png_frames',
     'transparent_png_sprite_sheet',
     'animation_json',
   ]);
   assert.equal(result.composite_preview_path, 'previews/arc-launcher-composite.gif');
+  assert.equal(
+    result.projectile_travel_preview_path,
+    'previews/arc-launcher-projectile-travel.gif',
+  );
+  assert.equal(result.manifest.projectile_travel_role, 'preview_only');
   assert.equal(result.timing.derived_frames, 6);
   assert.equal(await readFile(productPath, 'utf8'), productBefore);
 
