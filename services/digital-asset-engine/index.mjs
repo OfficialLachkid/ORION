@@ -12,7 +12,7 @@ import { slugify } from './src/product-planner.mjs';
 
 const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
 const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
-const DEFAULT_EFFECT_PILOT = 'services/digital-asset-engine/fixtures/arc-launcher-effects.pilot.json';
+const DEFAULT_EFFECT_PILOT = 'services/digital-asset-engine/fixtures/arc-launcher-effects-v2.pilot.json';
 
 function parseArguments(argv) {
   const args = {

@@ -182,7 +182,7 @@ test('effects pilot creates review-only proofs and leaves the canonical product 
   const outputRoot = await mkdtemp(join(tmpdir(), 'orion-effect-pilot-'));
   const { config, productPath } = await prepareCanonicalProduct(outputRoot);
   const pilot = EffectPilotSchema.parse(await readFixture(
-    'services/digital-asset-engine/fixtures/arc-launcher-effects.pilot.json',
+    'services/digital-asset-engine/fixtures/arc-launcher-effects-v2.pilot.json',
   ));
   const productBefore = await readFile(productPath, 'utf8');
   const source = await syntheticEffectSource();
@@ -223,7 +223,7 @@ test('effects pilot creates review-only proofs and leaves the canonical product 
   };
 
   const result = await generateEffectPilot(generationOptions);
-  assert.equal(generationCalls, 9);
+  assert.equal(generationCalls, 3);
   assert.equal(result.effects.length, 3);
   assert.equal(result.manifest.status, 'awaiting_effects_review');
   assert.equal(result.manifest.canonical_release_mutated, false);
@@ -236,6 +236,7 @@ test('effects pilot creates review-only proofs and leaves the canonical product 
     'animation_json',
   ]);
   assert.equal(result.composite_preview_path, 'previews/arc-launcher-composite.gif');
+  assert.equal(result.timing.derived_frames, 6);
   assert.equal(await readFile(productPath, 'utf8'), productBefore);
 
   const muzzleSheet = await sharp(resolve(result.experimentRoot, 'sheets/arc-muzzle-flash.png')).metadata();
@@ -252,7 +253,7 @@ test('effects pilot creates review-only proofs and leaves the canonical product 
   assert.match(result.manifest.manifest_hash, /^[a-f0-9]{64}$/u);
 
   const resumed = await generateEffectPilot(generationOptions);
-  assert.equal(generationCalls, 9);
+  assert.equal(generationCalls, 3);
   assert.equal(resumed.timing.generation_calls, 0);
   assert.equal(resumed.timing.resumed_frames, 9);
 });

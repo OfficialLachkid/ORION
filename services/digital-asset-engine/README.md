@@ -88,8 +88,8 @@ Generate the Arc Launcher effects proof without changing the approved product, D
 ```bash
 npm run digital-assets:effects-pilot -- \
   --execute \
-  --pilot services/digital-asset-engine/fixtures/arc-launcher-effects.pilot.json \
+  --pilot services/digital-asset-engine/fixtures/arc-launcher-effects-v2.pilot.json \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-The proof writes to `neon-plasma-armory/experiments/arc-launcher-effects-proof`. It produces one standalone projectile, four fixed-origin muzzle-flash frames, four fixed-center impact/decay frames, transparent PNG sprite sheets, `animation.json` metadata, isolated GIF previews, and an optional weapon-composited GIF for review. The muzzle anchor is stored in weapon-local coordinates; compositing adds the preview placement without baking movement into either asset. GIF files are previews only; buyer/runtime formats are the PNG frames, PNG sprite sheets, and animation metadata. All animation metadata declares zero root motion. The approved pack is extended only through a later versioned-release workflow after this proof receives human approval.
+The proof writes to `neon-plasma-armory/experiments/arc-launcher-effects-proof-v2`. The local model generates the projectile plus one peak keyframe for each animation; ORION derives the remaining phases deterministically around the fixed origin to prevent identity drift. It produces four fixed-origin muzzle-flash frames, four fixed-center impact/decay frames, transparent PNG sprite sheets, `animation.json` metadata, isolated GIF previews, and an optional weapon-composited GIF for review. The muzzle anchor is stored in weapon-local coordinates; compositing adds the preview placement without baking movement into either asset. GIF files are previews only; buyer/runtime formats are the PNG frames, PNG sprite sheets, and animation metadata. All animation metadata declares zero root motion. The approved pack is extended only through a later versioned-release workflow after this proof receives human approval.

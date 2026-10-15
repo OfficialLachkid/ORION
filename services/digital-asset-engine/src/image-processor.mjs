@@ -323,6 +323,47 @@ export async function inspectAnchorContact(assetBuffer, origin, tolerance) {
   };
 }
 
+export async function derivePixelArtEffectFrame(inputBuffer, options) {
+  const decoded = await sharp(inputBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const output = Buffer.alloc(decoded.data.length);
+  const scale = options.scale;
+  const opacity = options.opacity;
+  const density = options.density;
+  const salt = options.salt || 0;
+  for (let y = 0; y < decoded.info.height; y += 1) {
+    for (let x = 0; x < decoded.info.width; x += 1) {
+      const sourceX = Math.round(options.origin.x + ((x - options.origin.x) / scale));
+      const sourceY = Math.round(options.origin.y + ((y - options.origin.y) / scale));
+      if (
+        sourceX < 0 || sourceX >= decoded.info.width
+        || sourceY < 0 || sourceY >= decoded.info.height
+      ) continue;
+      const sourceOffset = ((sourceY * decoded.info.width) + sourceX) * 4;
+      if (decoded.data[sourceOffset + 3] === 0) continue;
+      const atOrigin = x === options.origin.x && y === options.origin.y;
+      const noise = (((x * 73_856_093) ^ (y * 19_349_663) ^ salt) >>> 0) % 10_000;
+      if (!atOrigin && noise >= Math.round(density * 10_000)) continue;
+      const targetOffset = ((y * decoded.info.width) + x) * 4;
+      output[targetOffset] = decoded.data[sourceOffset];
+      output[targetOffset + 1] = decoded.data[sourceOffset + 1];
+      output[targetOffset + 2] = decoded.data[sourceOffset + 2];
+      output[targetOffset + 3] = Math.round(decoded.data[sourceOffset + 3] * opacity);
+    }
+  }
+  return sharp(output, {
+    raw: {
+      width: decoded.info.width,
+      height: decoded.info.height,
+      channels: 4,
+    },
+  }).png({
+    palette: true,
+    colours: options.maxPaletteColors,
+    dither: 0,
+    compressionLevel: 9,
+  }).toBuffer();
+}
+
 export async function createTransparencyPreview(assetBuffer, options = {}) {
   const tileSize = options.tileSize || 8;
   const metadata = await sharp(assetBuffer).metadata();

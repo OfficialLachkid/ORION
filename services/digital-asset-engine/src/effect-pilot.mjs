@@ -10,6 +10,7 @@ import { CanonicalProductStore } from './canonical-store.mjs';
 import { withGenerationLock } from './generation-lock.mjs';
 import {
   createTransparencyPreview,
+  derivePixelArtEffectFrame,
   inspectAnchorContact,
   PIXEL_ART_EFFECT_PROCESSING_VERSION,
   PIXEL_ART_PROCESSING_VERSION,
@@ -249,6 +250,7 @@ function animationMetadata(effect, sheet) {
     effect_key: effect.effect_key,
     name: effect.name,
     kind: effect.kind,
+    generation: effect.generation,
     playback: effect.playback,
     root_motion: { x: 0, y: 0 },
     origin: effect.origin,
@@ -263,6 +265,7 @@ function animationMetadata(effect, sheet) {
       ...frame,
       duration_ms: effect.frames[index].duration_ms,
       phase: effect.frames[index].phase,
+      transform: effect.frames[index].transform || null,
       path: `../../frames/${effect.effect_key}/${frameName(index)}.png`,
     })),
     preview_gif: effect.frames.length > 1 ? `../../previews/${effect.effect_key}.gif` : null,
@@ -303,11 +306,22 @@ export async function generateEffectPilot(options) {
 
     for (const effect of pilot.effects) {
       const frameResults = [];
-      for (const frame of effect.frames) {
+      const keyframeNumber = effect.generation.strategy === 'keyframe_transform'
+        ? effect.generation.keyframe
+        : null;
+      const orderedFrames = keyframeNumber === null
+        ? effect.frames
+        : [
+          effect.frames[keyframeNumber],
+          ...effect.frames.filter((frame) => frame.frame !== keyframeNumber),
+        ];
+      let keyframeBuffer = null;
+      for (const frame of orderedFrames) {
         const fingerprint = generationFingerprint(pilot, effect, frame);
         const paths = framePaths(experimentRoot, effect, frame);
         const reusable = await loadReusableFrame(paths, fingerprint);
         if (reusable) {
+          if (frame.frame === keyframeNumber) keyframeBuffer = reusable.buffer;
           frameResults.push({
             frame: frame.frame,
             buffer: reusable.buffer,
@@ -316,30 +330,59 @@ export async function generateEffectPilot(options) {
             duration_ms: frame.duration_ms,
             generation_duration_ms: 0,
             resumed: true,
+            source_reused: false,
+            derived: keyframeNumber !== null && frame.frame !== keyframeNumber,
           });
           continue;
         }
 
         const frameStartedMs = Date.now();
-        const generated = await loadExistingSource(paths) || await adapter.generateAsset({
-          asset: { generation_prompt: frame.prompt, seed: frame.seed },
-          sourceWidth: pilot.style.source_width,
-          sourceHeight: pilot.style.source_height,
-        });
-        if (!generated.reprocessed) generationCalls += 1;
-        const generatedPaths = framePaths(experimentRoot, effect, frame, generated.format);
-        await writeBuffer(generatedPaths.source, generated.buffer);
-        const processed = await processPixelArtEffectFrame(generated.buffer, {
-          width: effect.canvas.width,
-          height: effect.canvas.height,
-          padding: effect.canvas.padding,
-          placement: effect.placement,
-          maxPaletteColors: pilot.style.max_palette_colors,
-          chromaKey: pilot.style.chroma_key,
-          chromaTolerance: options.config.generation.chroma_tolerance,
-          origin: effect.origin_contact_required ? effect.origin : null,
-          maximumOriginGap: effect.origin_contact_required ? effect.origin_tolerance * 2 : null,
-        });
+        const derived = keyframeNumber !== null && frame.frame !== keyframeNumber;
+        let generated = null;
+        let processed;
+        if (derived) {
+          if (!keyframeBuffer) throw new Error(`${effect.effect_key} keyframe is unavailable for derivation.`);
+          processed = {
+            buffer: await derivePixelArtEffectFrame(keyframeBuffer, {
+              ...frame.transform,
+              origin: effect.origin,
+              maxPaletteColors: pilot.style.max_palette_colors,
+              salt: frame.frame,
+            }),
+            processing_version: PIXEL_ART_PROCESSING_VERSION,
+            effect_processing_version: PIXEL_ART_EFFECT_PROCESSING_VERSION,
+            derived_from_frame: keyframeNumber,
+            transform: frame.transform,
+            detected_chroma_key: pilot.style.chroma_key,
+            anchor_correction: null,
+          };
+        } else {
+          generated = await loadExistingSource(paths) || await adapter.generateAsset({
+            asset: { generation_prompt: frame.prompt, seed: frame.seed },
+            sourceWidth: pilot.style.source_width,
+            sourceHeight: pilot.style.source_height,
+          });
+          if (!generated.reprocessed) generationCalls += 1;
+          processed = await processPixelArtEffectFrame(generated.buffer, {
+            width: effect.canvas.width,
+            height: effect.canvas.height,
+            padding: effect.canvas.padding,
+            placement: effect.placement,
+            maxPaletteColors: pilot.style.max_palette_colors,
+            chromaKey: pilot.style.chroma_key,
+            chromaTolerance: options.config.generation.chroma_tolerance,
+            origin: effect.origin_contact_required ? effect.origin : null,
+            maximumOriginGap: effect.origin_contact_required ? effect.origin_tolerance * 2 : null,
+          });
+          if (frame.frame === keyframeNumber) keyframeBuffer = processed.buffer;
+        }
+        const generatedPaths = framePaths(
+          experimentRoot,
+          effect,
+          frame,
+          generated?.format || 'png',
+        );
+        if (generated) await writeBuffer(generatedPaths.source, generated.buffer);
         await writeBuffer(generatedPaths.final, processed.buffer);
         const [validation, anchorContact] = await Promise.all([
           validateGeneratedAsset(processed.buffer, {
@@ -372,9 +415,11 @@ export async function generateEffectPilot(options) {
             placed_bounds: processed.placed_bounds,
             removed_chroma_pixels: processed.removed_chroma_pixels,
             detected_chroma_key: processed.detected_chroma_key,
-            border_chroma_match_ratio: processed.border_chroma_match_ratio,
-            requested_chroma_distance: processed.requested_chroma_distance,
+            border_chroma_match_ratio: processed.border_chroma_match_ratio ?? null,
+            requested_chroma_distance: processed.requested_chroma_distance ?? null,
             anchor_correction: processed.anchor_correction,
+            derived_from_frame: processed.derived_from_frame ?? null,
+            transform: processed.transform ?? null,
           },
         };
         await writeJson(generatedPaths.validation, report);
@@ -390,8 +435,12 @@ export async function generateEffectPilot(options) {
           duration_ms: frame.duration_ms,
           generation_duration_ms: Date.now() - frameStartedMs,
           resumed: false,
+          source_reused: generated?.reprocessed === true,
+          derived,
         });
       }
+
+      frameResults.sort((left, right) => left.frame - right.frame);
 
       const sheet = await assembleEffectSpriteSheet(frameResults.map((frame) => frame.buffer), effect);
       const sheetPath = resolveInside(experimentRoot, `sheets/${effect.effect_key}.png`, 'Effect sheet path');
@@ -413,6 +462,7 @@ export async function generateEffectPilot(options) {
       effects.push({
         effect_key: effect.effect_key,
         kind: effect.kind,
+        generation: effect.generation,
         frame_count: frameResults.length,
         frames: frameResults.map(({ buffer, ...frame }) => frame),
         sheet_path: relative(experimentRoot, sheetPath).replaceAll('\\', '/'),
@@ -450,11 +500,16 @@ export async function generateEffectPilot(options) {
       total_duration_ms: Date.now() - startedMs,
       generation_calls: generationCalls,
       resumed_frames: effects.flatMap((effect) => effect.frames).filter((frame) => frame.resumed).length,
+      source_reused_frames: effects.flatMap((effect) => effect.frames)
+        .filter((frame) => frame.source_reused).length,
+      derived_frames: effects.flatMap((effect) => effect.frames).filter((frame) => frame.derived).length,
       frames: effects.flatMap((effect) => effect.frames.map((frame) => ({
         effect_key: effect.effect_key,
         frame: frame.frame,
         generation_duration_ms: frame.generation_duration_ms,
         resumed: frame.resumed,
+        source_reused: frame.source_reused,
+        derived: frame.derived,
       }))),
     };
     await writeJson(resolveInside(experimentRoot, 'timing.json', 'Pilot timing path'), timing);

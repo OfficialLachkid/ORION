@@ -162,6 +162,11 @@ const EffectFrameSchema = z.object({
   phase: z.string().min(1),
   prompt: z.string().min(1),
   seed: z.number().int().nonnegative(),
+  transform: z.object({
+    scale: z.number().min(0.1).max(2),
+    opacity: z.number().min(0.1).max(1),
+    density: z.number().min(0.1).max(1),
+  }).optional(),
 });
 
 export const EffectPilotSchema = z.object({
@@ -201,6 +206,13 @@ export const EffectPilotSchema = z.object({
     origin: EffectAnchorSchema,
     origin_contact_required: z.boolean().default(false),
     origin_tolerance: z.number().int().min(0).max(64).default(6),
+    generation: z.discriminatedUnion('strategy', [
+      z.object({ strategy: z.literal('independent') }),
+      z.object({
+        strategy: z.literal('keyframe_transform'),
+        keyframe: z.number().int().nonnegative(),
+      }),
+    ]).default({ strategy: 'independent' }),
     playback: z.enum(['once', 'loop']),
     frames: z.array(EffectFrameSchema).min(1).max(32),
   })).min(1).max(12),
@@ -221,6 +233,22 @@ export const EffectPilotSchema = z.object({
         message: `Effect origin must be inside the ${effect.effect_key} canvas.`,
         path: ['effects'],
       });
+    }
+    if (effect.generation.strategy === 'keyframe_transform') {
+      if (effect.generation.keyframe >= effect.frames.length) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${effect.effect_key} keyframe must identify an existing frame.`,
+          path: ['effects'],
+        });
+      }
+      if (effect.frames.some((frame) => !frame.transform)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `${effect.effect_key} requires a transform for every derived sequence frame.`,
+          path: ['effects'],
+        });
+      }
     }
     const expectedFrames = Array.from({ length: effect.frames.length }, (_, index) => index);
     if (JSON.stringify(effect.frames.map((frame) => frame.frame)) !== JSON.stringify(expectedFrames)) {
