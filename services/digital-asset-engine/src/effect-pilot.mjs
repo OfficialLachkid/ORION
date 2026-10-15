@@ -302,6 +302,8 @@ async function projectileTravelLayout({ projectileBuffer, pilot, effect }) {
   return {
     travel,
     muzzleAnchor,
+    projectileBounds,
+    startLeft,
     projectileTop: muzzleAnchor.y - effect.origin.y,
     projectileLefts: Array.from({ length: travel.frame_count }, (unused, index) => {
       const progress = index / (travel.frame_count - 1);
@@ -345,9 +347,11 @@ export async function composeAttackCyclePreviewFrames({
   weaponBuffer,
   projectileBuffer,
   muzzleFrameBuffers,
+  impactFrameBuffers,
   pilot,
   projectileEffect,
   muzzleEffect,
+  impactEffect,
 }) {
   const layout = await projectileTravelLayout({
     projectileBuffer,
@@ -355,7 +359,22 @@ export async function composeAttackCyclePreviewFrames({
     effect: projectileEffect,
   });
   if (!layout) return [];
-  return Promise.all(layout.projectileLefts.map(async (projectileLeft, index) => {
+  const impactOrigin = {
+    x: layout.travel.canvas.width - (impactEffect.canvas.width - impactEffect.origin.x),
+    y: layout.muzzleAnchor.y,
+  };
+  const attackEndLeft = impactOrigin.x - layout.projectileBounds.max_x;
+  if (attackEndLeft <= layout.startLeft) {
+    throw new Error('Attack-cycle preview canvas does not provide positive projectile travel distance.');
+  }
+  const attackProjectileLefts = Array.from(
+    { length: layout.travel.frame_count },
+    (unused, index) => {
+      const progress = index / (layout.travel.frame_count - 1);
+      return Math.round(layout.startLeft + ((attackEndLeft - layout.startLeft) * progress));
+    },
+  );
+  const travelFrames = await Promise.all(attackProjectileLefts.map(async (projectileLeft, index) => {
     const composites = [{
       input: weaponBuffer,
       left: pilot.weapon_preview.weapon_position.x,
@@ -382,6 +401,26 @@ export async function composeAttackCyclePreviewFrames({
       },
     }).composite(composites).png({ compressionLevel: 9 }).toBuffer();
   }));
+  const impactFrames = await Promise.all(impactFrameBuffers.map(async (impactBuffer) => sharp({
+    create: {
+      width: layout.travel.canvas.width,
+      height: layout.travel.canvas.height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).composite([
+    {
+      input: weaponBuffer,
+      left: pilot.weapon_preview.weapon_position.x,
+      top: pilot.weapon_preview.weapon_position.y,
+    },
+    {
+      input: impactBuffer,
+      left: impactOrigin.x - impactEffect.origin.x,
+      top: impactOrigin.y - impactEffect.origin.y,
+    },
+  ]).png({ compressionLevel: 9 }).toBuffer()));
+  return [...travelFrames, ...impactFrames];
 }
 
 async function writeGifFromBuffers(buffers, delays, outputPath, options) {
@@ -676,7 +715,10 @@ export async function generateEffectPilot(options) {
 
     const muzzleEffect = pilot.effects.find((effect) => effect.kind === 'muzzle_flash');
     const muzzleResult = effects.find((effect) => effect.effect_key === muzzleEffect?.effect_key);
+    const impactEffect = pilot.effects.find((effect) => effect.kind === 'impact_decay');
+    const impactResult = effects.find((effect) => effect.effect_key === impactEffect?.effect_key);
     let muzzleFrameBuffers = [];
+    let impactFrameBuffers = [];
     let compositePreviewPath = null;
     if (muzzleEffect && muzzleResult && muzzleEffect.frames.length > 1) {
       muzzleFrameBuffers = await Promise.all(muzzleResult.frames.map((frame) => (
@@ -699,6 +741,11 @@ export async function generateEffectPilot(options) {
         compositePreviewPath,
         options,
       );
+    }
+    if (impactEffect && impactResult) {
+      impactFrameBuffers = await Promise.all(impactResult.frames.map((frame) => (
+        readFile(resolveInside(experimentRoot, frame.final_path, 'Impact frame path'))
+      )));
     }
 
     const projectileEffect = pilot.effects.find((effect) => effect.kind === 'projectile');
@@ -729,14 +776,21 @@ export async function generateEffectPilot(options) {
         projectileTravelPreviewPath,
         options,
       );
-      if (muzzleEffect && muzzleFrameBuffers.length > 0) {
+      if (
+        muzzleEffect
+        && muzzleFrameBuffers.length > 0
+        && impactEffect
+        && impactFrameBuffers.length > 0
+      ) {
         const attackBuffers = await composeAttackCyclePreviewFrames({
           weaponBuffer,
           projectileBuffer,
           muzzleFrameBuffers,
+          impactFrameBuffers,
           pilot: previewPilot,
           projectileEffect,
           muzzleEffect,
+          impactEffect,
         });
         attackCyclePreviewPath = resolveInside(
           experimentRoot,
@@ -745,7 +799,10 @@ export async function generateEffectPilot(options) {
         );
         await writeGifFromBuffers(
           attackBuffers,
-          Array.from({ length: travel.frame_count }, () => travel.frame_duration_ms),
+          [
+            ...Array.from({ length: travel.frame_count }, () => travel.frame_duration_ms),
+            ...impactEffect.frames.map((frame) => frame.duration_ms),
+          ],
           attackCyclePreviewPath,
           options,
         );

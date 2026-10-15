@@ -226,7 +226,7 @@ test('projectile travel preview keeps the weapon fixed and moves only the previe
   assert.deepEqual(await redPixelBounds(frames[2]), { left: 44, right: 47 });
 });
 
-test('attack-cycle preview combines muzzle frames with the travelling projectile', async () => {
+test('attack-cycle preview combines muzzle, projectile travel, and endpoint impact', async () => {
   const weaponBuffer = await sharp({
     create: { width: 16, height: 8, channels: 4, background: '#204060' },
   }).png().toBuffer();
@@ -235,6 +235,9 @@ test('attack-cycle preview combines muzzle frames with the travelling projectile
   }).png().toBuffer();
   const muzzleBuffer = await sharp({
     create: { width: 4, height: 4, channels: 4, background: '#00ff00' },
+  }).png().toBuffer();
+  const impactBuffer = await sharp({
+    create: { width: 6, height: 6, channels: 4, background: '#ffff00' },
   }).png().toBuffer();
   const pilot = {
     weapon_preview: {
@@ -253,11 +256,13 @@ test('attack-cycle preview combines muzzle frames with the travelling projectile
     weaponBuffer,
     projectileBuffer,
     muzzleFrameBuffers: [muzzleBuffer, muzzleBuffer],
+    impactFrameBuffers: [impactBuffer, impactBuffer],
     pilot,
     projectileEffect: { origin: { x: 2, y: 1 } },
     muzzleEffect: { origin: { x: 0, y: 2 } },
+    impactEffect: { canvas: { width: 6, height: 6 }, origin: { x: 3, y: 3 } },
   });
-  assert.equal(frames.length, 3);
+  assert.equal(frames.length, 5);
 
   async function containsColor(buffer, red, green, blue) {
     const { data } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
@@ -271,6 +276,8 @@ test('attack-cycle preview combines muzzle frames with the travelling projectile
   assert.equal(await containsColor(frames[0], 255, 0, 0), true);
   assert.equal(await containsColor(frames[2], 0, 255, 0), false);
   assert.equal(await containsColor(frames[2], 255, 0, 0), true);
+  assert.equal(await containsColor(frames[4], 255, 0, 0), false);
+  assert.equal(await containsColor(frames[4], 255, 255, 0), true);
 });
 
 test('muzzle detection follows the terminal barrel pixels at different vertical positions', async () => {
