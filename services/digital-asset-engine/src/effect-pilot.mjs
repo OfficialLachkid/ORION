@@ -632,7 +632,11 @@ export async function generateEffectPilot(options) {
         pilot: previewPilot,
         effect: muzzleEffect,
       });
-      compositePreviewPath = resolveInside(experimentRoot, 'previews/arc-launcher-composite.gif', 'Composite preview path');
+      compositePreviewPath = resolveInside(
+        experimentRoot,
+        `previews/${pilot.source_asset_key}-composite.gif`,
+        'Composite preview path',
+      );
       await writeGifFromBuffers(
         compositeBuffers,
         muzzleEffect.frames.map((frame) => frame.duration_ms),
@@ -659,7 +663,7 @@ export async function generateEffectPilot(options) {
       const travel = pilot.weapon_preview.projectile_travel_preview;
       projectileTravelPreviewPath = resolveInside(
         experimentRoot,
-        'previews/arc-launcher-projectile-travel.gif',
+        `previews/${pilot.source_asset_key}-projectile-travel.gif`,
         'Projectile travel preview path',
       );
       await writeGifFromBuffers(

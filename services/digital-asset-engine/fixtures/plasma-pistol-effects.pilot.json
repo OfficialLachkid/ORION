@@ -1,0 +1,148 @@
+{
+  "schema_version": "1.0",
+  "pilot_id": "plasma-pistol-effects-proof-v1",
+  "product_slug": "neon-plasma-armory",
+  "source_asset_key": "plasma-pistol",
+  "status": "planned",
+  "purpose": "Validate automatic muzzle placement and coherent effects on the pack's smallest weapon silhouette.",
+  "style": {
+    "medium": "pixel_art",
+    "perspective": "strict side view, effect travels or emits toward the right",
+    "palette": ["#10131d", "#20283a", "#44506b", "#7785a6", "#c8d4ec", "#35d9ff", "#875cff", "#ff4fd8"],
+    "max_palette_colors": 32,
+    "chroma_key": "#00ff00",
+    "source_width": 1024,
+    "source_height": 1024
+  },
+  "weapon_preview": {
+    "canvas": { "width": 208, "height": 96 },
+    "weapon_position": { "x": 16, "y": 16 },
+    "muzzle_anchor": {
+      "strategy": "rightmost_opaque",
+      "terminal_band_width": 4,
+      "alpha_threshold": 128
+    },
+    "projectile_travel_preview": {
+      "canvas": { "width": 320, "height": 96 },
+      "start_gap_px": 0,
+      "end_margin_right_px": 0,
+      "frame_count": 10,
+      "frame_duration_ms": 55
+    }
+  },
+  "effects": [
+    {
+      "effect_key": "plasma-pistol-projectile",
+      "name": "Plasma Pistol Projectile",
+      "kind": "projectile",
+      "canvas": { "width": 40, "height": 20, "padding": 3 },
+      "placement": "center",
+      "origin": { "x": 20, "y": 10 },
+      "origin_contact_required": false,
+      "origin_tolerance": 6,
+      "generation": { "strategy": "independent" },
+      "playback": "once",
+      "frames": [
+        {
+          "frame": 0,
+          "duration_ms": 80,
+          "phase": "projectile",
+          "seed": 14740,
+          "prompt": "Create one original isolated pixel-art Plasma Pistol projectile sprite, strict side view travelling right. Draw a small fast cyan-white plasma bolt with a compact violet tail and two restrained sparks, readable at 40x20 pixels. Use crisp hard pixel clusters, no gradients, no antialiasing, no weapon, no character, no text, no shadow, no floor, no border, and no other objects. Center the projectile. Use only dark gunmetal, cyan, violet, pale blue, and white. The entire background, including every enclosed empty area, must be a perfectly flat solid pure green #00ff00 chroma field."
+        }
+      ]
+    },
+    {
+      "effect_key": "plasma-pistol-muzzle-flash",
+      "name": "Plasma Pistol Muzzle Flash",
+      "kind": "muzzle_flash",
+      "canvas": { "width": 48, "height": 48, "padding": 4 },
+      "placement": "west_center",
+      "origin": { "x": 4, "y": 24 },
+      "origin_contact_required": true,
+      "origin_tolerance": 8,
+      "generation": { "strategy": "keyframe_transform", "keyframe": 2 },
+      "playback": "once",
+      "frames": [
+        {
+          "frame": 0,
+          "duration_ms": 50,
+          "phase": "ignition",
+          "seed": 14750,
+          "prompt": "Deterministically derived ignition frame.",
+          "transform": { "scale": 0.35, "opacity": 1, "density": 1 }
+        },
+        {
+          "frame": 1,
+          "duration_ms": 60,
+          "phase": "expansion",
+          "seed": 14751,
+          "prompt": "Deterministically derived expansion frame.",
+          "transform": { "scale": 0.7, "opacity": 1, "density": 1 }
+        },
+        {
+          "frame": 2,
+          "duration_ms": 70,
+          "phase": "peak",
+          "seed": 14752,
+          "prompt": "Create the peak keyframe of one original isolated pixel-art Plasma Pistol muzzle flash, strict side view emitting only toward the right. Draw a short compact cyan-white plasma flare that begins at one narrow attachment point on the exact left-center edge and expands rightward into a small pointed wedge. Add one or two restrained violet sparks. Do not draw a circular explosion, ring, orb, projectile, weapon, character, text, shadow, floor, border, or other object. Use crisp hard pixel clusters, no gradients and no antialiasing. Keep it fully inside the canvas. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00.",
+          "transform": { "scale": 1, "opacity": 1, "density": 1 }
+        },
+        {
+          "frame": 3,
+          "duration_ms": 90,
+          "phase": "dissipation",
+          "seed": 14753,
+          "prompt": "Deterministically derived dissipation frame.",
+          "transform": { "scale": 0.65, "opacity": 0.8, "density": 0.55 }
+        }
+      ]
+    },
+    {
+      "effect_key": "plasma-pistol-impact-decay",
+      "name": "Plasma Pistol Impact and Decay",
+      "kind": "impact_decay",
+      "canvas": { "width": 48, "height": 48, "padding": 4 },
+      "placement": "center",
+      "origin": { "x": 24, "y": 24 },
+      "origin_contact_required": false,
+      "origin_tolerance": 8,
+      "generation": { "strategy": "keyframe_transform", "keyframe": 2 },
+      "playback": "once",
+      "frames": [
+        {
+          "frame": 0,
+          "duration_ms": 60,
+          "phase": "contact",
+          "seed": 14760,
+          "prompt": "Deterministically derived contact frame.",
+          "transform": { "scale": 0.25, "opacity": 1, "density": 1 }
+        },
+        {
+          "frame": 1,
+          "duration_ms": 80,
+          "phase": "burst",
+          "seed": 14761,
+          "prompt": "Deterministically derived burst frame.",
+          "transform": { "scale": 0.6, "opacity": 1, "density": 1 }
+        },
+        {
+          "frame": 2,
+          "duration_ms": 100,
+          "phase": "peak",
+          "seed": 14762,
+          "prompt": "Create the peak keyframe of one original isolated stationary pixel-art Plasma Pistol impact. Draw one small centered cyan-white plasma pop with a thin violet ring and a few short radial sparks. It must be symmetrical enough to scale around the exact canvas center and must not imply travel on x or y. Do not draw a projectile, weapon, character, surface, text, shadow, floor, border, or other object. Use crisp hard pixel clusters, no gradients and no antialiasing. Keep it fully inside the canvas. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00.",
+          "transform": { "scale": 1, "opacity": 1, "density": 1 }
+        },
+        {
+          "frame": 3,
+          "duration_ms": 120,
+          "phase": "fade",
+          "seed": 14763,
+          "prompt": "Deterministically derived fade frame.",
+          "transform": { "scale": 1, "opacity": 0.65, "density": 0.35 }
+        }
+      ]
+    }
+  ]
+}

@@ -253,6 +253,23 @@ test('muzzle detection follows the terminal barrel pixels at different vertical 
   });
 });
 
+test('boundary weapon effect specifications validate independently', async () => {
+  const fixtures = [
+    'services/digital-asset-engine/fixtures/plasma-pistol-effects.pilot.json',
+    'services/digital-asset-engine/fixtures/ion-cannon-effects.pilot.json',
+  ];
+  const pilots = await Promise.all(fixtures.map(async (path) => (
+    EffectPilotSchema.parse(await readFixture(path))
+  )));
+  assert.deepEqual(pilots.map((pilot) => pilot.source_asset_key), [
+    'plasma-pistol',
+    'ion-cannon',
+  ]);
+  assert.equal(new Set(pilots.flatMap((pilot) => pilot.effects.map((effect) => (
+    effect.effect_key
+  )))).size, 6);
+});
+
 test('effects pilot creates review-only proofs and leaves the canonical product unchanged', async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), 'orion-effect-pilot-'));
   const { config, productPath } = await prepareCanonicalProduct(outputRoot);
