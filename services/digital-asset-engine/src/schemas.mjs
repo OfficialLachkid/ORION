@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 const IdentifierSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/u);
 const HexColorSchema = z.string().regex(/^#[0-9a-f]{6}$/iu);
+const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
+const SemanticVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/u);
 
 export const AssetRequestSchema = z.object({
   asset_key: IdentifierSchema,
@@ -235,6 +237,11 @@ export const EffectPilotSchema = z.object({
     playback: z.enum(['once', 'loop']),
     frames: z.array(EffectFrameSchema).min(1).max(32),
   })).min(1).max(12),
+  revision: z.object({
+    source_pilot_id: IdentifierSchema,
+    reason: z.string().min(3),
+    regenerated_kinds: z.array(z.enum(['projectile', 'muzzle_flash', 'impact_decay'])).min(1),
+  }).optional(),
 }).superRefine((pilot, context) => {
   const travelPreview = pilot.weapon_preview.projectile_travel_preview;
   if (travelPreview && travelPreview.end_margin_right_px >= travelPreview.canvas.width) {
@@ -312,5 +319,82 @@ export const EffectBatchPlanSchema = z.object({
       });
     }
     keys.add(weapon.source_asset_key);
+  }
+});
+
+export const EffectRevisionBatchPlanSchema = z.object({
+  schema_version: z.literal('1.0'),
+  batch_id: IdentifierSchema,
+  product_slug: IdentifierSchema,
+  revisions: z.array(z.object({
+    source_asset_key: IdentifierSchema,
+    source_pilot_id: IdentifierSchema,
+    target_pilot_id: IdentifierSchema,
+    reason: z.string().min(3),
+    effects: z.array(z.object({
+      kind: z.enum(['projectile', 'muzzle_flash', 'impact_decay']),
+      prompt: z.string().min(1),
+      seed_offset: z.number().int().positive(),
+    })).min(1).max(3),
+  })).min(1).max(25),
+}).superRefine((plan, context) => {
+  const targetIds = new Set();
+  for (const revision of plan.revisions) {
+    if (revision.source_pilot_id === revision.target_pilot_id) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Effect revision target must differ from its source pilot.',
+        path: ['revisions'],
+      });
+    }
+    if (targetIds.has(revision.target_pilot_id)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate effect revision target: ${revision.target_pilot_id}`,
+        path: ['revisions'],
+      });
+    }
+    targetIds.add(revision.target_pilot_id);
+    const kinds = revision.effects.map((effect) => effect.kind);
+    if (new Set(kinds).size !== kinds.length) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate regenerated effect kind for ${revision.target_pilot_id}.`,
+        path: ['revisions'],
+      });
+    }
+  }
+});
+
+export const ProductExtensionPlanSchema = z.object({
+  schema_version: z.literal('1.0'),
+  extension_id: IdentifierSchema,
+  product_slug: IdentifierSchema,
+  title: z.string().min(1),
+  base_version: SemanticVersionSchema,
+  target_version: SemanticVersionSchema,
+  base_manifest_hash: Sha256Schema,
+  effects_review_id: IdentifierSchema,
+  effects_bundle_hash: Sha256Schema,
+  release_notes: z.array(z.string().min(1)).min(1),
+  quality_holds: z.array(z.object({
+    hold_id: IdentifierSchema,
+    status: z.literal('open'),
+    affected_asset_keys: z.array(IdentifierSchema).default([]),
+    note: z.string().min(3),
+  })).default([]),
+}).superRefine((plan, context) => {
+  const parse = (value) => value.split('.').map(Number);
+  const base = parse(plan.base_version);
+  const target = parse(plan.target_version);
+  const isLater = target.some((value, index) => (
+    value > base[index] && target.slice(0, index).every((part, partIndex) => part === base[partIndex])
+  ));
+  if (!isLater) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Extension target version must be later than its base version.',
+      path: ['target_version'],
+    });
   }
 });

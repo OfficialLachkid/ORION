@@ -286,11 +286,21 @@ Human visual review on 2026-10-14 rejected this first package as a release candi
 
 The saved source images were reprocessed and repackaged on 2026-10-14 without another model call. All eight candidates passed with zero residual chroma pixels. The corrected manifest hash is `12e8fcf449c9cd2170c3311b5409505615aa0552ba7f0f34ed4985619f87a536`, and Butler accepted it as hidden version `0.2.0-internal-preview`. This version remains awaiting human visual review and is not distribution-ready.
 
+## Versioned package extensions
+
+An approved product is never updated by copying new files directly into its current export. An extension plan pins the approved base version and manifest, the exact effects-review bundle, the target semantic version, release notes, and any unresolved quality holds. ORION verifies those inputs and builds a content-addressed candidate under `releases/<target-version>/candidates/<input-hash>/`. Corrections create another immutable candidate; they do not erase the earlier review evidence.
+
+The buyer-facing effects layout keeps muzzle flashes, stationary projectiles, and impact/decay animations independent for every weapon. It includes transparent PNG frames, sprite sheets, animation JSON, and weapon-local muzzle anchors. Combined firing GIFs remain review previews, and projectile travel remains game-engine-controlled. Model source images and internal validation files never enter the buyer package.
+
+The first `0.2.0` plan carries an open quality hold because two decay animations were reported as resembling miniature weapons. The candidate may be assembled for inspection, but it remains `blocked_quality_review` until the affected weapons are identified and the sequences are explicitly accepted or replaced. Only a hold-free candidate can proceed to itch.io draft staging and the existing package-level Discord approval gate.
+
 ## Research-engine boundary - issue #149
 
 Issue #149 remains valuable as the architecture charter for answering *what should ORION make?* It must stay separate from this engine, which answers *how do we generate, review, package, and distribute an approved opportunity?*
 
 Before implementation, split the epic into bounded work items for source capability research, historical observations, opportunity scoring, Discord research digests, the handoff contract, and first-party sales feedback. Do not assume that public competitor sales or download counts are available: each source adapter must distinguish observed evidence from inferred proxies and document its allowed access method and cadence. Research creates proposals; only human-promoted opportunities enter the generation backlog.
+
+The research reasoner should be a local text/reasoning model served through Ollama, separate from the local image model. Deterministic source adapters collect timestamped marketplace observations first; scoring code calculates comparable signals; then the reasoner proposes one or more evidence-backed `ProductOpportunitySchema` records. It may choose themes, pack composition, price hypotheses, and generation cadence within configured limits, but it cannot invent evidence, start generation, or publish products on its own. A scheduled digest presents the ranked proposals and their evidence in Discord, and only a human-promoted proposal crosses into this generation engine. Later, first-party marketplace performance can improve the scoring without weakening that gate.
 
 Do not create those child issues yet. Finish the issue #146 pilot first and keep #149 as one parked architecture epic. When research work actually starts, create at most two implementation issues initially: one for the research foundation plus first source, and one for scoring, digest, handoff, and first-party feedback. Split further only when an active implementation becomes too large to review safely.
 

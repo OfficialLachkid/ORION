@@ -189,8 +189,8 @@ export function createWeaponEffectPilot(batchPlan, weaponSpecification) {
             phase: 'peak',
             seed: seed + 22,
             prompt: strictPrompt(
-              `${weapon.name} stationary impact peak keyframe`,
-              `${weapon.impact_description} Center it exactly and keep it symmetrical enough to scale without implying x/y travel. Do not draw a projectile or surface.`,
+              'stationary energy impact peak keyframe',
+              `${weapon.impact_description} Match only the weapon's palette and energy type; never reproduce its silhouette, body, barrel, stock, grip, trigger, or other gun parts. Center the effect exactly and keep it symmetrical enough to scale without implying x/y travel. Do not draw a projectile or surface.`,
               profile.impact_canvas,
             ),
             transform: { scale: 1, opacity: 1, density: 1 },

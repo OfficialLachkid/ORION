@@ -131,7 +131,7 @@
           "duration_ms": 150,
           "phase": "peak",
           "seed": 14862,
-          "prompt": "Create the peak keyframe of one original isolated stationary pixel-art Ion Cannon impact. Draw one large centered cyan-white electrical detonation with a thick pale-blue energy ring, restrained violet arcs, and several short radial sparks. It must be symmetrical enough to scale around the exact canvas center and must not imply travel on x or y. Do not draw a projectile, weapon, character, surface, text, shadow, floor, border, or other object. Use crisp hard pixel clusters, no gradients and no antialiasing. Keep it fully inside the canvas. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00.",
+          "prompt": "Create the peak keyframe of one original isolated stationary heavy ion-energy impact. Draw one large centered cyan-white electrical detonation with a thick pale-blue energy ring, restrained violet arcs, and several short radial sparks. Match only the pack palette and energy type; never reproduce a weapon silhouette, body, barrel, stock, grip, trigger, or other gun parts. It must be symmetrical enough to scale around the exact canvas center and must not imply travel on x or y. Do not draw a projectile, weapon, character, surface, text, shadow, floor, border, or other object. Use crisp hard pixel clusters, no gradients and no antialiasing. Keep it fully inside the canvas. The entire background and every enclosed empty area must be perfectly flat solid pure green #00ff00.",
           "transform": { "scale": 1, "opacity": 1, "density": 1 }
         },
         {

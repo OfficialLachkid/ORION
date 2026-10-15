@@ -30,6 +30,11 @@ test('remaining weapon batch expands into five isolated valid effect pilots', as
     effect.effect_key
   )))).size, 15);
   assert.equal(pilots.every((pilot) => pilot.effects.length === 3), true);
+  for (const [index, pilot] of pilots.entries()) {
+    const impactPrompt = pilot.effects.find((effect) => effect.kind === 'impact_decay').frames[2].prompt;
+    assert.doesNotMatch(impactPrompt, new RegExp(plan.weapons[index].name, 'iu'));
+    assert.match(impactPrompt, /never reproduce.*silhouette.*barrel.*stock.*grip.*trigger/iu);
+  }
 });
 
 test('effect batch runs sequential pilots and summarizes timing without marketplace mutation', async () => {

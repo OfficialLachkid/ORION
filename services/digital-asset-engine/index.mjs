@@ -7,6 +7,8 @@ import { postDigitalAssetReview } from './src/discord-review.mjs';
 import { generateEffectBatch } from './src/effect-batch.mjs';
 import { postEffectsDiscordReview } from './src/effect-discord-review.mjs';
 import { generateEffectPilot } from './src/effect-pilot.mjs';
+import { reviseEffectBatch } from './src/effect-revision.mjs';
+import { prepareVersionedPackageExtension } from './src/release-extension.mjs';
 import { stageItchDraft } from './src/itch-draft-stager.mjs';
 import { packageDigitalAssetPreview } from './src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from './src/pipeline.mjs';
@@ -16,7 +18,9 @@ const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
 const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
 const DEFAULT_EFFECT_PILOT = 'services/digital-asset-engine/fixtures/arc-launcher-effects-v2.pilot.json';
 const DEFAULT_EFFECT_BATCH = 'services/digital-asset-engine/fixtures/remaining-weapon-effects.batch.json';
-const DEFAULT_EFFECT_REVIEW = 'services/digital-asset-engine/fixtures/all-weapon-effects.review.json';
+const DEFAULT_EFFECT_REVISION = 'services/digital-asset-engine/fixtures/weapon-impact-decays.revision.json';
+const DEFAULT_EFFECT_REVIEW = 'services/digital-asset-engine/fixtures/all-weapon-effects-v2.review.json';
+const DEFAULT_EXTENSION_PLAN = 'services/digital-asset-engine/fixtures/neon-plasma-armory-effects.extension.json';
 
 function parseArguments(argv) {
   const args = {
@@ -38,7 +42,10 @@ function parseArguments(argv) {
     else if (token === '--opportunity') args.opportunity = argv[++index];
     else if (token === '--pilot') args.pilot = argv[++index];
     else if (token === '--batch') args.batch = argv[++index];
+    else if (token === '--revision-plan') args.revisionPlan = argv[++index];
     else if (token === '--review-plan') args.reviewPlan = argv[++index];
+    else if (token === '--extension-plan') args.extensionPlan = argv[++index];
+    else if (token === '--release-version') args.releaseVersion = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
     else if (token === '--category-name') args.categoryName = argv[++index];
@@ -63,14 +70,19 @@ function printHelp() {
     '  discord-review  Create the pack review channel/thread and post previews.',
     '  effects-pilot  Generate isolated fixed-anchor effects without changing the approved pack.',
     '  effects-batch  Generate sequential isolated weapon-effect proofs from a compact batch plan.',
+    '  revise-effects  Regenerate selected effects into new immutable proof revisions.',
     '  effects-review  Post or update the isolated effects presentation in the existing pack channel.',
+    '  prepare-extension  Assemble an immutable, versioned package-extension candidate.',
     '',
     'Options:',
     `  --config <path>       Default: ${DEFAULT_CONFIG}`,
     `  --opportunity <path>  Default: ${DEFAULT_OPPORTUNITY}`,
     `  --pilot <path>       Default: ${DEFAULT_EFFECT_PILOT}`,
     `  --batch <path>       Default: ${DEFAULT_EFFECT_BATCH}`,
+    `  --revision-plan <path> Default: ${DEFAULT_EFFECT_REVISION}`,
     `  --review-plan <path> Default: ${DEFAULT_EFFECT_REVIEW}`,
+    `  --extension-plan <path> Default: ${DEFAULT_EXTENSION_PLAN}`,
+    '  --release-version <semver>  Stage/review the latest immutable candidate for this version.',
     '  --output-root <path>  Override canonical product storage.',
     '  --now <ISO datetime>  Deterministic validation/testing time.',
     '  --execute             Required for image generation.',
@@ -93,11 +105,11 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'effects-pilot', 'effects-batch', 'effects-review'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
-  if (['generate', 'effects-pilot', 'effects-batch'].includes(args.command) && !args.execute) {
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
-  if (args.command === 'package' && !args.internalPreview) {
+  if (['package', 'prepare-extension'].includes(args.command) && !args.internalPreview) {
     throw new Error('Packaging unapproved candidates requires --internal-preview.');
   }
   if (['discord-review', 'effects-review'].includes(args.command) && !args.postToDiscord) {
@@ -112,6 +124,28 @@ async function main() {
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
   if (args.outputRoot) config = { ...config, output_root: args.outputRoot };
+  if (args.command === 'prepare-extension') {
+    const plan = JSON.parse(await readFile(args.extensionPlan || DEFAULT_EXTENSION_PLAN, 'utf8'));
+    const result = await prepareVersionedPackageExtension({
+      outputRoot: resolveOutputRoot(config),
+      plan,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      extension_id: result.plan.extension_id,
+      base_version: result.plan.base_version,
+      target_version: result.plan.target_version,
+      candidate_root: result.candidateRoot,
+      manifest_hash: result.manifest.manifest_hash,
+      release_state: result.manifest.release_state,
+      effect_animation_count: result.manifest.effect_animation_count,
+      quality_holds: result.manifest.quality_holds,
+      gates: result.gates,
+      reused: result.reused,
+    }, null, 2)}\n`);
+    return;
+  }
   if (args.command === 'effects-review') {
     const plan = JSON.parse(await readFile(args.reviewPlan || DEFAULT_EFFECT_REVIEW, 'utf8'));
     const review = await postEffectsDiscordReview({
@@ -129,6 +163,39 @@ async function main() {
       overview_message_id: review.overview_message_id,
       weapon_messages: review.weapon_messages,
       reused: review.reused,
+    }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'revise-effects') {
+    const plan = JSON.parse(await readFile(args.revisionPlan || DEFAULT_EFFECT_REVISION, 'utf8'));
+    const batch = await reviseEffectBatch({
+      config,
+      plan,
+      outputRoot: resolveOutputRoot(config),
+      projectRoot: process.cwd(),
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      batch_id: batch.batch_id,
+      product_slug: batch.product_slug,
+      total_generation_calls: batch.total_generation_calls,
+      total_duration_ms: batch.total_duration_ms,
+      incurred_cost: batch.incurred_cost,
+      results: batch.results.map((result) => ({
+        source_pilot_id: result.source_pilot_id,
+        target_pilot_id: result.target_pilot_id,
+        experiment_root: result.experimentRoot,
+        manifest_hash: result.manifest.manifest_hash,
+        inherited_effects: result.inherited_effects,
+        regenerated_kinds: result.regenerated_kinds,
+        attack_cycle_preview_path: result.attack_cycle_preview_path,
+        timing: {
+          total_duration_ms: result.timing.total_duration_ms,
+          generation_calls: result.timing.generation_calls,
+          derived_frames: result.timing.derived_frames,
+        },
+      })),
     }, null, 2)}\n`);
     return;
   }
@@ -227,6 +294,7 @@ async function main() {
               itchEditUrl: args.itchEditUrl,
               profileDir: args.playwrightProfile,
               headed: args.headed,
+              releaseVersion: args.releaseVersion,
               now: args.now,
             });
             return {
@@ -246,6 +314,7 @@ async function main() {
               slug: slugify(opportunity.title),
               categoryName: args.categoryName,
               itchUrl: args.itchUrl,
+              releaseVersion: args.releaseVersion,
               now: args.now,
             });
             return {
