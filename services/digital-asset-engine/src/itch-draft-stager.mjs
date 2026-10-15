@@ -430,7 +430,7 @@ async (page) => {
         publicUrl,
         editUrl: String(options.itchEditUrl || '').trim(),
         save,
-      }));
+      }), 3);
       const expectedStatus = save ? 'submitted' : 'prepared';
       if (prepared.details.status !== expectedStatus) {
         throw new Error(`itch.io draft preparation failed (${prepared.details.status || 'unknown'}): ${diagnostic(prepared)}`);
@@ -439,7 +439,7 @@ async (page) => {
     };
     prepareDraft();
 
-    let counted = runBrowserCode('screenshot count', buildScreenshotCountRunCode());
+    let counted = runBrowserCode('screenshot count', buildScreenshotCountRunCode(), 3);
     while (Number(counted.details.count) > 0) {
       const before = Number(counted.details.count);
       runBrowserCode('screenshot replacement', buildDeleteScreenshotRunCode());
@@ -450,7 +450,7 @@ async (page) => {
       if (!accepted.ok || acceptedDetails.isError) {
         throw new Error(`itch.io screenshot confirmation failed: ${acceptedDetails.error || accepted.stderr || accepted.stdout || accepted.error}`);
       }
-      counted = runBrowserCode('screenshot recount', buildScreenshotCountRunCode());
+      counted = runBrowserCode('screenshot recount', buildScreenshotCountRunCode(), 3);
       if (Number(counted.details.count) >= before) {
         throw new Error(`itch.io screenshot replacement made no progress: ${diagnostic(counted)}`);
       }
@@ -475,7 +475,7 @@ async (page) => {
     };
     uploadMedia('screenshots', screenshotPaths);
     uploadMedia('cover', [coverPath]);
-    const media = runBrowserCode('media readiness', buildMediaStateRunCode());
+    const media = runBrowserCode('media readiness', buildMediaStateRunCode(), 3);
     if (!media.details.coverId || Number(media.details.screenshotCount) !== screenshotPaths.length) {
       throw new Error(`itch.io media did not settle before save: ${diagnostic(media)}`);
     }
@@ -485,7 +485,7 @@ async (page) => {
       listing,
       screenshotCount: screenshotPaths.length,
       screenshotPath,
-    }));
+    }), 3);
     const details = verified.details;
     if (details.status !== 'verified') {
       throw new Error(`itch.io draft was not verified (${details.status || 'unknown'}): ${diagnostic(verified)}`);

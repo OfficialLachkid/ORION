@@ -137,12 +137,16 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   const fixture = await createFixture();
   const calls = [];
   let readinessAttempts = 0;
+  let preparationAttempts = 0;
   const cliRunner = (executable, args) => {
     calls.push({ executable, args });
     if (args.includes('run-code')) {
       const code = suppliedBrowserCode(args);
       const status = browserStatus(code);
       if (status === 'ready' && ++readinessAttempts === 1) {
+        return { ok: true, stdout: '{}', stderr: '' };
+      }
+      if (status === 'prepared' && ++preparationAttempts === 1) {
         return { ok: true, stdout: '{}', stderr: '' };
       }
       const media = status === 'media_ready' ? { coverId: 'cover-1', screenshotCount: 2 } : {};
@@ -177,6 +181,7 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   const browserRun = calls.find((call) => call.args.includes('run-code'));
   assert.ok(browserRun.args.includes('--filename'));
   assert.equal(readinessAttempts, 2);
+  assert.equal(preparationAttempts, 2);
   const uploads = calls.filter((call) => call.args.includes('upload'));
   assert.equal(uploads.length, 3);
   assert.ok(uploads.every((call) => call.args.indexOf('--json') - call.args.indexOf('upload') === 2));
