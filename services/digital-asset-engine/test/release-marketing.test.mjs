@@ -74,4 +74,6 @@ test('builds protected cover, inventory, effects board, and firing-cycle montage
   assert.equal((await readFile(resolve(candidateRoot, media.screenshot_paths[2]), 'utf8')), 'rendered-gif');
   assert.equal(ffmpegArgs.filter((value) => value === '-stream_loop').length, 8);
   assert.match(ffmpegArgs[ffmpegArgs.indexOf('-filter_complex') + 1], /palettegen/u);
+  assert.match(ffmpegArgs[ffmpegArgs.indexOf('-filter_complex') + 1], /trim=duration=4/u);
+  assert.ok(ffmpegArgs.includes('48'));
 });

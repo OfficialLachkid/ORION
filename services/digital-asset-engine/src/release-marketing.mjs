@@ -259,13 +259,13 @@ async function createMontage(candidateRoot, product, effectSets, options) {
       const y = top + (Math.floor(index / 4) * cellHeight) + 34;
       filters.push(`${index === 0 ? '[0:v]' : `[b${index - 1}]`}[a${index}]overlay=${x}:${y}:shortest=1[b${index}]`);
     }
-    filters.push(`[b${effectSets.length - 1}][${effectSets.length + 1}:v]overlay=0:0:shortest=1,split[p0][p1]`);
+    filters.push(`[b${effectSets.length - 1}][${effectSets.length + 1}:v]overlay=0:0:shortest=1,fps=12,trim=duration=4,setpts=PTS-STARTPTS,split[p0][p1]`);
     filters.push('[p0]palettegen=max_colors=128:reserve_transparent=0[p]');
     filters.push('[p1][p]paletteuse=dither=bayer:bayer_scale=3[out]');
     args.push(
       '-filter_complex', filters.join(';'),
       '-map', '[out]',
-      '-t', '6',
+      '-frames:v', '48',
       '-loop', '0',
       outputPath,
     );
@@ -274,7 +274,7 @@ async function createMontage(candidateRoot, product, effectSets, options) {
       args,
     );
     if (result.status !== 0 || result.error) {
-      throw new Error(`Could not render firing-cycle montage: ${result.stderr || result.error?.message || 'ffmpeg failed'}`);
+      throw new Error(`Could not render firing-cycle montage: ${result.error?.message || result.stderr || 'ffmpeg failed'}`);
     }
     return outputPath;
   } finally {
