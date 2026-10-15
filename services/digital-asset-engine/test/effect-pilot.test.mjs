@@ -40,6 +40,26 @@ async function syntheticEffectSource() {
   return sharp(data, { raw: { width, height, channels } }).png().toBuffer();
 }
 
+async function syntheticSmallAnchorGapSource() {
+  const width = 64;
+  const height = 64;
+  const channels = 4;
+  const data = Buffer.alloc(width * height * channels);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = ((y * width) + x) * channels;
+      const mainEffect = x >= 20 && x <= 55 && y >= 20 && y <= 34;
+      const anchorSpark = x === 8 && y === 10;
+      const effectPixel = mainEffect || anchorSpark;
+      data[offset] = effectPixel ? 53 : 0;
+      data[offset + 1] = effectPixel ? 217 : 255;
+      data[offset + 2] = effectPixel ? 255 : 0;
+      data[offset + 3] = 255;
+    }
+  }
+  return sharp(data, { raw: { width, height, channels } }).png().toBuffer();
+}
+
 async function prepareCanonicalProduct(outputRoot) {
   const opportunity = await readFixture('services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json');
   const config = await loadEngineConfig(
@@ -88,6 +108,8 @@ test('effect frame processing preserves a fixed west-center origin on a transpar
     maxPaletteColors: 32,
     chromaKey: '#00ff00',
     chromaTolerance: 105,
+    origin: { x: 4, y: 32 },
+    maximumOriginGap: 16,
   });
   const metadata = await sharp(processed.buffer).metadata();
   const contact = await inspectAnchorContact(processed.buffer, { x: 4, y: 32 }, 8);
@@ -96,6 +118,24 @@ test('effect frame processing preserves a fixed west-center origin on a transpar
   assert.equal(metadata.hasAlpha, true);
   assert.equal(processed.placed_bounds.left, 4);
   assert.equal(contact.passed, true);
+  assert.equal(processed.anchor_correction, null);
+});
+
+test('effect frame processing bridges a small model-made muzzle-origin gap', async () => {
+  const origin = { x: 4, y: 32 };
+  const processed = await processPixelArtEffectFrame(await syntheticSmallAnchorGapSource(), {
+    width: 64,
+    height: 64,
+    padding: 4,
+    placement: 'west_center',
+    maxPaletteColors: 32,
+    chromaKey: '#00ff00',
+    chromaTolerance: 105,
+    origin,
+    maximumOriginGap: 16,
+  });
+  assert.equal(processed.anchor_correction.applied, true);
+  assert.equal((await inspectAnchorContact(processed.buffer, origin, 0)).passed, true);
 });
 
 test('sprite-sheet assembly uses transparent gutters and non-overlapping frame rectangles', async () => {

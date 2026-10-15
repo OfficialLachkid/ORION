@@ -11,6 +11,7 @@ import { withGenerationLock } from './generation-lock.mjs';
 import {
   createTransparencyPreview,
   inspectAnchorContact,
+  PIXEL_ART_EFFECT_PROCESSING_VERSION,
   PIXEL_ART_PROCESSING_VERSION,
   processPixelArtEffectFrame,
 } from './image-processor.mjs';
@@ -48,6 +49,7 @@ function frameName(frameNumber) {
 function generationFingerprint(pilot, effect, frame) {
   return sha256(JSON.stringify({
     processing_version: PIXEL_ART_PROCESSING_VERSION,
+    effect_processing_version: PIXEL_ART_EFFECT_PROCESSING_VERSION,
     style: pilot.style,
     canvas: effect.canvas,
     placement: effect.placement,
@@ -67,8 +69,22 @@ async function loadReusableFrame(paths, fingerprint) {
       || validation.generation_fingerprint !== fingerprint
       || validation.metrics?.content_sha256 !== sha256(buffer)
       || validation.processing?.version !== PIXEL_ART_PROCESSING_VERSION
+      || validation.processing?.effect_version !== PIXEL_ART_EFFECT_PROCESSING_VERSION
     ) return null;
     return { buffer, validation };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function loadExistingSource(paths) {
+  try {
+    return {
+      buffer: await readFile(paths.source),
+      format: 'png',
+      reprocessed: true,
+    };
   } catch (error) {
     if (error?.code === 'ENOENT') return null;
     throw error;
@@ -305,12 +321,12 @@ export async function generateEffectPilot(options) {
         }
 
         const frameStartedMs = Date.now();
-        const generated = await adapter.generateAsset({
+        const generated = await loadExistingSource(paths) || await adapter.generateAsset({
           asset: { generation_prompt: frame.prompt, seed: frame.seed },
           sourceWidth: pilot.style.source_width,
           sourceHeight: pilot.style.source_height,
         });
-        generationCalls += 1;
+        if (!generated.reprocessed) generationCalls += 1;
         const generatedPaths = framePaths(experimentRoot, effect, frame, generated.format);
         await writeBuffer(generatedPaths.source, generated.buffer);
         const processed = await processPixelArtEffectFrame(generated.buffer, {
@@ -321,6 +337,8 @@ export async function generateEffectPilot(options) {
           maxPaletteColors: pilot.style.max_palette_colors,
           chromaKey: pilot.style.chroma_key,
           chromaTolerance: options.config.generation.chroma_tolerance,
+          origin: effect.origin_contact_required ? effect.origin : null,
+          maximumOriginGap: effect.origin_contact_required ? effect.origin_tolerance * 2 : null,
         });
         await writeBuffer(generatedPaths.final, processed.buffer);
         const [validation, anchorContact] = await Promise.all([
@@ -348,6 +366,7 @@ export async function generateEffectPilot(options) {
           origin: effect.origin,
           processing: {
             version: processed.processing_version,
+            effect_version: processed.effect_processing_version,
             source: processed.source,
             extracted_bounds: processed.extracted_bounds,
             placed_bounds: processed.placed_bounds,
@@ -355,6 +374,7 @@ export async function generateEffectPilot(options) {
             detected_chroma_key: processed.detected_chroma_key,
             border_chroma_match_ratio: processed.border_chroma_match_ratio,
             requested_chroma_distance: processed.requested_chroma_distance,
+            anchor_correction: processed.anchor_correction,
           },
         };
         await writeJson(generatedPaths.validation, report);

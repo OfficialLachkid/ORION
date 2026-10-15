@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 
 export const PIXEL_ART_PROCESSING_VERSION = '2.0';
+export const PIXEL_ART_EFFECT_PROCESSING_VERSION = '1.0';
 
 function parseHexColor(value) {
   const normalized = value.replace('#', '');
@@ -199,7 +200,7 @@ export async function processPixelArtEffectFrame(inputBuffer, options) {
     height: options.height,
     padding: options.padding,
   }, resized.info);
-  const output = await sharp({
+  let output = await sharp({
     create: {
       width: options.width,
       height: options.height,
@@ -215,10 +216,39 @@ export async function processPixelArtEffectFrame(inputBuffer, options) {
       compressionLevel: 9,
     })
     .toBuffer();
+  let anchorCorrection = null;
+  if (options.origin && Number.isFinite(options.maximumOriginGap)) {
+    const contact = await inspectAnchorContact(output, options.origin, 0);
+    if (contact.nearest_opaque_distance > 0
+      && contact.nearest_opaque_distance <= options.maximumOriginGap) {
+      const decodedOutput = await sharp(output).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const nearest = findNearestOpaquePixel(decodedOutput.data, decodedOutput.info, options.origin);
+      drawPixelLine(decodedOutput.data, decodedOutput.info, options.origin, nearest);
+      output = await sharp(decodedOutput.data, {
+        raw: {
+          width: decodedOutput.info.width,
+          height: decodedOutput.info.height,
+          channels: 4,
+        },
+      }).png({
+        palette: true,
+        colours: options.maxPaletteColors,
+        dither: 0,
+        compressionLevel: 9,
+      }).toBuffer();
+      anchorCorrection = {
+        applied: true,
+        distance: contact.nearest_opaque_distance,
+        from: options.origin,
+        to: { x: nearest.x, y: nearest.y },
+      };
+    }
+  }
 
   return {
     buffer: output,
     processing_version: PIXEL_ART_PROCESSING_VERSION,
+    effect_processing_version: PIXEL_ART_EFFECT_PROCESSING_VERSION,
     source: { width, height },
     extracted_bounds: extractedBounds,
     placed_bounds: {
@@ -231,18 +261,61 @@ export async function processPixelArtEffectFrame(inputBuffer, options) {
     detected_chroma_key: detected.hex,
     border_chroma_match_ratio: Number(detected.matchRatio.toFixed(4)),
     requested_chroma_distance: Number(detected.expectedDistance.toFixed(2)),
+    anchor_correction: anchorCorrection,
   };
+}
+
+function findNearestOpaquePixel(data, info, origin) {
+  let nearest = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const offset = ((y * info.width) + x) * 4;
+      if (data[offset + 3] === 0) continue;
+      const distance = Math.hypot(x - origin.x, y - origin.y);
+      if (distance >= nearestDistance) continue;
+      nearestDistance = distance;
+      nearest = {
+        x,
+        y,
+        color: [data[offset], data[offset + 1], data[offset + 2], data[offset + 3]],
+      };
+    }
+  }
+  return nearest;
+}
+
+function drawPixelLine(data, info, from, to) {
+  let x = from.x;
+  let y = from.y;
+  const dx = Math.abs(to.x - from.x);
+  const dy = -Math.abs(to.y - from.y);
+  const stepX = from.x < to.x ? 1 : -1;
+  const stepY = from.y < to.y ? 1 : -1;
+  let error = dx + dy;
+  while (true) {
+    const offset = ((y * info.width) + x) * 4;
+    for (let channel = 0; channel < 4; channel += 1) data[offset + channel] = to.color[channel];
+    if (x === to.x && y === to.y) break;
+    const doubled = error * 2;
+    if (doubled >= dy) {
+      error += dy;
+      x += stepX;
+    }
+    if (doubled <= dx) {
+      error += dx;
+      y += stepY;
+    }
+  }
 }
 
 export async function inspectAnchorContact(assetBuffer, origin, tolerance) {
   const decoded = await sharp(assetBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-  let nearestDistance = Number.POSITIVE_INFINITY;
-  for (let y = 0; y < decoded.info.height; y += 1) {
-    for (let x = 0; x < decoded.info.width; x += 1) {
-      if (decoded.data[((y * decoded.info.width) + x) * 4 + 3] === 0) continue;
-      nearestDistance = Math.min(nearestDistance, Math.hypot(x - origin.x, y - origin.y));
-    }
-  }
+  const nearest = findNearestOpaquePixel(decoded.data, decoded.info, origin);
+  const nearestDistance = Math.hypot(
+    nearest.x - origin.x,
+    nearest.y - origin.y,
+  );
   return {
     passed: nearestDistance <= tolerance,
     nearest_opaque_distance: Number(nearestDistance.toFixed(2)),
