@@ -43,13 +43,16 @@ function validatePlan(plan) {
   return plan;
 }
 
-function previewPaths(experiment) {
+function previewPaths(experiment, pilot) {
   const key = experiment.source_asset_key;
+  const muzzle = pilot.effects.find((effect) => effect.kind === 'muzzle_flash');
+  const impact = pilot.effects.find((effect) => effect.kind === 'impact_decay');
+  if (!muzzle || !impact) throw new Error(`${key} pilot is missing its muzzle or impact effect.`);
   return {
     attack: `previews/${key}-attack-cycle.gif`,
-    muzzle: `previews/${key}-muzzle-flash.gif`,
+    muzzle: `previews/${muzzle.effect_key}.gif`,
     projectile: `previews/${key}-projectile-travel.gif`,
-    impact: `previews/${key}-impact-decay.gif`,
+    impact: `previews/${impact.effect_key}.gif`,
   };
 }
 
@@ -103,7 +106,10 @@ async function loadBundle(productRoot, plan) {
   const experiments = [];
   for (const experiment of plan.experiments) {
     const root = resolve(productRoot, 'experiments', experiment.pilot_id);
-    const manifest = await readJson(resolve(root, 'manifest.json'));
+    const [manifest, pilot] = await Promise.all([
+      readJson(resolve(root, 'manifest.json')),
+      readJson(resolve(root, 'pilot.json')),
+    ]);
     if (
       manifest.source_asset_key !== experiment.source_asset_key
       || manifest.status !== 'awaiting_effects_review'
@@ -116,7 +122,7 @@ async function loadBundle(productRoot, plan) {
       experiment_root: root,
       manifest_hash: manifest.manifest_hash,
       muzzle_anchor: manifest.source_weapon_muzzle_anchor,
-      preview_paths: previewPaths(experiment),
+      preview_paths: previewPaths(experiment, pilot),
       manifest,
     });
   }

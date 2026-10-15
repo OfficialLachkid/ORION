@@ -77,9 +77,9 @@ test('effects review posts one overview and updates weapon previews in a dedicat
   const experimentRoot = resolve(productRoot, 'experiments', plan.experiments[0].pilot_id);
   const previewPaths = [
     'previews/arc-launcher-attack-cycle.gif',
-    'previews/arc-launcher-muzzle-flash.gif',
+    'previews/arc-muzzle-flash.gif',
     'previews/arc-launcher-projectile-travel.gif',
-    'previews/arc-launcher-impact-decay.gif',
+    'previews/arc-impact-decay.gif',
   ];
   const gif = await sharp({
     create: { width: 8, height: 8, channels: 4, background: '#35d9ff' },
@@ -101,6 +101,13 @@ test('effects review posts one overview and updates weapon previews in a dedicat
     attack_cycle_role: 'preview_only',
     manifest_hash: 'a'.repeat(64),
     source_weapon_muzzle_anchor: { x: 128, y: 21 },
+  }));
+  await writeFile(resolve(experimentRoot, 'pilot.json'), JSON.stringify({
+    effects: [
+      { effect_key: 'arc-projectile', kind: 'projectile' },
+      { effect_key: 'arc-muzzle-flash', kind: 'muzzle_flash' },
+      { effect_key: 'arc-impact-decay', kind: 'impact_decay' },
+    ],
   }));
 
   const calls = [];
