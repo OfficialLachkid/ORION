@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { basename, resolve } from 'node:path';
+import { basename, isAbsolute, relative, resolve } from 'node:path';
 import {
   buildDigitalAssetReviewModal,
   buildResolvedDigitalAssetReviewComponents,
@@ -89,16 +89,49 @@ function exportedAssetHash(manifest, asset) {
   ))?.content_sha256;
 }
 
+function resolveInside(rootPath, candidatePath, label) {
+  const root = resolve(rootPath);
+  const target = resolve(root, candidatePath);
+  const child = relative(root, target);
+  if (child.startsWith('..') || isAbsolute(child)) {
+    throw new Error(`${label} must stay inside the canonical product archive.`);
+  }
+  return target;
+}
+
+function resolveReviewedManifestPath(productRoot, reviewState) {
+  const packageRoot = String(reviewState.package_root || '').trim();
+  const targetVersion = String(reviewState.target_version || '').trim();
+  if (!packageRoot) {
+    if (targetVersion) throw new Error('The versioned package review is missing its immutable package path.');
+    return resolveInside(productRoot, 'exports/itch-preview/manifest.json', 'Preview manifest');
+  }
+  if (!/^\d+\.\d+\.\d+$/u.test(targetVersion)) {
+    throw new Error('The reviewed package target version is invalid.');
+  }
+  const normalizedRoot = relative(resolve(productRoot), resolveInside(productRoot, packageRoot, 'Reviewed package'))
+    .replaceAll('\\', '/');
+  const expectedPrefix = `releases/${targetVersion}/candidates/`;
+  if (!normalizedRoot.startsWith(expectedPrefix)
+    || !/^[a-f0-9]{16}$/u.test(normalizedRoot.slice(expectedPrefix.length))) {
+    throw new Error('The reviewed package path is not an immutable release candidate.');
+  }
+  return resolveInside(productRoot, `${normalizedRoot}/manifest.json`, 'Reviewed manifest');
+}
+
 async function loadReviewContext({ archiveRoot, reference, interaction }) {
   const productRoot = resolve(archiveRoot, reference.productSlug);
-  const [product, reviewState, manifest, itchState] = await Promise.all([
+  const [product, reviewState, itchState] = await Promise.all([
     readJson(resolve(productRoot, 'product.json')),
     readJson(resolve(productRoot, 'review', 'discord.json')),
-    readJson(resolve(productRoot, 'exports', 'itch-preview', 'manifest.json')),
     readJson(resolve(productRoot, 'review', 'itch.json')),
   ]);
   if (product.slug !== reference.productSlug || reviewState.product_slug !== reference.productSlug) {
     throw new Error('The Discord review reference does not match the canonical product.');
+  }
+  const manifest = await readJson(resolveReviewedManifestPath(productRoot, reviewState));
+  if (reviewState.target_version && manifest.target_version !== reviewState.target_version) {
+    throw new Error('The reviewed release candidate does not match its target version.');
   }
   if (manifest.manifest_hash !== reviewState.manifest_hash
     || !manifest.manifest_hash.startsWith(reference.manifestHashPrefix)) {
