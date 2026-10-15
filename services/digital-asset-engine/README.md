@@ -108,3 +108,14 @@ npm run digital-assets:effects-batch -- \
 ```
 
 The batch stops on the first failed proof, preserves every previously completed experiment, and prints a per-weapon manifest, muzzle anchor, attack-cycle path, generation-call count, and duration. It does not mutate the canonical release, Discord package decision, or marketplace listing.
+
+After all eight experiments exist, post or reconcile the read-only effects presentation in the existing pack channel:
+
+```bash
+npm run digital-assets:effects-review -- \
+  --post-to-discord \
+  --review-plan services/digital-asset-engine/fixtures/all-weapon-effects.review.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+This creates one effects overview and an `effects-review-v1` thread. Each numbered weapon message attaches its complete firing cycle plus the separate muzzle-flash, projectile-travel, and impact/decay GIFs. The exact experiment manifests are combined into one hashed review receipt. This presentation intentionally has no approval buttons yet; it does not reuse the package-release decision for an unversioned extension.

@@ -62,7 +62,7 @@ export async function discordRequest(token, path, options = {}) {
   throw new Error(`Discord ${options.method || 'GET'} ${path} exhausted its retry budget.`);
 }
 
-async function sendMessageWithFiles(token, channelId, payload, files, options = {}) {
+export async function sendMessageWithFiles(token, channelId, payload, files, options = {}) {
   const form = new FormData();
   const attachments = files.map((file, index) => ({
     id: index,
