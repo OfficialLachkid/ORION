@@ -129,6 +129,7 @@ test('Playwright draft preparation includes listing fields and exact price contr
   assert.match(code, /page\.url\(\)\.includes\('\/login'\)/u);
   assert.match(code, /\.game_row/u);
   assert.match(code, /projectUrl/u);
+  assert.match(code, /currentUrl !== requestedEditUrl/u);
   assert.doesNotMatch(code, /new URL/u);
   assert.doesNotThrow(() => new Function(`return (${code})`));
 });

@@ -105,7 +105,9 @@ async (page) => {
     return { status: 'login_required', url: page.url() };
   }
 
-  if (input.editUrl) {
+  const currentUrl = page.url().replace(/#.*$/u, '').replace(/\\/$/u, '');
+  const requestedEditUrl = input.editUrl.replace(/#.*$/u, '').replace(/\\/$/u, '');
+  if (input.editUrl && currentUrl !== requestedEditUrl) {
     await page.goto(input.editUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   } else if (!page.url().includes('/game/edit/')) {
     const projectUrl = input.publicUrl.split('?')[0].replace(/\\/$/u, '');
