@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, relative, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
+import { resolvePackagedRelease } from './packaged-release.mjs';
 import { buildDigitalAssetPackReviewComponents } from './review-components.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
@@ -133,7 +134,8 @@ export function buildPackReviewEmbed({ product, manifest, itchUrl, revision = 1 
     color: REVIEW_COLOR,
     fields: [
       { name: 'State', value: '`awaiting_package_review`', inline: true },
-      { name: 'Assets', value: String(manifest.asset_count), inline: true },
+      { name: 'Release', value: `\`${manifest.target_version || manifest.product_version || 'preview'}\``, inline: true },
+      { name: 'Assets', value: String(manifest.asset_count || manifest.weapon_count), inline: true },
       { name: 'Local generation cost', value: '€0 API cost', inline: true },
       { name: 'Included assets', value: numberedAssetList(product.assets), inline: false },
       { name: 'Manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
@@ -218,12 +220,12 @@ export async function postDigitalAssetReview(options) {
   const store = options.store || new CanonicalProductStore(options.outputRoot);
   const product = options.product || await store.loadProduct(options.slug);
   const productRoot = store.productRoot(product);
-  const exportRoot = resolve(productRoot, 'exports', 'itch-preview');
-  const manifestPath = resolve(exportRoot, 'manifest.json');
-  const manifest = await readJson(manifestPath);
-  if (manifest.distribution_ready !== false || manifest.release_state !== 'internal_preview') {
-    throw new Error('Discord review posting requires an internal preview manifest with distribution blocked.');
-  }
+  const packaged = await resolvePackagedRelease({
+    productRoot,
+    releaseVersion: options.releaseVersion,
+  });
+  const exportRoot = packaged.root;
+  const { manifestPath, manifest } = packaged;
   if (!/^[a-f0-9]{64}$/u.test(String(manifest.listing_hash || ''))) {
     throw new Error('Discord review posting requires a packaged listing hash.');
   }
@@ -268,6 +270,8 @@ export async function postDigitalAssetReview(options) {
   state.review_revision = Math.max(1, Number(state.review_revision) || 1) + (revisionChanged ? 1 : 0);
   state.manifest_hash = manifest.manifest_hash;
   state.listing_hash = manifest.listing_hash;
+  state.target_version = manifest.target_version || product.version || null;
+  state.package_root = relative(productRoot, exportRoot).replaceAll('\\', '/');
   state.itch_url = itchUrl;
   state.itch_staged_at = itchState.staged_at;
   state.component_schema_version = null;

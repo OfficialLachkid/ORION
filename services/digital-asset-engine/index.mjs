@@ -45,6 +45,7 @@ function parseArguments(argv) {
     else if (token === '--revision-plan') args.revisionPlan = argv[++index];
     else if (token === '--review-plan') args.reviewPlan = argv[++index];
     else if (token === '--extension-plan') args.extensionPlan = argv[++index];
+    else if (token === '--release-version') args.releaseVersion = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
     else if (token === '--category-name') args.categoryName = argv[++index];
@@ -81,6 +82,7 @@ function printHelp() {
     `  --revision-plan <path> Default: ${DEFAULT_EFFECT_REVISION}`,
     `  --review-plan <path> Default: ${DEFAULT_EFFECT_REVIEW}`,
     `  --extension-plan <path> Default: ${DEFAULT_EXTENSION_PLAN}`,
+    '  --release-version <semver>  Stage/review the latest immutable candidate for this version.',
     '  --output-root <path>  Override canonical product storage.',
     '  --now <ISO datetime>  Deterministic validation/testing time.',
     '  --execute             Required for image generation.',
@@ -292,6 +294,7 @@ async function main() {
               itchEditUrl: args.itchEditUrl,
               profileDir: args.playwrightProfile,
               headed: args.headed,
+              releaseVersion: args.releaseVersion,
               now: args.now,
             });
             return {
@@ -311,6 +314,7 @@ async function main() {
               slug: slugify(opportunity.title),
               categoryName: args.categoryName,
               itchUrl: args.itchUrl,
+              releaseVersion: args.releaseVersion,
               now: args.now,
             });
             return {

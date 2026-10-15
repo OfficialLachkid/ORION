@@ -2,8 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
+import { resolvePackagedRelease } from './packaged-release.mjs';
 
 function readJson(path) {
   return readFile(path, 'utf8').then((value) => JSON.parse(value));
@@ -321,14 +322,12 @@ export async function stageItchDraft(options) {
   const store = options.store || new CanonicalProductStore(options.outputRoot);
   const product = options.product || await store.loadProduct(options.slug);
   const productRoot = store.productRoot(product);
-  const exportRoot = resolve(productRoot, 'exports', 'itch-preview');
-  const [manifest, listing] = await Promise.all([
-    readJson(resolve(exportRoot, 'manifest.json')),
-    readJson(resolve(exportRoot, 'itch-listing-preview.json')),
-  ]);
-  if (manifest.listing_hash !== listing.listing_hash) {
-    throw new Error('The itch.io listing hash does not match the packaged manifest.');
-  }
+  const packaged = await resolvePackagedRelease({
+    productRoot,
+    releaseVersion: options.releaseVersion,
+  });
+  const exportRoot = packaged.root;
+  const { manifest, listing } = packaged;
   const publicUrl = normalizeItchUrl(options.itchUrl).toString();
   const target = butlerTargetFromUrl(publicUrl);
   const downloadRoot = resolve(exportRoot, 'download');
@@ -355,7 +354,7 @@ export async function stageItchDraft(options) {
     downloadRoot,
     `${target}:assets`,
     '--userversion',
-    `review-${manifest.manifest_hash.slice(0, 12)}`,
+    `${manifest.target_version || product.version || 'review'}-${manifest.manifest_hash.slice(0, 12)}`,
     '--if-changed',
   ], { cwd: options.cwd, env, timeoutMs: 15 * 60_000 });
   if (!butler.ok) {
@@ -471,11 +470,13 @@ export async function stageItchDraft(options) {
       status: 'verified',
       product_id: product.product_id,
       product_slug: product.slug,
+      target_version: manifest.target_version || product.version || null,
       manifest_hash: manifest.manifest_hash,
       listing_hash: listing.listing_hash,
       public_url: publicUrl,
       edit_url: details.url,
       butler_target: `${target}:assets`,
+      package_root: relative(productRoot, exportRoot).replaceAll('\\', '/'),
       screenshot_path: screenshotPath,
       staged_at: options.now || new Date().toISOString(),
     };

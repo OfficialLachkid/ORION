@@ -7,19 +7,12 @@
   "target_version": "0.2.0",
   "base_manifest_hash": "b5ef97a02c229dc70aaf036aca6bd3f10bf9fa7caab0bd76558649e1f6e1b00a",
   "effects_review_id": "neon-plasma-armory-effects-v1",
-  "effects_bundle_hash": "29e85c222181795a781f44cac2a85a0a9b55acb5ea18c1e54cb7fdeef8720861",
+  "effects_bundle_hash": "65be7fd4e98a62eb955925c6fc812f947ad259e6096569d2dfa1ecd601c41d1e",
   "release_notes": [
     "Added an independent muzzle-flash animation for every weapon.",
     "Added a stationary projectile sprite for every weapon; travel remains controlled by the game engine.",
     "Added an independent impact and decay animation for every weapon.",
     "Added dynamically detected weapon-local muzzle anchors and zero-root-motion animation metadata."
   ],
-  "quality_holds": [
-    {
-      "hold_id": "identify-weapon-like-impact-decays",
-      "status": "open",
-      "affected_asset_keys": ["ion-pistol", "energy-shotgun"],
-      "note": "Ion Pistol and Energy Shotgun impact/decay sequences resemble shrunken weapons. Replace and approve those two sequences before staging this revision."
-    }
-  ]
+  "quality_holds": []
 }

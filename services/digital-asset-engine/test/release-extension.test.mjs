@@ -87,6 +87,13 @@ async function createFixture({ approved = true } = {}) {
       experimentFiles.push({ path, size: details.size_bytes, sha256: details.content_sha256 });
     }
   }
+  const attackCyclePath = 'previews/plasma-pistol-attack-cycle.gif';
+  const attackCycleDetails = await write(resolve(experimentRoot, attackCyclePath), Buffer.from('attack-cycle'));
+  experimentFiles.push({
+    path: attackCyclePath,
+    size: attackCycleDetails.size_bytes,
+    sha256: attackCycleDetails.content_sha256,
+  });
   await write(resolve(experimentRoot, 'pilot.json'), JSON.stringify({ effects }));
   const proofManifestHash = 'd'.repeat(64);
   await write(resolve(experimentRoot, 'manifest.json'), JSON.stringify({
@@ -134,11 +141,22 @@ async function createFixture({ approved = true } = {}) {
       note: 'Identify two suspicious impact sequences.',
     }],
   };
+  const marketingBuilder = async ({ candidateRoot }) => {
+    const media = {
+      cover_path: 'cover.png',
+      screenshot_paths: ['weapon-inventory.png', 'effects-breakdown.png', 'firing-cycle-montage.gif'],
+    };
+    for (const path of [media.cover_path, ...media.screenshot_paths]) {
+      await write(resolve(candidateRoot, path), Buffer.from(`marketing-${path}`));
+    }
+    return media;
+  };
   return {
     outputRoot,
     productRoot,
     product,
     plan,
+    marketingBuilder,
     store: {
       async loadProduct() { return product; },
       productRoot() { return productRoot; },
@@ -152,6 +170,7 @@ test('builds an immutable extension candidate with buyer runtime effects and an 
     outputRoot: fixture.outputRoot,
     store: fixture.store,
     plan: fixture.plan,
+    marketingBuilder: fixture.marketingBuilder,
     now: '2026-10-15T12:00:00.000Z',
   });
   assert.equal(result.reused, false);
@@ -159,6 +178,11 @@ test('builds an immutable extension candidate with buyer runtime effects and an 
   assert.equal(result.manifest.target_version, '0.2.0');
   assert.equal(result.manifest.release_state, 'blocked_quality_review');
   assert.equal(result.manifest.effect_animation_count, 3);
+  assert.deepEqual(result.manifest.marketing_media.screenshot_paths, [
+    'weapon-inventory.png',
+    'effects-breakdown.png',
+    'firing-cycle-montage.gif',
+  ]);
   assert.equal(result.gates.quality_holds_resolved, false);
   assert.equal(result.gates.distribution_ready, false);
   assert.match(result.candidateRoot, /releases[\\/]0\.2\.0[\\/]candidates/u);
@@ -170,6 +194,13 @@ test('builds an immutable extension candidate with buyer runtime effects and an 
   assert.equal(result.manifest.files.some((file) => (
     file.path === 'download/effects/plasma-pistol/projectile/animation.json'
   )), true);
+  assert.equal(result.manifest.files.some((file) => file.path === 'effects-breakdown.png'), true);
+  const listing = JSON.parse(await readFile(resolve(result.candidateRoot, 'itch-listing.json'), 'utf8'));
+  assert.deepEqual(listing.screenshot_paths, [
+    'weapon-inventory.png',
+    'effects-breakdown.png',
+    'firing-cycle-montage.gif',
+  ]);
   const anchors = JSON.parse(await readFile(resolve(
     result.candidateRoot,
     'download',
@@ -183,6 +214,7 @@ test('builds an immutable extension candidate with buyer runtime effects and an 
     outputRoot: fixture.outputRoot,
     store: fixture.store,
     plan: fixture.plan,
+    marketingBuilder: fixture.marketingBuilder,
   });
   assert.equal(reused.reused, true);
   assert.equal(reused.manifest.manifest_hash, result.manifest.manifest_hash);
@@ -194,5 +226,6 @@ test('requires exact approval of the base package before preparing an extension'
     outputRoot: fixture.outputRoot,
     store: fixture.store,
     plan: fixture.plan,
+    marketingBuilder: fixture.marketingBuilder,
   }), /exact base package must have a persisted approval/u);
 });

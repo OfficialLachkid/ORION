@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { copyFile, cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
+import { buildReleaseMarketingMedia } from './release-marketing.mjs';
 import { ProductExtensionPlanSchema } from './schemas.mjs';
 
 const REQUIRED_EFFECT_KINDS = Object.freeze(['muzzle_flash', 'projectile', 'impact_decay']);
@@ -110,7 +111,7 @@ function effectsReadme() {
   ].join('\n');
 }
 
-function extensionListing(baseListing, product, plan, effectSets) {
+function extensionListing(baseListing, product, plan, effectSets, marketingMedia) {
   const effectCount = effectSets.length * 3;
   const addition = [
     '',
@@ -128,8 +129,8 @@ function extensionListing(baseListing, product, plan, effectSets) {
     short_description: `${product.assets.length} side-view sci-fi weapons with ${effectCount} matching effect animations.`,
     description: `${String(baseListing.description || '').trim()}${addition}`,
     visibility: 'draft',
-    cover_path: 'cover.png',
-    screenshot_paths: ['cover.png', 'marketplace-preview.png'],
+    cover_path: marketingMedia.cover_path,
+    screenshot_paths: marketingMedia.screenshot_paths,
     technical_information: [
       ...(baseListing.technical_information || []),
       `${effectCount} independent effect animations`,
@@ -208,6 +209,8 @@ async function copyEffectSet({ productRoot, candidateRoot, bundleItem, product }
       path: `effects/${bundleItem.source_asset_key}/${kind}`,
     };
   }
+  const attackCyclePath = `previews/${bundleItem.source_asset_key}-attack-cycle.gif`;
+  const attackCycle = await verifiedExperimentFile(experimentRoot, manifest, attackCyclePath);
   return {
     source_asset_key: bundleItem.source_asset_key,
     name: bundleItem.name,
@@ -216,6 +219,7 @@ async function copyEffectSet({ productRoot, candidateRoot, bundleItem, product }
     muzzle_anchor_detection: manifest.source_weapon_muzzle_anchor_detection,
     proof_manifest_hash: manifest.manifest_hash,
     effects,
+    attack_cycle_preview_source: attackCycle.source,
   };
 }
 
@@ -280,16 +284,20 @@ export async function prepareVersionedPackageExtension(options) {
 
   await mkdir(resolve(candidateRoot, 'download'), { recursive: true });
   await cp(resolve(baseRoot, 'download'), resolve(candidateRoot, 'download'), { recursive: true });
-  await Promise.all([
-    copyFile(resolve(baseRoot, 'cover.png'), resolve(candidateRoot, 'cover.png')),
-    copyFile(resolve(baseRoot, 'marketplace-preview.png'), resolve(candidateRoot, 'marketplace-preview.png')),
-  ]);
 
   const effectSets = [];
   for (const experiment of effectsBundle.experiments) {
     effectSets.push(await copyEffectSet({ productRoot, candidateRoot, bundleItem: experiment, product }));
   }
-  const listing = extensionListing(baseListing, product, plan, effectSets);
+  const marketingMedia = await (options.marketingBuilder || buildReleaseMarketingMedia)({
+    candidateRoot,
+    product,
+    effectSets,
+    version: plan.target_version,
+    runProcess: options.runProcess,
+    ffmpegExecutable: options.ffmpegExecutable,
+  });
+  const listing = extensionListing(baseListing, product, plan, effectSets, marketingMedia);
   const anchors = {
     schema_version: '1.0',
     product_id: product.product_id,
@@ -336,8 +344,10 @@ export async function prepareVersionedPackageExtension(options) {
     effects_bundle_hash: effectsBundle.bundle_hash,
     input_hash: inputHash,
     weapon_count: product.assets.length,
+    asset_count: product.assets.length,
     effect_set_count: effectSets.length,
     effect_animation_count: effectSets.length * REQUIRED_EFFECT_KINDS.length,
+    marketing_media: marketingMedia,
     listing_hash: listing.listing_hash,
     quality_holds: plan.quality_holds,
     gates,

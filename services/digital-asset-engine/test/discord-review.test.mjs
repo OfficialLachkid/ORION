@@ -83,9 +83,49 @@ async function createReviewFixture() {
     writeFile(resolve(productRoot, asset.validation_path), `${JSON.stringify(validation)}\n`, 'utf8'),
     writeFile(resolve(exportRoot, 'cover.png'), sprite),
     writeFile(resolve(exportRoot, 'manifest.json'), `${JSON.stringify(manifest)}\n`, 'utf8'),
+    writeFile(resolve(exportRoot, 'itch-listing-preview.json'), `${JSON.stringify({
+      listing_hash: manifest.listing_hash,
+    })}\n`, 'utf8'),
     writeFile(resolve(productRoot, 'review', 'itch.json'), `${JSON.stringify(itchState)}\n`, 'utf8'),
   ]);
   return { outputRoot, product, productRoot, exportRoot, manifest, validation, itchState };
+}
+
+async function addReviewReleaseCandidate(fixture) {
+  const candidatePath = 'releases/0.2.0/candidates/reviewcandidate1';
+  const candidateRoot = resolve(fixture.productRoot, candidatePath);
+  const listing = { listing_hash: 'f'.repeat(64) };
+  const manifest = {
+    manifest_hash: 'e'.repeat(64),
+    listing_hash: listing.listing_hash,
+    target_version: '0.2.0',
+    release_state: 'awaiting_extension_review',
+    distribution_ready: false,
+    quality_holds: [],
+    gates: { quality_holds_resolved: true },
+    asset_count: fixture.product.assets.length,
+  };
+  await mkdir(resolve(candidateRoot, 'download'), { recursive: true });
+  await Promise.all([
+    writeFile(resolve(candidateRoot, 'cover.png'), await readFile(resolve(fixture.exportRoot, 'cover.png'))),
+    writeFile(resolve(candidateRoot, 'manifest.json'), `${JSON.stringify(manifest)}\n`, 'utf8'),
+    writeFile(resolve(candidateRoot, 'itch-listing.json'), `${JSON.stringify(listing)}\n`, 'utf8'),
+    writeFile(resolve(fixture.productRoot, 'releases', '0.2.0', 'latest-candidate.json'), `${JSON.stringify({
+      target_version: '0.2.0',
+      candidate_path: candidatePath,
+      manifest_hash: manifest.manifest_hash,
+    })}\n`, 'utf8'),
+  ]);
+  return {
+    manifest,
+    itchState: {
+      status: 'verified',
+      manifest_hash: manifest.manifest_hash,
+      listing_hash: listing.listing_hash,
+      public_url: fixture.itchState.public_url,
+      staged_at: '2026-10-15T13:00:00.000Z',
+    },
+  };
 }
 
 test('Discord embeds use bold numbered assets and explain the manifest receipt', () => {
@@ -211,6 +251,9 @@ test('review revision updates the existing pack and asset messages instead of re
   };
   await Promise.all([
     writeFile(resolve(fixture.exportRoot, 'manifest.json'), `${JSON.stringify(revisedManifest)}\n`, 'utf8'),
+    writeFile(resolve(fixture.exportRoot, 'itch-listing-preview.json'), `${JSON.stringify({
+      listing_hash: revisedManifest.listing_hash,
+    })}\n`, 'utf8'),
     writeFile(resolve(fixture.productRoot, 'review', 'itch.json'), `${JSON.stringify(revisedItch)}\n`, 'utf8'),
   ]);
   const beforeRevision = calls.length;
@@ -226,4 +269,40 @@ test('review revision updates the existing pack and asset messages instead of re
   const resumed = await postDigitalAssetReview({ ...options, itchState: revisedItch });
   assert.equal(resumed.reused, true);
   assert.equal(calls.length, beforeResume);
+});
+
+test('package review resolves a verified versioned candidate and keeps the same approval gate', async () => {
+  const fixture = await createReviewFixture();
+  const release = await addReviewReleaseCandidate(fixture);
+  let messageNumber = 0;
+  const fetchImpl = async (url, options = {}) => {
+    if (options.method === 'GET' && String(url).endsWith('/guilds/guild-1/channels')) {
+      return jsonResponse([{ id: 'category-1', name: 'DIGITAL ASSETS', type: 4 }]);
+    }
+    if (options.method === 'POST' && String(url).endsWith('/guilds/guild-1/channels')) {
+      return jsonResponse({ id: 'channel-1', name: fixture.product.slug, type: 0, parent_id: 'category-1' });
+    }
+    if (options.method === 'POST' && String(url).endsWith('/messages/overview-1/threads')) {
+      return jsonResponse({ id: 'thread-1' });
+    }
+    if (options.method === 'POST' && String(url).endsWith('/messages')) {
+      messageNumber += 1;
+      return jsonResponse({ id: messageNumber === 1 ? 'overview-1' : 'asset-message-1' });
+    }
+    if (options.method === 'PATCH') return jsonResponse({ id: 'overview-1' });
+    return jsonResponse({ message: 'unexpected request' }, 500);
+  };
+  const review = await postDigitalAssetReview({
+    runtimeConfig: { env: { DISCORD_BOT_TOKEN: 'test-token' }, guildId: 'guild-1' },
+    outputRoot: fixture.outputRoot,
+    slug: fixture.product.slug,
+    categoryName: 'DIGITAL ASSETS',
+    itchUrl: release.itchState.public_url,
+    itchState: release.itchState,
+    releaseVersion: '0.2.0',
+    fetchImpl,
+  });
+  assert.equal(review.manifest_hash, release.manifest.manifest_hash);
+  assert.equal(review.target_version, '0.2.0');
+  assert.equal(review.package_root, 'releases/0.2.0/candidates/reviewcandidate1');
 });

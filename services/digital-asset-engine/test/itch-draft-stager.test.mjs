@@ -25,7 +25,12 @@ async function createFixture() {
     screenshot_paths: ['cover.png', 'marketplace-preview.png'],
     listing_hash: 'c'.repeat(64),
   };
-  const manifest = { manifest_hash: 'a'.repeat(64), listing_hash: listing.listing_hash };
+  const manifest = {
+    manifest_hash: 'a'.repeat(64),
+    listing_hash: listing.listing_hash,
+    release_state: 'internal_preview',
+    distribution_ready: false,
+  };
   await Promise.all([
     writeFile(resolve(exportRoot, 'manifest.json'), JSON.stringify(manifest)),
     writeFile(resolve(exportRoot, 'itch-listing-preview.json'), JSON.stringify(listing)),
@@ -40,6 +45,46 @@ async function createFixture() {
       productRoot() { return productRoot; },
     },
   };
+}
+
+async function addReleaseCandidate(fixture) {
+  const productRoot = fixture.store.productRoot(fixture.product);
+  const candidatePath = 'releases/0.2.0/candidates/candidate12345678';
+  const candidateRoot = resolve(productRoot, candidatePath);
+  await mkdir(resolve(candidateRoot, 'download', 'assets'), { recursive: true });
+  const listing = {
+    title: fixture.product.title,
+    short_description: 'Eight weapons with matching effects.',
+    description: 'Verified versioned candidate listing.',
+    suggested_price: { amount: 7.99, currency: 'EUR' },
+    tags: ['2D', 'Pixel Art'],
+    cover_path: 'cover.png',
+    screenshot_paths: ['weapon-inventory.png', 'effects-breakdown.png', 'firing-cycle-montage.gif'],
+    listing_hash: 'e'.repeat(64),
+  };
+  const manifest = {
+    manifest_hash: 'd'.repeat(64),
+    listing_hash: listing.listing_hash,
+    target_version: '0.2.0',
+    release_state: 'awaiting_extension_review',
+    distribution_ready: false,
+    quality_holds: [],
+    gates: { quality_holds_resolved: true },
+  };
+  await Promise.all([
+    writeFile(resolve(candidateRoot, 'manifest.json'), JSON.stringify(manifest)),
+    writeFile(resolve(candidateRoot, 'itch-listing.json'), JSON.stringify(listing)),
+    writeFile(resolve(candidateRoot, 'cover.png'), 'cover-v2'),
+    writeFile(resolve(candidateRoot, 'weapon-inventory.png'), 'inventory'),
+    writeFile(resolve(candidateRoot, 'effects-breakdown.png'), 'effects'),
+    writeFile(resolve(candidateRoot, 'firing-cycle-montage.gif'), 'montage'),
+    writeFile(resolve(productRoot, 'releases', '0.2.0', 'latest-candidate.json'), JSON.stringify({
+      target_version: '0.2.0',
+      candidate_path: candidatePath,
+      manifest_hash: manifest.manifest_hash,
+    })),
+  ]);
+  return { candidateRoot, manifest, listing };
 }
 
 test('Playwright draft preparation includes listing fields and exact price controls', () => {
@@ -149,4 +194,48 @@ test('fails closed when browser verification does not confirm draft state', asyn
     profileDir: fixture.outputRoot,
     cliRunner,
   }), /was not verified/u);
+});
+
+test('stages a quality-cleared immutable release candidate instead of the base preview', async () => {
+  const fixture = await createFixture();
+  const candidate = await addReleaseCandidate(fixture);
+  const calls = [];
+  const cliRunner = (executable, args) => {
+    calls.push({ executable, args });
+    if (args.includes('run-code')) {
+      const code = args.at(-2);
+      const status = code.includes('Object.values(checks)')
+        ? 'verified'
+        : code.includes("status: 'media_ready'") ? 'media_ready'
+          : code.includes('"save":true') ? 'submitted'
+            : code.includes("status: 'prepared'") ? 'prepared' : 'submitted';
+      return {
+        ok: true,
+        stdout: JSON.stringify({ result: JSON.stringify({
+          status,
+          coverId: status === 'media_ready' ? 'cover-v2' : undefined,
+          screenshotCount: status === 'media_ready' ? 3 : undefined,
+          url: 'https://itch.io/game/edit/12345',
+        }) }),
+        stderr: '',
+      };
+    }
+    return { ok: true, stdout: '', stderr: '' };
+  };
+  const staged = await stageItchDraft({
+    outputRoot: fixture.outputRoot,
+    slug: fixture.product.slug,
+    store: fixture.store,
+    releaseVersion: '0.2.0',
+    itchUrl: 'https://vbjservices.itch.io/asset-pack-test?secret=test',
+    profileDir: fixture.outputRoot,
+    cliRunner,
+  });
+  const butler = calls.find((call) => call.args[0] === 'push');
+  assert.equal(butler.args[1], resolve(candidate.candidateRoot, 'download'));
+  assert.ok(butler.args.includes(`0.2.0-${candidate.manifest.manifest_hash.slice(0, 12)}`));
+  assert.equal(staged.target_version, '0.2.0');
+  assert.equal(staged.manifest_hash, candidate.manifest.manifest_hash);
+  assert.equal(staged.package_root, 'releases/0.2.0/candidates/candidate12345678');
+  assert.equal(calls.filter((call) => call.args.includes('upload')).length, 4);
 });
