@@ -287,3 +287,30 @@ export const EffectPilotSchema = z.object({
     }
   }
 });
+
+export const EffectBatchPlanSchema = z.object({
+  schema_version: z.literal('1.0'),
+  batch_id: IdentifierSchema,
+  product_slug: IdentifierSchema,
+  weapons: z.array(z.object({
+    source_asset_key: IdentifierSchema,
+    name: z.string().min(1),
+    profile: z.enum(['compact', 'standard', 'heavy']),
+    seed_base: z.number().int().nonnegative(),
+    projectile_description: z.string().min(1),
+    muzzle_description: z.string().min(1),
+    impact_description: z.string().min(1),
+  })).min(1).max(25),
+}).superRefine((plan, context) => {
+  const keys = new Set();
+  for (const weapon of plan.weapons) {
+    if (keys.has(weapon.source_asset_key)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate batch weapon: ${weapon.source_asset_key}`,
+        path: ['weapons'],
+      });
+    }
+    keys.add(weapon.source_asset_key);
+  }
+});

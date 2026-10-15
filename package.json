@@ -99,6 +99,7 @@
     "digital-assets:plan": "node services/digital-asset-engine/index.mjs plan",
     "digital-assets:generate": "node services/digital-asset-engine/index.mjs generate",
     "digital-assets:effects-pilot": "node services/digital-asset-engine/index.mjs effects-pilot",
+    "digital-assets:effects-batch": "node services/digital-asset-engine/index.mjs effects-batch",
     "digital-assets:package": "node services/digital-asset-engine/index.mjs package",
     "digital-assets:itch-draft": "node services/digital-asset-engine/index.mjs itch-draft",
     "digital-assets:discord-review": "node services/digital-asset-engine/index.mjs discord-review",

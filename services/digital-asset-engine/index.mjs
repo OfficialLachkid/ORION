@@ -4,6 +4,7 @@ import process from 'node:process';
 import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
 import { loadEngineConfig, resolveOutputRoot } from './src/config.mjs';
 import { postDigitalAssetReview } from './src/discord-review.mjs';
+import { generateEffectBatch } from './src/effect-batch.mjs';
 import { generateEffectPilot } from './src/effect-pilot.mjs';
 import { stageItchDraft } from './src/itch-draft-stager.mjs';
 import { packageDigitalAssetPreview } from './src/packager.mjs';
@@ -13,6 +14,7 @@ import { slugify } from './src/product-planner.mjs';
 const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
 const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
 const DEFAULT_EFFECT_PILOT = 'services/digital-asset-engine/fixtures/arc-launcher-effects-v2.pilot.json';
+const DEFAULT_EFFECT_BATCH = 'services/digital-asset-engine/fixtures/remaining-weapon-effects.batch.json';
 
 function parseArguments(argv) {
   const args = {
@@ -33,6 +35,7 @@ function parseArguments(argv) {
     else if (token === '--config') args.config = argv[++index];
     else if (token === '--opportunity') args.opportunity = argv[++index];
     else if (token === '--pilot') args.pilot = argv[++index];
+    else if (token === '--batch') args.batch = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
     else if (token === '--category-name') args.categoryName = argv[++index];
@@ -56,11 +59,13 @@ function printHelp() {
     '  itch-draft  Upload the package and populate/verify the existing itch.io draft.',
     '  discord-review  Create the pack review channel/thread and post previews.',
     '  effects-pilot  Generate isolated fixed-anchor effects without changing the approved pack.',
+    '  effects-batch  Generate sequential isolated weapon-effect proofs from a compact batch plan.',
     '',
     'Options:',
     `  --config <path>       Default: ${DEFAULT_CONFIG}`,
     `  --opportunity <path>  Default: ${DEFAULT_OPPORTUNITY}`,
     `  --pilot <path>       Default: ${DEFAULT_EFFECT_PILOT}`,
+    `  --batch <path>       Default: ${DEFAULT_EFFECT_BATCH}`,
     '  --output-root <path>  Override canonical product storage.',
     '  --now <ISO datetime>  Deterministic validation/testing time.',
     '  --execute             Required for image generation.',
@@ -83,8 +88,8 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'effects-pilot'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
-  if (['generate', 'effects-pilot'].includes(args.command) && !args.execute) {
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'effects-pilot', 'effects-batch'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (['generate', 'effects-pilot', 'effects-batch'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
   if (args.command === 'package' && !args.internalPreview) {
@@ -102,6 +107,39 @@ async function main() {
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
   if (args.outputRoot) config = { ...config, output_root: args.outputRoot };
+  if (args.command === 'effects-batch') {
+    const plan = JSON.parse(await readFile(args.batch || DEFAULT_EFFECT_BATCH, 'utf8'));
+    const outputRoot = resolveOutputRoot(config);
+    const batch = await generateEffectBatch({
+      config,
+      plan,
+      outputRoot,
+      projectRoot: process.cwd(),
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      batch_id: batch.batch_id,
+      product_slug: batch.product_slug,
+      total_generation_calls: batch.total_generation_calls,
+      total_duration_ms: batch.total_duration_ms,
+      incurred_cost: batch.incurred_cost,
+      results: batch.results.map((result) => ({
+        pilot_id: result.pilot.pilot_id,
+        source_asset_key: result.pilot.source_asset_key,
+        experiment_root: result.experimentRoot,
+        manifest_hash: result.manifest.manifest_hash,
+        muzzle_anchor: result.manifest.source_weapon_muzzle_anchor,
+        attack_cycle_preview_path: result.attack_cycle_preview_path,
+        timing: {
+          total_duration_ms: result.timing.total_duration_ms,
+          generation_calls: result.timing.generation_calls,
+          derived_frames: result.timing.derived_frames,
+        },
+      })),
+    }, null, 2)}\n`);
+    return;
+  }
   if (args.command === 'effects-pilot') {
     const pilot = JSON.parse(await readFile(args.pilot || DEFAULT_EFFECT_PILOT, 'utf8'));
     const outputRoot = resolveOutputRoot(config);

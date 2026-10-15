@@ -1,0 +1,52 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "neon-plasma-armory-remaining-effects-v1",
+  "product_slug": "neon-plasma-armory",
+  "weapons": [
+    {
+      "source_asset_key": "ion-pistol",
+      "name": "Ion Pistol",
+      "profile": "compact",
+      "seed_base": 14940,
+      "projectile_description": "Draw a small focused pale-blue ion dart with a cyan core, a short violet wake, and one restrained trailing spark.",
+      "muzzle_description": "Draw a compact pale-blue electrical lance with a narrow cyan center and restrained violet side sparks.",
+      "impact_description": "Draw a small pale-blue electrical snap with a thin cyan ring and several short violet radial sparks."
+    },
+    {
+      "source_asset_key": "plasma-carbine",
+      "name": "Plasma Carbine",
+      "profile": "standard",
+      "seed_base": 15040,
+      "projectile_description": "Draw a medium elongated cyan plasma bolt with a white-hot center, a controlled violet tail, and two short trailing sparks.",
+      "muzzle_description": "Draw a medium cyan-white tapered plasma cone with a few restrained violet branches.",
+      "impact_description": "Draw a medium cyan plasma burst with a white center, violet energy ring, and short radial sparks."
+    },
+    {
+      "source_asset_key": "pulse-rifle",
+      "name": "Pulse Rifle",
+      "profile": "standard",
+      "seed_base": 15140,
+      "projectile_description": "Draw a narrow rhythmic cyan-white pulse bolt with two bright separated core bands and a restrained violet wake.",
+      "muzzle_description": "Draw a clean cyan-white pulse wedge with two visible horizontal energy bands and minimal violet sparks.",
+      "impact_description": "Draw a crisp concentric cyan-white pulse impact with two thin rings and restrained violet sparks."
+    },
+    {
+      "source_asset_key": "energy-shotgun",
+      "name": "Energy Shotgun",
+      "profile": "standard",
+      "seed_base": 15240,
+      "projectile_description": "Draw a tight horizontal cluster of five small cyan-white energy pellets spreading only slightly toward the right, with restrained violet traces.",
+      "muzzle_description": "Draw a broad but short cyan-white muzzle fan with several distinct energy prongs and restrained violet sparks.",
+      "impact_description": "Draw a clustered cyan-white multi-pellet impact with several small overlapping bursts and restrained violet arcs."
+    },
+    {
+      "source_asset_key": "rail-rifle",
+      "name": "Rail Rifle",
+      "profile": "standard",
+      "seed_base": 15340,
+      "projectile_description": "Draw a very narrow high-speed white-blue rail slug with a long straight cyan wake and minimal violet electrical filaments.",
+      "muzzle_description": "Draw a long narrow white-blue rail lance with a straight cyan centerline and sparse violet electrical branches.",
+      "impact_description": "Draw a sharp white-blue rail impact star with a compact cyan ring and a few long thin violet sparks."
+    }
+  ]
+}

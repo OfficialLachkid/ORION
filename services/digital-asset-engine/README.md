@@ -97,3 +97,14 @@ The proof writes to `neon-plasma-armory/experiments/arc-launcher-effects-proof-v
 After the Arc Launcher reference is approved, run the smallest and largest silhouette checks with `plasma-pistol-effects.pilot.json` and `ion-cannon-effects.pilot.json`. Each proof has its own experiment directory, effect keys, timing profile, manifest, and weapon-prefixed preview filenames, so the runs cannot overwrite one another.
 
 The first boundary run completed on 2026-10-15. The Plasma Pistol resolved its muzzle to `{x:111,y:12}` and generated in 192,923 ms with manifest `5cc7719454c239e0c1b631de56951fc4959fd9f5fbd216da219c04923097ef72`. The Ion Cannon resolved to `{x:128,y:15}` and generated in 192,197 ms with manifest `6216e3d89e336e2e12070ae5071a67c84c1a4f05525e248be72d0b378bcecf5e`. Each run used three local model calls, derived six frames deterministically, incurred zero API cost, and remained isolated from the canonical release and marketplace listing.
+
+Generate the five remaining weapon proofs sequentially from the compact, reproducible batch plan:
+
+```bash
+npm run digital-assets:effects-batch -- \
+  --execute \
+  --batch services/digital-asset-engine/fixtures/remaining-weapon-effects.batch.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The batch stops on the first failed proof, preserves every previously completed experiment, and prints a per-weapon manifest, muzzle anchor, attack-cycle path, generation-call count, and duration. It does not mutate the canonical release, Discord package decision, or marketplace listing.
