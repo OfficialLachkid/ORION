@@ -129,6 +129,7 @@ async function main() {
       })),
       composite_preview_path: result.composite_preview_path,
       projectile_travel_preview_path: result.projectile_travel_preview_path,
+      attack_cycle_preview_path: result.attack_cycle_preview_path,
       timing: result.timing,
       manifest_hash: result.manifest.manifest_hash,
       gates: result.gates,

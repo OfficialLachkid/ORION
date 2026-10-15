@@ -283,14 +283,9 @@ async function composeWeaponPreviewFrames({ weaponBuffer, frameBuffers, pilot, e
   ]).png({ compressionLevel: 9 }).toBuffer()));
 }
 
-export async function composeProjectileTravelPreviewFrames({
-  weaponBuffer,
-  projectileBuffer,
-  pilot,
-  effect,
-}) {
+async function projectileTravelLayout({ projectileBuffer, pilot, effect }) {
   const travel = pilot.weapon_preview.projectile_travel_preview;
-  if (!travel) return [];
+  if (!travel) return null;
   const muzzleAnchor = {
     x: pilot.weapon_preview.weapon_position.x + pilot.weapon_preview.muzzle_anchor.x,
     y: pilot.weapon_preview.weapon_position.y + pilot.weapon_preview.muzzle_anchor.y,
@@ -304,13 +299,30 @@ export async function composeProjectileTravelPreviewFrames({
   if (endLeft <= startLeft) {
     throw new Error('Projectile travel preview canvas does not provide positive travel distance.');
   }
-  return Promise.all(Array.from({ length: travel.frame_count }, async (unused, index) => {
-    const progress = index / (travel.frame_count - 1);
-    const projectileLeft = Math.round(startLeft + ((endLeft - startLeft) * progress));
+  return {
+    travel,
+    muzzleAnchor,
+    projectileTop: muzzleAnchor.y - effect.origin.y,
+    projectileLefts: Array.from({ length: travel.frame_count }, (unused, index) => {
+      const progress = index / (travel.frame_count - 1);
+      return Math.round(startLeft + ((endLeft - startLeft) * progress));
+    }),
+  };
+}
+
+export async function composeProjectileTravelPreviewFrames({
+  weaponBuffer,
+  projectileBuffer,
+  pilot,
+  effect,
+}) {
+  const layout = await projectileTravelLayout({ projectileBuffer, pilot, effect });
+  if (!layout) return [];
+  return Promise.all(layout.projectileLefts.map(async (projectileLeft) => {
     return sharp({
       create: {
-        width: travel.canvas.width,
-        height: travel.canvas.height,
+        width: layout.travel.canvas.width,
+        height: layout.travel.canvas.height,
         channels: 4,
         background: { r: 0, g: 0, b: 0, alpha: 0 },
       },
@@ -323,9 +335,52 @@ export async function composeProjectileTravelPreviewFrames({
       {
         input: projectileBuffer,
         left: projectileLeft,
-        top: muzzleAnchor.y - effect.origin.y,
+        top: layout.projectileTop,
       },
     ]).png({ compressionLevel: 9 }).toBuffer();
+  }));
+}
+
+export async function composeAttackCyclePreviewFrames({
+  weaponBuffer,
+  projectileBuffer,
+  muzzleFrameBuffers,
+  pilot,
+  projectileEffect,
+  muzzleEffect,
+}) {
+  const layout = await projectileTravelLayout({
+    projectileBuffer,
+    pilot,
+    effect: projectileEffect,
+  });
+  if (!layout) return [];
+  return Promise.all(layout.projectileLefts.map(async (projectileLeft, index) => {
+    const composites = [{
+      input: weaponBuffer,
+      left: pilot.weapon_preview.weapon_position.x,
+      top: pilot.weapon_preview.weapon_position.y,
+    }];
+    if (index < muzzleFrameBuffers.length) {
+      composites.push({
+        input: muzzleFrameBuffers[index],
+        left: layout.muzzleAnchor.x - muzzleEffect.origin.x,
+        top: layout.muzzleAnchor.y - muzzleEffect.origin.y,
+      });
+    }
+    composites.push({
+      input: projectileBuffer,
+      left: projectileLeft,
+      top: layout.projectileTop,
+    });
+    return sharp({
+      create: {
+        width: layout.travel.canvas.width,
+        height: layout.travel.canvas.height,
+        channels: 4,
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      },
+    }).composite(composites).png({ compressionLevel: 9 }).toBuffer();
   }));
 }
 
@@ -621,14 +676,15 @@ export async function generateEffectPilot(options) {
 
     const muzzleEffect = pilot.effects.find((effect) => effect.kind === 'muzzle_flash');
     const muzzleResult = effects.find((effect) => effect.effect_key === muzzleEffect?.effect_key);
+    let muzzleFrameBuffers = [];
     let compositePreviewPath = null;
     if (muzzleEffect && muzzleResult && muzzleEffect.frames.length > 1) {
-      const frameBuffers = await Promise.all(muzzleResult.frames.map((frame) => (
+      muzzleFrameBuffers = await Promise.all(muzzleResult.frames.map((frame) => (
         readFile(resolveInside(experimentRoot, frame.final_path, 'Muzzle frame path'))
       )));
       const compositeBuffers = await composeWeaponPreviewFrames({
         weaponBuffer,
-        frameBuffers,
+        frameBuffers: muzzleFrameBuffers,
         pilot: previewPilot,
         effect: muzzleEffect,
       });
@@ -648,6 +704,7 @@ export async function generateEffectPilot(options) {
     const projectileEffect = pilot.effects.find((effect) => effect.kind === 'projectile');
     const projectileResult = effects.find((effect) => effect.effect_key === projectileEffect?.effect_key);
     let projectileTravelPreviewPath = null;
+    let attackCyclePreviewPath = null;
     if (pilot.weapon_preview.projectile_travel_preview && projectileEffect && projectileResult) {
       const projectileBuffer = await readFile(resolveInside(
         experimentRoot,
@@ -672,6 +729,27 @@ export async function generateEffectPilot(options) {
         projectileTravelPreviewPath,
         options,
       );
+      if (muzzleEffect && muzzleFrameBuffers.length > 0) {
+        const attackBuffers = await composeAttackCyclePreviewFrames({
+          weaponBuffer,
+          projectileBuffer,
+          muzzleFrameBuffers,
+          pilot: previewPilot,
+          projectileEffect,
+          muzzleEffect,
+        });
+        attackCyclePreviewPath = resolveInside(
+          experimentRoot,
+          `previews/${pilot.source_asset_key}-attack-cycle.gif`,
+          'Attack cycle preview path',
+        );
+        await writeGifFromBuffers(
+          attackBuffers,
+          Array.from({ length: travel.frame_count }, () => travel.frame_duration_ms),
+          attackCyclePreviewPath,
+          options,
+        );
+      }
     }
 
     const completedAt = new Date().toISOString();
@@ -715,6 +793,7 @@ export async function generateEffectPilot(options) {
       human_review_required: true,
       gif_role: 'preview_only',
       projectile_travel_role: projectileTravelPreviewPath ? 'preview_only' : null,
+      attack_cycle_role: attackCyclePreviewPath ? 'preview_only' : null,
       buyer_runtime_formats: ['transparent_png_frames', 'transparent_png_sprite_sheet', 'animation_json'],
       created_at: completedAt,
     });
@@ -731,6 +810,9 @@ export async function generateEffectPilot(options) {
         : null,
       projectile_travel_preview_path: projectileTravelPreviewPath
         ? relative(experimentRoot, projectileTravelPreviewPath).replaceAll('\\', '/')
+        : null,
+      attack_cycle_preview_path: attackCyclePreviewPath
+        ? relative(experimentRoot, attackCyclePreviewPath).replaceAll('\\', '/')
         : null,
       resource_preflight: resourceReport,
       gates: {
