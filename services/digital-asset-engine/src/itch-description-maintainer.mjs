@@ -47,14 +47,14 @@ async (page) => {
   if (!response?.ok()) return { status: 'save_failed', httpStatus: response?.status() || null, url: page.url() };
   await page.goto(input.publicUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   const description = page.locator('.formatted_description, .game_description').first();
-  const visibleText = await description.innerText().catch(() => '');
+  const visibleText = await description.textContent().catch(() => '');
   const headingCount = await description.locator('h1, h2, h3').count().catch(() => 0);
   const listCount = await description.locator('ul').count().catch(() => 0);
   const normalize = (value) => String(value).replace(/\\s+/gu, ' ').trim();
   const expected = await page.evaluate((html) => {
     const node = document.createElement('div');
     node.innerHTML = html;
-    return node.innerText;
+    return node.textContent;
   }, input.descriptionHtml);
   const checks = {
     public_url: page.url().split('?')[0].replace(/\\/$/u, '') === input.publicUrl.replace(/\\/$/u, ''),

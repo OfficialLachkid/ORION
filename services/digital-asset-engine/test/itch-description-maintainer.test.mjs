@@ -19,6 +19,7 @@ test('published description browser code changes only description and verifies p
   });
   assert.match(code, /game\[description\]/u);
   assert.match(code, /formatted_description/u);
+  assert.match(code, /textContent/u);
   assert.match(code, /headingCount/u);
   assert.doesNotMatch(code, /game\[title\]|min_price|cover_image/u);
   assert.doesNotThrow(() => new Function(`return (${code})`));
