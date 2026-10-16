@@ -5,6 +5,7 @@ import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
 import { loadEngineConfig, resolveOutputRoot } from './src/config.mjs';
 import { postDigitalAssetReview } from './src/discord-review.mjs';
 import { postDigitalAssetDistributionReview } from './src/distribution-review.mjs';
+import { updatePublishedItchDescription } from './src/itch-description-maintainer.mjs';
 import { generateEffectBatch } from './src/effect-batch.mjs';
 import { postEffectsDiscordReview } from './src/effect-discord-review.mjs';
 import { generateEffectPilot } from './src/effect-pilot.mjs';
@@ -46,6 +47,7 @@ function parseArguments(argv) {
     else if (token === '--publish-itch') args.publishItch = true;
     else if (token === '--migrate-itch-slug') args.migrateItchSlug = true;
     else if (token === '--apply-itch-theme') args.applyItchTheme = true;
+    else if (token === '--update-itch-description') args.updateItchDescription = true;
     else if (token === '--headless') args.headed = false;
     else if (token === '--config') args.config = argv[++index];
     else if (token === '--opportunity') args.opportunity = argv[++index];
@@ -85,6 +87,7 @@ function printHelp() {
     '  itch-slug  Migrate the verified public project URL and reconcile every stored target.',
     '  itch-theme-review  Generate a local theme candidate and post desktop/mobile previews.',
     '  itch-theme-apply  Apply and verify the exact Discord-approved built-in itch.io theme.',
+    '  itch-description  Apply structured headings/lists to the exact verified public listing.',
     '  effects-pilot  Generate isolated fixed-anchor effects without changing the approved pack.',
     '  effects-batch  Generate sequential isolated weapon-effect proofs from a compact batch plan.',
     '  revise-effects  Regenerate selected effects into new immutable proof revisions.',
@@ -109,6 +112,7 @@ function printHelp() {
     '  --publish-itch        Required for the approved live itch.io visibility change.',
     '  --migrate-itch-slug   Required for the live project URL migration.',
     '  --apply-itch-theme    Required for the approved live Theme editor save.',
+    '  --update-itch-description  Required for the verified public description presentation update.',
     '  --category-name <name>  Discord category. Default: DIGITAL ASSETS.',
     '  --itch-url <url>      Existing itch.io draft URL shown to reviewers.',
     '  --itch-edit-url <url> Authenticated itch.io editor URL; dashboard discovery is the default.',
@@ -127,7 +131,7 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
@@ -148,6 +152,9 @@ async function main() {
   }
   if (args.command === 'itch-theme-apply' && !args.applyItchTheme) {
     throw new Error('Live itch.io theme application requires --apply-itch-theme and an exact theme approval.');
+  }
+  if (args.command === 'itch-description' && !args.updateItchDescription) {
+    throw new Error('Live itch.io description maintenance requires --update-itch-description.');
   }
   if (['itch-draft', 'discord-review'].includes(args.command) && !args.itchUrl) {
     throw new Error(`${args.command} requires --itch-url for the existing itch.io draft.`);
@@ -207,6 +214,19 @@ async function main() {
     await markItchThemeApplied({
       runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
       statePath: result.themeStatePath,
+    });
+    process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'itch-description') {
+    const opportunity = JSON.parse(await readFile(args.opportunity || DEFAULT_OPPORTUNITY, 'utf8'));
+    const result = await updatePublishedItchDescription({
+      outputRoot: resolveOutputRoot(config),
+      slug: slugify(opportunity.title),
+      releaseVersion: args.releaseVersion,
+      profileDir: args.playwrightProfile,
+      headed: args.headed,
+      now: args.now,
     });
     process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
     return;

@@ -79,6 +79,10 @@ import {
   isItchThemeReviewInteraction,
   recordItchThemeDecision,
 } from '../../digital-asset-engine/src/theme-review.mjs';
+import {
+  isResearchReviewInteraction,
+  recordResearchReviewDecision,
+} from '../../digital-asset-research/src/discord-review.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -1296,6 +1300,41 @@ export async function runLiveDiscordBot(config) {
                 embeds: buildItchThemeReviewEmbeds(recorded.state, recorded.row.decision, recorded.actor),
                 attachments: currentMessage.attachments,
               },
+              'PATCH',
+            );
+            return;
+          }
+
+          if (isResearchReviewInteraction(payload.d)) {
+            let recorded;
+            try {
+              recorded = await recordResearchReviewDecision({ interaction: payload.d, config });
+              if (!recorded) throw new Error('Unsupported research review action.');
+            } catch (error) {
+              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                  content: truncateMessage(`Research decision was not recorded: ${error.message}`),
+                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+                },
+              });
+              return;
+            }
+            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                content: recorded.review.decision === 'approve_handoff'
+                  ? 'Research handoff approved. No image generation job was started.'
+                  : recorded.review.decision === 'monitor'
+                    ? 'Recommendation kept in monitoring.'
+                    : 'Research recommendation rejected.',
+                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+              },
+            });
+            await sendDiscordApiRequest(
+              token,
+              `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+              recorded.messagePatch,
               'PATCH',
             );
             return;

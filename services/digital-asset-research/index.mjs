@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+import process from 'node:process';
+import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
+import { loadResearchConfig, runResearchCollection } from './src/pipeline.mjs';
+
+function parseArguments(argv) {
+  const args = { command: argv[2] || 'help', postToDiscord: false };
+  for (let index = 3; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (token === '--post-to-discord') args.postToDiscord = true;
+    else if (token === '--config') args.config = argv[++index];
+    else if (token === '--archive-root') args.archiveRoot = argv[++index];
+    else if (token === '--runtime-env') args.runtimeEnv = argv[++index];
+    else if (token === '--now') args.now = argv[++index];
+    else throw new Error(`Unknown argument: ${token}`);
+  }
+  return args;
+}
+
+async function main() {
+  const args = parseArguments(process.argv);
+  if (args.command === 'help' || args.command === '--help') {
+    process.stdout.write([
+      'ORION Digital Asset Research',
+      '',
+      'Commands:',
+      '  collect  Manually collect one marketplace snapshot and analyze when enough history exists.',
+      '',
+      'Options:',
+      '  --config <path>         Default: services/digital-asset-research/config.example.json',
+      '  --archive-root <path>   Store raw evidence on the T7 or another local archive.',
+      '  --runtime-env <path>    Existing ORION runtime .env.',
+      '  --post-to-discord       Post the baseline or recommendation to Discord.',
+      '  --now <ISO datetime>    Deterministic timestamp for testing.',
+      '',
+      'No scheduler is installed by this MVP. Approval creates a planning handoff; it does not generate assets.',
+    ].join('\n'));
+    return;
+  }
+  if (args.command !== 'collect') throw new Error(`Unknown command: ${args.command}`);
+  const config = await loadResearchConfig(
+    args.config || 'services/digital-asset-research/config.example.json',
+    process.cwd(),
+    { archiveRoot: args.archiveRoot },
+  );
+  const runtimeConfig = loadRuntimeConfig({ envFilePath: args.runtimeEnv });
+  const result = await runResearchCollection({
+    config,
+    runtimeConfig,
+    now: args.now,
+    postToDiscord: args.postToDiscord,
+  });
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
+main().catch((error) => {
+  process.stderr.write(`${error.stack || error.message || error}\n`);
+  process.exitCode = 1;
+});

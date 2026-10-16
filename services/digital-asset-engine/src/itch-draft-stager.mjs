@@ -29,7 +29,7 @@ function butlerTargetFromUrl(value) {
   return `${account}/${slug}`;
 }
 
-function expandHomeDirectory(path) {
+export function expandHomeDirectory(path) {
   const value = String(path || '').trim();
   if (!value) return '';
   if (value === '~') return os.homedir();
@@ -49,7 +49,7 @@ function runnerResult(executable, args, result) {
   };
 }
 
-function defaultCliRunner(executable, args, options = {}) {
+export function defaultCliRunner(executable, args, options = {}) {
   return runnerResult(executable, args, spawnSync(executable, args, {
     encoding: 'utf8',
     timeout: Number(options.timeoutMs) || 60_000,
@@ -58,7 +58,7 @@ function defaultCliRunner(executable, args, options = {}) {
   }));
 }
 
-function parseCliJson(value) {
+export function parseCliJson(value) {
   try {
     const parsed = JSON.parse(String(value || '').trim());
     return typeof parsed?.result === 'string' ? JSON.parse(parsed.result) : parsed;
@@ -71,10 +71,55 @@ function pause(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+export function renderItchDescriptionHtml(description) {
+  const output = [];
+  let listItems = [];
+  const flushList = () => {
+    if (!listItems.length) return;
+    output.push(`<ul>${listItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>`);
+    listItems = [];
+  };
+
+  for (const rawLine of String(description || '').split(/\r?\n/gu)) {
+    const line = rawLine.trim();
+    if (!line) {
+      flushList();
+      continue;
+    }
+    if (line.startsWith('- ')) {
+      listItems.push(line.slice(2).trim());
+      continue;
+    }
+    flushList();
+    if (line.endsWith(':') && line.length <= 80) {
+      output.push(`<h2>${escapeHtml(line)}</h2>`);
+    } else {
+      output.push(`<p>${escapeHtml(line)}</p>`);
+    }
+  }
+  flushList();
+  return output.join('\n');
+}
+
 export function buildItchDraftRunCode({ listing, publicUrl, editUrl, save = false }) {
   return `
 async (page) => {
-  const input = ${JSON.stringify({ listing, publicUrl, editUrl, save })};
+  const input = ${JSON.stringify({
+    listing,
+    descriptionHtml: renderItchDescriptionHtml(listing.description),
+    publicUrl,
+    editUrl,
+    save,
+  })};
   const wait = (ms) => page.waitForTimeout(ms);
   const bodyText = async () => page.locator('body').innerText({ timeout: 3000 }).catch(() => '');
   const visible = async (locator) => locator.isVisible().catch(() => false);
@@ -167,28 +212,23 @@ async (page) => {
   }, tagSlugs).catch((error) => ({ ok: false, reason: String(error?.message || error).slice(0, 160) }));
   changes.push({ name: 'tags', ...tagResult });
 
-  const descriptionResult = await page.locator('textarea').evaluateAll((nodes, description) => {
+  const descriptionResult = await page.locator('textarea').evaluateAll((nodes, inputDescription) => {
     const field = nodes.find((node) => node.name === 'game[description]');
     const redactor = field && window.jQuery?.(field).data('redactor');
     if (!field || !redactor?.code) return { ok: false, reason: 'redactor_not_found' };
-    const escape = (value) => {
-      const element = document.createElement('div');
-      element.textContent = value;
-      return element.innerHTML;
-    };
-    const html = String(description).split(/\\n{2,}/gu)
-      .map((block) => \`<p>\${escape(block).replace(/\\n/gu, '<br>')}</p>\`).join('\\n');
-    redactor.code.set(html);
+    redactor.code.set(inputDescription.html);
     redactor.code.sync();
     redactor.code.flushSync();
     const visibleText = field.parentElement?.querySelector('[contenteditable="true"]')?.innerText || '';
     const normalize = (value) => String(value).replace(/\\s+/gu, ' ').trim();
+    const expected = document.createElement('div');
+    expected.innerHTML = inputDescription.html;
     return {
-      ok: normalize(visibleText) === normalize(description) && Boolean(field.value),
+      ok: normalize(visibleText) === normalize(expected.innerText) && Boolean(field.value),
       length: field.value.length,
       visibleLength: visibleText.length,
     };
-  }, input.listing.description).catch((error) => ({
+  }, { html: input.descriptionHtml }).catch((error) => ({
     ok: false,
     reason: String(error?.message || error).slice(0, 160),
   }));

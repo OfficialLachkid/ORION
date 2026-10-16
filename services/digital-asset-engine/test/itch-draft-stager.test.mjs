@@ -4,7 +4,11 @@ import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { buildItchDraftRunCode, stageItchDraft } from '../src/itch-draft-stager.mjs';
+import {
+  buildItchDraftRunCode,
+  renderItchDescriptionHtml,
+  stageItchDraft,
+} from '../src/itch-draft-stager.mjs';
 
 function suppliedBrowserCode(args) {
   const filenameIndex = args.indexOf('--filename');
@@ -132,6 +136,23 @@ test('Playwright draft preparation includes listing fields and exact price contr
   assert.match(code, /currentUrl !== requestedEditUrl/u);
   assert.doesNotMatch(code, /new URL/u);
   assert.doesNotThrow(() => new Function(`return (${code})`));
+});
+
+test('renders itch descriptions as safe headings, paragraphs, and lists', () => {
+  const html = renderItchDescriptionHtml([
+    'What is included:',
+    '',
+    '- Eight weapons',
+    '- Matching muzzle flashes',
+    '',
+    'Use <only> the files in the download.',
+  ].join('\n'));
+
+  assert.equal(html, [
+    '<h2>What is included:</h2>',
+    '<ul><li>Eight weapons</li><li>Matching muzzle flashes</li></ul>',
+    '<p>Use &lt;only&gt; the files in the download.</p>',
+  ].join('\n'));
 });
 
 test('stages package with Butler, populates itch.io, verifies it, and reuses exact revision', async () => {
