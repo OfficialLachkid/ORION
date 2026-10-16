@@ -168,7 +168,7 @@ async function renderThemeMedia({ candidateRoot, packagedRoot, product, manifest
   return { bannerPath, backgroundPath };
 }
 
-function buildThemePreviewCode(input) {
+export function buildThemePreviewCode(input) {
   return `
 async (page) => {
   const input = ${JSON.stringify(input)};
@@ -189,7 +189,7 @@ async (page) => {
     #inner_column a { color: \${input.design.colors.link} !important; }
     #inner_column .button { background: \${input.design.colors.button} !important; color: #fff !important; }
   \` });
-  await page.evaluate(({ bannerDataUrl }) => {
+  await page.evaluate(({ bannerDataUrl, productTitle }) => {
     const header = document.querySelector('#header, .header');
     if (!header) return;
     const heading = header.querySelector('h1');
@@ -197,12 +197,12 @@ async (page) => {
     const image = document.createElement('img');
     image.id = 'orion-theme-preview-banner';
     image.src = bannerDataUrl;
-    image.alt = input.productTitle + ' storefront banner preview';
+    image.alt = productTitle + ' storefront banner preview';
     image.style.width = '100%';
     image.style.height = 'auto';
     image.style.display = 'block';
     header.prepend(image);
-  }, { bannerDataUrl: input.bannerDataUrl });
+  }, { bannerDataUrl: input.bannerDataUrl, productTitle: input.productTitle });
   const wrapper = page.locator('#wrapper').first();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await wrapper.screenshot({ path: input.desktopPath });

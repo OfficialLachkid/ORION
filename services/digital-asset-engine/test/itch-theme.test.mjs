@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import {
   applyApprovedItchTheme,
   buildThemeBannerSummary,
+  buildThemePreviewCode,
   prepareItchThemeCandidate,
 } from '../src/itch-theme.mjs';
 import { migrateItchProjectSlug } from '../src/itch-slug-migrator.mjs';
@@ -204,6 +205,35 @@ test('theme banner summary derives product counts and kinds from each release', 
   }, {
     asset_count: 2,
   }), '2 APPROVED ASSETS • TRANSPARENT GAME-READY FILES');
+});
+
+test('browser theme preview passes the dynamic product title into the page context', async () => {
+  const code = buildThemePreviewCode({
+    design,
+    productTitle: 'Crystal Cavern Tiles',
+    url: 'https://creator.itch.io/crystal-cavern-tiles',
+    bannerDataUrl: 'data:image/png;base64,banner',
+    backgroundDataUrl: 'data:image/png;base64,background',
+    desktopPath: '/tmp/desktop.png',
+    mobilePath: '/tmp/mobile.png',
+  });
+  const preview = new Function(`return (${code});`)();
+  let evaluateInput = null;
+  const wrapper = { async screenshot() {} };
+  await preview({
+    async goto() {},
+    async waitForTimeout() {},
+    url() { return 'https://creator.itch.io/crystal-cavern-tiles'; },
+    locator(selector) {
+      if (selector === 'body') return { async innerText() { return ''; } };
+      return { first() { return wrapper; } };
+    },
+    async addStyleTag() {},
+    async evaluate(_callback, input) { evaluateInput = input; },
+    async setViewportSize() {},
+  });
+  assert.equal(evaluateInput.productTitle, 'Crystal Cavern Tiles');
+  assert.equal(evaluateInput.bannerDataUrl, 'data:image/png;base64,banner');
 });
 
 test('theme candidate renders deterministic media and creates desktop/mobile previews without saving', async () => {
