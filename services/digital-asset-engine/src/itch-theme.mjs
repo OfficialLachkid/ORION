@@ -381,6 +381,7 @@ export async function prepareItchThemeCandidate(options) {
       model: proposal.model,
       execution: proposal.execution,
       estimated_cost: proposal.estimated_cost,
+      contrast_adjustments: proposal.contrast_adjustments || [],
     },
     design: proposal.design,
   };

@@ -20,6 +20,7 @@ import {
 import {
   contrastRatio,
   OllamaThemeAdapter,
+  repairThemeContrast,
 } from '../src/ollama-theme-adapter.mjs';
 
 const manifestHash = 'a'.repeat(64);
@@ -172,6 +173,22 @@ test('local theme adapter rejects cloud endpoints and enforces readable contrast
   assert.equal(result.model, 'llama3.1:8b');
   assert.deepEqual(result.design, design);
   assert.equal(result.estimated_cost, 0);
+});
+
+test('local theme adapter repairs model-selected contrast without discarding its palette', async () => {
+  const inaccessible = {
+    ...design,
+    colors: { ...design.colors, header: '#17203a', button: '#f2b9dc' },
+  };
+  const repaired = repairThemeContrast(inaccessible);
+  assert.equal(repaired.adjustments.length, 2);
+  assert.equal(repaired.adjustments[0].field, 'header');
+  assert.equal(repaired.adjustments[1].field, 'button');
+  assert.ok(contrastRatio(repaired.design.colors.header, repaired.design.colors.panel) >= 4.5);
+  assert.ok(contrastRatio('#ffffff', repaired.design.colors.button) >= 3);
+  assert.notEqual(repaired.design.colors.header, '#ffffff');
+  assert.notEqual(repaired.design.colors.button, '#000000');
+  assert.match(repaired.design.rationale, /adjusted deterministically/u);
 });
 
 test('theme candidate renders deterministic media and creates desktop/mobile previews without saving', async () => {
