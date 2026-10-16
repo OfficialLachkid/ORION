@@ -248,19 +248,28 @@ async (page) => {
   await selects.header.selectOption({ label: input.design.typography.header_font });
   await selects.size.selectOption({ label: input.design.typography.size });
   await selects.screenshots.selectOption({ label: input.design.screenshots });
-  const alpha = await page.locator('input').evaluateAll((nodes, value) => {
-    const inputNode = nodes.find((node) => /bg2.*alpha|alpha.*bg2/i.test([
-      node.name, node.id, node.getAttribute('aria-label'), node.closest('div')?.textContent,
-    ].filter(Boolean).join(' ')));
-    if (!inputNode) return { found: false };
-    const maximum = Number(inputNode.max || 1);
-    inputNode.value = String(maximum > 1 ? Math.round(value * maximum) : value);
-    inputNode.dispatchEvent(new Event('input', { bubbles: true }));
-    inputNode.dispatchEvent(new Event('change', { bubbles: true }));
-    return { found: true, value: inputNode.value };
-  }, input.design.panel_alpha).catch(() => ({ found: false }));
+  const alphaTarget = Math.round(input.design.panel_alpha * 100);
+  const alphaButton = page.getByRole('button', { name: /^BG2 Alpha(?: \d+)?$/i }).first();
+  let alpha = { found: false, value: null };
+  if (await alphaButton.count().catch(() => 0)) {
+    await alphaButton.click();
+    for (let attempts = 0; attempts <= 100; attempts += 1) {
+      const current = await alphaButton.evaluate((node) => {
+        const source = [node.getAttribute('aria-valuenow'), node.getAttribute('aria-label'), node.parentElement?.textContent]
+          .filter(Boolean).join(' ');
+        const matches = source.match(/\d+(?:\.\d+)?/g);
+        return matches?.length ? Number(matches[matches.length - 1]) : null;
+      }).catch(() => null);
+      if (current === alphaTarget) {
+        alpha = { found: true, value: current };
+        break;
+      }
+      if (!Number.isFinite(current)) break;
+      await alphaButton.press(current > alphaTarget ? 'ArrowLeft' : 'ArrowRight');
+    }
+  }
   return {
-    status: colorChecks.every(Boolean) ? 'prepared' : 'controls_missing',
+    status: colorChecks.every(Boolean) && alpha.found ? 'prepared' : 'controls_missing',
     colorChecks,
     alpha,
     url: page.url(),
@@ -278,14 +287,34 @@ async (page) => {
 }`.trim();
 }
 
-function buildThemeSaveAndVerifyCode(input) {
+function buildThemeImageReadyCode(expectedCount) {
+  return `
+async (page) => {
+  const expectedCount = ${Number(expectedCount)};
+  const removeButtons = page.getByRole('button', { name: /remove image/i });
+  for (let attempts = 0; attempts < 60; attempts += 1) {
+    const count = await removeButtons.count().catch(() => 0);
+    if (count >= expectedCount) return { status: 'image_ready', count };
+    await page.waitForTimeout(250);
+  }
+  return { status: 'image_not_ready', count: await removeButtons.count().catch(() => 0) };
+}`.trim();
+}
+
+export function buildThemeSaveAndVerifyCode(input) {
   return `
 async (page) => {
   const input = ${JSON.stringify(input)};
-  const save = page.getByRole('button', { name: /^save$/i }).first();
-  if (!(await save.count().catch(() => 0))) return { status: 'save_missing' };
-  await save.click({ timeout: 5000 });
-  await page.waitForTimeout(2000);
+  if (!input.skipSave) {
+    const save = page.getByRole('button', { name: /^save$/i }).first();
+    if (!(await save.count().catch(() => 0))) return { status: 'save_missing' };
+    const responsePromise = page.waitForResponse((response) => response.request().method() === 'POST'
+      && response.url().endsWith('/edit'), { timeout: 15000 }).catch(() => null);
+    await save.click({ timeout: 5000 });
+    const response = await responsePromise;
+    if (!response || !response.ok()) return { status: 'save_failed', httpStatus: response?.status?.() || null };
+    await page.waitForTimeout(1000);
+  }
   await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(1500);
   const wrapper = page.locator('#wrapper').first();
@@ -315,10 +344,13 @@ async (page) => {
   });
   const rgb = (hex) => [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16)).join(', ');
   const hasRgb = (actual, expected) => actual.includes(rgb(expected));
+  const panelAlphaMatch = styles.panel.match(/rgba?\([^,]+,[^,]+,[^,]+(?:,\s*([\d.]+))?\)/i);
+  const actualPanelAlpha = panelAlphaMatch?.[1] === undefined ? 1 : Number(panelAlphaMatch[1]);
   const checks = {
     background: hasRgb(styles.background, input.design.colors.background),
     background_image: styles.backgroundImage !== 'none',
     panel: hasRgb(styles.panel, input.design.colors.panel),
+    panel_alpha: Math.abs(actualPanelAlpha - input.design.panel_alpha) <= 0.01,
     text: hasRgb(styles.text, input.design.colors.text),
     header: hasRgb(styles.header, input.design.colors.header),
     button: hasRgb(styles.button, input.design.colors.button),
@@ -330,6 +362,10 @@ async (page) => {
   await wrapper.screenshot({ path: input.mobilePath });
   return { status: Object.values(checks).every(Boolean) ? 'verified_applied' : 'verification_failed', checks, styles };
 }`.trim();
+}
+
+function buildThemeVerifyCode(input) {
+  return buildThemeSaveAndVerifyCode({ ...input, skipSave: true });
 }
 
 function openBrowser({ executable, sessionName, profileDir, url, headed, cliRunner, cwd, env }) {
@@ -507,40 +543,57 @@ export async function applyApprovedItchTheme(options) {
     cliRunner, cwd: options.cwd, env,
   });
   try {
-    const prepared = runBrowserCode({
+    const verificationInput = {
+      design: themeState.design,
+      url: cleanPublicUrl(release.public_url),
+      desktopPath: appliedDesktopPath,
+      mobilePath: appliedMobilePath,
+    };
+    let details = runBrowserCode({
       executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
-      filename: 'prepare.js',
-      code: buildThemePrepareCode({ design: themeState.design, url: cleanPublicUrl(release.public_url) }),
+      filename: 'verify-live.js',
+      code: buildThemeVerifyCode(verificationInput),
     });
-    if (prepared.status !== 'prepared') throw new Error(`Theme editor preparation failed: ${JSON.stringify(prepared)}`);
-    for (const [kind, path] of [['Banner', bannerPath], ['Background', backgroundPath]]) {
-      const triggered = runBrowserCode({
+    const recoveredExistingTheme = details.status === 'verified_applied';
+    if (!recoveredExistingTheme) {
+      const prepared = runBrowserCode({
         executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
-        filename: `upload-${kind.toLowerCase()}.js`,
-        code: buildThemeImageTriggerCode(kind),
+        filename: 'prepare.js',
+        code: buildThemePrepareCode({ design: themeState.design, url: cleanPublicUrl(release.public_url) }),
       });
-      if (triggered.status !== 'chooser_opened') throw new Error(`Theme ${kind} chooser failed.`);
-      const uploaded = cliRunner(executable, ['-s', sessionName, 'upload', path, '--json'], {
-        cwd: options.cwd,
-        env,
-        timeoutMs: 3 * 60_000,
-      });
-      if (!uploaded.ok || parseCliJson(uploaded.stdout)?.isError) {
-        throw new Error(`Theme ${kind} upload failed: ${uploaded.stderr || uploaded.stdout || uploaded.error}`);
+      if (prepared.status !== 'prepared') throw new Error(`Theme editor preparation failed: ${JSON.stringify(prepared)}`);
+      let expectedImageCount = 0;
+      for (const [kind, path] of [['Banner', bannerPath], ['Background', backgroundPath]]) {
+        const triggered = runBrowserCode({
+          executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
+          filename: `upload-${kind.toLowerCase()}.js`,
+          code: buildThemeImageTriggerCode(kind),
+        });
+        if (triggered.status !== 'chooser_opened') throw new Error(`Theme ${kind} chooser failed.`);
+        const uploaded = cliRunner(executable, ['-s', sessionName, 'upload', path, '--json'], {
+          cwd: options.cwd,
+          env,
+          timeoutMs: 3 * 60_000,
+        });
+        if (!uploaded.ok || parseCliJson(uploaded.stdout)?.isError) {
+          throw new Error(`Theme ${kind} upload failed: ${uploaded.stderr || uploaded.stdout || uploaded.error}`);
+        }
+        expectedImageCount += 1;
+        const ready = runBrowserCode({
+          executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
+          filename: `ready-${kind.toLowerCase()}.js`,
+          code: buildThemeImageReadyCode(expectedImageCount),
+        });
+        if (ready.status !== 'image_ready') throw new Error(`Theme ${kind} upload did not settle: ${JSON.stringify(ready)}`);
       }
-    }
-    const details = runBrowserCode({
-      executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
-      filename: 'save-verify.js',
-      code: buildThemeSaveAndVerifyCode({
-        design: themeState.design,
-        url: cleanPublicUrl(release.public_url),
-        desktopPath: appliedDesktopPath,
-        mobilePath: appliedMobilePath,
-      }),
-    });
-    if (details.status !== 'verified_applied') {
-      throw new Error(`Applied theme verification failed: ${JSON.stringify(details)}`);
+      details = runBrowserCode({
+        executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
+        filename: 'save-verify.js',
+        code: buildThemeSaveAndVerifyCode(verificationInput),
+      });
+      if (details.status !== 'verified_applied') {
+        throw new Error(`Applied theme verification failed: ${JSON.stringify(details)}`);
+      }
     }
     const appliedAt = options.now || new Date().toISOString();
     const receipt = {
@@ -555,6 +608,7 @@ export async function applyApprovedItchTheme(options) {
       public_url: cleanPublicUrl(release.public_url),
       applied_at: appliedAt,
       verified_at: appliedAt,
+      recovered_existing_theme: recoveredExistingTheme,
       verification: details.checks,
       desktop_screenshot_path: appliedDesktopPath,
       mobile_screenshot_path: appliedMobilePath,

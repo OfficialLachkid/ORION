@@ -9,6 +9,7 @@ import {
   applyApprovedItchTheme,
   buildThemeBannerSummary,
   buildThemePreviewCode,
+  buildThemeSaveAndVerifyCode,
   prepareItchThemeCandidate,
 } from '../src/itch-theme.mjs';
 import { migrateItchProjectSlug } from '../src/itch-slug-migrator.mjs';
@@ -236,6 +237,18 @@ test('browser theme preview passes the dynamic product title into the page conte
   assert.equal(evaluateInput.bannerDataUrl, 'data:image/png;base64,banner');
 });
 
+test('theme apply waits for the save request and verifies approved panel alpha', () => {
+  const code = buildThemeSaveAndVerifyCode({
+    design,
+    url: 'https://creator.itch.io/example',
+    desktopPath: '/tmp/desktop.png',
+    mobilePath: '/tmp/mobile.png',
+  });
+  assert.doesNotThrow(() => new Function(`return (${code});`));
+  assert.match(code, /response\.url\(\)\.endsWith\('\/edit'\)/u);
+  assert.match(code, /panel_alpha/u);
+});
+
 test('theme candidate renders deterministic media and creates desktop/mobile previews without saving', async () => {
   const fixture = await createFixture();
   const commands = [];
@@ -321,12 +334,14 @@ test('theme approval is persisted before the exact candidate may be applied', as
     assertBrowserCodeParses(args);
     if (args[2] === 'run-code') {
       const file = basename(args[4]);
-      const status = file === 'prepare.js' ? 'prepared'
-        : file.startsWith('upload-') ? 'chooser_opened'
-          : 'verified_applied';
+      const status = file === 'verify-live.js' ? 'verification_failed'
+        : file === 'prepare.js' ? 'prepared'
+          : file.startsWith('upload-') ? 'chooser_opened'
+            : file.startsWith('ready-') ? 'image_ready'
+              : 'verified_applied';
       const details = status === 'verified_applied'
-        ? { status, checks: { background: true, background_image: true, panel: true, text: true, header: true, button: true, banner: true } }
-        : { status };
+        ? { status, checks: { background: true, background_image: true, panel: true, panel_alpha: true, text: true, header: true, button: true, banner: true } }
+        : status === 'image_ready' ? { status, count: 2 } : { status };
       return { ok: true, stdout: JSON.stringify({ result: JSON.stringify(details) }) };
     }
     return { ok: true, stdout: '{}' };
