@@ -7,6 +7,7 @@ import { basename, resolve } from 'node:path';
 import sharp from 'sharp';
 import {
   applyApprovedItchTheme,
+  buildThemeBannerSummary,
   prepareItchThemeCandidate,
 } from '../src/itch-theme.mjs';
 import { migrateItchProjectSlug } from '../src/itch-slug-migrator.mjs';
@@ -189,6 +190,20 @@ test('local theme adapter repairs model-selected contrast without discarding its
   assert.notEqual(repaired.design.colors.header, '#ffffff');
   assert.notEqual(repaired.design.colors.button, '#000000');
   assert.match(repaired.design.rationale, /adjusted deterministically/u);
+});
+
+test('theme banner summary derives product counts and kinds from each release', () => {
+  assert.equal(buildThemeBannerSummary({
+    assets: [{ kind: 'character' }, { kind: 'character' }, { kind: 'character' }],
+  }, {
+    asset_count: 3,
+    effect_animation_count: 12,
+  }), '3 CHARACTERS • 12 MATCHING EFFECTS • TRANSPARENT GAME-READY FILES');
+  assert.equal(buildThemeBannerSummary({
+    assets: [{ kind: 'tile' }, { kind: 'prop' }],
+  }, {
+    asset_count: 2,
+  }), '2 APPROVED ASSETS • TRANSPARENT GAME-READY FILES');
 });
 
 test('theme candidate renders deterministic media and creates desktop/mobile previews without saving', async () => {
