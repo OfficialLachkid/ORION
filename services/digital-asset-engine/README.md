@@ -148,6 +148,19 @@ npm run digital-assets:itch-theme-apply -- \
 
 Apply `supabase/migrations/20261016_create_digital_asset_theme_reviews.sql` before enabling the Discord theme gate. Theme decisions are append-only and service-role-only. The applied receipt is stored as `review/itch-theme-release.json`; retries reuse an exact verified receipt.
 
+After publication, improve the existing description presentation without reopening the release or touching its price, title, files, cover, screenshots, or visibility:
+
+```bash
+npm run digital-assets:itch-description -- \
+  --update-itch-description \
+  --release-version 0.2.0 \
+  --playwright-profile "/Users/Agent/.orion/playwright-profile-itch" \
+  --opportunity services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+This command requires the exact `verified_public` receipt, converts the canonical plain-text sections and bullets into itch headings and lists, reads the public DOM back, and stores the idempotent presentation receipt as `review/itch-description.json`.
+
 When a corrected package is staged, ORION increments the review revision and edits the existing itch.io draft, Discord overview message, and numbered asset messages. It does not create another channel, thread, or message set.
 
 Apply `supabase/migrations/20261014_create_digital_asset_release_reviews.sql` before enabling the package gate and `supabase/migrations/20261016_create_digital_asset_distribution_reviews.sql` before enabling the distribution gate. The earlier `digital_asset_review_decisions` table remains as immutable audit history for the first asset-level pilot. The Discord runtime requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DIGITAL_ASSET_ARCHIVE_ROOT`. Do not use the publishable key for these service-role-only tables.

@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "archive_root": "data/runtime/digital-asset-research",
+  "minimum_snapshots": 2,
+  "maximum_items_per_view": 30,
+  "request_delay_ms": 1500,
+  "scheduling": {
+    "enabled": false,
+    "cadence_hours": 24
+  },
+  "source": {
+    "id": "itch-public-assets",
+    "marketplace": "itch.io",
+    "user_agent": "ORION market research (+https://github.com/OfficialLachkid/ORION)",
+    "capabilities": {
+      "access_method": "public_html",
+      "observed_fields": ["rank", "title", "creator", "price_text", "summary", "listing_url"],
+      "unavailable_fields": ["sales", "revenue", "downloads", "conversion_rate"],
+      "minimum_cadence_hours": 24
+    },
+    "views": [
+      {
+        "id": "newest-pixel-art",
+        "url": "https://itch.io/game-assets/newest/tag-pixel-art",
+        "signal": "supply_activity"
+      },
+      {
+        "id": "top-sellers-pixel-art",
+        "url": "https://itch.io/game-assets/top-sellers/tag-pixel-art",
+        "signal": "marketplace_rank_proxy"
+      }
+    ]
+  },
+  "model": {
+    "provider": "ollama",
+    "endpoint": "http://127.0.0.1:11434",
+    "model": "llama3.1:8b",
+    "timeout_ms": 180000
+  },
+  "discord": {
+    "category_name": "DIGITAL ASSETS",
+    "channel_name": "asset-research"
+  }
+}

@@ -217,8 +217,8 @@ function buildThemePrepareCode({ design, url }) {
 async (page) => {
   const input = ${JSON.stringify({ design, url })};
   await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  const edit = page.getByRole('button', { name: /edit theme/i }).first();
-  await edit.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  const edit = page.locator('button').filter({ hasText: /edit theme/i }).first();
+  await edit.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
   if (!(await edit.count().catch(() => 0)) || !(await edit.isVisible().catch(() => false))) {
     return { status: 'theme_editor_unavailable', url: page.url() };
   }
