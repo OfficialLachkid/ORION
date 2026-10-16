@@ -217,10 +217,17 @@ function buildThemePrepareCode({ design, url }) {
 async (page) => {
   const input = ${JSON.stringify({ design, url })};
   await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  const edit = page.locator('button').filter({ hasText: /edit theme/i }).first();
-  await edit.waitFor({ state: 'visible', timeout: 10000 }).catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+  await page.waitForFunction(() => [...document.querySelectorAll('button')]
+    .some((button) => /edit theme/i.test(button.textContent || '')), null, { timeout: 30000 }).catch(() => {});
+  const edit = page.getByRole('button', { name: /edit theme/i }).first();
   if (!(await edit.count().catch(() => 0)) || !(await edit.isVisible().catch(() => false))) {
-    return { status: 'theme_editor_unavailable', url: page.url() };
+    return {
+      status: 'theme_editor_unavailable',
+      url: page.url(),
+      title: await page.title().catch(() => ''),
+      buttons: await page.locator('button').allTextContents().catch(() => []),
+    };
   }
   await edit.click({ timeout: 5000 });
   await page.waitForTimeout(500);
@@ -319,8 +326,9 @@ async (page) => {
     await page.waitForTimeout(1000);
   }
   await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(1500);
   const wrapper = page.locator('#wrapper, .wrapper').first();
+  await wrapper.waitFor({ state: 'visible', timeout: 30000 }).catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   const styles = await page.evaluate(() => {
     const read = (selector) => {
       const element = document.querySelector(selector);
