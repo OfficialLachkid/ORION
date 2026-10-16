@@ -1,6 +1,6 @@
 # Instagram Reels publication
 
-Last updated: 2026-10-13
+Last updated: 2026-10-16
 
 ## Decision
 
@@ -26,22 +26,24 @@ Implemented and merged in PR #163:
 - fail-closed handling when a publish response is uncertain;
 - adapter and integration unit tests.
 
-Implemented and merged through PR #165:
+Implemented and merged through PR #174:
 
 - shared scheduler dispatch for TikTok and Instagram without duplicating channel schedules;
 - atomic Instagram upload claiming and lifecycle reconciliation;
 - persistence at the staging, container, and published-media boundaries;
 - a read-only account diagnostic that requires the configured user id and username to match;
-- a one-publication supervised live override while unattended delivery remains disabled;
+- a one-publication supervised live override for controlled validation;
 - stale Instagram staging cleanup that protects objects referenced by active publications;
-- the Poke Quizzz target for Instagram user `17841467563066221` / `@pokequizzz`.
+- the Poke Quizzz target for Instagram user `17841467563066221` / `@pokequizzz`;
+- five-minute lifecycle reconciliation so finished containers are published promptly;
+- isolated Discord alerts for platform delivery failures without blocking other destinations.
 
-Deliberately not enabled yet:
+Current rollout:
 
-- the target participates in shared approvals and its first supervised delivery is scheduled;
-- `INSTAGRAM_DELIVERY_ENABLED` defaults to `false`;
-- unattended Instagram uploads remain blocked until the supervised Reel and staging cleanup are verified;
-- no live Reel has been created yet.
+- Poke Quizzz completed supervised and unattended public Reel delivery successfully;
+- the Mac runtime has Instagram delivery enabled for verified configured targets;
+- the tracked environment example remains fail-closed with `INSTAGRAM_DELIVERY_ENABLED=false`;
+- every additional owned account must pass the same token identity check before deployment.
 
 ## Operational update: 2026-10-13
 
@@ -59,13 +61,11 @@ Deliberately not enabled yet:
 - The corresponding TikTok children were preserved; withdrawn or already-published legacy rows
   were not backfilled. A deterministic Instagram dry run reports the first new row as
   `instagram_publish_due` at its inherited slot.
-- Unattended delivery remains disabled. A read-only `/me` identity check currently returns Meta
-  Graph error code `200`, type `OAuthException`, message `API access blocked.` The configured token
-  is present, but Meta app/account access must be restored and the identity diagnostic must pass
-  before setting `INSTAGRAM_DELIVERY_ENABLED=true`. With delivery disabled, due rows stay scheduled
-  and can be released through the supervised one-publication override after the blocker is cleared.
+- Meta access was restored after the operator completed the identity checkpoint. The `/me`
+  diagnostic passed, the supervised Reel published publicly, and unattended Poke Quizzz delivery
+  was subsequently enabled.
 
-## Supervised validation checkpoint
+## Completed supervised validation checkpoint
 
 The original approved Poke Quiz delivery was prepared without enabling Instagram globally:
 
@@ -77,13 +77,13 @@ The original approved Poke Quiz delivery was prepared without enabling Instagram
 - a dry run reported `instagram_publish_due` at that timestamp;
 - a one-time macOS LaunchAgent invoked only this publication with
   `--allow-instagram-live`, but the missing source path stopped execution before Meta received it;
-- the ordinary scheduler still sees `INSTAGRAM_DELIVERY_ENABLED=false`, so no other Instagram
-  publication can be uploaded during this test.
+- the ordinary scheduler remained disabled during that first attempt, so no other Instagram
+  publication was uploaded accidentally.
 
-The replacement supervised validation must first pass the `/me` identity diagnostic. After
-execution, verify the Reel is public, its caption and Share to Feed behavior are correct, the
-permalink and media id were persisted, and the temporary `instagram/` object was deleted. Only then
-may unattended Instagram delivery be enabled.
+The replacement supervised delivery passed the `/me` identity diagnostic and published publicly.
+The subsequent scheduler/reconciler fix was validated by successful TikTok and Instagram delivery.
+Future accounts therefore reuse the same adapter, but still require an independent identity check
+before their targets are activated.
 
 The Poke Quizzz Creator account is connected as an app tester and its token is stored only in the
 Mac runtime environment. Webhook subscriptions are intentionally disabled. The initial controlled
@@ -94,6 +94,24 @@ Instagram Login returns two different identifiers from `/me`: `user_id` is the p
 account/publishing id used by the media endpoints, while `id` is app-scoped. For Poke Quizzz,
 the configured publishing id is `17841467563066221`. The connection diagnostic records both but
 must match the target against `user_id`, never the app-scoped `id`.
+
+## Owned-account expansion: 2026-10-16
+
+Four additional Creator accounts were added as ORION Publisher test users. Their tokens remain only
+in the owner-readable Mac runtime environment. Read-only Meta `/me` checks verified each token before
+the targets were configured:
+
+| Source channel | Instagram target | Publishing user id | Token environment variable |
+| --- | --- | --- | --- |
+| `proffmon-youtube` | `@proffmon` | `17841460825848023` | `INSTAGRAM_PROFFMON_ACCESS_TOKEN` |
+| `dexguess-youtube` | `@dexguesss` | `17841435584465471` | `INSTAGRAM_DEXGUESS_ACCESS_TOKEN` |
+| `trivamon-youtube` | `@trivamon` | `17841449539714324` | `INSTAGRAM_TRIVAMON_ACCESS_TOKEN` |
+| `poke-guess-youtube` | `@pokeguesss` | `17841468340101871` | `INSTAGRAM_POKE_GUESS_ACCESS_TOKEN` |
+
+Each account is an independent `instagram_reels` target. It inherits only its matching source
+channel's shared Discord approval and current `scheduled_for` value. Deployment should be followed
+by a bounded, future-only reconciliation of already-approved source publications; published or
+withdrawn history must not be replayed.
 
 ## Account model
 
@@ -175,11 +193,12 @@ If the network drops during `media_publish`, ORION does not blindly repeat the r
 
 ### Phase 2: account connection and identity validation
 
-- use a dashboard-generated tester token for the first owned account;
-- query the authenticated Instagram user id and username;
-- reject target configuration when the authenticated identity differs from the configured account;
-- run the read-only connection diagnostic before any live publication;
-- later implement OAuth callback, token exchange, and refresh only when scaling beyond tester accounts.
+- [x] use dashboard-generated tester tokens for owned accounts;
+- [x] query the authenticated Instagram user id and username;
+- [x] reject target configuration when the authenticated identity differs from the configured account;
+- [x] run the read-only connection diagnostic before any live publication;
+- [ ] implement an interactive OAuth callback, token exchange, and refresh command when scaling
+  beyond tester accounts.
 
 ### Phase 3: scheduler dispatch
 
@@ -195,8 +214,8 @@ If the network drops during `media_publish`, ORION does not blindly repeat the r
 - [x] create the Instagram child from the normal shared Discord approval;
 - [x] run a dry-run due-publication check;
 - [x] register a one-publication supervised execution for the inherited schedule;
-- verify public visibility, caption, Share to Feed behavior, permalink, and staging deletion;
-- only then enable unattended delivery.
+- [x] verify public visibility and successful scheduled publication;
+- [x] enable unattended delivery only after supervised validation.
 
 ### Phase 5: access review, if needed
 
