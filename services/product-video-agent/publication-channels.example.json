@@ -397,6 +397,20 @@
                 "is_aigc": false,
                 "video_cover_timestamp_ms": 1000
               }
+            },
+            {
+              "platform": "instagram_reels",
+              "account_key": "trivamon-instagram",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "instagram_graph",
+              "visibility": "public",
+              "instagram": {
+                "user_id": "17841449539714324",
+                "expected_username": "trivamon",
+                "access_token_env": "INSTAGRAM_TRIVAMON_ACCESS_TOKEN",
+                "share_to_feed": true
+              }
             }
           ]
         },
@@ -595,6 +609,20 @@
                 "is_aigc": false,
                 "video_cover_timestamp_ms": 1000
               }
+            },
+            {
+              "platform": "instagram_reels",
+              "account_key": "poke-guess-instagram",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "instagram_graph",
+              "visibility": "public",
+              "instagram": {
+                "user_id": "17841468340101871",
+                "expected_username": "pokeguesss",
+                "access_token_env": "INSTAGRAM_POKE_GUESS_ACCESS_TOKEN",
+                "share_to_feed": true
+              }
             }
           ]
         },
@@ -774,6 +802,24 @@
             ]
           }
         },
+        "publisher": {
+          "targets": [
+            {
+              "platform": "instagram_reels",
+              "account_key": "dexguess-instagram",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "instagram_graph",
+              "visibility": "public",
+              "instagram": {
+                "user_id": "17841435584465471",
+                "expected_username": "dexguesss",
+                "access_token_env": "INSTAGRAM_DEXGUESS_ACCESS_TOKEN",
+                "share_to_feed": true
+              }
+            }
+          ]
+        },
         "review_thread_id": "1537438092338798684",
         "queue_status_message_id": "1537469765705269380",
         "related_video": {
@@ -948,6 +994,24 @@
               }
             ]
           }
+        },
+        "publisher": {
+          "targets": [
+            {
+              "platform": "instagram_reels",
+              "account_key": "proffmon-instagram",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "instagram_graph",
+              "visibility": "public",
+              "instagram": {
+                "user_id": "17841460825848023",
+                "expected_username": "proffmon",
+                "access_token_env": "INSTAGRAM_PROFFMON_ACCESS_TOKEN",
+                "share_to_feed": true
+              }
+            }
+          ]
         },
         "review_thread_id": "1549355550553280542",
         "queue_status_message_id": "1549426826487660705",
