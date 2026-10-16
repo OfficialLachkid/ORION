@@ -247,6 +247,8 @@ test('theme apply waits for the save request and verifies approved panel alpha',
   assert.doesNotThrow(() => new Function(`return (${code});`));
   assert.match(code, /response\.url\(\)\.endsWith\('\/edit'\)/u);
   assert.match(code, /panel_alpha/u);
+  assert.match(code, /#wrapper, \.wrapper/u);
+  assert.match(code, /fullPage: true/u);
 });
 
 test('theme candidate renders deterministic media and creates desktop/mobile previews without saving', async () => {

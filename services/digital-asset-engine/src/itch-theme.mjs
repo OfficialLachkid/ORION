@@ -203,7 +203,7 @@ async (page) => {
     image.style.display = 'block';
     header.prepend(image);
   }, { bannerDataUrl: input.bannerDataUrl, productTitle: input.productTitle });
-  const wrapper = page.locator('#wrapper').first();
+  const wrapper = page.locator('#wrapper, .wrapper').first();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await wrapper.screenshot({ path: input.desktopPath });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -320,19 +320,16 @@ async (page) => {
   }
   await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(1500);
-  const wrapper = page.locator('#wrapper').first();
-  const inner = page.locator('#inner_column').first();
-  const heading = page.locator('#inner_column h2').first();
-  const button = page.locator('#inner_column .button').first();
+  const wrapper = page.locator('#wrapper, .wrapper').first();
   const styles = await page.evaluate(() => {
     const read = (selector) => {
       const element = document.querySelector(selector);
       return element ? getComputedStyle(element) : null;
     };
-    const wrapperStyle = read('#wrapper');
-    const innerStyle = read('#inner_column');
-    const headingStyle = read('#inner_column h2');
-    const buttonStyle = read('#inner_column .button');
+    const wrapperStyle = read('#wrapper, .wrapper');
+    const innerStyle = read('#inner_column, .inner_column');
+    const headingStyle = read('#inner_column h2, .inner_column h2');
+    const buttonStyle = read('#inner_column .button, .inner_column .button');
     return {
       background: wrapperStyle?.backgroundColor || '',
       backgroundImage: wrapperStyle?.backgroundImage || '',
@@ -360,10 +357,18 @@ async (page) => {
     banner: styles.banner,
   };
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await wrapper.screenshot({ path: input.desktopPath });
+  if (await wrapper.count().catch(() => 0)) await wrapper.screenshot({ path: input.desktopPath });
+  else await page.screenshot({ path: input.desktopPath, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await wrapper.screenshot({ path: input.mobilePath });
-  return { status: Object.values(checks).every(Boolean) ? 'verified_applied' : 'verification_failed', checks, styles };
+  if (await wrapper.count().catch(() => 0)) await wrapper.screenshot({ path: input.mobilePath });
+  else await page.screenshot({ path: input.mobilePath, fullPage: true });
+  return {
+    status: Object.values(checks).every(Boolean) ? 'verified_applied' : 'verification_failed',
+    checks,
+    styles,
+    url: page.url(),
+    title: await page.title().catch(() => ''),
+  };
 }`.trim();
 }
 
