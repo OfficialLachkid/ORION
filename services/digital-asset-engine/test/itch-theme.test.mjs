@@ -248,6 +248,8 @@ test('theme apply waits for the save request and verifies approved panel alpha',
   assert.match(code, /response\.url\(\)\.endsWith\('\/edit'\)/u);
   assert.match(code, /panel_alpha/u);
   assert.match(code, /#wrapper, \.wrapper/u);
+  assert.match(code, /wrapper\.waitFor/u);
+  assert.match(code, /networkidle/u);
   assert.match(code, /fullPage: true/u);
 });
 
