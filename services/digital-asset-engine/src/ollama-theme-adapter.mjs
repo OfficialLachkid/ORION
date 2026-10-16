@@ -87,6 +87,57 @@ export function validateThemeContrast(design) {
   return design;
 }
 
+function hexFromChannels(channels) {
+  return `#${channels
+    .map((value) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+function mixColor(source, target, amount) {
+  const sourceChannels = channel(source).map((value) => value * 255);
+  const targetChannels = channel(target).map((value) => value * 255);
+  return hexFromChannels(sourceChannels.map((value, index) => (
+    value + ((targetChannels[index] - value) * amount)
+  )));
+}
+
+function closestReadableColor(foreground, background, minimumRatio) {
+  if (contrastRatio(foreground, background) >= minimumRatio) return foreground.toLowerCase();
+  for (let step = 1; step <= 20; step += 1) {
+    const amount = step / 20;
+    const candidates = [mixColor(foreground, '#ffffff', amount), mixColor(foreground, '#000000', amount)];
+    const readable = candidates.filter((candidate) => contrastRatio(candidate, background) >= minimumRatio);
+    if (readable.length) {
+      return readable.sort((left, right) => (
+        contrastRatio(right, background) - contrastRatio(left, background)
+      ))[0];
+    }
+  }
+  return contrastRatio('#ffffff', background) >= minimumRatio ? '#ffffff' : '#000000';
+}
+
+export function repairThemeContrast(input) {
+  const design = structuredClone(input);
+  const adjustments = [];
+  const replace = (key, background, minimumRatio) => {
+    const original = design.colors[key];
+    const repaired = closestReadableColor(original, background, minimumRatio);
+    if (repaired !== original.toLowerCase()) {
+      design.colors[key] = repaired;
+      adjustments.push({ field: key, from: original.toLowerCase(), to: repaired, minimum_ratio: minimumRatio });
+    }
+  };
+  replace('text', design.colors.panel, 4.5);
+  replace('header', design.colors.panel, 4.5);
+  replace('link', design.colors.panel, 3);
+  replace('button', '#ffffff', 3);
+  if (adjustments.length) {
+    const suffix = ' Contrast was adjusted deterministically for storefront readability.';
+    design.rationale = `${design.rationale.replace(/\s+$/u, '')}${suffix}`.slice(0, 600);
+  }
+  return { design: validateThemeContrast(design), adjustments };
+}
+
 async function fetchWithTimeout(fetchImpl, url, options, timeoutMs) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -151,8 +202,10 @@ export class OllamaThemeAdapter {
     } catch (error) {
       throw new Error(`Local Ollama theme proposal did not match the required schema: ${error.message}`);
     }
+    const repaired = repairThemeContrast(design);
     return {
-      design: validateThemeContrast(design),
+      design: repaired.design,
+      contrast_adjustments: repaired.adjustments,
       provider: 'ollama',
       model: this.model,
       execution: 'local',

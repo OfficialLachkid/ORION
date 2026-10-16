@@ -82,7 +82,21 @@ function escapeXml(value) {
     .replaceAll("'", '&apos;');
 }
 
-async function renderThemeMedia({ candidateRoot, packagedRoot, product, design }) {
+export function buildThemeBannerSummary(product, manifest) {
+  const assetCount = Number(manifest?.asset_count) || product.assets.length;
+  const kinds = [...new Set(product.assets.map((asset) => String(asset.kind || '').trim().toLowerCase()).filter(Boolean))];
+  const assetLabel = kinds.length === 1
+    ? `${assetCount} ${kinds[0].toUpperCase()}${assetCount === 1 ? '' : 'S'}`
+    : `${assetCount} APPROVED ASSETS`;
+  const effectCount = Number(manifest?.effect_animation_count) || 0;
+  return [
+    assetLabel,
+    ...(effectCount ? [`${effectCount} MATCHING EFFECTS`] : []),
+    'TRANSPARENT GAME-READY FILES',
+  ].join(' • ');
+}
+
+async function renderThemeMedia({ candidateRoot, packagedRoot, product, manifest, design }) {
   const width = 960;
   const bannerHeight = 240;
   const weaponFiles = await Promise.all(product.assets.map(async (asset) => ({
@@ -118,7 +132,7 @@ async function renderThemeMedia({ candidateRoot, packagedRoot, product, design }
     `<rect x="18" y="18" width="924" height="70" rx="14" fill="${design.colors.panel}" stroke="${design.colors.link}" stroke-width="2"/>`,
     `<rect x="34" y="31" width="8" height="44" rx="4" fill="${design.colors.button}"/>`,
     `<text x="480" y="53" text-anchor="middle" fill="${design.colors.header}" stroke="${design.colors.background}" stroke-width="4" paint-order="stroke" font-family="Arial, sans-serif" font-size="34" font-weight="900">${escapeXml(product.title.toUpperCase())}</text>`,
-    `<text x="480" y="76" text-anchor="middle" fill="${design.colors.link}" font-family="Arial, sans-serif" font-size="13" font-weight="800">8 WEAPONS &#8226; 24 MATCHING EFFECTS &#8226; TRANSPARENT GAME-READY FILES</text>`,
+    `<text x="480" y="76" text-anchor="middle" fill="${design.colors.link}" font-family="Arial, sans-serif" font-size="13" font-weight="800">${escapeXml(buildThemeBannerSummary(product, manifest))}</text>`,
     cells,
     '</svg>',
   ].join(''));
@@ -183,7 +197,7 @@ async (page) => {
     const image = document.createElement('img');
     image.id = 'orion-theme-preview-banner';
     image.src = bannerDataUrl;
-    image.alt = 'Neon Plasma Armory storefront banner preview';
+    image.alt = input.productTitle + ' storefront banner preview';
     image.style.width = '100%';
     image.style.height = 'auto';
     image.style.display = 'block';
@@ -381,6 +395,7 @@ export async function prepareItchThemeCandidate(options) {
       model: proposal.model,
       execution: proposal.execution,
       estimated_cost: proposal.estimated_cost,
+      contrast_adjustments: proposal.contrast_adjustments || [],
     },
     design: proposal.design,
   };
@@ -396,6 +411,7 @@ export async function prepareItchThemeCandidate(options) {
     candidateRoot,
     packagedRoot: packaged.root,
     product,
+    manifest: packaged.manifest,
     design: proposal.design,
   });
   const previewDesktopPath = resolve(candidateRoot, 'preview-desktop.png');
@@ -421,6 +437,7 @@ export async function prepareItchThemeCandidate(options) {
       filename: 'preview.js',
       code: buildThemePreviewCode({
         design: proposal.design,
+        productTitle: product.title,
         url: cleanPublicUrl(release.public_url),
         bannerDataUrl: `data:image/png;base64,${(await readFile(bannerPath)).toString('base64')}`,
         backgroundDataUrl: `data:image/png;base64,${(await readFile(backgroundPath)).toString('base64')}`,
