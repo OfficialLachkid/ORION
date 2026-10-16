@@ -4,12 +4,14 @@ import process from 'node:process';
 import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
 import { loadEngineConfig, resolveOutputRoot } from './src/config.mjs';
 import { postDigitalAssetReview } from './src/discord-review.mjs';
+import { postDigitalAssetDistributionReview } from './src/distribution-review.mjs';
 import { generateEffectBatch } from './src/effect-batch.mjs';
 import { postEffectsDiscordReview } from './src/effect-discord-review.mjs';
 import { generateEffectPilot } from './src/effect-pilot.mjs';
 import { reviseEffectBatch } from './src/effect-revision.mjs';
 import { prepareVersionedPackageExtension } from './src/release-extension.mjs';
 import { stageItchDraft } from './src/itch-draft-stager.mjs';
+import { inspectItchSellerReadiness } from './src/itch-seller-preflight.mjs';
 import { packageDigitalAssetPreview } from './src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from './src/pipeline.mjs';
 import { slugify } from './src/product-planner.mjs';
@@ -68,6 +70,8 @@ function printHelp() {
     '  package   Assemble a deterministic internal itch preview export.',
     '  itch-draft  Upload the package and populate/verify the existing itch.io draft.',
     '  discord-review  Create the pack review channel/thread and post previews.',
+    '  seller-preflight  Verify itch.io payout mode and tax-interview readiness.',
+    '  distribution-review  Reconcile the separate marketplace approval gate in Discord.',
     '  effects-pilot  Generate isolated fixed-anchor effects without changing the approved pack.',
     '  effects-batch  Generate sequential isolated weapon-effect proofs from a compact batch plan.',
     '  revise-effects  Regenerate selected effects into new immutable proof revisions.',
@@ -105,14 +109,14 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
   if (['package', 'prepare-extension'].includes(args.command) && !args.internalPreview) {
     throw new Error('Packaging unapproved candidates requires --internal-preview.');
   }
-  if (['discord-review', 'effects-review'].includes(args.command) && !args.postToDiscord) {
+  if (['discord-review', 'distribution-review', 'effects-review'].includes(args.command) && !args.postToDiscord) {
     throw new Error('Live Discord review posting requires --post-to-discord.');
   }
   if (args.command === 'itch-draft' && !args.stageItchDraft) {
@@ -124,6 +128,30 @@ async function main() {
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
   if (args.outputRoot) config = { ...config, output_root: args.outputRoot };
+  if (args.command === 'seller-preflight') {
+    const result = await inspectItchSellerReadiness({
+      outputRoot: resolveOutputRoot(config),
+      slug: slugify((JSON.parse(await readFile(args.opportunity || DEFAULT_OPPORTUNITY, 'utf8'))).title),
+      releaseVersion: args.releaseVersion,
+      profileDir: args.playwrightProfile,
+      headed: args.headed,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'distribution-review') {
+    const opportunity = JSON.parse(await readFile(args.opportunity || DEFAULT_OPPORTUNITY, 'utf8'));
+    const result = await postDigitalAssetDistributionReview({
+      runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
+      outputRoot: resolveOutputRoot(config),
+      slug: slugify(opportunity.title),
+      releaseVersion: args.releaseVersion,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
+    return;
+  }
   if (args.command === 'prepare-extension') {
     const plan = JSON.parse(await readFile(args.extensionPlan || DEFAULT_EXTENSION_PLAN, 'utf8'));
     const result = await prepareVersionedPackageExtension({

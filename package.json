@@ -106,6 +106,8 @@
     "digital-assets:package": "node services/digital-asset-engine/index.mjs package",
     "digital-assets:itch-draft": "node services/digital-asset-engine/index.mjs itch-draft",
     "digital-assets:discord-review": "node services/digital-asset-engine/index.mjs discord-review",
+    "digital-assets:seller-preflight": "node services/digital-asset-engine/index.mjs seller-preflight",
+    "digital-assets:distribution-review": "node services/digital-asset-engine/index.mjs distribution-review",
     "digital-assets:test": "node --test services/digital-asset-engine/test/*.test.mjs",
     "product-video:dry-run": "node services/product-video-agent/index.mjs",
     "product-video:doctor": "node services/product-video-agent/index.mjs --doctor",

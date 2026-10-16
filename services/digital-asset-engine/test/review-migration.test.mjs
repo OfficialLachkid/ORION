@@ -36,3 +36,19 @@ test('package review migration stores manifest, listing, and per-asset outcomes 
   assert.match(sql, /enable row level security/u);
   assert.match(sql, /grant select, insert .* to service_role/u);
 });
+
+test('distribution review migration is marketplace-bound, append-only, and service protected', async () => {
+  const sql = await readFile(resolve(
+    projectRoot,
+    'supabase/migrations/20261016_create_digital_asset_distribution_reviews.sql',
+  ), 'utf8');
+
+  assert.match(sql, /create table if not exists public\.digital_asset_distribution_reviews/iu);
+  assert.match(sql, /marketplace text not null/u);
+  assert.match(sql, /decision in \('approve_publish', 'keep_draft'\)/u);
+  assert.match(sql, /manifest_hash text not null/u);
+  assert.match(sql, /listing_hash text not null/u);
+  assert.match(sql, /discord_interaction_id text not null unique/u);
+  assert.match(sql, /enable row level security/u);
+  assert.match(sql, /grant select, insert .* to service_role/u);
+});

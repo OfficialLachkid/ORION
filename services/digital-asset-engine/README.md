@@ -71,9 +71,27 @@ The overview message owns the single package gate: `Approve Pack`, `Request Chan
 
 Before a decision is stored, the live bot verifies the operator allowlist, overview message, populated itch.io listing hash, package manifest hash, and every exported asset hash against the canonical T7 files. It appends one atomic decision to `digital_asset_release_reviews`, including each asset's resulting outcome. This creative decision does not approve marketplace distribution.
 
+After creative approval, verify the seller account and reconcile the separate distribution gate:
+
+```bash
+npm run digital-assets:seller-preflight -- \
+  --release-version 0.2.0 \
+  --opportunity services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+
+npm run digital-assets:distribution-review -- \
+  --post-to-discord \
+  --release-version 0.2.0 \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env" \
+  --opportunity services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The seller preflight reads payout mode and tax-interview readiness without modifying the itch.io account. If seller setup is incomplete, the existing Discord overview shows a blocking remediation link and no publish-approval button. When ready, the same message exposes `Approve itch.io Publish` and `Keep Draft`. This decision is append-only in `digital_asset_distribution_reviews` and is bound to the exact approved manifest, listing, marketplace, message, and Discord interaction. Recording distribution approval authorizes the later publish adapter; it does not itself change visibility.
+
 When a corrected package is staged, ORION increments the review revision and edits the existing itch.io draft, Discord overview message, and numbered asset messages. It does not create another channel, thread, or message set.
 
-Apply `supabase/migrations/20261014_create_digital_asset_release_reviews.sql` before enabling the package gate. The earlier `digital_asset_review_decisions` table remains as immutable audit history for the first asset-level pilot. The Discord runtime requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DIGITAL_ASSET_ARCHIVE_ROOT`. Do not use the publishable key for these service-role-only tables.
+Apply `supabase/migrations/20261014_create_digital_asset_release_reviews.sql` before enabling the package gate and `supabase/migrations/20261016_create_digital_asset_distribution_reviews.sql` before enabling the distribution gate. The earlier `digital_asset_review_decisions` table remains as immutable audit history for the first asset-level pilot. The Discord runtime requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DIGITAL_ASSET_ARCHIVE_ROOT`. Do not use the publishable key for these service-role-only tables.
 
 The ORION bot needs `View Channel`, `Send Messages`, `Embed Links`, `Attach Files`, `Create Public Threads`, and `Send Messages in Threads` in the `DIGITAL ASSETS` category. It also needs `Manage Channels` when ORION is expected to create the per-pack channel itself. Grant these as category permissions so each new pack channel inherits them.
 

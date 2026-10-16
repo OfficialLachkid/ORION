@@ -213,11 +213,12 @@ Status: **deferred**
 
 1. Read this document and `services/digital-asset-engine/README.md`.
 2. Run `npm run digital-assets:test`.
-3. Build the sale-ready immutable candidate with corrected runtime metadata and the review-ready customer license.
-4. Update and verify the existing itch.io draft, then reconcile the existing Discord package message in place.
-5. Approve the exact package manifest, including its buyer files, listing, price, previews, and license hash.
-6. Implement and record a separate distribution approval before changing itch.io visibility.
-7. Publish, verify the public page and buyer download, and persist the external marketplace release state.
+3. [x] Build the sale-ready immutable candidate with corrected runtime metadata and the review-ready customer license.
+4. [x] Update and verify the existing itch.io draft, then reconcile the existing Discord package message in place.
+5. [x] Approve the exact package manifest, including its buyer files, listing, price, previews, and license hash.
+6. Complete the itch.io tax interview; seller preflight currently blocks distribution until it is finished.
+7. Apply the distribution-review migration and reconcile the separate manifest-bound distribution gate.
+8. Approve distribution, publish, verify the public page and buyer download, and persist the external marketplace release state.
 
 ## Deferred decisions
 
@@ -256,6 +257,8 @@ Distribution approval -> adapter execution
 ```
 
 This avoids an accidental interpretation that approving the art also authorizes immediate external publication. The fuller proposal and open decisions are in [issue-146-product-brief.md](./issue-146-product-brief.md).
+
+The distribution-gate implementation also fails closed on seller readiness. It reads itch.io payout mode and tax-interview state into `review/itch-seller.json`; an incomplete interview produces a blocked Discord card with a setup link and no approval action. A ready account exposes a distinct `Approve itch.io Publish` action. Its immutable decision is stored in `digital_asset_distribution_reviews`; actual visibility change remains a subsequent adapter step.
 
 ## Live V0.1 verification — 2026-10-12
 
