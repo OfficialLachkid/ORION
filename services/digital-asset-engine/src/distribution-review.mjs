@@ -75,15 +75,20 @@ export function buildDistributionReviewEmbeds(embeds, state, actor = null) {
   const current = Array.isArray(embeds) ? embeds : [];
   const ready = state.status === 'awaiting_distribution_approval';
   const approved = state.status === 'distribution_approved';
+  const published = state.status === 'published';
   const held = state.status === 'held';
-  const statusLabel = approved
+  const statusLabel = published
+    ? 'PUBLISHED AND VERIFIED'
+    : approved
     ? 'DISTRIBUTION APPROVED'
     : held ? 'KEPT IN DRAFT' : ready ? 'DISTRIBUTION APPROVAL REQUIRED' : 'DISTRIBUTION BLOCKED';
-  const color = approved ? 0x57f287 : held ? 0xfee75c : ready ? 0x5865f2 : 0xed4245;
+  const color = published || approved ? 0x57f287 : held ? 0xfee75c : ready ? 0x5865f2 : 0xed4245;
   const sellerValue = state.seller_ready
     ? 'Ready — payout mode and tax interview verified.'
     : `Blocked — ${(state.blockers || []).join(', ') || 'seller readiness was not verified'}.`;
-  const decisionValue = actor
+  const decisionValue = published
+    ? `[Public itch.io page](${state.publication?.public_url || state.public_url}) verified at ${state.publication?.verified_at || 'publication time'}.`
+    : actor
     ? `${approved ? 'Approved for itch.io publication' : 'Kept as an itch.io draft'} by ${actor.displayName}.`
     : ready
       ? 'Use the publish approval only after reviewing the exact draft linked below.'
@@ -92,8 +97,10 @@ export function buildDistributionReviewEmbeds(embeds, state, actor = null) {
     ...embed,
     color,
     ...(index === 0 ? {
-      title: `${String(embed.title || 'Pack Review').replace(/ · (PACK APPROVED|DISTRIBUTION APPROVAL REQUIRED|DISTRIBUTION BLOCKED|DISTRIBUTION APPROVED|KEPT IN DRAFT)$/u, '')} · ${statusLabel}`,
-      description: approved
+      title: `${String(embed.title || 'Pack Review').replace(/ · (PACK APPROVED|DISTRIBUTION APPROVAL REQUIRED|DISTRIBUTION BLOCKED|DISTRIBUTION APPROVED|KEPT IN DRAFT|PUBLISHED AND VERIFIED)$/u, '')} · ${statusLabel}`,
+      description: published
+        ? 'The approved package is public on itch.io and its public listing has been read back successfully.'
+        : approved
         ? 'Creative approval and a separate distribution authorization are recorded for this exact manifest.'
         : 'The pack is creatively approved. Public visibility still requires this separate distribution gate.',
       fields: [

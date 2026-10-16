@@ -11,6 +11,7 @@ import { generateEffectPilot } from './src/effect-pilot.mjs';
 import { reviseEffectBatch } from './src/effect-revision.mjs';
 import { prepareVersionedPackageExtension } from './src/release-extension.mjs';
 import { stageItchDraft } from './src/itch-draft-stager.mjs';
+import { publishApprovedItchRelease } from './src/itch-publisher.mjs';
 import { inspectItchSellerReadiness } from './src/itch-seller-preflight.mjs';
 import { packageDigitalAssetPreview } from './src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from './src/pipeline.mjs';
@@ -39,6 +40,7 @@ function parseArguments(argv) {
     else if (token === '--internal-preview') args.internalPreview = true;
     else if (token === '--post-to-discord') args.postToDiscord = true;
     else if (token === '--stage-itch-draft') args.stageItchDraft = true;
+    else if (token === '--publish-itch') args.publishItch = true;
     else if (token === '--headless') args.headed = false;
     else if (token === '--config') args.config = argv[++index];
     else if (token === '--opportunity') args.opportunity = argv[++index];
@@ -72,6 +74,7 @@ function printHelp() {
     '  discord-review  Create the pack review channel/thread and post previews.',
     '  seller-preflight  Verify itch.io payout mode and tax-interview readiness.',
     '  distribution-review  Reconcile the separate marketplace approval gate in Discord.',
+    '  itch-publish  Publish and verify the separately approved itch.io release.',
     '  effects-pilot  Generate isolated fixed-anchor effects without changing the approved pack.',
     '  effects-batch  Generate sequential isolated weapon-effect proofs from a compact batch plan.',
     '  revise-effects  Regenerate selected effects into new immutable proof revisions.',
@@ -93,6 +96,7 @@ function printHelp() {
     '  --internal-preview    Required for packaging unapproved candidates.',
     '  --post-to-discord     Required for live Discord posting.',
     '  --stage-itch-draft    Required for live itch.io draft changes.',
+    '  --publish-itch        Required for the approved live itch.io visibility change.',
     '  --category-name <name>  Discord category. Default: DIGITAL ASSETS.',
     '  --itch-url <url>      Existing itch.io draft URL shown to reviewers.',
     '  --itch-edit-url <url> Authenticated itch.io editor URL; dashboard discovery is the default.',
@@ -109,7 +113,7 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
@@ -122,12 +126,29 @@ async function main() {
   if (args.command === 'itch-draft' && !args.stageItchDraft) {
     throw new Error('Live itch.io draft staging requires --stage-itch-draft.');
   }
+  if (args.command === 'itch-publish' && !args.publishItch) {
+    throw new Error('Live itch.io publication requires --publish-itch and an exact distribution approval.');
+  }
   if (['itch-draft', 'discord-review'].includes(args.command) && !args.itchUrl) {
     throw new Error(`${args.command} requires --itch-url for the existing itch.io draft.`);
   }
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
   if (args.outputRoot) config = { ...config, output_root: args.outputRoot };
+  if (args.command === 'itch-publish') {
+    const opportunity = JSON.parse(await readFile(args.opportunity || DEFAULT_OPPORTUNITY, 'utf8'));
+    const result = await publishApprovedItchRelease({
+      runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
+      outputRoot: resolveOutputRoot(config),
+      slug: slugify(opportunity.title),
+      releaseVersion: args.releaseVersion,
+      profileDir: args.playwrightProfile,
+      headed: args.headed,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
+    return;
+  }
   if (args.command === 'seller-preflight') {
     const result = await inspectItchSellerReadiness({
       outputRoot: resolveOutputRoot(config),
