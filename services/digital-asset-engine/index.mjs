@@ -13,9 +13,12 @@ import { prepareVersionedPackageExtension } from './src/release-extension.mjs';
 import { stageItchDraft } from './src/itch-draft-stager.mjs';
 import { publishApprovedItchRelease } from './src/itch-publisher.mjs';
 import { inspectItchSellerReadiness } from './src/itch-seller-preflight.mjs';
+import { migrateItchProjectSlug } from './src/itch-slug-migrator.mjs';
+import { applyApprovedItchTheme, prepareItchThemeCandidate } from './src/itch-theme.mjs';
 import { packageDigitalAssetPreview } from './src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from './src/pipeline.mjs';
 import { slugify } from './src/product-planner.mjs';
+import { markItchThemeApplied, postItchThemeReview } from './src/theme-review.mjs';
 
 const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
 const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
@@ -41,6 +44,8 @@ function parseArguments(argv) {
     else if (token === '--post-to-discord') args.postToDiscord = true;
     else if (token === '--stage-itch-draft') args.stageItchDraft = true;
     else if (token === '--publish-itch') args.publishItch = true;
+    else if (token === '--migrate-itch-slug') args.migrateItchSlug = true;
+    else if (token === '--apply-itch-theme') args.applyItchTheme = true;
     else if (token === '--headless') args.headed = false;
     else if (token === '--config') args.config = argv[++index];
     else if (token === '--opportunity') args.opportunity = argv[++index];
@@ -56,6 +61,8 @@ function parseArguments(argv) {
     else if (token === '--itch-url') args.itchUrl = argv[++index];
     else if (token === '--itch-edit-url') args.itchEditUrl = argv[++index];
     else if (token === '--playwright-profile') args.playwrightProfile = argv[++index];
+    else if (token === '--target-itch-slug') args.targetItchSlug = argv[++index];
+    else if (token === '--theme-model') args.themeModel = argv[++index];
     else if (token === '--runtime-env') args.runtimeEnv = argv[++index];
     else throw new Error(`Unknown argument: ${token}`);
   }
@@ -75,6 +82,9 @@ function printHelp() {
     '  seller-preflight  Verify itch.io payout mode and tax-interview readiness.',
     '  distribution-review  Reconcile the separate marketplace approval gate in Discord.',
     '  itch-publish  Publish and verify the separately approved itch.io release.',
+    '  itch-slug  Migrate the verified public project URL and reconcile every stored target.',
+    '  itch-theme-review  Generate a local theme candidate and post desktop/mobile previews.',
+    '  itch-theme-apply  Apply and verify the exact Discord-approved built-in itch.io theme.',
     '  effects-pilot  Generate isolated fixed-anchor effects without changing the approved pack.',
     '  effects-batch  Generate sequential isolated weapon-effect proofs from a compact batch plan.',
     '  revise-effects  Regenerate selected effects into new immutable proof revisions.',
@@ -97,10 +107,14 @@ function printHelp() {
     '  --post-to-discord     Required for live Discord posting.',
     '  --stage-itch-draft    Required for live itch.io draft changes.',
     '  --publish-itch        Required for the approved live itch.io visibility change.',
+    '  --migrate-itch-slug   Required for the live project URL migration.',
+    '  --apply-itch-theme    Required for the approved live Theme editor save.',
     '  --category-name <name>  Discord category. Default: DIGITAL ASSETS.',
     '  --itch-url <url>      Existing itch.io draft URL shown to reviewers.',
     '  --itch-edit-url <url> Authenticated itch.io editor URL; dashboard discovery is the default.',
     '  --playwright-profile <path>  Dedicated authenticated itch.io browser profile.',
+    '  --target-itch-slug <slug>  New itch.io project URL slug.',
+    '  --theme-model <model> Local Ollama text model. Default: llama3.1:8b.',
     '  --headless            Run itch.io browser automation without a visible window.',
     '  --runtime-env <path>  Existing ORION Discord .env; useful from an isolated worktree.',
     '',
@@ -113,14 +127,14 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
   if (['package', 'prepare-extension'].includes(args.command) && !args.internalPreview) {
     throw new Error('Packaging unapproved candidates requires --internal-preview.');
   }
-  if (['discord-review', 'distribution-review', 'effects-review'].includes(args.command) && !args.postToDiscord) {
+  if (['discord-review', 'distribution-review', 'effects-review', 'itch-theme-review'].includes(args.command) && !args.postToDiscord) {
     throw new Error('Live Discord review posting requires --post-to-discord.');
   }
   if (args.command === 'itch-draft' && !args.stageItchDraft) {
@@ -129,12 +143,74 @@ async function main() {
   if (args.command === 'itch-publish' && !args.publishItch) {
     throw new Error('Live itch.io publication requires --publish-itch and an exact distribution approval.');
   }
+  if (args.command === 'itch-slug' && (!args.migrateItchSlug || !args.targetItchSlug)) {
+    throw new Error('Live itch.io URL migration requires --migrate-itch-slug and --target-itch-slug.');
+  }
+  if (args.command === 'itch-theme-apply' && !args.applyItchTheme) {
+    throw new Error('Live itch.io theme application requires --apply-itch-theme and an exact theme approval.');
+  }
   if (['itch-draft', 'discord-review'].includes(args.command) && !args.itchUrl) {
     throw new Error(`${args.command} requires --itch-url for the existing itch.io draft.`);
   }
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
   if (args.outputRoot) config = { ...config, output_root: args.outputRoot };
+  if (args.command === 'itch-slug') {
+    const opportunity = JSON.parse(await readFile(args.opportunity || DEFAULT_OPPORTUNITY, 'utf8'));
+    const result = await migrateItchProjectSlug({
+      runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
+      outputRoot: resolveOutputRoot(config),
+      slug: slugify(opportunity.title),
+      releaseVersion: args.releaseVersion,
+      targetSlug: args.targetItchSlug,
+      profileDir: args.playwrightProfile,
+      headed: args.headed,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'itch-theme-review') {
+    const opportunity = JSON.parse(await readFile(args.opportunity || DEFAULT_OPPORTUNITY, 'utf8'));
+    const outputRoot = resolveOutputRoot(config);
+    const slug = slugify(opportunity.title);
+    const candidate = await prepareItchThemeCandidate({
+      outputRoot,
+      slug,
+      releaseVersion: args.releaseVersion,
+      profileDir: args.playwrightProfile,
+      headed: args.headed,
+      themeModel: args.themeModel,
+      ollamaEndpoint: config.generation.endpoint,
+      now: args.now,
+    });
+    const result = await postItchThemeReview({
+      runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
+      outputRoot,
+      slug,
+      candidate,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'itch-theme-apply') {
+    const opportunity = JSON.parse(await readFile(args.opportunity || DEFAULT_OPPORTUNITY, 'utf8'));
+    const result = await applyApprovedItchTheme({
+      outputRoot: resolveOutputRoot(config),
+      slug: slugify(opportunity.title),
+      releaseVersion: args.releaseVersion,
+      profileDir: args.playwrightProfile,
+      headed: args.headed,
+      now: args.now,
+    });
+    await markItchThemeApplied({
+      runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
+      statePath: result.themeStatePath,
+    });
+    process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
+    return;
+  }
   if (args.command === 'itch-publish') {
     const opportunity = JSON.parse(await readFile(args.opportunity || DEFAULT_OPPORTUNITY, 'utf8'));
     const result = await publishApprovedItchRelease({

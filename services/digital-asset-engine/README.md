@@ -104,6 +104,50 @@ npm run digital-assets:itch-publish -- \
 
 The adapter revalidates creative approval, seller readiness, distribution approval, manifest hash, listing hash, title, price, cover, screenshots, and current draft visibility before changing only the itch.io visibility control. It then reloads the editor, opens the clean public URL without the secret token, verifies the title, paid purchase action, price, and public accessibility, stores `review/itch-release.json`, captures `review/itch-public.png`, and marks the existing Discord card as published. An exact verified receipt makes retries idempotent.
 
+## Public URL and storefront theme
+
+The product title belongs to ORION's versioned listing metadata. Operators should not maintain a second manual title in itch.io: draft staging and verification keep the itch.io title equal to the approved listing title. The public URL slug is separate and is migrated once through the guarded browser workflow:
+
+```bash
+npm run digital-assets:itch-slug -- \
+  --migrate-itch-slug \
+  --target-itch-slug neon-plasma-armory \
+  --release-version 0.2.0 \
+  --playwright-profile "/Users/Agent/.orion/playwright-profile-itch" \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env" \
+  --opportunity services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The migration requires the exact verified public release. It preserves the approved title, verifies the new anonymous URL, updates the Butler target and T7 marketplace receipts together, and patches the existing Discord public link. The explicit migration flag prevents an accidental URL change.
+
+itch.io does not require approval for its built-in Theme editor. Only custom CSS access requires separate itch.io approval. ORION therefore uses built-in theme controls first. Generate deterministic banner/background media, ask the local `llama3.1:8b` model for a constrained color and typography recipe, simulate desktop and mobile views without saving, and post those previews to Discord:
+
+```bash
+npm run digital-assets:itch-theme-review -- \
+  --post-to-discord \
+  --theme-model llama3.1:8b \
+  --release-version 0.2.0 \
+  --playwright-profile "/Users/Agent/.orion/playwright-profile-itch" \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env" \
+  --opportunity services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The banner uses only approved packaged assets and carries preview markings; the procedural background contains no invented product artwork. The text model runs locally through Ollama, has no cloud fallback, and incurs no per-call API cost. The preview action does not mutate the public page. After `Approve Theme` is stored for the exact manifest, listing, and theme hashes, apply and read the built-in theme back on desktop and mobile:
+
+```bash
+npm run digital-assets:itch-theme-apply -- \
+  --apply-itch-theme \
+  --release-version 0.2.0 \
+  --playwright-profile "/Users/Agent/.orion/playwright-profile-itch" \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env" \
+  --opportunity services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+Apply `supabase/migrations/20261016_create_digital_asset_theme_reviews.sql` before enabling the Discord theme gate. Theme decisions are append-only and service-role-only. The applied receipt is stored as `review/itch-theme-release.json`; retries reuse an exact verified receipt.
+
 When a corrected package is staged, ORION increments the review revision and edits the existing itch.io draft, Discord overview message, and numbered asset messages. It does not create another channel, thread, or message set.
 
 Apply `supabase/migrations/20261014_create_digital_asset_release_reviews.sql` before enabling the package gate and `supabase/migrations/20261016_create_digital_asset_distribution_reviews.sql` before enabling the distribution gate. The earlier `digital_asset_review_decisions` table remains as immutable audit history for the first asset-level pilot. The Discord runtime requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DIGITAL_ASSET_ARCHIVE_ROOT`. Do not use the publishable key for these service-role-only tables.
