@@ -109,9 +109,32 @@ the targets were configured:
 | `poke-guess-youtube` | `@pokeguesss` | `17841468340101871` | `INSTAGRAM_POKE_GUESS_ACCESS_TOKEN` |
 
 Each account is an independent `instagram_reels` target. It inherits only its matching source
-channel's shared Discord approval and current `scheduled_for` value. Deployment should be followed
-by a bounded, future-only reconciliation of already-approved source publications; published or
-withdrawn history must not be replayed.
+channel's shared Discord approval and current `scheduled_for` value.
+
+PR #183 was deployed to the Mac mini on 2026-10-16 without replacing the active feature branch:
+the merged `origin/main` was merged into the clean runtime worktree. The full Mac product-video
+suite passed with 561 tests and one intentional skip. All five configured Instagram identities
+then passed the live read-only diagnostic with delivery enabled.
+
+An explicitly authorized, bounded reconciliation created 35 exact-file-bound Instagram children
+from approved source publications that were still scheduled at the preflight cutoff. It created
+8 ProffMon, 8 DexGuess, 11 TrivaMon, and 8 Poke Guess rows. The operation excluded past,
+published, withdrawn, and already-linked sources, recorded the operator authorization on each
+source, and preserved every inherited YouTube schedule.
+
+The first shared 12:00 Europe/Amsterdam slot provided live end-to-end validation. The scheduler
+created five independent Meta containers and the 12:05 reconciler published all five Reels without
+failure:
+
+- Poke Quizzz: <https://www.instagram.com/reel/DejRkyajxiJ/>
+- ProffMon: <https://www.instagram.com/reel/DejRhzGid3m/>
+- DexGuess: <https://www.instagram.com/reel/DejRiZ5AoJs/>
+- TrivaMon: <https://www.instagram.com/reel/DejRlSxkfst/>
+- Poke Guess: <https://www.instagram.com/reel/DejRi3TDdl1/>
+
+All five publication rows reached `published`; the authenticated `instagram/` staging listing was
+empty afterward, confirming that their temporary MP4 objects were removed. The remaining future
+children stay scheduled and require no separate Instagram schedule or approval gate.
 
 ## Account model
 
