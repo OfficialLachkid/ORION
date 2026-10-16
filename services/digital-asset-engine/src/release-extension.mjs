@@ -1,12 +1,17 @@
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { buildReleaseMarketingMedia, RELEASE_MARKETING_VERSION } from './release-marketing.mjs';
 import { ProductExtensionPlanSchema } from './schemas.mjs';
 
 const REQUIRED_EFFECT_KINDS = Object.freeze(['muzzle_flash', 'projectile', 'impact_decay']);
-const RELEASE_EXTENSION_VERSION = '1.1.0';
+const RELEASE_EXTENSION_VERSION = '1.2.0';
+const BUYER_LICENSE = Object.freeze({
+  license_id: 'vbjservices-digital-asset-license',
+  version: '1.0',
+  source_url: new URL('../templates/vbjservices-digital-asset-license-v1.md', import.meta.url),
+});
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -74,25 +79,62 @@ async function verifyBasePackageFiles(baseRoot, manifest) {
   }
 }
 
+async function inheritsVerifiedBaseApproval(productRoot, targetVersion, baseManifestHash) {
+  const versionRoot = resolveInside(productRoot, `releases/${targetVersion}`, 'Release version path');
+  const pointerPath = resolveInside(versionRoot, 'latest-candidate.json', 'Previous candidate pointer');
+  if (!await exists(pointerPath)) return false;
+  const pointer = await readJson(pointerPath);
+  if (pointer.target_version !== targetVersion || !/^[a-f0-9]{64}$/u.test(String(pointer.manifest_hash || ''))) {
+    return false;
+  }
+  const candidateRoot = resolveInside(productRoot, pointer.candidate_path, 'Previous release candidate');
+  const manifest = await readJson(resolveInside(candidateRoot, 'manifest.json', 'Previous candidate manifest'));
+  if (manifest.manifest_hash !== pointer.manifest_hash
+    || manifest.target_version !== targetVersion
+    || manifest.base_manifest_hash !== baseManifestHash
+    || manifest.gates?.base_package_approved !== true) {
+    return false;
+  }
+  await verifyCandidateFiles(candidateRoot, manifest);
+  return true;
+}
+
 function buyerReadme(product, plan, effectSets) {
   return [
     `# ${product.title}`,
     '',
-    `Release candidate ${plan.target_version}.`,
+    `Version ${plan.target_version}`,
     '',
     `${product.assets.length} transparent side-view weapon sprites and ${effectSets.length * 3} matching effect animations are included.`,
     '',
-    '## Runtime files',
+    '## Included files',
     '',
     '- `assets/individual/`: stationary weapon PNG files.',
+    `- \`assets/${product.slug}-sprite-sheet.png\`: all weapons on one transparent sprite sheet.`,
     '- `effects/<weapon>/muzzle_flash/`: transparent frames, sprite sheet, and animation metadata.',
     '- `effects/<weapon>/projectile/`: a stationary projectile sprite; move it in the game engine.',
     '- `effects/<weapon>/impact_decay/`: transparent endpoint impact and decay frames.',
     '- `effects/weapon-anchors.json`: weapon-local muzzle anchors for preview and runtime attachment.',
+    '- `LICENSE.md`: permitted use and redistribution restrictions.',
+    '- `CHANGELOG.md`: buyer-relevant changes by version.',
     '',
-    'Every animation declares zero root motion. Projectile travel and combined firing GIFs are review previews, not runtime files.',
+    '## Technical details',
     '',
-    'This candidate remains blocked from public distribution until its package review and license gate are complete.',
+    `- Weapon canvas: ${product.style.width}x${product.style.height} pixels`,
+    '- Format: transparent PNG',
+    '- View: right-facing side view',
+    '- Root motion: none',
+    '- Animation playback timing and frame rectangles: `animation.json`',
+    '',
+    'Every animation uses a fixed transparent canvas and declares zero root motion. Projectile travel belongs in the game engine; it is intentionally not baked into the runtime frames.',
+    '',
+    '## Quick start',
+    '',
+    '1. Load an individual PNG or the weapon sprite sheet.',
+    '2. Read the matching muzzle anchor from `effects/weapon-anchors.json`.',
+    '3. Play the muzzle flash at that anchor.',
+    '4. Spawn the stationary projectile sprite there and move it with game logic.',
+    '5. Play the impact/decay animation at the collision point.',
     '',
   ].join('\n');
 }
@@ -107,9 +149,31 @@ function effectsReadme() {
     '2. `projectile` contains no baked travel; the game engine controls position and velocity.',
     '3. `impact_decay` is placed at the collision point and played once.',
     '',
-    'Use the transparent PNG frames directly or read `animation.json` with `sprite-sheet.png`.',
+    'Use the transparent PNG frames directly or read `animation.json` with `sprite-sheet.png`. All paths in each animation file are relative to that effect directory.',
     '',
   ].join('\n');
+}
+
+function packageAnimationMetadata(buffer, framePaths) {
+  const animation = JSON.parse(buffer.toString('utf8'));
+  const packagedFrames = new Set(framePaths.map((path) => basename(path)));
+  if (!animation.sprite_sheet || !Array.isArray(animation.frames)) {
+    throw new Error(`Animation metadata is incomplete for ${animation.effect_key || 'an unknown effect'}.`);
+  }
+  animation.sprite_sheet = { ...animation.sprite_sheet, path: 'sprite-sheet.png' };
+  animation.frames = animation.frames.map((frame) => {
+    const filename = basename(String(frame.path || ''));
+    if (!packagedFrames.has(filename)) {
+      throw new Error(`Animation metadata references an unbundled frame: ${frame.path || '(missing)'}.`);
+    }
+    return { ...frame, path: `frames/${filename}` };
+  });
+  if (animation.frames.length !== packagedFrames.size) {
+    throw new Error(`Animation metadata frame count does not match the packaged frames for ${animation.effect_key}.`);
+  }
+  delete animation.preview_gif;
+  delete animation.preview_only;
+  return `${JSON.stringify(animation, null, 2)}\n`;
 }
 
 function extensionListing(baseListing, product, plan, effectSets, marketingMedia) {
@@ -196,14 +260,21 @@ async function copyEffectSet({ productRoot, candidateRoot, bundleItem, product }
       await mkdir(dirname(destination), { recursive: true });
       await writeFile(destination, verified.buffer);
     }
-    for (const [sourcePath, destinationName] of [
-      [`sheets/${effect.effect_key}.png`, 'sprite-sheet.png'],
-      [`metadata/${effect.effect_key}/animation.json`, 'animation.json'],
-    ]) {
-      const verified = await verifiedExperimentFile(experimentRoot, manifest, sourcePath);
-      await mkdir(destinationRoot, { recursive: true });
-      await writeFile(resolve(destinationRoot, destinationName), verified.buffer);
-    }
+    const sheet = await verifiedExperimentFile(experimentRoot, manifest, `sheets/${effect.effect_key}.png`);
+    const metadata = await verifiedExperimentFile(
+      experimentRoot,
+      manifest,
+      `metadata/${effect.effect_key}/animation.json`,
+    );
+    await mkdir(destinationRoot, { recursive: true });
+    await Promise.all([
+      writeFile(resolve(destinationRoot, 'sprite-sheet.png'), sheet.buffer),
+      writeFile(
+        resolve(destinationRoot, 'animation.json'),
+        packageAnimationMetadata(metadata.buffer, framePaths),
+        'utf8',
+      ),
+    ]);
     effects[kind] = {
       effect_key: effect.effect_key,
       frame_count: framePaths.length,
@@ -255,8 +326,14 @@ export async function prepareVersionedPackageExtension(options) {
     throw new Error('Approved base package listing no longer matches its manifest.');
   }
   await verifyBasePackageFiles(baseRoot, baseManifest);
-  if (packageReview.manifest_hash !== baseManifest.manifest_hash
-    || packageReview.last_decision?.decision !== 'approve') {
+  const baseApprovalIsCurrent = packageReview.manifest_hash === baseManifest.manifest_hash
+    && packageReview.last_decision?.decision === 'approve';
+  const baseApprovalIsInherited = !baseApprovalIsCurrent && await inheritsVerifiedBaseApproval(
+    productRoot,
+    plan.target_version,
+    baseManifest.manifest_hash,
+  );
+  if (!baseApprovalIsCurrent && !baseApprovalIsInherited) {
     throw new Error('The exact base package must have a persisted approval before it can be extended.');
   }
   if (
@@ -266,6 +343,12 @@ export async function prepareVersionedPackageExtension(options) {
     || !effectsReview.completed_at
   ) throw new Error('The effects review presentation no longer matches this extension plan.');
 
+  const buyerLicenseText = options.buyerLicenseText || await readFile(BUYER_LICENSE.source_url, 'utf8');
+  const buyerLicense = {
+    license_id: BUYER_LICENSE.license_id,
+    version: BUYER_LICENSE.version,
+    content_sha256: sha256(Buffer.from(buyerLicenseText)),
+  };
   const inputHash = sha256(Buffer.from(JSON.stringify({
     plan,
     product_id: product.product_id,
@@ -273,6 +356,7 @@ export async function prepareVersionedPackageExtension(options) {
     effect_manifests: effectsBundle.experiments.map((item) => item.manifest_hash),
     marketing_version: RELEASE_MARKETING_VERSION,
     extension_packaging_version: RELEASE_EXTENSION_VERSION,
+    buyer_license: buyerLicense,
   })));
   const versionRoot = resolveInside(productRoot, `releases/${plan.target_version}`, 'Release version path');
   const candidateRoot = resolveInside(versionRoot, `candidates/${inputHash.slice(0, 16)}`, 'Candidate path');
@@ -287,6 +371,7 @@ export async function prepareVersionedPackageExtension(options) {
 
   await mkdir(resolve(candidateRoot, 'download'), { recursive: true });
   await cp(resolve(baseRoot, 'download'), resolve(candidateRoot, 'download'), { recursive: true });
+  await rm(resolve(candidateRoot, 'download', 'LICENSE-DRAFT.md'), { force: true });
 
   const effectSets = [];
   for (const experiment of effectsBundle.experiments) {
@@ -314,6 +399,7 @@ export async function prepareVersionedPackageExtension(options) {
   };
   await Promise.all([
     writeFile(resolve(candidateRoot, 'download', 'README.md'), buyerReadme(product, plan, effectSets), 'utf8'),
+    writeFile(resolve(candidateRoot, 'download', 'LICENSE.md'), buyerLicenseText, 'utf8'),
     writeFile(resolve(candidateRoot, 'download', 'CHANGELOG.md'), [
       '# Changelog', '', `## ${plan.target_version}`, '', ...plan.release_notes.map((note) => `- ${note}`), '',
     ].join('\n'), 'utf8'),
@@ -328,6 +414,8 @@ export async function prepareVersionedPackageExtension(options) {
     base_package_approved: true,
     effects_bundle_verified: true,
     runtime_files_verified: true,
+    license_terms_included: true,
+    license_approval_required: true,
     quality_holds_resolved: plan.quality_holds.length === 0,
     human_review_required: true,
     distribution_ready: false,
@@ -352,11 +440,14 @@ export async function prepareVersionedPackageExtension(options) {
     asset_count: product.assets.length,
     effect_set_count: effectSets.length,
     effect_animation_count: effectSets.length * REQUIRED_EFFECT_KINDS.length,
+    buyer_license: buyerLicense,
     marketing_media: marketingMedia,
     marketing_version: RELEASE_MARKETING_VERSION,
     extension_packaging_version: RELEASE_EXTENSION_VERSION,
     listing_hash: listing.listing_hash,
     quality_holds: plan.quality_holds,
+    license_terms_included: true,
+    license_approval_required: true,
     gates,
     created_at: options.now || new Date().toISOString(),
     files,

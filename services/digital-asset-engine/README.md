@@ -142,7 +142,7 @@ npm run digital-assets:prepare-extension -- \
 
 The command verifies the exact approved base manifest, its persisted package approval, the effects review bundle, every canonical weapon hash, and every copied effect frame/sheet/metadata hash. It writes a content-addressed candidate below `releases/0.2.0/candidates/` and never changes `product.json`, the current itch.io export, or the Discord package decision. Rerunning the same inputs verifies and reuses the same immutable candidate; changed proof inputs create a new candidate directory.
 
-Buyer files contain the original weapon package plus independent transparent muzzle-flash, stationary-projectile, and impact/decay frames, sprite sheets, animation JSON, and `weapon-anchors.json`. Model source images, validation internals, and review-only GIFs are excluded. Open quality holds set the candidate state to `blocked_quality_review` and prevent it from being treated as distribution-ready. After the holds are resolved, the later staging slice will populate the existing itch.io draft from this candidate and reconcile the existing Discord package review in place.
+Buyer files contain the original weapon package plus independent transparent muzzle-flash, stationary-projectile, and impact/decay frames, sprite sheets, animation JSON, `weapon-anchors.json`, buyer-facing documentation, and the exact customer license under review. Animation paths are rewritten and verified against the packaged layout. Model source images, validation internals, and review-only GIFs are excluded. The license identity and content hash are part of the immutable candidate manifest, so approving the exact package also covers the exact license text. Open quality holds prevent a candidate from being staged for package review.
 
 A quality-cleared candidate also builds its marketplace presentation deterministically from the verified package contents: one high-contrast 630x500 grid cover, one weapon inventory image, one independent-effects breakdown, and one protected animated firing-cycle montage. These files remain outside `download/`; clean transparent runtime files remain buyer-only.
 
@@ -168,4 +168,4 @@ npm run digital-assets:discord-review -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-The effects thread is a proof gallery, not an independent release gate. The existing package overview remains the single authoritative approval surface for the exact candidate, listing, and download hashes.
+The effects thread is a proof gallery, not an independent release gate. The existing package overview remains the single authoritative approval surface for the exact candidate, listing, download, and customer-license hashes.

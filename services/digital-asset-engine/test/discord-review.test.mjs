@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -95,6 +96,7 @@ async function addReviewReleaseCandidate(fixture) {
   const candidatePath = 'releases/0.2.0/candidates/reviewcandidate1';
   const candidateRoot = resolve(fixture.productRoot, candidatePath);
   const listing = { listing_hash: 'f'.repeat(64) };
+  const license = Buffer.from('# Buyer license\n');
   const manifest = {
     manifest_hash: 'e'.repeat(64),
     listing_hash: listing.listing_hash,
@@ -104,12 +106,18 @@ async function addReviewReleaseCandidate(fixture) {
     quality_holds: [],
     gates: { quality_holds_resolved: true },
     asset_count: fixture.product.assets.length,
+    buyer_license: {
+      license_id: 'vbjservices-digital-asset-license',
+      version: '1.0',
+      content_sha256: createHash('sha256').update(license).digest('hex'),
+    },
   };
   await mkdir(resolve(candidateRoot, 'download'), { recursive: true });
   await Promise.all([
     writeFile(resolve(candidateRoot, 'cover.png'), await readFile(resolve(fixture.exportRoot, 'cover.png'))),
     writeFile(resolve(candidateRoot, 'manifest.json'), `${JSON.stringify(manifest)}\n`, 'utf8'),
     writeFile(resolve(candidateRoot, 'itch-listing.json'), `${JSON.stringify(listing)}\n`, 'utf8'),
+    writeFile(resolve(candidateRoot, 'download', 'LICENSE.md'), license),
     writeFile(resolve(fixture.productRoot, 'releases', '0.2.0', 'latest-candidate.json'), `${JSON.stringify({
       target_version: '0.2.0',
       candidate_path: candidatePath,
@@ -147,6 +155,29 @@ test('Discord embeds use bold numbered assets and explain the manifest receipt',
   assert.match(pack.fields.find((field) => field.name === 'Attached manifest.json').value, /SHA-256/u);
   assert.match(asset.description, /\*\*01\*\* of \*\*08\*\*/u);
   assert.equal(asset.image.url, 'attachment://rail-rifle.png');
+});
+
+test('versioned package review exposes the exact attached customer license hash', () => {
+  const product = { title: 'Neon Plasma Armory', assets: [{ name: 'Rail Rifle' }] };
+  const manifest = {
+    asset_count: 1,
+    manifest_hash: 'a'.repeat(64),
+    listing_hash: 'c'.repeat(64),
+    buyer_license: {
+      license_id: 'vbjservices-digital-asset-license',
+      version: '1.0',
+      content_sha256: 'd'.repeat(64),
+    },
+  };
+  const pack = buildPackReviewEmbed({
+    product,
+    manifest,
+    itchUrl: 'https://vbjservices.itch.io/asset-pack-test',
+  });
+  const field = pack.fields.find((item) => item.name === 'Customer license');
+  assert.match(field.value, /vbjservices-digital-asset-license 1\.0/u);
+  assert.match(field.value, new RegExp('d{64}', 'u'));
+  assert.match(field.value, /LICENSE\.md/u);
 });
 
 test('Discord requests honor the supplied retry interval for old-message edit limits', async () => {

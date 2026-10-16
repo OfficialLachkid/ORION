@@ -81,7 +81,15 @@ async function createFixture({ approved = true } = {}) {
     for (const [path, value] of [
       [`frames/${effect.effect_key}/00.png`, Buffer.from(`${effect.kind}-frame`)],
       [`sheets/${effect.effect_key}.png`, Buffer.from(`${effect.kind}-sheet`)],
-      [`metadata/${effect.effect_key}/animation.json`, JSON.stringify({ root_motion: { x: 0, y: 0 } })],
+      [`metadata/${effect.effect_key}/animation.json`, JSON.stringify({
+        effect_key: effect.effect_key,
+        kind: effect.kind,
+        root_motion: { x: 0, y: 0 },
+        sprite_sheet: { path: `../../sheets/${effect.effect_key}.png`, width: 64, height: 64 },
+        frames: [{ frame: 0, path: `../../frames/${effect.effect_key}/00.png` }],
+        preview_gif: `../../previews/${effect.effect_key}.gif`,
+        preview_only: ['preview_gif'],
+      })],
     ]) {
       const details = await write(resolve(experimentRoot, path), value);
       experimentFiles.push({ path, size: details.size_bytes, sha256: details.content_sha256 });
@@ -179,7 +187,7 @@ test('builds an immutable extension candidate with buyer runtime effects and an 
   assert.equal(result.manifest.release_state, 'blocked_quality_review');
   assert.equal(result.manifest.distribution_ready, false);
   assert.equal(result.manifest.human_review_required, true);
-  assert.equal(result.manifest.extension_packaging_version, '1.1.0');
+  assert.equal(result.manifest.extension_packaging_version, '1.2.0');
   assert.equal(result.manifest.effect_animation_count, 3);
   assert.equal(result.manifest.marketing_version, '1.0.1');
   assert.deepEqual(result.manifest.marketing_media.screenshot_paths, [
@@ -189,6 +197,11 @@ test('builds an immutable extension candidate with buyer runtime effects and an 
   ]);
   assert.equal(result.gates.quality_holds_resolved, false);
   assert.equal(result.gates.distribution_ready, false);
+  assert.equal(result.gates.license_terms_included, true);
+  assert.equal(result.gates.license_approval_required, true);
+  assert.equal(result.manifest.license_terms_included, true);
+  assert.equal(result.manifest.license_approval_required, true);
+  assert.equal(result.manifest.buyer_license.license_id, 'vbjservices-digital-asset-license');
   assert.match(result.candidateRoot, /releases[\\/]0\.2\.0[\\/]candidates/u);
   assert.equal(result.manifest.files.some((file) => file.path.includes('assets/source')), false);
   assert.equal(result.manifest.files.some((file) => file.path.includes('/previews/')), false);
@@ -198,6 +211,8 @@ test('builds an immutable extension candidate with buyer runtime effects and an 
   assert.equal(result.manifest.files.some((file) => (
     file.path === 'download/effects/plasma-pistol/projectile/animation.json'
   )), true);
+  assert.equal(result.manifest.files.some((file) => file.path === 'download/LICENSE-DRAFT.md'), false);
+  assert.equal(result.manifest.files.some((file) => file.path === 'download/LICENSE.md'), true);
   assert.equal(result.manifest.files.some((file) => file.path === 'effects-breakdown.png'), true);
   const listing = JSON.parse(await readFile(resolve(result.candidateRoot, 'itch-listing.json'), 'utf8'));
   assert.deepEqual(listing.screenshot_paths, [
@@ -212,6 +227,27 @@ test('builds an immutable extension candidate with buyer runtime effects and an 
     'weapon-anchors.json',
   ), 'utf8'));
   assert.deepEqual(anchors.weapons[0].muzzle_anchor, { x: 111, y: 12 });
+  const animation = JSON.parse(await readFile(resolve(
+    result.candidateRoot,
+    'download',
+    'effects',
+    'plasma-pistol',
+    'muzzle_flash',
+    'animation.json',
+  ), 'utf8'));
+  assert.equal(animation.sprite_sheet.path, 'sprite-sheet.png');
+  assert.equal(animation.frames[0].path, 'frames/00.png');
+  assert.equal('preview_gif' in animation, false);
+  assert.equal('preview_only' in animation, false);
+  const animationRoot = resolve(
+    result.candidateRoot,
+    'download',
+    'effects',
+    'plasma-pistol',
+    'muzzle_flash',
+  );
+  await readFile(resolve(animationRoot, animation.sprite_sheet.path));
+  await Promise.all(animation.frames.map((frame) => readFile(resolve(animationRoot, frame.path))));
   assert.equal((await readFile(resolve(fixture.productRoot, 'assets/items/plasma-pistol.png'))).toString(), 'canonical transparent weapon');
 
   const reused = await prepareVersionedPackageExtension({
@@ -232,4 +268,31 @@ test('requires exact approval of the base package before preparing an extension'
     plan: fixture.plan,
     marketingBuilder: fixture.marketingBuilder,
   }), /exact base package must have a persisted approval/u);
+});
+
+test('inherits the base approval from a verified immutable candidate during a package-only rebuild', async () => {
+  const fixture = await createFixture();
+  const first = await prepareVersionedPackageExtension({
+    outputRoot: fixture.outputRoot,
+    store: fixture.store,
+    plan: fixture.plan,
+    marketingBuilder: fixture.marketingBuilder,
+    now: '2026-10-15T12:00:00.000Z',
+  });
+  await write(resolve(fixture.productRoot, 'review', 'discord.json'), JSON.stringify({
+    manifest_hash: first.manifest.manifest_hash,
+    last_decision: null,
+  }));
+
+  const rebuilt = await prepareVersionedPackageExtension({
+    outputRoot: fixture.outputRoot,
+    store: fixture.store,
+    plan: fixture.plan,
+    marketingBuilder: fixture.marketingBuilder,
+    buyerLicenseText: '# Updated review-ready license\n',
+    now: '2026-10-15T13:00:00.000Z',
+  });
+  assert.equal(rebuilt.reused, false);
+  assert.notEqual(rebuilt.candidateRoot, first.candidateRoot);
+  assert.equal(rebuilt.manifest.gates.base_package_approved, true);
 });
