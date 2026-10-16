@@ -119,6 +119,10 @@ test('public verification requires title, price, buy action, and non-draft page'
   assert.match(code, /payment_options/u);
   assert.match(code, /not_draft_error/u);
   assert.match(code, /4\.99/u);
+  assert.match(code, /h1\.game_title/u);
+  assert.match(code, /documentTitle/u);
+  assert.ok(code.includes('/\\.zip\\b/i'));
+  assert.doesNotThrow(() => new Function(`return (${code});`));
 });
 
 test('approved release publishes once, verifies public page, and writes an idempotent receipt', async () => {
