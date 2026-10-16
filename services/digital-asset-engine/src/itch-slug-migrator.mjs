@@ -67,6 +67,7 @@ export function buildItchSlugMigrationCode({ editUrl, expectedTitle, targetSlug 
   return `
 async (page) => {
   const input = ${JSON.stringify({ editUrl, expectedTitle, targetSlug })};
+  const expectedDisplayName = input.targetSlug + '-assets.zip';
   await page.goto(input.editUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(750);
   if (page.url().includes('/login')) return { status: 'login_required', url: page.url() };
@@ -77,8 +78,35 @@ async (page) => {
   if (!(await field.count().catch(() => 0))) return { status: 'slug_field_missing', title };
   const currentSlug = await field.inputValue();
   if (title !== input.expectedTitle) return { status: 'title_mismatch', title, currentSlug };
-  if (currentSlug === input.targetSlug) return { status: 'already_migrated', title, currentSlug };
-  await field.fill(input.targetSlug);
+  const slugChanged = currentSlug !== input.targetSlug;
+  if (slugChanged) await field.fill(input.targetSlug);
+
+  const buttons = page.getByRole('button');
+  let productionUpload = null;
+  for (let index = 0; index < await buttons.count(); index += 1) {
+    const button = buttons.nth(index);
+    const label = String(await button.innerText().catch(() => '')).replace(/\\s+/gu, ' ').trim();
+    if (/(?:^|\\s)assets$/iu.test(label) && !/assets-preview$/iu.test(label)) {
+      productionUpload = button.locator('xpath=ancestor::*[.//a[contains(normalize-space(.), "Change display name")]][1]');
+      break;
+    }
+  }
+  if (!productionUpload || !(await productionUpload.count().catch(() => 0))) {
+    return { status: 'production_upload_missing', title, currentSlug };
+  }
+  let displayName = await productionUpload.locator('strong').first().innerText().catch(() => '');
+  let displayNameChanged = false;
+  if (displayName.trim() !== expectedDisplayName) {
+    await productionUpload.getByRole('link', { name: /change display name/i }).click({ timeout: 5000 });
+    const displayNameField = productionUpload.getByRole('textbox', { name: /enter a display name/i }).first();
+    await displayNameField.waitFor({ state: 'visible', timeout: 5000 });
+    await displayNameField.fill(expectedDisplayName);
+    displayName = expectedDisplayName;
+    displayNameChanged = true;
+  }
+  if (!slugChanged && !displayNameChanged) {
+    return { status: 'already_migrated', title, currentSlug, displayName };
+  }
   const save = page.locator('form.game_edit_form button.save_btn, button.save_btn').first();
   if (!(await save.count().catch(() => 0))) return { status: 'save_missing', title, currentSlug };
   const responsePromise = page.waitForResponse((response) => response.request().method() === 'POST'
@@ -90,11 +118,16 @@ async (page) => {
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 });
   const confirmed = await page.locator('input[name="game[url]"]').first().inputValue().catch(() => '');
   const confirmedTitle = await page.locator('input[name="game[title]"]').first().inputValue().catch(() => '');
+  const confirmedDisplayName = await productionUpload.locator('strong').first().innerText().catch(async () => (
+    productionUpload.getByRole('textbox', { name: /enter a display name/i }).first().inputValue().catch(() => '')
+  ));
   return {
-    status: confirmed === input.targetSlug && confirmedTitle === input.expectedTitle ? 'migrated' : 'verification_failed',
+    status: confirmed === input.targetSlug && confirmedTitle === input.expectedTitle
+      && confirmedDisplayName.trim() === expectedDisplayName ? 'migrated' : 'verification_failed',
     previousSlug: currentSlug,
     confirmed,
     title: confirmedTitle,
+    displayName: confirmedDisplayName.trim(),
   };
 }`.trim();
 }
@@ -128,8 +161,10 @@ export async function migrateItchProjectSlug(options) {
   }
   const current = publicIdentity(release.public_url);
   const targetUrl = `https://${current.account}.itch.io/${targetSlug}`;
+  const expectedDisplayName = `${targetSlug}-assets.zip`;
   if (previousReceipt?.status === 'verified'
     && previousReceipt.target_url === targetUrl
+    && previousReceipt.download_display_name === expectedDisplayName
     && release.public_url === targetUrl) {
     return { ...previousReceipt, statePath: paths.receipt, reused: true };
   }
@@ -194,6 +229,7 @@ export async function migrateItchProjectSlug(options) {
     previous_butler_target: previousButlerTarget,
     butler_target: butlerTarget,
     title: packaged.listing.title,
+    download_display_name: expectedDisplayName,
     migrated_at: migratedAt,
     anonymous_http: { reachable: response.ok, title: body.includes(packaged.listing.title) },
   };

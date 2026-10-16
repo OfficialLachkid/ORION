@@ -12,7 +12,7 @@ import {
   buildThemeSaveAndVerifyCode,
   prepareItchThemeCandidate,
 } from '../src/itch-theme.mjs';
-import { migrateItchProjectSlug } from '../src/itch-slug-migrator.mjs';
+import { buildItchSlugMigrationCode, migrateItchProjectSlug } from '../src/itch-slug-migrator.mjs';
 import {
   buildItchThemeFeedbackModal,
   getItchThemeModalRequest,
@@ -393,7 +393,21 @@ test('slug migration preserves the ORION title and reconciles marketplace URLs a
   assert.equal(result.target_url, 'https://vbjservices.itch.io/neon-plasma-armory');
   assert.equal(result.previous_butler_target, 'vbjservices/asset-pack-test:assets');
   assert.equal(result.butler_target, 'vbjservices/neon-plasma-armory:assets');
+  assert.equal(result.download_display_name, 'neon-plasma-armory-assets.zip');
   const release = JSON.parse(await readFile(resolve(fixture.productRoot, 'review', 'itch-release.json'), 'utf8'));
   assert.equal(release.public_url, result.target_url);
   assert.equal(release.butler_target, result.butler_target);
+});
+
+test('slug migration browser step renames only the production Butler upload', () => {
+  const code = buildItchSlugMigrationCode({
+    editUrl: 'https://itch.io/game/edit/5144533',
+    expectedTitle: 'Neon Plasma Armory',
+    targetSlug: 'neon-plasma-armory',
+  });
+  assert.match(code, /input\.targetSlug \+ '-assets\.zip'/u);
+  assert.match(code, /assets-preview\$\/iu/u);
+  assert.match(code, /change display name/i);
+  assert.match(code, /production_upload_missing/u);
+  assert.doesNotThrow(() => new Function(`return (${code})`));
 });

@@ -218,7 +218,10 @@ async (page) => {
   const input = ${JSON.stringify({ design, url })};
   await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   const edit = page.getByRole('button', { name: /edit theme/i }).first();
-  if (!(await edit.count().catch(() => 0))) return { status: 'theme_editor_unavailable', url: page.url() };
+  await edit.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  if (!(await edit.count().catch(() => 0)) || !(await edit.isVisible().catch(() => false))) {
+    return { status: 'theme_editor_unavailable', url: page.url() };
+  }
   await edit.click({ timeout: 5000 });
   await page.waitForTimeout(500);
   const more = page.getByRole('button', { name: /more options/i });
