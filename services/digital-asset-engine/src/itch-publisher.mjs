@@ -119,7 +119,9 @@ async (page) => {
   await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(1500);
   const text = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
-  const title = await page.locator('h1').first().innerText().catch(() => '');
+  const title = await page.locator('h1.game_title, h1[itemprop="name"]').first()
+    .innerText({ timeout: 5000 }).catch(() => '');
+  const documentTitle = await page.title().catch(() => '');
   const buyButton = page.getByText(/buy now|download now|purchase/i).first();
   const buyVisible = await buyButton.isVisible().catch(() => false);
   if (buyVisible) {
@@ -131,10 +133,12 @@ async (page) => {
   const priceText = Number(input.listing.suggested_price.amount).toFixed(2);
   const checks = {
     public_url: page.url().split('?')[0].replace(/\\/$/u, '') === input.url.replace(/\\/$/u, ''),
-    title: title.trim() === input.listing.title,
+    title: title.trim() === input.listing.title
+      || documentTitle.trim() === input.listing.title
+      || documentTitle.startsWith(input.listing.title + ' by '),
     buy_action: buyVisible,
     price: text.includes(priceText),
-    included_file: /\.zip\b/i.test(purchaseText),
+    included_file: /\\.zip\\b/i.test([text, purchaseText].join(' ')),
     payment_options: /paypal|pay with card|credit card/i.test(purchaseText),
     not_draft_error: !/page is currently in draft|page not found|you do not have access/i.test(text),
   };
@@ -144,6 +148,7 @@ async (page) => {
     checks,
     url: page.url(),
     title,
+    document_title: documentTitle,
   };
 }`.trim();
 }
