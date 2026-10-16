@@ -67,6 +67,11 @@ import {
   prepareDigitalAssetReviewModal,
   recordDigitalAssetReviewDecision,
 } from '../../digital-asset-engine/src/review-decisions.mjs';
+import {
+  buildDistributionReviewEmbeds,
+  isDigitalAssetDistributionInteraction,
+  recordDigitalAssetDistributionDecision,
+} from '../../digital-asset-engine/src/distribution-review.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -1234,6 +1239,51 @@ export async function runLiveDiscordBot(config) {
                 },
               });
             }
+            return;
+          }
+
+          if (isDigitalAssetDistributionInteraction(payload.d)) {
+            let recorded;
+            try {
+              recorded = await recordDigitalAssetDistributionDecision({
+                interaction: payload.d,
+                config,
+              });
+              if (!recorded) throw new Error('Unsupported digital asset distribution action.');
+            } catch (error) {
+              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                  content: truncateMessage(`Distribution decision was not recorded: ${error.message}`),
+                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+                },
+              });
+              return;
+            }
+            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                content: recorded.row.decision === 'approve_publish'
+                  ? 'Distribution approval recorded. The exact itch.io draft is authorized for the publish step.'
+                  : 'The package will remain an itch.io draft.',
+                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+              },
+            });
+            const currentMessage = await sendDiscordApiRequest(
+              token,
+              `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+              undefined,
+              'GET',
+            );
+            await sendDiscordApiRequest(
+              token,
+              `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+              {
+                ...recorded.messagePatch,
+                embeds: buildDistributionReviewEmbeds(currentMessage?.embeds, recorded.state, recorded.actor),
+              },
+              'PATCH',
+            );
             return;
           }
 
