@@ -89,6 +89,21 @@ npm run digital-assets:distribution-review -- \
 
 The seller preflight reads payout mode and tax-interview readiness without modifying the itch.io account. If seller setup is incomplete, the existing Discord overview shows a blocking remediation link and no publish-approval button. When ready, the same message exposes `Approve itch.io Publish` and `Keep Draft`. This decision is append-only in `digital_asset_distribution_reviews` and is bound to the exact approved manifest, listing, marketplace, message, and Discord interaction. Recording distribution approval authorizes the later publish adapter; it does not itself change visibility.
 
+After `Approve itch.io Publish` is recorded for the exact release, run the explicit publication adapter:
+
+```bash
+npm run digital-assets:itch-publish -- \
+  --publish-itch \
+  --headless \
+  --release-version 0.2.0 \
+  --playwright-profile "/Users/Agent/.orion/playwright-profile-itch" \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env" \
+  --opportunity services/digital-asset-engine/fixtures/neon-plasma-armory.opportunity.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+The adapter revalidates creative approval, seller readiness, distribution approval, manifest hash, listing hash, title, price, cover, screenshots, and current draft visibility before changing only the itch.io visibility control. It then reloads the editor, opens the clean public URL without the secret token, verifies the title, paid purchase action, price, and public accessibility, stores `review/itch-release.json`, captures `review/itch-public.png`, and marks the existing Discord card as published. An exact verified receipt makes retries idempotent.
+
 When a corrected package is staged, ORION increments the review revision and edits the existing itch.io draft, Discord overview message, and numbered asset messages. It does not create another channel, thread, or message set.
 
 Apply `supabase/migrations/20261014_create_digital_asset_release_reviews.sql` before enabling the package gate and `supabase/migrations/20261016_create_digital_asset_distribution_reviews.sql` before enabling the distribution gate. The earlier `digital_asset_review_decisions` table remains as immutable audit history for the first asset-level pilot. The Discord runtime requires `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, and `DIGITAL_ASSET_ARCHIVE_ROOT`. Do not use the publishable key for these service-role-only tables.
