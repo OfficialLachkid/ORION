@@ -190,8 +190,13 @@ Status: **in progress; draft staging and verification implemented**
 - [x] Generate honest listing copy and protected previews from the included assets.
 - [x] Populate and read the itch.io draft back through an authenticated browser session.
 - [x] Require exact package approval while keeping publication separately blocked.
-- Persist the external product ID, URL, version, publication status, price, and errors as marketplace release state.
-- Implement explicit distribution approval and public-state verification.
+- [x] Persist the external URL, version, publication status, price, hashes, and verification receipts as marketplace release state.
+- [x] Implement explicit distribution approval and public-state verification.
+- [x] Add a guarded public-slug migration that preserves the approved title and reconciles Butler, T7, and Discord references.
+- [x] Add a local, versioned built-in-theme proposal with deterministic media and Discord approval.
+- [x] Apply only the exact approved theme and verify the public result on desktop and mobile.
+- Improve the buyer-facing description formatting with stable sections and lists.
+- Collect the first analytics baseline after the storefront presentation is complete.
 
 ### Phase 4 — Second marketplace
 
@@ -216,10 +221,13 @@ Status: **deferred**
 3. [x] Build the sale-ready immutable candidate with corrected runtime metadata and the review-ready customer license.
 4. [x] Update and verify the existing itch.io draft, then reconcile the existing Discord package message in place.
 5. [x] Approve the exact package manifest, including its buyer files, listing, price, previews, and license hash.
-6. Complete the itch.io tax interview; seller preflight currently blocks distribution until it is finished.
-7. Apply the distribution-review migration and reconcile the separate manifest-bound distribution gate.
+6. [x] Complete seller setup and pass seller preflight.
+7. [x] Apply the distribution-review migration and reconcile the separate manifest-bound distribution gate.
 8. [x] Record the separate manifest-bound itch.io distribution approval.
-9. Run the approved publish adapter, verify the public page and paid download presentation, and persist the external marketplace release receipt.
+9. [x] Run the approved publish adapter, verify the public page and paid download presentation, and persist the external marketplace release receipt.
+10. Merge and deploy the guarded slug/theme workflow, then apply the theme-review Supabase migration.
+11. Migrate `asset-pack-test` to `neon-plasma-armory`, create a local theme candidate, and review it in Discord.
+12. Apply and verify the approved theme before starting issue #149 research implementation.
 
 ## Deferred decisions
 

@@ -52,3 +52,17 @@ test('distribution review migration is marketplace-bound, append-only, and servi
   assert.match(sql, /enable row level security/u);
   assert.match(sql, /grant select, insert .* to service_role/u);
 });
+
+test('theme review migration binds decisions to exact release and theme hashes', async () => {
+  const sql = await readFile(resolve(
+    projectRoot,
+    'supabase/migrations/20261016_create_digital_asset_theme_reviews.sql',
+  ), 'utf8');
+
+  assert.match(sql, /create table if not exists public\.digital_asset_theme_reviews/iu);
+  assert.match(sql, /theme_hash text not null/u);
+  assert.match(sql, /decision in \('approve', 'request_changes'\)/u);
+  assert.match(sql, /discord_interaction_id text not null unique/u);
+  assert.match(sql, /enable row level security/u);
+  assert.match(sql, /grant select, insert .* to service_role/u);
+});

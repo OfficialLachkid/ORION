@@ -72,6 +72,13 @@ import {
   isDigitalAssetDistributionInteraction,
   recordDigitalAssetDistributionDecision,
 } from '../../digital-asset-engine/src/distribution-review.mjs';
+import {
+  buildItchThemeFeedbackModal,
+  buildItchThemeReviewEmbeds,
+  getItchThemeModalRequest,
+  isItchThemeReviewInteraction,
+  recordItchThemeDecision,
+} from '../../digital-asset-engine/src/theme-review.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -1239,6 +1246,58 @@ export async function runLiveDiscordBot(config) {
                 },
               });
             }
+            return;
+          }
+
+          const themeModalRequest = getItchThemeModalRequest(payload.d);
+          if (themeModalRequest) {
+            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+              type: DISCORD_INTERACTION_CALLBACK_MODAL,
+              data: buildItchThemeFeedbackModal(themeModalRequest),
+            });
+            return;
+          }
+
+          if (isItchThemeReviewInteraction(payload.d)) {
+            let recorded;
+            try {
+              recorded = await recordItchThemeDecision({ interaction: payload.d, config });
+              if (!recorded) throw new Error('Unsupported itch.io theme review action.');
+            } catch (error) {
+              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                  content: truncateMessage(`Theme decision was not recorded: ${error.message}`),
+                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+                },
+              });
+              return;
+            }
+            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                content: recorded.row.decision === 'approve'
+                  ? 'Theme approval recorded. The exact preview is authorized for the explicit apply step.'
+                  : 'Theme changes requested. The public itch.io page remains unchanged.',
+                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+              },
+            });
+            const currentMessage = await sendDiscordApiRequest(
+              token,
+              `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+              undefined,
+              'GET',
+            );
+            await sendDiscordApiRequest(
+              token,
+              `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+              {
+                ...recorded.messagePatch,
+                embeds: buildItchThemeReviewEmbeds(recorded.state, recorded.row.decision, recorded.actor),
+                attachments: currentMessage.attachments,
+              },
+              'PATCH',
+            );
             return;
           }
 
