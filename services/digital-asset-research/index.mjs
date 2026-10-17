@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 import process from 'node:process';
 import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
-import { loadResearchConfig, runResearchCollection } from './src/pipeline.mjs';
+import {
+  analyzeResearchHistory,
+  loadResearchConfig,
+  runResearchCollection,
+} from './src/pipeline.mjs';
 
 function parseArguments(argv) {
   const args = { command: argv[2] || 'help', postToDiscord: false };
@@ -25,6 +29,7 @@ async function main() {
       '',
       'Commands:',
       '  collect  Manually collect one marketplace snapshot and analyze when enough history exists.',
+      '  analyze  Analyze already-stored snapshots without collecting another marketplace sample.',
       '',
       'Options:',
       '  --config <path>         Default: services/digital-asset-research/config.example.json',
@@ -37,14 +42,15 @@ async function main() {
     ].join('\n'));
     return;
   }
-  if (args.command !== 'collect') throw new Error(`Unknown command: ${args.command}`);
+  if (!['collect', 'analyze'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   const config = await loadResearchConfig(
     args.config || 'services/digital-asset-research/config.example.json',
     process.cwd(),
     { archiveRoot: args.archiveRoot },
   );
   const runtimeConfig = loadRuntimeConfig({ envFilePath: args.runtimeEnv });
-  const result = await runResearchCollection({
+  const operation = args.command === 'collect' ? runResearchCollection : analyzeResearchHistory;
+  const result = await operation({
     config,
     runtimeConfig,
     now: args.now,

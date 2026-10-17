@@ -28,6 +28,19 @@ npm run digital-assets:research -- \
   --post-to-discord
 ```
 
+If marketplace collection succeeds but local recommendation generation fails validation, repair the
+model contract and resume from the stored observations without creating an artificial extra snapshot:
+
+```bash
+npm run digital-assets:research:analyze -- \
+  --archive-root "/Volumes/T7/O.R.I.O.N. Digital Assets/research" \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env" \
+  --post-to-discord
+```
+
+The `analyze` command never requests marketplace pages. It reuses the timestamped evidence already
+stored in Supabase and on the T7.
+
 The bot finds or creates `#asset-research` under the existing `DIGITAL ASSETS` category. A recommendation offers `Approve Planning Handoff`, `Keep Monitoring`, and `Reject`. Approval stores an exact `product-opportunity.json` handoff on the T7 and records the decision in Supabase. The handoff explicitly records `generation_enqueued: false`.
 
 No schedule should be installed yet. Run collections manually at least 24 hours apart while the parser, evidence quality, and recommendations are evaluated.

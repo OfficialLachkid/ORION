@@ -1,5 +1,112 @@
 import { ResearchRecommendationSchema } from './schemas.mjs';
 
+const identifier = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$' };
+const isoDateTime = { type: 'string', format: 'date-time' };
+const confidence = { type: 'number', minimum: 0, maximum: 80 };
+const nonEmptyString = { type: 'string', minLength: 1 };
+
+function strictObject(properties) {
+  return {
+    type: 'object',
+    properties,
+    required: Object.keys(properties),
+    additionalProperties: false,
+  };
+}
+
+const assetSchema = strictObject({
+  asset_key: identifier,
+  name: nonEmptyString,
+  kind: nonEmptyString,
+  description: nonEmptyString,
+  prompt_notes: { type: 'array', items: nonEmptyString },
+});
+
+const opportunitySchema = strictObject({
+  schema_version: { type: 'string', const: '1.0' },
+  opportunity_id: nonEmptyString,
+  status: { type: 'string', const: 'validated' },
+  title: nonEmptyString,
+  category: nonEmptyString,
+  product_type: nonEmptyString,
+  theme: nonEmptyString,
+  target_audience: { type: 'array', minItems: 1, items: nonEmptyString },
+  observed_at: isoDateTime,
+  expires_at: isoDateTime,
+  signals: strictObject({
+    trend_direction: { type: 'string', enum: ['rising', 'stable', 'falling'] },
+    demand: { type: 'string', enum: ['high', 'medium', 'low'] },
+    competition: { type: 'string', enum: ['low', 'medium', 'high', 'saturated'] },
+    cross_marketplace_evidence: { type: 'string', const: 'weak' },
+    confidence,
+  }),
+  generation: strictObject({
+    medium: { type: 'string', const: 'pixel art' },
+    perspective: nonEmptyString,
+    width: { type: 'integer', minimum: 8, maximum: 4096 },
+    height: { type: 'integer', minimum: 8, maximum: 4096 },
+    source_width: { type: 'integer', minimum: 64, maximum: 4096 },
+    source_height: { type: 'integer', minimum: 64, maximum: 4096 },
+    max_palette_colors: { type: 'integer', minimum: 2, maximum: 256 },
+    palette: {
+      type: 'array',
+      minItems: 2,
+      maxItems: 256,
+      items: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+    },
+    outline: nonEmptyString,
+    lighting: nonEmptyString,
+    background: { type: 'string', const: 'transparent' },
+    chroma_key: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+    assets: { type: 'array', minItems: 1, maxItems: 100, items: assetSchema },
+  }),
+  commercial: strictObject({
+    base_price: strictObject({
+      amount: { type: 'number', minimum: 0 },
+      currency: { type: 'string', pattern: '^[A-Z]{3}$' },
+    }),
+    marketplace_candidates: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 1,
+      items: { type: 'string', const: 'itch.io' },
+    },
+  }),
+  risk: strictObject({
+    ip_risk: { type: 'string', const: 'low' },
+    prohibited_references: { type: 'array', items: nonEmptyString },
+    notes: { type: 'array', items: nonEmptyString },
+  }),
+  evidence: {
+    type: 'array',
+    minItems: 1,
+    maxItems: 30,
+    items: strictObject({
+      label: nonEmptyString,
+      source: { type: 'string', format: 'uri' },
+      observed_at: isoDateTime,
+    }),
+  },
+});
+
+export const ResearchRecommendationJsonSchema = strictObject({
+  schema_version: { type: 'string', const: '1.0' },
+  recommendation_id: { ...identifier, maxLength: 48 },
+  action: { type: 'string', enum: ['new_product', 'extend_existing_product'] },
+  existing_product_slug: { anyOf: [identifier, { type: 'null' }] },
+  title: { type: 'string', minLength: 1, maxLength: 120 },
+  summary: { type: 'string', minLength: 1, maxLength: 1000 },
+  rationale: { type: 'array', minItems: 1, maxItems: 8, items: nonEmptyString },
+  confidence,
+  evidence_ids: {
+    type: 'array',
+    minItems: 1,
+    maxItems: 30,
+    items: { type: 'string', format: 'uuid' },
+  },
+  opportunity: opportunitySchema,
+});
+
 function assertLocalEndpoint(value) {
   const url = new URL(value);
   if (!['127.0.0.1', 'localhost', '::1'].includes(url.hostname)) {
@@ -25,16 +132,20 @@ export async function generateResearchRecommendation(options) {
     body: JSON.stringify({
       model: options.model.model,
       stream: false,
-      format: 'json',
+      format: ResearchRecommendationJsonSchema,
+      options: { temperature: 0 },
       messages: [
         {
           role: 'system',
           content: [
             'You are ORION research. Return one JSON recommendation only.',
+            'Fill every field required by the provided response schema with concrete values.',
+            'Do not repeat the schema, required shape, or evidence report.',
             'Use only supplied evidence. Marketplace rank is a proxy, never a sales count.',
             'Do not cite brands, copyrighted franchises, or facts absent from the evidence.',
             'The opportunity field must conform to ORION ProductOpportunity schema_version 1.0 and status validated.',
-            'Set generation background to transparent, commercial marketplace_candidates to ["itch.io"], and ip_risk low.',
+            'Set generation medium to pixel art and background to transparent.',
+            'Set commercial marketplace_candidates to ["itch.io"], cross_marketplace_evidence to weak, and ip_risk to low.',
             'Every recommendation evidence_id must be an observation_id supplied below.',
           ].join(' '),
         },
@@ -43,37 +154,7 @@ export async function generateResearchRecommendation(options) {
           content: JSON.stringify({
             existing_products: options.existingProducts || [],
             evidence_report: options.report,
-            required_shape: {
-              schema_version: '1.0',
-              recommendation_id: 'lowercase-kebab-id',
-              action: 'new_product | extend_existing_product',
-              existing_product_slug: null,
-              title: 'string',
-              summary: 'string',
-              rationale: ['evidence-backed string'],
-              confidence: '0..100',
-              evidence_ids: ['observation uuid'],
-              opportunity: {
-                schema_version: '1.0', opportunity_id: 'string', status: 'validated',
-                title: 'string', category: 'string', product_type: 'string', theme: 'string',
-                target_audience: ['string'], observed_at: 'ISO datetime', expires_at: 'ISO datetime',
-                signals: {
-                  trend_direction: 'rising | stable | falling', demand: 'high | medium | low',
-                  competition: 'low | medium | high | saturated',
-                  cross_marketplace_evidence: 'strong | moderate | weak', confidence: '0..100',
-                },
-                generation: {
-                  medium: 'pixel art', perspective: 'string', width: '8..4096 integer', height: '8..4096 integer',
-                  source_width: '64..4096 integer', source_height: '64..4096 integer',
-                  max_palette_colors: '2..256 integer', palette: ['#rrggbb', '#rrggbb'],
-                  outline: 'string', lighting: 'string', background: 'transparent', chroma_key: '#ff00ff',
-                  assets: [{ asset_key: 'lowercase-kebab', name: 'string', kind: 'string', description: 'string', prompt_notes: [] }],
-                },
-                commercial: { base_price: { amount: 'number', currency: 'EUR' }, marketplace_candidates: ['itch.io'] },
-                risk: { ip_risk: 'low', prohibited_references: [], notes: [] },
-                evidence: [{ label: 'string', source: 'listing URL from evidence', observed_at: 'ISO datetime' }],
-              },
-            },
+            decision_request: 'Recommend one original product opportunity supported by the supplied observations.',
           }),
         },
       ],

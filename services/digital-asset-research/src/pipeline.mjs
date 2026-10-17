@@ -26,6 +26,15 @@ function runArchivePath(config, observedAt, runId) {
   return resolve(config.archive_root, 'runs', date, runId);
 }
 
+function createStore(options) {
+  return options.store || new DigitalAssetResearchStore({
+    supabaseUrl: options.runtimeConfig?.env?.SUPABASE_URL,
+    apiKey: options.runtimeConfig?.env?.SUPABASE_SECRET_KEY
+      || options.runtimeConfig?.env?.SUPABASE_SERVICE_ROLE_KEY,
+    fetchImpl: options.fetchImpl,
+  });
+}
+
 export async function loadExistingProductCatalog(root) {
   if (!root) return [];
   let entries;
@@ -51,6 +60,55 @@ export async function loadExistingProductCatalog(root) {
   return products;
 }
 
+export async function analyzeResearchHistory(options) {
+  const config = ResearchConfigSchema.parse(options.config);
+  const observedAt = options.now || new Date().toISOString();
+  const store = createStore(options);
+  const recent = await store.listRecentObservations(config.source.id);
+  const report = buildEvidenceReport(recent, config.minimum_snapshots);
+  let recommendation = null;
+  let evidenceHash = null;
+  let discord = null;
+  if (report.status === 'eligible_for_local_analysis') {
+    const existingProducts = options.existingProducts || await loadExistingProductCatalog(
+      options.runtimeConfig?.env?.DIGITAL_ASSET_ARCHIVE_ROOT,
+    );
+    recommendation = await (options.generateRecommendation || generateResearchRecommendation)({
+      report,
+      model: config.model,
+      existingProducts,
+      fetchImpl: options.fetchImpl,
+    });
+    evidenceHash = researchEvidenceHash(report, recommendation);
+    await store.insertRecommendation({
+      recommendation_id: recommendation.recommendation_id,
+      source_id: config.source.id,
+      evidence_hash: evidenceHash,
+      status: 'awaiting_review',
+      recommendation,
+      evidence_observation_ids: recommendation.evidence_ids,
+      created_at: observedAt,
+    });
+  }
+  if (options.postToDiscord) {
+    discord = await (options.postReview || postResearchReview)({
+      runtimeConfig: options.runtimeConfig,
+      config,
+      report,
+      recommendation,
+      evidenceHash,
+      fetchImpl: options.fetchImpl,
+    });
+    if (recommendation) {
+      await store.updateRecommendation(recommendation.recommendation_id, {
+        discord_channel_id: discord.channelId,
+        discord_message_id: discord.messageId,
+      });
+    }
+  }
+  return { report, recommendation, evidenceHash, discord };
+}
+
 export async function runResearchCollection(options) {
   const config = ResearchConfigSchema.parse(options.config);
   if (config.scheduling.enabled && !options.allowScheduled) {
@@ -58,12 +116,7 @@ export async function runResearchCollection(options) {
   }
   const observedAt = options.now || new Date().toISOString();
   const runId = options.runId || randomUUID();
-  const store = options.store || new DigitalAssetResearchStore({
-    supabaseUrl: options.runtimeConfig?.env?.SUPABASE_URL,
-    apiKey: options.runtimeConfig?.env?.SUPABASE_SECRET_KEY
-      || options.runtimeConfig?.env?.SUPABASE_SERVICE_ROLE_KEY,
-    fetchImpl: options.fetchImpl,
-  });
+  const store = createStore(options);
   const archivePath = runArchivePath(config, observedAt, runId);
   await store.insertRun({
     run_id: runId,
@@ -113,49 +166,8 @@ export async function runResearchCollection(options) {
       observation_count: observations.length,
     });
 
-    const recent = await store.listRecentObservations(config.source.id);
-    const report = buildEvidenceReport(recent, config.minimum_snapshots);
-    let recommendation = null;
-    let evidenceHash = null;
-    let discord = null;
-    if (report.status === 'eligible_for_local_analysis') {
-      const existingProducts = options.existingProducts || await loadExistingProductCatalog(
-        options.runtimeConfig?.env?.DIGITAL_ASSET_ARCHIVE_ROOT,
-      );
-      recommendation = await (options.generateRecommendation || generateResearchRecommendation)({
-        report,
-        model: config.model,
-        existingProducts,
-        fetchImpl: options.fetchImpl,
-      });
-      evidenceHash = researchEvidenceHash(report, recommendation);
-      await store.insertRecommendation({
-        recommendation_id: recommendation.recommendation_id,
-        source_id: config.source.id,
-        evidence_hash: evidenceHash,
-        status: 'awaiting_review',
-        recommendation,
-        evidence_observation_ids: recommendation.evidence_ids,
-        created_at: observedAt,
-      });
-    }
-    if (options.postToDiscord) {
-      discord = await (options.postReview || postResearchReview)({
-        runtimeConfig: options.runtimeConfig,
-        config,
-        report,
-        recommendation,
-        evidenceHash,
-        fetchImpl: options.fetchImpl,
-      });
-      if (recommendation) {
-        await store.updateRecommendation(recommendation.recommendation_id, {
-          discord_channel_id: discord.channelId,
-          discord_message_id: discord.messageId,
-        });
-      }
-    }
-    return { runId, archivePath, observationCount: observations.length, report, recommendation, discord };
+    const analysis = await analyzeResearchHistory({ ...options, config, store, now: observedAt });
+    return { runId, archivePath, observationCount: observations.length, ...analysis };
   } catch (error) {
     await store.updateRun(runId, {
       status: 'failed',
