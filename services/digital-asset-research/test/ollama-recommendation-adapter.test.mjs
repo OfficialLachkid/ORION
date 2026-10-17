@@ -6,8 +6,27 @@ import {
 } from '../src/ollama-recommendation-adapter.mjs';
 
 const observationId = '11111111-1111-4111-8111-111111111111';
+const secondObservationId = '22222222-2222-4222-8222-222222222222';
 const observedAt = '2026-10-17T15:00:00.000Z';
 const listingUrl = 'https://maker.itch.io/pixel-effects';
+const secondListingUrl = 'https://another-maker.itch.io/combat-effects';
+
+function evidence() {
+  return [
+    {
+      observation_id: observationId,
+      listing_url: listingUrl,
+      observed_at: observedAt,
+      creator: 'Maker',
+    },
+    {
+      observation_id: secondObservationId,
+      listing_url: secondListingUrl,
+      observed_at: observedAt,
+      creator: 'Another Maker',
+    },
+  ];
+}
 
 function recommendation() {
   return {
@@ -17,9 +36,9 @@ function recommendation() {
     existing_product_slug: null,
     title: 'Pixel Effects Opportunity',
     summary: 'A compact original effects pack supported by the supplied listing evidence.',
-    rationale: ['The cited listing persisted across both snapshots.'],
-    confidence: 70,
-    evidence_ids: [observationId],
+    rationale: ['Two effects listings from different creators persisted across both snapshots.'],
+    confidence: 55,
+    evidence_ids: [observationId, secondObservationId],
     opportunity: {
       schema_version: '1.0',
       opportunity_id: 'OPPORTUNITY-RESEARCH-001',
@@ -30,13 +49,13 @@ function recommendation() {
       theme: 'original fantasy combat effects',
       target_audience: ['indie game developers'],
       observed_at: observedAt,
-      expires_at: '2026-11-17T15:00:00.000Z',
+      expires_at: '2026-11-16T15:00:00.000Z',
       signals: {
         trend_direction: 'stable',
         demand: 'medium',
         competition: 'medium',
         cross_marketplace_evidence: 'weak',
-        confidence: 70,
+        confidence: 55,
       },
       generation: {
         medium: 'pixel art',
@@ -64,7 +83,10 @@ function recommendation() {
         marketplace_candidates: ['itch.io'],
       },
       risk: { ip_risk: 'low', prohibited_references: [], notes: [] },
-      evidence: [{ label: 'Persisted ranked listing', source: listingUrl, observed_at: observedAt }],
+      evidence: [
+        { label: 'Persisted ranked listing', source: listingUrl, observed_at: observedAt },
+        { label: 'Second persisted ranked listing', source: secondListingUrl, observed_at: observedAt },
+      ],
     },
   };
 }
@@ -75,7 +97,7 @@ test('sends a strict JSON schema to Ollama instead of a prompt template', async 
     report: {
       status: 'eligible_for_local_analysis',
       snapshot_count: 2,
-      evidence: [{ observation_id: observationId, listing_url: listingUrl, observed_at: observedAt }],
+      evidence: evidence(),
     },
     model: { endpoint: 'http://127.0.0.1:11434', model: 'llama3.1:8b', timeout_ms: 1000 },
     existingProducts: [],
@@ -88,14 +110,36 @@ test('sends a strict JSON schema to Ollama instead of a prompt template', async 
   });
 
   assert.deepEqual(requestBody.format, buildResearchRecommendationJsonSchema({
-    evidence: [{ observation_id: observationId, listing_url: listingUrl, observed_at: observedAt }],
+    evidence: evidence(),
   }));
-  assert.deepEqual(requestBody.format.properties.evidence_ids.items.enum, [observationId]);
+  assert.deepEqual(requestBody.format.properties.evidence_ids.items.enum, [observationId, secondObservationId]);
   assert.deepEqual(
     requestBody.format.properties.opportunity.properties.evidence.items.properties.source.enum,
-    [listingUrl],
+    [listingUrl, secondListingUrl],
   );
   assert.equal(requestBody.options.temperature, 0);
   assert.equal(requestBody.messages[1].content.includes('required_shape'), false);
   assert.equal(result.recommendation_id, 'pixel-effects-opportunity');
+});
+
+test('repairs one semantically weak local recommendation before returning it', async () => {
+  const invalid = recommendation();
+  invalid.title = 'Original Product Opportunity';
+  let requests = 0;
+  let repairBody;
+  const result = await generateResearchRecommendation({
+    report: { status: 'eligible_for_local_analysis', snapshot_count: 2, evidence: evidence() },
+    model: { endpoint: 'http://127.0.0.1:11434', model: 'llama3.1:8b', timeout_ms: 1000 },
+    existingProducts: [],
+    fetchImpl: async (_url, options) => {
+      requests += 1;
+      repairBody = JSON.parse(options.body);
+      const content = requests === 1 ? invalid : recommendation();
+      return new Response(JSON.stringify({ message: { content: JSON.stringify(content) } }), { status: 200 });
+    },
+  });
+
+  assert.equal(requests, 2);
+  assert.match(repairBody.messages.at(-1).content, /placeholder title/iu);
+  assert.equal(result.title, 'Pixel Effects Opportunity');
 });

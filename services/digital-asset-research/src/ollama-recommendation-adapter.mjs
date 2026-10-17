@@ -2,7 +2,7 @@ import { ResearchRecommendationSchema } from './schemas.mjs';
 
 const identifier = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$' };
 const isoDateTime = { type: 'string', format: 'date-time' };
-const confidence = { type: 'number', minimum: 0, maximum: 80 };
+const confidence = { type: 'integer', minimum: 20, maximum: 60 };
 const nonEmptyString = { type: 'string', minLength: 1 };
 
 function strictObject(properties) {
@@ -35,7 +35,7 @@ const opportunitySchema = strictObject({
   expires_at: isoDateTime,
   signals: strictObject({
     trend_direction: { type: 'string', enum: ['rising', 'stable', 'falling'] },
-    demand: { type: 'string', enum: ['high', 'medium', 'low'] },
+    demand: { type: 'string', enum: ['medium', 'low'] },
     competition: { type: 'string', enum: ['low', 'medium', 'high', 'saturated'] },
     cross_marketplace_evidence: { type: 'string', const: 'weak' },
     confidence,
@@ -57,13 +57,13 @@ const opportunitySchema = strictObject({
     outline: nonEmptyString,
     lighting: nonEmptyString,
     background: { type: 'string', const: 'transparent' },
-    chroma_key: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$' },
+    chroma_key: { type: 'string', const: '#ff00ff' },
     assets: { type: 'array', minItems: 1, maxItems: 100, items: assetSchema },
   }),
   commercial: strictObject({
     base_price: strictObject({
       amount: { type: 'number', minimum: 0 },
-      currency: { type: 'string', pattern: '^[A-Z]{3}$' },
+      currency: { type: 'string', const: 'EUR' },
     }),
     marketplace_candidates: {
       type: 'array',
@@ -79,7 +79,7 @@ const opportunitySchema = strictObject({
   }),
   evidence: {
     type: 'array',
-    minItems: 1,
+    minItems: 2,
     maxItems: 30,
     items: strictObject({
       label: nonEmptyString,
@@ -100,7 +100,7 @@ const researchRecommendationJsonSchema = strictObject({
   confidence,
   evidence_ids: {
     type: 'array',
-    minItems: 1,
+    minItems: 2,
     maxItems: 30,
     items: { type: 'string', format: 'uuid' },
   },
@@ -115,10 +115,15 @@ export function buildResearchRecommendationJsonSchema(report) {
   if (!observationIds.length || !listingUrls.length || !observedTimes.length) {
     throw new Error('Research recommendation schema requires supplied evidence identifiers, URLs, and timestamps.');
   }
+  const latestObservedAt = [...observedTimes]
+    .sort((left, right) => Date.parse(right) - Date.parse(left))[0];
+  const expiresAt = new Date(Date.parse(latestObservedAt) + (30 * 24 * 60 * 60 * 1000)).toISOString();
   const dynamicOpportunity = {
     ...opportunitySchema,
     properties: {
       ...opportunitySchema.properties,
+      observed_at: { type: 'string', const: latestObservedAt },
+      expires_at: { type: 'string', const: expiresAt },
       evidence: {
         ...opportunitySchema.properties.evidence,
         items: strictObject({
@@ -156,11 +161,57 @@ function extractJson(value) {
   return JSON.parse(text);
 }
 
-export async function generateResearchRecommendation(options) {
-  if (options.report.status !== 'eligible_for_local_analysis') {
-    throw new Error('Local recommendation generation requires at least two comparable snapshots.');
+function validateRecommendation(content, options) {
+  const recommendation = ResearchRecommendationSchema.parse(extractJson(content));
+  const suppliedById = new Map(options.report.evidence.map((item) => [item.observation_id, item]));
+  if (!recommendation.evidence_ids.every((id) => suppliedById.has(id))) {
+    throw new Error('The local model cited evidence that was not supplied by the research adapter.');
   }
-  const endpoint = assertLocalEndpoint(options.model.endpoint);
+  if (new Set(recommendation.evidence_ids).size < 2) {
+    throw new Error('A recommendation requires at least two distinct cited observations.');
+  }
+  const citedRows = recommendation.evidence_ids.map((id) => suppliedById.get(id));
+  if (new Set(citedRows.map((item) => item.creator).filter(Boolean)).size < 2) {
+    throw new Error('A recommendation requires evidence from at least two distinct creators.');
+  }
+  const citedEvidence = new Set(citedRows.map((item) => `${item.listing_url}|${item.observed_at}`));
+  if (!recommendation.opportunity.evidence.every((item) => citedEvidence.has(`${item.source}|${item.observed_at}`))) {
+    throw new Error('Opportunity evidence must be drawn from the recommendation citation set.');
+  }
+  if (recommendation.opportunity.evidence.length < 2) {
+    throw new Error('An opportunity requires at least two evidence references.');
+  }
+  if (recommendation.opportunity.signals.cross_marketplace_evidence !== 'weak') {
+    throw new Error('The first-source MVP cannot claim moderate or strong cross-marketplace evidence.');
+  }
+  if (!Number.isInteger(recommendation.confidence)
+    || !Number.isInteger(recommendation.opportunity.signals.confidence)
+    || recommendation.confidence < 20 || recommendation.confidence > 60
+    || recommendation.opportunity.signals.confidence < 20
+    || recommendation.opportunity.signals.confidence > 60) {
+    throw new Error('Two-snapshot confidence must be an integer percentage from 20 through 60.');
+  }
+  const genericTitles = new Set([
+    'original product opportunity',
+    'pixel art asset',
+    'pixel art asset pack',
+    'new asset pack',
+  ]);
+  if (genericTitles.has(recommendation.title.trim().toLowerCase())
+    || genericTitles.has(recommendation.opportunity.title.trim().toLowerCase())) {
+    throw new Error('The recommendation must name a concrete product concept, not a placeholder title.');
+  }
+  const unsupportedClaims = /\b(?:sales|downloads|revenue|conversion rate|purchase count)\b/iu;
+  if (unsupportedClaims.test([
+    recommendation.summary,
+    ...recommendation.rationale,
+  ].join(' '))) {
+    throw new Error('The recommendation claimed a marketplace metric unavailable to this source adapter.');
+  }
+  return recommendation;
+}
+
+async function requestRecommendation(options, endpoint, messages) {
   const response = await (options.fetchImpl || fetch)(new URL('/api/chat', endpoint), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -170,49 +221,66 @@ export async function generateResearchRecommendation(options) {
       stream: false,
       format: buildResearchRecommendationJsonSchema(options.report),
       options: { temperature: 0 },
-      messages: [
-        {
-          role: 'system',
-          content: [
-            'You are ORION research. Return one JSON recommendation only.',
-            'Fill every field required by the provided response schema with concrete values.',
-            'Do not repeat the schema, required shape, or evidence report.',
-            'Use only supplied evidence. Marketplace rank is a proxy, never a sales count.',
-            'Do not cite brands, copyrighted franchises, or facts absent from the evidence.',
-            'The opportunity field must conform to ORION ProductOpportunity schema_version 1.0 and status validated.',
-            'Set generation medium to pixel art and background to transparent.',
-            'Set commercial marketplace_candidates to ["itch.io"], cross_marketplace_evidence to weak, and ip_risk to low.',
-            'Every recommendation evidence_id must be an observation_id supplied below.',
-          ].join(' '),
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            existing_products: options.existingProducts || [],
-            evidence_report: options.report,
-            decision_request: 'Recommend one original product opportunity supported by the supplied observations.',
-          }),
-        },
-      ],
+      messages,
     }),
   });
   const body = await response.text();
   if (!response.ok) throw new Error(`Local Ollama research request failed (${response.status}): ${body.slice(0, 300)}`);
   const envelope = JSON.parse(body);
-  const recommendation = ResearchRecommendationSchema.parse(extractJson(envelope.message?.content));
-  const suppliedIds = new Set(options.report.evidence.map((item) => item.observation_id));
-  if (!recommendation.evidence_ids.every((id) => suppliedIds.has(id))) {
-    throw new Error('The local model cited evidence that was not supplied by the research adapter.');
+  return String(envelope.message?.content || '');
+}
+
+export async function generateResearchRecommendation(options) {
+  if (options.report.status !== 'eligible_for_local_analysis') {
+    throw new Error('Local recommendation generation requires at least two comparable snapshots.');
   }
-  const suppliedEvidence = new Set(options.report.evidence.map((item) => `${item.listing_url}|${item.observed_at}`));
-  if (!recommendation.opportunity.evidence.every((item) => suppliedEvidence.has(`${item.source}|${item.observed_at}`))) {
-    throw new Error('The local model added opportunity evidence that was not supplied by the research adapter.');
+  const endpoint = assertLocalEndpoint(options.model.endpoint);
+  const messages = [
+    {
+      role: 'system',
+      content: [
+        'You are ORION research. Return one JSON recommendation only.',
+        'Fill every field required by the provided response schema with concrete values.',
+        'Name a specific original product; placeholder titles such as Original Product Opportunity are forbidden.',
+        'Cite at least two coherent observations from at least two different creators.',
+        'Rationales must use the exact titles, ranks, and rank changes in the cited evidence.',
+        'Do not repeat the schema, required shape, or evidence report.',
+        'Use only supplied evidence. Marketplace rank is a proxy, never a sales count.',
+        'Do not claim sales, downloads, revenue, purchases, or conversion rates.',
+        'Do not cite brands, copyrighted franchises, or facts absent from the evidence.',
+        'Because this is one source and two snapshots, demand cannot be high and confidence must be an integer from 20 to 60.',
+        'The opportunity field must conform to ORION ProductOpportunity schema_version 1.0 and status validated.',
+        'Set generation medium to pixel art, background to transparent, and chroma_key to #ff00ff.',
+        'Set currency to EUR, marketplace_candidates to ["itch.io"], cross_marketplace_evidence to weak, and ip_risk to low.',
+        'Every recommendation evidence_id must be an observation_id supplied below.',
+      ].join(' '),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        existing_products: options.existingProducts || [],
+        evidence_report: options.report,
+        decision_request: 'Recommend one concrete, original product opportunity supported by a pattern across the supplied observations.',
+      }),
+    },
+  ];
+  const firstContent = await requestRecommendation(options, endpoint, messages);
+  try {
+    return validateRecommendation(firstContent, options);
+  } catch (firstError) {
+    const repairMessages = [
+      ...messages,
+      { role: 'assistant', content: firstContent },
+      {
+        role: 'user',
+        content: `Your recommendation failed ORION semantic validation: ${String(firstError.message || firstError).slice(0, 1200)} Correct the evidence and product concept, then return the complete JSON object again.`,
+      },
+    ];
+    const repairedContent = await requestRecommendation(options, endpoint, repairMessages);
+    try {
+      return validateRecommendation(repairedContent, options);
+    } catch (repairError) {
+      throw new Error(`Local research recommendation failed semantic validation after one repair attempt: ${repairError.message}`);
+    }
   }
-  if (recommendation.opportunity.signals.cross_marketplace_evidence !== 'weak') {
-    throw new Error('The first-source MVP cannot claim moderate or strong cross-marketplace evidence.');
-  }
-  if (recommendation.confidence > 80 || recommendation.opportunity.signals.confidence > 80) {
-    throw new Error('The first-source MVP caps recommendation confidence at 80.');
-  }
-  return recommendation;
 }
