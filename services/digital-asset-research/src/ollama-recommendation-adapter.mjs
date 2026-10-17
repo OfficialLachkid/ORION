@@ -1,5 +1,12 @@
 import { ResearchRecommendationSchema } from './schemas.mjs';
 
+export class ResearchRecommendationQualityError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ResearchRecommendationQualityError';
+  }
+}
+
 const identifier = { type: 'string', pattern: '^[a-z0-9][a-z0-9-]*$' };
 const isoDateTime = { type: 'string', format: 'date-time' };
 const confidence = { type: 'integer', minimum: 20, maximum: 60 };
@@ -325,7 +332,9 @@ export async function generateResearchRecommendation(options) {
     try {
       return validateRecommendation(repairedContent, options);
     } catch (repairError) {
-      throw new Error(`Local research recommendation failed semantic validation after one repair attempt: ${repairError.message}`);
+      throw new ResearchRecommendationQualityError(
+        `Local research recommendation failed semantic validation after one repair attempt: ${repairError.message}`,
+      );
     }
   }
 }

@@ -4,7 +4,10 @@ import { isAbsolute, resolve } from 'node:path';
 import { buildEvidenceReport } from './analyzer.mjs';
 import { postResearchReview, researchEvidenceHash } from './discord-review.mjs';
 import { fetchItchBrowseView } from './itch-browse-adapter.mjs';
-import { generateResearchRecommendation } from './ollama-recommendation-adapter.mjs';
+import {
+  generateResearchRecommendation,
+  ResearchRecommendationQualityError,
+} from './ollama-recommendation-adapter.mjs';
 import { DigitalAssetResearchStore } from './research-store.mjs';
 import { ResearchConfigSchema, ResearchObservationSchema } from './schemas.mjs';
 
@@ -65,30 +68,41 @@ export async function analyzeResearchHistory(options) {
   const observedAt = options.now || new Date().toISOString();
   const store = createStore(options);
   const recent = await store.listRecentObservations(config.source.id);
-  const report = buildEvidenceReport(recent, config.minimum_snapshots);
+  let report = buildEvidenceReport(recent, config.minimum_snapshots);
   let recommendation = null;
   let evidenceHash = null;
   let discord = null;
+  let analysisIssue = null;
   if (report.status === 'eligible_for_local_analysis') {
     const existingProducts = options.existingProducts || await loadExistingProductCatalog(
       options.runtimeConfig?.env?.DIGITAL_ASSET_ARCHIVE_ROOT,
     );
-    recommendation = await (options.generateRecommendation || generateResearchRecommendation)({
-      report,
-      model: config.model,
-      existingProducts,
-      fetchImpl: options.fetchImpl,
-    });
-    evidenceHash = researchEvidenceHash(report, recommendation);
-    await store.insertRecommendation({
-      recommendation_id: recommendation.recommendation_id,
-      source_id: config.source.id,
-      evidence_hash: evidenceHash,
-      status: 'awaiting_review',
-      recommendation,
-      evidence_observation_ids: recommendation.evidence_ids,
-      created_at: observedAt,
-    });
+    try {
+      recommendation = await (options.generateRecommendation || generateResearchRecommendation)({
+        report,
+        model: config.model,
+        existingProducts,
+        fetchImpl: options.fetchImpl,
+      });
+      evidenceHash = researchEvidenceHash(report, recommendation);
+      await store.insertRecommendation({
+        recommendation_id: recommendation.recommendation_id,
+        source_id: config.source.id,
+        evidence_hash: evidenceHash,
+        status: 'awaiting_review',
+        recommendation,
+        evidence_observation_ids: recommendation.evidence_ids,
+        created_at: observedAt,
+      });
+    } catch (error) {
+      if (!(error instanceof ResearchRecommendationQualityError)) throw error;
+      analysisIssue = error.message;
+      report = {
+        ...report,
+        status: 'monitoring',
+        reason: 'Two snapshots were compared, but no recommendation passed ORION evidence-quality gates. Research remains in monitoring and no generation was started.',
+      };
+    }
   }
   if (options.postToDiscord) {
     discord = await (options.postReview || postResearchReview)({
@@ -106,7 +120,7 @@ export async function analyzeResearchHistory(options) {
       });
     }
   }
-  return { report, recommendation, evidenceHash, discord };
+  return { report, recommendation, evidenceHash, discord, analysisIssue };
 }
 
 export async function runResearchCollection(options) {
