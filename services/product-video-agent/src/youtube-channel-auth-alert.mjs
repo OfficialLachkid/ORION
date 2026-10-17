@@ -114,17 +114,42 @@ export function buildAuthAlertBody({ channelKey, authType, action, errorDetail, 
     : 'Upload / analytics / comment APIs can\'t get an access token — the refresh token was rejected.';
   const detail = errorDetail ? `\nDetail: \`${String(errorDetail).slice(0, 300)}\`` : '';
   const context = action ? `\nFailed during: **${action}**` : '';
-  const recovery = recoveryCommand ? `\n\nRecovery:\n\`${recoveryCommand}\`` : '';
+  // Multi-line recovery blocks use a fenced code block so Discord
+  // renders the command line-wrapped and copy-pasteable as a single
+  // chunk; single-line commands stay inline for compactness.
+  const hasRecovery = Boolean(recoveryCommand);
+  const multiLineRecovery = hasRecovery && String(recoveryCommand).includes('\n');
+  const recovery = !hasRecovery
+    ? ''
+    : multiLineRecovery
+      ? `\n\nRecovery (paste in Terminal on the Mac):\n\`\`\`bash\n${recoveryCommand}\n\`\`\``
+      : `\n\nRecovery:\n\`${recoveryCommand}\``;
   return `**${title}**\n\n${explain}${context}${detail}${recovery}`;
 }
 
-export function buildRecoveryCommand({ channelKey, authType }) {
+export function buildRecoveryCommand({ channelKey, authType, profileDir = '', sessionName = '' } = {}) {
   if (authType === AUTH_TYPE_BROWSER_SESSION) {
-    // The related-video profile lives in a channel-specific Playwright
-    // user-data-dir; re-login is a manual step in the operator's own
-    // browser (see services/product-video-agent/scripts/related-video/*).
-    // No one-shot command — point the operator at the runbook.
-    return `See docs/runbooks/related-video-relogin.md (channel: ${channelKey})`;
+    // Related-video automation uses a channel-specific Playwright
+    // user-data-dir (profile_dir in publication-channels config). To
+    // re-establish the session the operator opens Chrome in headed
+    // mode against the same profile, logs in on YouTube Studio, and
+    // closes — cookies persist back to the dir and the next headless
+    // sweep picks them up. When the caller passes the actual
+    // profile_dir + session_name, we hand back a ready-to-paste
+    // multi-line command; when it doesn't (test harnesses, generic
+    // calls) we fall back to a hint.
+    const dir = String(profileDir || '').trim();
+    const session = String(sessionName || '').trim();
+    if (dir && session) {
+      return [
+        `playwright-cli -s ${session} open "https://studio.youtube.com" \\`,
+        '  --browser chrome \\',
+        '  --headed \\',
+        '  --persistent \\',
+        `  --profile ${dir}`,
+      ].join('\n');
+    }
+    return `See publication-channels.example.json for the Playwright profile_dir / session_name on ${channelKey}; open it with playwright-cli --headed --persistent, sign in, close.`;
   }
   return `node scripts/youtube-authorize.mjs --channel ${channelKey}`;
 }
@@ -137,6 +162,8 @@ export async function alertYoutubeChannelAuthFailure({
   authType,
   action = '',
   errorDetail = '',
+  profileDir = '',
+  sessionName = '',
   discordPostImpl,
   stateStore,
   now = () => new Date(),
@@ -161,7 +188,12 @@ export async function alertYoutubeChannelAuthFailure({
     authType: normalizedAuth,
     action,
     errorDetail,
-    recoveryCommand: buildRecoveryCommand({ channelKey: normalizedChannel, authType: normalizedAuth }),
+    recoveryCommand: buildRecoveryCommand({
+      channelKey: normalizedChannel,
+      authType: normalizedAuth,
+      profileDir,
+      sessionName,
+    }),
   });
   try {
     await discordPostImpl({ body, channelKey: normalizedChannel, authType: normalizedAuth, action, errorDetail, now: now() });
