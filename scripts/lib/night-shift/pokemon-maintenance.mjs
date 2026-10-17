@@ -413,16 +413,15 @@ export async function runVideoQueueMaintenance(asOf = new Date().toISOString(), 
       }
     }
 
-    // Related-video catch-up sweep: cheap no-op when nothing to catch
-    // up; onLoginRequired alerts #alerts on a dead Playwright profile.
+    // Related-video sweep: no-op when caught up; onLoginRequired alerts
+    // #alerts with a ready-to-paste command on dead profiles.
     if (profile?.metadata?.related_video?.enabled === true) {
+      const rv = profile.metadata.related_video;
       runResult.relatedVideoSweep = runNightShiftRelatedVideoRefresh({
         profile, asOf, runNodeScript,
-        onLoginRequired: ({ channelKey, count }) => fireBrowserSessionAlert(runtimeConfig, channelKey, count),
+        onLoginRequired: ({ channelKey, count }) => fireBrowserSessionAlert(runtimeConfig, channelKey, count, { profileDir: rv.profile_dir || rv.profileDir || '', sessionName: rv.session_name || rv.sessionName || '' }),
       });
-      if (runResult.relatedVideoSweep?.errors?.length > 0) {
-        runResult.error = [runResult.error, ...runResult.relatedVideoSweep.errors].filter(Boolean).join(' | ');
-      }
+      if (runResult.relatedVideoSweep?.errors?.length > 0) runResult.error = [runResult.error, ...runResult.relatedVideoSweep.errors].filter(Boolean).join(' | ');
     }
     results.push(runResult);
   }

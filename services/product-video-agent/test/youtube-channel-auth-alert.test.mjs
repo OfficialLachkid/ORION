@@ -64,10 +64,25 @@ test('buildRecoveryCommand: OAuth path points at youtube-authorize.mjs with the 
   );
 });
 
-test('buildRecoveryCommand: browser-session path points at the runbook, no one-shot command', () => {
+test('buildRecoveryCommand: browser-session path WITH profile_dir + session_name returns a ready-to-paste command', () => {
+  const cmd = buildRecoveryCommand({
+    channelKey: 'trivamon-youtube',
+    authType: AUTH_TYPE_BROWSER_SESSION,
+    profileDir: '/Users/op/.orion/playwright-profile-trivamon',
+    sessionName: 'yt-related-trivamon',
+  });
+  assert.match(cmd, /^playwright-cli -s yt-related-trivamon open "https:\/\/studio\.youtube\.com"/u);
+  assert.match(cmd, /--browser chrome/u);
+  assert.match(cmd, /--headed/u);
+  assert.match(cmd, /--persistent/u);
+  assert.match(cmd, /--profile \/Users\/op\/\.orion\/playwright-profile-trivamon/u);
+});
+
+test('buildRecoveryCommand: browser-session fallback (no profile hints) still points at the config', () => {
   const cmd = buildRecoveryCommand({ channelKey: 'poke-quizz-youtube', authType: AUTH_TYPE_BROWSER_SESSION });
-  assert.match(cmd, /related-video-relogin/u);
+  assert.match(cmd, /publication-channels\.example\.json/u);
   assert.match(cmd, /poke-quizz-youtube/u);
+  assert.match(cmd, /playwright-cli.*headed.*persistent/u);
 });
 
 test('buildAuthAlertBody: OAuth body mentions the token and uses the OAuth recovery command', () => {
@@ -84,18 +99,26 @@ test('buildAuthAlertBody: OAuth body mentions the token and uses the OAuth recov
   assert.match(body, /invalid_grant/u);
 });
 
-test('buildAuthAlertBody: browser-session body mentions Playwright profile + runbook recovery', () => {
+test('buildAuthAlertBody: browser-session body embeds the multi-line command in a fenced bash block', () => {
   const body = buildAuthAlertBody({
-    channelKey: 'poke-quizz-youtube',
+    channelKey: 'trivamon-youtube',
     authType: AUTH_TYPE_BROWSER_SESSION,
     action: 'related_video_sweep',
     errorDetail: 'login_required',
-    recoveryCommand: buildRecoveryCommand({ channelKey: 'poke-quizz-youtube', authType: AUTH_TYPE_BROWSER_SESSION }),
+    recoveryCommand: buildRecoveryCommand({
+      channelKey: 'trivamon-youtube',
+      authType: AUTH_TYPE_BROWSER_SESSION,
+      profileDir: '/Users/op/.orion/playwright-profile-trivamon',
+      sessionName: 'yt-related-trivamon',
+    }),
   });
   assert.match(body, /Studio session expired/u);
   assert.match(body, /Playwright profile/u);
   assert.match(body, /related_video_sweep/u);
-  assert.match(body, /related-video-relogin/u);
+  // Multi-line recovery renders inside a fenced bash block for copy-paste
+  assert.match(body, /Recovery \(paste in Terminal on the Mac\):\n```bash\n/u);
+  assert.match(body, /playwright-cli -s yt-related-trivamon/u);
+  assert.match(body, /--profile \/Users\/op\/\.orion\/playwright-profile-trivamon/u);
 });
 
 function makeInMemoryStore(initial = {}, nowRef = { value: new Date('2026-10-14T10:00:00Z') }) {
@@ -156,6 +179,31 @@ test('alertYoutubeChannelAuthFailure: after 24h window elapses, re-fires', async
   });
   assert.equal(first.posted, true, '25h since last alert → must re-post');
   assert.equal(posts.length, 1);
+});
+
+test('alertYoutubeChannelAuthFailure: browser-session alert forwards profileDir + sessionName into the recovery command', async () => {
+  // Regression guard for the 2026-10-17 operator-asked improvement:
+  // the posted alert must contain the actual playwright-cli command,
+  // not a pointer to a (non-existent) runbook. The night-shift caller
+  // reads profile_dir + session_name from publication-channels and
+  // threads them through the alerter.
+  const posts = [];
+  const store = makeInMemoryStore();
+  const impl = async (p) => { posts.push(p); };
+  await alertYoutubeChannelAuthFailure({
+    channelKey: 'trivamon-youtube',
+    authType: AUTH_TYPE_BROWSER_SESSION,
+    action: 'related_video_sweep',
+    errorDetail: '12 row(s) returned login_required',
+    profileDir: '/Users/op/.orion/playwright-profile-trivamon',
+    sessionName: 'yt-related-trivamon',
+    discordPostImpl: impl, stateStore: store,
+  });
+  assert.equal(posts.length, 1);
+  const body = posts[0].body;
+  assert.match(body, /playwright-cli -s yt-related-trivamon/u);
+  assert.match(body, /--profile \/Users\/op\/\.orion\/playwright-profile-trivamon/u);
+  assert.match(body, /```bash/u, 'multi-line command must be in a fenced bash block for copy-paste');
 });
 
 test('alertYoutubeChannelAuthFailure: OAuth and browser-session dedup independently per channel', async () => {
