@@ -256,6 +256,46 @@ test('theme apply waits for the save request and verifies approved panel alpha',
   assert.match(code, /fullPage: true/u);
 });
 
+test('generated theme verifier recognizes an approved rgba panel opacity', async () => {
+  const code = buildThemeSaveAndVerifyCode({
+    design,
+    url: 'https://creator.itch.io/example',
+    desktopPath: '/tmp/desktop.png',
+    mobilePath: '/tmp/mobile.png',
+    skipSave: true,
+  });
+  const verify = new Function(`return (${code});`)();
+  const wrapper = {
+    async waitFor() {},
+    async count() { return 1; },
+    async screenshot() {},
+  };
+  const result = await verify({
+    async setViewportSize() {},
+    async goto() {},
+    locator() { return { first() { return wrapper; } }; },
+    async waitForLoadState() {},
+    async evaluate() {
+      return {
+        background: 'rgb(8, 13, 24)',
+        backgroundImage: 'url("https://img.itch.zone/background.png")',
+        panel: 'rgba(17, 26, 44, 0.96)',
+        text: 'rgb(237, 246, 255)',
+        font: 'Lato',
+        header: 'rgb(247, 249, 255)',
+        headerFont: 'monospace',
+        button: 'rgb(157, 23, 111)',
+        banner: true,
+      };
+    },
+    async waitForTimeout() {},
+    url() { return 'https://creator.itch.io/example'; },
+    async title() { return 'Example'; },
+  });
+  assert.equal(result.status, 'verified_applied');
+  assert.equal(result.checks.panel_alpha, true);
+});
+
 test('theme editor preparation restores a desktop viewport before checking responsive controls', () => {
   const code = buildThemePrepareCode({
     design,
