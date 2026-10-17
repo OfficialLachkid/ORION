@@ -112,14 +112,7 @@ test('sends a strict JSON schema to Ollama instead of a prompt template', async 
   assert.deepEqual(requestBody.format, buildResearchRecommendationJsonSchema({
     evidence: evidence(),
   }, []));
-  assert.deepEqual(requestBody.format.oneOf, [{
-    type: 'object',
-    properties: {
-      action: { type: 'string', const: 'new_product' },
-      existing_product_slug: { type: 'null' },
-    },
-    required: ['action', 'existing_product_slug'],
-  }]);
+  assert.deepEqual(requestBody.format.properties.existing_product_slug, { type: 'null' });
   assert.deepEqual(requestBody.format.properties.evidence_ids.items.enum, [observationId, secondObservationId]);
   assert.deepEqual(
     requestBody.format.properties.opportunity.properties.evidence.items.properties.source.enum,
@@ -157,9 +150,23 @@ test('constrains extensions to product slugs present in the canonical catalog', 
     { evidence: evidence() },
     [{ slug: 'neon-plasma-armory' }],
   );
-  assert.equal(schema.oneOf.length, 2);
   assert.deepEqual(
-    schema.oneOf[1].properties.existing_product_slug.enum,
-    ['neon-plasma-armory'],
+    schema.properties.existing_product_slug,
+    { anyOf: [{ type: 'string', enum: ['neon-plasma-armory'] }, { type: 'null' }] },
   );
+});
+
+test('normalizes a new-product slug to null without weakening extension validation', async () => {
+  const inconsistent = recommendation();
+  inconsistent.existing_product_slug = 'neon-plasma-armory';
+  const result = await generateResearchRecommendation({
+    report: { status: 'eligible_for_local_analysis', snapshot_count: 2, evidence: evidence() },
+    model: { endpoint: 'http://127.0.0.1:11434', model: 'llama3.1:8b', timeout_ms: 1000 },
+    existingProducts: [{ slug: 'neon-plasma-armory' }],
+    fetchImpl: async () => new Response(JSON.stringify({
+      message: { content: JSON.stringify(inconsistent) },
+    }), { status: 200 }),
+  });
+  assert.equal(result.action, 'new_product');
+  assert.equal(result.existing_product_slug, null);
 });

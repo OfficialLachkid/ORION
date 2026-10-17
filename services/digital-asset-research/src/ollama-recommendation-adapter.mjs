@@ -135,29 +135,13 @@ export function buildResearchRecommendationJsonSchema(report, existingProducts =
     },
   };
   const existingSlugs = [...new Set(existingProducts.map((item) => item.slug).filter(Boolean))];
-  const actionBranches = [{
-    type: 'object',
-    properties: {
-      action: { type: 'string', const: 'new_product' },
-      existing_product_slug: { type: 'null' },
-    },
-    required: ['action', 'existing_product_slug'],
-  }];
-  if (existingSlugs.length) {
-    actionBranches.push({
-      type: 'object',
-      properties: {
-        action: { type: 'string', const: 'extend_existing_product' },
-        existing_product_slug: { type: 'string', enum: existingSlugs },
-      },
-      required: ['action', 'existing_product_slug'],
-    });
-  }
   return {
     ...researchRecommendationJsonSchema,
-    oneOf: actionBranches,
     properties: {
       ...researchRecommendationJsonSchema.properties,
+      existing_product_slug: existingSlugs.length
+        ? { anyOf: [{ type: 'string', enum: existingSlugs }, { type: 'null' }] }
+        : { type: 'null' },
       evidence_ids: {
         ...researchRecommendationJsonSchema.properties.evidence_ids,
         uniqueItems: true,
@@ -182,7 +166,14 @@ function extractJson(value) {
 }
 
 function validateRecommendation(content, options) {
-  const recommendation = ResearchRecommendationSchema.parse(extractJson(content));
+  const parsed = extractJson(content);
+  if (parsed?.action === 'new_product') parsed.existing_product_slug = null;
+  const recommendation = ResearchRecommendationSchema.parse(parsed);
+  const existingSlugs = new Set((options.existingProducts || []).map((item) => item.slug));
+  if (recommendation.action === 'extend_existing_product'
+    && !existingSlugs.has(recommendation.existing_product_slug)) {
+    throw new Error('An extension recommendation must target a product in the canonical catalog.');
+  }
   const suppliedById = new Map(options.report.evidence.map((item) => [item.observation_id, item]));
   if (!recommendation.evidence_ids.every((id) => suppliedById.has(id))) {
     throw new Error('The local model cited evidence that was not supplied by the research adapter.');
