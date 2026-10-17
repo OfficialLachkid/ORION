@@ -6,6 +6,7 @@ import {
   buildYoutubeLoopbackRedirectUri,
   extractYoutubeOAuthClientCredentials,
   fetchYoutubeMineChannel,
+  refreshYoutubeAccessToken,
   YOUTUBE_DEFAULT_SCOPES,
   YOUTUBE_READONLY_SCOPE,
   YT_ANALYTICS_READONLY_SCOPE,
@@ -80,4 +81,71 @@ test('youtube mine-channel fetch returns the authorized channel identity', async
 
   assert.equal(channel.channelId, 'UC1234567890');
   assert.equal(channel.title, 'Poke Quizz');
+});
+
+test('refreshYoutubeAccessToken: alerter fires on invalid_grant when channelKey is supplied', async () => {
+  const alerterCalls = [];
+  const alerter = async (params) => { alerterCalls.push(params); return { posted: true }; };
+  await assert.rejects(
+    () => refreshYoutubeAccessToken(
+      { clientId: 'cid', clientSecret: 'csec' },
+      'refresh-token-value',
+      {
+        channelKey: 'poke-quizz-youtube',
+        action: 'video_upload',
+        alerter,
+        fetch: async () => ({
+          ok: false,
+          status: 400,
+          async text() { return '{"error":"invalid_grant"}'; },
+        }),
+      },
+    ),
+    /refresh failed \(400\)/u,
+  );
+  assert.equal(alerterCalls.length, 1);
+  assert.equal(alerterCalls[0].channelKey, 'poke-quizz-youtube');
+  assert.equal(alerterCalls[0].authType, 'oauth');
+  assert.equal(alerterCalls[0].action, 'video_upload');
+  assert.match(alerterCalls[0].errorDetail, /invalid_grant/u);
+});
+
+test('refreshYoutubeAccessToken: transient 503 does NOT fire the alerter (never alert on Google blips)', async () => {
+  const alerterCalls = [];
+  const alerter = async (params) => { alerterCalls.push(params); return { posted: true }; };
+  await assert.rejects(
+    () => refreshYoutubeAccessToken(
+      { clientId: 'cid', clientSecret: 'csec' },
+      'refresh-token-value',
+      {
+        channelKey: 'poke-quizz-youtube',
+        action: 'video_upload',
+        alerter,
+        fetch: async () => ({
+          ok: false,
+          status: 503,
+          async text() { return 'service unavailable'; },
+        }),
+      },
+    ),
+    /refresh failed \(503\)/u,
+  );
+  assert.equal(alerterCalls.length, 0, 'transient errors must not post to #alerts');
+});
+
+test('refreshYoutubeAccessToken: with no channelKey, legacy call path is unchanged (no alerter lookup)', async () => {
+  await assert.rejects(
+    () => refreshYoutubeAccessToken(
+      { clientId: 'cid', clientSecret: 'csec' },
+      'refresh-token-value',
+      {
+        fetch: async () => ({
+          ok: false,
+          status: 400,
+          async text() { return '{"error":"invalid_grant"}'; },
+        }),
+      },
+    ),
+    /refresh failed \(400\)/u,
+  );
 });

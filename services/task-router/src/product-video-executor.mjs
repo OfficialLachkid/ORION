@@ -578,6 +578,7 @@ async function updatePriorPublicationForRevision(feedback, config, dependencies 
         externalId: publication.external_id,
         clientConfig,
         refreshToken,
+        channelKey: channelProfile?.account_key,
       });
       deleteReport = {
         deleted: true,
@@ -808,6 +809,7 @@ async function executeDeletePreviewTask(task, config, dependencies = {}) {
       externalId: publication.external_id,
       clientConfig,
       refreshToken,
+      channelKey: channelProfile?.account_key,
     });
     deleteReport = {
       deleted: true,

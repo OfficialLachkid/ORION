@@ -842,7 +842,7 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
         projectRoot,
       );
       const accessToken = await runWithRetry(
-        () => createAccessToken({ clientConfig, refreshToken, fetchImpl }),
+        () => createAccessToken({ clientConfig, refreshToken, channelKey: channelProfile?.account_key, fetchImpl }),
         'YouTube access-token refresh',
         channelProfile,
       );
