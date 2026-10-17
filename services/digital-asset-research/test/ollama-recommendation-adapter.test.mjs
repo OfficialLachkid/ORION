@@ -111,7 +111,15 @@ test('sends a strict JSON schema to Ollama instead of a prompt template', async 
 
   assert.deepEqual(requestBody.format, buildResearchRecommendationJsonSchema({
     evidence: evidence(),
-  }));
+  }, []));
+  assert.deepEqual(requestBody.format.oneOf, [{
+    type: 'object',
+    properties: {
+      action: { type: 'string', const: 'new_product' },
+      existing_product_slug: { type: 'null' },
+    },
+    required: ['action', 'existing_product_slug'],
+  }]);
   assert.deepEqual(requestBody.format.properties.evidence_ids.items.enum, [observationId, secondObservationId]);
   assert.deepEqual(
     requestBody.format.properties.opportunity.properties.evidence.items.properties.source.enum,
@@ -142,4 +150,16 @@ test('repairs one semantically weak local recommendation before returning it', a
   assert.equal(requests, 2);
   assert.match(repairBody.messages.at(-1).content, /placeholder title/iu);
   assert.equal(result.title, 'Pixel Effects Opportunity');
+});
+
+test('constrains extensions to product slugs present in the canonical catalog', () => {
+  const schema = buildResearchRecommendationJsonSchema(
+    { evidence: evidence() },
+    [{ slug: 'neon-plasma-armory' }],
+  );
+  assert.equal(schema.oneOf.length, 2);
+  assert.deepEqual(
+    schema.oneOf[1].properties.existing_product_slug.enum,
+    ['neon-plasma-armory'],
+  );
 });

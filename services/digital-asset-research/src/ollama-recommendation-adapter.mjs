@@ -107,7 +107,7 @@ const researchRecommendationJsonSchema = strictObject({
   opportunity: opportunitySchema,
 });
 
-export function buildResearchRecommendationJsonSchema(report) {
+export function buildResearchRecommendationJsonSchema(report, existingProducts = []) {
   const evidence = report.evidence || [];
   const observationIds = [...new Set(evidence.map((item) => item.observation_id))];
   const listingUrls = [...new Set(evidence.map((item) => item.listing_url))];
@@ -134,8 +134,28 @@ export function buildResearchRecommendationJsonSchema(report) {
       },
     },
   };
+  const existingSlugs = [...new Set(existingProducts.map((item) => item.slug).filter(Boolean))];
+  const actionBranches = [{
+    type: 'object',
+    properties: {
+      action: { type: 'string', const: 'new_product' },
+      existing_product_slug: { type: 'null' },
+    },
+    required: ['action', 'existing_product_slug'],
+  }];
+  if (existingSlugs.length) {
+    actionBranches.push({
+      type: 'object',
+      properties: {
+        action: { type: 'string', const: 'extend_existing_product' },
+        existing_product_slug: { type: 'string', enum: existingSlugs },
+      },
+      required: ['action', 'existing_product_slug'],
+    });
+  }
   return {
     ...researchRecommendationJsonSchema,
+    oneOf: actionBranches,
     properties: {
       ...researchRecommendationJsonSchema.properties,
       evidence_ids: {
@@ -219,7 +239,7 @@ async function requestRecommendation(options, endpoint, messages) {
     body: JSON.stringify({
       model: options.model.model,
       stream: false,
-      format: buildResearchRecommendationJsonSchema(options.report),
+      format: buildResearchRecommendationJsonSchema(options.report, options.existingProducts || []),
       options: { temperature: 0 },
       messages,
     }),
