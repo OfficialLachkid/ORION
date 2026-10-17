@@ -188,3 +188,19 @@ test('normalizes a new-product slug to null without weakening extension validati
   assert.equal(result.action, 'new_product');
   assert.equal(result.existing_product_slug, null);
 });
+
+test('rejects citations that do not support the proposed product concept', async () => {
+  const incoherent = recommendation();
+  incoherent.title = 'Dungeon Tileset';
+  incoherent.opportunity.title = 'Dungeon Tileset';
+  incoherent.opportunity.theme = 'dungeon';
+  incoherent.opportunity.product_type = 'tileset';
+  await assert.rejects(() => generateResearchRecommendation({
+    report: { status: 'eligible_for_local_analysis', snapshot_count: 2, evidence: evidence() },
+    model: { endpoint: 'http://127.0.0.1:11434', model: 'llama3.1:8b', timeout_ms: 1000 },
+    existingProducts: [],
+    fetchImpl: async () => new Response(JSON.stringify({
+      message: { content: JSON.stringify(incoherent) },
+    }), { status: 200 }),
+  }), /two cited listing titles must support/iu);
+});

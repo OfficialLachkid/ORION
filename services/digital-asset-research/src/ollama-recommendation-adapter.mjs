@@ -165,6 +165,15 @@ function extractJson(value) {
   return JSON.parse(text);
 }
 
+const genericConceptWords = new Set([
+  'asset', 'assets', 'game', 'games', 'original', 'opportunity', 'pack', 'pixel', 'product', 'products', 'rpg',
+]);
+
+function conceptTokens(value) {
+  return new Set((String(value || '').toLowerCase().match(/[a-z0-9]+/gu) || [])
+    .filter((word) => word.length >= 4 && !genericConceptWords.has(word)));
+}
+
 function validateRecommendation(content, options) {
   const parsed = extractJson(content);
   if (parsed?.action === 'new_product') parsed.existing_product_slug = null;
@@ -194,6 +203,19 @@ function validateRecommendation(content, options) {
   const citedRows = recommendation.evidence_ids.map((id) => suppliedById.get(id));
   if (new Set(citedRows.map((item) => item.creator).filter(Boolean)).size < 2) {
     throw new Error('A recommendation requires evidence from at least two distinct creators.');
+  }
+  const opportunityConcepts = conceptTokens([
+    recommendation.title,
+    recommendation.opportunity.title,
+    recommendation.opportunity.theme,
+    recommendation.opportunity.product_type,
+  ].join(' '));
+  const conceptMatches = citedRows.filter((item) => {
+    const listingConcepts = conceptTokens(item.title);
+    return [...opportunityConcepts].some((word) => listingConcepts.has(word));
+  });
+  if (conceptMatches.length < 2) {
+    throw new Error('At least two cited listing titles must support a specific theme or product-type term in the recommendation.');
   }
   const citedEvidence = new Set(citedRows.map((item) => `${item.listing_url}|${item.observed_at}`));
   if (!recommendation.opportunity.evidence.every((item) => citedEvidence.has(`${item.source}|${item.observed_at}`))) {
@@ -264,6 +286,8 @@ export async function generateResearchRecommendation(options) {
         'Fill every field required by the provided response schema with concrete values.',
         'Name a specific original product; placeholder titles such as Original Product Opportunity are forbidden.',
         'Cite at least two coherent observations from at least two different creators.',
+        'At least two cited listing titles must share a specific theme or product-type term with the recommendation.',
+        'Generic words such as pixel, art, asset, pack, game, and RPG do not establish concept support.',
         'Rationales must use the exact titles, ranks, and rank changes in the cited evidence.',
         'Do not repeat the schema, required shape, or evidence report.',
         'Use only supplied evidence. Marketplace rank is a proxy, never a sales count.',
