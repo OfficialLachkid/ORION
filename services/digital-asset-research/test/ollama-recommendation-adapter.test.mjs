@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildResearchRecommendationJsonSchema,
   generateResearchRecommendation,
-  ResearchRecommendationJsonSchema,
 } from '../src/ollama-recommendation-adapter.mjs';
 
 const observationId = '11111111-1111-4111-8111-111111111111';
@@ -87,7 +87,14 @@ test('sends a strict JSON schema to Ollama instead of a prompt template', async 
     },
   });
 
-  assert.deepEqual(requestBody.format, ResearchRecommendationJsonSchema);
+  assert.deepEqual(requestBody.format, buildResearchRecommendationJsonSchema({
+    evidence: [{ observation_id: observationId, listing_url: listingUrl, observed_at: observedAt }],
+  }));
+  assert.deepEqual(requestBody.format.properties.evidence_ids.items.enum, [observationId]);
+  assert.deepEqual(
+    requestBody.format.properties.opportunity.properties.evidence.items.properties.source.enum,
+    [listingUrl],
+  );
   assert.equal(requestBody.options.temperature, 0);
   assert.equal(requestBody.messages[1].content.includes('required_shape'), false);
   assert.equal(result.recommendation_id, 'pixel-effects-opportunity');

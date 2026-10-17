@@ -89,7 +89,7 @@ const opportunitySchema = strictObject({
   },
 });
 
-export const ResearchRecommendationJsonSchema = strictObject({
+const researchRecommendationJsonSchema = strictObject({
   schema_version: { type: 'string', const: '1.0' },
   recommendation_id: { ...identifier, maxLength: 48 },
   action: { type: 'string', enum: ['new_product', 'extend_existing_product'] },
@@ -106,6 +106,42 @@ export const ResearchRecommendationJsonSchema = strictObject({
   },
   opportunity: opportunitySchema,
 });
+
+export function buildResearchRecommendationJsonSchema(report) {
+  const evidence = report.evidence || [];
+  const observationIds = [...new Set(evidence.map((item) => item.observation_id))];
+  const listingUrls = [...new Set(evidence.map((item) => item.listing_url))];
+  const observedTimes = [...new Set(evidence.map((item) => item.observed_at))];
+  if (!observationIds.length || !listingUrls.length || !observedTimes.length) {
+    throw new Error('Research recommendation schema requires supplied evidence identifiers, URLs, and timestamps.');
+  }
+  const dynamicOpportunity = {
+    ...opportunitySchema,
+    properties: {
+      ...opportunitySchema.properties,
+      evidence: {
+        ...opportunitySchema.properties.evidence,
+        items: strictObject({
+          label: nonEmptyString,
+          source: { type: 'string', enum: listingUrls },
+          observed_at: { type: 'string', enum: observedTimes },
+        }),
+      },
+    },
+  };
+  return {
+    ...researchRecommendationJsonSchema,
+    properties: {
+      ...researchRecommendationJsonSchema.properties,
+      evidence_ids: {
+        ...researchRecommendationJsonSchema.properties.evidence_ids,
+        uniqueItems: true,
+        items: { type: 'string', enum: observationIds },
+      },
+      opportunity: dynamicOpportunity,
+    },
+  };
+}
 
 function assertLocalEndpoint(value) {
   const url = new URL(value);
@@ -132,7 +168,7 @@ export async function generateResearchRecommendation(options) {
     body: JSON.stringify({
       model: options.model.model,
       stream: false,
-      format: ResearchRecommendationJsonSchema,
+      format: buildResearchRecommendationJsonSchema(options.report),
       options: { temperature: 0 },
       messages: [
         {
