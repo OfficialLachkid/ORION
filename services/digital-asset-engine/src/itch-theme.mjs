@@ -355,7 +355,7 @@ async (page) => {
     };
   });
   const assess = (styles) => {
-    const panelAlphaMatch = styles.panel.match(/rgba?\([^,]+,[^,]+,[^,]+(?:,\s*([\d.]+))?\)/i);
+    const panelAlphaMatch = styles.panel.match(/rgba?\\([^,]+,[^,]+,[^,]+(?:,\\s*([\\d.]+))?\\)/i);
     const actualPanelAlpha = panelAlphaMatch?.[1] === undefined ? 1 : Number(panelAlphaMatch[1]);
     return {
       background: hasRgb(styles.background, input.design.colors.background),
