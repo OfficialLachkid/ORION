@@ -212,10 +212,11 @@ async (page) => {
 }`.trim();
 }
 
-function buildThemePrepareCode({ design, url }) {
+export function buildThemePrepareCode({ design, url }) {
   return `
 async (page) => {
   const input = ${JSON.stringify({ design, url })};
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   await page.waitForFunction(() => [...document.querySelectorAll('button')]
@@ -325,11 +326,14 @@ async (page) => {
     if (!response || !response.ok()) return { status: 'save_failed', httpStatus: response?.status?.() || null };
     await page.waitForTimeout(1000);
   }
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   const wrapper = page.locator('#wrapper, .wrapper').first();
   await wrapper.waitFor({ state: 'visible', timeout: 30000 }).catch(() => {});
   await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-  const styles = await page.evaluate(() => {
+  const rgb = (hex) => [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16)).join(', ');
+  const hasRgb = (actual, expected) => actual.includes(rgb(expected));
+  const readStyles = () => page.evaluate(() => {
     const read = (selector) => {
       const element = document.querySelector(selector);
       return element ? getComputedStyle(element) : null;
@@ -350,21 +354,27 @@ async (page) => {
       banner: Boolean(document.querySelector('#header img, .header img')),
     };
   });
-  const rgb = (hex) => [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16)).join(', ');
-  const hasRgb = (actual, expected) => actual.includes(rgb(expected));
-  const panelAlphaMatch = styles.panel.match(/rgba?\([^,]+,[^,]+,[^,]+(?:,\s*([\d.]+))?\)/i);
-  const actualPanelAlpha = panelAlphaMatch?.[1] === undefined ? 1 : Number(panelAlphaMatch[1]);
-  const checks = {
-    background: hasRgb(styles.background, input.design.colors.background),
-    background_image: styles.backgroundImage !== 'none',
-    panel: hasRgb(styles.panel, input.design.colors.panel),
-    panel_alpha: Math.abs(actualPanelAlpha - input.design.panel_alpha) <= 0.01,
-    text: hasRgb(styles.text, input.design.colors.text),
-    header: hasRgb(styles.header, input.design.colors.header),
-    button: hasRgb(styles.button, input.design.colors.button),
-    banner: styles.banner,
+  const assess = (styles) => {
+    const panelAlphaMatch = styles.panel.match(/rgba?\([^,]+,[^,]+,[^,]+(?:,\s*([\d.]+))?\)/i);
+    const actualPanelAlpha = panelAlphaMatch?.[1] === undefined ? 1 : Number(panelAlphaMatch[1]);
+    return {
+      background: hasRgb(styles.background, input.design.colors.background),
+      background_image: styles.backgroundImage !== 'none',
+      panel: hasRgb(styles.panel, input.design.colors.panel),
+      panel_alpha: Math.abs(actualPanelAlpha - input.design.panel_alpha) <= 0.01,
+      text: hasRgb(styles.text, input.design.colors.text),
+      header: hasRgb(styles.header, input.design.colors.header),
+      button: hasRgb(styles.button, input.design.colors.button),
+      banner: styles.banner,
+    };
   };
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  let styles = await readStyles();
+  let checks = assess(styles);
+  for (let attempt = 0; attempt < 40 && !Object.values(checks).every(Boolean); attempt += 1) {
+    await page.waitForTimeout(250);
+    styles = await readStyles();
+    checks = assess(styles);
+  }
   if (await wrapper.count().catch(() => 0)) await wrapper.screenshot({ path: input.desktopPath });
   else await page.screenshot({ path: input.desktopPath, fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -577,7 +587,9 @@ export async function applyApprovedItchTheme(options) {
         filename: 'prepare.js',
         code: buildThemePrepareCode({ design: themeState.design, url: cleanPublicUrl(release.public_url) }),
       });
-      if (prepared.status !== 'prepared') throw new Error(`Theme editor preparation failed: ${JSON.stringify(prepared)}`);
+      if (prepared.status !== 'prepared') {
+        throw new Error(`Theme editor preparation failed: ${JSON.stringify({ verification: details, preparation: prepared })}`);
+      }
       let expectedImageCount = 0;
       for (const [kind, path] of [['Banner', bannerPath], ['Background', backgroundPath]]) {
         const triggered = runBrowserCode({

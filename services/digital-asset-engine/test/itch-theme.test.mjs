@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import {
   applyApprovedItchTheme,
   buildThemeBannerSummary,
+  buildThemePrepareCode,
   buildThemePreviewCode,
   buildThemeSaveAndVerifyCode,
   prepareItchThemeCandidate,
@@ -250,7 +251,19 @@ test('theme apply waits for the save request and verifies approved panel alpha',
   assert.match(code, /#wrapper, \.wrapper/u);
   assert.match(code, /wrapper\.waitFor/u);
   assert.match(code, /networkidle/u);
+  assert.match(code, /attempt < 40/u);
+  assert.match(code, /waitForTimeout\(250\)/u);
   assert.match(code, /fullPage: true/u);
+});
+
+test('theme editor preparation restores a desktop viewport before checking responsive controls', () => {
+  const code = buildThemePrepareCode({
+    design,
+    url: 'https://creator.itch.io/example',
+  });
+  assert.doesNotThrow(() => new Function(`return (${code});`));
+  assert.match(code, /setViewportSize\(\{ width: 1440, height: 1000 \}\)/u);
+  assert.ok(code.indexOf('setViewportSize') < code.indexOf('page.goto'));
 });
 
 test('theme candidate renders deterministic media and creates desktop/mobile previews without saving', async () => {
