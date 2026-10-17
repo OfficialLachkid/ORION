@@ -4,7 +4,17 @@ import { readFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { recordResearchReviewDecision } from '../src/discord-review.mjs';
+import { buildResearchEmbed, recordResearchReviewDecision } from '../src/discord-review.mjs';
+
+test('labels a quality-gated result as evidence monitoring without approval', () => {
+  const embed = buildResearchEmbed({
+    snapshot_count: 2,
+    minimum_snapshots: 2,
+    reason: 'No recommendation passed.',
+  });
+  assert.equal(embed.title, 'Digital Asset Research · EVIDENCE MONITORING');
+  assert.match(embed.fields[1].value, /evidence-quality gates/iu);
+});
 
 test('research approval writes a planning handoff without enqueuing generation', async () => {
   const root = await mkdtemp(resolve(tmpdir(), 'orion-research-review-'));

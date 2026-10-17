@@ -49,13 +49,22 @@ async function findOrCreateChannel(options) {
 
 export function buildResearchEmbed(report, recommendation = null) {
   if (!recommendation) {
+    const baseline = report.snapshot_count < report.minimum_snapshots;
     return {
-      title: 'Digital Asset Research · BASELINE MONITORING',
+      title: baseline
+        ? 'Digital Asset Research · BASELINE MONITORING'
+        : 'Digital Asset Research · EVIDENCE MONITORING',
       color: 0x5865f2,
       description: report.reason,
       fields: [
         { name: 'Snapshots', value: `**${report.snapshot_count}** / **${report.minimum_snapshots}** required`, inline: true },
-        { name: 'Decision gate', value: 'No approval is available until comparable evidence exists.', inline: false },
+        {
+          name: 'Decision gate',
+          value: baseline
+            ? 'No approval is available until comparable evidence exists.'
+            : 'No approval is available because no recommendation passed the evidence-quality gates.',
+          inline: false,
+        },
       ],
     };
   }

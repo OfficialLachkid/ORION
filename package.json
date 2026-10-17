@@ -115,6 +115,7 @@
     "digital-assets:itch-description": "node services/digital-asset-engine/index.mjs itch-description",
     "digital-assets:test": "node --test services/digital-asset-engine/test/*.test.mjs",
     "digital-assets:research": "node services/digital-asset-research/index.mjs collect",
+    "digital-assets:research:analyze": "node services/digital-asset-research/index.mjs analyze",
     "digital-assets:research:test": "node --test services/digital-asset-research/test/*.test.mjs",
     "product-video:dry-run": "node services/product-video-agent/index.mjs",
     "product-video:doctor": "node services/product-video-agent/index.mjs --doctor",
