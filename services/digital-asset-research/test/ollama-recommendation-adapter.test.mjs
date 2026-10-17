@@ -15,12 +15,18 @@ function evidence() {
   return [
     {
       observation_id: observationId,
+      view_id: 'top-sellers-pixel-art',
+      current_rank: 3,
+      title: 'Pixel Effects',
       listing_url: listingUrl,
       observed_at: observedAt,
       creator: 'Maker',
     },
     {
       observation_id: secondObservationId,
+      view_id: 'top-sellers-pixel-art',
+      current_rank: 7,
+      title: 'Combat Effects',
       listing_url: secondListingUrl,
       observed_at: observedAt,
       creator: 'Another Maker',
@@ -121,6 +127,18 @@ test('sends a strict JSON schema to Ollama instead of a prompt template', async 
   assert.equal(requestBody.options.temperature, 0);
   assert.equal(requestBody.messages[1].content.includes('required_shape'), false);
   assert.equal(result.recommendation_id, 'pixel-effects-opportunity');
+  assert.deepEqual(result.opportunity.evidence, [
+    {
+      label: 'top-sellers-pixel-art rank 3: Pixel Effects',
+      source: listingUrl,
+      observed_at: observedAt,
+    },
+    {
+      label: 'top-sellers-pixel-art rank 7: Combat Effects',
+      source: secondListingUrl,
+      observed_at: observedAt,
+    },
+  ]);
 });
 
 test('repairs one semantically weak local recommendation before returning it', async () => {

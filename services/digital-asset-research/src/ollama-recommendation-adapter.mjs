@@ -168,13 +168,23 @@ function extractJson(value) {
 function validateRecommendation(content, options) {
   const parsed = extractJson(content);
   if (parsed?.action === 'new_product') parsed.existing_product_slug = null;
+  const suppliedById = new Map(options.report.evidence.map((item) => [item.observation_id, item]));
+  if (Array.isArray(parsed?.evidence_ids) && parsed?.opportunity) {
+    const citedRows = parsed.evidence_ids.map((id) => suppliedById.get(id));
+    if (citedRows.every(Boolean)) {
+      parsed.opportunity.evidence = citedRows.map((item) => ({
+        label: `${item.view_id} rank ${item.current_rank}: ${item.title}`,
+        source: item.listing_url,
+        observed_at: item.observed_at,
+      }));
+    }
+  }
   const recommendation = ResearchRecommendationSchema.parse(parsed);
   const existingSlugs = new Set((options.existingProducts || []).map((item) => item.slug));
   if (recommendation.action === 'extend_existing_product'
     && !existingSlugs.has(recommendation.existing_product_slug)) {
     throw new Error('An extension recommendation must target a product in the canonical catalog.');
   }
-  const suppliedById = new Map(options.report.evidence.map((item) => [item.observation_id, item]));
   if (!recommendation.evidence_ids.every((id) => suppliedById.has(id))) {
     throw new Error('The local model cited evidence that was not supplied by the research adapter.');
   }
