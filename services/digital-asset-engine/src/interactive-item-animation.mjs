@@ -13,7 +13,7 @@ import {
 } from './image-processor.mjs';
 import { OllamaImageAdapter } from './ollama-image-adapter.mjs';
 import { assertGenerationResourcesAvailable } from './resource-preflight.mjs';
-import { InteractiveItemAnimationBatchSchema } from './schemas.mjs';
+import { InteractiveItemAnimationBatchSchema, ProductSpecificationSchema } from './schemas.mjs';
 
 const SHEET_GUTTER = 4;
 
@@ -330,14 +330,29 @@ async function buildManifest(root, base) {
   return { ...payload, manifest_hash: sha256(JSON.stringify(payload)) };
 }
 
-async function generateItem(options, plan, item, batchRoot, adapter) {
+async function resolveSourceProduct(store, targetProduct, sourceSlug) {
+  try {
+    const product = await store.loadProduct(sourceSlug);
+    if (product) return { product, root: store.productRoot(product), layout: 'canonical_product' };
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  const targetRoot = store.productRoot(targetProduct);
+  const root = resolveInside(targetRoot, `experiments/${sourceSlug}`, 'Interactive item source experiment');
+  const product = ProductSpecificationSchema.parse(JSON.parse(await readFile(resolve(root, 'product.json'), 'utf8')));
+  if (product.slug !== sourceSlug) throw new Error(`Interactive item source slug changed: ${sourceSlug}.`);
+  return { product, root, layout: 'product_experiment' };
+}
+
+async function generateItem(options, plan, item, batchRoot, adapter, targetProduct) {
   const sourceStore = options.store || new CanonicalProductStore(options.outputRoot);
-  const sourceProduct = await sourceStore.loadProduct(item.source_product_slug);
+  const source = await resolveSourceProduct(sourceStore, targetProduct, item.source_product_slug);
+  const sourceProduct = source.product;
   const sourceAsset = sourceProduct.assets.find((asset) => asset.asset_key === item.source_asset_key);
   if (!sourceAsset?.final_path || sourceAsset.status !== 'generated') {
     throw new Error(`Source asset ${item.source_product_slug}/${item.source_asset_key} is not generated.`);
   }
-  const sourceRoot = sourceStore.productRoot(sourceProduct);
+  const sourceRoot = source.root;
   const baseBuffer = await readFile(resolveInside(sourceRoot, sourceAsset.final_path, 'Interactive item base'));
   const metadata = await sharp(baseBuffer).metadata();
   const canvas = { width: metadata.width, height: metadata.height };
@@ -437,6 +452,7 @@ async function generateItem(options, plan, item, batchRoot, adapter) {
       target_asset_key: item.target_asset_key,
       name: item.name,
       recipe: item.recipe,
+      source_layout: source.layout,
     },
     status: 'awaiting_animation_review',
     base_regenerated: false,
@@ -478,7 +494,7 @@ export async function generateInteractiveItemAnimationBatch(options) {
     const started = Date.now();
     const results = [];
     for (const item of plan.items) {
-      results.push(await generateItem({ ...options, store }, plan, item, batchRoot, adapter));
+      results.push(await generateItem({ ...options, store }, plan, item, batchRoot, adapter, targetProduct));
     }
     const batchManifest = await buildManifest(batchRoot, {
       schema_version: '1.0',

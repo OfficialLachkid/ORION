@@ -71,6 +71,46 @@ function plan(items) {
   };
 }
 
+function canonicalProduct(slug, assets) {
+  return {
+    schema_version: '1.0',
+    product_id: `product-${slug}`,
+    opportunity_id: `OPPORTUNITY-${slug}`,
+    slug,
+    title: slug,
+    version: '0.1.0',
+    status: 'awaiting_asset_review',
+    category: 'Pixel art',
+    product_type: 'Test fixture',
+    theme: 'Test fixture theme',
+    target_audience: ['testers'],
+    style: {
+      medium: 'pixel_art',
+      perspective: 'fixed',
+      width: 128,
+      height: 128,
+      max_palette_colors: 32,
+      palette: ['#20283a', '#35d9ff'],
+      outline: 'one pixel',
+      lighting: 'neutral',
+      background: 'transparent',
+      chroma_key: '#ff00ff',
+    },
+    assets,
+    pricing: {
+      base_price: { amount: 0, currency: 'EUR' },
+      marketplace_prices: {},
+      human_approval_required: true,
+    },
+    distribution: { marketplaces: ['itch.io'], status: 'not_started' },
+    license: { status: 'draft', redistribution_of_raw_assets: false },
+    generation_provider: { provider: 'ollama', model: 'fixture', estimated_cost: 0, execution: 'local' },
+    approvals: { generation: 'approved', distribution: 'pending' },
+    created_at: '2026-10-18T00:00:00.000Z',
+    updated_at: '2026-10-18T00:00:00.000Z',
+  };
+}
+
 test('dynamic energy detection follows differently positioned item cores', async () => {
   const high = await detectDynamicEnergyRegion(await itemSprite({ energyX: 48, energyY: 54 }), {
     colors: ['#35d9ff'],
@@ -111,21 +151,42 @@ test('interactive item batch schema rejects duplicate target assets', () => {
 
 test('batch emits complete fixed-anchor buyer runtime files without regenerating bases', async () => {
   const outputRoot = await mkdtemp(join(tmpdir(), 'orion-interactive-items-'));
+  const targetRoot = resolve(outputRoot, 'target-product');
   const sourceRoots = {
-    'source-grenade': resolve(outputRoot, 'source-grenade'),
-    'source-mine': resolve(outputRoot, 'source-mine'),
-    'target-product': resolve(outputRoot, 'target-product'),
+    'source-grenade': resolve(targetRoot, 'experiments/source-grenade'),
+    'source-mine': resolve(targetRoot, 'experiments/source-mine'),
+    'target-product': targetRoot,
   };
   const products = {
-    'source-grenade': {
-      slug: 'source-grenade',
-      assets: [{ asset_key: 'grenade-source', status: 'generated', final_path: 'assets/items/grenade-source.png' }],
-    },
-    'source-mine': {
-      slug: 'source-mine',
-      assets: [{ asset_key: 'mine-source', status: 'generated', final_path: 'assets/items/mine-source.png' }],
-    },
     'target-product': { slug: 'target-product', assets: [] },
+  };
+  const sourceProducts = {
+    'source-grenade': canonicalProduct('source-grenade', [{
+      asset_id: 'asset-grenade-source',
+      asset_key: 'grenade-source',
+      name: 'Grenade',
+      kind: 'grenade',
+      description: 'A grenade.',
+      generation_prompt: 'Generate a grenade.',
+      seed: 1,
+      status: 'generated',
+      source_path: 'assets/source/grenade-source.png',
+      final_path: 'assets/items/grenade-source.png',
+      validation_path: 'validation/grenade-source.json',
+    }]),
+    'source-mine': canonicalProduct('source-mine', [{
+      asset_id: 'asset-mine-source',
+      asset_key: 'mine-source',
+      name: 'Mine',
+      kind: 'deployable',
+      description: 'A mine.',
+      generation_prompt: 'Generate a mine.',
+      seed: 2,
+      status: 'generated',
+      source_path: 'assets/source/mine-source.png',
+      final_path: 'assets/items/mine-source.png',
+      validation_path: 'validation/mine-source.json',
+    }]),
   };
   const grenade = await itemSprite({ energyX: 54, energyY: 58 });
   const mine = await itemSprite({ energyX: 70, energyY: 74 });
@@ -136,6 +197,9 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   for (const [path, buffer] of sourcePaths) {
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, buffer);
+  }
+  for (const [slug, product] of Object.entries(sourceProducts)) {
+    await writeFile(resolve(sourceRoots[slug], 'product.json'), `${JSON.stringify(product, null, 2)}\n`);
   }
   const batchPlan = plan([
     {
@@ -167,7 +231,12 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     outputRoot,
     projectRoot: outputRoot,
     store: {
-      async loadProduct(slug) { return products[slug]; },
+      async loadProduct(slug) {
+        if (products[slug]) return products[slug];
+        const error = new Error('missing canonical product');
+        error.code = 'ENOENT';
+        throw error;
+      },
       productRoot(product) { return sourceRoots[product.slug]; },
     },
     adapter: {
@@ -198,6 +267,7 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   assert.equal(result.manifest.gates.all_items_valid, true);
   assert.equal(result.manifest.gates.package_modified, false);
   assert.equal(result.results.every((item) => item.manifest.base_regenerated === false), true);
+  assert.equal(result.results.every((item) => item.manifest.item.source_layout === 'product_experiment'), true);
   assert.equal(result.results.every((item) => item.validation.root_motion.passed), true);
   const animation = JSON.parse(await readFile(
     resolve(result.batchRoot, 'plasma-grenade/metadata/armed-loop/animation.json'),
