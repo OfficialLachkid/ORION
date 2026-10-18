@@ -258,3 +258,29 @@ test('fallback runs Pokemon maintenance when the primary never reached that step
   assert.equal(calls.includes('refreshPokeQuizzReviewMessages'), true);
   assert.equal(calls.includes('kickOffScheduledLeadgen'), false);
 });
+
+test('resource-busy research gets one sequential retry immediately before leadgen', async (t) => {
+  const root = makeTempRoot(t);
+  let attempts = 0;
+  const { calls, deps } = makeDeps(root, {
+    runNightShiftDigitalAssetResearch: async () => {
+      attempts += 1;
+      calls.push(`runNightShiftDigitalAssetResearch:${attempts}`);
+      return attempts === 1
+        ? { status: 'deferred', reason: 'resource_busy' }
+        : { status: 'completed', runId: 'research-run-2' };
+    },
+  });
+
+  await runNightShift(['node', 'scripts/run-night-shift.mjs', '--limit', '30'], deps);
+
+  assert.equal(attempts, 2);
+  assert.ok(
+    calls.indexOf('runNightShiftDigitalAssetResearch:2') > calls.indexOf('postPokemonNightShiftDigest'),
+    'retry must wait until normal night-shift maintenance is complete',
+  );
+  assert.ok(
+    calls.indexOf('kickOffScheduledLeadgen') > calls.indexOf('runNightShiftDigitalAssetResearch:2'),
+    'leadgen must wait for the bounded research retry',
+  );
+});

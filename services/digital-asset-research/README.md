@@ -43,7 +43,7 @@ stored in Supabase and on the T7.
 
 The bot finds or creates `#asset-research` under the existing `DIGITAL ASSETS` category. A recommendation offers `Approve Planning Handoff`, `Keep Monitoring`, and `Reject`. Approval stores an exact `product-opportunity.json` handoff on the T7 and records the decision in Supabase. The handoff explicitly records `generation_enqueued: false`.
 
-The primary night shift starts at 01:30 and runs this service first, before qualification, video maintenance, and the final detached lead-generation sweep. There is no separate research LaunchAgent. The phase has a ten-minute ceiling, requires the T7, observes a 23-hour minimum snapshot interval, and defers if image generation, rendering, deployment/sync maintenance, another Ollama job, or another night shift is active. The 07:00 fallback does not repeat research. A deferred collection waits for the next primary night shift rather than forcing a low-quality concurrent run.
+The primary night shift starts at 01:30 and runs this service first, before qualification, video maintenance, and the final detached lead-generation sweep. There is no separate research LaunchAgent. The phase has a ten-minute ceiling, requires the T7, observes a 23-hour minimum snapshot interval, and defers if image generation, rendering, deployment/sync maintenance, another Ollama job, or another night shift is active. A resource-busy start gets one sequential retry after the awaited maintenance phases and immediately before lead generation; non-resource deferrals are not retried. The 07:00 fallback does not repeat research.
 
 For a guarded manual diagnostic using the same cadence and resource checks:
 

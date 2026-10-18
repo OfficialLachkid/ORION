@@ -37,6 +37,12 @@ export const NIGHT_SHIFT_STEP_MARKERS = Object.freeze({
   leadgen: 'leadgen',
 });
 
+const RETRYABLE_RESEARCH_DEFERRALS = new Set([
+  'blocking_process_running',
+  'digital_asset_generation_running',
+  'resource_busy',
+]);
+
 export function markerPath(now = new Date(), root = projectRoot) {
   return resolve(root, 'data', 'night-shift', `${todayStamp(now)}.done`);
 }
@@ -138,7 +144,10 @@ export async function runNightShift(argv = process.argv, deps = {}) {
       digitalAssetResearch = { status: 'failed', reason: String(error.message || error) };
       runtime.stderr.write(`Digital-asset research phase failed (non-fatal): ${error.message}\n`);
     }
-    runtime.recordOpsMetric(config, 'digital_asset_research_schedule_run', digitalAssetResearch);
+    runtime.recordOpsMetric(config, 'digital_asset_research_schedule_run', {
+      ...digitalAssetResearch,
+      attempt: 'night_shift_start',
+    });
   }
 
   // Phase ordering (2026-09-18 rework, operator ask): all three Claude-quota
@@ -366,6 +375,29 @@ export async function runNightShift(argv = process.argv, deps = {}) {
     );
   } catch (error) {
     runtime.stderr.write(`Pokemon night-shift digest failed (non-fatal): ${error.message}\n`);
+  }
+
+  // A resource-busy start gets exactly one more sequential chance here,
+  // after all awaited maintenance but before leadgen. There is intentionally
+  // no free-running retry timer: that could collide with work this
+  // orchestrator already owns. Cadence and non-resource deferrals are final.
+  if (!isFallback
+    && digitalAssetResearch.status === 'deferred'
+    && RETRYABLE_RESEARCH_DEFERRALS.has(digitalAssetResearch.reason)) {
+    const initialDeferral = digitalAssetResearch;
+    try {
+      digitalAssetResearch = await runtime.runNightShiftDigitalAssetResearch(config, {
+        projectRoot: runtime.projectRoot,
+      });
+    } catch (error) {
+      digitalAssetResearch = { status: 'failed', reason: String(error.message || error) };
+      runtime.stderr.write(`Digital-asset research pre-leadgen retry failed (non-fatal): ${error.message}\n`);
+    }
+    digitalAssetResearch.initialDeferral = initialDeferral.reason;
+    runtime.recordOpsMetric(config, 'digital_asset_research_schedule_run', {
+      ...digitalAssetResearch,
+      attempt: 'pre_leadgen_retry',
+    });
   }
 
   // Kick off the daily leadgen sweep AFTER everything else — the video
