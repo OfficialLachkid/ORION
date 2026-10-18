@@ -64,6 +64,59 @@ async function fetchPokemonPublications(config, sinceIso) {
   return (Array.isArray(rows) ? rows : []).filter((row) => POKE_CHANNELS.has(row.account_key));
 }
 
+// Platform allowlist for the cross-platform activity rollup. The
+// bare `tiktok` platform (direct TikTok OAuth) is intentionally
+// excluded — the TikTok Developer app review isn't approved yet, so
+// all production TikTok traffic runs via Buffer under `tiktok_video`
+// (operator confirmed 2026-10-18). If direct TikTok ever ships, add
+// it here.
+const CROSS_PLATFORM_ALLOWLIST = Object.freeze(['youtube_shorts', 'tiktok_video', 'instagram_reels']);
+const CROSS_PLATFORM_LABELS = Object.freeze({
+  youtube_shorts: 'YouTube Shorts',
+  tiktok_video: 'TikTok (via Buffer)',
+  instagram_reels: 'Instagram Reels',
+});
+const CROSS_PLATFORM_ANALYTICS_STATUS = Object.freeze({
+  youtube_shorts: 'full — views, likes, geo, traffic sources',
+  tiktok_video: 'not yet captured — adapter pending (planned follow-up)',
+  instagram_reels: 'not yet captured — adapter pending (planned follow-up)',
+});
+
+async function fetchCrossPlatformActivity(config, sinceIso, untilIso) {
+  const rows = await supabaseFetch(
+    config,
+    `video_publications?status=eq.published&published_at=gte.${encodeURIComponent(sinceIso)}&published_at=lt.${encodeURIComponent(untilIso)}&select=platform,account_key&limit=5000`,
+  );
+  const list = Array.isArray(rows) ? rows : [];
+  const perPlatform = {};
+  for (const platform of CROSS_PLATFORM_ALLOWLIST) {
+    perPlatform[platform] = { publications: 0, channels: new Set() };
+  }
+  for (const row of list) {
+    const bucket = perPlatform[row.platform];
+    if (!bucket) continue;
+    bucket.publications += 1;
+    if (row.account_key) bucket.channels.add(row.account_key);
+  }
+  const summary = {};
+  let total = 0;
+  for (const platform of CROSS_PLATFORM_ALLOWLIST) {
+    const b = perPlatform[platform];
+    total += b.publications;
+    summary[platform] = {
+      label: CROSS_PLATFORM_LABELS[platform],
+      publications: b.publications,
+      channels: [...b.channels].sort(),
+      analytics_capture: CROSS_PLATFORM_ANALYTICS_STATUS[platform],
+    };
+  }
+  return {
+    window: { since: sinceIso, until: untilIso },
+    total_published_all_platforms: total,
+    per_platform: summary,
+  };
+}
+
 async function fetchLatestAnalyticsByPub(config, publicationIds = []) {
   if (publicationIds.length === 0) return new Map();
   const chunkSize = 100;
@@ -150,7 +203,7 @@ function pickHashtags(metrics, pub) {
   return [];
 }
 
-function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso }) {
+function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, crossPlatformActivity = null }) {
   const byChannel = new Map();
   const byTemplate = new Map();
   const scoredVideos = [];
@@ -264,6 +317,7 @@ function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso }) {
       per_channel: trafficByChannel,
     },
     instrumentation_gaps: instrumentationGaps,
+    cross_platform_activity: crossPlatformActivity || null,
     top_videos: topVideos,
     bottom_videos: bottomVideos,
   };
@@ -332,7 +386,8 @@ function buildAnalystPrompt(dataPack, priorSummary = '') {
     'FORMATTING: every concrete number you cite (view count, like count, v/vid, like-rate %, median, delta, hour, etc.) MUST be wrapped in bold with double-asterisks so it stands out at a glance in Discord. Example: "poke-quizz-youtube pulled **2070 v/vid** on **90 videos** (like-rate **1.33%**)." This is non-negotiable — plain numbers get lost in the wall of text.',
     '',
     'Structure your response as:',
-    '1. **This week in numbers** — 2-3 sentences on totals + which channel/template stood out. Bold every number.',
+    '0. **Cross-platform posting activity** — read `cross_platform_activity`. In one tight paragraph, report the total posts across platforms this week, split by platform (YouTube Shorts, TikTok via Buffer, Instagram Reels), and which channels are posting on each. Bold every count. State explicitly in one line that **YouTube Shorts is the only platform with analytics capture today**; TikTok (via Buffer) and Instagram Reels are publishing successfully but views/likes/engagement capture is pending adapter work. This section exists so the operator sees the full posting footprint — do NOT try to compare performance across platforms yet, and do NOT recommend changes based on cross-platform data because we have no cross-platform metrics. If `cross_platform_activity` is null or missing (older runs), skip this section silently rather than fabricate.',
+    '1. **This week in numbers** — 2-3 sentences on totals + which channel/template stood out. Bold every number. Scope: YouTube Shorts only (the only platform with analytics capture).',
     '2. **What is working** — 2-4 bullets identifying the templates or channels moving up, with the specific v/vid or like-rate numbers as evidence.',
     '3. **What is not working** — 2-4 bullets on underperformers or drops relative to peers. Do NOT recommend killing a channel or template with fewer than 20 videos in the window (undersampled).',
     '4. **Scheduling signal** — the network runs these per-channel CEST slots: poke-quizz 08:00/11:00/12:00 (3/day), trivamon 08:00/12:00/18:00/22:00 (4/day), proffmon 08:00/12:00/14:00 (3/day), poke-guess 08:00/12:00/18:00 (3/day), dexguess 08:00/12:00/18:00 (3/day). Three concurrent experiments this week: (i) poke-quizz is testing winner-adjacency — moving its 14:00 slot to 11:00 CEST, a tight 1h gap to the proven 12:00 CEST winner, to answer "is 12:00 a magic hour or a noon-audience-window effect"; (ii) trivamon, poke-guess, and dexguess run an 18:00 CEST slot against proffmon on 14:00 as the control; (iii) trivamon is additionally testing a 4/day cadence bump with a new 22:00 CEST slot (= 20 UTC = 16:00 EDT, US workday afternoon) — the strongest, most US-skewed channel is the one place where "more at-bats" is most likely to print, if the per-video floor holds. Read the `publish_hour_rollup` block. Answer: (a) does one UTC hour slot pull materially more views than the others network-wide, (b) does the picture differ per channel, (c) for the three experiments above, is each one working — specifically (i) does poke-quizz at 11 UTC perform near its 10 UTC winner, (ii) does 18:00 hold up on trivamon the way it did on poke-guess last week, (iii) does trivamon\'s 4th slot (20 UTC) deliver incremental views without dropping the per-video floor more than ~25%. Cross-reference with `viewer_geography` — if most viewers are in one timezone the "best hour" may differ from a naive views-per-UTC read. If the per-slot sample is small (< 5 videos) say so rather than over-fit. Treat all per-channel slot differences as intentional, not drift. Flag any remaining `instrumentation_gaps`.',
@@ -461,7 +516,20 @@ export async function runWeeklyAnalyticsReview({ config = loadRuntimeConfig(), n
   const analyticsByPub = await fetchLatestAnalyticsByPub(config, publications.map((p) => p.id));
   process.stdout.write(`[weekly-analytics-review] analytics coverage ${analyticsByPub.size}/${publications.length}\n`);
 
-  const dataPack = buildDataPack({ publications, analyticsByPub, sinceIso, untilIso });
+  // Cross-platform activity rollup (TikTok via Buffer + Instagram Reels
+  // alongside YouTube Shorts). Analytics capture is YouTube-only today;
+  // this section exists so the review surfaces that we're actually
+  // publishing on the other platforms. Best-effort — a Supabase blip
+  // here must not block the main YouTube review.
+  let crossPlatformActivity = null;
+  try {
+    crossPlatformActivity = await fetchCrossPlatformActivity(config, sinceIso, untilIso);
+    process.stdout.write(`[weekly-analytics-review] cross-platform activity: ${crossPlatformActivity.total_published_all_platforms} posts across ${CROSS_PLATFORM_ALLOWLIST.length} platforms\n`);
+  } catch (error) {
+    process.stderr.write(`[weekly-analytics-review] cross-platform activity fetch failed (non-fatal): ${error.message}\n`);
+  }
+
+  const dataPack = buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, crossPlatformActivity });
 
   const state = await loadState();
   const prompt = buildAnalystPrompt(dataPack, state.last_summary || '');
