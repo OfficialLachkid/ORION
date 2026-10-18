@@ -398,3 +398,42 @@ export const ProductExtensionPlanSchema = z.object({
     });
   }
 });
+
+export const AssetExpansionReviewPlanSchema = z.object({
+  schema_version: z.literal('1.0'),
+  expansion_id: IdentifierSchema,
+  product_slug: IdentifierSchema,
+  title: z.string().min(1),
+  base_version: SemanticVersionSchema,
+  target_version: SemanticVersionSchema,
+  base_manifest_hash: Sha256Schema,
+  assets: z.array(z.object({
+    source_product_slug: IdentifierSchema,
+    source_asset_key: IdentifierSchema,
+    target_asset_key: IdentifierSchema,
+    target_name: z.string().min(1),
+    buyer_group: z.enum(['items', 'props', 'vfx']),
+  })).min(1).max(25),
+}).superRefine((plan, context) => {
+  const targets = plan.assets.map((asset) => asset.target_asset_key);
+  if (new Set(targets).size !== targets.length) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Expansion target asset keys must be unique.',
+      path: ['assets'],
+    });
+  }
+  const parse = (value) => value.split('.').map(Number);
+  const base = parse(plan.base_version);
+  const target = parse(plan.target_version);
+  const isLater = target.some((value, index) => (
+    value > base[index] && target.slice(0, index).every((part, partIndex) => part === base[partIndex])
+  ));
+  if (!isLater) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Expansion target version must be later than its base version.',
+      path: ['target_version'],
+    });
+  }
+});

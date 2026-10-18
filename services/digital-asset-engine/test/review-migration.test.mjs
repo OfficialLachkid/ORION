@@ -66,3 +66,16 @@ test('theme review migration binds decisions to exact release and theme hashes',
   assert.match(sql, /enable row level security/u);
   assert.match(sql, /grant select, insert .* to service_role/u);
 });
+
+test('expansion review migration stores immutable asset decisions and is service protected', async () => {
+  const sql = await readFile(resolve(
+    projectRoot,
+    'supabase/migrations/20261018_create_digital_asset_expansion_reviews.sql',
+  ), 'utf8');
+  assert.match(sql, /create table if not exists public\.digital_asset_expansion_reviews/iu);
+  assert.match(sql, /manifest_hash text not null/iu);
+  assert.match(sql, /asset_decisions jsonb not null/iu);
+  assert.match(sql, /discord_interaction_id text not null unique/iu);
+  assert.match(sql, /enable row level security/iu);
+  assert.match(sql, /grant select, insert on public\.digital_asset_expansion_reviews to service_role/iu);
+});

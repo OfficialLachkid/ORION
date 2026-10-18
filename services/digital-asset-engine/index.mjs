@@ -20,6 +20,8 @@ import { packageDigitalAssetPreview } from './src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from './src/pipeline.mjs';
 import { slugify } from './src/product-planner.mjs';
 import { markItchThemeApplied, postItchThemeReview } from './src/theme-review.mjs';
+import { prepareAssetExpansionReview } from './src/asset-expansion.mjs';
+import { postAssetExpansionReview } from './src/asset-expansion-review.mjs';
 
 const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
 const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
@@ -28,6 +30,7 @@ const DEFAULT_EFFECT_BATCH = 'services/digital-asset-engine/fixtures/remaining-w
 const DEFAULT_EFFECT_REVISION = 'services/digital-asset-engine/fixtures/weapon-impact-decays.revision.json';
 const DEFAULT_EFFECT_REVIEW = 'services/digital-asset-engine/fixtures/all-weapon-effects-v2.review.json';
 const DEFAULT_EXTENSION_PLAN = 'services/digital-asset-engine/fixtures/neon-plasma-armory-effects.extension.json';
+const DEFAULT_EXPANSION_REVIEW = 'services/digital-asset-engine/fixtures/neon-plasma-armory-static-expansion.review.json';
 
 function parseArguments(argv) {
   const args = {
@@ -56,6 +59,7 @@ function parseArguments(argv) {
     else if (token === '--revision-plan') args.revisionPlan = argv[++index];
     else if (token === '--review-plan') args.reviewPlan = argv[++index];
     else if (token === '--extension-plan') args.extensionPlan = argv[++index];
+    else if (token === '--expansion-plan') args.expansionPlan = argv[++index];
     else if (token === '--release-version') args.releaseVersion = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
@@ -93,6 +97,8 @@ function printHelp() {
     '  revise-effects  Regenerate selected effects into new immutable proof revisions.',
     '  effects-review  Post or update the isolated effects presentation in the existing pack channel.',
     '  prepare-extension  Assemble an immutable, versioned package-extension candidate.',
+    '  prepare-expansion-review  Assemble an immutable static-asset expansion review bundle.',
+    '  expansion-review  Post or update the expansion proposal in the existing product channel.',
     '',
     'Options:',
     `  --config <path>       Default: ${DEFAULT_CONFIG}`,
@@ -102,6 +108,7 @@ function printHelp() {
     `  --revision-plan <path> Default: ${DEFAULT_EFFECT_REVISION}`,
     `  --review-plan <path> Default: ${DEFAULT_EFFECT_REVIEW}`,
     `  --extension-plan <path> Default: ${DEFAULT_EXTENSION_PLAN}`,
+    `  --expansion-plan <path> Default: ${DEFAULT_EXPANSION_REVIEW}`,
     '  --release-version <semver>  Stage/review the latest immutable candidate for this version.',
     '  --output-root <path>  Override canonical product storage.',
     '  --now <ISO datetime>  Deterministic validation/testing time.',
@@ -131,14 +138,14 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension', 'prepare-expansion-review', 'expansion-review'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
-  if (['package', 'prepare-extension'].includes(args.command) && !args.internalPreview) {
+  if (['package', 'prepare-extension', 'prepare-expansion-review'].includes(args.command) && !args.internalPreview) {
     throw new Error('Packaging unapproved candidates requires --internal-preview.');
   }
-  if (['discord-review', 'distribution-review', 'effects-review', 'itch-theme-review'].includes(args.command) && !args.postToDiscord) {
+  if (['discord-review', 'distribution-review', 'effects-review', 'itch-theme-review', 'expansion-review'].includes(args.command) && !args.postToDiscord) {
     throw new Error('Live Discord review posting requires --post-to-discord.');
   }
   if (args.command === 'itch-draft' && !args.stageItchDraft) {
@@ -264,6 +271,38 @@ async function main() {
       outputRoot: resolveOutputRoot(config),
       slug: slugify(opportunity.title),
       releaseVersion: args.releaseVersion,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'prepare-expansion-review') {
+    const plan = JSON.parse(await readFile(args.expansionPlan || DEFAULT_EXPANSION_REVIEW, 'utf8'));
+    const result = await prepareAssetExpansionReview({
+      outputRoot: resolveOutputRoot(config),
+      plan,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      expansion_id: result.plan.expansion_id,
+      base_version: result.plan.base_version,
+      target_version: result.plan.target_version,
+      candidate_root: result.candidateRoot,
+      manifest_hash: result.manifest.manifest_hash,
+      asset_count: result.manifest.asset_count,
+      gates: result.manifest.gates,
+      reused: result.reused,
+    }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'expansion-review') {
+    const plan = JSON.parse(await readFile(args.expansionPlan || DEFAULT_EXPANSION_REVIEW, 'utf8'));
+    const result = await postAssetExpansionReview({
+      runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
+      outputRoot: resolveOutputRoot(config),
+      productSlug: plan.product_slug,
+      expansionId: plan.expansion_id,
       now: args.now,
     });
     process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);

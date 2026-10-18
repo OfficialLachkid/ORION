@@ -178,6 +178,7 @@ Exit criterion: one coherent, useful, original pack whose files can be imported 
 - Human review placed the first energy pickup and proximity mine on semantic quality hold even though both passed technical validation. Their immutable V2 revisions completed in 2m 07.54s and resolved the misleading weapon-like pickup silhouette and the mine's ground smear.
 - Generalized internal-preview packaging now preserves the existing weapon-specific copy while supporting mixed asset kinds, square sprites, transparent contain-padding, more than eight preview cells, and longer labels.
 - None of these candidates modifies the approved public release. Promoting selected items requires a versioned static-asset extension, a Discord review decision, regenerated full-release media, and a separate marketplace publication approval.
+- The first static-expansion review selects eight buyer-ready additions and deliberately excludes the two VFX keyframes until they have complete runtime frame sequences, sprite sheets, metadata, and preview GIFs. Its immutable manifest is reviewed in the existing product channel, with per-asset feedback stored in Supabase before any `0.3.0` candidate may be assembled.
 
 ### Retention decision
 
