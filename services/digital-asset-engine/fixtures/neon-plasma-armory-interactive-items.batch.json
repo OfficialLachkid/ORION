@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "neon-plasma-armory-grenade-mine-animation-proof-v1",
+  "product_slug": "neon-plasma-armory",
+  "title": "Neon Plasma Armory Grenade and Mine Interactive States Proof",
+  "items": [
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "plasma-grenade",
+      "target_asset_key": "plasma-grenade",
+      "name": "Plasma Grenade",
+      "recipe": "grenade",
+      "seed": 3146,
+      "detonation_description": "A compact high-energy plasma detonation that reads as the natural destructive release of the grenade's cyan core, with a tight brilliant center and short irregular energy spikes."
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-revisions",
+      "source_asset_key": "plasma-proximity-mine-v2",
+      "target_asset_key": "plasma-proximity-mine",
+      "name": "Plasma Proximity Mine",
+      "recipe": "proximity_mine",
+      "seed": 3246,
+      "detonation_description": "A low broad plasma detonation that reads as the mine discharging upward and outward from its central cyan sensor core, with a compact bright center and restrained violet fragments."
+    }
+  ],
+  "style": {
+    "medium": "pixel_art",
+    "palette": [
+      "#10131d",
+      "#20283a",
+      "#44506b",
+      "#7785a6",
+      "#c8d4ec",
+      "#35d9ff",
+      "#875cff",
+      "#ff4fd8"
+    ],
+    "energy_colors": [
+      "#35d9ff",
+      "#875cff",
+      "#ff4fd8"
+    ],
+    "energy_color_tolerance": 72,
+    "max_palette_colors": 32,
+    "chroma_key": "#ff00ff",
+    "source_width": 1024,
+    "source_height": 1024
+  }
+}

@@ -1,0 +1,210 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import sharp from 'sharp';
+import {
+  createEnergyPulseFrame,
+  detectDynamicEnergyRegion,
+  generateInteractiveItemAnimationBatch,
+  inspectPulseIsolation,
+} from '../src/interactive-item-animation.mjs';
+import { InteractiveItemAnimationBatchSchema } from '../src/schemas.mjs';
+
+async function itemSprite({ energyX, energyY }) {
+  return sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).composite([
+    {
+      input: Buffer.from('<svg width="52" height="38"><rect width="52" height="38" fill="#20283a"/></svg>'),
+      left: 38,
+      top: 50,
+    },
+    {
+      input: Buffer.from('<svg width="10" height="8"><rect width="10" height="8" fill="#35d9ff"/></svg>'),
+      left: energyX,
+      top: energyY,
+    },
+  ]).png({ palette: true, colours: 32, dither: 0 }).toBuffer();
+}
+
+async function detonationSource() {
+  const width = 64;
+  const height = 64;
+  const data = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = ((y * width) + x) * 4;
+      const effect = Math.hypot(x - 32, y - 32) < 13;
+      data[offset] = effect ? 53 : 255;
+      data[offset + 1] = effect ? 217 : 0;
+      data[offset + 2] = 255;
+      data[offset + 3] = 255;
+    }
+  }
+  return sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer();
+}
+
+function plan(items) {
+  return {
+    schema_version: '1.0',
+    batch_id: 'interactive-items-test-v1',
+    product_slug: 'target-product',
+    title: 'Interactive items test',
+    items,
+    style: {
+      medium: 'pixel_art',
+      palette: ['#20283a', '#35d9ff', '#875cff'],
+      energy_colors: ['#35d9ff', '#875cff'],
+      energy_color_tolerance: 24,
+      max_palette_colors: 32,
+      chroma_key: '#ff00ff',
+      source_width: 1024,
+      source_height: 1024,
+    },
+  };
+}
+
+test('dynamic energy detection follows differently positioned item cores', async () => {
+  const high = await detectDynamicEnergyRegion(await itemSprite({ energyX: 48, energyY: 54 }), {
+    colors: ['#35d9ff'],
+    tolerance: 12,
+  });
+  const low = await detectDynamicEnergyRegion(await itemSprite({ energyX: 70, energyY: 76 }), {
+    colors: ['#35d9ff'],
+    tolerance: 12,
+  });
+  assert.deepEqual(high.report.centroid, { x: 53, y: 58 });
+  assert.deepEqual(low.report.centroid, { x: 75, y: 80 });
+  assert.equal(high.report.strategy, 'palette_connected_components');
+  assert.equal(high.report.matched_pixels, 80);
+});
+
+test('energy pulse changes only dynamically detected pixels', async () => {
+  const base = await itemSprite({ energyX: 60, energyY: 70 });
+  const detection = await detectDynamicEnergyRegion(base, { colors: ['#35d9ff'], tolerance: 12 });
+  const pulse = await createEnergyPulseFrame(base, detection, 0.7);
+  const isolation = await inspectPulseIsolation(base, pulse.compositeBuffer, detection.mask);
+  assert.equal(isolation.passed, true);
+  assert.equal(isolation.changed_pixels, 80);
+  assert.equal(isolation.outside_region_changes, 0);
+});
+
+test('interactive item batch schema rejects duplicate target assets', () => {
+  const item = {
+    source_product_slug: 'source-product',
+    source_asset_key: 'grenade-source',
+    target_asset_key: 'plasma-grenade',
+    name: 'Plasma Grenade',
+    recipe: 'grenade',
+    seed: 42,
+    detonation_description: 'Compact cyan plasma detonation.',
+  };
+  assert.throws(() => InteractiveItemAnimationBatchSchema.parse(plan([item, item])), /Duplicate interactive item target/u);
+});
+
+test('batch emits complete fixed-anchor buyer runtime files without regenerating bases', async () => {
+  const outputRoot = await mkdtemp(join(tmpdir(), 'orion-interactive-items-'));
+  const sourceRoots = {
+    'source-grenade': resolve(outputRoot, 'source-grenade'),
+    'source-mine': resolve(outputRoot, 'source-mine'),
+    'target-product': resolve(outputRoot, 'target-product'),
+  };
+  const products = {
+    'source-grenade': {
+      slug: 'source-grenade',
+      assets: [{ asset_key: 'grenade-source', status: 'generated', final_path: 'assets/items/grenade-source.png' }],
+    },
+    'source-mine': {
+      slug: 'source-mine',
+      assets: [{ asset_key: 'mine-source', status: 'generated', final_path: 'assets/items/mine-source.png' }],
+    },
+    'target-product': { slug: 'target-product', assets: [] },
+  };
+  const grenade = await itemSprite({ energyX: 54, energyY: 58 });
+  const mine = await itemSprite({ energyX: 70, energyY: 74 });
+  const sourcePaths = [
+    [resolve(sourceRoots['source-grenade'], 'assets/items/grenade-source.png'), grenade],
+    [resolve(sourceRoots['source-mine'], 'assets/items/mine-source.png'), mine],
+  ];
+  for (const [path, buffer] of sourcePaths) {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, buffer);
+  }
+  const batchPlan = plan([
+    {
+      source_product_slug: 'source-grenade',
+      source_asset_key: 'grenade-source',
+      target_asset_key: 'plasma-grenade',
+      name: 'Plasma Grenade',
+      recipe: 'grenade',
+      seed: 42,
+      detonation_description: 'Compact cyan plasma detonation.',
+    },
+    {
+      source_product_slug: 'source-mine',
+      source_asset_key: 'mine-source',
+      target_asset_key: 'plasma-mine',
+      name: 'Plasma Mine',
+      recipe: 'proximity_mine',
+      seed: 43,
+      detonation_description: 'Broad cyan plasma detonation.',
+    },
+  ]);
+  let generationCalls = 0;
+  const result = await generateInteractiveItemAnimationBatch({
+    config: {
+      validation: { minimum_transparent_ratio: 0.1 },
+      generation: { endpoint: 'http://127.0.0.1:11434', model: 'fixture', chroma_tolerance: 20 },
+    },
+    plan: batchPlan,
+    outputRoot,
+    projectRoot: outputRoot,
+    store: {
+      async loadProduct(slug) { return products[slug]; },
+      productRoot(product) { return sourceRoots[product.slug]; },
+    },
+    adapter: {
+      async checkReadiness() { return { status: 'ready' }; },
+      async generateAsset({ asset }) {
+        generationCalls += 1;
+        return {
+          buffer: await detonationSource(),
+          format: 'png',
+          provider: 'fixture',
+          model: 'fixture',
+          seed: asset.seed,
+          estimated_cost: 0,
+        };
+      },
+    },
+    async fetchImpl() {
+      return { ok: true, async json() { return { models: [] }; } };
+    },
+    async gifWriter({ outputPath }) {
+      await mkdir(dirname(outputPath), { recursive: true });
+      await writeFile(outputPath, 'GIF89a');
+      return outputPath;
+    },
+  });
+
+  assert.equal(generationCalls, 2);
+  assert.equal(result.manifest.gates.all_items_valid, true);
+  assert.equal(result.manifest.gates.package_modified, false);
+  assert.equal(result.results.every((item) => item.manifest.base_regenerated === false), true);
+  assert.equal(result.results.every((item) => item.validation.root_motion.passed), true);
+  const animation = JSON.parse(await readFile(
+    resolve(result.batchRoot, 'plasma-grenade/metadata/armed-loop/animation.json'),
+    'utf8',
+  ));
+  assert.deepEqual(animation.root_motion, { x: 0, y: 0 });
+  assert.equal(animation.frames.length, 4);
+  assert.equal(animation.frames.every((frame) => frame.overlay_path.endsWith('.png')), true);
+  assert.equal((await readFile(resolve(result.batchRoot, 'plasma-grenade/base.png'))).equals(grenade), true);
+});

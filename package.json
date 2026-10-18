@@ -105,6 +105,7 @@
     "digital-assets:prepare-extension": "node services/digital-asset-engine/index.mjs prepare-extension",
     "digital-assets:prepare-expansion-review": "node services/digital-asset-engine/index.mjs prepare-expansion-review",
     "digital-assets:expansion-review": "node services/digital-asset-engine/index.mjs expansion-review",
+    "digital-assets:interactive-items": "node services/digital-asset-engine/index.mjs interactive-items",
     "digital-assets:package": "node services/digital-asset-engine/index.mjs package",
     "digital-assets:itch-draft": "node services/digital-asset-engine/index.mjs itch-draft",
     "digital-assets:discord-review": "node services/digital-asset-engine/index.mjs discord-review",

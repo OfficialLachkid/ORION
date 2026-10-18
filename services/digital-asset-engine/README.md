@@ -199,6 +199,21 @@ npm run digital-assets:effects-batch -- \
 
 The batch stops on the first failed proof, preserves every previously completed experiment, and prints a per-weapon manifest, muzzle anchor, attack-cycle path, generation-call count, and duration. It does not mutate the canonical release, Discord package decision, or marketplace listing.
 
+## Interactive item animation recipes
+
+Generate the grenade and proximity-mine completeness proof without changing the approved product or live package:
+
+```bash
+npm run digital-assets:interactive-items -- \
+  --execute \
+  --item-animation-plan services/digital-asset-engine/fixtures/neon-plasma-armory-interactive-items.batch.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+An interactive-item recipe treats approved base artwork as immutable. ORION detects cyan/violet energy pixels dynamically from each sprite, records their connected components and centroid, and rejects a pulse frame if any visible pixel outside that region changes. The local image model is called only once per item for the isolated peak detonation VFX; deterministic transforms derive its other phases. The base sprite never moves and is never regenerated.
+
+Each item emits the original base PNG, transparent overlay frames, ready-to-use composite frames, non-overlapping sprite sheets, `animation.json` with zero root motion, validation evidence, and review-only GIFs. A failed state or animation holds the complete item candidate. This is the first asset-type recipe toward production jobs that generate the complete contract for a researched product in one run: required base images, angles, states, animations, metadata, validation, and review previews. Requirements remain type-specific; ORION must not invent unnecessary angles or animations for every asset.
+
 If review finds a problem in only selected effect kinds, create new immutable proof revisions while inheriting the accepted artifacts. The current targeted revision regenerates only the Ion Pistol and Energy Shotgun impact/decay keyframes, then derives their decay frames deterministically:
 
 ```bash

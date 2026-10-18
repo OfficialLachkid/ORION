@@ -322,6 +322,44 @@ export const EffectBatchPlanSchema = z.object({
   }
 });
 
+export const InteractiveItemAnimationBatchSchema = z.object({
+  schema_version: z.literal('1.0'),
+  batch_id: IdentifierSchema,
+  product_slug: IdentifierSchema,
+  title: z.string().min(1),
+  items: z.array(z.object({
+    source_product_slug: IdentifierSchema,
+    source_asset_key: IdentifierSchema,
+    target_asset_key: IdentifierSchema,
+    name: z.string().min(1),
+    recipe: z.enum(['grenade', 'proximity_mine']),
+    seed: z.number().int().nonnegative(),
+    detonation_description: z.string().min(1),
+  })).min(1).max(25),
+  style: z.object({
+    medium: z.literal('pixel_art'),
+    palette: z.array(HexColorSchema).min(2).max(256),
+    energy_colors: z.array(HexColorSchema).min(1).max(16),
+    energy_color_tolerance: z.number().int().min(0).max(441).default(72),
+    max_palette_colors: z.number().int().min(2).max(256),
+    chroma_key: HexColorSchema,
+    source_width: z.number().int().min(64).max(4096),
+    source_height: z.number().int().min(64).max(4096),
+  }),
+}).superRefine((plan, context) => {
+  const targetKeys = new Set();
+  for (const item of plan.items) {
+    if (targetKeys.has(item.target_asset_key)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Duplicate interactive item target: ${item.target_asset_key}`,
+        path: ['items'],
+      });
+    }
+    targetKeys.add(item.target_asset_key);
+  }
+});
+
 export const EffectRevisionBatchPlanSchema = z.object({
   schema_version: z.literal('1.0'),
   batch_id: IdentifierSchema,
