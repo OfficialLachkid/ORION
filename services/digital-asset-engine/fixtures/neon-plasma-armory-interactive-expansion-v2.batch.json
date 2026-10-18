@@ -38,7 +38,8 @@
       "recipe": "shield_emitter",
       "seed": 3346,
       "field_description": "One isolated broad protective cyan energy barrier arc, open at the bottom for a ground emitter, with a thin readable pixel edge, restrained violet energy seams, and a transparent-looking empty interior.",
-      "impact_description": "One isolated shield-hit reaction keyframe: an asymmetric curved cyan energy ripple with a brilliant compact contact point and a few restrained violet fragments."
+      "impact_description": "One isolated shield-hit reaction keyframe: an asymmetric curved cyan energy ripple with a brilliant compact contact point and a few restrained violet fragments.",
+      "break_description": "One isolated broken-shield keyframe with cyan force-field fragments and restrained violet shards scattering outward from a collapsing protective barrier."
     },
     {
       "source_product_slug": "neon-plasma-armory-expansion-proof",

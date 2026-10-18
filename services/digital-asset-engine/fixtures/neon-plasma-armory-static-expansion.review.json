@@ -52,8 +52,8 @@
       }
     },
     {
-      "source_product_slug": "neon-plasma-armory-interactive-revisions",
-      "source_asset_key": "portable-shield-emitter-v2",
+      "source_product_slug": "neon-plasma-armory-shield-emitter-revision",
+      "source_asset_key": "portable-shield-emitter-v3",
       "target_asset_key": "portable-shield-emitter",
       "target_name": "Portable Shield Emitter",
       "buyer_group": "items",

@@ -339,6 +339,7 @@ const InteractiveItemRecipeSchema = z.discriminatedUnion('recipe', [
     recipe: z.literal('shield_emitter'),
     field_description: z.string().min(1),
     impact_description: z.string().min(1),
+    break_description: z.string().min(1),
   }),
   InteractiveItemSourceSchema.extend({
     recipe: z.literal('power_cell'),

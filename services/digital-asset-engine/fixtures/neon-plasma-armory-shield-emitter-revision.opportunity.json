@@ -1,0 +1,60 @@
+{
+  "schema_version": "1.0",
+  "opportunity_id": "OPPORTUNITY-0146-SHIELD-EMITTER-REVISION",
+  "status": "validated",
+  "title": "Neon Plasma Armory Shield Emitter Revision",
+  "category": "Pixel Art / Items and Props",
+  "product_type": "Internal Sci-Fi Asset Revision Capability Proof",
+  "theme": "Original neon industrial science fiction matching Neon Plasma Armory: dark gunmetal bodies, compact cyan energy elements, restrained violet accents, and readable functional silhouettes",
+  "target_audience": ["internal ORION reviewers", "indie game developers", "2D science-fiction game creators"],
+  "observed_at": "2026-10-18T00:00:00.000Z",
+  "expires_at": "2027-01-16T00:00:00.000Z",
+  "signals": {
+    "trend_direction": "stable",
+    "demand": "medium",
+    "competition": "high",
+    "cross_marketplace_evidence": "weak",
+    "confidence": 72
+  },
+  "generation": {
+    "medium": "pixel_art",
+    "perspective": "consistent 2D game-sprite presentation in readable slight three-quarter view",
+    "width": 128,
+    "height": 128,
+    "source_width": 1024,
+    "source_height": 1024,
+    "max_palette_colors": 32,
+    "palette": ["#10131d", "#20283a", "#44506b", "#7785a6", "#c8d4ec", "#35d9ff", "#875cff", "#ff4fd8"],
+    "outline": "Use a one-pixel dark outline at final sprite resolution and the same crisp pixel-cluster language as the approved weapon sprites",
+    "lighting": "Cool cyan energy light, upper-left neutral rim light, restrained violet highlights, no cast shadow",
+    "background": "transparent",
+    "chroma_key": "#ff00ff",
+    "assets": [
+      {
+        "asset_key": "portable-shield-emitter-v3",
+        "name": "Portable Shield Emitter V3",
+        "kind": "deployable",
+        "description": "a compact low-profile portable force-field generator with a wide weighted trapezoidal gunmetal base, short central cyan projector module, and two small upward-angled emitter prongs",
+        "prompt_notes": [
+          "The complete device must be much wider than it is tall, with height no more than half its width; no tall column, humanoid form, statue, antenna mast, or chair-like silhouette",
+          "Show the inactive device only in slight three-quarter side view; the short paired prongs clearly project a protective dome upward",
+          "No active shield orb, mine disc, grenade, weapon, barrel, trigger, text, floor, cast shadow, scenery, or extra device"
+        ]
+      }
+    ]
+  },
+  "commercial": { "base_price": { "amount": 0, "currency": "EUR" }, "marketplace_candidates": ["itch.io"] },
+  "risk": {
+    "ip_risk": "low",
+    "prohibited_references": ["Pokemon", "Star Wars", "Halo", "Destiny", "Warhammer", "Cyberpunk 2077", "specific living artists"],
+    "notes": [
+      "Immutable replacement for the statue-like second shield-emitter proof. It does not join the package until the emitter and full field lifecycle pass human review.",
+      "Use the approved Neon Plasma Armory palette and functional vocabulary without copying an existing franchise, object design, or asset pack."
+    ]
+  },
+  "evidence": [{
+    "label": "Human review found the tall V2 emitter statue-like and requested a protective orb with damage and break states",
+    "source": "ORION expansion review on 2026-10-18",
+    "observed_at": "2026-10-18T00:00:00.000Z"
+  }]
+}

@@ -718,7 +718,11 @@ async function generatePickupRecipe(context) {
 
 async function generateShieldRecipe(context) {
   const { options, plan, item, itemRoot, baseBuffer, canvas, detection, source, adapter } = context;
-  const deviceAnchor = detection.report.components[0]?.centroid || detection.report.centroid;
+  const deviceOrigin = await detectOpaqueObjectAnchor(baseBuffer);
+  const deviceAnchor = {
+    x: deviceOrigin.anchor.x,
+    y: deviceOrigin.bounds.y + deviceOrigin.bounds.height - 1,
+  };
   const field = await generateIsolatedEffect({
     adapter,
     config: options.config,
@@ -740,6 +744,17 @@ async function generateShieldRecipe(context) {
     seedOffset: 1,
     prompt: isolatedEffectPrompt(plan, item, item.impact_description, [
       'emitter device', 'shield bubble', 'weapon', 'projectile', 'character', 'floor', 'scenery',
+    ]),
+  });
+  const brokenField = await generateIsolatedEffect({
+    adapter,
+    config: options.config,
+    item,
+    plan,
+    canvas,
+    seedOffset: 2,
+    prompt: isolatedEffectPrompt(plan, item, item.break_description, [
+      'emitter device', 'intact shield orb', 'weapon', 'projectile', 'character', 'floor', 'scenery', 'smoke',
     ]),
   });
   const fieldFrames = await Promise.all([
@@ -786,6 +801,42 @@ async function generateShieldRecipe(context) {
     name: 'Shield Hit Reaction', playback: 'once', canvas,
     phases: ['contact', 'impact-rise', 'impact-peak', 'dissipation'], durations: [70, 60, 80, 120],
   }, hitComposite, impactFrames, options);
+  const damagedOverlays = await Promise.all([
+    [fieldFrames[2], impactFrames[2]],
+    [fieldFrames[3], impactFrames[2]],
+    [fieldFrames[2], impactFrames[1]],
+  ].map((layers) => compositeItemFrame(empty, layers)));
+  const damagedComposite = await Promise.all(damagedOverlays.map((overlay) => (
+    compositeItemFrame(baseBuffer, [overlay], { baseOnTop: true, canvas })
+  )));
+  const damaged = await writeAnimation(itemRoot, item, 'damaged-loop', {
+    name: 'Damaged Shield Loop', playback: 'loop', canvas,
+    phases: ['cracked', 'stress-pulse', 'cracked-return'], durations: [160, 100, 140],
+  }, damagedComposite, damagedOverlays, options);
+  const breakFrames = await Promise.all([
+    { scale: 0.58, opacity: 0.62, density: 0.86 },
+    { scale: 1, opacity: 1, density: 1 },
+    { scale: 1.18, opacity: 0.62, density: 0.7 },
+  ].map((transform, index) => derivePixelArtEffectFrame(brokenField.buffer, {
+    ...transform,
+    origin: deviceAnchor,
+    salt: item.seed + 50 + index,
+    maxPaletteColors: plan.style.max_palette_colors,
+  })));
+  const breakOverlays = await Promise.all([
+    [fieldFrames[2], impactFrames[2]],
+    [fieldFrames[3], breakFrames[0]],
+    [breakFrames[1]],
+    [breakFrames[2]],
+    [],
+  ].map((layers) => compositeItemFrame(empty, layers)));
+  const breakComposite = await Promise.all(breakOverlays.map((overlay) => (
+    compositeItemFrame(baseBuffer, [overlay], { baseOnTop: true, canvas })
+  )));
+  const shieldBreak = await writeAnimation(itemRoot, item, 'shield-break', {
+    name: 'Shield Break and Scatter', playback: 'once', canvas,
+    phases: ['damaged', 'fracture', 'break', 'scatter', 'broken'], durations: [90, 70, 80, 120, 180],
+  }, breakComposite, breakOverlays, options);
   const downOverlays = [fieldFrames[2], fieldFrames[1], fieldFrames[0], empty];
   const downComposite = await Promise.all(downOverlays.map((overlay, index) => (
     index === downOverlays.length - 1 ? baseBuffer : combineField(overlay)
@@ -797,22 +848,33 @@ async function generateShieldRecipe(context) {
   await Promise.all([
     writeBuffer(resolveInside(itemRoot, `source/shield-field.${field.generated.format}`, 'Shield field source'), field.generated.buffer),
     writeBuffer(resolveInside(itemRoot, `source/shield-impact.${impact.generated.format}`, 'Shield impact source'), impact.generated.buffer),
+    writeBuffer(resolveInside(itemRoot, `source/shield-break.${brokenField.generated.format}`, 'Shield break source'), brokenField.generated.buffer),
   ]);
   const states = await writeStates(itemRoot, item, [
     { key: 'inactive', name: 'Inactive', buffer: baseBuffer },
     { key: 'active', name: 'Active Shield', buffer: activeComposite[0] },
+    { key: 'damaged', name: 'Damaged / Cracked', buffer: damagedComposite[0] },
+    { key: 'broken', name: 'Broken / Field Down', buffer: baseBuffer },
   ], canvas);
   return finalizeRecipeItem({
     options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
     states,
-    animations: [powerUp, active, hit, powerDown],
-    validationBuffers: [...fieldFrames, ...impactFrames, ...activeComposite],
+    animations: [powerUp, active, hit, damaged, shieldBreak, powerDown],
+    validationBuffers: [
+      ...fieldFrames,
+      ...impactFrames,
+      ...breakFrames,
+      ...activeComposite,
+      ...damagedComposite,
+      ...breakComposite,
+    ],
     validationDetails: {
       energy_region: detection.report,
+      device_origin: deviceOrigin,
       field_origin: deviceAnchor,
       impact_alignment: impact.alignment,
     },
-    generationCalls: 2,
+    generationCalls: 3,
   });
 }
 

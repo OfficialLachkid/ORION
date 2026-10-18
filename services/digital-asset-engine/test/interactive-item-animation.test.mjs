@@ -193,6 +193,7 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     'source-grenade': resolve(targetRoot, 'experiments/source-grenade'),
     'source-mine': resolve(targetRoot, 'experiments/source-mine'),
     'source-cell': resolve(targetRoot, 'experiments/source-cell'),
+    'source-shield': resolve(targetRoot, 'experiments/source-shield'),
     'target-product': targetRoot,
   };
   const products = {
@@ -238,14 +239,29 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       final_path: 'assets/items/cell-source.png',
       validation_path: 'validation/cell-source.json',
     }]),
+    'source-shield': canonicalProduct('source-shield', [{
+      asset_id: 'asset-shield-source',
+      asset_key: 'shield-source',
+      name: 'Shield Emitter',
+      kind: 'deployable',
+      description: 'A shield emitter.',
+      generation_prompt: 'Generate a shield emitter.',
+      seed: 4,
+      status: 'generated',
+      source_path: 'assets/source/shield-source.png',
+      final_path: 'assets/items/shield-source.png',
+      validation_path: 'validation/shield-source.json',
+    }]),
   };
   const grenade = await itemSprite({ energyX: 54, energyY: 58 });
   const mine = await itemSprite({ energyX: 70, energyY: 74 });
   const cell = await itemSprite({ energyX: 62, energyY: 58 });
+  const shield = await itemSprite({ energyX: 58, energyY: 54 });
   const sourcePaths = [
     [resolve(sourceRoots['source-grenade'], 'assets/items/grenade-source.png'), grenade],
     [resolve(sourceRoots['source-mine'], 'assets/items/mine-source.png'), mine],
     [resolve(sourceRoots['source-cell'], 'assets/items/cell-source.png'), cell],
+    [resolve(sourceRoots['source-shield'], 'assets/items/shield-source.png'), shield],
   ];
   for (const [path, buffer] of sourcePaths) {
     await mkdir(dirname(path), { recursive: true });
@@ -280,6 +296,17 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       name: 'Plasma Cell',
       recipe: 'power_cell',
       seed: 44,
+    },
+    {
+      source_product_slug: 'source-shield',
+      source_asset_key: 'shield-source',
+      target_asset_key: 'shield-emitter',
+      name: 'Shield Emitter',
+      recipe: 'shield_emitter',
+      seed: 45,
+      field_description: 'Protective shield orb.',
+      impact_description: 'Cracked shield surface.',
+      break_description: 'Scattering shield fragments.',
     },
   ]);
   let generationCalls = 0;
@@ -324,8 +351,8 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     },
   });
 
-  assert.equal(generationCalls, 2);
-  assert.equal(result.manifest.generation_calls, 2);
+  assert.equal(generationCalls, 5);
+  assert.equal(result.manifest.generation_calls, 5);
   assert.equal(result.manifest.gates.all_items_valid, true);
   assert.equal(result.manifest.gates.package_modified, false);
   assert.equal(result.results.every((item) => item.manifest.base_regenerated === false), true);
@@ -345,4 +372,10 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   assert.equal(cellManifest.generation_calls, 0);
   assert.equal((await readFile(resolve(result.batchRoot, 'plasma-cell/states/full.png'))).equals(cell), true);
   assert.equal((await readFile(resolve(result.batchRoot, 'plasma-cell/previews/states.png'))).length > 0, true);
+  const shieldManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'shield-emitter/manifest.json'), 'utf8'));
+  assert.deepEqual(shieldManifest.states, ['inactive', 'active', 'damaged', 'broken']);
+  assert.deepEqual(shieldManifest.animations, [
+    'power-up', 'active-loop', 'shield-hit', 'damaged-loop', 'shield-break', 'power-down',
+  ]);
+  assert.equal(shieldManifest.generation_calls, 3);
 });
