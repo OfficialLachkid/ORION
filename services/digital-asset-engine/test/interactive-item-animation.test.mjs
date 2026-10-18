@@ -8,6 +8,7 @@ import {
   alignEffectCoreToAnchor,
   createEnergyPulseFrame,
   detectDynamicEnergyRegion,
+  detectOpaqueObjectAnchor,
   generateInteractiveItemAnimationBatch,
   inspectPulseIsolation,
 } from '../src/interactive-item-animation.mjs';
@@ -135,6 +136,14 @@ test('energy pulse changes only dynamically detected pixels', async () => {
   assert.equal(isolation.passed, true);
   assert.equal(isolation.changed_pixels, 80);
   assert.equal(isolation.outside_region_changes, 0);
+});
+
+test('explosive object anchor follows the opaque sprite bounds rather than an off-center energy window', async () => {
+  const base = await itemSprite({ energyX: 70, energyY: 76 });
+  const origin = await detectOpaqueObjectAnchor(base);
+  assert.deepEqual(origin.bounds, { x: 38, y: 50, width: 52, height: 38 });
+  assert.deepEqual(origin.anchor, { x: 64, y: 69 });
+  assert.equal(origin.strategy, 'opaque_bounds_center');
 });
 
 test('effect alignment moves an asymmetric energy core onto the detected item anchor', async () => {

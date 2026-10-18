@@ -67,11 +67,7 @@
       "source_asset_key": "armory-supply-crate",
       "target_asset_key": "armory-supply-crate",
       "target_name": "Armory Supply Crate",
-      "buyer_group": "props",
-      "interactive_proof": {
-        "batch_id": "neon-plasma-armory-interactive-expansion-v2",
-        "asset_key": "armory-supply-crate"
-      }
+      "buyer_group": "props"
     },
     {
       "source_product_slug": "neon-plasma-armory-expansion-proof",

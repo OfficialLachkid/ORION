@@ -185,6 +185,33 @@ export async function detectDynamicEnergyRegion(assetBuffer, options) {
   };
 }
 
+export async function detectOpaqueObjectAnchor(assetBuffer, alphaThreshold = 128) {
+  const decoded = await sharp(assetBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let left = decoded.info.width;
+  let top = decoded.info.height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < decoded.info.height; y += 1) {
+    for (let x = 0; x < decoded.info.width; x += 1) {
+      if (decoded.data[(((y * decoded.info.width) + x) * 4) + 3] < alphaThreshold) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < left || bottom < top) throw new Error('Cannot detect an anchor for an empty asset.');
+  const bounds = { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+  return {
+    strategy: 'opaque_bounds_center',
+    bounds,
+    anchor: {
+      x: Math.round(left + ((bounds.width - 1) / 2)),
+      y: Math.round(top + ((bounds.height - 1) / 2)),
+    },
+  };
+}
+
 export async function createEnergyPulseFrame(assetBuffer, detection, intensity) {
   const overlay = Buffer.alloc(detection.decoded.data.length);
   for (let pixel = 0; pixel < detection.mask.length; pixel += 1) {
@@ -716,10 +743,10 @@ async function generateShieldRecipe(context) {
     ]),
   });
   const fieldFrames = await Promise.all([
-    { scale: 0.45, opacity: 0.35, density: 0.72 },
-    { scale: 0.72, opacity: 0.68, density: 0.86 },
+    { scale: 0.45, opacity: 0.35, density: 1 },
+    { scale: 0.72, opacity: 0.68, density: 1 },
     { scale: 1, opacity: 1, density: 1 },
-    { scale: 0.96, opacity: 0.82, density: 0.92 },
+    { scale: 0.96, opacity: 0.82, density: 1 },
   ].map((transform, index) => derivePixelArtEffectFrame(field.buffer, {
     ...transform,
     origin: deviceAnchor,
@@ -900,13 +927,14 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
     options,
   );
 
+  const detonationOrigin = await detectOpaqueObjectAnchor(baseBuffer);
   const detonation = await generateDetonationFrames({
     adapter,
     config: options.config,
     item,
     plan,
     canvas,
-    targetOrigin: detection.report.components[0]?.centroid || detection.report.centroid,
+    targetOrigin: detonationOrigin.anchor,
   });
   const sourceEffectPath = resolveInside(itemRoot, `source/detonation-peak.${detonation.generated.format}`, 'Detonation source');
   await writeBuffer(sourceEffectPath, detonation.generated.buffer);
@@ -953,6 +981,7 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
     base_regenerated: false,
     energy_region: detection.report,
     detonation_alignment: detonation.alignment,
+    detonation_origin: detonationOrigin,
     pulse_isolation: isolation,
     frame_reports: validations,
   };
