@@ -3,7 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { analyzeResearchHistory, loadExistingProductCatalog } from '../src/pipeline.mjs';
+import {
+  analyzeResearchHistory,
+  loadExistingProductCatalog,
+  runResearchCollection,
+} from '../src/pipeline.mjs';
 import { ResearchRecommendationQualityError } from '../src/ollama-recommendation-adapter.mjs';
 
 test('loads a compact existing-product catalog so research can recommend extensions', async () => {
@@ -112,4 +116,16 @@ test('keeps mature evidence in monitoring when the local model fails quality gat
   assert.equal(result.report.status, 'monitoring');
   assert.match(result.analysisIssue, /No coherent evidence/iu);
   assert.equal(posted.recommendation, null);
+});
+
+test('scheduled collection fails closed when scheduling is disabled', async () => {
+  const config = JSON.parse(await readFile(resolve(
+    process.cwd(),
+    'services/digital-asset-research/config.example.json',
+  ), 'utf8'));
+  config.scheduling.enabled = false;
+  await assert.rejects(
+    runResearchCollection({ config, scheduled: true }),
+    /scheduling is disabled/iu,
+  );
 });

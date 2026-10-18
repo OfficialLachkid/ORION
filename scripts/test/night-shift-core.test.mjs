@@ -127,6 +127,10 @@ function makeDeps(root, overrides = {}) {
     postNightShiftFailure: async () => calls.push('postNightShiftFailure'),
     postLeadNightShiftDigest: async () => calls.push('postLeadNightShiftDigest'),
     postPokemonNightShiftDigest: async () => calls.push('postPokemonNightShiftDigest'),
+    runNightShiftDigitalAssetResearch: async () => {
+      calls.push('runNightShiftDigitalAssetResearch');
+      return { status: 'completed', runId: 'research-run-1' };
+    },
     kickOffScheduledLeadgen: () => {
       calls.push('kickOffScheduledLeadgen');
       return 4242;
@@ -200,16 +204,20 @@ test('night shift runs Claude-quota phases in priority order: redraft -> follow-
   await runNightShift(['node', 'scripts/run-night-shift.mjs', '--limit', '30'], deps);
 
   const detectRepliesIndex = calls.indexOf('detectReplies');
+  const researchIndex = calls.indexOf('runNightShiftDigitalAssetResearch');
   const redraftIndex = calls.indexOf('runRedraftRejected');
   const followUpsIndex = calls.indexOf('runFollowUps');
   const qualificationIndex = calls.indexOf('runQualification');
   const reconcileIndex = calls.indexOf('reconcileDrafts');
 
+  assert.ok(researchIndex >= 0, 'digital-asset research must run');
+  assert.ok(detectRepliesIndex > researchIndex, 'digital-asset research must be the first night-shift work phase');
   assert.ok(detectRepliesIndex >= 0, 'detectReplies must run');
   assert.ok(redraftIndex > detectRepliesIndex, 'runRedraftRejected must run after detectReplies');
   assert.ok(followUpsIndex > redraftIndex, 'runFollowUps must run after runRedraftRejected');
   assert.ok(qualificationIndex > followUpsIndex, 'runQualification must run LAST of the Claude-quota phases so quota drains hit new drafts, not operator-feedback rewrites or follow-ups');
   assert.ok(reconcileIndex > qualificationIndex, 'reconcileDrafts must run after all Claude-quota phases so it picks up freshly-produced drafts');
+  assert.ok(calls.indexOf('kickOffScheduledLeadgen') > calls.indexOf('postPokemonNightShiftDigest'), 'leadgen must remain the final heavy phase');
 });
 
 test('fallback retries qualification but skips duplicate Pokemon maintenance and full leadgen sweep', async (t) => {
@@ -232,6 +240,7 @@ test('fallback retries qualification but skips duplicate Pokemon maintenance and
   assert.equal(calls.includes('refreshPokeQuizzReviewMessages'), false);
   assert.equal(calls.includes('reconcilePokeQuizzReviewThreads'), false);
   assert.equal(calls.includes('kickOffScheduledLeadgen'), false);
+  assert.equal(calls.includes('runNightShiftDigitalAssetResearch'), false);
 });
 
 test('fallback runs Pokemon maintenance when the primary never reached that step', async (t) => {

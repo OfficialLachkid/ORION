@@ -26,6 +26,7 @@ import {
   runQualification,
   runRedraftRejected,
 } from './qualification.mjs';
+import { runNightShiftDigitalAssetResearch } from './digital-asset-research.mjs';
 
 export function todayStamp(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -87,6 +88,7 @@ function buildRuntime(deps) {
     postNightShiftFailure,
     postLeadNightShiftDigest,
     postPokemonNightShiftDigest,
+    runNightShiftDigitalAssetResearch,
     kickOffScheduledLeadgen,
     ...deps,
   };
@@ -117,6 +119,27 @@ export async function runNightShift(argv = process.argv, deps = {}) {
   }
 
   const label = isFallback ? 'Night Shift (07:00 fallback)' : 'Night Shift';
+
+  // The primary night shift owns digital-asset research as its first bounded
+  // phase. This keeps marketplace collection and short local-model analysis
+  // after the operator's working day, but before qualification, video work,
+  // and the detached leadgen sweep. It deliberately has no separate timer,
+  // so two ORION jobs cannot race merely because their clocks align.
+  let digitalAssetResearch = {
+    status: 'skipped',
+    reason: isFallback ? 'fallback_run' : 'not_started',
+  };
+  if (!isFallback) {
+    try {
+      digitalAssetResearch = await runtime.runNightShiftDigitalAssetResearch(config, {
+        projectRoot: runtime.projectRoot,
+      });
+    } catch (error) {
+      digitalAssetResearch = { status: 'failed', reason: String(error.message || error) };
+      runtime.stderr.write(`Digital-asset research phase failed (non-fatal): ${error.message}\n`);
+    }
+    runtime.recordOpsMetric(config, 'digital_asset_research_schedule_run', digitalAssetResearch);
+  }
 
   // Phase ordering (2026-09-18 rework, operator ask): all three Claude-quota
   // steps share ONE weekly usage cap. If the fresh-lead qualifier drained
@@ -387,6 +410,7 @@ export async function runNightShift(argv = process.argv, deps = {}) {
     previewFallbackError,
     leadgenChildPid,
     skippedPokemonMaintenance,
+    digitalAssetResearch,
   }, null, 2)}\n`);
 }
 

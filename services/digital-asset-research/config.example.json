@@ -5,7 +5,7 @@
   "maximum_items_per_view": 30,
   "request_delay_ms": 1500,
   "scheduling": {
-    "enabled": false,
+    "enabled": true,
     "cadence_hours": 24
   },
   "source": {

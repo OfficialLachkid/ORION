@@ -125,8 +125,8 @@ export async function analyzeResearchHistory(options) {
 
 export async function runResearchCollection(options) {
   const config = ResearchConfigSchema.parse(options.config);
-  if (config.scheduling.enabled && !options.allowScheduled) {
-    throw new Error('Automatic research scheduling is intentionally disabled for the MVP. Run it manually.');
+  if (options.scheduled && !config.scheduling.enabled) {
+    throw new Error('Automatic research scheduling is disabled in the research config.');
   }
   const observedAt = options.now || new Date().toISOString();
   const runId = options.runId || randomUUID();

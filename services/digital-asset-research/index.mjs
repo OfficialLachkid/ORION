@@ -8,10 +8,11 @@ import {
 } from './src/pipeline.mjs';
 
 function parseArguments(argv) {
-  const args = { command: argv[2] || 'help', postToDiscord: false };
+  const args = { command: argv[2] || 'help', postToDiscord: false, scheduled: false };
   for (let index = 3; index < argv.length; index += 1) {
     const token = argv[index];
     if (token === '--post-to-discord') args.postToDiscord = true;
+    else if (token === '--scheduled') args.scheduled = true;
     else if (token === '--config') args.config = argv[++index];
     else if (token === '--archive-root') args.archiveRoot = argv[++index];
     else if (token === '--runtime-env') args.runtimeEnv = argv[++index];
@@ -36,9 +37,10 @@ async function main() {
       '  --archive-root <path>   Store raw evidence on the T7 or another local archive.',
       '  --runtime-env <path>    Existing ORION runtime .env.',
       '  --post-to-discord       Post the baseline or recommendation to Discord.',
+      '  --scheduled             Require scheduling to be enabled in the research config.',
       '  --now <ISO datetime>    Deterministic timestamp for testing.',
       '',
-      'No scheduler is installed by this MVP. Approval creates a planning handoff; it does not generate assets.',
+      'Scheduled collection is owned by the existing night shift. Approval creates a planning handoff; it does not generate assets.',
     ].join('\n'));
     return;
   }
@@ -55,6 +57,7 @@ async function main() {
     runtimeConfig,
     now: args.now,
     postToDiscord: args.postToDiscord,
+    scheduled: args.scheduled,
   });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
