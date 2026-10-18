@@ -307,10 +307,15 @@ async function generateDetonationFrames({ adapter, config, item, plan, canvas, t
     sourceWidth: plan.style.source_width,
     sourceHeight: plan.style.source_height,
   });
+  const center = { x: Math.floor(canvas.width / 2), y: Math.floor(canvas.height / 2) };
+  const anchorReserve = Math.ceil(Math.max(
+    Math.abs(targetOrigin.x - center.x),
+    Math.abs(targetOrigin.y - center.y),
+  ));
   const processed = await processPixelArtEffectFrame(generated.buffer, {
     width: canvas.width,
     height: canvas.height,
-    padding: Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.12)),
+    padding: Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.12)) + anchorReserve,
     placement: 'center',
     maxPaletteColors: plan.style.max_palette_colors,
     chromaKey: plan.style.chroma_key,
@@ -436,10 +441,15 @@ async function generateIsolatedEffect({ adapter, config, item, plan, canvas, pro
     sourceWidth: plan.style.source_width,
     sourceHeight: plan.style.source_height,
   });
+  const center = { x: Math.floor(canvas.width / 2), y: Math.floor(canvas.height / 2) };
+  const anchorReserve = targetOrigin ? Math.ceil(Math.max(
+    Math.abs(targetOrigin.x - center.x),
+    Math.abs(targetOrigin.y - center.y),
+  )) : 0;
   const processed = await processPixelArtEffectFrame(generated.buffer, {
     width: canvas.width,
     height: canvas.height,
-    padding: Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.12)),
+    padding: Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.12)) + anchorReserve,
     placement: 'center',
     maxPaletteColors: plan.style.max_palette_colors,
     chromaKey: plan.style.chroma_key,
