@@ -6,7 +6,11 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { loadEngineConfig } from '../src/config.mjs';
-import { packageDigitalAssetPreview } from '../src/packager.mjs';
+import {
+  describeAssetCollection,
+  packageDigitalAssetPreview,
+  resizePreviewAsset,
+} from '../src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from '../src/pipeline.mjs';
 
 const testDirectory = resolve(fileURLToPath(new URL('.', import.meta.url)));
@@ -65,6 +69,45 @@ test('planning validates an opportunity and writes a canonical product', async (
   assert.equal(result.product.approvals.distribution, 'pending');
   const stored = JSON.parse(await readFile(result.persistence.manifestPath, 'utf8'));
   assert.deepEqual(stored, result.product);
+});
+
+test('packager preserves weapon copy and describes mixed expansion assets generically', () => {
+  const product = { style: { perspective: 'side and three-quarter view' } };
+  const weaponCopy = describeAssetCollection(product, [
+    { asset: { kind: 'weapon' } },
+    { asset: { kind: 'weapon' } },
+  ]);
+  const mixedCopy = describeAssetCollection(product, [
+    { asset: { kind: 'pickup' } },
+    { asset: { kind: 'environment-prop' } },
+    { asset: { kind: 'vfx-keyframe' } },
+  ]);
+
+  assert.equal(weaponCopy.coverLabel, '2 SIDE-VIEW WEAPON SPRITES');
+  assert.deepEqual(weaponCopy.tags, ['2D', 'Pixel Art', 'Sci-fi', 'Weapons', 'Sprites']);
+  assert.equal(mixedCopy.coverLabel, '3 PIXEL ART ASSETS');
+  assert.match(mixedCopy.shortDescription, /game assets/iu);
+  assert.doesNotMatch(mixedCopy.shortDescription, /weapon/iu);
+  assert.match(mixedCopy.technicalLines.join(' '), /pickup/iu);
+});
+
+test('preview resizing keeps contain padding transparent', async () => {
+  const source = await sharp({
+    create: {
+      width: 128,
+      height: 64,
+      channels: 4,
+      background: { r: 53, g: 217, b: 255, alpha: 1 },
+    },
+  }).png().toBuffer();
+  const resized = await resizePreviewAsset(source, 96, 96);
+  const { data, info } = await sharp(resized).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+
+  assert.equal(info.width, 96);
+  assert.equal(info.height, 96);
+  assert.equal(data[3], 0);
+  const centerOffset = (((48 * info.width) + 48) * 4) + 3;
+  assert.equal(data[centerOffset], 255);
 });
 
 test('pipeline produces a transparent, validated candidate while blocking distribution', async () => {

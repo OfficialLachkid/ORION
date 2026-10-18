@@ -1,0 +1,180 @@
+{
+  "schema_version": "1.0",
+  "opportunity_id": "OPPORTUNITY-0146-ARMORY-EXPANSION-PROOF",
+  "status": "validated",
+  "title": "Neon Plasma Armory Expansion Proof",
+  "category": "Pixel Art / Items and Props",
+  "product_type": "Internal Sci-Fi Asset Expansion Capability Proof",
+  "theme": "Original neon industrial science fiction matching Neon Plasma Armory: dark gunmetal bodies, compact cyan energy elements, restrained violet accents, and readable functional silhouettes",
+  "target_audience": [
+    "internal ORION reviewers",
+    "indie game developers",
+    "2D science-fiction game creators"
+  ],
+  "observed_at": "2026-10-18T00:00:00.000Z",
+  "expires_at": "2027-01-16T00:00:00.000Z",
+  "signals": {
+    "trend_direction": "stable",
+    "demand": "medium",
+    "competition": "high",
+    "cross_marketplace_evidence": "weak",
+    "confidence": 72
+  },
+  "generation": {
+    "medium": "pixel_art",
+    "perspective": "consistent 2D game-sprite presentation; readable side or slight three-quarter view for compact items and furniture; centered camera-facing shape for VFX",
+    "width": 128,
+    "height": 128,
+    "source_width": 1024,
+    "source_height": 1024,
+    "max_palette_colors": 32,
+    "palette": [
+      "#10131d",
+      "#20283a",
+      "#44506b",
+      "#7785a6",
+      "#c8d4ec",
+      "#35d9ff",
+      "#875cff",
+      "#ff4fd8"
+    ],
+    "outline": "Use a one-pixel dark outline at final sprite resolution and the same crisp pixel-cluster language as the approved weapon sprites",
+    "lighting": "Cool cyan energy light, upper-left neutral rim light, restrained violet highlights, no cast shadow",
+    "background": "transparent",
+    "chroma_key": "#ff00ff",
+    "assets": [
+      {
+        "asset_key": "plasma-power-cell",
+        "name": "Plasma Power Cell",
+        "kind": "consumable",
+        "description": "a compact replaceable plasma power cell with a dark reinforced casing, cyan charge window, small violet status light, and clearly readable connection contacts",
+        "prompt_notes": [
+          "Show one upright cartridge-sized object in slight three-quarter side view",
+          "Keep the cyan chamber enclosed by the casing and avoid weapon-like handles or barrels"
+        ]
+      },
+      {
+        "asset_key": "energy-pickup",
+        "name": "Energy Pickup",
+        "kind": "pickup",
+        "description": "a compact collectible energy pickup with a protected cyan core held inside a small symmetrical gunmetal frame",
+        "prompt_notes": [
+          "Design a clear collectible silhouette that differs from the rectangular power cell",
+          "No floating particles, floor, aura, letters, numbers, or extra pickup objects"
+        ]
+      },
+      {
+        "asset_key": "plasma-grenade",
+        "name": "Plasma Grenade",
+        "kind": "grenade",
+        "description": "a palm-sized plasma grenade with a squat rounded armored body, protected cyan energy chamber, top safety control, and restrained violet indicator",
+        "prompt_notes": [
+          "One compact throwable device in readable three-quarter side view",
+          "Avoid familiar real-world grenade silhouettes and avoid franchise-specific shapes"
+        ]
+      },
+      {
+        "asset_key": "plasma-proximity-mine",
+        "name": "Plasma Proximity Mine",
+        "kind": "deployable",
+        "description": "a low-profile deployable proximity mine with a broad stable base, four short armored sensor fins, central cyan detection core, and violet arming light",
+        "prompt_notes": [
+          "Show the complete mine from a slightly elevated side view so its footprint reads clearly",
+          "No floor contact shadow, warning text, skull symbols, or extra devices"
+        ]
+      },
+      {
+        "asset_key": "portable-shield-emitter",
+        "name": "Portable Shield Emitter",
+        "kind": "deployable",
+        "description": "a compact portable shield emitter with a weighted gunmetal base, two folded side vanes, central cyan projector core, and restrained violet controls",
+        "prompt_notes": [
+          "Show the inactive device only, without a surrounding shield bubble",
+          "Keep it clearly distinct from a mine through its upright projector silhouette"
+        ]
+      },
+      {
+        "asset_key": "shield-impact-keyframe",
+        "name": "Shield Impact Keyframe",
+        "kind": "vfx-keyframe",
+        "description": "one isolated science-fiction shield-hit effect keyframe shaped as a curved cyan energy arc with a bright compact contact point and a few restrained violet pixel fragments",
+        "prompt_notes": [
+          "Effect only with no shield device, character, weapon, projectile, environment, or circular full-screen bubble",
+          "Use an asymmetric curved impact silhouette suitable as the strongest frame of a short animation"
+        ]
+      },
+      {
+        "asset_key": "plasma-burst-keyframe",
+        "name": "Plasma Burst Keyframe",
+        "kind": "vfx-keyframe",
+        "description": "one isolated plasma burst effect keyframe with a compact brilliant cyan center, short irregular energy spikes, and restrained violet outer fragments",
+        "prompt_notes": [
+          "Effect only with no projectile, weapon, target, smoke cloud, environment, or multiple explosions",
+          "Keep the silhouette compact and radial but visibly irregular for a readable impact animation keyframe"
+        ]
+      },
+      {
+        "asset_key": "armory-supply-crate",
+        "name": "Armory Supply Crate",
+        "kind": "environment-prop",
+        "description": "a closed compact science-fiction supply crate with reinforced gunmetal corners, inset cyan power latch, restrained violet status light, and readable industrial panel seams",
+        "prompt_notes": [
+          "Show one complete crate in slight three-quarter side view",
+          "No logos, letters, numbers, contents, weapon attachments, floor, or shadow"
+        ]
+      },
+      {
+        "asset_key": "armory-chair",
+        "name": "Armory Chair",
+        "kind": "environment-prop",
+        "description": "a practical single-seat science-fiction armory chair with a dark angular metal frame, padded blue-gray seat and back, small cyan adjustment light, and restrained violet accent",
+        "prompt_notes": [
+          "Show one empty chair in slight three-quarter side view with all legs or base fully visible",
+          "No person, desk, floor, cast shadow, wheels, text, or extra furniture"
+        ]
+      },
+      {
+        "asset_key": "armory-workbench",
+        "name": "Armory Workbench",
+        "kind": "environment-prop",
+        "description": "a sturdy science-fiction armory workbench with a dark reinforced frame, clear tabletop, integrated cyan power strip, closed storage drawers, and restrained violet controls",
+        "prompt_notes": [
+          "Show one complete empty workbench in slight three-quarter side view with generous canvas padding",
+          "No weapons, tools, chair, loose objects, text, floor, cast shadow, wall, or scenery"
+        ]
+      }
+    ]
+  },
+  "commercial": {
+    "base_price": {
+      "amount": 0,
+      "currency": "EUR"
+    },
+    "marketplace_candidates": [
+      "itch.io"
+    ]
+  },
+  "risk": {
+    "ip_risk": "low",
+    "prohibited_references": [
+      "Pokemon",
+      "Star Wars",
+      "Halo",
+      "Destiny",
+      "Warhammer",
+      "Cyberpunk 2077",
+      "specific living artists"
+    ],
+    "notes": [
+      "Internal capability proof only. No generated item joins the public product until it passes human review and a versioned package-extension gate.",
+      "Use the approved Neon Plasma Armory palette and functional vocabulary without copying an existing franchise, object design, or asset pack."
+    ]
+  },
+  "evidence": [
+    {
+      "label": "Operator-approved technical capability experiment for an existing ORION product",
+      "source": "ORION human product review on 2026-10-18",
+      "observed_at": "2026-10-18T00:00:00.000Z"
+    }
+  ]
+}
