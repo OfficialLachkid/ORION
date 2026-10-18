@@ -109,6 +109,10 @@ async function addAnimationProof(setup) {
   const itemRoot = resolve(setup.productRoot, 'experiments', batchId, assetKey);
   const runtime = {
     'base.png': setup.png,
+    'states/full.png': setup.png,
+    'states/empty.png': setup.png,
+    'metadata/states.json': Buffer.from('{"states":["empty","full"]}\n'),
+    'previews/states.png': setup.png,
     'frames/active-loop/00.png': setup.png,
     'overlays/active-loop/00.png': setup.png,
     'sheets/active-loop.png': setup.png,
@@ -137,6 +141,7 @@ async function addAnimationProof(setup) {
     incurred_cost: 0,
     buyer_runtime_formats: ['transparent_png_frames', 'animation_json'],
     preview_only_formats: ['animated_gif'],
+    states: ['empty', 'full'],
     animations: ['active-loop', 'detonation'],
     files,
     manifest_hash: itemManifestHash,
@@ -183,6 +188,8 @@ test('expansion review binds interactive runtime files and Discord GIF previews 
   });
   const asset = prepared.manifest.assets[0];
   assert.equal(prepared.manifest.animation_count, 2);
+  assert.equal(prepared.manifest.state_count, 2);
+  assert.equal(asset.animation.states.length, 2);
   assert.equal(asset.animation.animations.length, 2);
   assert.equal(asset.animation.base_sha256, setup.hash);
   assert.equal(asset.review_hash, asset.animation.bundle_hash);
@@ -226,6 +233,7 @@ test('expansion review binds interactive runtime files and Discord GIF previews 
   ));
   assert.deepEqual(assetRequest.payload.attachments.map((attachment) => attachment.filename), [
     'power-cell.png',
+    'power-cell-states.png',
     'power-cell-active-loop.gif',
     'power-cell-detonation.gif',
   ]);

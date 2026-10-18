@@ -322,20 +322,47 @@ export const EffectBatchPlanSchema = z.object({
   }
 });
 
+const InteractiveItemSourceSchema = z.object({
+  source_product_slug: IdentifierSchema,
+  source_asset_key: IdentifierSchema,
+  target_asset_key: IdentifierSchema,
+  name: z.string().min(1),
+  seed: z.number().int().nonnegative(),
+});
+
+const InteractiveItemRecipeSchema = z.discriminatedUnion('recipe', [
+  InteractiveItemSourceSchema.extend({
+    recipe: z.enum(['grenade', 'proximity_mine']),
+    detonation_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('shield_emitter'),
+    field_description: z.string().min(1),
+    impact_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('power_cell'),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('energy_pickup'),
+    collection_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('supply_crate'),
+    open_description: z.string().min(1),
+    empty_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('workbench'),
+  }),
+]);
+
 export const InteractiveItemAnimationBatchSchema = z.object({
   schema_version: z.literal('1.0'),
   batch_id: IdentifierSchema,
   product_slug: IdentifierSchema,
   title: z.string().min(1),
-  items: z.array(z.object({
-    source_product_slug: IdentifierSchema,
-    source_asset_key: IdentifierSchema,
-    target_asset_key: IdentifierSchema,
-    name: z.string().min(1),
-    recipe: z.enum(['grenade', 'proximity_mine']),
-    seed: z.number().int().nonnegative(),
-    detonation_description: z.string().min(1),
-  })).min(1).max(25),
+  items: z.array(InteractiveItemRecipeSchema).min(1).max(25),
   style: z.object({
     medium: z.literal('pixel_art'),
     palette: z.array(HexColorSchema).min(2).max(256),
@@ -455,6 +482,10 @@ export const AssetExpansionReviewPlanSchema = z.object({
       batch_id: IdentifierSchema,
       asset_key: IdentifierSchema,
     }).optional(),
+    interactive_proof: z.object({
+      batch_id: IdentifierSchema,
+      asset_key: IdentifierSchema,
+    }).optional(),
   })).min(1).max(25),
 }).superRefine((plan, context) => {
   const targets = plan.assets.map((asset) => asset.target_asset_key);
@@ -464,6 +495,15 @@ export const AssetExpansionReviewPlanSchema = z.object({
       message: 'Expansion target asset keys must be unique.',
       path: ['assets'],
     });
+  }
+  for (const [index, asset] of plan.assets.entries()) {
+    if (asset.animation_proof && asset.interactive_proof) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Use interactive_proof instead of defining both proof fields.',
+        path: ['assets', index],
+      });
+    }
   }
   const parse = (value) => value.split('.').map(Number);
   const base = parse(plan.base_version);

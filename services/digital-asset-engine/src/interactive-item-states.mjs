@@ -1,0 +1,87 @@
+import sharp from 'sharp';
+
+function escapeXml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+export async function transparentFrame(canvas) {
+  return sharp({
+    create: {
+      width: canvas.width,
+      height: canvas.height,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).png().toBuffer();
+}
+
+export async function compositeItemFrame(baseBuffer, overlays = [], options = {}) {
+  const inputs = overlays.map((input) => ({ input }));
+  if (options.baseOnTop) inputs.push({ input: baseBuffer });
+  return sharp(options.baseOnTop ? await transparentFrame(options.canvas) : baseBuffer)
+    .composite(inputs)
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+export async function createEnergyLevelFrame(baseBuffer, detection, level) {
+  const output = Buffer.from(detection.decoded.data);
+  const overlay = Buffer.alloc(output.length);
+  for (let pixel = 0; pixel < detection.mask.length; pixel += 1) {
+    if (!detection.mask[pixel]) continue;
+    const offset = pixel * 4;
+    for (let channel = 0; channel < 3; channel += 1) {
+      const source = detection.decoded.data[offset + channel];
+      const target = level >= 0
+        ? source + ((255 - source) * level)
+        : source * (1 + level);
+      output[offset + channel] = Math.max(0, Math.min(255, Math.round(target)));
+      overlay[offset + channel] = output[offset + channel];
+    }
+    output[offset + 3] = detection.decoded.data[offset + 3];
+    overlay[offset + 3] = detection.decoded.data[offset + 3];
+  }
+  const raw = { width: detection.decoded.info.width, height: detection.decoded.info.height, channels: 4 };
+  return {
+    compositeBuffer: level === 0
+      ? baseBuffer
+      : await sharp(output, { raw }).png({ palette: true, colours: 32, dither: 0 }).toBuffer(),
+    overlayBuffer: await sharp(overlay, { raw }).png({ palette: true, colours: 32, dither: 0 }).toBuffer(),
+  };
+}
+
+export async function buildStateContactSheet(states, canvas) {
+  const cellWidth = Math.max(180, canvas.width + 48);
+  const cellHeight = canvas.height + 76;
+  const columns = Math.min(4, states.length);
+  const rows = Math.ceil(states.length / columns);
+  const width = cellWidth * columns;
+  const height = cellHeight * rows;
+  const cards = [];
+  const images = [];
+  for (let index = 0; index < states.length; index += 1) {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const left = column * cellWidth;
+    const top = row * cellHeight;
+    cards.push(
+      `<rect x="${left + 8}" y="${top + 8}" width="${cellWidth - 16}" height="${cellHeight - 16}" rx="12" fill="#111827" stroke="#30405e"/>`,
+      `<text x="${left + (cellWidth / 2)}" y="${top + cellHeight - 25}" text-anchor="middle" fill="#e6eefc" font-family="Arial, sans-serif" font-size="16" font-weight="700">${escapeXml(states[index].name)}</text>`,
+    );
+    images.push({
+      input: states[index].buffer,
+      left: left + Math.floor((cellWidth - canvas.width) / 2),
+      top: top + 18,
+    });
+  }
+  const background = Buffer.from(`<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#0c1019"/>${cards.join('')}</svg>`);
+  return sharp({ create: { width, height, channels: 3, background: '#0c1019' } })
+    .composite([{ input: background }, ...images])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}

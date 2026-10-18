@@ -32,7 +32,7 @@ const DEFAULT_EFFECT_REVISION = 'services/digital-asset-engine/fixtures/weapon-i
 const DEFAULT_EFFECT_REVIEW = 'services/digital-asset-engine/fixtures/all-weapon-effects-v2.review.json';
 const DEFAULT_EXTENSION_PLAN = 'services/digital-asset-engine/fixtures/neon-plasma-armory-effects.extension.json';
 const DEFAULT_EXPANSION_REVIEW = 'services/digital-asset-engine/fixtures/neon-plasma-armory-static-expansion.review.json';
-const DEFAULT_ITEM_ANIMATION_BATCH = 'services/digital-asset-engine/fixtures/neon-plasma-armory-interactive-items.batch.json';
+const DEFAULT_ITEM_ANIMATION_BATCH = 'services/digital-asset-engine/fixtures/neon-plasma-armory-interactive-expansion-v2.batch.json';
 
 function parseArguments(argv) {
   const args = {
@@ -445,6 +445,10 @@ async function main() {
         manifest_hash: result.manifest.manifest_hash,
         status: result.validation.status,
         dynamic_energy_region: result.validation.energy_region,
+        states: result.states?.states?.map((state) => ({
+          state_key: state.key,
+          path: state.path,
+        })) || [],
         animations: result.animations.map((animation) => ({
           animation_key: animation.key,
           sprite_sheet_path: animation.sheetPath,

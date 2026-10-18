@@ -123,29 +123,31 @@ function animationReviewFile(path) {
     || path.startsWith('frames/')
     || path.startsWith('overlays/')
     || path.startsWith('sheets/')
+    || path.startsWith('states/')
     || path.startsWith('metadata/')
-    || (path.startsWith('previews/') && path.endsWith('.gif'));
+    || (path.startsWith('previews/') && (path.endsWith('.gif') || path.endsWith('.png')));
 }
 
 async function loadAnimationProof(productRoot, request, expectedBaseHash) {
-  if (!request.animation_proof) return null;
+  const proof = request.interactive_proof || request.animation_proof;
+  if (!proof) return null;
   const batchRoot = resolveInside(
     productRoot,
-    `experiments/${request.animation_proof.batch_id}`,
+    `experiments/${proof.batch_id}`,
     'Interactive animation batch',
   );
   const batchManifest = await readJson(resolveInside(batchRoot, 'manifest.json', 'Animation batch manifest'));
-  if (batchManifest.batch_id !== request.animation_proof.batch_id
+  if (batchManifest.batch_id !== proof.batch_id
     || batchManifest.status !== 'awaiting_animation_review'
     || batchManifest.gates?.all_items_valid !== true
     || batchManifest.gates?.package_modified !== false) {
-    throw new Error(`Animation batch is not a valid isolated proof: ${request.animation_proof.batch_id}.`);
+    throw new Error(`Animation batch is not a valid isolated proof: ${proof.batch_id}.`);
   }
   const itemReference = batchManifest.item_manifests?.find((item) => (
-    item.asset_key === request.animation_proof.asset_key
+    item.asset_key === proof.asset_key
   ));
-  if (!itemReference) throw new Error(`Animation proof item is missing: ${request.animation_proof.asset_key}.`);
-  const itemRoot = resolveInside(batchRoot, request.animation_proof.asset_key, 'Interactive animation item');
+  if (!itemReference) throw new Error(`Animation proof item is missing: ${proof.asset_key}.`);
+  const itemRoot = resolveInside(batchRoot, proof.asset_key, 'Interactive animation item');
   const itemManifest = await readJson(resolveInside(itemRoot, 'manifest.json', 'Animation item manifest'));
   if (itemManifest.manifest_hash !== itemReference.manifest_hash
     || itemManifest.item?.target_asset_key !== request.target_asset_key
@@ -171,7 +173,13 @@ async function loadAnimationProof(productRoot, request, expectedBaseHash) {
     sprite_sheet_path: `animations/${request.target_asset_key}/sheets/${animationKey}.png`,
     preview_gif_path: `animations/${request.target_asset_key}/previews/${animationKey}.gif`,
   }));
-  if (!animations.length) throw new Error(`Animation proof contains no animations: ${request.target_asset_key}.`);
+  const states = (itemManifest.states || []).map((stateKey) => ({
+    state_key: stateKey,
+    path: `animations/${request.target_asset_key}/states/${stateKey}.png`,
+  }));
+  if (!animations.length && !states.length) {
+    throw new Error(`Interactive proof contains no states or animations: ${request.target_asset_key}.`);
+  }
   const identity = {
     batch_id: batchManifest.batch_id,
     batch_manifest_hash: batchManifest.manifest_hash,
@@ -181,6 +189,8 @@ async function loadAnimationProof(productRoot, request, expectedBaseHash) {
     incurred_cost: itemManifest.incurred_cost,
     buyer_runtime_formats: itemManifest.buyer_runtime_formats,
     preview_only_formats: itemManifest.preview_only_formats,
+    quality_holds: itemManifest.quality_holds || [],
+    states,
     animations,
     files: files.map(({ buffer, path, size, sha256: fileHash }) => ({
       path: `animations/${request.target_asset_key}/${path}`,
@@ -312,6 +322,7 @@ export async function prepareAssetExpansionReview(options) {
     expansion_review_version: EXPANSION_REVIEW_VERSION,
     asset_count: selected.length,
     animation_count: selected.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0),
+    state_count: selected.reduce((total, asset) => total + (asset.animation?.states.length || 0), 0),
     assets: selected.map(({ buffer, animation, ...asset }) => ({
       ...asset,
       path: `assets/${asset.asset_key}.png`,

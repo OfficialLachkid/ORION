@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import sharp from 'sharp';
 import {
+  alignEffectCoreToAnchor,
   createEnergyPulseFrame,
   detectDynamicEnergyRegion,
   generateInteractiveItemAnimationBatch,
@@ -136,6 +137,33 @@ test('energy pulse changes only dynamically detected pixels', async () => {
   assert.equal(isolation.outside_region_changes, 0);
 });
 
+test('effect alignment moves an asymmetric energy core onto the detected item anchor', async () => {
+  const effect = await sharp({
+    create: {
+      width: 128,
+      height: 128,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).composite([
+    {
+      input: Buffer.from('<svg width="18" height="12"><rect x="0" y="3" width="18" height="6" fill="#875cff"/><rect x="2" y="1" width="8" height="10" fill="#35d9ff"/></svg>'),
+      left: 72,
+      top: 42,
+    },
+  ]).png({ palette: true, colours: 32, dither: 0 }).toBuffer();
+  const aligned = await alignEffectCoreToAnchor(effect, {
+    colors: ['#35d9ff'],
+    tolerance: 12,
+    target: { x: 55, y: 61 },
+    maxPaletteColors: 32,
+  });
+  assert.equal(aligned.report.passed, true);
+  assert.deepEqual(aligned.report.aligned_origin, { x: 55, y: 61 });
+  assert.deepEqual(aligned.report.translation, { x: -23, y: 13 });
+  assert.equal(aligned.report.clipped_pixels, 0);
+});
+
 test('interactive item batch schema rejects duplicate target assets', () => {
   const item = {
     source_product_slug: 'source-product',
@@ -155,6 +183,7 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   const sourceRoots = {
     'source-grenade': resolve(targetRoot, 'experiments/source-grenade'),
     'source-mine': resolve(targetRoot, 'experiments/source-mine'),
+    'source-cell': resolve(targetRoot, 'experiments/source-cell'),
     'target-product': targetRoot,
   };
   const products = {
@@ -187,12 +216,27 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       final_path: 'assets/items/mine-source.png',
       validation_path: 'validation/mine-source.json',
     }]),
+    'source-cell': canonicalProduct('source-cell', [{
+      asset_id: 'asset-cell-source',
+      asset_key: 'cell-source',
+      name: 'Power Cell',
+      kind: 'consumable',
+      description: 'A power cell.',
+      generation_prompt: 'Generate a power cell.',
+      seed: 3,
+      status: 'generated',
+      source_path: 'assets/source/cell-source.png',
+      final_path: 'assets/items/cell-source.png',
+      validation_path: 'validation/cell-source.json',
+    }]),
   };
   const grenade = await itemSprite({ energyX: 54, energyY: 58 });
   const mine = await itemSprite({ energyX: 70, energyY: 74 });
+  const cell = await itemSprite({ energyX: 62, energyY: 58 });
   const sourcePaths = [
     [resolve(sourceRoots['source-grenade'], 'assets/items/grenade-source.png'), grenade],
     [resolve(sourceRoots['source-mine'], 'assets/items/mine-source.png'), mine],
+    [resolve(sourceRoots['source-cell'], 'assets/items/cell-source.png'), cell],
   ];
   for (const [path, buffer] of sourcePaths) {
     await mkdir(dirname(path), { recursive: true });
@@ -219,6 +263,14 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       recipe: 'proximity_mine',
       seed: 43,
       detonation_description: 'Broad cyan plasma detonation.',
+    },
+    {
+      source_product_slug: 'source-cell',
+      source_asset_key: 'cell-source',
+      target_asset_key: 'plasma-cell',
+      name: 'Plasma Cell',
+      recipe: 'power_cell',
+      seed: 44,
     },
   ]);
   let generationCalls = 0;
@@ -264,6 +316,7 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   });
 
   assert.equal(generationCalls, 2);
+  assert.equal(result.manifest.generation_calls, 2);
   assert.equal(result.manifest.gates.all_items_valid, true);
   assert.equal(result.manifest.gates.package_modified, false);
   assert.equal(result.results.every((item) => item.manifest.base_regenerated === false), true);
@@ -277,4 +330,10 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   assert.equal(animation.frames.length, 4);
   assert.equal(animation.frames.every((frame) => frame.overlay_path.endsWith('.png')), true);
   assert.equal((await readFile(resolve(result.batchRoot, 'plasma-grenade/base.png'))).equals(grenade), true);
+  const cellManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'plasma-cell/manifest.json'), 'utf8'));
+  assert.deepEqual(cellManifest.states, ['empty', 'low', 'full', 'overcharged']);
+  assert.deepEqual(cellManifest.animations, ['charging-loop']);
+  assert.equal(cellManifest.generation_calls, 0);
+  assert.equal((await readFile(resolve(result.batchRoot, 'plasma-cell/states/full.png'))).equals(cell), true);
+  assert.equal((await readFile(resolve(result.batchRoot, 'plasma-cell/previews/states.png'))).length > 0, true);
 });

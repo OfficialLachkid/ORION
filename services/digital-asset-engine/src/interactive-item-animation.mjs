@@ -9,8 +9,15 @@ import { withGenerationLock } from './generation-lock.mjs';
 import {
   createTransparencyPreview,
   derivePixelArtEffectFrame,
+  processPixelArtAsset,
   processPixelArtEffectFrame,
 } from './image-processor.mjs';
+import {
+  buildStateContactSheet,
+  compositeItemFrame,
+  createEnergyLevelFrame,
+  transparentFrame,
+} from './interactive-item-states.mjs';
 import { OllamaImageAdapter } from './ollama-image-adapter.mjs';
 import { assertGenerationResourcesAvailable } from './resource-preflight.mjs';
 import { InteractiveItemAnimationBatchSchema, ProductSpecificationSchema } from './schemas.mjs';
@@ -44,6 +51,18 @@ const RECIPE_PROFILES = Object.freeze({
       { scale: 0.62, opacity: 0.85, density: 0.86 },
       { scale: 1, opacity: 1, density: 1 },
       { scale: 1.28, opacity: 0.5, density: 0.58 },
+    ],
+  },
+  energy_pickup: {
+    active_key: 'idle-loop',
+    active_name: 'Idle Energy Loop',
+    active_phases: ['idle', 'pulse-rise', 'pulse-peak', 'pulse-fall'],
+    active_intensities: [0.08, 0.32, 0.68, 0.32],
+    active_durations: [160, 120, 100, 120],
+    effect_transforms: [
+      { scale: 0.5, opacity: 0.65, density: 0.72 },
+      { scale: 0.82, opacity: 0.9, density: 0.9 },
+      { scale: 1, opacity: 1, density: 1 },
     ],
   },
 });
@@ -212,6 +231,63 @@ export async function inspectPulseIsolation(baseBuffer, compositeBuffer, mask) {
   };
 }
 
+export async function alignEffectCoreToAnchor(effectBuffer, options) {
+  const decoded = await sharp(effectBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const detection = await detectDynamicEnergyRegion(effectBuffer, {
+    colors: options.colors,
+    tolerance: options.tolerance,
+    minimumPixels: options.minimumPixels ?? 2,
+    alphaThreshold: 1,
+  });
+  const detected = detection.report.components[0]?.centroid || detection.report.centroid;
+  const translation = {
+    x: Math.round(options.target.x - detected.x),
+    y: Math.round(options.target.y - detected.y),
+  };
+  const output = Buffer.alloc(decoded.data.length);
+  let opaquePixels = 0;
+  let clippedPixels = 0;
+  for (let y = 0; y < decoded.info.height; y += 1) {
+    for (let x = 0; x < decoded.info.width; x += 1) {
+      const sourceOffset = ((y * decoded.info.width) + x) * 4;
+      if (decoded.data[sourceOffset + 3] === 0) continue;
+      opaquePixels += 1;
+      const targetX = x + translation.x;
+      const targetY = y + translation.y;
+      if (targetX < 0 || targetX >= decoded.info.width || targetY < 0 || targetY >= decoded.info.height) {
+        clippedPixels += 1;
+        continue;
+      }
+      decoded.data.copy(output, ((targetY * decoded.info.width) + targetX) * 4, sourceOffset, sourceOffset + 4);
+    }
+  }
+  const buffer = await sharp(output, {
+    raw: { width: decoded.info.width, height: decoded.info.height, channels: 4 },
+  }).png({ palette: true, colours: options.maxPaletteColors, dither: 0, compressionLevel: 9 }).toBuffer();
+  const alignedDetection = await detectDynamicEnergyRegion(buffer, {
+    colors: options.colors,
+    tolerance: options.tolerance,
+    minimumPixels: options.minimumPixels ?? 2,
+    alphaThreshold: 1,
+  });
+  const aligned = alignedDetection.report.components[0]?.centroid || alignedDetection.report.centroid;
+  const error = Math.hypot(aligned.x - options.target.x, aligned.y - options.target.y);
+  return {
+    buffer,
+    report: {
+      strategy: 'primary_energy_component_translation',
+      detected_origin: detected,
+      expected_origin: options.target,
+      aligned_origin: aligned,
+      translation,
+      alignment_error_pixels: Number(error.toFixed(3)),
+      opaque_pixels: opaquePixels,
+      clipped_pixels: clippedPixels,
+      passed: error <= (options.maximumError ?? 1) && clippedPixels === 0,
+    },
+  };
+}
+
 function detonationPrompt(plan, item) {
   return [
     `Create one isolated peak detonation VFX keyframe for the ${item.name}.`,
@@ -225,7 +301,7 @@ function detonationPrompt(plan, item) {
   ].join(' ');
 }
 
-async function generateDetonationFrames({ adapter, config, item, plan, canvas }) {
+async function generateDetonationFrames({ adapter, config, item, plan, canvas, targetOrigin }) {
   const generated = await adapter.generateAsset({
     asset: { generation_prompt: detonationPrompt(plan, item), seed: item.seed },
     sourceWidth: plan.style.source_width,
@@ -240,19 +316,28 @@ async function generateDetonationFrames({ adapter, config, item, plan, canvas })
     chromaKey: plan.style.chroma_key,
     chromaTolerance: config.generation.chroma_tolerance,
   });
+  const aligned = await alignEffectCoreToAnchor(processed.buffer, {
+    colors: plan.style.energy_colors,
+    tolerance: plan.style.energy_color_tolerance,
+    target: targetOrigin,
+    maxPaletteColors: plan.style.max_palette_colors,
+  });
+  if (!aligned.report.passed) {
+    throw new Error(`${item.target_asset_key} detonation could not be aligned without clipping.`);
+  }
   const profile = RECIPE_PROFILES[item.recipe];
-  const origin = { x: Math.floor(canvas.width / 2), y: Math.floor(canvas.height / 2) };
+  const origin = targetOrigin;
   const frames = await Promise.all(profile.vfx_transforms.map((transform, index) => (
     index === 1
-      ? processed.buffer
-      : derivePixelArtEffectFrame(processed.buffer, {
+      ? aligned.buffer
+      : derivePixelArtEffectFrame(aligned.buffer, {
         ...transform,
         origin,
         salt: item.seed + index,
         maxPaletteColors: plan.style.max_palette_colors,
       })
   )));
-  return { generated, processed, frames, origin };
+  return { generated, processed, frames, origin, alignment: aligned.report };
 }
 
 async function writeAnimation(root, item, key, definition, frames, overlays, options = {}) {
@@ -307,6 +392,69 @@ async function writeAnimation(root, item, key, definition, frames, overlays, opt
   return { key, framePaths, overlayPaths, sheetPath, gifPath, metadataPath, metadata };
 }
 
+async function writeStates(root, item, states, canvas) {
+  const written = [];
+  for (const state of states) {
+    const path = resolveInside(root, `states/${state.key}.png`, 'Interactive state');
+    await writeBuffer(path, state.buffer);
+    written.push({ key: state.key, name: state.name, path });
+  }
+  const previewPath = resolveInside(root, 'previews/states.png', 'State contact sheet');
+  await writeBuffer(previewPath, await buildStateContactSheet(states, canvas));
+  const metadata = {
+    schema_version: '1.0',
+    asset_key: item.target_asset_key,
+    root_motion: { x: 0, y: 0 },
+    canvas,
+    states: written.map((state) => ({
+      state_key: state.key,
+      name: state.name,
+      path: `../../states/${state.key}.png`,
+    })),
+    preview: '../../previews/states.png',
+    preview_only: ['preview'],
+  };
+  const metadataPath = resolveInside(root, 'metadata/states.json', 'State metadata');
+  await writeJson(metadataPath, metadata);
+  return { states: written, previewPath, metadataPath, metadata };
+}
+
+function isolatedEffectPrompt(plan, item, description, exclusions) {
+  return [
+    description,
+    `Use only this palette: ${plan.style.palette.join(', ')}.`,
+    'Create one isolated effect keyframe in crisp low-resolution pixel art with square pixel clusters and no antialiasing.',
+    `Effect only: no ${exclusions.join(', ')}.`,
+    `Use a perfectly flat ${plan.style.chroma_key} background touching every border pixel.`,
+    'No shadow, frame, scenery, text, logo, gradient background, or semi-transparent haze.',
+  ].join(' ');
+}
+
+async function generateIsolatedEffect({ adapter, config, item, plan, canvas, prompt, targetOrigin, seedOffset = 0 }) {
+  const generated = await adapter.generateAsset({
+    asset: { generation_prompt: prompt, seed: item.seed + seedOffset },
+    sourceWidth: plan.style.source_width,
+    sourceHeight: plan.style.source_height,
+  });
+  const processed = await processPixelArtEffectFrame(generated.buffer, {
+    width: canvas.width,
+    height: canvas.height,
+    padding: Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.12)),
+    placement: 'center',
+    maxPaletteColors: plan.style.max_palette_colors,
+    chromaKey: plan.style.chroma_key,
+    chromaTolerance: config.generation.chroma_tolerance,
+  });
+  const aligned = targetOrigin ? await alignEffectCoreToAnchor(processed.buffer, {
+    colors: plan.style.energy_colors,
+    tolerance: plan.style.energy_color_tolerance,
+    target: targetOrigin,
+    maxPaletteColors: plan.style.max_palette_colors,
+  }) : { buffer: processed.buffer, report: null };
+  if (aligned.report && !aligned.report.passed) throw new Error(`${item.target_asset_key} effect alignment failed.`);
+  return { generated, processed, buffer: aligned.buffer, alignment: aligned.report };
+}
+
 async function listFiles(rootPath, currentPath = rootPath) {
   const entries = await readdir(currentPath, { withFileTypes: true });
   const files = [];
@@ -344,6 +492,337 @@ async function resolveSourceProduct(store, targetProduct, sourceSlug) {
   return { product, root, layout: 'product_experiment' };
 }
 
+async function validateRuntimeBuffers(buffers, options, canvas) {
+  return Promise.all(buffers.map((buffer) => validateGeneratedAsset(buffer, {
+    width: canvas.width,
+    height: canvas.height,
+    maxPaletteColors: options.plan.style.max_palette_colors,
+    minimumTransparentRatio: options.config.validation.minimum_transparent_ratio,
+    forbiddenChroma: options.plan.style.chroma_key,
+    chromaTolerance: 45,
+    maximumChromaRatio: 0,
+  })));
+}
+
+async function finalizeRecipeItem({
+  options,
+  plan,
+  item,
+  itemRoot,
+  baseBuffer,
+  sourceLayout,
+  states,
+  animations,
+  validationBuffers,
+  validationDetails = {},
+  generationCalls = 0,
+  qualityHolds = [],
+}) {
+  const reports = await validateRuntimeBuffers(validationBuffers, { ...options, plan }, {
+    width: (await sharp(baseBuffer).metadata()).width,
+    height: (await sharp(baseBuffer).metadata()).height,
+  });
+  const validation = {
+    status: reports.every((report) => report.status === 'passed') ? 'passed' : 'failed',
+    root_motion: { x: 0, y: 0, passed: true },
+    base_sha256: sha256(baseBuffer),
+    base_regenerated: false,
+    quality_holds: qualityHolds,
+    frame_reports: reports,
+    ...validationDetails,
+  };
+  await writeJson(resolveInside(itemRoot, 'validation.json', 'Item validation'), validation);
+  if (validation.status !== 'passed') throw new Error(`${item.target_asset_key} interactive frames failed validation.`);
+  const manifest = await buildManifest(itemRoot, {
+    schema_version: '1.0',
+    item: {
+      source_product_slug: item.source_product_slug,
+      source_asset_key: item.source_asset_key,
+      target_asset_key: item.target_asset_key,
+      name: item.name,
+      recipe: item.recipe,
+      source_layout: sourceLayout,
+    },
+    status: 'awaiting_animation_review',
+    base_regenerated: false,
+    generation_calls: generationCalls,
+    incurred_cost: 0,
+    quality_holds: qualityHolds,
+    buyer_runtime_formats: [
+      'transparent_base_png',
+      ...(states?.states?.length ? ['transparent_state_pngs', 'states_json'] : []),
+      ...(animations.length ? [
+        'transparent_overlay_png_frames',
+        'transparent_composite_png_frames',
+        'transparent_png_sprite_sheet',
+        'animation_json',
+      ] : []),
+    ],
+    preview_only_formats: [
+      ...(states?.previewPath ? ['state_contact_sheet_png'] : []),
+      ...(animations.length ? ['animated_gif'] : []),
+    ],
+    states: states?.states?.map((state) => state.key) || [],
+    animations: animations.map((animation) => animation.key),
+  });
+  await writeJson(resolveInside(itemRoot, 'manifest.json', 'Item manifest'), manifest);
+  return { item, itemRoot, manifest, validation, states, animations };
+}
+
+async function generateEnergyStatesRecipe(context) {
+  const { options, plan, item, itemRoot, baseBuffer, canvas, detection, source } = context;
+  const definitions = item.recipe === 'power_cell'
+    ? [
+      ['empty', 'Empty', -0.82],
+      ['low', 'Low Charge', -0.42],
+      ['full', 'Full Charge', 0],
+      ['overcharged', 'Overcharged', 0.72],
+    ]
+    : [
+      ['powered-off', 'Powered Off', -0.78],
+      ['powered-on', 'Powered On', 0],
+    ];
+  const rendered = await Promise.all(definitions.map(async ([key, name, level]) => ({
+    key,
+    name,
+    ...(await createEnergyLevelFrame(baseBuffer, detection, level)),
+  })));
+  const states = await writeStates(itemRoot, item, rendered.map((state) => ({
+    key: state.key,
+    name: state.name,
+    buffer: state.compositeBuffer,
+  })), canvas);
+  const animations = [];
+  const validationBuffers = rendered.map((state) => state.compositeBuffer);
+  if (item.recipe === 'power_cell') {
+    const charging = await Promise.all([-0.65, -0.3, 0.15, 0.65, 0.15, -0.3].map((level) => (
+      createEnergyLevelFrame(baseBuffer, detection, level)
+    )));
+    animations.push(await writeAnimation(itemRoot, item, 'charging-loop', {
+      name: 'Charging Loop',
+      playback: 'loop',
+      canvas,
+      phases: ['empty', 'low', 'charging', 'overcharged', 'settling', 'low-return'],
+      durations: [150, 120, 100, 90, 110, 130],
+    }, charging.map((frame) => frame.compositeBuffer), charging.map((frame) => frame.overlayBuffer), options));
+    validationBuffers.push(...charging.map((frame) => frame.compositeBuffer));
+  }
+  return finalizeRecipeItem({
+    options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
+    states, animations, validationBuffers,
+    validationDetails: { energy_region: detection.report },
+  });
+}
+
+async function generatePickupRecipe(context) {
+  const { options, plan, item, itemRoot, baseBuffer, canvas, detection, source, adapter } = context;
+  const profile = RECIPE_PROFILES.energy_pickup;
+  const active = await Promise.all(profile.active_intensities.map((intensity) => (
+    createEnergyPulseFrame(baseBuffer, detection, intensity)
+  )));
+  const idle = await writeAnimation(itemRoot, item, profile.active_key, {
+    name: profile.active_name,
+    playback: 'loop',
+    canvas,
+    phases: profile.active_phases,
+    durations: profile.active_durations,
+  }, active.map((frame) => frame.compositeBuffer), active.map((frame) => frame.overlayBuffer), options);
+  const anchor = detection.report.components[0]?.centroid || detection.report.centroid;
+  const effect = await generateIsolatedEffect({
+    adapter,
+    config: options.config,
+    item,
+    plan,
+    canvas,
+    targetOrigin: anchor,
+    prompt: isolatedEffectPrompt(plan, item, item.collection_description, [
+      'pickup object', 'weapon', 'character', 'floor', 'scenery', 'duplicate burst',
+    ]),
+  });
+  const burstOverlays = await Promise.all(profile.effect_transforms.map((transform, index) => (
+    index === profile.effect_transforms.length - 1
+      ? effect.buffer
+      : derivePixelArtEffectFrame(effect.buffer, {
+        ...transform,
+        origin: anchor,
+        salt: item.seed + 20 + index,
+        maxPaletteColors: plan.style.max_palette_colors,
+      })
+  )));
+  const empty = await transparentFrame(canvas);
+  const collectFrames = [
+    baseBuffer,
+    await compositeItemFrame(baseBuffer, [burstOverlays[0]]),
+    await compositeItemFrame(baseBuffer, [burstOverlays[1]]),
+    burstOverlays[2],
+    empty,
+  ];
+  const collect = await writeAnimation(itemRoot, item, 'collect-burst', {
+    name: 'Collection Burst',
+    playback: 'once',
+    canvas,
+    phases: ['available', 'contact', 'burst-rise', 'burst-peak', 'collected'],
+    durations: [100, 70, 70, 90, 120],
+  }, collectFrames, [empty, burstOverlays[0], burstOverlays[1], burstOverlays[2], empty], options);
+  await writeBuffer(resolveInside(itemRoot, `source/collection-peak.${effect.generated.format}`, 'Collection source'), effect.generated.buffer);
+  const states = await writeStates(itemRoot, item, [
+    { key: 'available', name: 'Available', buffer: baseBuffer },
+    { key: 'collected', name: 'Collected', buffer: empty },
+  ], canvas);
+  return finalizeRecipeItem({
+    options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
+    states,
+    animations: [idle, collect],
+    validationBuffers: [...active.map((frame) => frame.compositeBuffer), ...burstOverlays],
+    validationDetails: { energy_region: detection.report, collection_alignment: effect.alignment },
+    generationCalls: 1,
+  });
+}
+
+async function generateShieldRecipe(context) {
+  const { options, plan, item, itemRoot, baseBuffer, canvas, detection, source, adapter } = context;
+  const deviceAnchor = detection.report.components[0]?.centroid || detection.report.centroid;
+  const field = await generateIsolatedEffect({
+    adapter,
+    config: options.config,
+    item,
+    plan,
+    canvas,
+    prompt: isolatedEffectPrompt(plan, item, item.field_description, [
+      'emitter device', 'mine', 'weapon', 'character', 'floor', 'scenery', 'full opaque fill',
+    ]),
+  });
+  const impactTarget = { x: Math.round(canvas.width * 0.68), y: Math.round(canvas.height * 0.34) };
+  const impact = await generateIsolatedEffect({
+    adapter,
+    config: options.config,
+    item,
+    plan,
+    canvas,
+    targetOrigin: impactTarget,
+    seedOffset: 1,
+    prompt: isolatedEffectPrompt(plan, item, item.impact_description, [
+      'emitter device', 'shield bubble', 'weapon', 'projectile', 'character', 'floor', 'scenery',
+    ]),
+  });
+  const fieldFrames = await Promise.all([
+    { scale: 0.45, opacity: 0.35, density: 0.72 },
+    { scale: 0.72, opacity: 0.68, density: 0.86 },
+    { scale: 1, opacity: 1, density: 1 },
+    { scale: 0.96, opacity: 0.82, density: 0.92 },
+  ].map((transform, index) => derivePixelArtEffectFrame(field.buffer, {
+    ...transform,
+    origin: deviceAnchor,
+    salt: item.seed + 30 + index,
+    maxPaletteColors: plan.style.max_palette_colors,
+  })));
+  const empty = await transparentFrame(canvas);
+  const combineField = (overlay) => compositeItemFrame(baseBuffer, [overlay], { baseOnTop: true, canvas });
+  const powerUpComposite = await Promise.all([empty, ...fieldFrames.slice(0, 3)].map((overlay, index) => (
+    index === 0 ? baseBuffer : combineField(overlay)
+  )));
+  const powerUp = await writeAnimation(itemRoot, item, 'power-up', {
+    name: 'Power Up', playback: 'once', canvas,
+    phases: ['inactive', 'field-start', 'field-rise', 'active'], durations: [120, 90, 90, 140],
+  }, powerUpComposite, [empty, ...fieldFrames.slice(0, 3)], options);
+  const activeOverlays = [fieldFrames[2], fieldFrames[3], fieldFrames[2], fieldFrames[1]];
+  const activeComposite = await Promise.all(activeOverlays.map(combineField));
+  const active = await writeAnimation(itemRoot, item, 'active-loop', {
+    name: 'Active Shield Loop', playback: 'loop', canvas,
+    phases: ['active', 'field-soften', 'active-return', 'field-pulse'], durations: [140, 120, 140, 120],
+  }, activeComposite, activeOverlays, options);
+  const impactFrames = await Promise.all([
+    { scale: 0.48, opacity: 0.64, density: 0.72 },
+    { scale: 0.76, opacity: 0.9, density: 0.9 },
+    { scale: 1, opacity: 1, density: 1 },
+    { scale: 1.18, opacity: 0.42, density: 0.56 },
+  ].map((transform, index) => derivePixelArtEffectFrame(impact.buffer, {
+    ...transform,
+    origin: impactTarget,
+    salt: item.seed + 40 + index,
+    maxPaletteColors: plan.style.max_palette_colors,
+  })));
+  const hitComposite = await Promise.all(impactFrames.map((hit) => (
+    compositeItemFrame(baseBuffer, [fieldFrames[2], hit], { baseOnTop: true, canvas })
+  )));
+  const hit = await writeAnimation(itemRoot, item, 'shield-hit', {
+    name: 'Shield Hit Reaction', playback: 'once', canvas,
+    phases: ['contact', 'impact-rise', 'impact-peak', 'dissipation'], durations: [70, 60, 80, 120],
+  }, hitComposite, impactFrames, options);
+  const downOverlays = [fieldFrames[2], fieldFrames[1], fieldFrames[0], empty];
+  const downComposite = await Promise.all(downOverlays.map((overlay, index) => (
+    index === downOverlays.length - 1 ? baseBuffer : combineField(overlay)
+  )));
+  const powerDown = await writeAnimation(itemRoot, item, 'power-down', {
+    name: 'Power Down', playback: 'once', canvas,
+    phases: ['active', 'field-fall', 'field-end', 'inactive'], durations: [100, 90, 90, 140],
+  }, downComposite, downOverlays, options);
+  await Promise.all([
+    writeBuffer(resolveInside(itemRoot, `source/shield-field.${field.generated.format}`, 'Shield field source'), field.generated.buffer),
+    writeBuffer(resolveInside(itemRoot, `source/shield-impact.${impact.generated.format}`, 'Shield impact source'), impact.generated.buffer),
+  ]);
+  const states = await writeStates(itemRoot, item, [
+    { key: 'inactive', name: 'Inactive', buffer: baseBuffer },
+    { key: 'active', name: 'Active Shield', buffer: activeComposite[0] },
+  ], canvas);
+  return finalizeRecipeItem({
+    options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
+    states,
+    animations: [powerUp, active, hit, powerDown],
+    validationBuffers: [...fieldFrames, ...impactFrames, ...activeComposite],
+    validationDetails: {
+      energy_region: detection.report,
+      field_origin: deviceAnchor,
+      impact_alignment: impact.alignment,
+    },
+    generationCalls: 2,
+  });
+}
+
+async function generateCrateRecipe(context) {
+  const { options, plan, item, itemRoot, baseBuffer, canvas, source, adapter } = context;
+  async function generateState(key, name, description, seedOffset) {
+    const generated = await adapter.generateAsset({
+      asset: {
+        seed: item.seed + seedOffset,
+        generation_prompt: [
+          `Create one ${name.toLowerCase()} state for the same science-fiction supply crate design described here: ${description}`,
+          `Use only this palette: ${plan.style.palette.join(', ')}.`,
+          'Crisp low-resolution pixel art with deliberate square pixel clusters and no antialiasing.',
+          'One complete crate in slight three-quarter side view with generous empty padding.',
+          `Use a perfectly flat ${plan.style.chroma_key} background touching every border pixel.`,
+          'No weapon, loose item, character, floor, cast shadow, text, logo, scenery, or duplicate crate.',
+        ].join(' '),
+      },
+      sourceWidth: plan.style.source_width,
+      sourceHeight: plan.style.source_height,
+    });
+    const processed = await processPixelArtAsset(generated.buffer, {
+      width: canvas.width,
+      height: canvas.height,
+      maxPaletteColors: plan.style.max_palette_colors,
+      chromaKey: plan.style.chroma_key,
+      chromaTolerance: options.config.generation.chroma_tolerance,
+    });
+    await writeBuffer(resolveInside(itemRoot, `source/${key}.${generated.format}`, 'Crate state source'), generated.buffer);
+    return { key, name, buffer: processed.buffer };
+  }
+  const generated = await Promise.all([
+    generateState('open', 'Open', item.open_description, 1),
+    generateState('open-empty', 'Open Empty', item.empty_description, 2),
+  ]);
+  const stateDefinitions = [{ key: 'closed', name: 'Closed', buffer: baseBuffer }, ...generated];
+  const states = await writeStates(itemRoot, item, stateDefinitions, canvas);
+  return finalizeRecipeItem({
+    options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
+    states,
+    animations: [],
+    validationBuffers: stateDefinitions.map((state) => state.buffer),
+    generationCalls: 2,
+    qualityHolds: ['Text-only generation cannot prove crate identity consistency; human visual review is required.'],
+  });
+}
+
 async function generateItem(options, plan, item, batchRoot, adapter, targetProduct) {
   const sourceStore = options.store || new CanonicalProductStore(options.outputRoot);
   const source = await resolveSourceProduct(sourceStore, targetProduct, item.source_product_slug);
@@ -368,6 +847,23 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
     tolerance: plan.style.energy_color_tolerance,
   });
   await writeJson(resolveInside(itemRoot, 'metadata/energy-region.json', 'Energy region report'), detection.report);
+  const recipeContext = {
+    options,
+    plan,
+    item,
+    itemRoot,
+    baseBuffer,
+    canvas,
+    detection,
+    source,
+    adapter,
+  };
+  if (item.recipe === 'power_cell' || item.recipe === 'workbench') {
+    return generateEnergyStatesRecipe(recipeContext);
+  }
+  if (item.recipe === 'energy_pickup') return generatePickupRecipe(recipeContext);
+  if (item.recipe === 'shield_emitter') return generateShieldRecipe(recipeContext);
+  if (item.recipe === 'supply_crate') return generateCrateRecipe(recipeContext);
   const profile = RECIPE_PROFILES[item.recipe];
   const active = await Promise.all(profile.active_intensities.map((intensity) => (
     createEnergyPulseFrame(baseBuffer, detection, intensity)
@@ -394,7 +890,14 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
     options,
   );
 
-  const detonation = await generateDetonationFrames({ adapter, config: options.config, item, plan, canvas });
+  const detonation = await generateDetonationFrames({
+    adapter,
+    config: options.config,
+    item,
+    plan,
+    canvas,
+    targetOrigin: detection.report.components[0]?.centroid || detection.report.centroid,
+  });
   const sourceEffectPath = resolveInside(itemRoot, `source/detonation-peak.${detonation.generated.format}`, 'Detonation source');
   await writeBuffer(sourceEffectPath, detonation.generated.buffer);
   const charge = active.at(-1);
@@ -439,6 +942,7 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
     base_sha256: sha256(baseBuffer),
     base_regenerated: false,
     energy_region: detection.report,
+    detonation_alignment: detonation.alignment,
     pulse_isolation: isolation,
     frame_reports: validations,
   };
@@ -503,7 +1007,10 @@ export async function generateInteractiveItemAnimationBatch(options) {
       title: plan.title,
       status: 'awaiting_animation_review',
       base_assets_regenerated: false,
-      generation_calls: results.length,
+      generation_calls: results.reduce((total, result) => total + (result.manifest.generation_calls || 0), 0),
+      quality_holds: results.flatMap((result) => (
+        result.manifest.quality_holds || []
+      ).map((reason) => ({ asset_key: result.item.target_asset_key, reason }))),
       incurred_cost: 0,
       item_manifests: results.map((result) => ({
         asset_key: result.item.target_asset_key,
