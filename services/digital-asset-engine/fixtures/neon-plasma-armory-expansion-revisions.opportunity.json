@@ -1,0 +1,101 @@
+{
+  "schema_version": "1.0",
+  "opportunity_id": "OPPORTUNITY-0146-ARMORY-EXPANSION-REVISIONS",
+  "status": "validated",
+  "title": "Neon Plasma Armory Expansion Revisions",
+  "category": "Pixel Art / Items and Props",
+  "product_type": "Internal Sci-Fi Asset Revision Capability Proof",
+  "theme": "Original neon industrial science fiction matching Neon Plasma Armory: dark gunmetal bodies, compact cyan energy elements, restrained violet accents, and readable functional silhouettes",
+  "target_audience": [
+    "internal ORION reviewers",
+    "indie game developers",
+    "2D science-fiction game creators"
+  ],
+  "observed_at": "2026-10-18T00:00:00.000Z",
+  "expires_at": "2027-01-16T00:00:00.000Z",
+  "signals": {
+    "trend_direction": "stable",
+    "demand": "medium",
+    "competition": "high",
+    "cross_marketplace_evidence": "weak",
+    "confidence": 72
+  },
+  "generation": {
+    "medium": "pixel_art",
+    "perspective": "consistent 2D game-sprite presentation in readable slight three-quarter view",
+    "width": 128,
+    "height": 128,
+    "source_width": 1024,
+    "source_height": 1024,
+    "max_palette_colors": 32,
+    "palette": [
+      "#10131d",
+      "#20283a",
+      "#44506b",
+      "#7785a6",
+      "#c8d4ec",
+      "#35d9ff",
+      "#875cff",
+      "#ff4fd8"
+    ],
+    "outline": "Use a one-pixel dark outline at final sprite resolution and the same crisp pixel-cluster language as the approved weapon sprites",
+    "lighting": "Cool cyan energy light, upper-left neutral rim light, restrained violet highlights, no cast shadow",
+    "background": "transparent",
+    "chroma_key": "#ff00ff",
+    "assets": [
+      {
+        "asset_key": "energy-pickup-v2",
+        "name": "Energy Pickup V2",
+        "kind": "pickup",
+        "description": "an upright diamond-shaped collectible energy pickup with a bright cyan core enclosed by four short symmetrical gunmetal containment brackets and a small violet status point",
+        "prompt_notes": [
+          "Use a compact vertical diamond silhouette that reads immediately as a collectible pickup",
+          "No long horizontal extensions, barrel, grip, trigger, handle, launcher shape, magnifying-glass shape, floating particles, aura, letters, numbers, or extra objects"
+        ]
+      },
+      {
+        "asset_key": "plasma-proximity-mine-v2",
+        "name": "Plasma Proximity Mine V2",
+        "kind": "deployable",
+        "description": "a low-profile deployable proximity mine with a broad stable gunmetal base, four short armored sensor fins, central cyan detection core, and one small violet arming indicator",
+        "prompt_notes": [
+          "Show the complete mine from a slightly elevated side view so its footprint reads clearly",
+          "The object silhouette must end cleanly at its base with empty background immediately below it",
+          "No floor, cast shadow, puddle, smear, glow beneath the device, warning text, skull symbol, or extra device; violet is limited to the small indicator and integrated casing accents"
+        ]
+      }
+    ]
+  },
+  "commercial": {
+    "base_price": {
+      "amount": 0,
+      "currency": "EUR"
+    },
+    "marketplace_candidates": [
+      "itch.io"
+    ]
+  },
+  "risk": {
+    "ip_risk": "low",
+    "prohibited_references": [
+      "Pokemon",
+      "Star Wars",
+      "Halo",
+      "Destiny",
+      "Warhammer",
+      "Cyberpunk 2077",
+      "specific living artists"
+    ],
+    "notes": [
+      "Immutable targeted revisions of the two V1 quality holds. No generated item joins the public product until human review and a versioned package-extension gate.",
+      "Use the approved Neon Plasma Armory palette and functional vocabulary without copying an existing franchise, object design, or asset pack."
+    ]
+  },
+  "evidence": [
+    {
+      "label": "Visual review of the first expansion capability proof",
+      "source": "ORION human-assisted quality review on 2026-10-18",
+      "observed_at": "2026-10-18T00:00:00.000Z"
+    }
+  ]
+}

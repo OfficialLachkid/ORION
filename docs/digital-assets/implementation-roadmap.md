@@ -171,6 +171,14 @@ Status: **in progress**
 
 Exit criterion: one coherent, useful, original pack whose files can be imported into a game engine without manual repair.
 
+### Expansion capability proof — 2026-10-18
+
+- Generated ten isolated 128x128 Neon Plasma Armory expansion candidates on the Mac/T7: power cell, pickup, grenade, mine, shield emitter, two VFX keyframes, crate, chair, and workbench.
+- The first pass completed in 10m 47.09s (about 64.7 seconds per asset), passed all automated PNG, alpha, palette, and chroma checks, and incurred EUR 0 in provider cost.
+- Human review placed the first energy pickup and proximity mine on semantic quality hold even though both passed technical validation. Their immutable V2 revisions completed in 2m 07.54s and resolved the misleading weapon-like pickup silhouette and the mine's ground smear.
+- Generalized internal-preview packaging now preserves the existing weapon-specific copy while supporting mixed asset kinds, square sprites, transparent contain-padding, more than eight preview cells, and longer labels.
+- None of these candidates modifies the approved public release. Promoting selected items requires a versioned static-asset extension, a Discord review decision, regenerated full-release media, and a separate marketplace publication approval.
+
 ### Retention decision
 
 - T7 is the canonical large-file store; Supabase stores metadata, hashes, decisions, and publication state only.

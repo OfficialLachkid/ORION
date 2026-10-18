@@ -28,6 +28,52 @@ function escapeXml(value) {
     .replaceAll("'", '&apos;');
 }
 
+export function describeAssetCollection(product, candidates) {
+  const kinds = [...new Set(candidates.map(({ asset }) => asset.kind))];
+  const weaponsOnly = kinds.length === 1 && kinds[0] === 'weapon';
+  if (weaponsOnly) {
+    return {
+      weaponsOnly: true,
+      coverLabel: `${candidates.length} SIDE-VIEW WEAPON SPRITES`,
+      marketplaceLabel: `${candidates.length} INCLUDED SIDE-VIEW SPRITES`,
+      collectionName: 'science-fiction weapon sprites',
+      shortDescription: `${candidates.length} original side-view sci-fi weapon sprites for 2D games.`,
+      viewLines: ['View: strict side view', 'Facing: right-facing side view'],
+      technicalLines: ['Strict side-view presentation', 'One supplied direction'],
+      tags: ['2D', 'Pixel Art', 'Sci-fi', 'Weapons', 'Sprites'],
+    };
+  }
+  const friendlyKinds = kinds.map((kind) => kind.replaceAll('-', ' '));
+  return {
+    weaponsOnly: false,
+    coverLabel: `${candidates.length} PIXEL ART ASSETS`,
+    marketplaceLabel: `${candidates.length} INCLUDED PIXEL ART ASSETS`,
+    collectionName: 'science-fiction pixel-art game assets',
+    shortDescription: `${candidates.length} original sci-fi pixel-art game assets for 2D games.`,
+    viewLines: [`Presentation: ${product.style.perspective}`, `Asset types: ${friendlyKinds.join(', ')}`],
+    technicalLines: [
+      'Side, three-quarter, or centered presentation according to asset function',
+      `Asset types: ${friendlyKinds.join(', ')}`,
+    ],
+    tags: ['2D', 'Pixel Art', 'Sci-fi', 'Game Assets', 'Props', 'VFX', 'Sprites'],
+  };
+}
+
+export async function resizePreviewAsset(buffer, width, height) {
+  return sharp(buffer)
+    .resize(width, height, {
+      fit: 'contain',
+      kernel: sharp.kernel.nearest,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toBuffer();
+}
+
+function previewLabelFontSize(value, maximum = 13) {
+  return Math.max(9, Math.min(maximum, Math.floor(156 / Math.max(1, String(value).length))));
+}
+
 async function loadApprovedCandidates(store, product) {
   const root = store.productRoot(product);
   const candidates = [];
@@ -65,22 +111,25 @@ async function createSpriteSheet(candidates, product) {
 }
 
 async function createCover(candidates, product) {
+  const collection = describeAssetCollection(product, candidates);
   const cellWidth = 142;
-  const cellHeight = 142;
+  const rows = Math.ceil(candidates.length / 4);
+  const cellHeight = collection.weaponsOnly && rows <= 2
+    ? 142
+    : Math.floor(324 / rows);
   const gridLeft = 31;
-  const gridTop = 112;
+  const gridTop = collection.weaponsOnly && rows <= 2 ? 112 : 105;
+  const assetWidth = collection.weaponsOnly ? 128 : 96;
+  const assetHeight = collection.weaponsOnly ? 64 : Math.min(72, cellHeight - 34);
   const composites = [];
   for (let index = 0; index < candidates.length; index += 1) {
     const column = index % 4;
     const row = Math.floor(index / 4);
-    const scaled = await sharp(candidates[index].buffer)
-      .resize(128, 64, { fit: 'contain', kernel: sharp.kernel.nearest })
-      .png()
-      .toBuffer();
+    const scaled = await resizePreviewAsset(candidates[index].buffer, assetWidth, assetHeight);
     composites.push({
       input: scaled,
-      left: gridLeft + (column * cellWidth) + 7,
-      top: gridTop + (row * cellHeight) + 23,
+      left: gridLeft + (column * cellWidth) + Math.floor((cellWidth - assetWidth) / 2),
+      top: gridTop + (row * cellHeight) + Math.max(6, Math.floor((cellHeight - assetHeight - 20) / 2)),
     });
   }
 
@@ -88,15 +137,17 @@ async function createCover(candidates, product) {
     const column = index % 4;
     const row = Math.floor(index / 4);
     const x = gridLeft + (column * cellWidth) + (cellWidth / 2);
-    const y = gridTop + (row * cellHeight) + 108;
-    return `<text x="${x}" y="${y}" text-anchor="middle" fill="#c8d4ec" font-family="Arial, sans-serif" font-size="13">${escapeXml(asset.name)}</text>`;
+    const y = gridTop + (row * cellHeight) + cellHeight - 8;
+    const fontSize = previewLabelFontSize(asset.name);
+    return `<text x="${x}" y="${y}" text-anchor="middle" fill="#c8d4ec" font-family="Arial, sans-serif" font-size="${fontSize}">${escapeXml(asset.name)}</text>`;
   }).join('');
+  const titleFontSize = Math.max(22, Math.min(38, Math.floor(600 / Math.max(1, product.title.length * 0.6))));
   const overlay = Buffer.from([
     `<svg width="${COVER_WIDTH}" height="${COVER_HEIGHT}" xmlns="http://www.w3.org/2000/svg">`,
     '<rect width="630" height="500" fill="#10131d"/>',
     '<rect x="18" y="18" width="594" height="464" rx="18" fill="#161c2a" stroke="#35d9ff" stroke-width="3"/>',
-    `<text x="315" y="66" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="38" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
-    `<text x="315" y="96" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${candidates.length} SIDE-VIEW WEAPON SPRITES</text>`,
+    `<text x="315" y="66" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="${titleFontSize}" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
+    `<text x="315" y="96" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${escapeXml(collection.coverLabel)}</text>`,
     labels,
     `<text x="315" y="456" text-anchor="middle" fill="#7785a6" font-family="Arial, sans-serif" font-size="14">Protected preview · clean transparent PNG files in download · ${product.style.width} × ${product.style.height} px</text>`,
     '</svg>',
@@ -123,6 +174,7 @@ async function createCover(candidates, product) {
 }
 
 async function createMarketplacePreview(candidates, product) {
+  const collection = describeAssetCollection(product, candidates);
   const columns = Math.min(4, candidates.length);
   const rows = Math.ceil(candidates.length / columns);
   const gridWidth = 880;
@@ -138,10 +190,7 @@ async function createMarketplacePreview(candidates, product) {
   for (let index = 0; index < candidates.length; index += 1) {
     const column = index % columns;
     const row = Math.floor(index / columns);
-    const scaled = await sharp(candidates[index].buffer)
-      .resize(assetWidth, assetHeight, { fit: 'contain', kernel: sharp.kernel.nearest })
-      .png()
-      .toBuffer();
+    const scaled = await resizePreviewAsset(candidates[index].buffer, assetWidth, assetHeight);
     composites.push({
       input: scaled,
       left: gridLeft + (column * cellWidth) + Math.floor((cellWidth - assetWidth) / 2),
@@ -158,7 +207,7 @@ async function createMarketplacePreview(candidates, product) {
     const labelY = top + cellHeight - 18;
     return [
       `<rect x="${left + 5}" y="${top + 5}" width="${cellWidth - 10}" height="${cellHeight - 10}" rx="12" fill="#151c2a" stroke="#2f4160"/>`,
-      `<text x="${centerX}" y="${labelY}" text-anchor="middle" fill="#d8e2f7" font-family="Arial, sans-serif" font-size="14">${escapeXml(asset.name)}</text>`,
+      `<text x="${centerX}" y="${labelY}" text-anchor="middle" fill="#d8e2f7" font-family="Arial, sans-serif" font-size="${previewLabelFontSize(asset.name, 14)}">${escapeXml(asset.name)}</text>`,
     ].join('');
   }).join('');
   const base = Buffer.from([
@@ -166,7 +215,7 @@ async function createMarketplacePreview(candidates, product) {
     '<rect width="100%" height="100%" fill="#0c1019"/>',
     '<rect x="20" y="20" width="920" height="500" rx="22" fill="#111827" stroke="#35d9ff" stroke-width="2"/>',
     `<text x="480" y="65" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="34" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
-    `<text x="480" y="99" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${candidates.length} INCLUDED SIDE-VIEW SPRITES</text>`,
+    `<text x="480" y="99" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${escapeXml(collection.marketplaceLabel)}</text>`,
     cells,
     '<text x="480" y="501" text-anchor="middle" fill="#8998b8" font-family="Arial, sans-serif" font-size="14">Protected marketplace preview · clean transparent PNG files are included in the paid download</text>',
     '</svg>',
@@ -200,15 +249,15 @@ async function createMarketplacePreview(candidates, product) {
 }
 
 function packReadme(product, candidates) {
+  const collection = describeAssetCollection(product, candidates);
   return [
     `# ${product.title}`,
     '',
     'Internal ORION marketplace-connection preview.',
     '',
-    `${candidates.length} original science-fiction weapon sprites are included as individual transparent PNG files and one sprite sheet.`,
+    `${candidates.length} original ${collection.collectionName} are included as individual transparent PNG files and one sprite sheet.`,
     '',
-    '- View: strict side view',
-    '- Facing: right-facing side view',
+    ...collection.viewLines.map((line) => `- ${line}`),
     `- Canvas: ${product.style.width}x${product.style.height} per sprite`,
     `- Palette limit: ${product.style.max_palette_colors} colors`,
     '- Root motion: none',
@@ -220,19 +269,19 @@ function packReadme(product, candidates) {
 }
 
 function buildItchListing(product, candidates) {
+  const collection = describeAssetCollection(product, candidates);
   const assetNames = candidates.map(({ asset }, index) => (
     `${String(index + 1).padStart(2, '0')}. ${asset.name}`
   ));
   const technicalInformation = [
     `${product.style.width}x${product.style.height} pixel canvas per sprite`,
     'Transparent PNG files',
-    'Strict side-view presentation',
-    'One supplied direction',
+    ...collection.technicalLines,
     'No baked root motion',
     `Palette limited to ${product.style.max_palette_colors} colors`,
   ];
   const description = [
-    `${product.title} is a coordinated pack of ${candidates.length} original science-fiction weapon sprites for 2D games.`,
+    `${product.title} is a coordinated pack of ${candidates.length} original ${collection.collectionName} for 2D games.`,
     '',
     'Included assets:',
     ...assetNames.map((name) => `- ${name}`),
@@ -243,10 +292,10 @@ function buildItchListing(product, candidates) {
   const listing = {
     schema_version: '1.0',
     title: product.title,
-    short_description: `${candidates.length} original side-view sci-fi weapon sprites for 2D games.`,
+    short_description: collection.shortDescription,
     description,
     suggested_price: product.pricing.base_price,
-    tags: ['2D', 'Pixel Art', 'Sci-fi', 'Weapons', 'Sprites'],
+    tags: collection.tags,
     classification: 'assets',
     visibility: 'draft',
     cover_path: 'cover.png',
