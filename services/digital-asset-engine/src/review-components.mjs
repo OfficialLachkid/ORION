@@ -26,7 +26,7 @@ function compactPart(value, label) {
   return result;
 }
 
-function buildReference(prefix, action, context) {
+export function buildReviewReference(prefix, action, context) {
   const code = ACTION_CODES[action];
   if (!code) throw new Error(`Unsupported digital asset review action: ${action}`);
   const value = [
@@ -39,7 +39,7 @@ function buildReference(prefix, action, context) {
   return value;
 }
 
-function parseReference(value, expectedPrefix) {
+export function parseReviewReference(value, expectedPrefix) {
   const parts = String(value || '').split('|');
   if (parts.length !== 4 || parts[0] !== expectedPrefix || !CODE_ACTIONS[parts[1]]) return null;
   if (!/^[a-z0-9-]+$/u.test(parts[2])) return null;
@@ -63,19 +63,19 @@ export function buildDigitalAssetPackReviewComponents(context) {
         type: BUTTON,
         style: BUTTON_SUCCESS,
         label: 'Approve Pack',
-        custom_id: buildReference(BUTTON_PREFIX, 'approve', context),
+        custom_id: buildReviewReference(BUTTON_PREFIX, 'approve', context),
       },
       {
         type: BUTTON,
         style: BUTTON_SECONDARY,
         label: 'Request Changes',
-        custom_id: buildReference(BUTTON_PREFIX, 'request_changes', context),
+        custom_id: buildReviewReference(BUTTON_PREFIX, 'request_changes', context),
       },
       {
         type: BUTTON,
         style: BUTTON_DANGER,
         label: 'Reject Pack',
-        custom_id: buildReference(BUTTON_PREFIX, 'reject', context),
+        custom_id: buildReviewReference(BUTTON_PREFIX, 'reject', context),
       },
       linkButton('Open itch.io Draft', context.itchUrl),
       linkButton('Open Manifest', context.manifestUrl),
@@ -94,12 +94,12 @@ export function buildResolvedDigitalAssetReviewComponents(context) {
 }
 
 export function parseDigitalAssetReviewCustomId(customId) {
-  return parseReference(customId, BUTTON_PREFIX) || parseReference(customId, MODAL_PREFIX);
+  return parseReviewReference(customId, BUTTON_PREFIX) || parseReviewReference(customId, MODAL_PREFIX);
 }
 
 export function getDigitalAssetReviewModalRequest(interaction) {
   if (interaction?.type !== MESSAGE_COMPONENT) return null;
-  const request = parseReference(interaction?.data?.custom_id, BUTTON_PREFIX);
+  const request = parseReviewReference(interaction?.data?.custom_id, BUTTON_PREFIX);
   return request && ['request_changes', 'reject'].includes(request.decision) ? request : null;
 }
 
@@ -156,11 +156,13 @@ function reasonInput(requestingChanges) {
   };
 }
 
-export function buildDigitalAssetReviewModal(request, assets = []) {
+export function buildDigitalAssetReviewModal(request, assets = [], options = {}) {
   if (!request || !['request_changes', 'reject'].includes(request.decision)) return null;
   const requestingChanges = request.decision === 'request_changes';
   return {
-    custom_id: buildReference(MODAL_PREFIX, request.decision, request),
+    custom_id: options.referenceBuilder
+      ? options.referenceBuilder(options.modalPrefix || MODAL_PREFIX, request.decision, request)
+      : buildReviewReference(options.modalPrefix || MODAL_PREFIX, request.decision, request),
     title: requestingChanges ? 'Request Pack Changes' : 'Reject Asset Pack',
     components: [
       ...(requestingChanges ? [
@@ -200,12 +202,12 @@ function extractModalValues(components = []) {
 
 export function parseDigitalAssetReviewDecision(interaction) {
   const direct = interaction?.type === MESSAGE_COMPONENT
-    ? parseReference(interaction?.data?.custom_id, BUTTON_PREFIX)
+    ? parseReviewReference(interaction?.data?.custom_id, BUTTON_PREFIX)
     : null;
   if (direct?.decision === 'approve') return { ...direct, reason: '', affectedAssetIds: [] };
 
   const modal = interaction?.type === MODAL_SUBMIT
-    ? parseReference(interaction?.data?.custom_id, MODAL_PREFIX)
+    ? parseReviewReference(interaction?.data?.custom_id, MODAL_PREFIX)
     : null;
   if (!modal || !['request_changes', 'reject'].includes(modal.decision)) return null;
   const { reason, affectedAssetIds } = extractModalValues(interaction?.data?.components);

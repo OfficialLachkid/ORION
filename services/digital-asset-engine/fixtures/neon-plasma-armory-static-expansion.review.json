@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "expansion_id": "neon-plasma-armory-static-expansion-v1",
+  "product_slug": "neon-plasma-armory",
+  "title": "Neon Plasma Armory Static Expansion",
+  "base_version": "0.2.0",
+  "target_version": "0.3.0",
+  "base_manifest_hash": "0605a81fbbe9a4aa1475e1023f8537f949b1a2de561adb839eecf5ca320ec771",
+  "assets": [
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "plasma-power-cell",
+      "target_asset_key": "plasma-power-cell",
+      "target_name": "Plasma Power Cell",
+      "buyer_group": "items"
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-revisions",
+      "source_asset_key": "energy-pickup-v2",
+      "target_asset_key": "energy-pickup",
+      "target_name": "Energy Pickup",
+      "buyer_group": "items"
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "plasma-grenade",
+      "target_asset_key": "plasma-grenade",
+      "target_name": "Plasma Grenade",
+      "buyer_group": "items"
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-revisions",
+      "source_asset_key": "plasma-proximity-mine-v2",
+      "target_asset_key": "plasma-proximity-mine",
+      "target_name": "Plasma Proximity Mine",
+      "buyer_group": "items"
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "portable-shield-emitter",
+      "target_asset_key": "portable-shield-emitter",
+      "target_name": "Portable Shield Emitter",
+      "buyer_group": "items"
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "armory-supply-crate",
+      "target_asset_key": "armory-supply-crate",
+      "target_name": "Armory Supply Crate",
+      "buyer_group": "props"
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "armory-chair",
+      "target_asset_key": "armory-chair",
+      "target_name": "Armory Chair",
+      "buyer_group": "props"
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "armory-workbench",
+      "target_asset_key": "armory-workbench",
+      "target_name": "Armory Workbench",
+      "buyer_group": "props"
+    }
+  ]
+}

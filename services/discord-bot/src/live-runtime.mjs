@@ -68,6 +68,14 @@ import {
   recordDigitalAssetReviewDecision,
 } from '../../digital-asset-engine/src/review-decisions.mjs';
 import {
+  buildResolvedAssetExpansionReviewEmbeds,
+  buildResolvedExpansionAssetEmbeds,
+  getAssetExpansionModalRequest,
+  isAssetExpansionReviewInteraction,
+  prepareAssetExpansionReviewModal,
+  recordAssetExpansionReviewDecision,
+} from '../../digital-asset-engine/src/asset-expansion-review.mjs';
+import {
   buildDistributionReviewEmbeds,
   isDigitalAssetDistributionInteraction,
   recordDigitalAssetDistributionDecision,
@@ -1233,6 +1241,26 @@ export async function runLiveDiscordBot(config) {
             return;
           }
 
+          const expansionModalRequest = getAssetExpansionModalRequest(payload.d);
+          if (expansionModalRequest) {
+            try {
+              const modal = await prepareAssetExpansionReviewModal({ interaction: payload.d, config });
+              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+                type: DISCORD_INTERACTION_CALLBACK_MODAL,
+                data: modal,
+              });
+            } catch (error) {
+              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                  content: truncateMessage(`Could not open expansion review: ${error.message}`),
+                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+                },
+              });
+            }
+            return;
+          }
+
           const digitalAssetModalRequest = getDigitalAssetReviewModalRequest(payload.d);
           if (digitalAssetModalRequest) {
             try {
@@ -1382,6 +1410,79 @@ export async function runLiveDiscordBot(config) {
               },
               'PATCH',
             );
+            return;
+          }
+
+          if (isAssetExpansionReviewInteraction(payload.d)) {
+            let recorded;
+            try {
+              recorded = await recordAssetExpansionReviewDecision({ interaction: payload.d, config });
+              if (!recorded) throw new Error('Unsupported asset expansion review action.');
+            } catch (error) {
+              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+                data: {
+                  content: truncateMessage(`Expansion decision was not recorded: ${error.message}`),
+                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+                },
+              });
+              return;
+            }
+            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                content: recorded.row.decision === 'approve'
+                  ? 'Expansion approved for an immutable candidate build. The public package is unchanged.'
+                  : `Recorded ${recorded.row.decision.toUpperCase()} for this expansion proposal.`,
+                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+              },
+            });
+            try {
+              const currentMessage = await sendDiscordApiRequest(
+                token,
+                `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+                undefined,
+                'GET',
+              );
+              await sendDiscordApiRequest(
+                token,
+                `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+                {
+                  ...recorded.messagePatch,
+                  embeds: buildResolvedAssetExpansionReviewEmbeds(
+                    currentMessage?.embeds,
+                    recorded.decision,
+                    recorded.actor,
+                  ),
+                  attachments: currentMessage.attachments,
+                },
+                'PATCH',
+              );
+              for (const assetPatch of recorded.assetMessagePatches || []) {
+                if (!assetPatch.messageId) continue;
+                const assetMessage = await sendDiscordApiRequest(
+                  token,
+                  `/channels/${recorded.threadId}/messages/${assetPatch.messageId}`,
+                  undefined,
+                  'GET',
+                );
+                await sendDiscordApiRequest(
+                  token,
+                  `/channels/${recorded.threadId}/messages/${assetPatch.messageId}`,
+                  {
+                    embeds: buildResolvedExpansionAssetEmbeds(
+                      assetMessage?.embeds,
+                      assetPatch,
+                      recorded.actor,
+                    ),
+                    components: [],
+                  },
+                  'PATCH',
+                );
+              }
+            } catch (error) {
+              process.stderr.write(`Could not update expansion review message ${recorded.messageId}: ${error.message}\n`);
+            }
             return;
           }
 
