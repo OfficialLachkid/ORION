@@ -91,7 +91,7 @@ async function buildOverview(title, assets) {
     '<rect width="100%" height="100%" fill="#0c1019"/>',
     '<rect x="20" y="20" width="920" height="500" rx="22" fill="#111827" stroke="#35d9ff" stroke-width="2"/>',
     `<text x="480" y="66" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="${titleSize}" font-weight="700">${escapeXml(title.toUpperCase())}</text>`,
-    `<text x="480" y="99" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${assets.length} PROPOSED STATIC ASSETS</text>`,
+    `<text x="480" y="99" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${assets.length} PROPOSED ASSETS · ${assets.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0)} ANIMATIONS</text>`,
     ...cells,
     '<text x="480" y="501" text-anchor="middle" fill="#8998b8" font-family="Arial, sans-serif" font-size="14">Internal expansion review · public package unchanged</text>',
     '</svg>',
@@ -115,6 +115,84 @@ async function verifyBundle(candidateRoot, manifest) {
       throw new Error(`Immutable expansion review file changed: ${file.path}.`);
     }
   }
+}
+
+function animationReviewFile(path) {
+  return path === 'base.png'
+    || path === 'validation.json'
+    || path.startsWith('frames/')
+    || path.startsWith('overlays/')
+    || path.startsWith('sheets/')
+    || path.startsWith('metadata/')
+    || (path.startsWith('previews/') && path.endsWith('.gif'));
+}
+
+async function loadAnimationProof(productRoot, request, expectedBaseHash) {
+  if (!request.animation_proof) return null;
+  const batchRoot = resolveInside(
+    productRoot,
+    `experiments/${request.animation_proof.batch_id}`,
+    'Interactive animation batch',
+  );
+  const batchManifest = await readJson(resolveInside(batchRoot, 'manifest.json', 'Animation batch manifest'));
+  if (batchManifest.batch_id !== request.animation_proof.batch_id
+    || batchManifest.status !== 'awaiting_animation_review'
+    || batchManifest.gates?.all_items_valid !== true
+    || batchManifest.gates?.package_modified !== false) {
+    throw new Error(`Animation batch is not a valid isolated proof: ${request.animation_proof.batch_id}.`);
+  }
+  const itemReference = batchManifest.item_manifests?.find((item) => (
+    item.asset_key === request.animation_proof.asset_key
+  ));
+  if (!itemReference) throw new Error(`Animation proof item is missing: ${request.animation_proof.asset_key}.`);
+  const itemRoot = resolveInside(batchRoot, request.animation_proof.asset_key, 'Interactive animation item');
+  const itemManifest = await readJson(resolveInside(itemRoot, 'manifest.json', 'Animation item manifest'));
+  if (itemManifest.manifest_hash !== itemReference.manifest_hash
+    || itemManifest.item?.target_asset_key !== request.target_asset_key
+    || itemManifest.status !== 'awaiting_animation_review'
+    || itemManifest.base_regenerated !== false) {
+    throw new Error(`Animation proof no longer matches ${request.target_asset_key}.`);
+  }
+  const baseFile = itemManifest.files?.find((file) => file.path === 'base.png');
+  if (!baseFile || baseFile.sha256 !== expectedBaseHash) {
+    throw new Error(`Animation proof base changed for ${request.target_asset_key}.`);
+  }
+  const files = [];
+  for (const file of itemManifest.files || []) {
+    const buffer = await readFile(resolveInside(itemRoot, file.path, 'Animation proof file'));
+    if (buffer.length !== file.size || sha256(buffer) !== file.sha256) {
+      throw new Error(`Animation proof file changed: ${request.target_asset_key}/${file.path}.`);
+    }
+    if (animationReviewFile(file.path)) files.push({ ...file, buffer });
+  }
+  const animations = (itemManifest.animations || []).map((animationKey) => ({
+    animation_key: animationKey,
+    metadata_path: `animations/${request.target_asset_key}/metadata/${animationKey}/animation.json`,
+    sprite_sheet_path: `animations/${request.target_asset_key}/sheets/${animationKey}.png`,
+    preview_gif_path: `animations/${request.target_asset_key}/previews/${animationKey}.gif`,
+  }));
+  if (!animations.length) throw new Error(`Animation proof contains no animations: ${request.target_asset_key}.`);
+  const identity = {
+    batch_id: batchManifest.batch_id,
+    batch_manifest_hash: batchManifest.manifest_hash,
+    item_manifest_hash: itemManifest.manifest_hash,
+    base_sha256: baseFile.sha256,
+    generation_calls: itemManifest.generation_calls,
+    incurred_cost: itemManifest.incurred_cost,
+    buyer_runtime_formats: itemManifest.buyer_runtime_formats,
+    preview_only_formats: itemManifest.preview_only_formats,
+    animations,
+    files: files.map(({ buffer, path, size, sha256: fileHash }) => ({
+      path: `animations/${request.target_asset_key}/${path}`,
+      size_bytes: size,
+      content_sha256: fileHash,
+    })),
+  };
+  return {
+    ...identity,
+    bundle_hash: sha256(JSON.stringify(identity)),
+    runtime_files: files,
+  };
 }
 
 export async function prepareAssetExpansionReview(options) {
@@ -153,6 +231,7 @@ export async function prepareAssetExpansionReview(options) {
     if (validation.status !== 'passed' || validation.metrics?.content_sha256 !== contentHash) {
       throw new Error(`Expansion source asset is not a verified candidate: ${request.source_asset_key}.`);
     }
+    const animation = await loadAnimationProof(productRoot, request, contentHash);
     selected.push({
       asset_id: `asset-expansion-${sha256(`${plan.expansion_id}:${request.target_asset_key}`).slice(0, 16)}`,
       asset_key: request.target_asset_key,
@@ -166,6 +245,7 @@ export async function prepareAssetExpansionReview(options) {
       content_sha256: contentHash,
       size_bytes: buffer.length,
       validation_metrics: validation.metrics,
+      animation,
       buffer,
     });
   }
@@ -174,7 +254,13 @@ export async function prepareAssetExpansionReview(options) {
     plan,
     product_id: product.product_id,
     base_release_id: base.manifest.release_id,
-    assets: selected.map(({ buffer, ...asset }) => asset),
+    assets: selected.map(({ buffer, animation, ...asset }) => ({
+      ...asset,
+      animation: animation ? {
+        ...animation,
+        runtime_files: animation.runtime_files.map(({ buffer: runtimeBuffer, ...file }) => file),
+      } : null,
+    })),
     expansion_review_version: EXPANSION_REVIEW_VERSION,
   })));
   const reviewRoot = resolveInside(productRoot, `extensions/${plan.expansion_id}/review`, 'Expansion review root');
@@ -190,6 +276,15 @@ export async function prepareAssetExpansionReview(options) {
   await mkdir(resolve(candidateRoot, 'assets'), { recursive: true });
   for (const asset of selected) {
     await writeFile(resolve(candidateRoot, 'assets', `${asset.asset_key}.png`), asset.buffer);
+    for (const file of asset.animation?.runtime_files || []) {
+      const target = resolveInside(
+        candidateRoot,
+        `animations/${asset.asset_key}/${file.path}`,
+        'Expansion animation file',
+      );
+      await mkdir(resolve(target, '..'), { recursive: true });
+      await writeFile(target, file.buffer);
+    }
   }
   const overview = await buildOverview(plan.title, selected);
   await writeFile(resolve(candidateRoot, 'overview.png'), overview);
@@ -200,6 +295,7 @@ export async function prepareAssetExpansionReview(options) {
       size_bytes: asset.size_bytes,
       content_sha256: asset.content_sha256,
     });
+    files.push(...(asset.animation?.files || []));
   }
   files.push({ path: 'overview.png', size_bytes: overview.length, content_sha256: sha256(overview) });
   const identity = {
@@ -215,9 +311,15 @@ export async function prepareAssetExpansionReview(options) {
     input_hash: inputHash,
     expansion_review_version: EXPANSION_REVIEW_VERSION,
     asset_count: selected.length,
-    assets: selected.map(({ buffer, ...asset }) => ({
+    animation_count: selected.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0),
+    assets: selected.map(({ buffer, animation, ...asset }) => ({
       ...asset,
       path: `assets/${asset.asset_key}.png`,
+      review_hash: animation?.bundle_hash || asset.content_sha256,
+      animation: animation ? {
+        ...animation,
+        runtime_files: undefined,
+      } : null,
     })),
     gates: {
       base_release_verified: true,

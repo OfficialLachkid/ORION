@@ -214,6 +214,8 @@ An interactive-item recipe treats approved base artwork as immutable. ORION dete
 
 Each item emits the original base PNG, transparent overlay frames, ready-to-use composite frames, non-overlapping sprite sheets, `animation.json` with zero root motion, validation evidence, and review-only GIFs. A failed state or animation holds the complete item candidate. This is the first asset-type recipe toward production jobs that generate the complete contract for a researched product in one run: required base images, angles, states, animations, metadata, validation, and review previews. Requirements remain type-specific; ORION must not invent unnecessary angles or animations for every asset.
 
+An expansion-plan asset may reference an approved interactive-item proof by `batch_id` and `asset_key`. Preparing the expansion review then verifies the proof's immutable item manifest, confirms its base PNG is byte-identical to the proposed static asset, excludes model source files, and binds the runtime frames, overlays, sheets, metadata, validation evidence, and review GIFs into the same expansion manifest. Discord updates the existing expansion overview and asset messages in place. The existing Supabase expansion decision stores the aggregate animation-bundle hash for animated assets, so adding new recipes does not require a database migration.
+
 If review finds a problem in only selected effect kinds, create new immutable proof revisions while inheriting the accepted artifacts. The current targeted revision regenerates only the Ion Pistol and Energy Shotgun impact/decay keyframes, then derives their decay frames deterministically:
 
 ```bash

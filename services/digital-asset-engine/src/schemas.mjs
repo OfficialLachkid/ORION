@@ -451,6 +451,10 @@ export const AssetExpansionReviewPlanSchema = z.object({
     target_asset_key: IdentifierSchema,
     target_name: z.string().min(1),
     buyer_group: z.enum(['items', 'props', 'vfx']),
+    animation_proof: z.object({
+      batch_id: IdentifierSchema,
+      asset_key: IdentifierSchema,
+    }).optional(),
   })).min(1).max(25),
 }).superRefine((plan, context) => {
   const targets = plan.assets.map((asset) => asset.target_asset_key);

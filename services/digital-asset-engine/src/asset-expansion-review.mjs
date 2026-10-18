@@ -77,15 +77,16 @@ function manifestUrl(guildId, state) {
 
 function overviewEmbed(manifest, revision) {
   const assets = manifest.assets.map((asset, index) => (
-    `**${String(index + 1).padStart(2, '0')}** — ${asset.name} · ${asset.buyer_group}`
+    `**${String(index + 1).padStart(2, '0')}** — ${asset.name} · ${asset.buyer_group}${asset.animation ? ` · ${asset.animation.animations.length} animations` : ''}`
   )).join('\n');
   return {
     title: `${manifest.title} · Expansion Review · Revision ${revision}`,
-    description: 'Review these isolated additions before ORION builds a new version of the existing product. The current public release remains unchanged.',
+    description: 'Review these complete additions before ORION builds a new version of the existing product. Animated items include their exact runtime frames, overlays, sheets, metadata, and review GIFs. The current public release remains unchanged.',
     color: COLOR,
     fields: [
       { name: 'Target release', value: `\`${manifest.base_version}\` → \`${manifest.target_version}\``, inline: true },
       { name: 'Assets', value: String(manifest.asset_count), inline: true },
+      { name: 'Animations', value: String(manifest.animation_count || 0), inline: true },
       { name: 'Generation cost', value: '€0 API cost', inline: true },
       { name: 'Proposed additions', value: assets, inline: false },
       { name: 'Expansion manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
@@ -97,6 +98,9 @@ function overviewEmbed(manifest, revision) {
 }
 
 function assetEmbed(asset, index, total) {
+  const animationSummary = asset.animation
+    ? asset.animation.animations.map((animation) => `- ${animation.animation_key}`).join('\n')
+    : 'Static base asset only';
   return {
     title: `${String(index + 1).padStart(2, '0')}/${String(total).padStart(2, '0')} · ${asset.name}`,
     description: `Buyer group: **${asset.buyer_group}**. Select **${String(index + 1).padStart(2, '0')}** in the feedback form if this addition needs revision.`,
@@ -105,7 +109,9 @@ function assetEmbed(asset, index, total) {
       { name: 'Asset ID', value: `\`${asset.asset_id}\``, inline: false },
       { name: 'Kind', value: `\`${asset.kind}\``, inline: true },
       { name: 'Canvas', value: `${asset.validation_metrics.width}×${asset.validation_metrics.height}`, inline: true },
+      { name: 'Included states', value: animationSummary, inline: false },
       { name: 'SHA-256', value: `\`${asset.content_sha256}\``, inline: false },
+      ...(asset.animation ? [{ name: 'Animation bundle', value: `\`${asset.animation.bundle_hash}\``, inline: false }] : []),
     ],
     image: { url: `attachment://${basename(asset.path)}` },
   };
@@ -209,16 +215,24 @@ export async function postAssetExpansionReview(options) {
   }
   for (let index = 0; index < manifest.assets.length; index += 1) {
     const asset = manifest.assets[index];
-    const file = {
+    const assetFiles = [{
       filename: basename(asset.path),
       contentType: 'image/png',
       description: clean(`${String(index + 1).padStart(2, '0')} ${asset.name} expansion candidate`),
       buffer: await readFile(resolveInside(candidateRoot, asset.path, 'Expansion asset')),
-    };
+    }];
+    for (const animation of asset.animation?.animations || []) {
+      assetFiles.push({
+        filename: `${asset.asset_key}-${animation.animation_key}.gif`,
+        contentType: 'image/gif',
+        description: clean(`${asset.name}: ${animation.animation_key} review preview`),
+        buffer: await readFile(resolveInside(candidateRoot, animation.preview_gif_path, 'Expansion animation preview')),
+      });
+    }
     const messageId = state.asset_messages[asset.asset_id];
     const message = await sendMessageWithFiles(token, state.thread_id, {
       embeds: [assetEmbed(asset, index, manifest.assets.length)], components: [],
-    }, [file], { messageId, fetchImpl: options.fetchImpl });
+    }, assetFiles, { messageId, fetchImpl: options.fetchImpl });
     if (!messageId) {
       state.asset_messages[asset.asset_id] = message.id;
       await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
@@ -275,10 +289,12 @@ async function loadContext(reference, interaction, config) {
     || (interaction.message?.id && String(state.overview_message_id) !== String(interaction.message.id))) {
     throw new Error('This expansion action came from an unexpected Discord message.');
   }
-  for (const asset of manifest.assets) {
-    const buffer = await readFile(resolveInside(candidateRoot, asset.path, 'Expansion review asset'));
+  for (const file of manifest.files || []) {
+    const buffer = await readFile(resolveInside(candidateRoot, file.path, 'Expansion review file'));
     const hash = createHash('sha256').update(buffer).digest('hex');
-    if (hash !== asset.content_sha256) throw new Error(`Expansion asset changed: ${asset.asset_key}.`);
+    if (hash !== file.content_sha256 || buffer.length !== file.size_bytes) {
+      throw new Error(`Expansion review file changed: ${file.path}.`);
+    }
   }
   return { productRoot, statePath, state, candidateRoot, manifest };
 }
@@ -359,7 +375,7 @@ export async function recordAssetExpansionReviewDecision(options) {
       : decision.affectedAssetIds,
     asset_decisions: context.manifest.assets.map((asset) => ({
       asset_id: asset.asset_id,
-      asset_hash: asset.content_sha256,
+      asset_hash: asset.review_hash || asset.content_sha256,
       decision: decision.decision === 'approve'
         ? 'approve'
         : decision.decision === 'reject'
