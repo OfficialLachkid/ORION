@@ -36,7 +36,7 @@
       "target_name": "Plasma Grenade",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "neon-plasma-armory-interactive-expansion-v2",
+        "batch_id": "neon-plasma-armory-interactive-fixes-v3",
         "asset_key": "plasma-grenade"
       }
     },
@@ -58,7 +58,7 @@
       "target_name": "Portable Shield Emitter",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "neon-plasma-armory-interactive-expansion-v2",
+        "batch_id": "neon-plasma-armory-interactive-fixes-v3",
         "asset_key": "portable-shield-emitter"
       }
     },
