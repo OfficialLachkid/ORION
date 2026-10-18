@@ -195,4 +195,3 @@ test('expansion feedback modal lists the exact proposed assets', async () => {
   assert.equal(modal.components[1].component.options[0].label, '01 · Power Cell');
   assert.match(modal.custom_id, /^daerm\|c\|/u);
 });
-

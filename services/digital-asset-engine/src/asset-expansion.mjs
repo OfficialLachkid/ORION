@@ -245,4 +245,3 @@ export async function prepareAssetExpansionReview(options) {
   }, null, 2)}\n`, 'utf8');
   return { plan, product, candidateRoot, manifestPath, manifest, reused: false };
 }
-

@@ -29,4 +29,3 @@ alter table public.digital_asset_expansion_reviews enable row level security;
 revoke all on public.digital_asset_expansion_reviews from anon, authenticated, service_role;
 grant all on public.digital_asset_expansion_reviews to postgres;
 grant select, insert on public.digital_asset_expansion_reviews to service_role;
-

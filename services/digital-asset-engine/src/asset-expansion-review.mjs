@@ -451,4 +451,3 @@ export function buildResolvedExpansionAssetEmbeds(embeds, assetDecision, actor) 
     } : {}),
   }));
 }
-
