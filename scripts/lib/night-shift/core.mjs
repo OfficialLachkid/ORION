@@ -26,6 +26,7 @@ import {
   runQualification,
   runRedraftRejected,
 } from './qualification.mjs';
+import { runNightShiftDigitalAssetResearch } from './digital-asset-research.mjs';
 
 export function todayStamp(now = new Date()) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -35,6 +36,12 @@ export const NIGHT_SHIFT_STEP_MARKERS = Object.freeze({
   pokemonMaintenance: 'pokemon-maintenance',
   leadgen: 'leadgen',
 });
+
+const RETRYABLE_RESEARCH_DEFERRALS = new Set([
+  'blocking_process_running',
+  'digital_asset_generation_running',
+  'resource_busy',
+]);
 
 export function markerPath(now = new Date(), root = projectRoot) {
   return resolve(root, 'data', 'night-shift', `${todayStamp(now)}.done`);
@@ -87,6 +94,7 @@ function buildRuntime(deps) {
     postNightShiftFailure,
     postLeadNightShiftDigest,
     postPokemonNightShiftDigest,
+    runNightShiftDigitalAssetResearch,
     kickOffScheduledLeadgen,
     ...deps,
   };
@@ -117,6 +125,30 @@ export async function runNightShift(argv = process.argv, deps = {}) {
   }
 
   const label = isFallback ? 'Night Shift (07:00 fallback)' : 'Night Shift';
+
+  // The primary night shift owns digital-asset research as its first bounded
+  // phase. This keeps marketplace collection and short local-model analysis
+  // after the operator's working day, but before qualification, video work,
+  // and the detached leadgen sweep. It deliberately has no separate timer,
+  // so two ORION jobs cannot race merely because their clocks align.
+  let digitalAssetResearch = {
+    status: 'skipped',
+    reason: isFallback ? 'fallback_run' : 'not_started',
+  };
+  if (!isFallback) {
+    try {
+      digitalAssetResearch = await runtime.runNightShiftDigitalAssetResearch(config, {
+        projectRoot: runtime.projectRoot,
+      });
+    } catch (error) {
+      digitalAssetResearch = { status: 'failed', reason: String(error.message || error) };
+      runtime.stderr.write(`Digital-asset research phase failed (non-fatal): ${error.message}\n`);
+    }
+    runtime.recordOpsMetric(config, 'digital_asset_research_schedule_run', {
+      ...digitalAssetResearch,
+      attempt: 'night_shift_start',
+    });
+  }
 
   // Phase ordering (2026-09-18 rework, operator ask): all three Claude-quota
   // steps share ONE weekly usage cap. If the fresh-lead qualifier drained
@@ -345,6 +377,29 @@ export async function runNightShift(argv = process.argv, deps = {}) {
     runtime.stderr.write(`Pokemon night-shift digest failed (non-fatal): ${error.message}\n`);
   }
 
+  // A resource-busy start gets exactly one more sequential chance here,
+  // after all awaited maintenance but before leadgen. There is intentionally
+  // no free-running retry timer: that could collide with work this
+  // orchestrator already owns. Cadence and non-resource deferrals are final.
+  if (!isFallback
+    && digitalAssetResearch.status === 'deferred'
+    && RETRYABLE_RESEARCH_DEFERRALS.has(digitalAssetResearch.reason)) {
+    const initialDeferral = digitalAssetResearch;
+    try {
+      digitalAssetResearch = await runtime.runNightShiftDigitalAssetResearch(config, {
+        projectRoot: runtime.projectRoot,
+      });
+    } catch (error) {
+      digitalAssetResearch = { status: 'failed', reason: String(error.message || error) };
+      runtime.stderr.write(`Digital-asset research pre-leadgen retry failed (non-fatal): ${error.message}\n`);
+    }
+    digitalAssetResearch.initialDeferral = initialDeferral.reason;
+    runtime.recordOpsMetric(config, 'digital_asset_research_schedule_run', {
+      ...digitalAssetResearch,
+      attempt: 'pre_leadgen_retry',
+    });
+  }
+
   // Kick off the daily leadgen sweep AFTER everything else — the video
   // pipeline is the machine's heaviest step, and leadgen is the only
   // background task the operator explicitly wants deferred until last
@@ -387,6 +442,7 @@ export async function runNightShift(argv = process.argv, deps = {}) {
     previewFallbackError,
     leadgenChildPid,
     skippedPokemonMaintenance,
+    digitalAssetResearch,
   }, null, 2)}\n`);
 }
 

@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 
 import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 import { buildNoticeDiscordPayload } from '../services/discord-bot/src/message-formatting.mjs';
 import { evaluateHealthCheckResult } from '../services/discord-bot/src/health-monitor.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
 import { executeHealthAction } from '../services/task-router/src/executor.mjs';
+import { inspectRuntimeResourceLock } from './lib/runtime-resource-lock.mjs';
 import {
   MAC_SYNC_HEALTH_ACTIONS,
   buildMacSyncDescription,
@@ -19,6 +21,10 @@ import {
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_BOT_LAUNCH_AGENT = 'io.vbj.orion.discord-bot';
 const ORION_WORKER_SERVICE_LAUNCH_AGENT = 'io.vbj.orion.daemon';
+const DIGITAL_ASSET_RESEARCH_LOCK = resolve(
+  projectRoot,
+  'data/runtime/resource-locks/digital-asset-research.lock',
+);
 
 function hasFlag(flag) {
   return process.argv.includes(flag);
@@ -177,6 +183,7 @@ function buildMacSyncResult({
   orionWorkerServiceStatus,
   restartedOrionWorkerService,
   healthChecks,
+  resourceDeferral = null,
 }) {
   const normalizedHealthChecks = normalizeHealthChecks(healthChecks);
   const healthSummary = summarizeHealthChecks(normalizedHealthChecks);
@@ -202,6 +209,7 @@ function buildMacSyncResult({
     gitState,
     healthSummary,
     healthChecks: normalizedHealthChecks,
+    resourceDeferral,
   };
 }
 
@@ -216,6 +224,7 @@ function buildDiscordSyncPayload({
   orionWorkerServiceStatus,
   restartedOrionWorkerService,
   healthSummary,
+  resourceDeferral,
 }) {
   const workerServiceStatus = orionWorkerServiceStatus
     || (restartedOrionWorkerService ? 'restarted' : 'unchanged');
@@ -247,6 +256,8 @@ function buildDiscordSyncPayload({
         name: 'Pull',
         value: didPull
           ? 'Applied'
+          : resourceDeferral
+            ? 'Deferred'
           : syncState.blocked
             ? 'Blocked'
             : syncState.canPull
@@ -330,7 +341,10 @@ async function main() {
   const skipDiscordRestart = hasFlag('--skip-discord-restart');
   const config = loadRuntimeConfig();
 
-  runCommand('git', ['fetch', 'origin']);
+  const researchLock = inspectRuntimeResourceLock(DIGITAL_ASSET_RESEARCH_LOCK);
+  if (!researchLock.held) {
+    runCommand('git', ['fetch', 'origin']);
+  }
 
   let gitState = readGitSyncState();
   let restoredRuntimeDriftPaths = [];
@@ -338,16 +352,32 @@ async function main() {
     restoredRuntimeDriftPaths = cleanAllowedRuntimeDrift(gitState);
     gitState = readGitSyncState();
   }
-  const syncState = classifyMacSyncState(gitState);
+  let syncState = classifyMacSyncState(gitState);
+  let resourceDeferral = null;
+  if (researchLock.held) {
+    resourceDeferral = {
+      resource: 'digital_asset_research',
+      reason: researchLock.reason,
+      pid: researchLock.pid,
+      startedAt: researchLock.startedAt,
+    };
+    syncState = {
+      status: 'deferred_resource_busy',
+      summary: 'Mac sync deferred because digital-asset research is running.',
+      canPull: false,
+      blocked: false,
+    };
+  }
   let didPull = false;
   let restartedDiscordBot = false;
   let restartDiscordBotDeferred = false;
   let restartedOrionWorkerService = false;
   let orionWorkerServiceStatus = config.orionWorkerService?.expected === false ? 'disabled' : 'unchanged';
-  const includeOrionWorkerService = config.orionWorkerService?.expected !== false
+  const includeOrionWorkerService = !resourceDeferral
+    && config.orionWorkerService?.expected !== false
     && isLaunchAgentInstalled(ORION_WORKER_SERVICE_LAUNCH_AGENT);
 
-  if (config.orionWorkerService?.expected !== false && !includeOrionWorkerService) {
+  if (!resourceDeferral && config.orionWorkerService?.expected !== false && !includeOrionWorkerService) {
     orionWorkerServiceStatus = 'not_installed';
   }
 
@@ -362,13 +392,13 @@ async function main() {
     }
   }
 
-  let healthChecks = await runSyncHealthChecks(config, {
-    includeOrionWorkerService,
-  });
+  let healthChecks = resourceDeferral
+    ? []
+    : await runSyncHealthChecks(config, { includeOrionWorkerService });
   const workerCheck = healthChecks.find((check) => check.action === 'orion_daemon_health_check');
   const discordCheck = healthChecks.find((check) => check.action === 'discord_bot_runtime_health_check');
 
-  if (!dryRun && discordCheck?.severity !== 'healthy' && !restartedDiscordBot) {
+  if (!resourceDeferral && !dryRun && discordCheck?.severity !== 'healthy' && !restartedDiscordBot) {
     if (skipDiscordRestart) {
       restartDiscordBotDeferred = true;
     } else {
@@ -377,7 +407,7 @@ async function main() {
     }
   }
 
-  if (!dryRun && includeOrionWorkerService && workerCheck?.severity !== 'healthy') {
+  if (!resourceDeferral && !dryRun && includeOrionWorkerService && workerCheck?.severity !== 'healthy') {
     restartLaunchAgent(ORION_WORKER_SERVICE_LAUNCH_AGENT);
     restartedOrionWorkerService = true;
     orionWorkerServiceStatus = 'restarted';
@@ -399,6 +429,7 @@ async function main() {
     orionWorkerServiceStatus,
     restartedOrionWorkerService,
     healthChecks,
+    resourceDeferral,
   });
   const payload = buildDiscordSyncPayload(result);
 
@@ -422,6 +453,7 @@ async function main() {
     healthyCount: result.healthSummary.healthyCount || 0,
     unhealthyCount: result.healthSummary.unhealthyCount || 0,
     unhealthyChecks: result.healthSummary.unhealthyChecks || [],
+    resourceDeferral: result.resourceDeferral || null,
   });
 
   process.stdout.write(jsonOutput ? `${JSON.stringify(result)}\n` : `${result.summary}\n`);
