@@ -210,10 +210,36 @@ test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bo
   assert.ok(withoutPrior.includes('Audience mix'), 'prompt must include the geo + traffic section');
   assert.ok(withoutPrior.includes('viewer_geography'), 'prompt must reference the viewer_geography field');
   assert.ok(withoutPrior.includes('traffic_sources_split'), 'prompt must reference the traffic_sources_split field');
+  // Section 0: cross-platform activity (2026-10-18 operator ask)
+  assert.ok(withoutPrior.includes('Cross-platform posting activity'), 'prompt must include a cross-platform activity section');
+  assert.ok(withoutPrior.includes('cross_platform_activity'), 'prompt must reference the cross_platform_activity data field');
+  assert.ok(/YouTube Shorts is the only platform with analytics capture today/u.test(withoutPrior), 'prompt must explicitly tell the analyst analytics is YouTube-only today');
+  assert.ok(/do NOT try to compare performance across platforms yet|do not recommend changes based on cross-platform data/iu.test(withoutPrior), 'prompt must forbid cross-platform performance comparisons until adapters land');
 
   const withPrior = buildAnalystPrompt(pack, 'Last week I said X and Y happened.');
   assert.ok(withPrior.includes('Previous week\'s summary'));
   assert.ok(withPrior.includes('Last week I said X and Y happened.'));
+});
+
+test('buildDataPack: cross_platform_activity flows through from the fetch helper and defaults to null when not provided', () => {
+  const publications = [
+    { id: 'a', account_key: 'poke-quizz-youtube', title: 'A', published_at: '2026-10-15T06:00:00Z', metadata: {}, external_id: 'aaa' },
+  ];
+  const analytics = new Map([['a', { metrics: { views: 1000, likes: 10 } }]]);
+  const packNoActivity = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y' });
+  assert.equal(packNoActivity.cross_platform_activity, null, 'defaults to null for backward compat');
+
+  const activity = {
+    window: { since: 'X', until: 'Y' },
+    total_published_all_platforms: 109,
+    per_platform: {
+      youtube_shorts: { label: 'YouTube Shorts', publications: 95, channels: ['poke-quizz-youtube'], analytics_capture: 'full' },
+      tiktok_video: { label: 'TikTok (via Buffer)', publications: 7, channels: ['poke-quizz-tiktok'], analytics_capture: 'pending' },
+      instagram_reels: { label: 'Instagram Reels', publications: 7, channels: ['poke-quizz-instagram'], analytics_capture: 'pending' },
+    },
+  };
+  const packWithActivity = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y', crossPlatformActivity: activity });
+  assert.deepEqual(packWithActivity.cross_platform_activity, activity, 'passed-through activity reaches the data pack verbatim');
 });
 
 test('install-schedule plist uses the Monday post-sweep schedule and exposes Homebrew tools', () => {
