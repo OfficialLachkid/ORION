@@ -100,4 +100,3 @@ test('scheduled research acquires shared locks and records one successful collec
   assert.ok(processCall.args.includes('--scheduled'));
   assert.deepEqual(releases, [resolve(root, 'ollama.lock'), resolve(root, 'research.lock')]);
 });
-
