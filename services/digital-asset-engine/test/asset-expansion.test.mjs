@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import { prepareAssetExpansionReview } from '../src/asset-expansion.mjs';
 import {
   buildAssetExpansionReviewComponents,
+  postAssetExpansionReview,
   prepareAssetExpansionReviewModal,
   recordAssetExpansionReviewDecision,
 } from '../src/asset-expansion-review.mjs';
@@ -99,7 +100,58 @@ async function fixture() {
       target_name: 'Power Cell', buyer_group: 'items',
     }],
   };
-  return { outputRoot, productRoot, plan, hash };
+  return { outputRoot, productRoot, plan, hash, png };
+}
+
+async function addAnimationProof(setup) {
+  const batchId = 'interactive-items-v1';
+  const assetKey = 'power-cell';
+  const itemRoot = resolve(setup.productRoot, 'experiments', batchId, assetKey);
+  const runtime = {
+    'base.png': setup.png,
+    'frames/active-loop/00.png': setup.png,
+    'overlays/active-loop/00.png': setup.png,
+    'sheets/active-loop.png': setup.png,
+    'metadata/active-loop/animation.json': Buffer.from('{"root_motion":{"x":0,"y":0}}\n'),
+    'previews/active-loop.gif': Buffer.from('GIF89a-active'),
+    'frames/detonation/00.png': setup.png,
+    'overlays/detonation/00.png': setup.png,
+    'sheets/detonation.png': setup.png,
+    'metadata/detonation/animation.json': Buffer.from('{"root_motion":{"x":0,"y":0}}\n'),
+    'previews/detonation.gif': Buffer.from('GIF89a-detonation'),
+    'validation.json': Buffer.from('{"status":"passed"}\n'),
+    'source/detonation-peak.png': Buffer.from('private-model-source'),
+  };
+  const files = [];
+  for (const [path, buffer] of Object.entries(runtime)) {
+    await write(resolve(itemRoot, path), buffer);
+    files.push({ path, size: buffer.length, sha256: sha256(buffer) });
+  }
+  const itemManifestHash = 'c'.repeat(64);
+  await write(resolve(itemRoot, 'manifest.json'), JSON.stringify({
+    schema_version: '1.0',
+    item: { target_asset_key: assetKey },
+    status: 'awaiting_animation_review',
+    base_regenerated: false,
+    generation_calls: 1,
+    incurred_cost: 0,
+    buyer_runtime_formats: ['transparent_png_frames', 'animation_json'],
+    preview_only_formats: ['animated_gif'],
+    animations: ['active-loop', 'detonation'],
+    files,
+    manifest_hash: itemManifestHash,
+  }));
+  await write(resolve(setup.productRoot, 'experiments', batchId, 'manifest.json'), JSON.stringify({
+    schema_version: '1.0',
+    batch_id: batchId,
+    product_slug: setup.plan.product_slug,
+    status: 'awaiting_animation_review',
+    manifest_hash: 'd'.repeat(64),
+    item_manifests: [{ asset_key: assetKey, manifest_hash: itemManifestHash }],
+    gates: { all_items_valid: true, package_modified: false },
+  }));
+  setup.plan.title = 'Interactive Expansion';
+  setup.plan.assets[0].animation_proof = { batch_id: batchId, asset_key: assetKey };
 }
 
 test('builds an immutable static expansion review without changing the base release', async () => {
@@ -119,6 +171,97 @@ test('builds an immutable static expansion review without changing the base rele
   const reused = await prepareAssetExpansionReview({ outputRoot: setup.outputRoot, plan: setup.plan });
   assert.equal(reused.reused, true);
   assert.equal(reused.manifest.manifest_hash, result.manifest.manifest_hash);
+});
+
+test('expansion review binds interactive runtime files and Discord GIF previews to the same manifest', async () => {
+  const setup = await fixture();
+  await addAnimationProof(setup);
+  const prepared = await prepareAssetExpansionReview({
+    outputRoot: setup.outputRoot,
+    plan: setup.plan,
+    now: '2026-10-18T14:00:00.000Z',
+  });
+  const asset = prepared.manifest.assets[0];
+  assert.equal(prepared.manifest.animation_count, 2);
+  assert.equal(asset.animation.animations.length, 2);
+  assert.equal(asset.animation.base_sha256, setup.hash);
+  assert.equal(asset.review_hash, asset.animation.bundle_hash);
+  assert.equal(prepared.manifest.files.some((file) => file.path.endsWith('previews/active-loop.gif')), true);
+  assert.equal(prepared.manifest.files.some((file) => file.path.includes('/source/')), false);
+  assert.equal(
+    await readFile(resolve(prepared.candidateRoot, asset.animation.animations[0].preview_gif_path), 'utf8'),
+    'GIF89a-active',
+  );
+  assert.equal(
+    (await readFile(resolve(prepared.candidateRoot, 'animations/power-cell/base.png'))).equals(setup.png),
+    true,
+  );
+
+  await write(resolve(setup.productRoot, 'review', 'discord.json'), JSON.stringify({ channel_id: 'channel-1' }));
+  const requests = [];
+  let messageIndex = 0;
+  const review = await postAssetExpansionReview({
+    runtimeConfig: { env: { DISCORD_BOT_TOKEN: 'token' }, guildId: 'guild-1' },
+    outputRoot: setup.outputRoot,
+    productSlug: setup.plan.product_slug,
+    expansionId: setup.plan.expansion_id,
+    now: '2026-10-18T14:05:00.000Z',
+    async fetchImpl(url, options = {}) {
+      const path = new URL(url).pathname;
+      const payload = options.body instanceof FormData
+        ? JSON.parse(options.body.get('payload_json'))
+        : options.body ? JSON.parse(options.body) : null;
+      requests.push({ path, method: options.method || 'GET', payload });
+      if (path.endsWith('/threads')) return { ok: true, status: 200, async json() { return { id: 'thread-1' }; } };
+      if (options.method === 'POST' && path.endsWith('/messages')) {
+        messageIndex += 1;
+        return { ok: true, status: 200, async json() { return { id: `message-${messageIndex}` }; } };
+      }
+      return { ok: true, status: 200, async json() { return {}; } };
+    },
+  });
+  assert.equal(review.thread_id, 'thread-1');
+  const assetRequest = requests.find((request) => (
+    request.path === '/api/v10/channels/thread-1/messages'
+  ));
+  assert.deepEqual(assetRequest.payload.attachments.map((attachment) => attachment.filename), [
+    'power-cell.png',
+    'power-cell-active-loop.gif',
+    'power-cell-detonation.gif',
+  ]);
+  assert.match(assetRequest.payload.embeds[0].fields.find((field) => field.name === 'Included states').value, /detonation/u);
+
+  const decisionContext = {
+    productSlug: setup.plan.product_slug,
+    expansionId: setup.plan.expansion_id,
+    manifestHash: prepared.manifest.manifest_hash,
+    manifestUrl: 'https://discord.com/channels/guild-1/channel-1/message-1',
+  };
+  const decision = await recordAssetExpansionReviewDecision({
+    interaction: {
+      id: 'animation-review-interaction',
+      type: 3,
+      guild_id: 'guild-1',
+      channel_id: 'channel-1',
+      data: { custom_id: buildAssetExpansionReviewComponents(decisionContext)[0].components[0].custom_id },
+      message: { id: 'message-1' },
+      member: { roles: ['operator-role'], user: { id: 'reviewer-1', username: 'reviewer' } },
+    },
+    config: {
+      guildId: 'guild-1',
+      operatorRoleId: 'operator-role',
+      operatorUserIds: [],
+      env: {
+        DIGITAL_ASSET_ARCHIVE_ROOT: setup.outputRoot,
+        SUPABASE_URL: 'https://project.supabase.co',
+        SUPABASE_SECRET_KEY: 'secret',
+      },
+    },
+    async fetchImpl() {
+      return { ok: true, status: 201, async text() { return '[]'; } };
+    },
+  });
+  assert.equal(decision.row.asset_decisions[0].asset_hash, asset.animation.bundle_hash);
 });
 
 test('expansion approval is bound to the exact manifest and persists per-asset hashes', async () => {

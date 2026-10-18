@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "expansion_id": "neon-plasma-armory-static-expansion-v1",
   "product_slug": "neon-plasma-armory",
-  "title": "Neon Plasma Armory Static Expansion",
+  "title": "Neon Plasma Armory Items, Props & Interactive VFX Expansion",
   "base_version": "0.2.0",
   "target_version": "0.3.0",
   "base_manifest_hash": "0605a81fbbe9a4aa1475e1023f8537f949b1a2de561adb839eecf5ca320ec771",
@@ -26,14 +26,22 @@
       "source_asset_key": "plasma-grenade",
       "target_asset_key": "plasma-grenade",
       "target_name": "Plasma Grenade",
-      "buyer_group": "items"
+      "buyer_group": "items",
+      "animation_proof": {
+        "batch_id": "neon-plasma-armory-grenade-mine-animation-proof-v1",
+        "asset_key": "plasma-grenade"
+      }
     },
     {
       "source_product_slug": "neon-plasma-armory-expansion-revisions",
       "source_asset_key": "plasma-proximity-mine-v2",
       "target_asset_key": "plasma-proximity-mine",
       "target_name": "Plasma Proximity Mine",
-      "buyer_group": "items"
+      "buyer_group": "items",
+      "animation_proof": {
+        "batch_id": "neon-plasma-armory-grenade-mine-animation-proof-v1",
+        "asset_key": "plasma-proximity-mine"
+      }
     },
     {
       "source_product_slug": "neon-plasma-armory-expansion-proof",
