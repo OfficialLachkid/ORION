@@ -22,6 +22,7 @@ import { slugify } from './src/product-planner.mjs';
 import { markItchThemeApplied, postItchThemeReview } from './src/theme-review.mjs';
 import { prepareAssetExpansionReview } from './src/asset-expansion.mjs';
 import { postAssetExpansionReview } from './src/asset-expansion-review.mjs';
+import { generateInteractiveItemAnimationBatch } from './src/interactive-item-animation.mjs';
 
 const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
 const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
@@ -31,6 +32,7 @@ const DEFAULT_EFFECT_REVISION = 'services/digital-asset-engine/fixtures/weapon-i
 const DEFAULT_EFFECT_REVIEW = 'services/digital-asset-engine/fixtures/all-weapon-effects-v2.review.json';
 const DEFAULT_EXTENSION_PLAN = 'services/digital-asset-engine/fixtures/neon-plasma-armory-effects.extension.json';
 const DEFAULT_EXPANSION_REVIEW = 'services/digital-asset-engine/fixtures/neon-plasma-armory-static-expansion.review.json';
+const DEFAULT_ITEM_ANIMATION_BATCH = 'services/digital-asset-engine/fixtures/neon-plasma-armory-interactive-items.batch.json';
 
 function parseArguments(argv) {
   const args = {
@@ -60,6 +62,7 @@ function parseArguments(argv) {
     else if (token === '--review-plan') args.reviewPlan = argv[++index];
     else if (token === '--extension-plan') args.extensionPlan = argv[++index];
     else if (token === '--expansion-plan') args.expansionPlan = argv[++index];
+    else if (token === '--item-animation-plan') args.itemAnimationPlan = argv[++index];
     else if (token === '--release-version') args.releaseVersion = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
@@ -99,6 +102,7 @@ function printHelp() {
     '  prepare-extension  Assemble an immutable, versioned package-extension candidate.',
     '  prepare-expansion-review  Assemble an immutable static-asset expansion review bundle.',
     '  expansion-review  Post or update the expansion proposal in the existing product channel.',
+    '  interactive-items  Generate fixed-anchor item states, overlays, sheets, metadata, and review GIFs.',
     '',
     'Options:',
     `  --config <path>       Default: ${DEFAULT_CONFIG}`,
@@ -109,6 +113,7 @@ function printHelp() {
     `  --review-plan <path> Default: ${DEFAULT_EFFECT_REVIEW}`,
     `  --extension-plan <path> Default: ${DEFAULT_EXTENSION_PLAN}`,
     `  --expansion-plan <path> Default: ${DEFAULT_EXPANSION_REVIEW}`,
+    `  --item-animation-plan <path> Default: ${DEFAULT_ITEM_ANIMATION_BATCH}`,
     '  --release-version <semver>  Stage/review the latest immutable candidate for this version.',
     '  --output-root <path>  Override canonical product storage.',
     '  --now <ISO datetime>  Deterministic validation/testing time.',
@@ -138,8 +143,8 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension', 'prepare-expansion-review', 'expansion-review'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
-  if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects'].includes(args.command) && !args.execute) {
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension', 'prepare-expansion-review', 'expansion-review', 'interactive-items'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects', 'interactive-items'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
   if (['package', 'prepare-extension', 'prepare-expansion-review'].includes(args.command) && !args.internalPreview) {
@@ -413,6 +418,41 @@ async function main() {
           derived_frames: result.timing.derived_frames,
         },
       })),
+    }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'interactive-items') {
+    const plan = JSON.parse(await readFile(args.itemAnimationPlan || DEFAULT_ITEM_ANIMATION_BATCH, 'utf8'));
+    const batch = await generateInteractiveItemAnimationBatch({
+      config,
+      plan,
+      outputRoot: resolveOutputRoot(config),
+      projectRoot: process.cwd(),
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      batch_id: batch.plan.batch_id,
+      product_slug: batch.plan.product_slug,
+      experiment_root: batch.batchRoot,
+      manifest_hash: batch.manifest.manifest_hash,
+      generation_calls: batch.manifest.generation_calls,
+      total_duration_ms: batch.timing.total_duration_ms,
+      incurred_cost: batch.cost.incurred,
+      items: batch.results.map((result) => ({
+        asset_key: result.item.target_asset_key,
+        recipe: result.item.recipe,
+        manifest_hash: result.manifest.manifest_hash,
+        status: result.validation.status,
+        dynamic_energy_region: result.validation.energy_region,
+        animations: result.animations.map((animation) => ({
+          animation_key: animation.key,
+          sprite_sheet_path: animation.sheetPath,
+          preview_gif_path: animation.gifPath,
+          metadata_path: animation.metadataPath,
+        })),
+      })),
+      gates: batch.manifest.gates,
     }, null, 2)}\n`);
     return;
   }
