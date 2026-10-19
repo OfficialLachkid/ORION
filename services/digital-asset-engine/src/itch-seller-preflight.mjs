@@ -4,6 +4,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
+import { resolveDistributionMarketplaceState } from './distribution-review.mjs';
 import { resolvePackagedRelease } from './packaged-release.mjs';
 
 function parseCliJson(value) {
@@ -78,6 +79,36 @@ async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
 
+async function readOptionalJson(path) {
+  try {
+    return await readJson(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+export function resolveItchSellerMarketplaceState({
+  product,
+  manifest,
+  discordState,
+  itchState,
+  publishedState,
+}) {
+  if (discordState?.last_decision?.decision !== 'approve'
+    || discordState.manifest_hash !== manifest.manifest_hash
+    || discordState.listing_hash !== manifest.listing_hash) {
+    throw new Error('Seller readiness requires creative approval for this exact manifest and listing.');
+  }
+  return resolveDistributionMarketplaceState({
+    product,
+    manifest,
+    discordState,
+    itchState,
+    publishedState,
+  });
+}
+
 export async function inspectItchSellerReadiness(options) {
   const store = options.store || new CanonicalProductStore(options.outputRoot);
   const product = options.product || await store.loadProduct(options.slug);
@@ -86,12 +117,18 @@ export async function inspectItchSellerReadiness(options) {
     productRoot,
     releaseVersion: options.releaseVersion,
   });
-  const itchState = await readJson(resolve(productRoot, 'review', 'itch.json'));
-  if (itchState.status !== 'verified'
-    || itchState.manifest_hash !== packaged.manifest.manifest_hash
-    || itchState.listing_hash !== packaged.manifest.listing_hash) {
-    throw new Error('Seller readiness requires a verified itch.io draft for the exact release candidate.');
-  }
+  const [discordState, itchState, publishedState] = await Promise.all([
+    readJson(resolve(productRoot, 'review', 'discord.json')),
+    readOptionalJson(resolve(productRoot, 'review', 'itch.json')),
+    readOptionalJson(resolve(productRoot, 'review', 'itch-release.json')),
+  ]);
+  const marketplaceState = resolveItchSellerMarketplaceState({
+    product,
+    manifest: packaged.manifest,
+    discordState,
+    itchState,
+    publishedState,
+  });
 
   const cliRunner = options.cliRunner || defaultCliRunner;
   const env = options.env || process.env;
@@ -101,7 +138,7 @@ export async function inspectItchSellerReadiness(options) {
     options.profileDir || env.ITCH_PLAYWRIGHT_PROFILE || '~/.orion/playwright-profile-itch',
   );
   const openArgs = [
-    '-s', sessionName, 'open', itchState.edit_url || 'https://itch.io/dashboard',
+    '-s', sessionName, 'open', marketplaceState.editUrl || 'https://itch.io/dashboard',
     '--browser', 'chrome', '--persistent', '--profile', profileDir, '--json',
   ];
   if (options.headed !== false && env.ITCH_PLAYWRIGHT_HEADED !== 'false') openArgs.splice(-1, 0, '--headed');
@@ -132,6 +169,9 @@ export async function inspectItchSellerReadiness(options) {
       manifest_hash: packaged.manifest.manifest_hash,
       listing_hash: packaged.manifest.listing_hash,
       marketplace: 'itch.io',
+      marketplace_review_mode: marketplaceState.mode,
+      current_marketplace_version: marketplaceState.currentVersion,
+      base_manifest_hash: packaged.manifest.base_manifest_hash || null,
       payout_mode: details.payout_mode,
       tax_interview_complete: details.tax_interview_complete,
       blockers: details.blockers,
