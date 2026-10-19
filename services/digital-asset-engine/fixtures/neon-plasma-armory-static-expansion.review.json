@@ -59,7 +59,7 @@
       "buyer_group": "vfx",
       "replaces_review_asset_key": "portable-shield-emitter",
       "interactive_proof": {
-        "batch_id": "neon-plasma-armory-alpha-and-shield-v7",
+        "batch_id": "neon-plasma-armory-shield-v8",
         "asset_key": "plasma-shield"
       }
     },
