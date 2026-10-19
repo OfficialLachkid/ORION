@@ -115,7 +115,9 @@ export async function clearDenseShieldInterior(baseBuffer, options = {}) {
       clearedPixels += 1;
     }
   }
-  if (clearedPixels === 0) return baseBuffer;
+  const minimumCorrectionPixels = options.minimumCorrectionPixels
+    ?? Math.max(32, Math.floor(width * height * 0.002));
+  if (clearedPixels < minimumCorrectionPixels) return baseBuffer;
   return sharp(output, { raw: { width, height, channels: 4 } })
     .png({ palette: false, compressionLevel: 9 })
     .toBuffer();
