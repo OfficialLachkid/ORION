@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import {
   alignEffectCoreToAnchor,
   createEnergyPulseFrame,
+  createRadialEnergyPulseFrame,
   detectDynamicEnergyRegion,
   detectOpaqueObjectAnchor,
   generateInteractiveItemAnimationBatch,
@@ -75,7 +76,7 @@ function plan(items) {
   };
 }
 
-test('shield integrity damage spreads around the field and remains progressive', async () => {
+test('shield integrity damage adds progressive glass fractures without deleting the field', async () => {
   const base = await sharp({
     create: {
       width: 96,
@@ -86,27 +87,30 @@ test('shield integrity damage spreads around the field and remains progressive',
   }).composite([{
     input: Buffer.from('<svg width="96" height="96"><circle cx="48" cy="48" r="38" fill="none" stroke="#35d9ff" stroke-width="12"/></svg>'),
   }]).png().toBuffer();
-  const half = await createShieldIntegrityFrame(base, 50, { seed: 45, cellSize: 6 });
-  const low = await createShieldIntegrityFrame(base, 20, { seed: 45, cellSize: 6 });
+  const half = await createShieldIntegrityFrame(base, 50, { seed: 45 });
+  const low = await createShieldIntegrityFrame(base, 20, { seed: 45 });
   const [baseRaw, halfRaw, lowRaw] = await Promise.all([base, half, low].map((buffer) => (
     sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   )));
-  const opaqueByQuadrant = (decoded) => {
+  const addedByQuadrant = (decoded) => {
     const counts = [0, 0, 0, 0];
     for (let y = 0; y < decoded.info.height; y += 1) {
       for (let x = 0; x < decoded.info.width; x += 1) {
-        const alpha = decoded.data[((y * decoded.info.width) + x) * 4 + 3];
-        if (alpha === 0) continue;
+        const offset = ((y * decoded.info.width) + x) * 4;
+        if (baseRaw.data[offset + 3] > 0 || decoded.data[offset + 3] === 0) continue;
         counts[(y >= 48 ? 2 : 0) + (x >= 48 ? 1 : 0)] += 1;
       }
     }
     return counts;
   };
-  const baseQuadrants = opaqueByQuadrant(baseRaw);
-  const halfQuadrants = opaqueByQuadrant(halfRaw);
-  assert.equal(halfQuadrants.every((count, index) => count > 0 && count < baseQuadrants[index]), true);
-  for (let pixel = 0; pixel < lowRaw.data.length; pixel += 4) {
-    if (lowRaw.data[pixel + 3] > 0) assert.equal(halfRaw.data[pixel + 3] > 0, true);
+  assert.equal(addedByQuadrant(lowRaw).every((count) => count > 0), true);
+  for (let offset = 0; offset < lowRaw.data.length; offset += 4) {
+    if (baseRaw.data[offset + 3] > 0) {
+      assert.equal(halfRaw.data[offset + 3] > 0, true);
+      assert.equal(lowRaw.data[offset + 3] > 0, true);
+    }
+    const halfAdded = baseRaw.data[offset + 3] === 0 && halfRaw.data[offset + 3] > 0;
+    if (halfAdded) assert.equal(lowRaw.data[offset + 3] > 0, true);
   }
 });
 
@@ -173,6 +177,38 @@ test('energy pulse changes only dynamically detected pixels', async () => {
   assert.equal(isolation.passed, true);
   assert.equal(isolation.changed_pixels, 80);
   assert.equal(isolation.outside_region_changes, 0);
+});
+
+test('radial shield pulse travels from inner lattice to outer rim', async () => {
+  const base = await sharp({
+    create: { width: 96, height: 96, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite([{
+    input: Buffer.from('<svg width="96" height="96"><g fill="none" stroke="#35d9ff" stroke-width="3"><circle cx="48" cy="48" r="12"/><circle cx="48" cy="48" r="24"/><circle cx="48" cy="48" r="38"/></g></svg>'),
+  }]).png().toBuffer();
+  const detection = await detectDynamicEnergyRegion(base, {
+    colors: ['#35d9ff'], tolerance: 72, alphaThreshold: 1,
+  });
+  const inner = await createRadialEnergyPulseFrame(base, detection, 0.3);
+  const outer = await createRadialEnergyPulseFrame(base, detection, 0.92);
+  const changedRadius = async (buffer) => {
+    const [source, result] = await Promise.all([base, buffer].map((value) => (
+      sharp(value).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+    )));
+    const radii = [];
+    for (let y = 0; y < result.info.height; y += 1) {
+      for (let x = 0; x < result.info.width; x += 1) {
+        const offset = ((y * result.info.width) + x) * 4;
+        if (source.data[offset] === result.data[offset]
+          && source.data[offset + 1] === result.data[offset + 1]
+          && source.data[offset + 2] === result.data[offset + 2]) continue;
+        radii.push(Math.hypot(x - 48, y - 48));
+      }
+    }
+    return radii.reduce((total, value) => total + value, 0) / radii.length;
+  };
+  assert.equal(await changedRadius(outer.compositeBuffer) > await changedRadius(inner.compositeBuffer), true);
+  assert.equal((await inspectPulseIsolation(base, inner.compositeBuffer, detection.mask)).passed, true);
+  assert.equal((await inspectPulseIsolation(base, outer.compositeBuffer, detection.mask)).passed, true);
 });
 
 test('explosive object anchor follows the opaque sprite bounds rather than an off-center energy window', async () => {

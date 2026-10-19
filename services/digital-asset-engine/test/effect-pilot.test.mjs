@@ -14,7 +14,11 @@ import {
   generateEffectPilot,
   writeAnimatedGifPreview,
 } from '../src/effect-pilot.mjs';
-import { inspectAnchorContact, processPixelArtEffectFrame } from '../src/image-processor.mjs';
+import {
+  inspectAnchorContact,
+  processPixelArtEffectFrame,
+  sanitizeTransparentPixels,
+} from '../src/image-processor.mjs';
 import { planDigitalAssetProduct } from '../src/pipeline.mjs';
 import { EffectPilotSchema } from '../src/schemas.mjs';
 
@@ -122,6 +126,21 @@ test('effect frame processing preserves a fixed west-center origin on a transpar
   assert.equal(processed.placed_bounds.left, 4);
   assert.equal(contact.passed, true);
   assert.equal(processed.anchor_correction, null);
+  const rgba = await sharp(processed.buffer).ensureAlpha().raw().toBuffer();
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    if (rgba[offset + 3] !== 0) continue;
+    assert.deepEqual([...rgba.subarray(offset, offset + 4)], [0, 0, 0, 0]);
+  }
+});
+
+test('transparent pixel sanitization removes hidden matte RGB without changing visible pixels', async () => {
+  const input = await sharp(Buffer.from([
+    68, 80, 107, 0,
+    53, 217, 255, 255,
+  ]), { raw: { width: 2, height: 1, channels: 4 } }).png().toBuffer();
+  const output = await sanitizeTransparentPixels(input);
+  const rgba = await sharp(output).ensureAlpha().raw().toBuffer();
+  assert.deepEqual([...rgba], [0, 0, 0, 0, 53, 217, 255, 255]);
 });
 
 test('effect frame processing bridges a small model-made muzzle-origin gap', async () => {
@@ -178,6 +197,7 @@ test('GIF preview assembly preserves frame delays and uses a transparency palett
   assert.equal(invocation.args.includes('11'), true);
   assert.equal(invocation.args.some((value) => String(value).includes('concat=n=2')), true);
   assert.equal(invocation.args.some((value) => String(value).includes('mpdecimate')), true);
+  assert.equal(invocation.args.some((value) => String(value).includes('format=rgba')), true);
   assert.equal(invocation.args.some((value) => String(value).includes('reserve_transparent=1')), true);
   assert.equal(await readFile(outputPath, 'utf8'), 'gif');
 });

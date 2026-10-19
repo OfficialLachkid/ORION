@@ -1,7 +1,26 @@
 import sharp from 'sharp';
 
-export const PIXEL_ART_PROCESSING_VERSION = '2.1';
-export const PIXEL_ART_EFFECT_PROCESSING_VERSION = '1.0';
+export const PIXEL_ART_PROCESSING_VERSION = '2.2';
+export const PIXEL_ART_EFFECT_PROCESSING_VERSION = '1.1';
+
+export async function sanitizeTransparentPixels(inputBuffer, options = {}) {
+  const decoded = await sharp(inputBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const rgba = Buffer.from(decoded.data);
+  const alphaCutoff = options.alphaCutoff ?? 0;
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    if (rgba[offset + 3] > alphaCutoff) continue;
+    rgba[offset] = 0;
+    rgba[offset + 1] = 0;
+    rgba[offset + 2] = 0;
+    rgba[offset + 3] = 0;
+  }
+  return sharp(rgba, {
+    raw: { width: decoded.info.width, height: decoded.info.height, channels: 4 },
+  }).png({
+    palette: false,
+    compressionLevel: 9,
+  }).toBuffer();
+}
 
 function parseHexColor(value) {
   const normalized = value.replace('#', '');
@@ -165,7 +184,7 @@ export async function processPixelArtAsset(inputBuffer, options) {
     .toBuffer();
 
   return {
-    buffer: output,
+    buffer: await sanitizeTransparentPixels(output, { maxPaletteColors: options.maxPaletteColors }),
     processing_version: PIXEL_ART_PROCESSING_VERSION,
     source: { width, height },
     extracted_bounds: bounds,
@@ -275,7 +294,7 @@ export async function processPixelArtEffectFrame(inputBuffer, options) {
   }
 
   return {
-    buffer: output,
+    buffer: await sanitizeTransparentPixels(output, { maxPaletteColors: options.maxPaletteColors }),
     processing_version: PIXEL_ART_PROCESSING_VERSION,
     effect_processing_version: PIXEL_ART_EFFECT_PROCESSING_VERSION,
     source: { width, height },
@@ -379,7 +398,7 @@ export async function derivePixelArtEffectFrame(inputBuffer, options) {
       output[targetOffset + 3] = Math.round(decoded.data[sourceOffset + 3] * opacity);
     }
   }
-  return sharp(output, {
+  const buffer = await sharp(output, {
     raw: {
       width: decoded.info.width,
       height: decoded.info.height,
@@ -391,6 +410,7 @@ export async function derivePixelArtEffectFrame(inputBuffer, options) {
     dither: 0,
     compressionLevel: 9,
   }).toBuffer();
+  return sanitizeTransparentPixels(buffer, { maxPaletteColors: options.maxPaletteColors });
 }
 
 export async function createTransparencyPreview(assetBuffer, options = {}) {

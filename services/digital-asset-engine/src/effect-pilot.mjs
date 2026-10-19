@@ -15,6 +15,7 @@ import {
   PIXEL_ART_EFFECT_PROCESSING_VERSION,
   PIXEL_ART_PROCESSING_VERSION,
   processPixelArtEffectFrame,
+  sanitizeTransparentPixels,
 } from './image-processor.mjs';
 import { OllamaImageAdapter } from './ollama-image-adapter.mjs';
 import { assertGenerationResourcesAvailable } from './resource-preflight.mjs';
@@ -235,8 +236,12 @@ export async function writeAnimatedGifPreview(options) {
     '-t', (options.delays[index] / 1000).toFixed(3),
     '-i', resolve(path),
   ]);
-  const inputLabels = options.framePaths.map((unused, index) => `[${index}:v]`).join('');
+  const rgbaInputs = options.framePaths
+    .map((unused, index) => `[${index}:v]format=rgba[v${index}]`)
+    .join(';');
+  const inputLabels = options.framePaths.map((unused, index) => `[v${index}]`).join('');
   const filter = [
+    rgbaInputs,
     `${inputLabels}concat=n=${options.framePaths.length}:v=1:a=0,mpdecimate,split[s0][s1]`,
     '[s0]palettegen=reserve_transparent=1:transparency_color=000000[p]',
     '[s1][p]paletteuse=alpha_threshold=128',
@@ -429,7 +434,7 @@ async function writeGifFromBuffers(buffers, delays, outputPath, options) {
     const paths = [];
     for (let index = 0; index < buffers.length; index += 1) {
       const path = join(temporaryDirectory, `${frameName(index)}.png`);
-      await writeFile(path, buffers[index]);
+      await writeFile(path, await sanitizeTransparentPixels(buffers[index]));
       paths.push(path);
     }
     return await (options.gifWriter || writeAnimatedGifPreview)({

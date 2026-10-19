@@ -60,41 +60,109 @@ export async function createEnergyLevelFrame(baseBuffer, detection, level) {
   };
 }
 
-function integrityCellNoise(cellX, cellY, seed) {
-  const mixed = Math.sin(((cellX + 1) * 12.9898) + ((cellY + 1) * 78.233) + (seed * 0.017));
+function seededUnit(seed, index) {
+  const mixed = Math.sin(((index + 1) * 12.9898) + (seed * 0.017)) * 43_758.5453;
   return mixed - Math.floor(mixed);
 }
 
-function distributedDamageOrder(cells, columns, rows, seed) {
-  const sectorCount = 8;
-  const centerX = (columns - 1) / 2;
-  const centerY = (rows - 1) / 2;
-  const sectors = Array.from({ length: sectorCount }, () => []);
-  for (const cell of cells) {
-    const angle = Math.atan2(cell.cellY - centerY, cell.cellX - centerX) + Math.PI;
-    const sector = Math.min(sectorCount - 1, Math.floor((angle / (Math.PI * 2)) * sectorCount));
-    sectors[sector].push(cell);
-  }
-  for (const sector of sectors) {
-    sector.sort((left, right) => (
-      integrityCellNoise(left.cellX, left.cellY, seed)
-      - integrityCellNoise(right.cellX, right.cellY, seed)
-      || left.key.localeCompare(right.key)
-    ));
-  }
-  const order = [];
-  const rotation = Math.abs(Math.round(seed)) % sectorCount;
-  while (order.length < cells.length) {
-    let added = false;
-    for (let offset = 0; offset < sectorCount; offset += 1) {
-      const sector = sectors[(rotation + offset) % sectorCount];
-      if (sector.length === 0) continue;
-      order.push(sector.shift());
-      added = true;
+function opaqueBounds(data, width, height) {
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (data[((y * width) + x) * 4 + 3] === 0) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
     }
-    if (!added) break;
   }
-  return order;
+  return { left, top, right, bottom };
+}
+
+function crackSegments(bounds, seed) {
+  const center = {
+    x: (bounds.left + bounds.right) / 2,
+    y: (bounds.top + bounds.bottom) / 2,
+  };
+  const radius = Math.min(bounds.right - bounds.left, bounds.bottom - bounds.top) / 2;
+  const sites = 8;
+  const paths = [];
+  for (let site = 0; site < sites; site += 1) {
+    const angle = ((Math.PI * 2 * site) / sites) + (seededUnit(seed, site) * 0.28);
+    let point = {
+      x: center.x + (Math.cos(angle) * radius * 0.76),
+      y: center.y + (Math.sin(angle) * radius * 0.76),
+    };
+    const segments = [];
+    for (let depth = 0; depth < 5; depth += 1) {
+      const inward = angle + Math.PI + ((seededUnit(seed + site, depth + 20) - 0.5) * 0.75);
+      const length = radius * (0.075 + (seededUnit(seed + depth, site + 40) * 0.045));
+      const next = {
+        x: point.x + (Math.cos(inward) * length),
+        y: point.y + (Math.sin(inward) * length),
+      };
+      segments.push({ from: point, to: next, site, depth, branch: false });
+      if (depth >= 1) {
+        const branchAngle = inward + (site % 2 === 0 ? 0.85 : -0.85);
+        const branchLength = length * (0.55 + (seededUnit(seed + 90, (site * 5) + depth) * 0.35));
+        segments.push({
+          from: next,
+          to: {
+            x: next.x + (Math.cos(branchAngle) * branchLength),
+            y: next.y + (Math.sin(branchAngle) * branchLength),
+          },
+          site,
+          depth,
+          branch: true,
+        });
+      }
+      point = next;
+    }
+    paths.push(segments);
+  }
+  const ordered = [];
+  const maximumDepth = Math.max(...paths.map((path) => path.length));
+  for (let depth = 0; depth < maximumDepth; depth += 1) {
+    for (let site = 0; site < paths.length; site += 1) {
+      if (paths[site][depth]) ordered.push(paths[site][depth]);
+    }
+  }
+  return { center, radius, segments: ordered };
+}
+
+function drawCrackLine(data, width, height, segment, center, radius, color) {
+  let x = Math.round(segment.from.x);
+  let y = Math.round(segment.from.y);
+  const endX = Math.round(segment.to.x);
+  const endY = Math.round(segment.to.y);
+  const dx = Math.abs(endX - x);
+  const dy = -Math.abs(endY - y);
+  const stepX = x < endX ? 1 : -1;
+  const stepY = y < endY ? 1 : -1;
+  let error = dx + dy;
+  while (true) {
+    if (x >= 0 && x < width && y >= 0 && y < height
+      && Math.hypot(x - center.x, y - center.y) <= radius * 0.9) {
+      const offset = ((y * width) + x) * 4;
+      data[offset] = color[0];
+      data[offset + 1] = color[1];
+      data[offset + 2] = color[2];
+      data[offset + 3] = color[3];
+    }
+    if (x === endX && y === endY) break;
+    const doubled = error * 2;
+    if (doubled >= dy) {
+      error += dy;
+      x += stepX;
+    }
+    if (doubled <= dx) {
+      error += dx;
+      y += stepY;
+    }
+  }
 }
 
 export async function createShieldIntegrityFrame(baseBuffer, integrityPercent, options = {}) {
@@ -102,37 +170,28 @@ export async function createShieldIntegrityFrame(baseBuffer, integrityPercent, o
   if (integrity === 100) return baseBuffer;
   const decoded = await sharp(baseBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = decoded.info;
-  const cellSize = Math.max(4, options.cellSize ?? 8);
-  const columns = Math.ceil(width / cellSize);
-  const rows = Math.ceil(height / cellSize);
-  const occupied = new Set();
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const offset = ((y * width) + x) * 4;
-      if (decoded.data[offset + 3] === 0) continue;
-      occupied.add(`${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`);
-    }
-  }
-  const cells = [...occupied].map((key) => {
-    const [cellX, cellY] = key.split(':').map(Number);
-    return { key, cellX, cellY };
-  });
-  const damageOrder = distributedDamageOrder(cells, columns, rows, options.seed ?? 0);
-  const removeCount = Math.floor(cells.length * ((100 - integrity) / 100));
-  const removed = new Set(damageOrder.slice(0, removeCount).map((cell) => cell.key));
   const output = Buffer.from(decoded.data);
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const key = `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`;
-      if (!removed.has(key)) continue;
-      output[((y * width) + x) * 4 + 3] = 0;
+  const fieldOpacity = 0.45 + ((integrity / 100) * 0.55);
+  for (let offset = 0; offset < output.length; offset += 4) {
+    if (output[offset + 3] === 0) {
+      output[offset] = 0;
+      output[offset + 1] = 0;
+      output[offset + 2] = 0;
+      continue;
     }
+    output[offset + 3] = Math.max(1, Math.round(output[offset + 3] * fieldOpacity));
+  }
+  const fractures = crackSegments(opaqueBounds(decoded.data, width, height), options.seed ?? 0);
+  const damage = (100 - integrity) / 100;
+  const visibleSegments = Math.max(1, Math.ceil(fractures.segments.length * damage));
+  for (let index = 0; index < visibleSegments; index += 1) {
+    const segment = fractures.segments[index];
+    const color = segment.branch ? [53, 217, 255, 230] : [200, 212, 236, 255];
+    drawCrackLine(output, width, height, segment, fractures.center, fractures.radius, color);
   }
   return sharp(output, { raw: { width, height, channels: 4 } })
     .png({
-      palette: true,
-      colours: options.maxPaletteColors ?? 32,
-      dither: 0,
+      palette: false,
       compressionLevel: 9,
     })
     .toBuffer();

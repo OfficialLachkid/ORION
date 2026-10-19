@@ -144,6 +144,48 @@ export async function createEnergyPulseFrame(assetBuffer, detection, intensity) 
   return { overlayBuffer, compositeBuffer };
 }
 
+export async function createRadialEnergyPulseFrame(assetBuffer, detection, phase, intensity = 0.72) {
+  const overlay = Buffer.alloc(detection.decoded.data.length);
+  const center = detection.report.centroid;
+  let maximumRadius = 1;
+  for (let pixel = 0; pixel < detection.mask.length; pixel += 1) {
+    if (!detection.mask[pixel]) continue;
+    const x = pixel % detection.decoded.info.width;
+    const y = Math.floor(pixel / detection.decoded.info.width);
+    maximumRadius = Math.max(maximumRadius, Math.hypot(x - center.x, y - center.y));
+  }
+  const waveRadius = Math.max(0, Math.min(1, phase));
+  const waveWidth = 0.22;
+  for (let pixel = 0; pixel < detection.mask.length; pixel += 1) {
+    if (!detection.mask[pixel]) continue;
+    const x = pixel % detection.decoded.info.width;
+    const y = Math.floor(pixel / detection.decoded.info.width);
+    const normalizedRadius = Math.hypot(x - center.x, y - center.y) / maximumRadius;
+    const proximity = Math.max(0, 1 - (Math.abs(normalizedRadius - waveRadius) / waveWidth));
+    if (proximity <= 0) continue;
+    const offset = pixel * 4;
+    const boost = proximity * intensity;
+    for (let channel = 0; channel < 3; channel += 1) {
+      const source = detection.decoded.data[offset + channel];
+      overlay[offset + channel] = Math.round(source + ((255 - source) * boost));
+    }
+    overlay[offset + 3] = detection.decoded.data[offset + 3];
+  }
+  const raw = {
+    width: detection.decoded.info.width,
+    height: detection.decoded.info.height,
+    channels: 4,
+  };
+  const overlayBuffer = await sharp(overlay, { raw })
+    .png({ palette: true, colours: 32, dither: 0, compressionLevel: 9 })
+    .toBuffer();
+  const compositeBuffer = await sharp(assetBuffer)
+    .composite([{ input: overlayBuffer }])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+  return { overlayBuffer, compositeBuffer };
+}
+
 export async function inspectPulseIsolation(baseBuffer, compositeBuffer, mask) {
   const [base, composite] = await Promise.all([
     sharp(baseBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true }),

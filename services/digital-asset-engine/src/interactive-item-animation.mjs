@@ -11,6 +11,7 @@ import {
   derivePixelArtEffectFrame,
   processPixelArtAsset,
   processPixelArtEffectFrame,
+  sanitizeTransparentPixels,
 } from './image-processor.mjs';
 import {
   buildStateContactSheet,
@@ -22,6 +23,7 @@ import {
 import {
   alignEffectCoreToAnchor,
   createEnergyPulseFrame,
+  createRadialEnergyPulseFrame,
   detectDynamicEnergyRegion,
   detectOpaqueObjectAnchor,
   inspectPulseIsolation,
@@ -33,6 +35,7 @@ import { InteractiveItemAnimationBatchSchema, ProductSpecificationSchema } from 
 export {
   alignEffectCoreToAnchor,
   createEnergyPulseFrame,
+  createRadialEnergyPulseFrame,
   detectDynamicEnergyRegion,
   detectOpaqueObjectAnchor,
   inspectPulseIsolation,
@@ -162,16 +165,20 @@ async function generateDetonationFrames({ adapter, config, item, plan, canvas, t
 }
 
 async function writeAnimation(root, item, key, definition, frames, overlays, options = {}) {
+  const [cleanFrames, cleanOverlays] = await Promise.all([
+    Promise.all(frames.map((frame) => sanitizeTransparentPixels(frame))),
+    Promise.all(overlays.map((overlay) => sanitizeTransparentPixels(overlay))),
+  ]);
   const framePaths = [];
   const overlayPaths = [];
-  for (let index = 0; index < frames.length; index += 1) {
+  for (let index = 0; index < cleanFrames.length; index += 1) {
     const framePath = resolveInside(root, `frames/${key}/${String(index).padStart(2, '0')}.png`, 'Animation frame');
     const overlayPath = resolveInside(root, `overlays/${key}/${String(index).padStart(2, '0')}.png`, 'Animation overlay');
-    await Promise.all([writeBuffer(framePath, frames[index]), writeBuffer(overlayPath, overlays[index])]);
+    await Promise.all([writeBuffer(framePath, cleanFrames[index]), writeBuffer(overlayPath, cleanOverlays[index])]);
     framePaths.push(framePath);
     overlayPaths.push(overlayPath);
   }
-  const sheet = await assembleEffectSpriteSheet(frames, { canvas: definition.canvas }, { gutter: SHEET_GUTTER });
+  const sheet = await assembleEffectSpriteSheet(cleanFrames, { canvas: definition.canvas }, { gutter: SHEET_GUTTER });
   const sheetPath = resolveInside(root, `sheets/${key}.png`, 'Animation sheet');
   const gifPath = resolveInside(root, `previews/${key}.gif`, 'Animation GIF');
   await writeBuffer(sheetPath, sheet.buffer);
@@ -725,8 +732,8 @@ async function generatePlasmaShieldRecipe(context) {
     durations: [100, 80, 80, 90, 140],
   }, powerUpFrames, powerUpFrames, options);
 
-  const pulses = await Promise.all([0, 0.18, 0.38, 0.18].map((intensity) => (
-    createEnergyPulseFrame(baseBuffer, detection, intensity)
+  const pulses = await Promise.all([0.18, 0.42, 0.68, 0.92].map((phase) => (
+    createRadialEnergyPulseFrame(baseBuffer, detection, phase)
   )));
   const active = await writeAnimation(itemRoot, item, 'active-loop', {
     name: 'Active Shield Loop', playback: 'loop', canvas,
