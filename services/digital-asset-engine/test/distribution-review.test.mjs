@@ -11,7 +11,10 @@ import {
   postDigitalAssetDistributionReview,
   resolveDistributionMarketplaceState,
 } from '../src/distribution-review.mjs';
-import { buildItchSellerPreflightCode } from '../src/itch-seller-preflight.mjs';
+import {
+  buildItchSellerPreflightCode,
+  resolveItchSellerMarketplaceState,
+} from '../src/itch-seller-preflight.mjs';
 
 const context = {
   status: 'awaiting_distribution_approval',
@@ -310,6 +313,62 @@ test('seller preflight checks payout mode and fails closed on incomplete tax set
   assert.match(code, /collected by itch/u);
   assert.match(code, /tax_interview_incomplete/u);
   assert.match(code, /begin interview/u);
+});
+
+test('seller preflight accepts an approved update based on the verified public release', () => {
+  const currentManifestHash = 'b'.repeat(64);
+  const manifest = {
+    manifest_hash: 'a'.repeat(64),
+    listing_hash: 'c'.repeat(64),
+    base_manifest_hash: currentManifestHash,
+    target_version: '0.3.0',
+  };
+  const result = resolveItchSellerMarketplaceState({
+    product: { product_id: 'product-1', slug: 'neon-plasma-armory' },
+    manifest,
+    discordState: {
+      manifest_hash: manifest.manifest_hash,
+      listing_hash: manifest.listing_hash,
+      marketplace_review_mode: 'published_update',
+      current_marketplace_version: '0.2.0',
+      itch_url: 'https://vbjservices.itch.io/neon-plasma-armory',
+      last_decision: { decision: 'approve' },
+    },
+    itchState: null,
+    publishedState: {
+      status: 'verified_public',
+      product_id: 'product-1',
+      product_slug: 'neon-plasma-armory',
+      target_version: '0.2.0',
+      manifest_hash: currentManifestHash,
+      public_url: 'https://vbjservices.itch.io/neon-plasma-armory',
+      edit_url: 'https://itch.io/game/edit/5144533',
+      butler_target: 'vbjservices/neon-plasma-armory:assets',
+    },
+  });
+  assert.equal(result.mode, 'published_update');
+  assert.equal(result.currentVersion, '0.2.0');
+  assert.equal(result.editUrl, 'https://itch.io/game/edit/5144533');
+});
+
+test('seller preflight rejects a public update that lacks exact creative approval', () => {
+  assert.throws(() => resolveItchSellerMarketplaceState({
+    product: { product_id: 'product-1', slug: 'neon-plasma-armory' },
+    manifest: {
+      manifest_hash: 'a'.repeat(64),
+      listing_hash: 'c'.repeat(64),
+      base_manifest_hash: 'b'.repeat(64),
+      target_version: '0.3.0',
+    },
+    discordState: {
+      manifest_hash: 'd'.repeat(64),
+      listing_hash: 'c'.repeat(64),
+      marketplace_review_mode: 'published_update',
+      current_marketplace_version: '0.2.0',
+      last_decision: { decision: 'approve' },
+    },
+    publishedState: null,
+  }), /creative approval for this exact manifest and listing/iu);
 });
 
 test('distribution store uses the append-only Supabase endpoint', async () => {
