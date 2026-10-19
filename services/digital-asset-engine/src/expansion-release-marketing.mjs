@@ -19,7 +19,7 @@ const COLORS = Object.freeze({
   violet: '#7d6cf2',
 });
 
-export const EXPANSION_RELEASE_MARKETING_VERSION = '1.0.1';
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.0.2';
 
 function escapeXml(value) {
   return String(value)
@@ -113,7 +113,9 @@ async function gridImage({ width, height, title, subtitle, entries, columns, top
       height,
       title,
       subtitle,
-      titleSize: Math.max(24, Math.min(width < 700 ? 35 : 40, Math.floor((width - 90) / (title.length * 0.62)))),
+      titleSize: title.length > 26
+        ? 30
+        : Math.max(24, Math.min(width < 700 ? 35 : 40, Math.floor((width - 90) / (title.length * 0.62)))),
     }),
     ...cards,
     `<text x="${width - 28}" y="${height - 13}" text-anchor="end" fill="${COLORS.ink}" font-family="Arial, sans-serif" font-size="12" font-weight="800">${escapeXml(footer)}</text>`,
