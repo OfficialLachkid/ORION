@@ -80,6 +80,11 @@ async function createArchiveFixture(options = {}) {
       'asset-rail-rifle': 'asset-message-1',
       'asset-arc-launcher': 'asset-message-2',
     },
+    itch_url: context.itchUrl,
+    marketplace_review_mode: options.marketplaceReviewMode || 'draft',
+    ...(options.marketplaceReviewMode === 'published_update' ? {
+      current_marketplace_version: options.currentMarketplaceVersion || '0.1.0',
+    } : {}),
     ...(options.targetVersion ? {
       target_version: options.targetVersion,
       package_root: packageRoot,
@@ -90,6 +95,7 @@ async function createArchiveFixture(options = {}) {
     manifest_hash: manifestHash,
     listing_hash: listingHash,
     ...(options.targetVersion ? { target_version: options.targetVersion } : {}),
+    ...(options.baseManifestHash ? { base_manifest_hash: options.baseManifestHash } : {}),
     files: productAssets.map((asset, index) => ({
       path: `${options.targetVersion ? 'download/' : ''}assets/individual/${asset.final_path.split('/').at(-1)}`,
       content_sha256: hashes[index],
@@ -98,12 +104,16 @@ async function createArchiveFixture(options = {}) {
   await Promise.all([
     writeFile(resolve(productRoot, 'product.json'), JSON.stringify(product)),
     writeFile(resolve(productRoot, 'review', 'discord.json'), JSON.stringify(state)),
-    writeFile(resolve(productRoot, 'review', 'itch.json'), JSON.stringify({
+    writeFile(resolve(productRoot, 'review', 'itch.json'), JSON.stringify(options.itchState || {
       status: 'verified',
       manifest_hash: manifestHash,
       listing_hash: listingHash,
       public_url: context.itchUrl,
     })),
+    ...(options.publishedState ? [writeFile(
+      resolve(productRoot, 'review', 'itch-release.json'),
+      JSON.stringify(options.publishedState),
+    )] : []),
     writeFile(resolve(productRoot, packageRoot, 'manifest.json'), JSON.stringify(manifest)),
     ...productAssets.map((asset, index) => writeFile(
       resolve(productRoot, asset.validation_path),
@@ -194,6 +204,68 @@ test('approves the exact immutable versioned candidate stored in the Discord rev
   assert.equal(inserted.length, 1);
   assert.equal(result.row.manifest_hash, manifestHash);
   assert.deepEqual(result.row.asset_decisions.map((item) => item.decision), ['approve', 'approve']);
+});
+
+test('approves a published update against the verified current public release instead of a draft', async () => {
+  const packageRoot = 'releases/0.3.0/candidates/0123456789abcdef';
+  const currentManifestHash = 'e'.repeat(64);
+  const archiveRoot = await createArchiveFixture({
+    packageRoot,
+    targetVersion: '0.3.0',
+    baseManifestHash: currentManifestHash,
+    marketplaceReviewMode: 'published_update',
+    currentMarketplaceVersion: '0.2.0',
+    itchState: {
+      status: 'verified',
+      manifest_hash: currentManifestHash,
+      listing_hash: 'f'.repeat(64),
+      public_url: context.itchUrl,
+    },
+    publishedState: {
+      status: 'verified_public',
+      product_id: 'asset-product-e7bd21e31c69c03a',
+      target_version: '0.2.0',
+      manifest_hash: currentManifestHash,
+      listing_hash: 'f'.repeat(64),
+      public_url: context.itchUrl,
+    },
+  });
+  const inserted = [];
+  const result = await recordDigitalAssetReviewDecision({
+    interaction: packInteraction(),
+    archiveRoot,
+    config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+    store: { async insert(row) { inserted.push(row); } },
+  });
+  assert.equal(inserted.length, 1);
+  assert.equal(result.row.manifest_hash, manifestHash);
+  assert.equal(result.messagePatch.components[0].components[0].label, 'Open Current itch.io Page');
+});
+
+test('rejects a published update when its verified current release receipt changed', async () => {
+  const archiveRoot = await createArchiveFixture({
+    packageRoot: 'releases/0.3.0/candidates/0123456789abcdef',
+    targetVersion: '0.3.0',
+    marketplaceReviewMode: 'published_update',
+    currentMarketplaceVersion: '0.2.0',
+    publishedState: {
+      status: 'verified_public',
+      product_id: 'asset-product-e7bd21e31c69c03a',
+      target_version: '0.1.0',
+      manifest_hash: 'e'.repeat(64),
+      listing_hash: 'f'.repeat(64),
+      public_url: context.itchUrl,
+    },
+  });
+  await assert.rejects(
+    recordDigitalAssetReviewDecision({
+      interaction: packInteraction(),
+      archiveRoot,
+      config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+      store: { async insert() { throw new Error('must not be called'); } },
+    }),
+    /verified current itch\.io release no longer matches/u,
+  );
 });
 
 test('rejects a versioned package path outside its target version candidate directory', async () => {

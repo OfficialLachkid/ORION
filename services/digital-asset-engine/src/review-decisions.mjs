@@ -23,6 +23,15 @@ async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
 
+async function readOptionalJson(path) {
+  try {
+    return await readJson(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 function isAuthorizedOperator(interaction, config) {
   const userId = String(interaction?.member?.user?.id || interaction?.user?.id || '');
   const roles = Array.isArray(interaction?.member?.roles) ? interaction.member.roles : [];
@@ -119,12 +128,67 @@ function resolveReviewedManifestPath(productRoot, reviewState) {
   return resolveInside(productRoot, `${normalizedRoot}/manifest.json`, 'Reviewed manifest');
 }
 
+function normalizedItchUrl(value, label) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || ''));
+  } catch {
+    throw new Error(`${label} is not a valid itch.io URL.`);
+  }
+  if (parsed.protocol !== 'https:' || !parsed.hostname.endsWith('.itch.io')
+    || parsed.username || parsed.password) {
+    throw new Error(`${label} is not a valid itch.io URL.`);
+  }
+  return parsed.toString();
+}
+
+function validateMarketplaceReviewState({ product, reviewState, manifest, itchState, publishedState }) {
+  const mode = String(reviewState.marketplace_review_mode || 'draft');
+  if (mode === 'draft') {
+    if (manifest.listing_hash !== reviewState.listing_hash
+      || itchState?.status !== 'verified'
+      || itchState.manifest_hash !== manifest.manifest_hash
+      || itchState.listing_hash !== manifest.listing_hash) {
+      throw new Error('The populated itch.io draft no longer matches this package review.');
+    }
+    return {
+      mode,
+      url: normalizedItchUrl(itchState.public_url, 'The verified itch.io draft URL'),
+    };
+  }
+
+  if (mode !== 'published_update') {
+    throw new Error(`Unsupported marketplace review mode: ${mode}.`);
+  }
+  if (manifest.listing_hash !== reviewState.listing_hash) {
+    throw new Error('The immutable update listing no longer matches this package review.');
+  }
+  if (publishedState?.status !== 'verified_public'
+    || publishedState.product_id !== product.product_id
+    || publishedState.target_version !== reviewState.current_marketplace_version
+    || publishedState.manifest_hash === manifest.manifest_hash
+    || (manifest.base_manifest_hash
+      && publishedState.manifest_hash !== manifest.base_manifest_hash)) {
+    throw new Error('The verified current itch.io release no longer matches this package update review.');
+  }
+  if (manifest.target_version === publishedState.target_version) {
+    throw new Error('The package update must target a version newer than the verified public release.');
+  }
+  const publicUrl = normalizedItchUrl(publishedState.public_url, 'The verified public itch.io URL');
+  if (reviewState.itch_url
+    && normalizedItchUrl(reviewState.itch_url, 'The package review itch.io URL') !== publicUrl) {
+    throw new Error('The verified public itch.io URL no longer matches this package update review.');
+  }
+  return { mode, url: publicUrl };
+}
+
 async function loadReviewContext({ archiveRoot, reference, interaction }) {
   const productRoot = resolve(archiveRoot, reference.productSlug);
-  const [product, reviewState, itchState] = await Promise.all([
+  const [product, reviewState, itchState, publishedState] = await Promise.all([
     readJson(resolve(productRoot, 'product.json')),
     readJson(resolve(productRoot, 'review', 'discord.json')),
-    readJson(resolve(productRoot, 'review', 'itch.json')),
+    readOptionalJson(resolve(productRoot, 'review', 'itch.json')),
+    readOptionalJson(resolve(productRoot, 'review', 'itch-release.json')),
   ]);
   if (product.slug !== reference.productSlug || reviewState.product_slug !== reference.productSlug) {
     throw new Error('The Discord review reference does not match the canonical product.');
@@ -137,12 +201,13 @@ async function loadReviewContext({ archiveRoot, reference, interaction }) {
     || !manifest.manifest_hash.startsWith(reference.manifestHashPrefix)) {
     throw new Error('This package action belongs to a stale manifest.');
   }
-  if (manifest.listing_hash !== reviewState.listing_hash
-    || itchState.status !== 'verified'
-    || itchState.manifest_hash !== manifest.manifest_hash
-    || itchState.listing_hash !== manifest.listing_hash) {
-    throw new Error('The populated itch.io draft no longer matches this package review.');
-  }
+  const marketplaceReview = validateMarketplaceReviewState({
+    product,
+    reviewState,
+    manifest,
+    itchState,
+    publishedState,
+  });
   if (String(reviewState.channel_id) !== String(interaction.channel_id || '')) {
     throw new Error('This package decision came from an unexpected Discord channel.');
   }
@@ -159,7 +224,16 @@ async function loadReviewContext({ archiveRoot, reference, interaction }) {
     }
     assets.push({ ...asset, asset_hash: assetHash });
   }
-  return { productRoot, product, reviewState, manifest, itchState, assets };
+  return {
+    productRoot,
+    product,
+    reviewState,
+    manifest,
+    itchState,
+    publishedState,
+    marketplaceReview,
+    assets,
+  };
 }
 
 function actorFromInteraction(interaction) {
@@ -290,7 +364,13 @@ export async function recordDigitalAssetReviewDecision(options) {
     'utf8',
   );
   const manifestUrl = `https://discord.com/channels/${config.guildId}/${context.reviewState.channel_id}/${context.reviewState.overview_message_id}`;
-  const linkContext = { manifestUrl, itchUrl: context.itchState.public_url };
+  const linkContext = {
+    manifestUrl,
+    itchUrl: context.marketplaceReview.url,
+    itchLabel: context.marketplaceReview.mode === 'published_update'
+      ? 'Open Current itch.io Page'
+      : 'Open itch.io Draft',
+  };
   return {
     row,
     decision: reference,
