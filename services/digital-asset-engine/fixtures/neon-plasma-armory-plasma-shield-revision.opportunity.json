@@ -39,6 +39,7 @@
           "Shield effect only: no emitter, generator, pedestal, statue, device, character, hand, weapon, floor, cast shadow, scenery, text, numbers, logo, watermark, frame, or duplicate shield",
           "Show one complete intact circular protective barrier centered on canvas, sized to surround a game character while leaving the interior transparent",
           "Use a continuous cyan outer energy ring and a sparse readable hexagonal energy-cell lattice; do not fill the orb with an opaque color",
+          "Every empty pixel outside the shield and every gap inside and between the energy lattice cells must be exactly solid #ff00ff chroma key; only the cyan, pale-blue, and violet energy lines may use non-chroma colors",
           "Keep generous transparent padding on every side and use no hot-pink pixels inside the shield artwork"
         ]
       }
