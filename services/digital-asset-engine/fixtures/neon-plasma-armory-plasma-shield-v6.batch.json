@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "neon-plasma-armory-plasma-shield-v6",
+  "product_slug": "neon-plasma-armory",
+  "title": "Neon Plasma Armory Distributed Shield Integrity States",
+  "items": [
+    {
+      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v5",
+      "source_asset_key": "plasma-shield-v5",
+      "target_asset_key": "plasma-shield",
+      "name": "Plasma Shield",
+      "recipe": "plasma_shield",
+      "seed": 3446,
+      "impact_description": "One isolated compact shield-hit reaction with branching cyan cracks and a restrained violet stress flare spreading from one contact point; effect fragments only, not a complete shield.",
+      "break_description": "One isolated circular scattering pattern of cyan plasma shield fragments and restrained violet energy shards, leaving an empty transparent center and clearly reading as a force field breaking apart."
+    }
+  ],
+  "style": {
+    "medium": "pixel_art",
+    "palette": ["#10131d", "#20283a", "#44506b", "#7785a6", "#c8d4ec", "#35d9ff", "#875cff", "#ff4fd8"],
+    "energy_colors": ["#35d9ff", "#875cff", "#c8d4ec"],
+    "energy_color_tolerance": 72,
+    "max_palette_colors": 32,
+    "chroma_key": "#ff00ff",
+    "source_width": 1024,
+    "source_height": 1024
+  }
+}
