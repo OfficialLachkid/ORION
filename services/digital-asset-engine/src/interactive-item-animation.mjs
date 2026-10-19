@@ -271,12 +271,33 @@ async function generateIsolatedEffect({ adapter, config, item, plan, canvas, pro
     chromaKey: plan.style.chroma_key,
     chromaTolerance: config.generation.chroma_tolerance,
   });
-  const aligned = targetOrigin ? await alignEffectCoreToAnchor(processed.buffer, {
+  const alignmentOptions = {
     colors: plan.style.energy_colors,
     tolerance: plan.style.energy_color_tolerance,
     target: targetOrigin,
     maxPaletteColors: plan.style.max_palette_colors,
-  }) : { buffer: processed.buffer, report: null };
+  };
+  let aligned = targetOrigin
+    ? await alignEffectCoreToAnchor(processed.buffer, alignmentOptions)
+    : { buffer: processed.buffer, report: null };
+  if (aligned.report && !aligned.report.passed) {
+    const detectedOrigin = aligned.report.detected_origin;
+    for (const scale of [0.78, 0.62, 0.48]) {
+      const compact = await derivePixelArtEffectFrame(processed.buffer, {
+        scale,
+        opacity: 1,
+        density: 1,
+        origin: detectedOrigin,
+        salt: item.seed + seedOffset + Math.round(scale * 100),
+        maxPaletteColors: plan.style.max_palette_colors,
+      });
+      aligned = await alignEffectCoreToAnchor(compact, alignmentOptions);
+      if (aligned.report.passed) {
+        aligned.report.retry_scale = scale;
+        break;
+      }
+    }
+  }
   if (aligned.report && !aligned.report.passed) throw new Error(`${item.target_asset_key} effect alignment failed.`);
   return { generated, processed, buffer: aligned.buffer, alignment: aligned.report };
 }
