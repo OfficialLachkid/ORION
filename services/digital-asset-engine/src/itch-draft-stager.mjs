@@ -112,12 +112,21 @@ export function renderItchDescriptionHtml(description) {
   return output.join('\n');
 }
 
+export function renderItchDescriptionText(description) {
+  return String(description || '')
+    .split(/\r?\n/gu)
+    .map((line) => line.trim().replace(/^#{1,3}\s+/u, '').replace(/^-\s+/u, ''))
+    .filter(Boolean)
+    .join(' ');
+}
+
 export function buildItchDraftRunCode({ listing, publicUrl, editUrl, save = false }) {
   return `
 async (page) => {
   const input = ${JSON.stringify({
     listing,
     descriptionHtml: renderItchDescriptionHtml(listing.description),
+    descriptionText: renderItchDescriptionText(listing.description),
     publicUrl,
     editUrl,
     save,
@@ -226,17 +235,12 @@ async (page) => {
       .replace(/[•◦▪●]/gu, ' ')
       .replace(/\\s+/gu, ' ')
       .trim();
-    const expected = document.createElement('div');
-    expected.innerHTML = inputDescription.html;
-    const expectedText = [...expected.querySelectorAll('h1, h2, h3, p, li')]
-      .map((node) => node.textContent || '')
-      .join(' ');
     return {
-      ok: normalize(visibleText) === normalize(expectedText) && Boolean(field.value),
+      ok: normalize(visibleText) === normalize(inputDescription.text) && Boolean(field.value),
       length: field.value.length,
       visibleLength: visibleText.length,
     };
-  }, { html: input.descriptionHtml }).catch((error) => ({
+  }, { html: input.descriptionHtml, text: input.descriptionText }).catch((error) => ({
     ok: false,
     reason: String(error?.message || error).slice(0, 160),
   }));
@@ -325,6 +329,7 @@ async (page) => {
   const input = ${JSON.stringify({
     listing,
     descriptionHtml: renderItchDescriptionHtml(listing.description),
+    descriptionText: renderItchDescriptionText(listing.description),
     screenshotCount,
     screenshotPath,
   })};
@@ -355,16 +360,11 @@ async (page) => {
     .replace(/[•◦▪●]/gu, ' ')
     .replace(/\\s+/gu, ' ')
     .trim();
-  const expectedDescription = document.createElement('div');
-  expectedDescription.innerHTML = input.descriptionHtml;
-  const expectedDescriptionText = [...expectedDescription.querySelectorAll('h1, h2, h3, p, li')]
-    .map((node) => node.textContent || '')
-    .join(' ');
   const checks = {
     title: titleValue === input.listing.title,
     short_description: shortValue === input.listing.short_description,
     description: normalizeDescription(descriptionValue)
-      === normalizeDescription(expectedDescriptionText),
+      === normalizeDescription(input.descriptionText),
     price: paymentMode === 'paid' && Math.abs(numericPrice - expectedPrice) < 0.001,
     tags: tagsMatch,
     cover: Boolean(coverId),

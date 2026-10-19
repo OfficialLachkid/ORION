@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import {
   buildItchDraftRunCode,
   renderItchDescriptionHtml,
+  renderItchDescriptionText,
   stageItchDraft,
 } from '../src/itch-draft-stager.mjs';
 
@@ -156,6 +157,9 @@ test('renders itch descriptions as safe headings, paragraphs, and lists', () => 
     '<ul><li>Eight weapons</li><li>Matching muzzle flashes</li></ul>',
     '<p>Use &lt;only&gt; the files in the download.</p>',
   ].join('\n'));
+  assert.equal(renderItchDescriptionText([
+    '## Version 0.3.0', '', 'What is included:', '- Eight weapons', '- Matching muzzle flashes',
+  ].join('\n')), 'Version 0.3.0 What is included: Eight weapons Matching muzzle flashes');
 });
 
 test('stages package with Butler, populates itch.io, verifies it, and reuses exact revision', async () => {
