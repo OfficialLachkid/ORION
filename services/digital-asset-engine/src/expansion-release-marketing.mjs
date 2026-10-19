@@ -19,7 +19,7 @@ const COLORS = Object.freeze({
   violet: '#7d6cf2',
 });
 
-export const EXPANSION_RELEASE_MARKETING_VERSION = '1.0.0';
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.0.1';
 
 function escapeXml(value) {
   return String(value)
@@ -108,7 +108,13 @@ async function gridImage({ width, height, title, subtitle, entries, columns, top
   }
   const background = Buffer.from([
     `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`,
-    shell({ width, height, title, subtitle, titleSize: width < 700 ? 35 : 40 }),
+    shell({
+      width,
+      height,
+      title,
+      subtitle,
+      titleSize: Math.max(24, Math.min(width < 700 ? 35 : 40, Math.floor((width - 90) / (title.length * 0.62)))),
+    }),
     ...cards,
     `<text x="${width - 28}" y="${height - 13}" text-anchor="end" fill="${COLORS.ink}" font-family="Arial, sans-serif" font-size="12" font-weight="800">${escapeXml(footer)}</text>`,
     '</svg>',
@@ -133,9 +139,9 @@ function representativeEntries(weapons, expansion) {
     .map((key) => expansion.find((item) => item.asset_key === key)).filter(Boolean);
   const expansionFallback = expansion.filter((item) => !selectedExpansion.includes(item));
   return [
-    ...selectedWeapons, ...weaponFallback,
-    ...selectedExpansion, ...expansionFallback,
-  ].slice(0, 8);
+    ...[...selectedWeapons, ...weaponFallback].slice(0, 4),
+    ...[...selectedExpansion, ...expansionFallback].slice(0, 4),
+  ];
 }
 
 async function buildAnimatedGrid({ tempRoot, outputPath, frameFactory, frameCount, delayMs }) {
