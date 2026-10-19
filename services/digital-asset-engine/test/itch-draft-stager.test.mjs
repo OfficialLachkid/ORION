@@ -140,6 +140,8 @@ test('Playwright draft preparation includes listing fields and exact price contr
 
 test('renders itch descriptions as safe headings, paragraphs, and lists', () => {
   const html = renderItchDescriptionHtml([
+    '## Version 0.3.0',
+    '',
     'What is included:',
     '',
     '- Eight weapons',
@@ -149,6 +151,7 @@ test('renders itch descriptions as safe headings, paragraphs, and lists', () => 
   ].join('\n'));
 
   assert.equal(html, [
+    '<h2>Version 0.3.0</h2>',
     '<h2>What is included:</h2>',
     '<ul><li>Eight weapons</li><li>Matching muzzle flashes</li></ul>',
     '<p>Use &lt;only&gt; the files in the download.</p>',

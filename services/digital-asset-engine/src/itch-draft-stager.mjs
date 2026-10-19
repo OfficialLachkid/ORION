@@ -100,7 +100,9 @@ export function renderItchDescriptionHtml(description) {
       continue;
     }
     flushList();
-    if (line.endsWith(':') && line.length <= 80) {
+    if (/^#{1,3}\s+/u.test(line)) {
+      output.push(`<h2>${escapeHtml(line.replace(/^#{1,3}\s+/u, ''))}</h2>`);
+    } else if (line.endsWith(':') && line.length <= 80) {
       output.push(`<h2>${escapeHtml(line)}</h2>`);
     } else {
       output.push(`<p>${escapeHtml(line)}</p>`);
@@ -220,7 +222,10 @@ async (page) => {
     redactor.code.sync();
     redactor.code.flushSync();
     const visibleText = field.parentElement?.querySelector('[contenteditable="true"]')?.innerText || '';
-    const normalize = (value) => String(value).replace(/\\s+/gu, ' ').trim();
+    const normalize = (value) => String(value).normalize('NFKC')
+      .replace(/[•◦▪●]/gu, ' ')
+      .replace(/\\s+/gu, ' ')
+      .trim();
     const expected = document.createElement('div');
     expected.innerHTML = inputDescription.html;
     return {
@@ -314,7 +319,12 @@ async (page) => {
 function buildVerifyRunCode({ listing, screenshotCount, screenshotPath }) {
   return `
 async (page) => {
-  const input = ${JSON.stringify({ listing, screenshotCount, screenshotPath })};
+  const input = ${JSON.stringify({
+    listing,
+    descriptionHtml: renderItchDescriptionHtml(listing.description),
+    screenshotCount,
+    screenshotPath,
+  })};
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(2500);
@@ -338,11 +348,17 @@ async (page) => {
   const actualScreenshotCount = await page.locator('button.delete_screen_btn').count().catch(() => 0);
   const isDraft = await page.locator('input[name="game[published]"][value="draft"]').isChecked().catch(() => false);
   await page.screenshot({ path: input.screenshotPath, fullPage: true }).catch(() => {});
+  const normalizeDescription = (value) => String(value).normalize('NFKC')
+    .replace(/[•◦▪●]/gu, ' ')
+    .replace(/\\s+/gu, ' ')
+    .trim();
+  const expectedDescription = document.createElement('div');
+  expectedDescription.innerHTML = input.descriptionHtml;
   const checks = {
     title: titleValue === input.listing.title,
     short_description: shortValue === input.listing.short_description,
-    description: descriptionValue.replace(/\s+/gu, ' ').trim()
-      === input.listing.description.replace(/\s+/gu, ' ').trim(),
+    description: normalizeDescription(descriptionValue)
+      === normalizeDescription(expectedDescription.innerText),
     price: paymentMode === 'paid' && Math.abs(numericPrice - expectedPrice) < 0.001,
     tags: tagsMatch,
     cover: Boolean(coverId),
