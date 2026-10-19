@@ -1,12 +1,12 @@
 {
   "schema_version": "1.0",
-  "batch_id": "neon-plasma-armory-plasma-shield-v4",
+  "batch_id": "neon-plasma-armory-plasma-shield-v5",
   "product_slug": "neon-plasma-armory",
   "title": "Neon Plasma Armory Shield-Only Integrity States",
   "items": [
     {
-      "source_product_slug": "neon-plasma-armory-plasma-shield-revision",
-      "source_asset_key": "plasma-shield-v4",
+      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v5",
+      "source_asset_key": "plasma-shield-v5",
       "target_asset_key": "plasma-shield",
       "name": "Plasma Shield",
       "recipe": "plasma_shield",

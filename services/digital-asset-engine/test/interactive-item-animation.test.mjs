@@ -13,6 +13,7 @@ import {
   inspectPulseIsolation,
 } from '../src/interactive-item-animation.mjs';
 import { compositeItemFrame } from '../src/interactive-item-states.mjs';
+import { processPixelArtAsset } from '../src/image-processor.mjs';
 import { InteractiveItemAnimationBatchSchema } from '../src/schemas.mjs';
 
 async function itemSprite({ energyX, energyY }) {
@@ -198,6 +199,33 @@ test('composited item frames retain the configured pixel-art palette cap', async
     colors.add(`${data[channel]},${data[channel + 1]},${data[channel + 2]},${data[channel + 3]}`);
   }
   assert.equal(colors.size <= 32, true);
+});
+
+test('palette-only alpha extraction removes opaque shield interiors', async () => {
+  const source = await sharp({
+    create: { width: 64, height: 64, channels: 4, background: '#ff00ff' },
+  }).composite([{
+    input: Buffer.from('<svg width="48" height="48"><circle cx="24" cy="24" r="23" fill="#44506b" stroke="#35d9ff" stroke-width="3"/><path d="M8 24h32" stroke="#c8d4ec" stroke-width="2"/></svg>'),
+    left: 8,
+    top: 8,
+  }]).png().toBuffer();
+  const processed = await processPixelArtAsset(source, {
+    width: 128,
+    height: 128,
+    maxPaletteColors: 32,
+    chromaKey: '#ff00ff',
+    chromaTolerance: 20,
+    alphaMode: 'palette_only',
+    alphaPalette: ['#35d9ff', '#c8d4ec'],
+    alphaTolerance: 24,
+  });
+  const decoded = await sharp(processed.buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const centerAlpha = decoded.data[(((64 * decoded.info.width) + 64) * 4) + 3];
+  assert.equal(centerAlpha, 255);
+  const interiorAlpha = decoded.data[(((48 * decoded.info.width) + 64) * 4) + 3];
+  assert.equal(interiorAlpha, 0);
+  assert.equal(processed.alpha_mode, 'palette_only');
+  assert.equal(processed.removed_non_palette_pixels > 0, true);
 });
 
 test('interactive item batch schema rejects duplicate target assets', () => {

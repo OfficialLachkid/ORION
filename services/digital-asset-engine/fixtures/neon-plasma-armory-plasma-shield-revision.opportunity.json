@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "opportunity_id": "OPPORTUNITY-0146-PLASMA-SHIELD-REVISION",
+  "opportunity_id": "OPPORTUNITY-0146-PLASMA-SHIELD-REVISION-V5",
   "status": "validated",
-  "title": "Neon Plasma Armory Plasma Shield Revision",
+  "title": "Neon Plasma Armory Plasma Shield Revision V5",
   "category": "Pixel Art / VFX",
   "product_type": "Internal Sci-Fi Asset Revision Capability Proof",
   "theme": "Original neon industrial science fiction matching Neon Plasma Armory: transparent cyan plasma energy, restrained violet stress accents, and a readable protective silhouette",
@@ -31,10 +31,13 @@
     "chroma_key": "#ff00ff",
     "assets": [
       {
-        "asset_key": "plasma-shield-v4",
-        "name": "Plasma Shield V4",
+        "asset_key": "plasma-shield-v5",
+        "name": "Plasma Shield V5",
         "kind": "vfx",
         "description": "a large circular character-sized plasma shield made only from a bright cyan energy rim and sparse hexagonal force-field lattice with a transparent empty interior",
+        "alpha_mode": "palette_only",
+        "alpha_palette": ["#35d9ff", "#875cff", "#c8d4ec"],
+        "alpha_tolerance": 72,
         "prompt_notes": [
           "Shield effect only: no emitter, generator, pedestal, statue, device, character, hand, weapon, floor, cast shadow, scenery, text, numbers, logo, watermark, frame, or duplicate shield",
           "Show one complete intact circular protective barrier centered on canvas, sized to surround a game character while leaving the interior transparent",

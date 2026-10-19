@@ -11,6 +11,9 @@ export const AssetRequestSchema = z.object({
   kind: z.string().min(1),
   description: z.string().min(1),
   prompt_notes: z.array(z.string().min(1)).default([]),
+  alpha_mode: z.enum(['chroma', 'palette_only']).default('chroma'),
+  alpha_palette: z.array(HexColorSchema).max(32).default([]),
+  alpha_tolerance: z.number().int().min(0).max(441).default(48),
 });
 
 export const ProductOpportunitySchema = z.object({
@@ -120,6 +123,9 @@ export const ProductSpecificationSchema = z.object({
     kind: z.string().min(1),
     description: z.string().min(1),
     generation_prompt: z.string().min(1),
+    alpha_mode: z.enum(['chroma', 'palette_only']).default('chroma'),
+    alpha_palette: z.array(HexColorSchema).max(32).default([]),
+    alpha_tolerance: z.number().int().min(0).max(441).default(48),
     seed: z.number().int().nonnegative(),
     status: z.enum(['planned', 'generated', 'failed']),
     source_path: z.string().nullable(),
