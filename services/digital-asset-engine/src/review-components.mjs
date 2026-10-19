@@ -77,7 +77,7 @@ export function buildDigitalAssetPackReviewComponents(context) {
         label: 'Reject Pack',
         custom_id: buildReviewReference(BUTTON_PREFIX, 'reject', context),
       },
-      linkButton('Open itch.io Draft', context.itchUrl),
+      linkButton(context.itchLabel || 'Open itch.io Draft', context.itchUrl),
       linkButton('Open Manifest', context.manifestUrl),
     ],
   }];
@@ -87,7 +87,7 @@ export function buildResolvedDigitalAssetReviewComponents(context) {
   return [{
     type: ACTION_ROW,
     components: [
-      linkButton('Open itch.io Draft', context.itchUrl),
+      linkButton(context.itchLabel || 'Open itch.io Draft', context.itchUrl),
       linkButton('Open Manifest', context.manifestUrl),
     ],
   }];

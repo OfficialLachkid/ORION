@@ -160,6 +160,7 @@ test('builds an immutable 0.3.0 package from the exact approved expansion review
   });
   assert.equal(result.manifest.target_version, '0.3.0');
   assert.equal(result.manifest.asset_count, 2);
+  assert.equal(result.manifest.expansion_assets[0].name, 'Plasma Shield');
   assert.equal(result.manifest.expansion_review_approved, undefined);
   assert.equal(result.manifest.gates.expansion_review_approved, true);
   assert.equal(result.listing.cover_path, 'cover.gif');

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { basename, dirname, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { resolvePackagedRelease } from './packaged-release.mjs';
 import { buildDigitalAssetPackReviewComponents } from './review-components.mjs';
@@ -127,7 +127,20 @@ function numberedAssetList(assets) {
   )).join('\n');
 }
 
-export function buildPackReviewEmbed({ product, manifest, itchUrl, revision = 1 }) {
+export function buildPackReviewEmbed({
+  product,
+  manifest,
+  itchUrl,
+  revision = 1,
+  marketplaceReviewMode = 'draft',
+  currentReleaseVersion = null,
+  coverFilename = 'cover.png',
+}) {
+  const reviewAssets = [
+    ...product.assets,
+    ...(manifest.expansion_assets || []),
+  ];
+  const publishedUpdate = marketplaceReviewMode === 'published_update';
   const licenseField = manifest.buyer_license ? [{
     name: 'Customer license',
     value: `\`${manifest.buyer_license.license_id} ${manifest.buyer_license.version}\`\nSHA-256: \`${manifest.buyer_license.content_sha256}\`\nAttached as \`LICENSE.md\`; approval covers these exact terms.`,
@@ -136,14 +149,16 @@ export function buildPackReviewEmbed({ product, manifest, itchUrl, revision = 1 
   return {
     title: `${product.title} · Pack Review · Revision ${revision}`,
     url: itchUrl,
-    description: 'Review the exact package and populated itch.io draft. Public distribution remains blocked.',
+    description: publishedUpdate
+      ? `Review the exact update package and generated storefront media. The linked itch.io page remains on approved version ${currentReleaseVersion || 'current'}; this candidate has not been applied.`
+      : 'Review the exact package and populated itch.io draft. Public distribution remains blocked.',
     color: REVIEW_COLOR,
     fields: [
       { name: 'State', value: '`awaiting_package_review`', inline: true },
       { name: 'Release', value: `\`${manifest.target_version || manifest.product_version || 'preview'}\``, inline: true },
       { name: 'Assets', value: String(manifest.asset_count || manifest.weapon_count), inline: true },
       { name: 'Local generation cost', value: '€0 API cost', inline: true },
-      { name: 'Included assets', value: numberedAssetList(product.assets), inline: false },
+      { name: 'Included assets', value: numberedAssetList(reviewAssets), inline: false },
       { name: 'Manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
       { name: 'Listing', value: `\`${manifest.listing_hash}\``, inline: false },
       ...licenseField,
@@ -152,10 +167,12 @@ export function buildPackReviewEmbed({ product, manifest, itchUrl, revision = 1 
         value: 'Machine-readable review receipt with the exact file list and SHA-256 hashes. It proves which files this decision covers; it is not buyer-facing marketing content.',
         inline: false,
       },
-      { name: 'itch.io draft', value: `[Open populated draft listing](${itchUrl})`, inline: false },
+      publishedUpdate
+        ? { name: 'Current itch.io release', value: `[Open current approved listing](${itchUrl})\nCandidate storefront media is attached for review and is not live.`, inline: false }
+        : { name: 'itch.io draft', value: `[Open populated draft listing](${itchUrl})`, inline: false },
       { name: 'Approval', value: 'Approve the complete pack, request changes for selected numbered assets, or reject this revision.', inline: false },
     ],
-    image: { url: 'attachment://cover.png' },
+    image: { url: `attachment://${coverFilename}` },
     footer: { text: 'ORION Digital Asset Engine · exact included assets and listing' },
   };
 }
@@ -182,12 +199,15 @@ function buildManifestMessageUrl(guildId, state) {
   return `https://discord.com/channels/${guildId}/${state.channel_id}/${state.overview_message_id}`;
 }
 
-function buildPackComponents({ guildId, state, product, manifest, itchUrl }) {
+function buildPackComponents({ guildId, state, product, manifest, itchUrl, marketplaceReviewMode }) {
   return buildDigitalAssetPackReviewComponents({
     productSlug: product.slug,
     manifestHash: manifest.manifest_hash,
     manifestUrl: buildManifestMessageUrl(guildId, state),
     itchUrl,
+    itchLabel: marketplaceReviewMode === 'published_update'
+      ? 'Open Current itch.io Page'
+      : 'Open itch.io Draft',
   });
 }
 
@@ -204,19 +224,35 @@ async function saveState(path, state) {
   await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 }
 
-function validateItchStaging(itchState, manifest, requestedUrl) {
-  if (itchState?.status !== 'verified') {
-    throw new Error('The itch.io draft must be populated and verified before Discord review is created.');
+function validateMarketplaceReview(itchState, publishedState, manifest, requestedUrl) {
+  if (itchState?.status === 'verified'
+    && itchState.manifest_hash === manifest.manifest_hash
+    && itchState.listing_hash === manifest.listing_hash) {
+    const stagedUrl = validateItchUrl(itchState.public_url);
+    if (requestedUrl && validateItchUrl(requestedUrl) !== stagedUrl) {
+      throw new Error('The requested itch.io URL does not match the verified draft.');
+    }
+    return { url: stagedUrl, mode: 'draft', stagedAt: itchState.staged_at, currentReleaseVersion: null };
   }
-  if (itchState.manifest_hash !== manifest.manifest_hash
-    || itchState.listing_hash !== manifest.listing_hash) {
+  if (publishedState?.status === 'verified_public') {
+    const publicUrl = validateItchUrl(publishedState.public_url);
+    if (requestedUrl && validateItchUrl(requestedUrl) !== publicUrl) {
+      throw new Error('The requested itch.io URL does not match the verified public release.');
+    }
+    if (publishedState.manifest_hash === manifest.manifest_hash) {
+      throw new Error('The requested package is already the verified public itch.io release.');
+    }
+    return {
+      url: publicUrl,
+      mode: 'published_update',
+      stagedAt: null,
+      currentReleaseVersion: publishedState.target_version || null,
+    };
+  }
+  if (itchState?.status === 'verified') {
     throw new Error('The verified itch.io draft belongs to a different package revision.');
   }
-  const stagedUrl = validateItchUrl(itchState.public_url);
-  if (requestedUrl && validateItchUrl(requestedUrl) !== stagedUrl) {
-    throw new Error('The requested itch.io URL does not match the verified draft.');
-  }
-  return stagedUrl;
+  throw new Error('The itch.io draft must be populated and verified before Discord review is created.');
 }
 
 export async function postDigitalAssetReview(options) {
@@ -232,13 +268,21 @@ export async function postDigitalAssetReview(options) {
     releaseVersion: options.releaseVersion,
   });
   const exportRoot = packaged.root;
-  const { manifestPath, manifest } = packaged;
+  const { manifestPath, manifest, listing } = packaged;
   if (!/^[a-f0-9]{64}$/u.test(String(manifest.listing_hash || ''))) {
     throw new Error('Discord review posting requires a packaged listing hash.');
   }
   const itchStatePath = resolve(productRoot, 'review', 'itch.json');
   const itchState = options.itchState || await loadState(itchStatePath);
-  const itchUrl = validateItchStaging(itchState, manifest, options.itchUrl);
+  const publishedState = options.publishedState
+    || await loadState(resolve(productRoot, 'review', 'itch-release.json'));
+  const marketplaceReview = validateMarketplaceReview(
+    itchState,
+    publishedState,
+    manifest,
+    options.itchUrl,
+  );
+  const itchUrl = marketplaceReview.url;
   const statePath = resolve(productRoot, 'review', 'discord.json');
   const existingState = await loadState(statePath);
   if (existingState?.manifest_hash === manifest.manifest_hash
@@ -280,7 +324,9 @@ export async function postDigitalAssetReview(options) {
   state.target_version = manifest.target_version || product.version || null;
   state.package_root = relative(productRoot, exportRoot).replaceAll('\\', '/');
   state.itch_url = itchUrl;
-  state.itch_staged_at = itchState.staged_at;
+  state.itch_staged_at = marketplaceReview.stagedAt;
+  state.marketplace_review_mode = marketplaceReview.mode;
+  state.current_marketplace_version = marketplaceReview.currentReleaseVersion;
   state.component_schema_version = null;
   state.completed_at = null;
   if (revisionChanged) state.last_decision = null;
@@ -292,14 +338,23 @@ export async function postDigitalAssetReview(options) {
       manifest,
       itchUrl,
       revision: state.review_revision,
+      marketplaceReviewMode: marketplaceReview.mode,
+      currentReleaseVersion: marketplaceReview.currentReleaseVersion,
+      coverFilename: basename(listing.cover_path || 'cover.png'),
     })],
   };
+  const coverFilename = basename(listing.cover_path || 'cover.png');
+  const coverPath = resolve(exportRoot, listing.cover_path || 'cover.png');
+  const coverChild = relative(exportRoot, coverPath);
+  if (coverChild.startsWith('..') || isAbsolute(coverChild)) {
+    throw new Error('Pack review cover path must stay inside the immutable candidate.');
+  }
   const overviewFiles = [
     {
-      filename: 'cover.png',
-      contentType: 'image/png',
+      filename: coverFilename,
+      contentType: coverFilename.endsWith('.gif') ? 'image/gif' : 'image/png',
       description: `${product.title} cover assembled from included assets`,
-      buffer: await readFile(resolve(exportRoot, 'cover.png')),
+      buffer: await readFile(coverPath),
     },
     {
       filename: 'manifest.json',
@@ -329,13 +384,13 @@ export async function postDigitalAssetReview(options) {
     await saveState(statePath, state);
     await discordRequest(token, `/channels/${state.channel_id}/messages/${state.overview_message_id}`, {
       method: 'PATCH',
-      body: { components: buildPackComponents({ guildId, state, product, manifest, itchUrl }) },
+      body: { components: buildPackComponents({ guildId, state, product, manifest, itchUrl, marketplaceReviewMode: marketplaceReview.mode }) },
       fetchImpl: options.fetchImpl,
     });
   } else {
     await sendMessageWithFiles(token, state.channel_id, {
       ...overviewPayload,
-      components: buildPackComponents({ guildId, state, product, manifest, itchUrl }),
+      components: buildPackComponents({ guildId, state, product, manifest, itchUrl, marketplaceReviewMode: marketplaceReview.mode }),
     }, overviewFiles, {
       messageId: state.overview_message_id,
       fetchImpl: options.fetchImpl,

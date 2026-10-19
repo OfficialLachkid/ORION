@@ -410,6 +410,19 @@ export async function stageItchDraft(options) {
     && previous.listing_hash === listing.listing_hash) {
     return { ...previous, reused: true, statePath };
   }
+  let published = null;
+  try {
+    published = await readJson(resolve(productRoot, 'review', 'itch-release.json'));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (published?.status === 'verified_public') {
+    throw new Error(
+      published.manifest_hash === manifest.manifest_hash
+        ? 'This itch.io release is already public; draft staging is disabled for published projects.'
+        : 'A verified itch.io release is already public. Review this update locally and use the separately approved marketplace-update publisher instead of mutating the live page through draft staging.',
+    );
+  }
 
   const cliRunner = options.cliRunner || defaultCliRunner;
   const env = options.env || process.env;

@@ -9,7 +9,7 @@ import {
 import { resolvePackagedRelease } from './packaged-release.mjs';
 import { AssetExpansionReviewPlanSchema } from './schemas.mjs';
 
-const EXPANSION_RELEASE_VERSION = '1.0.0';
+const EXPANSION_RELEASE_VERSION = '1.0.1';
 const RUNTIME_PREFIXES = Object.freeze(['frames/', 'overlays/', 'sheets/', 'states/', 'metadata/']);
 
 function sha256(value) {
@@ -374,6 +374,18 @@ export async function prepareApprovedAssetExpansionRelease(options) {
     weapon_count: product.assets.length,
     asset_count: product.assets.length + expansionAssets.length,
     expansion_asset_count: expansionAssets.length,
+    expansion_assets: expansionAssets.map((asset) => ({
+      asset_id: asset.asset_id,
+      asset_key: asset.asset_key,
+      name: asset.name,
+      description: asset.description,
+      buyer_group: asset.buyer_group,
+      buyer_path: asset.buyer_path,
+      content_sha256: asset.content_sha256,
+      review_hash: asset.review_hash,
+      states: asset.states,
+      animations: asset.animations,
+    })),
     effect_animation_count: base.manifest.effect_animation_count || 0,
     expansion_animation_count: expansionAnimationCount,
     expansion_state_count: expansionStateCount,

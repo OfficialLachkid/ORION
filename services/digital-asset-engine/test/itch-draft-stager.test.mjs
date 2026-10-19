@@ -247,6 +247,31 @@ test('fails closed when browser verification does not confirm draft state', asyn
   }), /was not verified/u);
 });
 
+test('published projects reject update draft staging before Butler or browser mutation', async () => {
+  const fixture = await createFixture();
+  const calls = [];
+  await mkdir(resolve(fixture.store.productRoot(fixture.product), 'review'), { recursive: true });
+  await writeFile(resolve(fixture.store.productRoot(fixture.product), 'review', 'itch-release.json'), JSON.stringify({
+    status: 'verified_public',
+    manifest_hash: 'f'.repeat(64),
+    listing_hash: 'e'.repeat(64),
+    target_version: '0.2.0',
+    public_url: 'https://vbjservices.itch.io/neon-plasma-armory',
+  }));
+  await assert.rejects(stageItchDraft({
+    outputRoot: fixture.outputRoot,
+    slug: fixture.product.slug,
+    store: fixture.store,
+    itchUrl: 'https://vbjservices.itch.io/neon-plasma-armory',
+    profileDir: fixture.outputRoot,
+    cliRunner(executable, args) {
+      calls.push({ executable, args });
+      return { ok: true, stdout: '', stderr: '' };
+    },
+  }), /marketplace-update publisher/iu);
+  assert.equal(calls.length, 0);
+});
+
 test('stages a quality-cleared immutable release candidate instead of the base preview', async () => {
   const fixture = await createFixture();
   const candidate = await addReleaseCandidate(fixture);
