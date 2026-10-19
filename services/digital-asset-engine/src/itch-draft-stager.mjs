@@ -100,7 +100,9 @@ export function renderItchDescriptionHtml(description) {
       continue;
     }
     flushList();
-    if (line.endsWith(':') && line.length <= 80) {
+    if (/^#{1,3}\s+/u.test(line)) {
+      output.push(`<h2>${escapeHtml(line.replace(/^#{1,3}\s+/u, ''))}</h2>`);
+    } else if (line.endsWith(':') && line.length <= 80) {
       output.push(`<h2>${escapeHtml(line)}</h2>`);
     } else {
       output.push(`<p>${escapeHtml(line)}</p>`);
@@ -110,12 +112,21 @@ export function renderItchDescriptionHtml(description) {
   return output.join('\n');
 }
 
+export function renderItchDescriptionText(description) {
+  return String(description || '')
+    .split(/\r?\n/gu)
+    .map((line) => line.trim().replace(/^#{1,3}\s+/u, '').replace(/^-\s+/u, ''))
+    .filter(Boolean)
+    .join(' ');
+}
+
 export function buildItchDraftRunCode({ listing, publicUrl, editUrl, save = false }) {
   return `
 async (page) => {
   const input = ${JSON.stringify({
     listing,
     descriptionHtml: renderItchDescriptionHtml(listing.description),
+    descriptionText: renderItchDescriptionText(listing.description),
     publicUrl,
     editUrl,
     save,
@@ -220,15 +231,16 @@ async (page) => {
     redactor.code.sync();
     redactor.code.flushSync();
     const visibleText = field.parentElement?.querySelector('[contenteditable="true"]')?.innerText || '';
-    const normalize = (value) => String(value).replace(/\\s+/gu, ' ').trim();
-    const expected = document.createElement('div');
-    expected.innerHTML = inputDescription.html;
+    const normalize = (value) => String(value).normalize('NFKC')
+      .replace(/[•◦▪●]/gu, ' ')
+      .replace(/\\s+/gu, ' ')
+      .trim();
     return {
-      ok: normalize(visibleText) === normalize(expected.innerText) && Boolean(field.value),
+      ok: normalize(visibleText) === normalize(inputDescription.text) && Boolean(field.value),
       length: field.value.length,
       visibleLength: visibleText.length,
     };
-  }, { html: input.descriptionHtml }).catch((error) => ({
+  }, { html: input.descriptionHtml, text: input.descriptionText }).catch((error) => ({
     ok: false,
     reason: String(error?.message || error).slice(0, 160),
   }));
@@ -314,7 +326,13 @@ async (page) => {
 function buildVerifyRunCode({ listing, screenshotCount, screenshotPath }) {
   return `
 async (page) => {
-  const input = ${JSON.stringify({ listing, screenshotCount, screenshotPath })};
+  const input = ${JSON.stringify({
+    listing,
+    descriptionHtml: renderItchDescriptionHtml(listing.description),
+    descriptionText: renderItchDescriptionText(listing.description),
+    screenshotCount,
+    screenshotPath,
+  })};
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(2500);
@@ -338,11 +356,15 @@ async (page) => {
   const actualScreenshotCount = await page.locator('button.delete_screen_btn').count().catch(() => 0);
   const isDraft = await page.locator('input[name="game[published]"][value="draft"]').isChecked().catch(() => false);
   await page.screenshot({ path: input.screenshotPath, fullPage: true }).catch(() => {});
+  const normalizeDescription = (value) => String(value).normalize('NFKC')
+    .replace(/[•◦▪●]/gu, ' ')
+    .replace(/\\s+/gu, ' ')
+    .trim();
   const checks = {
     title: titleValue === input.listing.title,
     short_description: shortValue === input.listing.short_description,
-    description: descriptionValue.replace(/\s+/gu, ' ').trim()
-      === input.listing.description.replace(/\s+/gu, ' ').trim(),
+    description: normalizeDescription(descriptionValue)
+      === normalizeDescription(input.descriptionText),
     price: paymentMode === 'paid' && Math.abs(numericPrice - expectedPrice) < 0.001,
     tags: tagsMatch,
     cover: Boolean(coverId),
@@ -387,6 +409,19 @@ export async function stageItchDraft(options) {
     && previous.manifest_hash === manifest.manifest_hash
     && previous.listing_hash === listing.listing_hash) {
     return { ...previous, reused: true, statePath };
+  }
+  let published = null;
+  try {
+    published = await readJson(resolve(productRoot, 'review', 'itch-release.json'));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (published?.status === 'verified_public') {
+    throw new Error(
+      published.manifest_hash === manifest.manifest_hash
+        ? 'This itch.io release is already public; draft staging is disabled for published projects.'
+        : 'A verified itch.io release is already public. Review this update locally and use the separately approved marketplace-update publisher instead of mutating the live page through draft staging.',
+    );
   }
 
   const cliRunner = options.cliRunner || defaultCliRunner;

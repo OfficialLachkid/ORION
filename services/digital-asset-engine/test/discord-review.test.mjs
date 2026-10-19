@@ -180,6 +180,29 @@ test('versioned package review exposes the exact attached customer license hash'
   assert.match(field.value, /LICENSE\.md/u);
 });
 
+test('published update review distinguishes candidate media from the current live release', () => {
+  const product = { title: 'Neon Plasma Armory', assets: [{ asset_id: 'weapon-1', name: 'Rail Rifle' }] };
+  const manifest = {
+    asset_count: 2,
+    manifest_hash: 'a'.repeat(64),
+    listing_hash: 'c'.repeat(64),
+    expansion_assets: [{ asset_id: 'item-1', name: 'Plasma Shield' }],
+  };
+  const pack = buildPackReviewEmbed({
+    product,
+    manifest,
+    itchUrl: 'https://vbjservices.itch.io/neon-plasma-armory',
+    marketplaceReviewMode: 'published_update',
+    currentReleaseVersion: '0.2.0',
+    coverFilename: 'cover.gif',
+  });
+  assert.match(pack.description, /has not been applied/iu);
+  assert.match(pack.description, /0\.2\.0/u);
+  assert.match(pack.fields.find((field) => field.name === 'Included assets').value, /Plasma Shield/u);
+  assert.equal(pack.fields.some((field) => field.name === 'itch.io draft'), false);
+  assert.equal(pack.image.url, 'attachment://cover.gif');
+});
+
 test('Discord requests honor the supplied retry interval for old-message edit limits', async () => {
   let attempts = 0;
   const waits = [];

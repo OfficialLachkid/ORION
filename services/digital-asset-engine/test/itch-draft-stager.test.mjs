@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import {
   buildItchDraftRunCode,
   renderItchDescriptionHtml,
+  renderItchDescriptionText,
   stageItchDraft,
 } from '../src/itch-draft-stager.mjs';
 
@@ -140,6 +141,8 @@ test('Playwright draft preparation includes listing fields and exact price contr
 
 test('renders itch descriptions as safe headings, paragraphs, and lists', () => {
   const html = renderItchDescriptionHtml([
+    '## Version 0.3.0',
+    '',
     'What is included:',
     '',
     '- Eight weapons',
@@ -149,10 +152,14 @@ test('renders itch descriptions as safe headings, paragraphs, and lists', () => 
   ].join('\n'));
 
   assert.equal(html, [
+    '<h2>Version 0.3.0</h2>',
     '<h2>What is included:</h2>',
     '<ul><li>Eight weapons</li><li>Matching muzzle flashes</li></ul>',
     '<p>Use &lt;only&gt; the files in the download.</p>',
   ].join('\n'));
+  assert.equal(renderItchDescriptionText([
+    '## Version 0.3.0', '', 'What is included:', '- Eight weapons', '- Matching muzzle flashes',
+  ].join('\n')), 'Version 0.3.0 What is included: Eight weapons Matching muzzle flashes');
 });
 
 test('stages package with Butler, populates itch.io, verifies it, and reuses exact revision', async () => {
@@ -238,6 +245,31 @@ test('fails closed when browser verification does not confirm draft state', asyn
     profileDir: fixture.outputRoot,
     cliRunner,
   }), /was not verified/u);
+});
+
+test('published projects reject update draft staging before Butler or browser mutation', async () => {
+  const fixture = await createFixture();
+  const calls = [];
+  await mkdir(resolve(fixture.store.productRoot(fixture.product), 'review'), { recursive: true });
+  await writeFile(resolve(fixture.store.productRoot(fixture.product), 'review', 'itch-release.json'), JSON.stringify({
+    status: 'verified_public',
+    manifest_hash: 'f'.repeat(64),
+    listing_hash: 'e'.repeat(64),
+    target_version: '0.2.0',
+    public_url: 'https://vbjservices.itch.io/neon-plasma-armory',
+  }));
+  await assert.rejects(stageItchDraft({
+    outputRoot: fixture.outputRoot,
+    slug: fixture.product.slug,
+    store: fixture.store,
+    itchUrl: 'https://vbjservices.itch.io/neon-plasma-armory',
+    profileDir: fixture.outputRoot,
+    cliRunner(executable, args) {
+      calls.push({ executable, args });
+      return { ok: true, stdout: '', stderr: '' };
+    },
+  }), /marketplace-update publisher/iu);
+  assert.equal(calls.length, 0);
 });
 
 test('stages a quality-cleared immutable release candidate instead of the base preview', async () => {

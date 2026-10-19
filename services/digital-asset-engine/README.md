@@ -218,6 +218,17 @@ Supply-crate open states are explicitly marked for human identity review because
 
 An expansion-plan asset may reference an approved `interactive_proof` by `batch_id` and `asset_key`; legacy `animation_proof` references remain accepted. Preparing the expansion review then verifies the proof's immutable item manifest, confirms its base PNG is byte-identical to the proposed static asset, excludes model source files, and binds state PNGs, runtime frames, overlays, sheets, metadata, validation evidence, contact sheets, and review GIFs into the same expansion manifest. Discord updates the existing expansion overview and asset messages in place. The existing Supabase expansion decision stores the aggregate interactive-bundle hash, so adding new recipes does not require a database migration.
 
+After Discord approves the exact expansion manifest, promote it into a complete versioned buyer candidate:
+
+```bash
+npm run digital-assets:prepare-expansion-release -- \
+  --internal-preview \
+  --expansion-plan services/digital-asset-engine/fixtures/neon-plasma-armory-static-expansion.review.json \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+This command fails closed if the expansion approval is absent or stale. It verifies the immutable `0.2.0` base and approved expansion files, copies only buyer-useful states, frames, overlays, sheets, and metadata into a content-addressed `0.3.0` candidate, and rebuilds the complete listing media. Review GIFs, validation reports, model sources, and duplicated base images stay outside the paid download. The storefront uses a protected slow animated cover with a readable first frame, a complete inventory, an expansion breakdown, and an interactive montage on a lighter steel-blue presentation.
+
 If review finds a problem in only selected effect kinds, create new immutable proof revisions while inheriting the accepted artifacts. The current targeted revision regenerates only the Ion Pistol and Energy Shotgun impact/decay keyframes, then derives their decay frames deterministically:
 
 ```bash
