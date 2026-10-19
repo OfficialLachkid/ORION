@@ -82,6 +82,45 @@ function opaqueBounds(data, width, height) {
   return { left, top, right, bottom };
 }
 
+export async function clearDenseShieldInterior(baseBuffer, options = {}) {
+  const decoded = await sharp(baseBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height } = decoded.info;
+  const output = Buffer.from(decoded.data);
+  const bounds = opaqueBounds(output, width, height);
+  const centerX = (bounds.left + bounds.right) / 2;
+  const centerY = (bounds.top + bounds.bottom) / 2;
+  const shieldRadius = Math.min(bounds.right - bounds.left, bounds.bottom - bounds.top) / 2;
+  const clearRadius = shieldRadius * (options.clearRadiusRatio ?? 0.24);
+  const sampleRadius = options.sampleRadius ?? 2;
+  const densityThreshold = options.densityThreshold ?? 0.68;
+  let clearedPixels = 0;
+  for (let y = Math.max(0, Math.floor(centerY - clearRadius)); y <= Math.min(height - 1, Math.ceil(centerY + clearRadius)); y += 1) {
+    for (let x = Math.max(0, Math.floor(centerX - clearRadius)); x <= Math.min(width - 1, Math.ceil(centerX + clearRadius)); x += 1) {
+      if (Math.hypot(x - centerX, y - centerY) > clearRadius) continue;
+      const offset = ((y * width) + x) * 4;
+      if (output[offset + 3] === 0) continue;
+      let opaque = 0;
+      let sampled = 0;
+      for (let sampleY = Math.max(0, y - sampleRadius); sampleY <= Math.min(height - 1, y + sampleRadius); sampleY += 1) {
+        for (let sampleX = Math.max(0, x - sampleRadius); sampleX <= Math.min(width - 1, x + sampleRadius); sampleX += 1) {
+          sampled += 1;
+          if (decoded.data[((sampleY * width) + sampleX) * 4 + 3] > 0) opaque += 1;
+        }
+      }
+      if ((opaque / sampled) < densityThreshold) continue;
+      output[offset] = 0;
+      output[offset + 1] = 0;
+      output[offset + 2] = 0;
+      output[offset + 3] = 0;
+      clearedPixels += 1;
+    }
+  }
+  if (clearedPixels === 0) return baseBuffer;
+  return sharp(output, { raw: { width, height, channels: 4 } })
+    .png({ palette: false, compressionLevel: 9 })
+    .toBuffer();
+}
+
 function crackSegments(bounds, seed) {
   const center = {
     x: (bounds.left + bounds.right) / 2,

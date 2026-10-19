@@ -15,6 +15,7 @@ import {
 } from './image-processor.mjs';
 import {
   buildStateContactSheet,
+  clearDenseShieldInterior,
   compositeItemFrame,
   createEnergyLevelFrame,
   createShieldIntegrityFrame,
@@ -697,12 +698,14 @@ async function generateShieldRecipe(context) {
 
 async function generatePlasmaShieldRecipe(context) {
   const { options, plan, item, itemRoot, baseBuffer, canvas, detection, source, adapter } = context;
-  const fieldOrigin = await detectOpaqueObjectAnchor(baseBuffer);
+  const shieldBaseBuffer = baseBuffer;
+  const shieldDetection = detection;
+  const fieldOrigin = await detectOpaqueObjectAnchor(shieldBaseBuffer);
   const integrityLevels = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10];
   const integrityFrames = await Promise.all(integrityLevels.map(async (level) => ({
     key: `integrity-${level}`,
     name: `${level}% Integrity`,
-    buffer: await createShieldIntegrityFrame(baseBuffer, level, {
+    buffer: await createShieldIntegrityFrame(shieldBaseBuffer, level, {
       seed: item.seed,
       cellSize: 6,
       maxPaletteColors: plan.style.max_palette_colors,
@@ -719,13 +722,13 @@ async function generatePlasmaShieldRecipe(context) {
     { scale: 0.35, opacity: 0.3, density: 0.72 },
     { scale: 0.62, opacity: 0.58, density: 0.86 },
     { scale: 0.84, opacity: 0.82, density: 0.94 },
-  ].map((transform, index) => derivePixelArtEffectFrame(baseBuffer, {
+  ].map((transform, index) => derivePixelArtEffectFrame(shieldBaseBuffer, {
     ...transform,
     origin: fieldOrigin.anchor,
     salt: item.seed + 10 + index,
     maxPaletteColors: plan.style.max_palette_colors,
   })));
-  const powerUpFrames = [empty, ...activationFrames, baseBuffer];
+  const powerUpFrames = [empty, ...activationFrames, shieldBaseBuffer];
   const powerUp = await writeAnimation(itemRoot, item, 'power-up', {
     name: 'Shield Power Up', playback: 'once', canvas,
     phases: ['inactive', 'field-start', 'field-rise', 'field-form', 'active'],
@@ -733,7 +736,7 @@ async function generatePlasmaShieldRecipe(context) {
   }, powerUpFrames, powerUpFrames, options);
 
   const pulses = await Promise.all([0.18, 0.42, 0.68, 0.92].map((phase) => (
-    createRadialEnergyPulseFrame(baseBuffer, detection, phase)
+    createRadialEnergyPulseFrame(shieldBaseBuffer, shieldDetection, phase)
   )));
   const active = await writeAnimation(itemRoot, item, 'active-loop', {
     name: 'Active Shield Loop', playback: 'loop', canvas,
@@ -765,7 +768,7 @@ async function generatePlasmaShieldRecipe(context) {
     maxPaletteColors: plan.style.max_palette_colors,
   })));
   const hitComposite = await Promise.all(impactFrames.map((overlay) => (
-    compositeItemFrame(baseBuffer, [overlay], { maxPaletteColors: plan.style.max_palette_colors })
+    compositeItemFrame(shieldBaseBuffer, [overlay], { maxPaletteColors: plan.style.max_palette_colors })
   )));
   const hit = await writeAnimation(itemRoot, item, 'shield-hit', {
     name: 'Shield Hit Reaction', playback: 'once', canvas,
@@ -817,7 +820,7 @@ async function generatePlasmaShieldRecipe(context) {
     durations: [90, 70, 70, 80, 120, 180],
   }, breakFrames, [frameAt(70), breakEffects[0], breakEffects[1], breakEffects[2], breakEffects[3], empty], options);
 
-  const powerDownFrames = [baseBuffer, activationFrames[2], activationFrames[1], activationFrames[0], empty];
+  const powerDownFrames = [shieldBaseBuffer, activationFrames[2], activationFrames[1], activationFrames[0], empty];
   const powerDown = await writeAnimation(itemRoot, item, 'power-down', {
     name: 'Shield Power Down', playback: 'once', canvas,
     phases: ['active', 'field-fall', 'field-contract', 'field-end', 'inactive'],
@@ -828,7 +831,7 @@ async function generatePlasmaShieldRecipe(context) {
     writeBuffer(resolveInside(itemRoot, `source/shield-break.${brokenField.generated.format}`, 'Shield break source'), brokenField.generated.buffer),
   ]);
   return finalizeRecipeItem({
-    options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
+    options, plan, item, itemRoot, baseBuffer: shieldBaseBuffer, sourceLayout: source.layout,
     states,
     animations: [powerUp, active, hit, decay, shieldBreak, powerDown],
     validationBuffers: [
@@ -839,7 +842,7 @@ async function generatePlasmaShieldRecipe(context) {
       ...breakFrames.slice(0, -1),
     ],
     validationDetails: {
-      energy_region: detection.report,
+      energy_region: shieldDetection.report,
       field_origin: fieldOrigin,
       impact_alignment: impact.alignment,
       integrity_levels: integrityLevels,
@@ -901,7 +904,10 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
     throw new Error(`Source asset ${item.source_product_slug}/${item.source_asset_key} is not generated.`);
   }
   const sourceRoot = source.root;
-  const baseBuffer = await readFile(resolveInside(sourceRoot, sourceAsset.final_path, 'Interactive item base'));
+  const sourceBaseBuffer = await readFile(resolveInside(sourceRoot, sourceAsset.final_path, 'Interactive item base'));
+  const baseBuffer = item.recipe === 'plasma_shield'
+    ? await clearDenseShieldInterior(sourceBaseBuffer)
+    : sourceBaseBuffer;
   const metadata = await sharp(baseBuffer).metadata();
   const canvas = { width: metadata.width, height: metadata.height };
   const itemRoot = resolveInside(batchRoot, item.target_asset_key, 'Interactive item root');

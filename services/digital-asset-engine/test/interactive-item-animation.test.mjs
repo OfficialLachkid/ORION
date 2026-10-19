@@ -13,7 +13,11 @@ import {
   generateInteractiveItemAnimationBatch,
   inspectPulseIsolation,
 } from '../src/interactive-item-animation.mjs';
-import { compositeItemFrame, createShieldIntegrityFrame } from '../src/interactive-item-states.mjs';
+import {
+  clearDenseShieldInterior,
+  compositeItemFrame,
+  createShieldIntegrityFrame,
+} from '../src/interactive-item-states.mjs';
 import { processPixelArtAsset } from '../src/image-processor.mjs';
 import { InteractiveItemAnimationBatchSchema } from '../src/schemas.mjs';
 
@@ -112,6 +116,21 @@ test('shield integrity damage adds progressive glass fractures without deleting 
     const halfAdded = baseRaw.data[offset + 3] === 0 && halfRaw.data[offset + 3] > 0;
     if (halfAdded) assert.equal(lowRaw.data[offset + 3] > 0, true);
   }
+});
+
+test('shield normalization clears an opaque center without erasing thin lattice lines', async () => {
+  const base = await sharp({
+    create: { width: 96, height: 96, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite([{
+    input: Buffer.from('<svg width="96" height="96"><circle cx="48" cy="48" r="40" fill="none" stroke="#35d9ff" stroke-width="5"/><circle cx="48" cy="48" r="9" fill="#6ab8d5"/><path d="M28 48H68" stroke="#35d9ff" stroke-width="1"/></svg>'),
+  }]).png().toBuffer();
+  const normalized = await clearDenseShieldInterior(base);
+  const { data, info } = await sharp(normalized).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const alphaAt = (x, y) => data[((y * info.width) + x) * 4 + 3];
+
+  assert.equal(alphaAt(48, 48), 0);
+  assert.equal(alphaAt(28, 48) > 0, true);
+  assert.equal(alphaAt(48, 8) > 0, true);
 });
 
 function canonicalProduct(slug, assets) {
