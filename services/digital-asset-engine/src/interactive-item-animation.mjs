@@ -697,7 +697,7 @@ async function generatePlasmaShieldRecipe(context) {
     name: `${level}% Integrity`,
     buffer: await createShieldIntegrityFrame(baseBuffer, level, {
       seed: item.seed,
-      cellSize: 8,
+      cellSize: 6,
       maxPaletteColors: plan.style.max_palette_colors,
     }),
   })));

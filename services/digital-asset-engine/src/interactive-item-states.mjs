@@ -60,13 +60,41 @@ export async function createEnergyLevelFrame(baseBuffer, detection, level) {
   };
 }
 
-function integrityCellScore(cellX, cellY, columns, rows, seed) {
-  const normalizedX = columns <= 1 ? 0 : cellX / (columns - 1);
-  const normalizedY = rows <= 1 ? 0 : cellY / (rows - 1);
-  const spatial = ((1 - normalizedX) * 0.55) + (normalizedY * 0.45);
+function integrityCellNoise(cellX, cellY, seed) {
   const mixed = Math.sin(((cellX + 1) * 12.9898) + ((cellY + 1) * 78.233) + (seed * 0.017));
-  const noise = mixed - Math.floor(mixed);
-  return spatial + (noise * 0.22);
+  return mixed - Math.floor(mixed);
+}
+
+function distributedDamageOrder(cells, columns, rows, seed) {
+  const sectorCount = 8;
+  const centerX = (columns - 1) / 2;
+  const centerY = (rows - 1) / 2;
+  const sectors = Array.from({ length: sectorCount }, () => []);
+  for (const cell of cells) {
+    const angle = Math.atan2(cell.cellY - centerY, cell.cellX - centerX) + Math.PI;
+    const sector = Math.min(sectorCount - 1, Math.floor((angle / (Math.PI * 2)) * sectorCount));
+    sectors[sector].push(cell);
+  }
+  for (const sector of sectors) {
+    sector.sort((left, right) => (
+      integrityCellNoise(left.cellX, left.cellY, seed)
+      - integrityCellNoise(right.cellX, right.cellY, seed)
+      || left.key.localeCompare(right.key)
+    ));
+  }
+  const order = [];
+  const rotation = Math.abs(Math.round(seed)) % sectorCount;
+  while (order.length < cells.length) {
+    let added = false;
+    for (let offset = 0; offset < sectorCount; offset += 1) {
+      const sector = sectors[(rotation + offset) % sectorCount];
+      if (sector.length === 0) continue;
+      order.push(sector.shift());
+      added = true;
+    }
+    if (!added) break;
+  }
+  return order;
 }
 
 export async function createShieldIntegrityFrame(baseBuffer, integrityPercent, options = {}) {
@@ -87,18 +115,16 @@ export async function createShieldIntegrityFrame(baseBuffer, integrityPercent, o
   }
   const cells = [...occupied].map((key) => {
     const [cellX, cellY] = key.split(':').map(Number);
-    return {
-      key,
-      score: integrityCellScore(cellX, cellY, columns, rows, options.seed ?? 0),
-    };
-  }).sort((left, right) => right.score - left.score || left.key.localeCompare(right.key));
-  const keepCount = Math.ceil(cells.length * (integrity / 100));
-  const retained = new Set(cells.slice(0, keepCount).map((cell) => cell.key));
+    return { key, cellX, cellY };
+  });
+  const damageOrder = distributedDamageOrder(cells, columns, rows, options.seed ?? 0);
+  const removeCount = Math.floor(cells.length * ((100 - integrity) / 100));
+  const removed = new Set(damageOrder.slice(0, removeCount).map((cell) => cell.key));
   const output = Buffer.from(decoded.data);
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const key = `${Math.floor(x / cellSize)}:${Math.floor(y / cellSize)}`;
-      if (retained.has(key)) continue;
+      if (!removed.has(key)) continue;
       output[((y * width) + x) * 4 + 3] = 0;
     }
   }

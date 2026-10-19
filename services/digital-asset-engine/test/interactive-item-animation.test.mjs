@@ -12,7 +12,7 @@ import {
   generateInteractiveItemAnimationBatch,
   inspectPulseIsolation,
 } from '../src/interactive-item-animation.mjs';
-import { compositeItemFrame } from '../src/interactive-item-states.mjs';
+import { compositeItemFrame, createShieldIntegrityFrame } from '../src/interactive-item-states.mjs';
 import { processPixelArtAsset } from '../src/image-processor.mjs';
 import { InteractiveItemAnimationBatchSchema } from '../src/schemas.mjs';
 
@@ -74,6 +74,41 @@ function plan(items) {
     },
   };
 }
+
+test('shield integrity damage spreads around the field and remains progressive', async () => {
+  const base = await sharp({
+    create: {
+      width: 96,
+      height: 96,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).composite([{
+    input: Buffer.from('<svg width="96" height="96"><circle cx="48" cy="48" r="38" fill="none" stroke="#35d9ff" stroke-width="12"/></svg>'),
+  }]).png().toBuffer();
+  const half = await createShieldIntegrityFrame(base, 50, { seed: 45, cellSize: 6 });
+  const low = await createShieldIntegrityFrame(base, 20, { seed: 45, cellSize: 6 });
+  const [baseRaw, halfRaw, lowRaw] = await Promise.all([base, half, low].map((buffer) => (
+    sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  )));
+  const opaqueByQuadrant = (decoded) => {
+    const counts = [0, 0, 0, 0];
+    for (let y = 0; y < decoded.info.height; y += 1) {
+      for (let x = 0; x < decoded.info.width; x += 1) {
+        const alpha = decoded.data[((y * decoded.info.width) + x) * 4 + 3];
+        if (alpha === 0) continue;
+        counts[(y >= 48 ? 2 : 0) + (x >= 48 ? 1 : 0)] += 1;
+      }
+    }
+    return counts;
+  };
+  const baseQuadrants = opaqueByQuadrant(baseRaw);
+  const halfQuadrants = opaqueByQuadrant(halfRaw);
+  assert.equal(halfQuadrants.every((count, index) => count > 0 && count < baseQuadrants[index]), true);
+  for (let pixel = 0; pixel < lowRaw.data.length; pixel += 4) {
+    if (lowRaw.data[pixel + 3] > 0) assert.equal(halfRaw.data[pixel + 3] > 0, true);
+  }
+});
 
 function canonicalProduct(slug, assets) {
   return {
