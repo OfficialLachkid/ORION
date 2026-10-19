@@ -77,7 +77,7 @@ function manifestUrl(guildId, state) {
 
 function overviewEmbed(manifest, revision) {
   const assets = manifest.assets.map((asset, index) => (
-    `**${String(index + 1).padStart(2, '0')}** — ${asset.name} · ${asset.buyer_group}${asset.animation ? ` · ${asset.animation.animations.length} animations` : ''}`
+    `**${String(index + 1).padStart(2, '0')}** — ${asset.name} · ${asset.buyer_group}${asset.animation ? ` · ${(asset.animation.states || []).length} states · ${asset.animation.animations.length} animations` : ''}`
   )).join('\n');
   return {
     title: `${manifest.title} · Expansion Review · Revision ${revision}`,
@@ -87,6 +87,7 @@ function overviewEmbed(manifest, revision) {
       { name: 'Target release', value: `\`${manifest.base_version}\` → \`${manifest.target_version}\``, inline: true },
       { name: 'Assets', value: String(manifest.asset_count), inline: true },
       { name: 'Animations', value: String(manifest.animation_count || 0), inline: true },
+      { name: 'States', value: String(manifest.state_count || 0), inline: true },
       { name: 'Generation cost', value: '€0 API cost', inline: true },
       { name: 'Proposed additions', value: assets, inline: false },
       { name: 'Expansion manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
@@ -98,8 +99,11 @@ function overviewEmbed(manifest, revision) {
 }
 
 function assetEmbed(asset, index, total) {
-  const animationSummary = asset.animation
-    ? asset.animation.animations.map((animation) => `- ${animation.animation_key}`).join('\n')
+  const interactiveSummary = asset.animation
+    ? [
+      ...(asset.animation.states || []).map((state) => `- State: ${state.state_key}`),
+      ...asset.animation.animations.map((animation) => `- Animation: ${animation.animation_key}`),
+    ].join('\n')
     : 'Static base asset only';
   return {
     title: `${String(index + 1).padStart(2, '0')}/${String(total).padStart(2, '0')} · ${asset.name}`,
@@ -109,7 +113,7 @@ function assetEmbed(asset, index, total) {
       { name: 'Asset ID', value: `\`${asset.asset_id}\``, inline: false },
       { name: 'Kind', value: `\`${asset.kind}\``, inline: true },
       { name: 'Canvas', value: `${asset.validation_metrics.width}×${asset.validation_metrics.height}`, inline: true },
-      { name: 'Included states', value: animationSummary, inline: false },
+      { name: 'Included states', value: interactiveSummary, inline: false },
       { name: 'SHA-256', value: `\`${asset.content_sha256}\``, inline: false },
       ...(asset.animation ? [{ name: 'Animation bundle', value: `\`${asset.animation.bundle_hash}\``, inline: false }] : []),
     ],
@@ -221,6 +225,18 @@ export async function postAssetExpansionReview(options) {
       description: clean(`${String(index + 1).padStart(2, '0')} ${asset.name} expansion candidate`),
       buffer: await readFile(resolveInside(candidateRoot, asset.path, 'Expansion asset')),
     }];
+    if (asset.animation?.states?.length) {
+      assetFiles.push({
+        filename: `${asset.asset_key}-states.png`,
+        contentType: 'image/png',
+        description: clean(`${asset.name}: deterministic state overview`),
+        buffer: await readFile(resolveInside(
+          candidateRoot,
+          `animations/${asset.asset_key}/previews/states.png`,
+          'Expansion state preview',
+        )),
+      });
+    }
     for (const animation of asset.animation?.animations || []) {
       assetFiles.push({
         filename: `${asset.asset_key}-${animation.animation_key}.gif`,
@@ -229,12 +245,17 @@ export async function postAssetExpansionReview(options) {
         buffer: await readFile(resolveInside(candidateRoot, animation.preview_gif_path, 'Expansion animation preview')),
       });
     }
-    const messageId = state.asset_messages[asset.asset_id];
+    const replacedAssetId = asset.replaces_review_asset_key
+      ? `asset-expansion-${createHash('sha256').update(`${manifest.expansion_id}:${asset.replaces_review_asset_key}`).digest('hex').slice(0, 16)}`
+      : null;
+    const messageId = state.asset_messages[asset.asset_id]
+      || (replacedAssetId ? state.asset_messages[replacedAssetId] : null);
     const message = await sendMessageWithFiles(token, state.thread_id, {
       embeds: [assetEmbed(asset, index, manifest.assets.length)], components: [],
     }, assetFiles, { messageId, fetchImpl: options.fetchImpl });
-    if (!messageId) {
+    if (!state.asset_messages[asset.asset_id]) {
       state.asset_messages[asset.asset_id] = message.id;
+      if (replacedAssetId && replacedAssetId !== asset.asset_id) delete state.asset_messages[replacedAssetId];
       await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
     }
   }

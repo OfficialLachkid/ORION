@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "neon-plasma-armory-interactive-expansion-v2",
+  "product_slug": "neon-plasma-armory",
+  "title": "Neon Plasma Armory Interactive Expansion Revision 3",
+  "items": [
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "plasma-power-cell",
+      "target_asset_key": "plasma-power-cell",
+      "name": "Plasma Power Cell",
+      "recipe": "power_cell",
+      "seed": 3046
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-revisions",
+      "source_asset_key": "energy-pickup-v2",
+      "target_asset_key": "energy-pickup",
+      "name": "Energy Pickup",
+      "recipe": "energy_pickup",
+      "seed": 3096,
+      "collection_description": "A compact cyan plasma collection burst expanding from a brilliant central point with short violet fragments and generous transparent padding."
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "plasma-grenade",
+      "target_asset_key": "plasma-grenade",
+      "name": "Plasma Grenade",
+      "recipe": "grenade",
+      "seed": 3146,
+      "detonation_description": "A compact high-energy plasma detonation that reads as the natural destructive release of the grenade's cyan core, with a tight brilliant center and short irregular energy spikes."
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-interactive-revisions",
+      "source_asset_key": "portable-shield-emitter-v2",
+      "target_asset_key": "portable-shield-emitter",
+      "name": "Portable Shield Emitter",
+      "recipe": "shield_emitter",
+      "seed": 3346,
+      "field_description": "One isolated broad protective cyan energy barrier arc, open at the bottom for a ground emitter, with a thin readable pixel edge, restrained violet energy seams, and a transparent-looking empty interior.",
+      "impact_description": "One isolated shield-hit reaction keyframe: an asymmetric curved cyan energy ripple with a brilliant compact contact point and a few restrained violet fragments.",
+      "break_description": "One isolated broken-shield keyframe with cyan force-field fragments and restrained violet shards scattering outward from a collapsing protective barrier."
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "armory-supply-crate",
+      "target_asset_key": "armory-supply-crate",
+      "name": "Armory Supply Crate",
+      "recipe": "supply_crate",
+      "seed": 3496,
+      "open_description": "The reinforced gunmetal lid is visibly hinged open while the interior remains dark and no loose contents are shown; preserve the cyan powered latch and restrained violet status light.",
+      "empty_description": "The reinforced gunmetal lid is fully hinged open and the empty interior cavity is clearly visible; preserve the cyan powered latch, restrained violet status light, proportions, and perspective."
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "armory-workbench",
+      "target_asset_key": "armory-workbench",
+      "name": "Armory Workbench",
+      "recipe": "workbench",
+      "seed": 3596
+    }
+  ],
+  "style": {
+    "medium": "pixel_art",
+    "palette": [
+      "#10131d",
+      "#20283a",
+      "#44506b",
+      "#7785a6",
+      "#c8d4ec",
+      "#35d9ff",
+      "#875cff",
+      "#ff4fd8"
+    ],
+    "energy_colors": ["#35d9ff", "#875cff", "#ff4fd8"],
+    "energy_color_tolerance": 72,
+    "max_palette_colors": 32,
+    "chroma_key": "#ff00ff",
+    "source_width": 1024,
+    "source_height": 1024
+  }
+}

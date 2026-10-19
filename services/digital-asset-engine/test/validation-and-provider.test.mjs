@@ -8,6 +8,7 @@ import { validateGeneratedAsset } from '../src/asset-validator.mjs';
 import { loadEngineConfig } from '../src/config.mjs';
 import { validateOpportunity } from '../src/opportunity-validator.mjs';
 import { OllamaImageAdapter } from '../src/ollama-image-adapter.mjs';
+import { createProductSpecification } from '../src/product-planner.mjs';
 
 const testDirectory = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const projectRoot = resolve(testDirectory, '../../..');
@@ -30,6 +31,17 @@ test('final opportunity validation rejects stale and high-risk work', async () =
 
   assert.equal(result.generation_eligible, false);
   assert.deepEqual(result.failures.sort(), ['freshness', 'ip_risk']);
+});
+
+test('an opportunity may pin a reproducible generation seed', async () => {
+  const { opportunity, config } = await fixtures();
+  const validation = validateOpportunity({
+    ...opportunity,
+    generation: { ...opportunity.generation, seed: 814 },
+  }, config, { now: '2026-10-12T12:00:00.000Z' });
+  const product = createProductSpecification(validation, config);
+
+  assert.equal(product.assets[0].seed, 814);
 });
 
 test('Ollama adapter refuses non-local endpoints by default', async () => {

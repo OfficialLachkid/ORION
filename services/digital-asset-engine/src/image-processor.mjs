@@ -1,7 +1,26 @@
 import sharp from 'sharp';
 
-export const PIXEL_ART_PROCESSING_VERSION = '2.0';
-export const PIXEL_ART_EFFECT_PROCESSING_VERSION = '1.0';
+export const PIXEL_ART_PROCESSING_VERSION = '2.2';
+export const PIXEL_ART_EFFECT_PROCESSING_VERSION = '1.1';
+
+export async function sanitizeTransparentPixels(inputBuffer, options = {}) {
+  const decoded = await sharp(inputBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const rgba = Buffer.from(decoded.data);
+  const alphaCutoff = options.alphaCutoff ?? 0;
+  for (let offset = 0; offset < rgba.length; offset += 4) {
+    if (rgba[offset + 3] > alphaCutoff) continue;
+    rgba[offset] = 0;
+    rgba[offset + 1] = 0;
+    rgba[offset + 2] = 0;
+    rgba[offset + 3] = 0;
+  }
+  return sharp(rgba, {
+    raw: { width: decoded.info.width, height: decoded.info.height, channels: 4 },
+  }).png({
+    palette: false,
+    compressionLevel: 9,
+  }).toBuffer();
+}
 
 function parseHexColor(value) {
   const normalized = value.replace('#', '');
@@ -80,6 +99,24 @@ function removeChroma(data, width, height, key, tolerance) {
   return removedPixels;
 }
 
+function clearNonPalettePixels(data, width, height, colors, tolerance) {
+  if (!colors?.length) throw new Error('Palette-only alpha extraction requires at least one retained color.');
+  const retained = colors.map(parseHexColor);
+  const threshold = tolerance ** 2;
+  let removedPixels = 0;
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    const offset = pixel * 4;
+    if (data[offset + 3] === 0) continue;
+    const matches = retained.some((color) => (
+      colorDistanceSquared(data[offset], data[offset + 1], data[offset + 2], color) <= threshold
+    ));
+    if (matches) continue;
+    data[offset + 3] = 0;
+    removedPixels += 1;
+  }
+  return removedPixels;
+}
+
 function findOpaqueBounds(data, width, height) {
   let left = width;
   let top = height;
@@ -120,6 +157,15 @@ export async function processPixelArtAsset(inputBuffer, options) {
     detected.color,
     options.chromaTolerance,
   );
+  const removedNonPalettePixels = options.alphaMode === 'palette_only'
+    ? clearNonPalettePixels(
+      rgba,
+      width,
+      height,
+      options.alphaPalette,
+      options.alphaTolerance,
+    )
+    : 0;
   const bounds = findOpaqueBounds(rgba, width, height);
 
   const output = await sharp(rgba, { raw: { width, height, channels: 4 } })
@@ -138,11 +184,13 @@ export async function processPixelArtAsset(inputBuffer, options) {
     .toBuffer();
 
   return {
-    buffer: output,
+    buffer: await sanitizeTransparentPixels(output, { maxPaletteColors: options.maxPaletteColors }),
     processing_version: PIXEL_ART_PROCESSING_VERSION,
     source: { width, height },
     extracted_bounds: bounds,
     removed_chroma_pixels: removedChromaPixels,
+    removed_non_palette_pixels: removedNonPalettePixels,
+    alpha_mode: options.alphaMode || 'chroma',
     detected_chroma_key: detected.hex,
     border_chroma_match_ratio: Number(detected.matchRatio.toFixed(4)),
     requested_chroma_distance: Number(detected.expectedDistance.toFixed(2)),
@@ -246,7 +294,7 @@ export async function processPixelArtEffectFrame(inputBuffer, options) {
   }
 
   return {
-    buffer: output,
+    buffer: await sanitizeTransparentPixels(output, { maxPaletteColors: options.maxPaletteColors }),
     processing_version: PIXEL_ART_PROCESSING_VERSION,
     effect_processing_version: PIXEL_ART_EFFECT_PROCESSING_VERSION,
     source: { width, height },
@@ -350,7 +398,7 @@ export async function derivePixelArtEffectFrame(inputBuffer, options) {
       output[targetOffset + 3] = Math.round(decoded.data[sourceOffset + 3] * opacity);
     }
   }
-  return sharp(output, {
+  const buffer = await sharp(output, {
     raw: {
       width: decoded.info.width,
       height: decoded.info.height,
@@ -362,6 +410,7 @@ export async function derivePixelArtEffectFrame(inputBuffer, options) {
     dither: 0,
     compressionLevel: 9,
   }).toBuffer();
+  return sanitizeTransparentPixels(buffer, { maxPaletteColors: options.maxPaletteColors });
 }
 
 export async function createTransparencyPreview(assetBuffer, options = {}) {

@@ -147,6 +147,9 @@ export async function generateDigitalAssetProduct(options) {
         maxPaletteColors: product.style.max_palette_colors,
         chromaKey: product.style.chroma_key,
         chromaTolerance: options.config.generation.chroma_tolerance,
+        alphaMode: asset.alpha_mode,
+        alphaPalette: asset.alpha_palette,
+        alphaTolerance: asset.alpha_tolerance,
       });
       await writeBuffer(paths.final, processed.buffer);
       const report = await validateGeneratedAsset(processed.buffer, {
@@ -165,6 +168,8 @@ export async function generateDigitalAssetProduct(options) {
           source: processed.source,
           extracted_bounds: processed.extracted_bounds,
           removed_chroma_pixels: processed.removed_chroma_pixels,
+          removed_non_palette_pixels: processed.removed_non_palette_pixels,
+          alpha_mode: processed.alpha_mode,
           detected_chroma_key: processed.detected_chroma_key,
           border_chroma_match_ratio: processed.border_chroma_match_ratio,
           requested_chroma_distance: processed.requested_chroma_distance,

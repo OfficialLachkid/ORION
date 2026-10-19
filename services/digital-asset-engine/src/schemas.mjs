@@ -11,6 +11,9 @@ export const AssetRequestSchema = z.object({
   kind: z.string().min(1),
   description: z.string().min(1),
   prompt_notes: z.array(z.string().min(1)).default([]),
+  alpha_mode: z.enum(['chroma', 'palette_only']).default('chroma'),
+  alpha_palette: z.array(HexColorSchema).max(32).default([]),
+  alpha_tolerance: z.number().int().min(0).max(441).default(48),
 });
 
 export const ProductOpportunitySchema = z.object({
@@ -32,6 +35,7 @@ export const ProductOpportunitySchema = z.object({
     confidence: z.number().min(0).max(100),
   }),
   generation: z.object({
+    seed: z.number().int().nonnegative().optional(),
     medium: z.string().min(1),
     perspective: z.string().min(1),
     width: z.number().int().min(8).max(4096),
@@ -120,6 +124,9 @@ export const ProductSpecificationSchema = z.object({
     kind: z.string().min(1),
     description: z.string().min(1),
     generation_prompt: z.string().min(1),
+    alpha_mode: z.enum(['chroma', 'palette_only']).default('chroma'),
+    alpha_palette: z.array(HexColorSchema).max(32).default([]),
+    alpha_tolerance: z.number().int().min(0).max(441).default(48),
     seed: z.number().int().nonnegative(),
     status: z.enum(['planned', 'generated', 'failed']),
     source_path: z.string().nullable(),
@@ -322,20 +329,53 @@ export const EffectBatchPlanSchema = z.object({
   }
 });
 
+const InteractiveItemSourceSchema = z.object({
+  source_product_slug: IdentifierSchema,
+  source_asset_key: IdentifierSchema,
+  target_asset_key: IdentifierSchema,
+  name: z.string().min(1),
+  seed: z.number().int().nonnegative(),
+});
+
+const InteractiveItemRecipeSchema = z.discriminatedUnion('recipe', [
+  InteractiveItemSourceSchema.extend({
+    recipe: z.enum(['grenade', 'proximity_mine']),
+    detonation_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('shield_emitter'),
+    field_description: z.string().min(1),
+    impact_description: z.string().min(1),
+    break_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('plasma_shield'),
+    impact_description: z.string().min(1),
+    break_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('power_cell'),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('energy_pickup'),
+    collection_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('supply_crate'),
+    open_description: z.string().min(1),
+    empty_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('workbench'),
+  }),
+]);
+
 export const InteractiveItemAnimationBatchSchema = z.object({
   schema_version: z.literal('1.0'),
   batch_id: IdentifierSchema,
   product_slug: IdentifierSchema,
   title: z.string().min(1),
-  items: z.array(z.object({
-    source_product_slug: IdentifierSchema,
-    source_asset_key: IdentifierSchema,
-    target_asset_key: IdentifierSchema,
-    name: z.string().min(1),
-    recipe: z.enum(['grenade', 'proximity_mine']),
-    seed: z.number().int().nonnegative(),
-    detonation_description: z.string().min(1),
-  })).min(1).max(25),
+  items: z.array(InteractiveItemRecipeSchema).min(1).max(25),
   style: z.object({
     medium: z.literal('pixel_art'),
     palette: z.array(HexColorSchema).min(2).max(256),
@@ -451,7 +491,12 @@ export const AssetExpansionReviewPlanSchema = z.object({
     target_asset_key: IdentifierSchema,
     target_name: z.string().min(1),
     buyer_group: z.enum(['items', 'props', 'vfx']),
+    replaces_review_asset_key: IdentifierSchema.optional(),
     animation_proof: z.object({
+      batch_id: IdentifierSchema,
+      asset_key: IdentifierSchema,
+    }).optional(),
+    interactive_proof: z.object({
       batch_id: IdentifierSchema,
       asset_key: IdentifierSchema,
     }).optional(),
@@ -464,6 +509,15 @@ export const AssetExpansionReviewPlanSchema = z.object({
       message: 'Expansion target asset keys must be unique.',
       path: ['assets'],
     });
+  }
+  for (const [index, asset] of plan.assets.entries()) {
+    if (asset.animation_proof && asset.interactive_proof) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Use interactive_proof instead of defining both proof fields.',
+        path: ['assets', index],
+      });
+    }
   }
   const parse = (value) => value.split('.').map(Number);
   const base = parse(plan.base_version);

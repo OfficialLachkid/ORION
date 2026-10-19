@@ -12,14 +12,22 @@
       "source_asset_key": "plasma-power-cell",
       "target_asset_key": "plasma-power-cell",
       "target_name": "Plasma Power Cell",
-      "buyer_group": "items"
+      "buyer_group": "items",
+      "interactive_proof": {
+        "batch_id": "neon-plasma-armory-interactive-expansion-v2",
+        "asset_key": "plasma-power-cell"
+      }
     },
     {
       "source_product_slug": "neon-plasma-armory-expansion-revisions",
       "source_asset_key": "energy-pickup-v2",
       "target_asset_key": "energy-pickup",
       "target_name": "Energy Pickup",
-      "buyer_group": "items"
+      "buyer_group": "items",
+      "interactive_proof": {
+        "batch_id": "neon-plasma-armory-alpha-and-shield-v7",
+        "asset_key": "energy-pickup"
+      }
     },
     {
       "source_product_slug": "neon-plasma-armory-expansion-proof",
@@ -27,8 +35,8 @@
       "target_asset_key": "plasma-grenade",
       "target_name": "Plasma Grenade",
       "buyer_group": "items",
-      "animation_proof": {
-        "batch_id": "neon-plasma-armory-grenade-mine-animation-proof-v1",
+      "interactive_proof": {
+        "batch_id": "neon-plasma-armory-alpha-and-shield-v7",
         "asset_key": "plasma-grenade"
       }
     },
@@ -44,11 +52,16 @@
       }
     },
     {
-      "source_product_slug": "neon-plasma-armory-expansion-proof",
-      "source_asset_key": "portable-shield-emitter",
-      "target_asset_key": "portable-shield-emitter",
-      "target_name": "Portable Shield Emitter",
-      "buyer_group": "items"
+      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v8",
+      "source_asset_key": "plasma-shield-v8",
+      "target_asset_key": "plasma-shield",
+      "target_name": "Plasma Shield",
+      "buyer_group": "vfx",
+      "replaces_review_asset_key": "portable-shield-emitter",
+      "interactive_proof": {
+        "batch_id": "neon-plasma-armory-shield-v8",
+        "asset_key": "plasma-shield"
+      }
     },
     {
       "source_product_slug": "neon-plasma-armory-expansion-proof",
@@ -69,7 +82,11 @@
       "source_asset_key": "armory-workbench",
       "target_asset_key": "armory-workbench",
       "target_name": "Armory Workbench",
-      "buyer_group": "props"
+      "buyer_group": "props",
+      "interactive_proof": {
+        "batch_id": "neon-plasma-armory-interactive-expansion-v2",
+        "asset_key": "armory-workbench"
+      }
     }
   ]
 }

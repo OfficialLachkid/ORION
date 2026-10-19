@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "opportunity_id": "OPPORTUNITY-0146-PLASMA-SHIELD-REVISION-V5",
+  "status": "validated",
+  "title": "Neon Plasma Armory Plasma Shield Revision V5",
+  "category": "Pixel Art / VFX",
+  "product_type": "Internal Sci-Fi Asset Revision Capability Proof",
+  "theme": "Original neon industrial science fiction matching Neon Plasma Armory: transparent cyan plasma energy, restrained violet stress accents, and a readable protective silhouette",
+  "target_audience": ["internal ORION reviewers", "indie game developers", "2D science-fiction game creators"],
+  "observed_at": "2026-10-19T00:00:00.000Z",
+  "expires_at": "2027-01-17T00:00:00.000Z",
+  "signals": {
+    "trend_direction": "stable",
+    "demand": "medium",
+    "competition": "high",
+    "cross_marketplace_evidence": "weak",
+    "confidence": 72
+  },
+  "generation": {
+    "medium": "pixel_art",
+    "perspective": "front-facing orthographic 2D game-effect sprite",
+    "width": 128,
+    "height": 128,
+    "source_width": 1024,
+    "source_height": 1024,
+    "max_palette_colors": 32,
+    "palette": ["#10131d", "#20283a", "#44506b", "#7785a6", "#c8d4ec", "#35d9ff", "#875cff", "#ff4fd8"],
+    "outline": "Crisp one-pixel energy edges at final resolution with deliberate square pixel clusters and no antialiasing",
+    "lighting": "Self-illuminated cyan plasma with a pale-blue core and restrained violet stress accents",
+    "background": "transparent",
+    "chroma_key": "#ff00ff",
+    "assets": [
+      {
+        "asset_key": "plasma-shield-v5",
+        "name": "Plasma Shield V5",
+        "kind": "vfx",
+        "description": "a large circular character-sized plasma shield made only from a bright cyan energy rim and sparse hexagonal force-field lattice with a transparent empty interior",
+        "alpha_mode": "palette_only",
+        "alpha_palette": ["#35d9ff", "#875cff", "#c8d4ec"],
+        "alpha_tolerance": 72,
+        "prompt_notes": [
+          "Shield effect only: no emitter, generator, pedestal, statue, device, character, hand, weapon, floor, cast shadow, scenery, text, numbers, logo, watermark, frame, or duplicate shield",
+          "Show one complete intact circular protective barrier centered on canvas, sized to surround a game character while leaving the interior transparent",
+          "Use a continuous cyan outer energy ring and a sparse readable hexagonal energy-cell lattice; do not fill the orb with an opaque color",
+          "Every empty pixel outside the shield and every gap inside and between the energy lattice cells must be exactly solid #ff00ff chroma key; only the cyan, pale-blue, and violet energy lines may use non-chroma colors",
+          "Keep generous transparent padding on every side and use no hot-pink pixels inside the shield artwork"
+        ]
+      }
+    ]
+  },
+  "commercial": { "base_price": { "amount": 0, "currency": "EUR" }, "marketplace_candidates": ["itch.io"] },
+  "risk": {
+    "ip_risk": "low",
+    "prohibited_references": ["specific marketplace artwork", "specific living artists", "franchise shield designs"],
+    "notes": [
+      "The human-provided marketplace image is functional inspiration only. Generate original artwork with no copied watermark, text, exact lattice, or arrangement.",
+      "This replaces the unwanted stationary emitter concept and does not enter the package until the shield-only lifecycle passes human review."
+    ]
+  },
+  "evidence": [{
+    "label": "Human review requested a character-sized plasma barrier with many integrity states and no stationary emitter",
+    "source": "ORION expansion review on 2026-10-19",
+    "observed_at": "2026-10-19T00:00:00.000Z"
+  }]
+}

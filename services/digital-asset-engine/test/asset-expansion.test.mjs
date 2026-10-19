@@ -109,6 +109,10 @@ async function addAnimationProof(setup) {
   const itemRoot = resolve(setup.productRoot, 'experiments', batchId, assetKey);
   const runtime = {
     'base.png': setup.png,
+    'states/full.png': setup.png,
+    'states/empty.png': setup.png,
+    'metadata/states.json': Buffer.from('{"states":["empty","full"]}\n'),
+    'previews/states.png': setup.png,
     'frames/active-loop/00.png': setup.png,
     'overlays/active-loop/00.png': setup.png,
     'sheets/active-loop.png': setup.png,
@@ -137,6 +141,7 @@ async function addAnimationProof(setup) {
     incurred_cost: 0,
     buyer_runtime_formats: ['transparent_png_frames', 'animation_json'],
     preview_only_formats: ['animated_gif'],
+    states: ['empty', 'full'],
     animations: ['active-loop', 'detonation'],
     files,
     manifest_hash: itemManifestHash,
@@ -173,6 +178,47 @@ test('builds an immutable static expansion review without changing the base rele
   assert.equal(reused.manifest.manifest_hash, result.manifest.manifest_hash);
 });
 
+test('renamed expansion assets reuse their existing Discord review message', async () => {
+  const setup = await fixture();
+  setup.plan.assets[0].replaces_review_asset_key = 'legacy-power-cell';
+  const prepared = await prepareAssetExpansionReview({ outputRoot: setup.outputRoot, plan: setup.plan });
+  const legacyAssetId = `asset-expansion-${sha256(`${setup.plan.expansion_id}:legacy-power-cell`).slice(0, 16)}`;
+  const statePath = resolve(
+    setup.productRoot, 'extensions', setup.plan.expansion_id, 'review', 'discord.json',
+  );
+  await write(resolve(setup.productRoot, 'review', 'discord.json'), JSON.stringify({ channel_id: 'channel-1' }));
+  await write(statePath, JSON.stringify({
+    schema_version: '1.0',
+    product_id: prepared.manifest.product_id,
+    product_slug: setup.plan.product_slug,
+    expansion_id: setup.plan.expansion_id,
+    channel_id: 'channel-1',
+    overview_message_id: 'overview-1',
+    thread_id: 'thread-1',
+    asset_messages: { [legacyAssetId]: 'legacy-message-1' },
+    review_revision: 1,
+    manifest_hash: 'f'.repeat(64),
+  }));
+  const requests = [];
+  await postAssetExpansionReview({
+    runtimeConfig: { env: { DISCORD_BOT_TOKEN: 'token' }, guildId: 'guild-1' },
+    outputRoot: setup.outputRoot,
+    productSlug: setup.plan.product_slug,
+    expansionId: setup.plan.expansion_id,
+    async fetchImpl(url, options = {}) {
+      const path = new URL(url).pathname;
+      requests.push({ path, method: options.method || 'GET' });
+      return { ok: true, status: 200, async json() { return { id: 'legacy-message-1' }; } };
+    },
+  });
+  assert.equal(requests.some((request) => (
+    request.method === 'PATCH' && request.path.endsWith('/messages/legacy-message-1')
+  )), true);
+  const state = JSON.parse(await readFile(statePath, 'utf8'));
+  assert.equal(state.asset_messages[prepared.manifest.assets[0].asset_id], 'legacy-message-1');
+  assert.equal(state.asset_messages[legacyAssetId], undefined);
+});
+
 test('expansion review binds interactive runtime files and Discord GIF previews to the same manifest', async () => {
   const setup = await fixture();
   await addAnimationProof(setup);
@@ -183,6 +229,8 @@ test('expansion review binds interactive runtime files and Discord GIF previews 
   });
   const asset = prepared.manifest.assets[0];
   assert.equal(prepared.manifest.animation_count, 2);
+  assert.equal(prepared.manifest.state_count, 2);
+  assert.equal(asset.animation.states.length, 2);
   assert.equal(asset.animation.animations.length, 2);
   assert.equal(asset.animation.base_sha256, setup.hash);
   assert.equal(asset.review_hash, asset.animation.bundle_hash);
@@ -226,6 +274,7 @@ test('expansion review binds interactive runtime files and Discord GIF previews 
   ));
   assert.deepEqual(assetRequest.payload.attachments.map((attachment) => attachment.filename), [
     'power-cell.png',
+    'power-cell-states.png',
     'power-cell-active-loop.gif',
     'power-cell-detonation.gif',
   ]);

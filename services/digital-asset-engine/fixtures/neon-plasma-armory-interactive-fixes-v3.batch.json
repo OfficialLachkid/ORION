@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "neon-plasma-armory-interactive-fixes-v3",
+  "product_slug": "neon-plasma-armory",
+  "title": "Neon Plasma Armory Interactive Anchor and Shield Fixes",
+  "items": [
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "plasma-grenade",
+      "target_asset_key": "plasma-grenade",
+      "name": "Plasma Grenade",
+      "recipe": "grenade",
+      "seed": 3146,
+      "detonation_description": "A compact high-energy plasma detonation that reads as the natural destructive release of the grenade's cyan core, with a tight brilliant center and short irregular energy spikes."
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-shield-emitter-revision",
+      "source_asset_key": "portable-shield-emitter-v3",
+      "target_asset_key": "portable-shield-emitter",
+      "name": "Portable Shield Emitter",
+      "recipe": "shield_emitter",
+      "seed": 3346,
+      "field_description": "One isolated large protective cyan energy orb or hemispherical force-field outline, open only at the bottom for a compact ground emitter, with a continuous thin readable curved edge, restrained violet energy seams, and a transparent empty interior.",
+      "impact_description": "One isolated damaged-shield keyframe: branching cyan cracks spreading across a curved protective force-field surface from a brilliant compact contact point in the upper-right area, with restrained violet stress lines.",
+      "break_description": "One isolated broken-shield keyframe: curved cyan force-field fragments and restrained violet shards scattering outward from a collapsing protective orb, with a clearly empty center and no explosion or smoke."
+    }
+  ],
+  "style": {
+    "medium": "pixel_art",
+    "palette": [
+      "#10131d",
+      "#20283a",
+      "#44506b",
+      "#7785a6",
+      "#c8d4ec",
+      "#35d9ff",
+      "#875cff",
+      "#ff4fd8"
+    ],
+    "energy_colors": ["#35d9ff", "#875cff", "#ff4fd8"],
+    "energy_color_tolerance": 72,
+    "max_palette_colors": 32,
+    "chroma_key": "#ff00ff",
+    "source_width": 1024,
+    "source_height": 1024
+  }
+}
