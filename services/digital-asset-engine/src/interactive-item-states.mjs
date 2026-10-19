@@ -172,7 +172,7 @@ function crackSegments(bounds, seed) {
   return { center, radius, segments: ordered };
 }
 
-function drawCrackLine(data, width, height, segment, center, radius, color) {
+function drawCrackLine(data, width, height, segment, center, radius, color, missingMask) {
   let x = Math.round(segment.from.x);
   let y = Math.round(segment.from.y);
   const endX = Math.round(segment.to.x);
@@ -183,7 +183,9 @@ function drawCrackLine(data, width, height, segment, center, radius, color) {
   const stepY = y < endY ? 1 : -1;
   let error = dx + dy;
   while (true) {
+    const pixel = (y * width) + x;
     if (x >= 0 && x < width && y >= 0 && y < height
+      && !missingMask[pixel]
       && Math.hypot(x - center.x, y - center.y) <= radius * 0.9) {
       const offset = ((y * width) + x) * 4;
       data[offset] = color[0];
@@ -204,29 +206,70 @@ function drawCrackLine(data, width, height, segment, center, radius, color) {
   }
 }
 
+function angularDistance(left, right) {
+  return Math.abs(Math.atan2(Math.sin(left - right), Math.cos(left - right)));
+}
+
+function createDistributedBreakMask(width, height, fractures, damage, seed) {
+  const mask = new Uint8Array(width * height);
+  const siteOrder = [0, 4, 2, 6, 1, 5, 3, 7];
+  const siteAngles = siteOrder.map((site) => {
+    const segment = fractures.segments.find((candidate) => candidate.site === site);
+    return Math.atan2(
+      segment.from.y - fractures.center.y,
+      segment.from.x - fractures.center.x,
+    );
+  });
+  for (let rank = 0; rank < siteAngles.length; rank += 1) {
+    const activationThreshold = 0.12 + (rank * 0.085);
+    const progress = Math.max(0, Math.min(1, (damage - activationThreshold) / 0.5));
+    if (progress === 0) continue;
+    const halfWidth = 0.025 + (progress * 0.2);
+    const innerRadius = fractures.radius * (0.94 - (progress * 0.62));
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const dx = x - fractures.center.x;
+        const dy = y - fractures.center.y;
+        const radius = Math.hypot(dx, dy);
+        if (radius < innerRadius || radius > fractures.radius * 1.04) continue;
+        const angle = Math.atan2(dy, dx);
+        const irregularity = Math.sin((angle * 9) + (seed * 0.01) + rank) * fractures.radius * 0.025;
+        if (radius < innerRadius + irregularity) continue;
+        const radialProgress = (radius - innerRadius) / Math.max(1, fractures.radius - innerRadius);
+        const edgeNoise = Math.sin((radialProgress * 19) + (rank * 2.3) + (seed * 0.003));
+        const localCenter = siteAngles[rank] + (edgeNoise * 0.035 * progress);
+        const localWidth = halfWidth
+          * (0.72 + (radialProgress * 0.38))
+          * (0.88 + (Math.sin((radialProgress * 31) + rank) * 0.12));
+        if (angularDistance(angle, localCenter) <= localWidth) mask[(y * width) + x] = 1;
+      }
+    }
+  }
+  return mask;
+}
+
 export async function createShieldIntegrityFrame(baseBuffer, integrityPercent, options = {}) {
   const integrity = Math.max(0, Math.min(100, Math.round(integrityPercent)));
   if (integrity === 100) return baseBuffer;
   const decoded = await sharp(baseBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = decoded.info;
   const output = Buffer.from(decoded.data);
-  const fieldOpacity = 0.45 + ((integrity / 100) * 0.55);
-  for (let offset = 0; offset < output.length; offset += 4) {
-    if (output[offset + 3] === 0) {
-      output[offset] = 0;
-      output[offset + 1] = 0;
-      output[offset + 2] = 0;
-      continue;
-    }
-    output[offset + 3] = Math.max(1, Math.round(output[offset + 3] * fieldOpacity));
-  }
   const fractures = crackSegments(opaqueBounds(decoded.data, width, height), options.seed ?? 0);
   const damage = (100 - integrity) / 100;
+  const missingMask = createDistributedBreakMask(width, height, fractures, damage, options.seed ?? 0);
+  for (let pixel = 0; pixel < missingMask.length; pixel += 1) {
+    if (!missingMask[pixel]) continue;
+    const offset = pixel * 4;
+    output[offset] = 0;
+    output[offset + 1] = 0;
+    output[offset + 2] = 0;
+    output[offset + 3] = 0;
+  }
   const visibleSegments = Math.max(1, Math.ceil(fractures.segments.length * damage));
   for (let index = 0; index < visibleSegments; index += 1) {
     const segment = fractures.segments[index];
     const color = segment.branch ? [53, 217, 255, 230] : [200, 212, 236, 255];
-    drawCrackLine(output, width, height, segment, fractures.center, fractures.radius, color);
+    drawCrackLine(output, width, height, segment, fractures.center, fractures.radius, color, missingMask);
   }
   return sharp(output, { raw: { width, height, channels: 4 } })
     .png({

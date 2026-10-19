@@ -80,7 +80,7 @@ function plan(items) {
   };
 }
 
-test('shield integrity damage adds progressive glass fractures without deleting the field', async () => {
+test('shield integrity damage adds distributed glass fractures and structural breaks', async () => {
   const base = await sharp({
     create: {
       width: 96,
@@ -96,26 +96,36 @@ test('shield integrity damage adds progressive glass fractures without deleting 
   const [baseRaw, halfRaw, lowRaw] = await Promise.all([base, half, low].map((buffer) => (
     sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
   )));
-  const addedByQuadrant = (decoded) => {
+  const changedByQuadrant = (decoded, predicate) => {
     const counts = [0, 0, 0, 0];
     for (let y = 0; y < decoded.info.height; y += 1) {
       for (let x = 0; x < decoded.info.width; x += 1) {
         const offset = ((y * decoded.info.width) + x) * 4;
-        if (baseRaw.data[offset + 3] > 0 || decoded.data[offset + 3] === 0) continue;
+        if (!predicate(baseRaw.data[offset + 3], decoded.data[offset + 3])) continue;
         counts[(y >= 48 ? 2 : 0) + (x >= 48 ? 1 : 0)] += 1;
       }
     }
     return counts;
   };
-  assert.equal(addedByQuadrant(lowRaw).every((count) => count > 0), true);
+  const addedAtLow = changedByQuadrant(lowRaw, (baseAlpha, resultAlpha) => baseAlpha === 0 && resultAlpha > 0);
+  const removedAtLow = changedByQuadrant(lowRaw, (baseAlpha, resultAlpha) => baseAlpha > 0 && resultAlpha === 0);
+  assert.equal(addedAtLow.every((count) => count > 0), true);
+  assert.equal(removedAtLow.every((count) => count > 0), true);
+  let halfRemoved = 0;
+  let lowRemoved = 0;
+  let halfSurviving = 0;
+  let halfUnchanged = 0;
   for (let offset = 0; offset < lowRaw.data.length; offset += 4) {
-    if (baseRaw.data[offset + 3] > 0) {
-      assert.equal(halfRaw.data[offset + 3] > 0, true);
-      assert.equal(lowRaw.data[offset + 3] > 0, true);
+    if (baseRaw.data[offset + 3] > 0 && halfRaw.data[offset + 3] === 0) halfRemoved += 1;
+    if (baseRaw.data[offset + 3] > 0 && lowRaw.data[offset + 3] === 0) lowRemoved += 1;
+    if (baseRaw.data[offset + 3] > 0 && halfRaw.data[offset + 3] > 0) {
+      halfSurviving += 1;
+      if (halfRaw.data[offset + 3] === baseRaw.data[offset + 3]) halfUnchanged += 1;
     }
-    const halfAdded = baseRaw.data[offset + 3] === 0 && halfRaw.data[offset + 3] > 0;
-    if (halfAdded) assert.equal(lowRaw.data[offset + 3] > 0, true);
   }
+  assert.equal(halfRemoved > 0, true);
+  assert.equal(lowRemoved > halfRemoved, true);
+  assert.equal((halfUnchanged / halfSurviving) > 0.8, true);
 });
 
 test('shield normalization clears an opaque center without erasing thin lattice lines', async () => {
