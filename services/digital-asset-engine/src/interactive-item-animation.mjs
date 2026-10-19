@@ -334,17 +334,17 @@ async function buildManifest(root, base) {
 }
 
 async function resolveSourceProduct(store, targetProduct, sourceSlug) {
+  const targetRoot = store.productRoot(targetProduct);
+  const experimentRoot = resolveInside(targetRoot, `experiments/${sourceSlug}`, 'Interactive item source experiment');
   try {
-    const product = await store.loadProduct(sourceSlug);
-    if (product) return { product, root: store.productRoot(product), layout: 'canonical_product' };
+    const product = ProductSpecificationSchema.parse(JSON.parse(await readFile(resolve(experimentRoot, 'product.json'), 'utf8')));
+    if (product.slug !== sourceSlug) throw new Error(`Interactive item source slug changed: ${sourceSlug}.`);
+    return { product, root: experimentRoot, layout: 'product_experiment' };
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
-  const targetRoot = store.productRoot(targetProduct);
-  const root = resolveInside(targetRoot, `experiments/${sourceSlug}`, 'Interactive item source experiment');
-  const product = ProductSpecificationSchema.parse(JSON.parse(await readFile(resolve(root, 'product.json'), 'utf8')));
-  if (product.slug !== sourceSlug) throw new Error(`Interactive item source slug changed: ${sourceSlug}.`);
-  return { product, root, layout: 'product_experiment' };
+  const product = await store.loadProduct(sourceSlug);
+  return { product, root: store.productRoot(product), layout: 'canonical_product' };
 }
 
 async function validateRuntimeBuffers(buffers, options, canvas) {
