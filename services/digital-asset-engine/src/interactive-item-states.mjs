@@ -25,7 +25,12 @@ export async function compositeItemFrame(baseBuffer, overlays = [], options = {}
   if (options.baseOnTop) inputs.push({ input: baseBuffer });
   return sharp(options.baseOnTop ? await transparentFrame(options.canvas) : baseBuffer)
     .composite(inputs)
-    .png({ compressionLevel: 9 })
+    .png({
+      palette: true,
+      colours: options.maxPaletteColors ?? 32,
+      dither: 0,
+      compressionLevel: 9,
+    })
     .toBuffer();
 }
 

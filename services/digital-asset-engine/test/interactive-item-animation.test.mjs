@@ -12,6 +12,7 @@ import {
   generateInteractiveItemAnimationBatch,
   inspectPulseIsolation,
 } from '../src/interactive-item-animation.mjs';
+import { compositeItemFrame } from '../src/interactive-item-states.mjs';
 import { InteractiveItemAnimationBatchSchema } from '../src/schemas.mjs';
 
 async function itemSprite({ energyX, energyY }) {
@@ -171,6 +172,32 @@ test('effect alignment moves an asymmetric energy core onto the detected item an
   assert.deepEqual(aligned.report.aligned_origin, { x: 55, y: 61 });
   assert.deepEqual(aligned.report.translation, { x: -23, y: 13 });
   assert.equal(aligned.report.clipped_pixels, 0);
+});
+
+test('composited item frames retain the configured pixel-art palette cap', async () => {
+  const width = 16;
+  const height = 16;
+  const layer = (offset) => {
+    const data = Buffer.alloc(width * height * 4);
+    for (let pixel = 0; pixel < width * height; pixel += 1) {
+      const channel = pixel * 4;
+      data[channel] = (pixel * 17 + offset) % 256;
+      data[channel + 1] = (pixel * 31 + offset) % 256;
+      data[channel + 2] = (pixel * 47 + offset) % 256;
+      data[channel + 3] = pixel % 3 === 0 ? 0 : 255;
+    }
+    return sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  };
+  const composite = await compositeItemFrame(await layer(0), [await layer(29)], {
+    maxPaletteColors: 32,
+  });
+  const { data, info } = await sharp(composite).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const colors = new Set();
+  for (let pixel = 0; pixel < info.width * info.height; pixel += 1) {
+    const channel = pixel * info.channels;
+    colors.add(`${data[channel]},${data[channel + 1]},${data[channel + 2]},${data[channel + 3]}`);
+  }
+  assert.equal(colors.size <= 32, true);
 });
 
 test('interactive item batch schema rejects duplicate target assets', () => {
