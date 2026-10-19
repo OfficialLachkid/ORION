@@ -228,8 +228,11 @@ async (page) => {
       .trim();
     const expected = document.createElement('div');
     expected.innerHTML = inputDescription.html;
+    const expectedText = [...expected.querySelectorAll('h1, h2, h3, p, li')]
+      .map((node) => node.textContent || '')
+      .join(' ');
     return {
-      ok: normalize(visibleText) === normalize(expected.innerText) && Boolean(field.value),
+      ok: normalize(visibleText) === normalize(expectedText) && Boolean(field.value),
       length: field.value.length,
       visibleLength: visibleText.length,
     };
@@ -354,11 +357,14 @@ async (page) => {
     .trim();
   const expectedDescription = document.createElement('div');
   expectedDescription.innerHTML = input.descriptionHtml;
+  const expectedDescriptionText = [...expectedDescription.querySelectorAll('h1, h2, h3, p, li')]
+    .map((node) => node.textContent || '')
+    .join(' ');
   const checks = {
     title: titleValue === input.listing.title,
     short_description: shortValue === input.listing.short_description,
     description: normalizeDescription(descriptionValue)
-      === normalizeDescription(expectedDescription.innerText),
+      === normalizeDescription(expectedDescriptionText),
     price: paymentMode === 'paid' && Math.abs(numericPrice - expectedPrice) < 0.001,
     tags: tagsMatch,
     cover: Boolean(coverId),
