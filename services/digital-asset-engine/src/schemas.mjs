@@ -342,6 +342,11 @@ const InteractiveItemRecipeSchema = z.discriminatedUnion('recipe', [
     break_description: z.string().min(1),
   }),
   InteractiveItemSourceSchema.extend({
+    recipe: z.literal('plasma_shield'),
+    impact_description: z.string().min(1),
+    break_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
     recipe: z.literal('power_cell'),
   }),
   InteractiveItemSourceSchema.extend({
@@ -479,6 +484,7 @@ export const AssetExpansionReviewPlanSchema = z.object({
     target_asset_key: IdentifierSchema,
     target_name: z.string().min(1),
     buyer_group: z.enum(['items', 'props', 'vfx']),
+    replaces_review_asset_key: IdentifierSchema.optional(),
     animation_proof: z.object({
       batch_id: IdentifierSchema,
       asset_key: IdentifierSchema,

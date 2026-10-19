@@ -327,11 +327,10 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     {
       source_product_slug: 'source-shield',
       source_asset_key: 'shield-source',
-      target_asset_key: 'shield-emitter',
-      name: 'Shield Emitter',
-      recipe: 'shield_emitter',
+      target_asset_key: 'plasma-shield',
+      name: 'Plasma Shield',
+      recipe: 'plasma_shield',
       seed: 45,
-      field_description: 'Protective shield orb.',
       impact_description: 'Cracked shield surface.',
       break_description: 'Scattering shield fragments.',
     },
@@ -378,8 +377,8 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     },
   });
 
-  assert.equal(generationCalls, 5);
-  assert.equal(result.manifest.generation_calls, 5);
+  assert.equal(generationCalls, 4);
+  assert.equal(result.manifest.generation_calls, 4);
   assert.equal(result.manifest.gates.all_items_valid, true);
   assert.equal(result.manifest.gates.package_modified, false);
   assert.equal(result.results.every((item) => item.manifest.base_regenerated === false), true);
@@ -399,10 +398,13 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   assert.equal(cellManifest.generation_calls, 0);
   assert.equal((await readFile(resolve(result.batchRoot, 'plasma-cell/states/full.png'))).equals(cell), true);
   assert.equal((await readFile(resolve(result.batchRoot, 'plasma-cell/previews/states.png'))).length > 0, true);
-  const shieldManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'shield-emitter/manifest.json'), 'utf8'));
-  assert.deepEqual(shieldManifest.states, ['inactive', 'active', 'damaged', 'broken']);
-  assert.deepEqual(shieldManifest.animations, [
-    'power-up', 'active-loop', 'shield-hit', 'damaged-loop', 'shield-break', 'power-down',
+  const shieldManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'plasma-shield/manifest.json'), 'utf8'));
+  assert.deepEqual(shieldManifest.states, [
+    'integrity-100', 'integrity-90', 'integrity-80', 'integrity-70', 'integrity-60',
+    'integrity-50', 'integrity-40', 'integrity-30', 'integrity-20', 'integrity-10', 'broken',
   ]);
-  assert.equal(shieldManifest.generation_calls, 3);
+  assert.deepEqual(shieldManifest.animations, [
+    'power-up', 'active-loop', 'shield-hit', 'integrity-decay', 'shield-break', 'power-down',
+  ]);
+  assert.equal(shieldManifest.generation_calls, 2);
 });

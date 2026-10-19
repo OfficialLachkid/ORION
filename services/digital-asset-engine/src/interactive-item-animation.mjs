@@ -16,6 +16,7 @@ import {
   buildStateContactSheet,
   compositeItemFrame,
   createEnergyLevelFrame,
+  createShieldIntegrityFrame,
   transparentFrame,
 } from './interactive-item-states.mjs';
 import {
@@ -666,6 +667,159 @@ async function generateShieldRecipe(context) {
   });
 }
 
+async function generatePlasmaShieldRecipe(context) {
+  const { options, plan, item, itemRoot, baseBuffer, canvas, detection, source, adapter } = context;
+  const fieldOrigin = await detectOpaqueObjectAnchor(baseBuffer);
+  const integrityLevels = [100, 90, 80, 70, 60, 50, 40, 30, 20, 10];
+  const integrityFrames = await Promise.all(integrityLevels.map(async (level) => ({
+    key: `integrity-${level}`,
+    name: `${level}% Integrity`,
+    buffer: await createShieldIntegrityFrame(baseBuffer, level, {
+      seed: item.seed,
+      cellSize: 8,
+      maxPaletteColors: plan.style.max_palette_colors,
+    }),
+  })));
+  const empty = await transparentFrame(canvas);
+  const frameAt = (level) => integrityFrames.find((state) => state.name === `${level}% Integrity`).buffer;
+  const states = await writeStates(itemRoot, item, [
+    ...integrityFrames,
+    { key: 'broken', name: 'Broken / Empty', buffer: empty },
+  ], canvas);
+
+  const activationFrames = await Promise.all([
+    { scale: 0.35, opacity: 0.3, density: 0.72 },
+    { scale: 0.62, opacity: 0.58, density: 0.86 },
+    { scale: 0.84, opacity: 0.82, density: 0.94 },
+  ].map((transform, index) => derivePixelArtEffectFrame(baseBuffer, {
+    ...transform,
+    origin: fieldOrigin.anchor,
+    salt: item.seed + 10 + index,
+    maxPaletteColors: plan.style.max_palette_colors,
+  })));
+  const powerUpFrames = [empty, ...activationFrames, baseBuffer];
+  const powerUp = await writeAnimation(itemRoot, item, 'power-up', {
+    name: 'Shield Power Up', playback: 'once', canvas,
+    phases: ['inactive', 'field-start', 'field-rise', 'field-form', 'active'],
+    durations: [100, 80, 80, 90, 140],
+  }, powerUpFrames, powerUpFrames, options);
+
+  const pulses = await Promise.all([0, 0.18, 0.38, 0.18].map((intensity) => (
+    createEnergyPulseFrame(baseBuffer, detection, intensity)
+  )));
+  const active = await writeAnimation(itemRoot, item, 'active-loop', {
+    name: 'Active Shield Loop', playback: 'loop', canvas,
+    phases: ['active', 'pulse-rise', 'pulse-peak', 'pulse-fall'], durations: [140, 110, 90, 110],
+  }, pulses.map((frame) => frame.compositeBuffer), pulses.map((frame) => frame.overlayBuffer), options);
+
+  const impactTarget = { x: Math.round(canvas.width * 0.7), y: Math.round(canvas.height * 0.32) };
+  const impact = await generateIsolatedEffect({
+    adapter,
+    config: options.config,
+    item,
+    plan,
+    canvas,
+    targetOrigin: impactTarget,
+    prompt: isolatedEffectPrompt(plan, item, item.impact_description, [
+      'emitter device', 'pedestal', 'statue', 'complete shield orb', 'weapon', 'projectile',
+      'character', 'floor', 'scenery', 'text', 'logo',
+    ]),
+  });
+  const impactFrames = await Promise.all([
+    { scale: 0.42, opacity: 0.55, density: 0.72 },
+    { scale: 0.72, opacity: 0.86, density: 0.9 },
+    { scale: 1, opacity: 1, density: 1 },
+    { scale: 1.14, opacity: 0.38, density: 0.52 },
+  ].map((transform, index) => derivePixelArtEffectFrame(impact.buffer, {
+    ...transform,
+    origin: impactTarget,
+    salt: item.seed + 30 + index,
+    maxPaletteColors: plan.style.max_palette_colors,
+  })));
+  const hitComposite = await Promise.all(impactFrames.map((overlay) => (
+    compositeItemFrame(baseBuffer, [overlay], { maxPaletteColors: plan.style.max_palette_colors })
+  )));
+  const hit = await writeAnimation(itemRoot, item, 'shield-hit', {
+    name: 'Shield Hit Reaction', playback: 'once', canvas,
+    phases: ['contact', 'impact-rise', 'impact-peak', 'dissipation'], durations: [70, 60, 80, 120],
+  }, hitComposite, impactFrames, options);
+
+  const decayFrames = integrityFrames.map((state) => state.buffer);
+  const decay = await writeAnimation(itemRoot, item, 'integrity-decay', {
+    name: 'Integrity Decay', playback: 'once', canvas,
+    phases: integrityLevels.map((level) => `integrity-${level}`),
+    durations: integrityLevels.map(() => 110),
+  }, decayFrames, decayFrames, options);
+
+  const brokenField = await generateIsolatedEffect({
+    adapter,
+    config: options.config,
+    item,
+    plan,
+    canvas,
+    targetOrigin: fieldOrigin.anchor,
+    seedOffset: 1,
+    prompt: isolatedEffectPrompt(plan, item, item.break_description, [
+      'emitter device', 'pedestal', 'statue', 'intact shield orb', 'weapon', 'projectile',
+      'character', 'floor', 'scenery', 'smoke', 'text', 'logo',
+    ]),
+  });
+  const breakEffects = await Promise.all([
+    { scale: 0.55, opacity: 0.58, density: 0.76 },
+    { scale: 0.82, opacity: 0.86, density: 0.9 },
+    { scale: 1, opacity: 1, density: 1 },
+    { scale: 1.18, opacity: 0.44, density: 0.54 },
+  ].map((transform, index) => derivePixelArtEffectFrame(brokenField.buffer, {
+    ...transform,
+    origin: fieldOrigin.anchor,
+    salt: item.seed + 50 + index,
+    maxPaletteColors: plan.style.max_palette_colors,
+  })));
+  const breakFrames = await Promise.all([
+    Promise.resolve(frameAt(70)),
+    compositeItemFrame(frameAt(50), [breakEffects[0]], { maxPaletteColors: plan.style.max_palette_colors }),
+    compositeItemFrame(frameAt(30), [breakEffects[1]], { maxPaletteColors: plan.style.max_palette_colors }),
+    compositeItemFrame(frameAt(10), [breakEffects[2]], { maxPaletteColors: plan.style.max_palette_colors }),
+    Promise.resolve(breakEffects[3]),
+    Promise.resolve(empty),
+  ]);
+  const shieldBreak = await writeAnimation(itemRoot, item, 'shield-break', {
+    name: 'Shield Break and Scatter', playback: 'once', canvas,
+    phases: ['damaged', 'fracture', 'collapse', 'break', 'scatter', 'empty'],
+    durations: [90, 70, 70, 80, 120, 180],
+  }, breakFrames, [frameAt(70), breakEffects[0], breakEffects[1], breakEffects[2], breakEffects[3], empty], options);
+
+  const powerDownFrames = [baseBuffer, activationFrames[2], activationFrames[1], activationFrames[0], empty];
+  const powerDown = await writeAnimation(itemRoot, item, 'power-down', {
+    name: 'Shield Power Down', playback: 'once', canvas,
+    phases: ['active', 'field-fall', 'field-contract', 'field-end', 'inactive'],
+    durations: [100, 80, 80, 90, 140],
+  }, powerDownFrames, powerDownFrames, options);
+  await Promise.all([
+    writeBuffer(resolveInside(itemRoot, `source/shield-impact.${impact.generated.format}`, 'Shield impact source'), impact.generated.buffer),
+    writeBuffer(resolveInside(itemRoot, `source/shield-break.${brokenField.generated.format}`, 'Shield break source'), brokenField.generated.buffer),
+  ]);
+  return finalizeRecipeItem({
+    options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
+    states,
+    animations: [powerUp, active, hit, decay, shieldBreak, powerDown],
+    validationBuffers: [
+      ...integrityFrames.map((state) => state.buffer),
+      ...activationFrames,
+      ...pulses.map((frame) => frame.compositeBuffer),
+      ...hitComposite,
+      ...breakFrames.slice(0, -1),
+    ],
+    validationDetails: {
+      energy_region: detection.report,
+      field_origin: fieldOrigin,
+      impact_alignment: impact.alignment,
+      integrity_levels: integrityLevels,
+    },
+    generationCalls: 2,
+  });
+}
+
 async function generateCrateRecipe(context) {
   const { options, plan, item, itemRoot, baseBuffer, canvas, source, adapter } = context;
   async function generateState(key, name, description, seedOffset) {
@@ -750,6 +904,7 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
   }
   if (item.recipe === 'energy_pickup') return generatePickupRecipe(recipeContext);
   if (item.recipe === 'shield_emitter') return generateShieldRecipe(recipeContext);
+  if (item.recipe === 'plasma_shield') return generatePlasmaShieldRecipe(recipeContext);
   if (item.recipe === 'supply_crate') return generateCrateRecipe(recipeContext);
   const profile = RECIPE_PROFILES[item.recipe];
   const active = await Promise.all(profile.active_intensities.map((intensity) => (

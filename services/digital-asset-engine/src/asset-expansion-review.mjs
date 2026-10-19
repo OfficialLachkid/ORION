@@ -245,12 +245,17 @@ export async function postAssetExpansionReview(options) {
         buffer: await readFile(resolveInside(candidateRoot, animation.preview_gif_path, 'Expansion animation preview')),
       });
     }
-    const messageId = state.asset_messages[asset.asset_id];
+    const replacedAssetId = asset.replaces_review_asset_key
+      ? `asset-expansion-${createHash('sha256').update(`${manifest.expansion_id}:${asset.replaces_review_asset_key}`).digest('hex').slice(0, 16)}`
+      : null;
+    const messageId = state.asset_messages[asset.asset_id]
+      || (replacedAssetId ? state.asset_messages[replacedAssetId] : null);
     const message = await sendMessageWithFiles(token, state.thread_id, {
       embeds: [assetEmbed(asset, index, manifest.assets.length)], components: [],
     }, assetFiles, { messageId, fetchImpl: options.fetchImpl });
-    if (!messageId) {
+    if (!state.asset_messages[asset.asset_id]) {
       state.asset_messages[asset.asset_id] = message.id;
+      if (replacedAssetId && replacedAssetId !== asset.asset_id) delete state.asset_messages[replacedAssetId];
       await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
     }
   }

@@ -249,6 +249,7 @@ export async function prepareAssetExpansionReview(options) {
       kind: sourceAsset.kind,
       description: sourceAsset.description,
       buyer_group: request.buyer_group,
+      replaces_review_asset_key: request.replaces_review_asset_key,
       source_product_slug: request.source_product_slug,
       source_asset_key: request.source_asset_key,
       source_asset_id: sourceAsset.asset_id,
