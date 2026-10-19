@@ -17,6 +17,7 @@
     "confidence": 72
   },
   "generation": {
+    "seed": 814,
     "medium": "pixel_art",
     "perspective": "front-facing orthographic 2D game-effect sprite",
     "width": 256,

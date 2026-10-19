@@ -35,6 +35,7 @@ export const ProductOpportunitySchema = z.object({
     confidence: z.number().min(0).max(100),
   }),
   generation: z.object({
+    seed: z.number().int().nonnegative().optional(),
     medium: z.string().min(1),
     perspective: z.string().min(1),
     width: z.number().int().min(8).max(4096),

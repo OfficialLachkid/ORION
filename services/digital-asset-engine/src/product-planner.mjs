@@ -73,7 +73,7 @@ export function createProductSpecification(validation, config, options = {}) {
       alpha_mode: asset.alpha_mode,
       alpha_palette: asset.alpha_palette,
       alpha_tolerance: asset.alpha_tolerance,
-      seed: config.generation.seed + index,
+      seed: (opportunity.generation.seed ?? config.generation.seed) + index,
       status: 'planned',
       source_path: null,
       final_path: null,
