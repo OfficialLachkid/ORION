@@ -52,8 +52,8 @@
       }
     },
     {
-      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v7",
-      "source_asset_key": "plasma-shield-v7",
+      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v8",
+      "source_asset_key": "plasma-shield-v8",
       "target_asset_key": "plasma-shield",
       "target_name": "Plasma Shield",
       "buyer_group": "vfx",

@@ -23,8 +23,8 @@
       "detonation_description": "A compact high-energy plasma detonation that reads as the natural destructive release of the grenade's cyan core, with a tight brilliant center and short irregular energy spikes."
     },
     {
-      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v7",
-      "source_asset_key": "plasma-shield-v7",
+      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v8",
+      "source_asset_key": "plasma-shield-v8",
       "target_asset_key": "plasma-shield",
       "name": "Plasma Shield",
       "recipe": "plasma_shield",

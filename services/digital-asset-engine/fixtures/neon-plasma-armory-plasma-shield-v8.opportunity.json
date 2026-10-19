@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0",
+  "opportunity_id": "OPPORTUNITY-0146-PLASMA-SHIELD-REVISION-V8",
+  "status": "validated",
+  "title": "Neon Plasma Armory Plasma Shield Revision V8",
+  "category": "Pixel Art / VFX",
+  "product_type": "Internal Sci-Fi Asset Revision Capability Proof",
+  "theme": "Original neon industrial science fiction matching Neon Plasma Armory: layered cyan honeycomb energy, brilliant pale-blue rim light, restrained violet stress accents, and a readable protective silhouette",
+  "target_audience": ["internal ORION reviewers", "indie game developers", "2D science-fiction game creators"],
+  "observed_at": "2026-10-19T00:00:00.000Z",
+  "expires_at": "2027-01-17T00:00:00.000Z",
+  "signals": {
+    "trend_direction": "stable",
+    "demand": "medium",
+    "competition": "high",
+    "cross_marketplace_evidence": "weak",
+    "confidence": 72
+  },
+  "generation": {
+    "medium": "pixel_art",
+    "perspective": "front-facing orthographic 2D game-effect sprite",
+    "width": 256,
+    "height": 256,
+    "source_width": 1024,
+    "source_height": 1024,
+    "max_palette_colors": 32,
+    "palette": ["#10131d", "#20283a", "#44506b", "#7785a6", "#c8d4ec", "#35d9ff", "#875cff", "#ff4fd8"],
+    "outline": "Crisp one-pixel and two-pixel energy edges at final resolution with deliberate square pixel clusters and no antialiasing",
+    "lighting": "Strong self-illuminated cyan outer glow with a brilliant pale-blue rim and restrained violet stress accents",
+    "background": "transparent",
+    "chroma_key": "#ff00ff",
+    "assets": [
+      {
+        "asset_key": "plasma-shield-v8",
+        "name": "Plasma Shield V8",
+        "kind": "vfx",
+        "description": "one detailed circular character-sized plasma force-field orb covered by a connected hexagonal glass lattice, with a brilliant multilayer cyan rim and progressively fainter honeycomb lines toward its transparent center",
+        "alpha_mode": "palette_only",
+        "alpha_palette": ["#35d9ff", "#875cff", "#c8d4ec"],
+        "alpha_tolerance": 80,
+        "prompt_notes": [
+          "Shield effect only: no emitter, generator, pedestal, statue, device, character, hand, weapon, floor, cast shadow, scenery, text, numbers, logo, watermark, frame, or duplicate shield",
+          "Show exactly one complete intact spherical protective barrier centered on canvas and large enough to surround a game character",
+          "The shield surface must be a geodesic honeycomb mesh: many clearly recognizable connected six-sided hexagonal cells distributed across the whole circular field, like transparent energy glass",
+          "Use several depth bands of the same connected honeycomb mesh: brightest and densest at the outside rim, then progressively dimmer and more transparent toward the center",
+          "Do not substitute plain concentric circles, radial spokes, a single hexagon ring, scales, square tiles, dots, or a solid filled orb for the honeycomb mesh",
+          "Build a thick luminous outer edge from several crisp nested cyan and pale-blue pixel bands with a strong readable halo",
+          "Keep the center, every hexagonal cell interior, every lattice gap, and every pixel outside the shield empty; do not fill the orb with dark blue, gray, fog, glass color, or any opaque surface",
+          "Every empty pixel must be exactly solid #ff00ff chroma key; only cyan, pale-blue, and restrained violet energy lines may use non-chroma colors",
+          "Use dense crisp pixel detail without antialiasing, blur, smoke, soft opaque haze, or hot-pink pixels inside the artwork"
+        ]
+      }
+    ]
+  },
+  "commercial": { "base_price": { "amount": 0, "currency": "EUR" }, "marketplace_candidates": ["itch.io"] },
+  "risk": {
+    "ip_risk": "low",
+    "prohibited_references": ["specific marketplace artwork", "specific living artists", "franchise shield designs"],
+    "notes": [
+      "The human-provided shield image is functional inspiration only. Generate original artwork with no copied text, watermark, exact lattice, or arrangement.",
+      "This proof must retain a truly transparent interior and does not enter the package until its complete lifecycle passes human review."
+    ]
+  },
+  "evidence": [{
+    "label": "Human review requested a detailed layered honeycomb shield, glass-fracture damage, strong rim glow, and an inward-to-outward idle pulse",
+    "source": "ORION expansion review on 2026-10-19",
+    "observed_at": "2026-10-19T00:00:00.000Z"
+  }]
+}
