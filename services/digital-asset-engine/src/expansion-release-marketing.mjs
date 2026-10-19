@@ -1,0 +1,230 @@
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import sharp from 'sharp';
+import { writeAnimatedGifPreview } from './effect-pilot.mjs';
+
+const WIDTH = 960;
+const HEIGHT = 540;
+const COVER_WIDTH = 630;
+const COVER_HEIGHT = 500;
+const COLORS = Object.freeze({
+  background: '#9bafc5',
+  backgroundLight: '#b7c5d4',
+  panel: '#172538',
+  panelSoft: '#263a52',
+  text: '#f8fbff',
+  ink: '#111b29',
+  cyan: '#20d8f4',
+  violet: '#7d6cf2',
+});
+
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.0.0';
+
+function escapeXml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+function protectionText(x, y, size = 18) {
+  return `<text x="${x}" y="${y}" text-anchor="middle" fill="#ffffff" fill-opacity="0.34" stroke="#0c1520" stroke-opacity="0.62" stroke-width="1" font-family="Arial, sans-serif" font-size="${size}" font-weight="800" transform="rotate(-14 ${x} ${y})">PREVIEW</text>`;
+}
+
+function shell({ width, height, title, subtitle, titleSize = 40 }) {
+  return [
+    `<rect width="${width}" height="${height}" fill="${COLORS.background}"/>`,
+    `<path d="M0 ${height - 92} L${width} ${height - 170} L${width} ${height} L0 ${height} Z" fill="${COLORS.backgroundLight}" fill-opacity="0.72"/>`,
+    `<rect x="18" y="18" width="${width - 36}" height="104" rx="18" fill="${COLORS.panel}" stroke="${COLORS.cyan}" stroke-width="3"/>`,
+    `<rect x="34" y="34" width="10" height="72" rx="5" fill="${COLORS.violet}"/>`,
+    `<text x="${width / 2}" y="67" text-anchor="middle" fill="${COLORS.text}" stroke="#09111c" stroke-width="4" paint-order="stroke" font-family="Arial, sans-serif" font-size="${titleSize}" font-weight="900" letter-spacing="1">${escapeXml(title.toUpperCase())}</text>`,
+    `<text x="${width / 2}" y="100" text-anchor="middle" fill="${COLORS.cyan}" stroke="#09111c" stroke-width="2" paint-order="stroke" font-family="Arial, sans-serif" font-size="18" font-weight="800">${escapeXml(subtitle.toUpperCase())}</text>`,
+  ].join('');
+}
+
+async function contained(buffer, width, height) {
+  return sharp(buffer).resize(width, height, {
+    fit: 'contain',
+    kernel: sharp.kernel.nearest,
+    background: { r: 0, g: 0, b: 0, alpha: 0 },
+  }).ensureAlpha().png().toBuffer();
+}
+
+async function weaponEntries(candidateRoot, product) {
+  return Promise.all(product.assets.map(async (asset) => ({
+    asset_key: asset.asset_key,
+    name: asset.name,
+    group: 'weapons',
+    buffer: await readFile(resolve(
+      candidateRoot, 'download', 'assets', 'individual', basename(asset.final_path),
+    )),
+  })));
+}
+
+async function expansionEntries(candidateRoot, expansionAssets, frameIndex = 0) {
+  return Promise.all(expansionAssets.map(async (asset) => {
+    const runtimeFrames = (asset.runtime_paths || []).filter((path) => path.includes('/frames/') && path.endsWith('.png'));
+    const states = (asset.runtime_paths || []).filter((path) => path.includes('/states/') && path.endsWith('.png'));
+    const sequence = runtimeFrames.length ? runtimeFrames : states;
+    const selected = sequence.length ? sequence[frameIndex % sequence.length] : asset.buyer_path;
+    return {
+      asset_key: asset.asset_key,
+      name: asset.name,
+      group: asset.buyer_group,
+      buffer: await readFile(resolve(candidateRoot, 'download', selected)),
+    };
+  }));
+}
+
+async function gridImage({ width, height, title, subtitle, entries, columns, top = 138, footer }) {
+  const left = 28;
+  const gap = 10;
+  const rows = Math.ceil(entries.length / columns);
+  const usableWidth = width - (left * 2);
+  const cellWidth = Math.floor((usableWidth - ((columns - 1) * gap)) / columns);
+  const bottom = 38;
+  const cellHeight = Math.floor((height - top - bottom - ((rows - 1) * gap)) / rows);
+  const composites = [];
+  const cards = [];
+  const watermarks = [];
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    const x = left + ((index % columns) * (cellWidth + gap));
+    const y = top + (Math.floor(index / columns) * (cellHeight + gap));
+    const imageHeight = Math.max(36, cellHeight - 34);
+    composites.push({
+      input: await contained(entry.buffer, cellWidth - 18, imageHeight),
+      left: x + 9,
+      top: y + 5,
+    });
+    cards.push(
+      `<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" rx="11" fill="${COLORS.panel}" stroke="#405b78" stroke-width="2"/>`,
+      `<text x="${x + (cellWidth / 2)}" y="${y + cellHeight - 10}" text-anchor="middle" fill="${COLORS.text}" font-family="Arial, sans-serif" font-size="${Math.min(14, Math.max(10, Math.floor(175 / entry.name.length)))}" font-weight="700">${escapeXml(entry.name)}</text>`,
+    );
+    watermarks.push(protectionText(x + (cellWidth / 2), y + (cellHeight / 2), Math.min(22, cellWidth / 7)));
+  }
+  const background = Buffer.from([
+    `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`,
+    shell({ width, height, title, subtitle, titleSize: width < 700 ? 35 : 40 }),
+    ...cards,
+    `<text x="${width - 28}" y="${height - 13}" text-anchor="end" fill="${COLORS.ink}" font-family="Arial, sans-serif" font-size="12" font-weight="800">${escapeXml(footer)}</text>`,
+    '</svg>',
+  ].join(''));
+  const protection = Buffer.from([
+    `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">`,
+    ...watermarks,
+    '</svg>',
+  ].join(''));
+  return sharp({ create: { width, height, channels: 3, background: COLORS.background } })
+    .composite([{ input: background }, ...composites, { input: protection }])
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+function representativeEntries(weapons, expansion) {
+  const keys = ['arc-launcher', 'ion-pistol', 'energy-shotgun', 'plasma-rifle'];
+  const selectedWeapons = keys.map((key) => weapons.find((item) => item.asset_key === key)).filter(Boolean);
+  const weaponFallback = weapons.filter((item) => !selectedWeapons.includes(item));
+  const selectedExpansionKeys = ['plasma-shield', 'plasma-grenade', 'energy-pickup', 'plasma-power-cell'];
+  const selectedExpansion = selectedExpansionKeys
+    .map((key) => expansion.find((item) => item.asset_key === key)).filter(Boolean);
+  const expansionFallback = expansion.filter((item) => !selectedExpansion.includes(item));
+  return [
+    ...selectedWeapons, ...weaponFallback,
+    ...selectedExpansion, ...expansionFallback,
+  ].slice(0, 8);
+}
+
+async function buildAnimatedGrid({ tempRoot, outputPath, frameFactory, frameCount, delayMs }) {
+  const framePaths = [];
+  for (let index = 0; index < frameCount; index += 1) {
+    const path = resolve(tempRoot, `${basename(outputPath)}-${String(index).padStart(2, '0')}.png`);
+    await writeFile(path, await frameFactory(index));
+    framePaths.push(path);
+  }
+  await writeAnimatedGifPreview({
+    framePaths,
+    delays: framePaths.map(() => delayMs),
+    outputPath,
+  });
+  return framePaths[0];
+}
+
+export async function buildExpansionReleaseMarketingMedia(options) {
+  const weapons = await weaponEntries(options.candidateRoot, options.product);
+  const firstExpansion = await expansionEntries(options.candidateRoot, options.expansionAssets, 0);
+  const tempRoot = await mkdtemp(join(tmpdir(), 'orion-expansion-marketing-'));
+  const files = {
+    cover: 'cover.gif',
+    coverStill: 'cover-still.png',
+    inventory: 'complete-inventory.png',
+    expansion: 'armory-items-and-vfx.png',
+    montage: 'interactive-expansion-montage.gif',
+  };
+  try {
+    const coverFirstFrame = await buildAnimatedGrid({
+      tempRoot,
+      outputPath: resolve(options.candidateRoot, files.cover),
+      frameCount: 8,
+      delayMs: 520,
+      frameFactory: async (frameIndex) => {
+        const expansion = await expansionEntries(options.candidateRoot, options.expansionAssets, frameIndex);
+        return gridImage({
+          width: COVER_WIDTH,
+          height: COVER_HEIGHT,
+          title: options.product.title,
+          subtitle: 'Weapons, items, props & interactive VFX',
+          entries: representativeEntries(weapons, expansion),
+          columns: 4,
+          footer: `VERSION ${options.version} · ANIMATED PREVIEW`,
+        });
+      },
+    });
+    await writeFile(resolve(options.candidateRoot, files.coverStill), await readFile(coverFirstFrame));
+    await writeFile(resolve(options.candidateRoot, files.inventory), await gridImage({
+      width: WIDTH,
+      height: HEIGHT,
+      title: options.product.title,
+      subtitle: `${weapons.length} weapons + ${firstExpansion.length} armory additions`,
+      entries: [...weapons, ...firstExpansion],
+      columns: 4,
+      footer: 'VBJSERVICES · PROTECTED COMPLETE INVENTORY',
+    }));
+    await writeFile(resolve(options.candidateRoot, files.expansion), await gridImage({
+      width: WIDTH,
+      height: HEIGHT,
+      title: 'Armory Items & Interactive VFX',
+      subtitle: 'Transparent states, fixed-anchor frames, sheets & metadata',
+      entries: firstExpansion,
+      columns: 4,
+      footer: 'CLEAN TRANSPARENT RUNTIME FILES INCLUDED IN DOWNLOAD',
+    }));
+    await buildAnimatedGrid({
+      tempRoot,
+      outputPath: resolve(options.candidateRoot, files.montage),
+      frameCount: 12,
+      delayMs: 260,
+      frameFactory: async (frameIndex) => gridImage({
+        width: WIDTH,
+        height: HEIGHT,
+        title: 'Interactive States & VFX',
+        subtitle: 'Representative buyer-runtime frames · zero root motion',
+        entries: await expansionEntries(options.candidateRoot, options.expansionAssets, frameIndex),
+        columns: 4,
+        footer: 'VBJSERVICES · PROTECTED ANIMATED PREVIEW',
+      }),
+    });
+    return {
+      cover_path: files.cover,
+      cover_fallback_path: files.coverStill,
+      screenshot_paths: [files.inventory, files.expansion, files.montage],
+      palette: COLORS,
+      motion: { cover_frame_count: 8, cover_frame_delay_ms: 520, rapid_flashing: false },
+    };
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}

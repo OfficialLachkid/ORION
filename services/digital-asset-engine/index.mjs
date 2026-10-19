@@ -21,6 +21,7 @@ import { generateDigitalAssetProduct, planDigitalAssetProduct } from './src/pipe
 import { slugify } from './src/product-planner.mjs';
 import { markItchThemeApplied, postItchThemeReview } from './src/theme-review.mjs';
 import { prepareAssetExpansionReview } from './src/asset-expansion.mjs';
+import { prepareApprovedAssetExpansionRelease } from './src/asset-expansion-release.mjs';
 import { postAssetExpansionReview } from './src/asset-expansion-review.mjs';
 import { generateInteractiveItemAnimationBatch } from './src/interactive-item-animation.mjs';
 
@@ -101,6 +102,7 @@ function printHelp() {
     '  effects-review  Post or update the isolated effects presentation in the existing pack channel.',
     '  prepare-extension  Assemble an immutable, versioned package-extension candidate.',
     '  prepare-expansion-review  Assemble an immutable static-asset expansion review bundle.',
+    '  prepare-expansion-release  Build a full immutable release from an approved expansion review.',
     '  expansion-review  Post or update the expansion proposal in the existing product channel.',
     '  interactive-items  Generate fixed-anchor item states, overlays, sheets, metadata, and review GIFs.',
     '',
@@ -143,11 +145,11 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension', 'prepare-expansion-review', 'expansion-review', 'interactive-items'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension', 'prepare-expansion-review', 'prepare-expansion-release', 'expansion-review', 'interactive-items'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects', 'interactive-items'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
-  if (['package', 'prepare-extension', 'prepare-expansion-review'].includes(args.command) && !args.internalPreview) {
+  if (['package', 'prepare-extension', 'prepare-expansion-review', 'prepare-expansion-release'].includes(args.command) && !args.internalPreview) {
     throw new Error('Packaging unapproved candidates requires --internal-preview.');
   }
   if (['discord-review', 'distribution-review', 'effects-review', 'itch-theme-review', 'expansion-review'].includes(args.command) && !args.postToDiscord) {
@@ -297,6 +299,28 @@ async function main() {
       manifest_hash: result.manifest.manifest_hash,
       asset_count: result.manifest.asset_count,
       gates: result.manifest.gates,
+      reused: result.reused,
+    }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'prepare-expansion-release') {
+    const plan = JSON.parse(await readFile(args.expansionPlan || DEFAULT_EXPANSION_REVIEW, 'utf8'));
+    const result = await prepareApprovedAssetExpansionRelease({
+      outputRoot: resolveOutputRoot(config),
+      plan,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      expansion_id: result.plan.expansion_id,
+      base_version: result.plan.base_version,
+      target_version: result.plan.target_version,
+      candidate_root: result.candidateRoot,
+      manifest_hash: result.manifest.manifest_hash,
+      release_state: result.manifest.release_state,
+      asset_count: result.manifest.asset_count,
+      expansion_animation_count: result.manifest.expansion_animation_count,
+      gates: result.gates,
       reused: result.reused,
     }, null, 2)}\n`);
     return;
