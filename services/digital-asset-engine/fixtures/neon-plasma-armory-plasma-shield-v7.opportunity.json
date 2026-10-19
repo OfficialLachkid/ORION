@@ -1,0 +1,67 @@
+{
+  "schema_version": "1.0",
+  "opportunity_id": "OPPORTUNITY-0146-PLASMA-SHIELD-REVISION-V7",
+  "status": "validated",
+  "title": "Neon Plasma Armory Plasma Shield Revision V7",
+  "category": "Pixel Art / VFX",
+  "product_type": "Internal Sci-Fi Asset Revision Capability Proof",
+  "theme": "Original neon industrial science fiction matching Neon Plasma Armory: layered cyan honeycomb energy, brilliant pale-blue rim light, restrained violet stress accents, and a readable protective silhouette",
+  "target_audience": ["internal ORION reviewers", "indie game developers", "2D science-fiction game creators"],
+  "observed_at": "2026-10-19T00:00:00.000Z",
+  "expires_at": "2027-01-17T00:00:00.000Z",
+  "signals": {
+    "trend_direction": "stable",
+    "demand": "medium",
+    "competition": "high",
+    "cross_marketplace_evidence": "weak",
+    "confidence": 72
+  },
+  "generation": {
+    "medium": "pixel_art",
+    "perspective": "front-facing orthographic 2D game-effect sprite",
+    "width": 128,
+    "height": 128,
+    "source_width": 1024,
+    "source_height": 1024,
+    "max_palette_colors": 32,
+    "palette": ["#10131d", "#20283a", "#44506b", "#7785a6", "#c8d4ec", "#35d9ff", "#875cff", "#ff4fd8"],
+    "outline": "Crisp one-pixel energy edges at final resolution with deliberate square pixel clusters and no antialiasing",
+    "lighting": "Strong self-illuminated cyan outer glow with a brilliant pale-blue rim and restrained violet stress accents",
+    "background": "transparent",
+    "chroma_key": "#ff00ff",
+    "assets": [
+      {
+        "asset_key": "plasma-shield-v7",
+        "name": "Plasma Shield V7",
+        "kind": "vfx",
+        "description": "a detailed circular character-sized plasma shield with a brilliant layered cyan rim and several concentric honeycomb lattice bands that fade inward over a transparent empty interior",
+        "alpha_mode": "palette_only",
+        "alpha_palette": ["#35d9ff", "#875cff", "#c8d4ec"],
+        "alpha_tolerance": 80,
+        "prompt_notes": [
+          "Shield effect only: no emitter, generator, pedestal, statue, device, character, hand, weapon, floor, cast shadow, scenery, text, numbers, logo, watermark, frame, or duplicate shield",
+          "Show one complete intact circular protective barrier centered on canvas and large enough to surround a game character",
+          "Build a thick luminous outer rim from several crisp nested cyan and pale-blue pixel bands, with a strong readable halo rather than one thin outline",
+          "Draw multiple complete concentric bands of connected hexagonal force-field cells from the outer rim toward the center; use larger cells inward and gradually thinner, dimmer energy lines toward the transparent center",
+          "Keep the center, every hexagonal cell interior, every lattice gap, and every pixel outside the shield transparent; do not fill the orb with dark blue, gray, fog, glass color, or any opaque surface",
+          "Every empty pixel must be exactly solid #ff00ff chroma key; only cyan, pale-blue, and restrained violet energy lines may use non-chroma colors",
+          "Use dense crisp pixel detail without antialiasing, blur, smoke, soft opaque haze, or hot-pink pixels inside the artwork"
+        ]
+      }
+    ]
+  },
+  "commercial": { "base_price": { "amount": 0, "currency": "EUR" }, "marketplace_candidates": ["itch.io"] },
+  "risk": {
+    "ip_risk": "low",
+    "prohibited_references": ["specific marketplace artwork", "specific living artists", "franchise shield designs"],
+    "notes": [
+      "The human-provided shield image is functional inspiration only. Generate original artwork with no copied text, watermark, exact lattice, or arrangement.",
+      "This proof must retain a truly transparent interior and does not enter the package until its complete lifecycle passes human review."
+    ]
+  },
+  "evidence": [{
+    "label": "Human review requested a detailed layered honeycomb shield, glass-fracture damage, strong rim glow, and an inward-to-outward idle pulse",
+    "source": "ORION expansion review on 2026-10-19",
+    "observed_at": "2026-10-19T00:00:00.000Z"
+  }]
+}

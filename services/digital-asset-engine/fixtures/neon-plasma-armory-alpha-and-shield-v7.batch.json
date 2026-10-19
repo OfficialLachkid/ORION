@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "neon-plasma-armory-alpha-and-shield-v7",
+  "product_slug": "neon-plasma-armory",
+  "title": "Neon Plasma Armory Clean Alpha and Glass Shield Review",
+  "items": [
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-revisions",
+      "source_asset_key": "energy-pickup-v2",
+      "target_asset_key": "energy-pickup",
+      "name": "Energy Pickup",
+      "recipe": "energy_pickup",
+      "seed": 3096,
+      "collection_description": "A compact cyan plasma collection burst expanding from a brilliant central point with short violet fragments and generous transparent padding."
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-expansion-proof",
+      "source_asset_key": "plasma-grenade",
+      "target_asset_key": "plasma-grenade",
+      "name": "Plasma Grenade",
+      "recipe": "grenade",
+      "seed": 3146,
+      "detonation_description": "A compact high-energy plasma detonation that reads as the natural destructive release of the grenade's cyan core, with a tight brilliant center and short irregular energy spikes."
+    },
+    {
+      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v7",
+      "source_asset_key": "plasma-shield-v7",
+      "target_asset_key": "plasma-shield",
+      "name": "Plasma Shield",
+      "recipe": "plasma_shield",
+      "seed": 3447,
+      "impact_description": "One isolated compact shield-hit reaction with branching pale-blue glass-like fractures, a bright cyan contact flare, and restrained violet stress energy; effect fragments only, not a complete shield.",
+      "break_description": "One isolated circular scattering pattern of cyan honeycomb force-field fragments and restrained violet energy shards, leaving an empty transparent center and clearly reading as a protective field breaking apart."
+    }
+  ],
+  "style": {
+    "medium": "pixel_art",
+    "palette": ["#10131d", "#20283a", "#44506b", "#7785a6", "#c8d4ec", "#35d9ff", "#875cff", "#ff4fd8"],
+    "energy_colors": ["#35d9ff", "#875cff", "#c8d4ec"],
+    "energy_color_tolerance": 80,
+    "max_palette_colors": 32,
+    "chroma_key": "#ff00ff",
+    "source_width": 1024,
+    "source_height": 1024
+  }
+}

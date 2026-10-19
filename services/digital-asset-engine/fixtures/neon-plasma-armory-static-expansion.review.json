@@ -25,7 +25,7 @@
       "target_name": "Energy Pickup",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "neon-plasma-armory-interactive-expansion-v2",
+        "batch_id": "neon-plasma-armory-alpha-and-shield-v7",
         "asset_key": "energy-pickup"
       }
     },
@@ -36,7 +36,7 @@
       "target_name": "Plasma Grenade",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "neon-plasma-armory-interactive-fixes-v3",
+        "batch_id": "neon-plasma-armory-alpha-and-shield-v7",
         "asset_key": "plasma-grenade"
       }
     },
@@ -52,14 +52,14 @@
       }
     },
     {
-      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v5",
-      "source_asset_key": "plasma-shield-v5",
+      "source_product_slug": "neon-plasma-armory-plasma-shield-revision-v7",
+      "source_asset_key": "plasma-shield-v7",
       "target_asset_key": "plasma-shield",
       "target_name": "Plasma Shield",
       "buyer_group": "vfx",
       "replaces_review_asset_key": "portable-shield-emitter",
       "interactive_proof": {
-        "batch_id": "neon-plasma-armory-plasma-shield-v6",
+        "batch_id": "neon-plasma-armory-alpha-and-shield-v7",
         "asset_key": "plasma-shield"
       }
     },
