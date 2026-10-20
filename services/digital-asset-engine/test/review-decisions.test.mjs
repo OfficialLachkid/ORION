@@ -97,7 +97,7 @@ async function createArchiveFixture(options = {}) {
     ...(options.targetVersion ? { target_version: options.targetVersion } : {}),
     ...(options.baseManifestHash ? { base_manifest_hash: options.baseManifestHash } : {}),
     files: productAssets.map((asset, index) => ({
-      path: `${options.targetVersion ? 'download/' : ''}assets/individual/${asset.final_path.split('/').at(-1)}`,
+      path: `${packageRoot.startsWith('releases/') ? 'download/' : ''}assets/individual/${asset.final_path.split('/').at(-1)}`,
       content_sha256: hashes[index],
     })),
   };
@@ -210,6 +210,39 @@ test('local creative approval marks the package ready for separate marketplace s
   assert.deepEqual(result.messagePatch.components[0].components.map((component) => component.label), [
     'Open Manifest',
   ]);
+});
+
+test('local creative approval accepts the canonical preview path with a target version', async () => {
+  const archiveRoot = await createArchiveFixture({
+    marketplaceReviewMode: 'local_generation',
+    targetVersion: '0.1.0',
+  });
+  const result = await recordDigitalAssetReviewDecision({
+    interaction: packInteraction(),
+    archiveRoot,
+    config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+    store: { async insert() {} },
+    now: '2026-10-20T19:30:00.000Z',
+  });
+  assert.equal(result.nextAction, 'marketplace_setup');
+  assert.equal(result.row.decision, 'approve');
+});
+
+test('local creative approval rejects a package path outside the canonical preview', async () => {
+  const archiveRoot = await createArchiveFixture({
+    marketplaceReviewMode: 'local_generation',
+    packageRoot: 'exports/other-preview',
+    targetVersion: '0.1.0',
+  });
+  await assert.rejects(
+    recordDigitalAssetReviewDecision({
+      interaction: packInteraction(),
+      archiveRoot,
+      config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+      store: { async insert() { throw new Error('must not be called'); } },
+    }),
+    /must use the canonical packaged preview/u,
+  );
 });
 
 test('approves the exact immutable versioned candidate stored in the Discord review state', async () => {
