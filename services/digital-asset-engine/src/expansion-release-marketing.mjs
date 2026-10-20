@@ -19,7 +19,7 @@ const COLORS = Object.freeze({
   violet: '#7d6cf2',
 });
 
-export const EXPANSION_RELEASE_MARKETING_VERSION = '1.3.0';
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.4.0';
 
 const WEAPON_COVER_FRAME_COUNT = 8;
 const EXPANSION_COVER_FRAME_COUNT = 12;
@@ -120,10 +120,35 @@ function animationFramePaths(asset, animation) {
     .sort();
 }
 
+export function continuousLifecyclePreviewPaths(animations) {
+  const integrityDecay = animations.find(({ animation }) => (
+    animation.animation_key === 'integrity-decay'
+  ));
+  if (!integrityDecay?.paths?.length) return null;
+  const shieldBreak = animations.find(({ animation }) => (
+    animation.animation_key === 'shield-break'
+  ));
+  return [
+    ...integrityDecay.paths,
+    ...(shieldBreak?.paths || []).slice(-2),
+  ];
+}
+
+function sampleOrderedPaths(paths, frameIndex, frameCount) {
+  const count = Math.max(1, Number(frameCount) || 1);
+  const index = Math.max(0, Math.min(count - 1, Number(frameIndex) || 0));
+  const progress = count === 1 ? 0 : index / (count - 1);
+  return paths[Math.min(paths.length - 1, Math.round(progress * (paths.length - 1)))];
+}
+
 export function selectLifecyclePreviewPath(asset, frameIndex, frameCount) {
   const animations = (asset.animations || [])
     .map((animation) => ({ animation, paths: animationFramePaths(asset, animation) }))
     .filter(({ paths }) => paths.length);
+  const continuousPaths = continuousLifecyclePreviewPaths(animations);
+  if (continuousPaths?.length) {
+    return sampleOrderedPaths(continuousPaths, frameIndex, frameCount);
+  }
   if (animations.length) {
     const count = Math.max(1, Number(frameCount) || 1);
     const index = Math.max(0, Math.min(count - 1, Number(frameIndex) || 0));

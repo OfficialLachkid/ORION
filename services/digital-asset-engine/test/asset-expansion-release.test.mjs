@@ -10,6 +10,7 @@ import {
   prepareApprovedAssetExpansionRelease,
 } from '../src/asset-expansion-release.mjs';
 import {
+  continuousLifecyclePreviewPaths,
   coverScene,
   cropVisibleAlpha,
   selectCoverLifecyclePreviewPath,
@@ -209,7 +210,7 @@ test('builds an immutable 0.3.0 package from the exact approved expansion review
   assert.equal(reused.manifest.manifest_hash, result.manifest.manifest_hash);
 });
 
-test('marketing previews sample every declared shield animation instead of early sorted frames only', () => {
+test('shield marketing preview depletes monotonically before its terminal scatter and empty frames', () => {
   const asset = {
     asset_key: 'plasma-shield',
     buyer_path: 'assets/expansion/vfx/plasma-shield.png',
@@ -217,25 +218,62 @@ test('marketing previews sample every declared shield animation instead of early
       'power-up', 'active-loop', 'shield-hit', 'integrity-decay', 'shield-break', 'power-down',
     ].map((animationKey) => ({ animation_key: animationKey })),
   };
-  asset.runtime_paths = asset.animations.flatMap(({ animation_key: animationKey }) => [
-    `animations/plasma-shield/frames/${animationKey}/00.png`,
-    `animations/plasma-shield/frames/${animationKey}/01.png`,
-  ]);
+  asset.runtime_paths = asset.animations.flatMap(({ animation_key: animationKey }) => {
+    const frameCount = animationKey === 'integrity-decay'
+      ? 10
+      : animationKey === 'shield-break' ? 6 : 2;
+    return Array.from(
+      { length: frameCount },
+      (unused, index) => `animations/plasma-shield/frames/${animationKey}/${String(index).padStart(2, '0')}.png`,
+    );
+  });
+  const animationPaths = asset.animations.map((animation) => ({
+    animation,
+    paths: asset.runtime_paths.filter((path) => path.includes(`/frames/${animation.animation_key}/`)),
+  }));
+  const expected = [
+    ...Array.from(
+      { length: 10 },
+      (unused, index) => `animations/plasma-shield/frames/integrity-decay/${String(index).padStart(2, '0')}.png`,
+    ),
+    'animations/plasma-shield/frames/shield-break/04.png',
+    'animations/plasma-shield/frames/shield-break/05.png',
+  ];
+  assert.deepEqual(continuousLifecyclePreviewPaths(animationPaths), expected);
   const selected = Array.from(
     { length: 12 },
     (unused, index) => selectLifecyclePreviewPath(asset, index, 12),
   );
-  for (const { animation_key: animationKey } of asset.animations) {
-    assert.ok(selected.some((path) => path.includes(`/frames/${animationKey}/`)), animationKey);
-  }
+  assert.deepEqual(selected, expected);
   const coverSelected = Array.from(
     { length: 12 },
     (unused, index) => selectCoverLifecyclePreviewPath(asset, index, 12),
   );
   assert.equal(coverSelected[0], asset.buyer_path);
-  for (const { animation_key: animationKey } of asset.animations) {
-    assert.ok(coverSelected.some((path) => path.includes(`/frames/${animationKey}/`)), animationKey);
-  }
+  assert.ok(coverSelected.slice(1, -2).every((path) => path.includes('/frames/integrity-decay/')));
+  assert.deepEqual(coverSelected.slice(-2), expected.slice(-2));
+});
+
+test('generic marketing previews still sample every declared animation', () => {
+  const asset = {
+    asset_key: 'pickup',
+    animations: ['idle-loop', 'collection-burst'].map((animationKey) => ({ animation_key: animationKey })),
+    runtime_paths: [
+      'animations/pickup/frames/idle-loop/00.png',
+      'animations/pickup/frames/idle-loop/01.png',
+      'animations/pickup/frames/collection-burst/00.png',
+      'animations/pickup/frames/collection-burst/01.png',
+    ],
+  };
+  const selected = Array.from(
+    { length: 4 },
+    (unused, index) => selectLifecyclePreviewPath(asset, index, 4),
+  );
+  assert.ok(selected.some((path) => path.includes('/frames/idle-loop/')));
+  assert.ok(selected.some((path) => path.includes('/frames/collection-burst/')));
+});
+
+test('cover scenes hold labelled weapon effects before showing expansion assets', () => {
   assert.deepEqual(
     Array.from({ length: 8 }, (unused, index) => weaponEffectPhase(index)),
     [
