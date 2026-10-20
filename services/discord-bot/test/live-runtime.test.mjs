@@ -20,11 +20,109 @@ import {
   isLeadOutreachSendComplete,
   mergeImageAttachments,
   prepareCommandTasksForExecution,
+  recordDeferredInteractionDecision,
   rehydratePokeQuizzReviewTask,
   resolveInteractionApprovalOrigin,
   searchApprovalMessageInThreads,
+  sendDiscordApiRequest,
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
+
+test('persistent Discord decisions acknowledge ephemerally before slow recording starts', async () => {
+  const calls = [];
+  const outcome = await recordDeferredInteractionDecision({
+    interaction: {
+      id: 'interaction-1',
+      token: 'interaction-token',
+      application_id: 'application-1',
+    },
+    sendCallback: async (id, token, body) => {
+      calls.push(['ack', id, token, body]);
+    },
+    record: async () => {
+      calls.push(['record']);
+      return { row: { decision: 'approve' } };
+    },
+    successContent: (result) => `Recorded ${result.row.decision}.`,
+    failurePrefix: 'Decision was not recorded',
+    editResponse: async (applicationId, token, body) => {
+      calls.push(['status', applicationId, token, body]);
+    },
+  });
+
+  assert.deepEqual(calls, [
+    ['ack', 'interaction-1', 'interaction-token', { type: 5, data: { flags: 64 } }],
+    ['record'],
+    ['status', 'application-1', 'interaction-token', { content: 'Recorded approve.' }],
+  ]);
+  assert.equal(outcome.error, null);
+  assert.equal(outcome.result.row.decision, 'approve');
+});
+
+test('persistent Discord decision failures update the already deferred response', async () => {
+  const calls = [];
+  const outcome = await recordDeferredInteractionDecision({
+    interaction: {
+      id: 'interaction-2',
+      token: 'interaction-token-2',
+      application_id: 'application-1',
+    },
+    sendCallback: async () => {
+      calls.push('ack');
+    },
+    record: async () => {
+      calls.push('record');
+      throw new Error('stale manifest');
+    },
+    successContent: () => 'Recorded.',
+    failurePrefix: 'Digital asset decision was not recorded',
+    editResponse: async (applicationId, token, body) => {
+      calls.push(['status', applicationId, token, body]);
+    },
+  });
+
+  assert.deepEqual(calls, [
+    'ack',
+    'record',
+    [
+      'status',
+      'application-1',
+      'interaction-token-2',
+      { content: 'Digital asset decision was not recorded: stale manifest' },
+    ],
+  ]);
+  assert.equal(outcome.result, null);
+  assert.match(outcome.error.message, /stale manifest/u);
+});
+
+test('Discord message updates honor retry_after responses for older review messages', async () => {
+  const sleeps = [];
+  const responses = [
+    {
+      ok: false,
+      status: 429,
+      json: async () => ({ retry_after: 0.25, code: 30046 }),
+    },
+    {
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'message-1' }),
+    },
+  ];
+  const result = await sendDiscordApiRequest(
+    'token',
+    '/channels/channel-1/messages/message-1',
+    { components: [] },
+    'PATCH',
+    {
+      fetchImpl: async () => responses.shift(),
+      sleep: async (durationMs) => sleeps.push(durationMs),
+    },
+  );
+
+  assert.deepEqual(sleeps, [250]);
+  assert.deepEqual(result, { id: 'message-1' });
+});
 
 test('parseApprovalButtonCustomId understands approve, reject, and delete actions', () => {
   assert.deepEqual(
