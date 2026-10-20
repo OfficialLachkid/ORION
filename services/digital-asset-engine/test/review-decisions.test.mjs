@@ -94,10 +94,12 @@ async function createArchiveFixture(options = {}) {
   const manifest = {
     manifest_hash: manifestHash,
     listing_hash: listingHash,
-    ...(options.targetVersion ? { target_version: options.targetVersion } : {}),
+    ...(options.targetVersion && options.marketplaceReviewMode === 'local_generation'
+      ? { product_version: options.targetVersion }
+      : options.targetVersion ? { target_version: options.targetVersion } : {}),
     ...(options.baseManifestHash ? { base_manifest_hash: options.baseManifestHash } : {}),
     files: productAssets.map((asset, index) => ({
-      path: `${packageRoot.startsWith('releases/') ? 'download/' : ''}assets/individual/${asset.final_path.split('/').at(-1)}`,
+      path: `${packageRoot.startsWith('releases/') || options.marketplaceReviewMode === 'local_generation' ? 'download/' : ''}assets/individual/${asset.final_path.split('/').at(-1)}`,
       content_sha256: hashes[index],
     })),
   };
@@ -226,6 +228,32 @@ test('local creative approval accepts the canonical preview path with a target v
   });
   assert.equal(result.nextAction, 'marketplace_setup');
   assert.equal(result.row.decision, 'approve');
+});
+
+test('local creative approval rejects a preview whose product version changed', async () => {
+  const archiveRoot = await createArchiveFixture({
+    marketplaceReviewMode: 'local_generation',
+    targetVersion: '0.1.0',
+  });
+  const manifestPath = resolve(
+    archiveRoot,
+    context.productSlug,
+    'exports',
+    'itch-preview',
+    'manifest.json',
+  );
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.product_version = '0.2.0';
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(
+    recordDigitalAssetReviewDecision({
+      interaction: packInteraction(),
+      archiveRoot,
+      config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+      store: { async insert() { throw new Error('must not be called'); } },
+    }),
+    /does not match its target version/u,
+  );
 });
 
 test('local creative approval rejects a package path outside the canonical preview', async () => {
