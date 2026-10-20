@@ -111,6 +111,22 @@ function resolveInside(rootPath, candidatePath, label) {
 function resolveReviewedManifestPath(productRoot, reviewState) {
   const packageRoot = String(reviewState.package_root || '').trim();
   const targetVersion = String(reviewState.target_version || '').trim();
+  const marketplaceReviewMode = String(reviewState.marketplace_review_mode || 'draft');
+  if (marketplaceReviewMode === 'local_generation') {
+    const localPreviewRoot = packageRoot || 'exports/itch-preview';
+    const normalizedRoot = relative(
+      resolve(productRoot),
+      resolveInside(productRoot, localPreviewRoot, 'Local generation preview'),
+    ).replaceAll('\\', '/');
+    if (normalizedRoot !== 'exports/itch-preview') {
+      throw new Error('The local generation review must use the canonical packaged preview.');
+    }
+    return resolveInside(
+      productRoot,
+      `${normalizedRoot}/manifest.json`,
+      'Local generation preview manifest',
+    );
+  }
   if (!packageRoot) {
     if (targetVersion) throw new Error('The versioned package review is missing its immutable package path.');
     return resolveInside(productRoot, 'exports/itch-preview/manifest.json', 'Preview manifest');
