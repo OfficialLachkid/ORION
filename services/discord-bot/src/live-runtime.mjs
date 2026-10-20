@@ -100,6 +100,7 @@ const GATEWAY_INTENTS =
   (1 << 15); // MESSAGE_CONTENT
 
 const DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE = 4;
+const DISCORD_INTERACTION_CALLBACK_DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE = 5;
 const DISCORD_INTERACTION_CALLBACK_DEFERRED_UPDATE_MESSAGE = 6;
 const DISCORD_INTERACTION_CALLBACK_UPDATE_MESSAGE = 7;
 const DISCORD_INTERACTION_CALLBACK_MODAL = 9;
@@ -222,23 +223,31 @@ export async function rehydratePokeQuizzReviewTask(decision, config, dependencie
   }
 }
 
-async function sendDiscordApiRequest(token, path, body, method = 'POST') {
-  const response = await fetch(`${DISCORD_API_BASE_URL}${path}`, {
-    method,
-    headers: buildAuthHeaders(token),
-    body: JSON.stringify(body),
-  });
+export async function sendDiscordApiRequest(token, path, body, method = 'POST', options = {}) {
+  const fetchImpl = options.fetchImpl || fetch;
+  const sleep = options.sleep || ((durationMs) => new Promise((resolve) => setTimeout(resolve, durationMs)));
+  const maxRateLimitRetries = options.maxRateLimitRetries ?? 3;
+  for (let attempt = 0; attempt <= maxRateLimitRetries; attempt += 1) {
+    const response = await fetchImpl(`${DISCORD_API_BASE_URL}${path}`, {
+      method,
+      headers: buildAuthHeaders(token),
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Discord API request failed (${response.status}): ${errorText}`);
+    if (response.status === 429 && attempt < maxRateLimitRetries) {
+      const rateLimit = await response.json();
+      const retryAfterMs = Math.max(50, Math.ceil((Number(rateLimit?.retry_after) || 1) * 1000));
+      await sleep(retryAfterMs);
+      continue;
+    }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Discord API request failed (${response.status}): ${errorText}`);
+    }
+    if (response.status === 204) return null;
+    return response.json();
   }
-
-  if (response.status === 204) {
-    return null;
-  }
-
-  return response.json();
+  throw new Error('Discord API request exhausted its rate-limit retries.');
 }
 
 async function sendDiscordInteractionCallback(interactionId, interactionToken, body) {
@@ -253,6 +262,24 @@ async function sendDiscordInteractionCallback(interactionId, interactionToken, b
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`Discord interaction callback failed (${response.status}): ${errorText}`);
+  }
+}
+
+async function editDiscordInteractionResponse(applicationId, interactionToken, body) {
+  const response = await fetch(
+    `${DISCORD_API_BASE_URL}/webhooks/${applicationId}/${interactionToken}/messages/@original`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Discord deferred interaction response failed (${response.status}): ${errorText}`);
   }
 }
 
@@ -292,6 +319,39 @@ function truncateMessage(content) {
   }
 
   return `${text.slice(0, 1997)}...`;
+}
+
+export async function recordDeferredInteractionDecision(options) {
+  const sendCallback = options.sendCallback || sendDiscordInteractionCallback;
+  const editResponse = options.editResponse || editDiscordInteractionResponse;
+  const interaction = options.interaction;
+  await sendCallback(interaction.id, interaction.token, {
+    type: DISCORD_INTERACTION_CALLBACK_DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { flags: DISCORD_MESSAGE_FLAG_EPHEMERAL },
+  });
+
+  let result;
+  try {
+    result = await options.record();
+  } catch (error) {
+    try {
+      await editResponse(interaction.application_id, interaction.token, {
+        content: truncateMessage(`${options.failurePrefix}: ${error.message}`),
+      });
+    } catch (responseError) {
+      process.stderr.write(`Could not report deferred Discord decision failure: ${responseError.message}\n`);
+    }
+    return { result: null, error };
+  }
+
+  try {
+    await editResponse(interaction.application_id, interaction.token, {
+      content: truncateMessage(options.successContent(result)),
+    });
+  } catch (responseError) {
+    process.stderr.write(`Could not complete deferred Discord decision response: ${responseError.message}\n`);
+  }
+  return { result, error: null };
 }
 
 function isCommandChannelMessage(message, config) {
@@ -1291,29 +1351,19 @@ export async function runLiveDiscordBot(config) {
           }
 
           if (isItchThemeReviewInteraction(payload.d)) {
-            let recorded;
-            try {
-              recorded = await recordItchThemeDecision({ interaction: payload.d, config });
-              if (!recorded) throw new Error('Unsupported itch.io theme review action.');
-            } catch (error) {
-              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
-                  content: truncateMessage(`Theme decision was not recorded: ${error.message}`),
-                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
-                },
-              });
-              return;
-            }
-            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-              data: {
-                content: recorded.row.decision === 'approve'
+            const { result: recorded, error } = await recordDeferredInteractionDecision({
+              interaction: payload.d,
+              record: async () => {
+                const decision = await recordItchThemeDecision({ interaction: payload.d, config });
+                if (!decision) throw new Error('Unsupported itch.io theme review action.');
+                return decision;
+              },
+              failurePrefix: 'Theme decision was not recorded',
+              successContent: (decision) => decision.row.decision === 'approve'
                   ? 'Theme approval recorded. The exact preview is authorized for the explicit apply step.'
                   : 'Theme changes requested. The public itch.io page remains unchanged.',
-                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
-              },
             });
+            if (error) return;
             const currentMessage = await sendDiscordApiRequest(
               token,
               `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
@@ -1334,31 +1384,21 @@ export async function runLiveDiscordBot(config) {
           }
 
           if (isResearchReviewInteraction(payload.d)) {
-            let recorded;
-            try {
-              recorded = await recordResearchReviewDecision({ interaction: payload.d, config });
-              if (!recorded) throw new Error('Unsupported research review action.');
-            } catch (error) {
-              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
-                  content: truncateMessage(`Research decision was not recorded: ${error.message}`),
-                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
-                },
-              });
-              return;
-            }
-            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-              data: {
-                content: recorded.review.decision === 'approve_handoff'
+            const { result: recorded, error } = await recordDeferredInteractionDecision({
+              interaction: payload.d,
+              record: async () => {
+                const decision = await recordResearchReviewDecision({ interaction: payload.d, config });
+                if (!decision) throw new Error('Unsupported research review action.');
+                return decision;
+              },
+              failurePrefix: 'Research decision was not recorded',
+              successContent: (decision) => decision.review.decision === 'approve_handoff'
                   ? 'Research handoff approved. No image generation job was started.'
-                  : recorded.review.decision === 'monitor'
+                  : decision.review.decision === 'monitor'
                     ? 'Recommendation kept in monitoring.'
                     : 'Research recommendation rejected.',
-                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
-              },
             });
+            if (error) return;
             await sendDiscordApiRequest(
               token,
               `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
@@ -1369,32 +1409,22 @@ export async function runLiveDiscordBot(config) {
           }
 
           if (isDigitalAssetDistributionInteraction(payload.d)) {
-            let recorded;
-            try {
-              recorded = await recordDigitalAssetDistributionDecision({
-                interaction: payload.d,
-                config,
-              });
-              if (!recorded) throw new Error('Unsupported digital asset distribution action.');
-            } catch (error) {
-              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
-                  content: truncateMessage(`Distribution decision was not recorded: ${error.message}`),
-                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
-                },
-              });
-              return;
-            }
-            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-              data: {
-                content: recorded.row.decision === 'approve_publish'
+            const { result: recorded, error } = await recordDeferredInteractionDecision({
+              interaction: payload.d,
+              record: async () => {
+                const decision = await recordDigitalAssetDistributionDecision({
+                  interaction: payload.d,
+                  config,
+                });
+                if (!decision) throw new Error('Unsupported digital asset distribution action.');
+                return decision;
+              },
+              failurePrefix: 'Distribution decision was not recorded',
+              successContent: (decision) => decision.row.decision === 'approve_publish'
                   ? 'Distribution approval recorded. The exact itch.io draft is authorized for the publish step.'
                   : 'The package will remain an itch.io draft.',
-                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
-              },
             });
+            if (error) return;
             const currentMessage = await sendDiscordApiRequest(
               token,
               `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
@@ -1414,29 +1444,19 @@ export async function runLiveDiscordBot(config) {
           }
 
           if (isAssetExpansionReviewInteraction(payload.d)) {
-            let recorded;
-            try {
-              recorded = await recordAssetExpansionReviewDecision({ interaction: payload.d, config });
-              if (!recorded) throw new Error('Unsupported asset expansion review action.');
-            } catch (error) {
-              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
-                  content: truncateMessage(`Expansion decision was not recorded: ${error.message}`),
-                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
-                },
-              });
-              return;
-            }
-            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-              data: {
-                content: recorded.row.decision === 'approve'
-                  ? 'Expansion approved for an immutable candidate build. The public package is unchanged.'
-                  : `Recorded ${recorded.row.decision.toUpperCase()} for this expansion proposal.`,
-                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+            const { result: recorded, error } = await recordDeferredInteractionDecision({
+              interaction: payload.d,
+              record: async () => {
+                const decision = await recordAssetExpansionReviewDecision({ interaction: payload.d, config });
+                if (!decision) throw new Error('Unsupported asset expansion review action.');
+                return decision;
               },
+              failurePrefix: 'Expansion decision was not recorded',
+              successContent: (decision) => decision.row.decision === 'approve'
+                  ? 'Expansion approved for an immutable candidate build. The public package is unchanged.'
+                  : `Recorded ${decision.row.decision.toUpperCase()} for this expansion proposal.`,
             });
+            if (error) return;
             try {
               const currentMessage = await sendDiscordApiRequest(
                 token,
@@ -1487,31 +1507,22 @@ export async function runLiveDiscordBot(config) {
           }
 
           if (isDigitalAssetReviewInteraction(payload.d)) {
-            let recorded;
-            try {
-              recorded = await recordDigitalAssetReviewDecision({
-                interaction: payload.d,
-                config,
-              });
-              if (!recorded) throw new Error('Unsupported digital asset review action.');
-            } catch (error) {
-              await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-                type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-                data: {
-                  content: truncateMessage(`Digital asset decision was not recorded: ${error.message}`),
-                  flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
-                },
-              });
-              return;
-            }
-
-            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
-              type: DISCORD_INTERACTION_CALLBACK_CHANNEL_MESSAGE_WITH_SOURCE,
-              data: {
-                content: `Recorded ${recorded.row.decision.toUpperCase()} for package revision ${recorded.row.review_revision}.`,
-                flags: DISCORD_MESSAGE_FLAG_EPHEMERAL,
+            const { result: recorded, error } = await recordDeferredInteractionDecision({
+              interaction: payload.d,
+              record: async () => {
+                const decision = await recordDigitalAssetReviewDecision({
+                  interaction: payload.d,
+                  config,
+                });
+                if (!decision) throw new Error('Unsupported digital asset review action.');
+                return decision;
               },
+              failurePrefix: 'Digital asset decision was not recorded',
+              successContent: (decision) => (
+                `Recorded ${decision.row.decision.toUpperCase()} for package revision ${decision.row.review_revision}.`
+              ),
             });
+            if (error) return;
             try {
               const currentMessage = await sendDiscordApiRequest(
                 token,
