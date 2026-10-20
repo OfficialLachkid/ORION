@@ -19,9 +19,9 @@ const COLORS = Object.freeze({
   violet: '#7d6cf2',
 });
 
-export const EXPANSION_RELEASE_MARKETING_VERSION = '1.2.0';
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.3.0';
 
-const WEAPON_COVER_FRAME_COUNT = 4;
+const WEAPON_COVER_FRAME_COUNT = 8;
 const EXPANSION_COVER_FRAME_COUNT = 12;
 const COVER_FRAME_COUNT = WEAPON_COVER_FRAME_COUNT + EXPANSION_COVER_FRAME_COUNT;
 
@@ -49,8 +49,51 @@ function shell({ width, height, title, subtitle, titleSize = 40 }) {
   ].join('');
 }
 
+export function visibleAlphaBounds(data, info, alphaThreshold = 4) {
+  const width = Number(info?.width) || 0;
+  const height = Number(info?.height) || 0;
+  const channels = Number(info?.channels) || 0;
+  if (!width || !height || channels < 2) return null;
+  const threshold = Math.max(0, Math.min(255, Number(alphaThreshold) || 0));
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const alpha = data[((y * width) + x) * channels + channels - 1];
+      if (alpha <= threshold) continue;
+      left = Math.min(left, x);
+      top = Math.min(top, y);
+      right = Math.max(right, x);
+      bottom = Math.max(bottom, y);
+    }
+  }
+  if (right < left || bottom < top) return null;
+  return {
+    left,
+    top,
+    width: right - left + 1,
+    height: bottom - top + 1,
+  };
+}
+
+export async function cropVisibleAlpha(buffer, alphaThreshold = 4) {
+  const { data, info } = await sharp(buffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const bounds = visibleAlphaBounds(data, info, alphaThreshold);
+  if (!bounds) return sharp(buffer).ensureAlpha().png().toBuffer();
+  return sharp(data, { raw: info })
+    .extract(bounds)
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
 async function contained(buffer, width, height) {
-  return sharp(buffer).resize(width, height, {
+  const visible = await cropVisibleAlpha(buffer);
+  return sharp(visible).resize(width, height, {
     fit: 'contain',
     kernel: sharp.kernel.nearest,
     background: { r: 0, g: 0, b: 0, alpha: 0 },
@@ -129,8 +172,17 @@ async function effectSample(candidateRoot, assetKey, kind, preferredFrame) {
 
 export function weaponEffectPhase(frameIndex) {
   return ['weapon', 'muzzle_flash', 'projectile', 'impact_decay'][
-    Math.max(0, Number(frameIndex) || 0) % 4
+    Math.floor(Math.max(0, Number(frameIndex) || 0) / 2) % 4
   ];
+}
+
+export function weaponEffectSubtitle(frameIndex) {
+  return {
+    weapon: '8 transparent weapon sprites',
+    muzzle_flash: 'Independent muzzle-flash overlays',
+    projectile: 'Independent projectile sprites',
+    impact_decay: 'Independent impact & decay frames',
+  }[weaponEffectPhase(frameIndex)];
 }
 
 async function weaponLifecycleBuffer(candidateRoot, asset, anchor, frameIndex) {
@@ -333,7 +385,7 @@ export async function buildExpansionReleaseMarketingMedia(options) {
           height: COVER_HEIGHT,
           title: options.product.title,
           subtitle: scene.kind === 'weapons'
-            ? '8 weapons with independent firing effects'
+            ? weaponEffectSubtitle(scene.frame_index)
             : 'Armory items, props & interactive plasma VFX',
           entries,
           columns: 4,
@@ -382,6 +434,8 @@ export async function buildExpansionReleaseMarketingMedia(options) {
         cover_sequence: ['weapons', 'expansion'],
         mixed_asset_families_per_frame: false,
         weapon_effect_phases: ['weapon', 'muzzle_flash', 'projectile', 'impact_decay'],
+        weapon_effect_phase_hold_frames: 2,
+        entry_scaling: 'visible_alpha_bounds',
         expansion_sampling: 'declared_animation_lifecycle',
       },
     };
