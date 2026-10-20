@@ -270,7 +270,7 @@ async (page) => {
 }`.trim();
 }
 
-function buildScreenshotCountRunCode() {
+export function buildScreenshotCountRunCode() {
   return `
 async (page) => {
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
@@ -283,7 +283,7 @@ async (page) => {
 }`.trim();
 }
 
-function buildDeleteScreenshotRunCode() {
+export function buildDeleteScreenshotRunCode() {
   return `
 async (page) => {
   const button = page.locator('button.delete_screen_btn').first();
@@ -295,7 +295,7 @@ async (page) => {
 }`.trim();
 }
 
-function buildMediaTriggerRunCode(kind) {
+export function buildMediaTriggerRunCode(kind) {
   return `
 async (page) => {
   const kind = ${JSON.stringify(kind)};
@@ -310,7 +310,7 @@ async (page) => {
 }`.trim();
 }
 
-function buildMediaStateRunCode() {
+export function buildMediaStateRunCode() {
   return `
 async (page) => {
   await page.waitForTimeout(4000);
@@ -323,7 +323,12 @@ async (page) => {
 }`.trim();
 }
 
-function buildVerifyRunCode({ listing, screenshotCount, screenshotPath }) {
+export function buildVerifyRunCode({
+  listing,
+  screenshotCount,
+  screenshotPath,
+  expectedVisibility = 'draft',
+}) {
   return `
 async (page) => {
   const input = ${JSON.stringify({
@@ -332,6 +337,7 @@ async (page) => {
     descriptionText: renderItchDescriptionText(listing.description),
     screenshotCount,
     screenshotPath,
+    expectedVisibility,
   })};
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
@@ -355,6 +361,7 @@ async (page) => {
   const coverId = await page.locator('input[name="game[cover_image_id]"]').first().inputValue().catch(() => '');
   const actualScreenshotCount = await page.locator('button.delete_screen_btn').count().catch(() => 0);
   const isDraft = await page.locator('input[name="game[published]"][value="draft"]').isChecked().catch(() => false);
+  const isPublished = await page.locator('input[name="game[published]"][value="published"]').isChecked().catch(() => false);
   await page.screenshot({ path: input.screenshotPath, fullPage: true }).catch(() => {});
   const normalizeDescription = (value) => String(value).normalize('NFKC')
     .replace(/[•◦▪●]/gu, ' ')
@@ -369,7 +376,7 @@ async (page) => {
     tags: tagsMatch,
     cover: Boolean(coverId),
     screenshots: actualScreenshotCount === input.screenshotCount,
-    draft: isDraft,
+    visibility: input.expectedVisibility === 'published' ? isPublished : isDraft,
   };
   return {
     status: Object.values(checks).every(Boolean) ? 'verified' : 'verification_failed',

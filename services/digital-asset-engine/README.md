@@ -102,7 +102,9 @@ npm run digital-assets:itch-publish -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-The adapter revalidates creative approval, seller readiness, distribution approval, manifest hash, listing hash, title, price, cover, screenshots, and current draft visibility before changing only the itch.io visibility control. It then reloads the editor, opens the clean public URL without the secret token, verifies the title, paid purchase action, price, and public accessibility, stores `review/itch-release.json`, captures `review/itch-public.png`, and marks the existing Discord card as published. An exact verified receipt makes retries idempotent.
+For an initial release, the adapter revalidates creative approval, seller readiness, distribution approval, manifest hash, listing hash, title, price, cover, screenshots, and current draft visibility before changing only the itch.io visibility control.
+
+For an already-public versioned update, the same command fails closed unless the distribution approval is bound to the exact new candidate and exact current public-release receipt. It then verifies that the existing project is still public, pushes the approved buyer package to the existing Butler channel, replaces the cover and the complete dynamic screenshot list, updates the listing fields without changing visibility, and reads the editor back. In both modes it opens the clean public URL, verifies the title, paid purchase action, price, downloadable ZIP, payment actions, and public accessibility, stores `review/itch-release.json`, captures `review/itch-public.png`, advances the existing Discord card, and makes exact verified retries idempotent.
 
 ## Public URL and storefront theme
 
