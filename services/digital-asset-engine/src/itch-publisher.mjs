@@ -1,11 +1,19 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { discordRequest } from './discord-review.mjs';
 import { buildDistributionReviewEmbeds } from './distribution-review.mjs';
+import {
+  buildDeleteScreenshotRunCode,
+  buildItchDraftRunCode,
+  buildMediaStateRunCode,
+  buildMediaTriggerRunCode,
+  buildScreenshotCountRunCode,
+  buildVerifyRunCode,
+} from './itch-draft-stager.mjs';
 import { resolvePackagedRelease } from './packaged-release.mjs';
 
 function parseCliJson(value) {
@@ -60,6 +68,32 @@ async function readOptionalJson(path) {
     if (error?.code === 'ENOENT') return null;
     throw error;
   }
+}
+
+export function buildPublishedUpdatePreflightCode({ editUrl, expectedTitle }) {
+  return `
+async (page) => {
+  const input = ${JSON.stringify({ editUrl, expectedTitle })};
+  await page.goto(input.editUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForTimeout(1000);
+  if (page.url().includes('/login') || page.url().includes('/register')) {
+    return { status: 'login_required', url: page.url() };
+  }
+  const title = await page.locator('input[name="game[title]"]').first().inputValue().catch(() => '');
+  const published = await page.locator('input[name="game[published]"][value="published"]')
+    .isChecked().catch(() => false);
+  const checks = {
+    editor: page.url().includes('/game/edit/'),
+    title: title === input.expectedTitle,
+    published,
+  };
+  return {
+    status: Object.values(checks).every(Boolean) ? 'ready' : 'preflight_failed',
+    checks,
+    title,
+    url: page.url(),
+  };
+}`.trim();
 }
 
 export function buildItchPublishCode({ listing, editUrl }) {
@@ -158,11 +192,12 @@ export async function publishApprovedItchRelease(options) {
   const product = options.product || await store.loadProduct(options.slug);
   const productRoot = store.productRoot(product);
   const packaged = await resolvePackagedRelease({ productRoot, releaseVersion: options.releaseVersion });
-  const [discordState, itchState, sellerState, distributionState] = await Promise.all([
+  const [discordState, itchState, sellerState, distributionState, publishedState] = await Promise.all([
     readJson(resolve(productRoot, 'review', 'discord.json')),
-    readJson(resolve(productRoot, 'review', 'itch.json')),
+    readOptionalJson(resolve(productRoot, 'review', 'itch.json')),
     readJson(resolve(productRoot, 'review', 'itch-seller.json')),
     readJson(resolve(productRoot, 'review', 'distribution.json')),
+    readOptionalJson(resolve(productRoot, 'review', 'itch-release.json')),
   ]);
   const manifestHash = packaged.manifest.manifest_hash;
   const listingHash = packaged.manifest.listing_hash;
@@ -170,11 +205,6 @@ export async function publishApprovedItchRelease(options) {
     || discordState.manifest_hash !== manifestHash
     || discordState.listing_hash !== listingHash) {
     throw new Error('Publishing requires creative approval for this exact release.');
-  }
-  if (itchState.status !== 'verified'
-    || itchState.manifest_hash !== manifestHash
-    || itchState.listing_hash !== listingHash) {
-    throw new Error('Publishing requires the exact verified itch.io draft.');
   }
   if (sellerState.status !== 'ready'
     || sellerState.manifest_hash !== manifestHash
@@ -193,11 +223,38 @@ export async function publishApprovedItchRelease(options) {
     })}).`);
   }
   const releaseStatePath = resolve(productRoot, 'review', 'itch-release.json');
-  const previous = await readOptionalJson(releaseStatePath);
+  const previous = publishedState;
   if (previous?.status === 'verified_public'
     && previous.manifest_hash === manifestHash
     && previous.listing_hash === listingHash) {
     return { ...previous, reused: true, statePath: releaseStatePath };
+  }
+
+  const marketplaceReviewMode = String(distributionState.marketplace_review_mode || 'draft');
+  let marketplaceState;
+  if (marketplaceReviewMode === 'draft') {
+    if (itchState?.status !== 'verified'
+      || itchState.manifest_hash !== manifestHash
+      || itchState.listing_hash !== listingHash) {
+      throw new Error('Publishing requires the exact verified itch.io draft.');
+    }
+    marketplaceState = itchState;
+  } else if (marketplaceReviewMode === 'published_update') {
+    const currentReceiptMatches = publishedState?.status === 'verified_public'
+      && publishedState.product_id === product.product_id
+      && publishedState.product_slug === product.slug
+      && publishedState.target_version === distributionState.current_marketplace_version
+      && publishedState.manifest_hash === packaged.manifest.base_manifest_hash
+      && distributionState.base_manifest_hash === publishedState.manifest_hash
+      && publicUrl(publishedState.public_url) === publicUrl(distributionState.public_url)
+      && publishedState.edit_url === distributionState.edit_url
+      && publishedState.butler_target === distributionState.butler_target;
+    if (!currentReceiptMatches) {
+      throw new Error('Updating requires the exact verified current public release receipt.');
+    }
+    marketplaceState = publishedState;
+  } else {
+    throw new Error(`Unsupported itch.io publication mode: ${marketplaceReviewMode}.`);
   }
 
   const env = options.env || process.env;
@@ -208,7 +265,7 @@ export async function publishApprovedItchRelease(options) {
   );
   const cliRunner = options.cliRunner || defaultCliRunner;
   const openArgs = [
-    '-s', sessionName, 'open', itchState.edit_url, '--browser', 'chrome',
+    '-s', sessionName, 'open', marketplaceState.edit_url, '--browser', 'chrome',
     '--persistent', '--profile', profileDir, '--json',
   ];
   if (options.headed !== false && env.ITCH_PLAYWRIGHT_HEADED !== 'false') openArgs.splice(-1, 0, '--headed');
@@ -216,8 +273,10 @@ export async function publishApprovedItchRelease(options) {
   if (!opened.ok) throw new Error(`Could not open itch.io publication editor: ${opened.stderr || opened.stdout || opened.error}`);
   const codeRoot = mkdtempSync(resolve(os.tmpdir(), 'orion-itch-publish-'));
   try {
+    let codeIndex = 0;
     const runCode = (filename, code) => {
-      const codePath = resolve(codeRoot, filename);
+      codeIndex += 1;
+      const codePath = resolve(codeRoot, `${String(codeIndex).padStart(2, '0')}-${filename}`);
       writeFileSync(codePath, code, 'utf8');
       const result = cliRunner(executable, ['-s', sessionName, 'run-code', '--filename', codePath, '--json'], {
         cwd: options.cwd,
@@ -229,14 +288,124 @@ export async function publishApprovedItchRelease(options) {
       if (details.isError) throw new Error(`itch.io publication failed: ${details.error}`);
       return details;
     };
-    const published = runCode('publish.js', buildItchPublishCode({
-      listing: packaged.listing,
-      editUrl: itchState.edit_url,
-    }));
-    if (!['published', 'already_public'].includes(published.status)) {
-      throw new Error(`itch.io visibility was not changed (${published.status || 'unknown'}).`);
+    const runCli = (label, args, timeoutMs = 3 * 60_000) => {
+      const result = cliRunner(args[0], args.slice(1), { cwd: options.cwd, env, timeoutMs });
+      const details = parseCliJson(result.stdout) || {};
+      if (!result.ok || details.isError) {
+        throw new Error(`itch.io ${label} failed: ${details.error || result.stderr || result.stdout || result.error}`);
+      }
+      return { result, details };
+    };
+    const cleanPublicUrl = publicUrl(marketplaceState.public_url);
+    let publicationAction = 'published';
+    let butlerReceipt = null;
+
+    if (marketplaceReviewMode === 'published_update') {
+      const downloadRoot = resolve(packaged.root, 'download');
+      const coverPath = resolve(packaged.root, packaged.listing.cover_path);
+      const screenshotPaths = (packaged.listing.screenshot_paths || [])
+        .map((path) => resolve(packaged.root, path));
+      const missingFiles = [downloadRoot, coverPath, ...screenshotPaths]
+        .filter((path) => !existsSync(path));
+      if (missingFiles.length) {
+        throw new Error(`Missing approved itch.io update files: ${missingFiles.join(', ')}`);
+      }
+
+      const preflight = runCode('update-preflight.js', buildPublishedUpdatePreflightCode({
+        editUrl: marketplaceState.edit_url,
+        expectedTitle: product.title,
+      }));
+      if (preflight.status !== 'ready') {
+        throw new Error(`itch.io update preflight failed: ${JSON.stringify(preflight.checks || {})}`);
+      }
+
+      const homeButler = resolve(os.homedir(), 'bin', 'butler');
+      const butlerExecutable = options.butlerExecutable
+        || env.ITCH_BUTLER_EXECUTABLE
+        || (existsSync(homeButler) ? homeButler : 'butler');
+      const butler = cliRunner(butlerExecutable, [
+        'push',
+        downloadRoot,
+        marketplaceState.butler_target,
+        '--userversion',
+        `${packaged.manifest.target_version}-${manifestHash.slice(0, 12)}`,
+        '--if-changed',
+      ], { cwd: options.cwd, env, timeoutMs: 15 * 60_000 });
+      if (!butler.ok) {
+        throw new Error(`Butler could not publish the approved update: ${butler.stderr || butler.stdout || butler.error}`);
+      }
+      butlerReceipt = {
+        target: marketplaceState.butler_target,
+        user_version: `${packaged.manifest.target_version}-${manifestHash.slice(0, 12)}`,
+        output: String(butler.stdout || '').slice(-2000),
+      };
+
+      cliRunner(executable, ['-s', sessionName, 'dialog-dismiss', '--json'], {
+        cwd: options.cwd,
+        env,
+        timeoutMs: 15_000,
+      });
+      let counted = runCode('screenshot-count.js', buildScreenshotCountRunCode());
+      while (Number(counted.count) > 0) {
+        const before = Number(counted.count);
+        runCode('screenshot-delete.js', buildDeleteScreenshotRunCode());
+        runCli('screenshot confirmation', [
+          executable, '-s', sessionName, 'dialog-accept', '--json',
+        ], 15_000);
+        counted = runCode('screenshot-recount.js', buildScreenshotCountRunCode());
+        if (Number(counted.count) >= before) {
+          throw new Error('itch.io screenshot replacement made no progress.');
+        }
+      }
+
+      const uploadMedia = (kind, paths) => {
+        for (const path of paths) {
+          const trigger = runCode(`${kind}-chooser.js`, buildMediaTriggerRunCode(kind));
+          if (trigger.status !== 'chooser_opened') {
+            throw new Error(`itch.io ${kind} chooser was not available (${trigger.status || 'unknown'}).`);
+          }
+          runCli(`${kind} upload`, [
+            executable, '-s', sessionName, 'upload', path, '--json',
+          ]);
+        }
+      };
+      uploadMedia('screenshots', screenshotPaths);
+      uploadMedia('cover', [coverPath]);
+      const media = runCode('media-state.js', buildMediaStateRunCode());
+      if (!media.coverId || Number(media.screenshotCount) !== screenshotPaths.length) {
+        throw new Error(`itch.io update media did not settle: ${JSON.stringify(media)}`);
+      }
+
+      const submitted = runCode('update-listing.js', buildItchDraftRunCode({
+        listing: packaged.listing,
+        publicUrl: cleanPublicUrl,
+        editUrl: marketplaceState.edit_url,
+        save: true,
+      }));
+      if (submitted.status !== 'submitted') {
+        throw new Error(`itch.io update listing was not saved (${submitted.status || 'unknown'}).`);
+      }
+      const editorScreenshotPath = resolve(productRoot, 'review', 'itch-update-editor.png');
+      const editorVerified = runCode('update-editor-verify.js', buildVerifyRunCode({
+        listing: packaged.listing,
+        screenshotCount: screenshotPaths.length,
+        screenshotPath: editorScreenshotPath,
+        expectedVisibility: 'published',
+      }));
+      if (editorVerified.status !== 'verified') {
+        throw new Error(`itch.io update editor verification failed: ${JSON.stringify(editorVerified.checks || {})}`);
+      }
+      publicationAction = 'updated';
+    } else {
+      const published = runCode('publish.js', buildItchPublishCode({
+        listing: packaged.listing,
+        editUrl: marketplaceState.edit_url,
+      }));
+      if (!['published', 'already_public'].includes(published.status)) {
+        throw new Error(`itch.io visibility was not changed (${published.status || 'unknown'}).`);
+      }
+      publicationAction = published.status;
     }
-    const cleanPublicUrl = publicUrl(itchState.public_url);
     const screenshotPath = resolve(productRoot, 'review', 'itch-public.png');
     const verified = runCode('verify.js', buildItchPublicVerificationCode({
       listing: packaged.listing,
@@ -259,6 +428,7 @@ export async function publishApprovedItchRelease(options) {
     if (!Object.values(anonymousChecks).every(Boolean)) {
       throw new Error(`itch.io anonymous verification failed: ${JSON.stringify(anonymousChecks)}`);
     }
+    const completedAt = options.now || new Date().toISOString();
     const state = {
       schema_version: '1.0',
       status: 'verified_public',
@@ -268,13 +438,25 @@ export async function publishApprovedItchRelease(options) {
       manifest_hash: manifestHash,
       listing_hash: listingHash,
       marketplace: 'itch.io',
+      publication_mode: marketplaceReviewMode,
+      publication_action: publicationAction,
+      previous_version: marketplaceReviewMode === 'published_update'
+        ? publishedState.target_version
+        : null,
+      previous_manifest_hash: marketplaceReviewMode === 'published_update'
+        ? publishedState.manifest_hash
+        : null,
       public_url: cleanPublicUrl,
-      edit_url: itchState.edit_url,
-      butler_target: itchState.butler_target,
+      edit_url: marketplaceState.edit_url,
+      butler_target: marketplaceState.butler_target,
       distribution_interaction_id: distributionState.last_decision.discord_interaction_id,
-      published_at: options.now || new Date().toISOString(),
-      verified_at: options.now || new Date().toISOString(),
+      published_at: marketplaceReviewMode === 'published_update'
+        ? publishedState.published_at || completedAt
+        : completedAt,
+      updated_at: completedAt,
+      verified_at: completedAt,
       verification: { ...verified.checks, anonymous_http: anonymousChecks },
+      ...(butlerReceipt ? { butler: butlerReceipt } : {}),
       screenshot_path: screenshotPath,
     };
     await mkdir(dirname(releaseStatePath), { recursive: true });

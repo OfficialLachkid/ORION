@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import {
+  buildPublishedUpdatePreflightCode,
   buildItchPublicVerificationCode,
   buildItchPublishCode,
   publishApprovedItchRelease,
@@ -11,6 +13,11 @@ import {
 
 const manifestHash = 'a'.repeat(64);
 const listingHash = 'b'.repeat(64);
+
+function suppliedBrowserCode(args) {
+  const filenameIndex = args.indexOf('--filename');
+  return filenameIndex >= 0 ? readFileSync(args[filenameIndex + 1], 'utf8') : '';
+}
 
 async function createFixture() {
   const outputRoot = await mkdtemp(resolve(tmpdir(), 'orion-itch-publish-'));
@@ -125,6 +132,17 @@ test('public verification requires title, price, buy action, and non-draft page'
   assert.doesNotThrow(() => new Function(`return (${code});`));
 });
 
+test('published-update preflight requires the expected editor, title, and public visibility', () => {
+  const code = buildPublishedUpdatePreflightCode({
+    editUrl: 'https://itch.io/game/edit/5144533',
+    expectedTitle: 'Neon Plasma Armory',
+  });
+  assert.match(code, /preflight_failed/u);
+  assert.match(code, /game\[published\].*value="published"/u);
+  assert.match(code, /title === input\.expectedTitle/u);
+  assert.doesNotThrow(() => new Function(`return (${code});`));
+});
+
 test('approved release publishes once, verifies public page, and writes an idempotent receipt', async () => {
   const fixture = await createFixture();
   let runCodeCalls = 0;
@@ -194,4 +212,153 @@ test('publishing fails before browser mutation when distribution approval is abs
     releaseVersion: '0.2.0',
     cliRunner() { throw new Error('browser must not open'); },
   }), /separate distribution approval/u);
+});
+
+test('approved published update replaces the package and dynamic listing media before advancing the receipt', async () => {
+  const fixture = await createFixture();
+  const oldManifestHash = manifestHash;
+  const updateManifestHash = 'c'.repeat(64);
+  const updateListingHash = 'd'.repeat(64);
+  const candidatePath = 'releases/0.3.0/candidates/fedcba9876543210';
+  const candidateRoot = resolve(fixture.productRoot, candidatePath);
+  const listing = {
+    listing_hash: updateListingHash,
+    title: fixture.product.title,
+    short_description: 'Weapons, effects, props, and interactive shield states.',
+    description: 'Complete approved version 0.3.0 listing.',
+    suggested_price: { amount: 4.99, currency: 'USD' },
+    tags: ['2D', 'Pixel Art'],
+    cover_path: 'cover.png',
+    screenshot_paths: ['inventory.png', 'effects.png', 'cycles.gif'],
+  };
+  const manifest = {
+    manifest_hash: updateManifestHash,
+    listing_hash: updateListingHash,
+    base_manifest_hash: oldManifestHash,
+    target_version: '0.3.0',
+    release_state: 'awaiting_extension_review',
+    distribution_ready: false,
+    quality_holds: [],
+    gates: { quality_holds_resolved: true },
+  };
+  await mkdir(resolve(candidateRoot, 'download'), { recursive: true });
+  await Promise.all([
+    writeFile(resolve(candidateRoot, 'manifest.json'), JSON.stringify(manifest)),
+    writeFile(resolve(candidateRoot, 'itch-listing.json'), JSON.stringify(listing)),
+    writeFile(resolve(candidateRoot, 'cover.png'), 'cover'),
+    writeFile(resolve(candidateRoot, 'inventory.png'), 'inventory'),
+    writeFile(resolve(candidateRoot, 'effects.png'), 'effects'),
+    writeFile(resolve(candidateRoot, 'cycles.gif'), 'cycles'),
+    writeFile(resolve(candidateRoot, 'download', 'neon-plasma-armory-assets.zip'), 'buyer package'),
+    writeFile(resolve(fixture.productRoot, 'releases', '0.3.0', 'latest-candidate.json'), JSON.stringify({
+      target_version: '0.3.0',
+      candidate_path: candidatePath,
+      manifest_hash: updateManifestHash,
+    })),
+    writeFile(resolve(fixture.productRoot, 'review', 'discord.json'), JSON.stringify({
+      manifest_hash: updateManifestHash,
+      listing_hash: updateListingHash,
+      marketplace_review_mode: 'published_update',
+      current_marketplace_version: '0.2.0',
+      last_decision: { decision: 'approve' },
+    })),
+    writeFile(resolve(fixture.productRoot, 'review', 'itch-seller.json'), JSON.stringify({
+      status: 'ready',
+      manifest_hash: updateManifestHash,
+      listing_hash: updateListingHash,
+    })),
+    writeFile(resolve(fixture.productRoot, 'review', 'distribution.json'), JSON.stringify({
+      status: 'distribution_approved',
+      marketplace_review_mode: 'published_update',
+      current_marketplace_version: '0.2.0',
+      base_manifest_hash: oldManifestHash,
+      manifest_hash: updateManifestHash,
+      listing_hash: updateListingHash,
+      public_url: 'https://vbjservices.itch.io/asset-pack-test',
+      edit_url: 'https://itch.io/game/edit/5144533',
+      butler_target: 'vbjservices/asset-pack-test:assets',
+      last_decision: { decision: 'approve_publish', discord_interaction_id: 'interaction-update' },
+    })),
+    writeFile(resolve(fixture.productRoot, 'review', 'itch-release.json'), JSON.stringify({
+      status: 'verified_public',
+      product_id: fixture.product.product_id,
+      product_slug: fixture.product.slug,
+      target_version: '0.2.0',
+      manifest_hash: oldManifestHash,
+      listing_hash: listingHash,
+      public_url: 'https://vbjservices.itch.io/asset-pack-test',
+      edit_url: 'https://itch.io/game/edit/5144533',
+      butler_target: 'vbjservices/asset-pack-test:assets',
+      published_at: '2026-10-16T12:00:00.000Z',
+    })),
+  ]);
+
+  const calls = [];
+  let screenshotCount = 2;
+  const cliRunner = (executable, args) => {
+    calls.push({ executable, args });
+    if (args[0] === 'push') return { ok: true, stdout: 'Pushed build 42', stderr: '' };
+    const command = args[2];
+    if (['open', 'close', 'dialog-dismiss', 'dialog-accept', 'upload'].includes(command)) {
+      return { ok: true, stdout: '{}', stderr: '' };
+    }
+    if (command !== 'run-code') return { ok: false, stderr: `unexpected ${command}` };
+    const code = suppliedBrowserCode(args);
+    let details;
+    if (code.includes('expectedTitle')) details = { status: 'ready', checks: { editor: true, title: true, published: true } };
+    else if (code.includes("status: 'screenshots_counted'")) details = { status: 'screenshots_counted', count: screenshotCount };
+    else if (code.includes("status: 'screenshot_delete_requested'")) {
+      screenshotCount -= 1;
+      details = { status: 'screenshot_delete_requested' };
+    } else if (code.includes("status: 'chooser_opened'")) details = { status: 'chooser_opened' };
+    else if (code.includes("status: 'media_ready'")) details = { status: 'media_ready', coverId: 'cover-v3', screenshotCount: 3 };
+    else if (code.includes('"save":true')) details = { status: 'submitted' };
+    else if (code.includes('expectedVisibility')) details = { status: 'verified', checks: { visibility: true } };
+    else if (code.includes('buy_action')) details = {
+      status: 'verified_public',
+      checks: {
+        public_url: true,
+        title: true,
+        buy_action: true,
+        price: true,
+        included_file: true,
+        payment_options: true,
+        not_draft_error: true,
+      },
+    };
+    else details = { status: 'unknown' };
+    return { ok: true, stdout: JSON.stringify({ result: JSON.stringify(details) }), stderr: '' };
+  };
+
+  const result = await publishApprovedItchRelease({
+    ...fixture,
+    slug: fixture.product.slug,
+    releaseVersion: '0.3.0',
+    cliRunner,
+    headed: false,
+    butlerExecutable: 'butler',
+    publicFetchImpl: async () => ({
+      ok: true,
+      async text() { return '<html><title>Neon Plasma Armory</title></html>'; },
+    }),
+    now: '2026-10-20T13:00:00.000Z',
+  });
+
+  assert.equal(result.target_version, '0.3.0');
+  assert.equal(result.publication_mode, 'published_update');
+  assert.equal(result.publication_action, 'updated');
+  assert.equal(result.previous_version, '0.2.0');
+  assert.equal(result.previous_manifest_hash, oldManifestHash);
+  assert.equal(result.butler.target, 'vbjservices/asset-pack-test:assets');
+  const butler = calls.find((call) => call.args[0] === 'push');
+  assert.ok(butler.args.includes('--if-changed'));
+  assert.ok(butler.args.includes(`0.3.0-${updateManifestHash.slice(0, 12)}`));
+  assert.equal(calls.filter((call) => call.args[2] === 'upload').length, 4);
+  const receipt = JSON.parse(await readFile(
+    resolve(fixture.productRoot, 'review', 'itch-release.json'),
+    'utf8',
+  ));
+  assert.equal(receipt.manifest_hash, updateManifestHash);
+  assert.equal(receipt.published_at, '2026-10-16T12:00:00.000Z');
+  assert.equal(receipt.updated_at, '2026-10-20T13:00:00.000Z');
 });
