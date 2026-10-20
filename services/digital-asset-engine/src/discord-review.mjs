@@ -166,7 +166,7 @@ export function partitionReviewAttachments(mediaFiles, receiptFiles, limit = DIS
   return { overviewFiles, galleryChunks };
 }
 
-async function findOrCreatePackChannel(options) {
+export async function findOrCreatePackChannel(options) {
   const channels = await discordRequest(options.token, `/guilds/${options.guildId}/channels`, {
     fetchImpl: options.fetchImpl,
   });

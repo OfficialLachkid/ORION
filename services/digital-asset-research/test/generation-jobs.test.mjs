@@ -55,6 +55,8 @@ test('generation worker advances a queued job through package review without mar
     runtimeConfig: { env: { DIGITAL_ASSET_ARCHIVE_ROOT: outputRoot } },
     projectRoot: process.cwd(),
     now: '2026-10-20T12:01:00.000Z',
+    heartbeatIntervalMs: 0,
+    updateProgress: async () => null,
     generateProduct: async () => {
       calls.push('generate');
       return { product: { product_id: 'product-1', slug: 'test-pack' }, gates: { all_assets_valid: true } };
