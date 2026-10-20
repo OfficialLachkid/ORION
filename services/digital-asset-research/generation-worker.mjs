@@ -26,4 +26,3 @@ runResearchGenerationJob({
   process.stderr.write(`${error.stack || error.message || error}\n`);
   process.exitCode = 1;
 });
-

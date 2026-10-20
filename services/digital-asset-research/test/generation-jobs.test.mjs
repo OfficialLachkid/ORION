@@ -98,4 +98,3 @@ test('generation worker rejects a job whose approved opportunity was changed on 
     /input hash does not match/iu,
   );
 });
-
