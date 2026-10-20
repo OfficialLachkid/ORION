@@ -11,6 +11,8 @@ import {
   buildAssetReviewEmbed,
   buildPackReviewEmbed,
   discordRequest,
+  marketplaceReviewMediaPaths,
+  partitionReviewAttachments,
   postDigitalAssetReview,
 } from '../src/discord-review.mjs';
 import { planDigitalAssetProduct } from '../src/pipeline.mjs';
@@ -83,9 +85,13 @@ async function createReviewFixture() {
     writeFile(resolve(productRoot, asset.final_path), sprite),
     writeFile(resolve(productRoot, asset.validation_path), `${JSON.stringify(validation)}\n`, 'utf8'),
     writeFile(resolve(exportRoot, 'cover.png'), sprite),
+    writeFile(resolve(exportRoot, 'inventory.png'), sprite),
+    writeFile(resolve(exportRoot, 'cycles.gif'), sprite),
     writeFile(resolve(exportRoot, 'manifest.json'), `${JSON.stringify(manifest)}\n`, 'utf8'),
     writeFile(resolve(exportRoot, 'itch-listing-preview.json'), `${JSON.stringify({
       listing_hash: manifest.listing_hash,
+      cover_path: 'cover.png',
+      screenshot_paths: ['inventory.png', 'cycles.gif'],
     })}\n`, 'utf8'),
     writeFile(resolve(productRoot, 'review', 'itch.json'), `${JSON.stringify(itchState)}\n`, 'utf8'),
   ]);
@@ -203,6 +209,35 @@ test('published update review distinguishes candidate media from the current liv
   assert.equal(pack.image.url, 'attachment://cover.gif');
 });
 
+test('Discord review media follows every dynamic listing path and partitions only at the API limit', () => {
+  const screenshotPaths = Array.from({ length: 12 }, (unused, index) => `gallery/preview-${index + 1}.png`);
+  const paths = marketplaceReviewMediaPaths({
+    cover_path: 'cover.gif',
+    screenshot_paths: [...screenshotPaths, 'cover.gif'],
+  }, {
+    cover_fallback_path: 'cover-still.png',
+    screenshot_paths: screenshotPaths,
+  });
+  assert.deepEqual(paths, ['cover.gif', 'cover-still.png', ...screenshotPaths]);
+
+  const media = paths.map((path) => ({ path, filename: path, buffer: Buffer.from(path) }));
+  const receipts = [
+    { filename: 'manifest.json', buffer: Buffer.from('manifest') },
+    { filename: 'LICENSE.md', buffer: Buffer.from('license') },
+  ];
+  const partitioned = partitionReviewAttachments(media, receipts);
+  assert.equal(partitioned.overviewFiles.length, 10);
+  assert.deepEqual(
+    partitioned.overviewFiles.slice(0, 8).map((file) => file.path),
+    paths.slice(0, 8),
+  );
+  assert.deepEqual(partitioned.overviewFiles.slice(8).map((file) => file.filename), [
+    'manifest.json',
+    'LICENSE.md',
+  ]);
+  assert.deepEqual(partitioned.galleryChunks.flat().map((file) => file.path), paths.slice(8));
+});
+
 test('Discord requests honor the supplied retry interval for old-message edit limits', async () => {
   let attempts = 0;
   const waits = [];
@@ -258,6 +293,16 @@ test('review revision updates the existing pack and asset messages instead of re
     }
     if (options.method === 'POST' && String(url).endsWith('/messages')) {
       messageNumber += 1;
+      if (messageNumber === 1) {
+        const payload = JSON.parse(options.body.get('payload_json'));
+        assert.deepEqual(payload.attachments.map((attachment) => attachment.filename), [
+          'cover.png',
+          'inventory.png',
+          'cycles.gif',
+          'manifest.json',
+        ]);
+        assert.equal(payload.embeds[0].fields.find((field) => field.name === 'Storefront media').value, '**3** exact candidate images attached to this package review.');
+      }
       return jsonResponse({ id: messageNumber === 1 ? 'overview-1' : 'asset-message-1' });
     }
     if (options.method === 'PATCH') {

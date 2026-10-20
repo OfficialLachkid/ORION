@@ -67,7 +67,7 @@ npm run digital-assets:discord-review -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-The overview message owns the single package gate: `Approve Pack`, `Request Changes`, `Reject Pack`, `Open itch.io Draft`, and `Open Manifest`. Individual thread messages are numbered visual previews without decision buttons. `Request Changes` opens one form with a selectable/deselectable numbered asset list and one shared feedback field. Unselected assets are accepted for that revision; selected assets receive `request_changes`.
+The overview message owns the single package gate: `Approve Pack`, `Request Changes`, `Reject Pack`, `Open itch.io Draft`, and `Open Manifest`. It derives its attachments from the versioned listing's cover, optional static cover fallback, and complete `screenshot_paths` array rather than assuming a fixed image count. When the media, manifest, and license exceed Discord's ten-attachment limit, ORION keeps the first group on the overview and posts deterministic continuation messages for every remaining image. Individual thread messages are numbered visual previews without decision buttons. `Request Changes` opens one form with a selectable/deselectable numbered asset list and one shared feedback field. Unselected assets are accepted for that revision; selected assets receive `request_changes`.
 
 Before a decision is stored, the live bot verifies the operator allowlist, overview message, populated itch.io listing hash, package manifest hash, and every exported asset hash against the canonical T7 files. It appends one atomic decision to `digital_asset_release_reviews`, including each asset's resulting outcome. This creative decision does not approve marketplace distribution.
 
@@ -227,7 +227,7 @@ npm run digital-assets:prepare-expansion-release -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-This command fails closed if the expansion approval is absent or stale. It verifies the immutable `0.2.0` base and approved expansion files, copies only buyer-useful states, frames, overlays, sheets, and metadata into a content-addressed `0.3.0` candidate, and rebuilds the complete listing media. Review GIFs, validation reports, model sources, and duplicated base images stay outside the paid download. The storefront uses a protected slow animated cover with a readable first frame, a complete inventory, an expansion breakdown, and an interactive montage on a lighter steel-blue presentation.
+This command fails closed if the expansion approval is absent or stale. It verifies the immutable `0.2.0` base and approved expansion files, copies only buyer-useful states, frames, overlays, sheets, and metadata into a content-addressed `0.3.0` candidate, and rebuilds the complete listing media. Review GIFs, validation reports, model sources, and duplicated base images stay outside the paid download. The storefront preserves the established weapon inventory, effects breakdown, and firing-cycle preview, then appends a separate expansion inventory and interactive montage. Its protected slow animated cover shows weapon and expansion scenes sequentially rather than mixing their asset families.
 
 If review finds a problem in only selected effect kinds, create new immutable proof revisions while inheriting the accepted artifacts. The current targeted revision regenerates only the Ion Pistol and Energy Shotgun impact/decay keyframes, then derives their decay frames deterministically:
 

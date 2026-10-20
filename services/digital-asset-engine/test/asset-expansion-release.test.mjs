@@ -5,8 +5,12 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import sharp from 'sharp';
-import { prepareApprovedAssetExpansionRelease } from '../src/asset-expansion-release.mjs';
 import {
+  inheritedMarketplaceScreenshotPath,
+  prepareApprovedAssetExpansionRelease,
+} from '../src/asset-expansion-release.mjs';
+import {
+  coverScene,
   selectCoverLifecyclePreviewPath,
   selectLifecyclePreviewPath,
   weaponEffectPhase,
@@ -148,14 +152,12 @@ async function fixture() {
     await Promise.all([
       write(resolve(candidateRoot, 'cover.gif'), Buffer.from('GIF89a-cover')),
       write(resolve(candidateRoot, 'cover-still.png'), png),
-      write(resolve(candidateRoot, 'complete-inventory.png'), png),
       write(resolve(candidateRoot, 'armory-items-and-vfx.png'), png),
       write(resolve(candidateRoot, 'interactive-expansion-montage.gif'), Buffer.from('GIF89a-montage')),
     ]);
     return {
       cover_path: 'cover.gif', cover_fallback_path: 'cover-still.png',
       screenshot_paths: [
-        'complete-inventory.png',
         ...inheritedScreenshotPaths,
         'armory-items-and-vfx.png',
         'interactive-expansion-montage.gif',
@@ -180,7 +182,6 @@ test('builds an immutable 0.3.0 package from the exact approved expansion review
   assert.equal(result.listing.cover_path, 'cover.gif');
   assert.equal(result.manifest.marketing_media.motion.rapid_flashing, false);
   assert.deepEqual(result.listing.screenshot_paths, [
-    'complete-inventory.png',
     'previous-release-media/weapon-inventory.png',
     'previous-release-media/effects-breakdown.png',
     'previous-release-media/firing-cycle-montage.gif',
@@ -191,6 +192,7 @@ test('builds an immutable 0.3.0 package from the exact approved expansion review
     await readFile(resolve(result.candidateRoot, 'previous-release-media/firing-cycle-montage.gif'), 'utf8'),
     'GIF89a-base-montage',
   );
+  await assert.rejects(readFile(resolve(result.candidateRoot, 'complete-inventory.png')));
   assert.equal((await readFile(resolve(result.candidateRoot, 'download/assets/expansion/vfx/plasma-shield.png'))).length > 0, true);
   assert.equal((await readFile(resolve(result.candidateRoot, 'download/animations/plasma-shield/frames/active/00.png'))).length > 0, true);
   await assert.rejects(readFile(resolve(result.candidateRoot, 'download/animations/plasma-shield/previews/active.gif')));
@@ -238,6 +240,35 @@ test('marketing previews sample every declared shield animation instead of early
       'weapon', 'muzzle_flash', 'projectile', 'impact_decay',
     ],
   );
+  assert.deepEqual(
+    Array.from({ length: 16 }, (unused, index) => coverScene(index).kind),
+    [
+      'weapons', 'weapons', 'weapons', 'weapons',
+      'expansion', 'expansion', 'expansion', 'expansion',
+      'expansion', 'expansion', 'expansion', 'expansion',
+      'expansion', 'expansion', 'expansion', 'expansion',
+    ],
+  );
+  assert.equal(coverScene(0).frame_index, 0);
+  assert.equal(coverScene(4).frame_index, 0);
+  assert.equal(coverScene(15).frame_index, 11);
+});
+
+test('inherited marketplace media stays flat across any number of future release updates', () => {
+  const paths = [
+    'weapon-inventory.png',
+    'previous-release-media/effects-breakdown.png',
+    'previous-release-media/previous-release-media/firing-cycle-montage.gif',
+    'screenshots/expansion-inventory.png',
+    'previous-release-media/screenshots/second-expansion.gif',
+  ];
+  assert.deepEqual(paths.map(inheritedMarketplaceScreenshotPath), [
+    'previous-release-media/weapon-inventory.png',
+    'previous-release-media/effects-breakdown.png',
+    'previous-release-media/firing-cycle-montage.gif',
+    'previous-release-media/screenshots/expansion-inventory.png',
+    'previous-release-media/screenshots/second-expansion.gif',
+  ]);
 });
 
 test('fails closed when the approval does not cover the exact expansion manifest', async () => {
