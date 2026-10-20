@@ -139,12 +139,26 @@ function unique(values) {
   return [...new Set(values)];
 }
 
+export function inheritedMarketplaceScreenshotPath(path) {
+  let normalized = normalizePath(String(path || '')).replace(/^\/+/, '');
+  while (normalized.startsWith('previous-release-media/')) {
+    normalized = normalized.slice('previous-release-media/'.length);
+  }
+  if (!normalized) throw new Error('Inherited marketplace screenshot path cannot be empty.');
+  return `previous-release-media/${normalized}`;
+}
+
 async function copyInheritedMarketplaceScreenshots({ baseRoot, candidateRoot, listing }) {
   const inherited = [];
+  const destinations = new Set();
   for (const path of unique(listing.screenshot_paths || [])) {
     const normalized = normalizePath(path);
     const source = resolveInside(baseRoot, normalized, 'Inherited marketplace screenshot');
-    const destinationPath = `previous-release-media/${normalized}`;
+    const destinationPath = inheritedMarketplaceScreenshotPath(normalized);
+    if (destinations.has(destinationPath)) {
+      throw new Error(`Inherited marketplace screenshots collide at ${destinationPath}.`);
+    }
+    destinations.add(destinationPath);
     const destination = resolveInside(
       candidateRoot,
       destinationPath,

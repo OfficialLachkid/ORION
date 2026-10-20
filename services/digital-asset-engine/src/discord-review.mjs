@@ -9,7 +9,8 @@ const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_CATEGORY_TYPE = 4;
 const DISCORD_TEXT_CHANNEL_TYPE = 0;
 const REVIEW_COLOR = 0x35d9ff;
-const REVIEW_COMPONENT_SCHEMA_VERSION = '2.0';
+const REVIEW_COMPONENT_SCHEMA_VERSION = '2.1';
+const DISCORD_ATTACHMENT_LIMIT = 10;
 
 function cleanText(value, maximum = 1024) {
   const normalized = String(value || '').replace(/\s+/gu, ' ').trim();
@@ -92,6 +93,79 @@ export async function sendMessageWithFiles(token, channelId, payload, files, opt
   );
 }
 
+function reviewMediaContentType(path) {
+  const normalized = path.toLocaleLowerCase();
+  if (normalized.endsWith('.gif')) return 'image/gif';
+  if (normalized.endsWith('.png')) return 'image/png';
+  if (normalized.endsWith('.jpg') || normalized.endsWith('.jpeg')) return 'image/jpeg';
+  if (normalized.endsWith('.webp')) return 'image/webp';
+  throw new Error(`Unsupported storefront review image: ${path}.`);
+}
+
+export function marketplaceReviewMediaPaths(listing, marketingMedia = null) {
+  const paths = [
+    listing.cover_path || marketingMedia?.cover_path || 'cover.png',
+    marketingMedia?.cover_fallback_path,
+    ...(listing.screenshot_paths || []),
+    ...(marketingMedia?.screenshot_paths || []),
+  ]
+    .map((path) => String(path || '').replaceAll('\\', '/').trim())
+    .filter(Boolean);
+  return [...new Set(paths)];
+}
+
+function uniqueAttachmentFilenames(paths) {
+  const totals = new Map();
+  for (const path of paths) {
+    const filename = basename(path);
+    totals.set(filename, (totals.get(filename) || 0) + 1);
+  }
+  return paths.map((path, index) => {
+    const filename = basename(path);
+    return totals.get(filename) === 1
+      ? filename
+      : `${String(index + 1).padStart(2, '0')}-${filename}`;
+  });
+}
+
+async function loadMarketplaceReviewMedia(exportRoot, listing, marketingMedia, productTitle) {
+  const paths = marketplaceReviewMediaPaths(listing, marketingMedia);
+  const filenames = uniqueAttachmentFilenames(paths);
+  return Promise.all(paths.map(async (path, index) => {
+    const absolutePath = resolve(exportRoot, path);
+    const child = relative(exportRoot, absolutePath);
+    if (child.startsWith('..') || isAbsolute(child)) {
+      throw new Error('Storefront review media path must stay inside the immutable candidate.');
+    }
+    return {
+      path,
+      filename: filenames[index],
+      contentType: reviewMediaContentType(path),
+      description: index === 0
+        ? `${productTitle} cover assembled from included assets`
+        : `${productTitle} marketplace preview ${index}`,
+      buffer: await readFile(absolutePath),
+    };
+  }));
+}
+
+export function partitionReviewAttachments(mediaFiles, receiptFiles, limit = DISCORD_ATTACHMENT_LIMIT) {
+  const maximum = Math.max(1, Number(limit) || DISCORD_ATTACHMENT_LIMIT);
+  if (receiptFiles.length >= maximum) {
+    throw new Error('Discord review receipts leave no attachment slot for the storefront cover.');
+  }
+  const overviewMediaCount = Math.min(mediaFiles.length, maximum - receiptFiles.length);
+  const overviewFiles = [
+    ...mediaFiles.slice(0, overviewMediaCount),
+    ...receiptFiles,
+  ];
+  const galleryChunks = [];
+  for (let index = overviewMediaCount; index < mediaFiles.length; index += maximum) {
+    galleryChunks.push(mediaFiles.slice(index, index + maximum));
+  }
+  return { overviewFiles, galleryChunks };
+}
+
 async function findOrCreatePackChannel(options) {
   const channels = await discordRequest(options.token, `/guilds/${options.guildId}/channels`, {
     fetchImpl: options.fetchImpl,
@@ -135,6 +209,7 @@ export function buildPackReviewEmbed({
   marketplaceReviewMode = 'draft',
   currentReleaseVersion = null,
   coverFilename = 'cover.png',
+  mediaCount = 1,
 }) {
   const reviewAssets = [
     ...product.assets,
@@ -165,6 +240,11 @@ export function buildPackReviewEmbed({
       {
         name: 'Attached manifest.json',
         value: 'Machine-readable review receipt with the exact file list and SHA-256 hashes. It proves which files this decision covers; it is not buyer-facing marketing content.',
+        inline: false,
+      },
+      {
+        name: 'Storefront media',
+        value: `**${mediaCount}** exact candidate image${mediaCount === 1 ? '' : 's'} attached to this package review.`,
         inline: false,
       },
       publishedUpdate
@@ -327,11 +407,40 @@ export async function postDigitalAssetReview(options) {
   state.itch_staged_at = marketplaceReview.stagedAt;
   state.marketplace_review_mode = marketplaceReview.mode;
   state.current_marketplace_version = marketplaceReview.currentReleaseVersion;
+  state.storefront_media_message_ids = Array.isArray(state.storefront_media_message_ids)
+    ? state.storefront_media_message_ids
+    : [];
   state.component_schema_version = null;
   state.completed_at = null;
   if (revisionChanged) state.last_decision = null;
   await saveState(statePath, state);
 
+  const mediaFiles = await loadMarketplaceReviewMedia(
+    exportRoot,
+    listing,
+    manifest.marketing_media,
+    product.title,
+  );
+  const receiptFiles = [{
+    filename: 'manifest.json',
+    contentType: 'application/json',
+    description: `Exact internal preview manifest ${manifest.manifest_hash}`,
+    buffer: await readFile(manifestPath),
+  }];
+  if (manifest.buyer_license) {
+    const licenseBuffer = await readFile(resolve(exportRoot, 'download', 'LICENSE.md'));
+    const licenseHash = createHash('sha256').update(licenseBuffer).digest('hex');
+    if (licenseHash !== manifest.buyer_license.content_sha256) {
+      throw new Error('The buyer license no longer matches the immutable package manifest.');
+    }
+    receiptFiles.push({
+      filename: 'LICENSE.md',
+      contentType: 'text/markdown',
+      description: `${manifest.buyer_license.license_id} ${manifest.buyer_license.version}`,
+      buffer: licenseBuffer,
+    });
+  }
+  const { overviewFiles, galleryChunks } = partitionReviewAttachments(mediaFiles, receiptFiles);
   const overviewPayload = {
     embeds: [buildPackReviewEmbed({
       product,
@@ -340,62 +449,78 @@ export async function postDigitalAssetReview(options) {
       revision: state.review_revision,
       marketplaceReviewMode: marketplaceReview.mode,
       currentReleaseVersion: marketplaceReview.currentReleaseVersion,
-      coverFilename: basename(listing.cover_path || 'cover.png'),
+      coverFilename: mediaFiles[0].filename,
+      mediaCount: mediaFiles.length,
     })],
   };
-  const coverFilename = basename(listing.cover_path || 'cover.png');
-  const coverPath = resolve(exportRoot, listing.cover_path || 'cover.png');
-  const coverChild = relative(exportRoot, coverPath);
-  if (coverChild.startsWith('..') || isAbsolute(coverChild)) {
-    throw new Error('Pack review cover path must stay inside the immutable candidate.');
-  }
-  const overviewFiles = [
-    {
-      filename: coverFilename,
-      contentType: coverFilename.endsWith('.gif') ? 'image/gif' : 'image/png',
-      description: `${product.title} cover assembled from included assets`,
-      buffer: await readFile(coverPath),
-    },
-    {
-      filename: 'manifest.json',
-      contentType: 'application/json',
-      description: `Exact internal preview manifest ${manifest.manifest_hash}`,
-      buffer: await readFile(manifestPath),
-    },
-  ];
-  if (manifest.buyer_license) {
-    const licenseBuffer = await readFile(resolve(exportRoot, 'download', 'LICENSE.md'));
-    const licenseHash = createHash('sha256').update(licenseBuffer).digest('hex');
-    if (licenseHash !== manifest.buyer_license.content_sha256) {
-      throw new Error('The buyer license no longer matches the immutable package manifest.');
-    }
-    overviewFiles.push({
-      filename: 'LICENSE.md',
-      contentType: 'text/markdown',
-      description: `${manifest.buyer_license.license_id} ${manifest.buyer_license.version}`,
-      buffer: licenseBuffer,
-    });
-  }
+  let needsComponentPatch = false;
   if (!state.overview_message_id) {
     const overview = await sendMessageWithFiles(token, state.channel_id, overviewPayload, overviewFiles, {
       fetchImpl: options.fetchImpl,
     });
     state.overview_message_id = overview.id;
     await saveState(statePath, state);
+    needsComponentPatch = true;
+  } else {
+    try {
+      await sendMessageWithFiles(token, state.channel_id, {
+        ...overviewPayload,
+        components: buildPackComponents({ guildId, state, product, manifest, itchUrl, marketplaceReviewMode: marketplaceReview.mode }),
+      }, overviewFiles, {
+        messageId: state.overview_message_id,
+        fetchImpl: options.fetchImpl,
+      });
+    } catch (error) {
+      if (!String(error?.message || '').includes('"code": 30046')) throw error;
+      state.superseded_overview_message_ids = [
+        ...(state.superseded_overview_message_ids || []),
+        state.overview_message_id,
+      ];
+      const overview = await sendMessageWithFiles(token, state.channel_id, overviewPayload, overviewFiles, {
+        fetchImpl: options.fetchImpl,
+      });
+      state.overview_message_id = overview.id;
+      await saveState(statePath, state);
+      needsComponentPatch = true;
+    }
+  }
+  if (needsComponentPatch) {
     await discordRequest(token, `/channels/${state.channel_id}/messages/${state.overview_message_id}`, {
       method: 'PATCH',
       body: { components: buildPackComponents({ guildId, state, product, manifest, itchUrl, marketplaceReviewMode: marketplaceReview.mode }) },
       fetchImpl: options.fetchImpl,
     });
-  } else {
-    await sendMessageWithFiles(token, state.channel_id, {
-      ...overviewPayload,
-      components: buildPackComponents({ guildId, state, product, manifest, itchUrl, marketplaceReviewMode: marketplaceReview.mode }),
-    }, overviewFiles, {
-      messageId: state.overview_message_id,
+  }
+
+  const mediaMessageIds = [];
+  for (let index = 0; index < galleryChunks.length; index += 1) {
+    const chunk = galleryChunks[index];
+    const payload = {
+      content: `**Storefront media ${index + 2}/${galleryChunks.length + 1}** — exact files from package review Revision ${state.review_revision}.`,
+      embeds: [],
+      components: [],
+    };
+    const existingMessageId = state.storefront_media_message_ids[index];
+    if (existingMessageId) {
+      try {
+        await sendMessageWithFiles(token, state.channel_id, payload, chunk, {
+          messageId: existingMessageId,
+          fetchImpl: options.fetchImpl,
+        });
+        mediaMessageIds.push(existingMessageId);
+        continue;
+      } catch (error) {
+        if (!String(error?.message || '').includes('"code": 30046')) throw error;
+      }
+    }
+    const message = await sendMessageWithFiles(token, state.channel_id, payload, chunk, {
       fetchImpl: options.fetchImpl,
     });
+    mediaMessageIds.push(message.id);
   }
+  state.storefront_media_message_ids = mediaMessageIds;
+  state.storefront_media_paths = mediaFiles.map((file) => file.path);
+  await saveState(statePath, state);
 
   if (!state.thread_id) {
     const thread = await discordRequest(

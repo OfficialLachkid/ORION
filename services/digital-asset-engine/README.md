@@ -67,7 +67,7 @@ npm run digital-assets:discord-review -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-The overview message owns the single package gate: `Approve Pack`, `Request Changes`, `Reject Pack`, `Open itch.io Draft`, and `Open Manifest`. Individual thread messages are numbered visual previews without decision buttons. `Request Changes` opens one form with a selectable/deselectable numbered asset list and one shared feedback field. Unselected assets are accepted for that revision; selected assets receive `request_changes`.
+The overview message owns the single package gate: `Approve Pack`, `Request Changes`, `Reject Pack`, `Open itch.io Draft`, and `Open Manifest`. It derives its attachments from the versioned listing's cover, optional static cover fallback, and complete `screenshot_paths` array rather than assuming a fixed image count. When the media, manifest, and license exceed Discord's ten-attachment limit, ORION keeps the first group on the overview and posts deterministic continuation messages for every remaining image. Individual thread messages are numbered visual previews without decision buttons. `Request Changes` opens one form with a selectable/deselectable numbered asset list and one shared feedback field. Unselected assets are accepted for that revision; selected assets receive `request_changes`.
 
 Before a decision is stored, the live bot verifies the operator allowlist, overview message, populated itch.io listing hash, package manifest hash, and every exported asset hash against the canonical T7 files. It appends one atomic decision to `digital_asset_release_reviews`, including each asset's resulting outcome. This creative decision does not approve marketplace distribution.
 

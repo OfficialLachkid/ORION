@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import test from 'node:test';
 import sharp from 'sharp';
-import { prepareApprovedAssetExpansionRelease } from '../src/asset-expansion-release.mjs';
+import {
+  inheritedMarketplaceScreenshotPath,
+  prepareApprovedAssetExpansionRelease,
+} from '../src/asset-expansion-release.mjs';
 import {
   coverScene,
   selectCoverLifecyclePreviewPath,
@@ -249,6 +252,23 @@ test('marketing previews sample every declared shield animation instead of early
   assert.equal(coverScene(0).frame_index, 0);
   assert.equal(coverScene(4).frame_index, 0);
   assert.equal(coverScene(15).frame_index, 11);
+});
+
+test('inherited marketplace media stays flat across any number of future release updates', () => {
+  const paths = [
+    'weapon-inventory.png',
+    'previous-release-media/effects-breakdown.png',
+    'previous-release-media/previous-release-media/firing-cycle-montage.gif',
+    'screenshots/expansion-inventory.png',
+    'previous-release-media/screenshots/second-expansion.gif',
+  ];
+  assert.deepEqual(paths.map(inheritedMarketplaceScreenshotPath), [
+    'previous-release-media/weapon-inventory.png',
+    'previous-release-media/effects-breakdown.png',
+    'previous-release-media/firing-cycle-montage.gif',
+    'previous-release-media/screenshots/expansion-inventory.png',
+    'previous-release-media/screenshots/second-expansion.gif',
+  ]);
 });
 
 test('fails closed when the approval does not cover the exact expansion manifest', async () => {
