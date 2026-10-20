@@ -7,6 +7,7 @@ import test from 'node:test';
 import sharp from 'sharp';
 import { prepareApprovedAssetExpansionRelease } from '../src/asset-expansion-release.mjs';
 import {
+  selectCoverLifecyclePreviewPath,
   selectLifecyclePreviewPath,
   weaponEffectPhase,
 } from '../src/expansion-release-marketing.mjs';
@@ -221,6 +222,14 @@ test('marketing previews sample every declared shield animation instead of early
   );
   for (const { animation_key: animationKey } of asset.animations) {
     assert.ok(selected.some((path) => path.includes(`/frames/${animationKey}/`)), animationKey);
+  }
+  const coverSelected = Array.from(
+    { length: 12 },
+    (unused, index) => selectCoverLifecyclePreviewPath(asset, index, 12),
+  );
+  assert.equal(coverSelected[0], asset.buyer_path);
+  for (const { animation_key: animationKey } of asset.animations) {
+    assert.ok(coverSelected.some((path) => path.includes(`/frames/${animationKey}/`)), animationKey);
   }
   assert.deepEqual(
     Array.from({ length: 8 }, (unused, index) => weaponEffectPhase(index)),
