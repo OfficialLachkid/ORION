@@ -19,7 +19,7 @@ const COLORS = Object.freeze({
   violet: '#7d6cf2',
 });
 
-export const EXPANSION_RELEASE_MARKETING_VERSION = '1.1.0';
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.1.1';
 
 function escapeXml(value) {
   return String(value)
@@ -102,6 +102,15 @@ export function selectLifecyclePreviewPath(asset, frameIndex, frameCount) {
   return asset.buyer_path;
 }
 
+export function selectCoverLifecyclePreviewPath(asset, frameIndex, frameCount) {
+  if ((Number(frameIndex) || 0) === 0) return asset.buyer_path;
+  return selectLifecyclePreviewPath(
+    asset,
+    (Number(frameIndex) || 0) - 1,
+    Math.max(1, (Number(frameCount) || 1) - 1),
+  );
+}
+
 async function effectSample(candidateRoot, assetKey, kind, preferredFrame) {
   const root = resolve(candidateRoot, 'download', 'effects', assetKey, kind);
   const metadata = await readOptionalJson(resolve(root, 'animation.json'));
@@ -126,17 +135,20 @@ async function weaponLifecycleBuffer(candidateRoot, asset, anchor, frameIndex) {
   ));
   if (!anchor) return weapon;
   const phase = weaponEffectPhase(frameIndex);
-  if (phase === 'weapon') return weapon;
+  const width = 184;
+  const height = 96;
+  const weaponTop = 32;
+  const composites = [{ input: weapon, left: 0, top: weaponTop }];
+  const render = () => sharp({
+    create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite(composites).png({ compressionLevel: 9 }).toBuffer();
+  if (phase === 'weapon') return render();
   const [muzzle, projectile, impact] = await Promise.all([
     effectSample(candidateRoot, asset.asset_key, 'muzzle_flash', 2),
     effectSample(candidateRoot, asset.asset_key, 'projectile', 0),
     effectSample(candidateRoot, asset.asset_key, 'impact_decay', 2),
   ]);
-  if (!muzzle || !projectile || !impact) return weapon;
-  const width = 256;
-  const height = 128;
-  const weaponTop = 32;
-  const composites = [{ input: weapon, left: 0, top: weaponTop }];
+  if (!muzzle || !projectile || !impact) return render();
   if (phase === 'muzzle_flash' || phase === 'projectile') {
     composites.push({
       input: muzzle.buffer,
@@ -147,7 +159,7 @@ async function weaponLifecycleBuffer(candidateRoot, asset, anchor, frameIndex) {
   if (phase === 'projectile') {
     composites.push({
       input: projectile.buffer,
-      left: anchor.x + 34 - projectile.origin.x,
+      left: anchor.x + 18 - projectile.origin.x,
       top: weaponTop + anchor.y - projectile.origin.y,
     });
   }
@@ -158,9 +170,7 @@ async function weaponLifecycleBuffer(candidateRoot, asset, anchor, frameIndex) {
       top: weaponTop + anchor.y - impact.origin.y,
     });
   }
-  return sharp({
-    create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
-  }).composite(composites).png({ compressionLevel: 9 }).toBuffer();
+  return render();
 }
 
 async function weaponEntries(candidateRoot, product, frameIndex = 0) {
@@ -184,11 +194,17 @@ async function weaponEntries(candidateRoot, product, frameIndex = 0) {
   })));
 }
 
-async function expansionEntries(candidateRoot, expansionAssets, frameIndex = null, frameCount = null) {
+async function expansionEntries(
+  candidateRoot,
+  expansionAssets,
+  frameIndex = null,
+  frameCount = null,
+  selector = selectLifecyclePreviewPath,
+) {
   return Promise.all(expansionAssets.map(async (asset) => {
     const selected = frameIndex === null
       ? asset.buyer_path
-      : selectLifecyclePreviewPath(asset, frameIndex, frameCount);
+      : selector(asset, frameIndex, frameCount);
     return {
       asset_key: asset.asset_key,
       name: asset.name,
@@ -300,7 +316,13 @@ export async function buildExpansionReleaseMarketingMedia(options) {
       frameFactory: async (frameIndex) => {
         const [animatedWeapons, expansion] = await Promise.all([
           weaponEntries(options.candidateRoot, options.product, frameIndex),
-          expansionEntries(options.candidateRoot, options.expansionAssets, frameIndex, 12),
+          expansionEntries(
+            options.candidateRoot,
+            options.expansionAssets,
+            frameIndex,
+            12,
+            selectCoverLifecyclePreviewPath,
+          ),
         ]);
         return gridImage({
           width: COVER_WIDTH,
