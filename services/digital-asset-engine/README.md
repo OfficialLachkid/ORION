@@ -227,7 +227,7 @@ npm run digital-assets:prepare-expansion-release -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-This command fails closed if the expansion approval is absent or stale. It verifies the immutable `0.2.0` base and approved expansion files, copies only buyer-useful states, frames, overlays, sheets, and metadata into a content-addressed `0.3.0` candidate, and rebuilds the complete listing media. Review GIFs, validation reports, model sources, and duplicated base images stay outside the paid download. The storefront uses a protected slow animated cover with a readable first frame, a complete inventory, an expansion breakdown, and an interactive montage on a lighter steel-blue presentation.
+This command fails closed if the expansion approval is absent or stale. It verifies the immutable `0.2.0` base and approved expansion files, copies only buyer-useful states, frames, overlays, sheets, and metadata into a content-addressed `0.3.0` candidate, and rebuilds the complete listing media. Review GIFs, validation reports, model sources, and duplicated base images stay outside the paid download. The storefront preserves the established weapon inventory, effects breakdown, and firing-cycle preview, then appends a separate expansion inventory and interactive montage. Its protected slow animated cover shows weapon and expansion scenes sequentially rather than mixing their asset families.
 
 If review finds a problem in only selected effect kinds, create new immutable proof revisions while inheriting the accepted artifacts. The current targeted revision regenerates only the Ion Pistol and Energy Shotgun impact/decay keyframes, then derives their decay frames deterministically:
 

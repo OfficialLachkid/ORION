@@ -19,7 +19,11 @@ const COLORS = Object.freeze({
   violet: '#7d6cf2',
 });
 
-export const EXPANSION_RELEASE_MARKETING_VERSION = '1.1.1';
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.2.0';
+
+const WEAPON_COVER_FRAME_COUNT = 4;
+const EXPANSION_COVER_FRAME_COUNT = 12;
+const COVER_FRAME_COUNT = WEAPON_COVER_FRAME_COUNT + EXPANSION_COVER_FRAME_COUNT;
 
 function escapeXml(value) {
   return String(value)
@@ -267,18 +271,20 @@ async function gridImage({ width, height, title, subtitle, entries, columns, top
     .toBuffer();
 }
 
-function representativeEntries(weapons, expansion) {
-  const keys = ['arc-launcher', 'ion-pistol', 'energy-shotgun', 'plasma-rifle'];
-  const selectedWeapons = keys.map((key) => weapons.find((item) => item.asset_key === key)).filter(Boolean);
-  const weaponFallback = weapons.filter((item) => !selectedWeapons.includes(item));
-  const selectedExpansionKeys = ['plasma-shield', 'plasma-grenade', 'energy-pickup', 'plasma-power-cell'];
-  const selectedExpansion = selectedExpansionKeys
-    .map((key) => expansion.find((item) => item.asset_key === key)).filter(Boolean);
-  const expansionFallback = expansion.filter((item) => !selectedExpansion.includes(item));
-  return [
-    ...[...selectedWeapons, ...weaponFallback].slice(0, 4),
-    ...[...selectedExpansion, ...expansionFallback].slice(0, 4),
-  ];
+export function coverScene(frameIndex) {
+  const index = Math.max(0, Math.min(COVER_FRAME_COUNT - 1, Number(frameIndex) || 0));
+  if (index < WEAPON_COVER_FRAME_COUNT) {
+    return {
+      kind: 'weapons',
+      frame_index: index,
+      frame_count: WEAPON_COVER_FRAME_COUNT,
+    };
+  }
+  return {
+    kind: 'expansion',
+    frame_index: index - WEAPON_COVER_FRAME_COUNT,
+    frame_count: EXPANSION_COVER_FRAME_COUNT,
+  };
 }
 
 async function buildAnimatedGrid({ tempRoot, outputPath, frameFactory, frameCount, delayMs }) {
@@ -297,13 +303,11 @@ async function buildAnimatedGrid({ tempRoot, outputPath, frameFactory, frameCoun
 }
 
 export async function buildExpansionReleaseMarketingMedia(options) {
-  const weapons = await weaponEntries(options.candidateRoot, options.product);
   const firstExpansion = await expansionEntries(options.candidateRoot, options.expansionAssets);
   const tempRoot = await mkdtemp(join(tmpdir(), 'orion-expansion-marketing-'));
   const files = {
     cover: 'cover.gif',
     coverStill: 'cover-still.png',
-    inventory: 'complete-inventory.png',
     expansion: 'armory-items-and-vfx.png',
     montage: 'interactive-expansion-montage.gif',
   };
@@ -311,40 +315,33 @@ export async function buildExpansionReleaseMarketingMedia(options) {
     const coverFirstFrame = await buildAnimatedGrid({
       tempRoot,
       outputPath: resolve(options.candidateRoot, files.cover),
-      frameCount: 12,
+      frameCount: COVER_FRAME_COUNT,
       delayMs: 420,
       frameFactory: async (frameIndex) => {
-        const [animatedWeapons, expansion] = await Promise.all([
-          weaponEntries(options.candidateRoot, options.product, frameIndex),
-          expansionEntries(
+        const scene = coverScene(frameIndex);
+        const entries = scene.kind === 'weapons'
+          ? await weaponEntries(options.candidateRoot, options.product, scene.frame_index)
+          : await expansionEntries(
             options.candidateRoot,
             options.expansionAssets,
-            frameIndex,
-            12,
+            scene.frame_index,
+            scene.frame_count,
             selectCoverLifecyclePreviewPath,
-          ),
-        ]);
+          );
         return gridImage({
           width: COVER_WIDTH,
           height: COVER_HEIGHT,
           title: options.product.title,
-          subtitle: 'Weapons, effects, items, props & interactive VFX',
-          entries: representativeEntries(animatedWeapons, expansion),
+          subtitle: scene.kind === 'weapons'
+            ? '8 weapons with independent firing effects'
+            : 'Armory items, props & interactive plasma VFX',
+          entries,
           columns: 4,
           footer: `VERSION ${options.version} · ANIMATED PREVIEW`,
         });
       },
     });
     await writeFile(resolve(options.candidateRoot, files.coverStill), await readFile(coverFirstFrame));
-    await writeFile(resolve(options.candidateRoot, files.inventory), await gridImage({
-      width: WIDTH,
-      height: HEIGHT,
-      title: options.product.title,
-      subtitle: `${weapons.length} weapons + ${firstExpansion.length} armory additions`,
-      entries: [...weapons, ...firstExpansion],
-      columns: 4,
-      footer: 'VBJSERVICES · PROTECTED COMPLETE INVENTORY',
-    }));
     await writeFile(resolve(options.candidateRoot, files.expansion), await gridImage({
       width: WIDTH,
       height: HEIGHT,
@@ -373,16 +370,17 @@ export async function buildExpansionReleaseMarketingMedia(options) {
       cover_path: files.cover,
       cover_fallback_path: files.coverStill,
       screenshot_paths: [
-        files.inventory,
         ...(options.inheritedScreenshotPaths || []),
         files.expansion,
         files.montage,
       ],
       palette: COLORS,
       motion: {
-        cover_frame_count: 12,
+        cover_frame_count: COVER_FRAME_COUNT,
         cover_frame_delay_ms: 420,
         rapid_flashing: false,
+        cover_sequence: ['weapons', 'expansion'],
+        mixed_asset_families_per_frame: false,
         weapon_effect_phases: ['weapon', 'muzzle_flash', 'projectile', 'impact_decay'],
         expansion_sampling: 'declared_animation_lifecycle',
       },
