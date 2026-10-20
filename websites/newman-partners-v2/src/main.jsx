@@ -4,6 +4,9 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import App from './App.jsx'
 import Colophon from './pages/Colophon.jsx'
 import './index.css'
+import { installWebsiteBuilderContentBridge } from '../../shared/builder-content-bridge.js'
+
+installWebsiteBuilderContentBridge()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

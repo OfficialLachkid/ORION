@@ -53,7 +53,10 @@ export function hydrateDraft(input) {
 export function reseedDraftForTemplate(input, templateId) {
   const nextTemplate = getTemplateById(templateId);
   const normalizedInput = isPlainObject(input) ? structuredClone(input) : {};
-  const mergedDraft = mergeDeep(createDefaultDraft(nextTemplate.id), normalizedInput);
+  const portableInput = isPlainObject(normalizedInput.site)
+    ? { site: normalizedInput.site }
+    : {};
+  const mergedDraft = mergeDeep(createDefaultDraft(nextTemplate.id), portableInput);
   mergedDraft.templateId = nextTemplate.id;
   mergedDraft.updatedAt = new Date().toISOString();
   return mergedDraft;

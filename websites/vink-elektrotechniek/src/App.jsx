@@ -96,6 +96,7 @@ function Navbar() {
               <span className="absolute inset-0 rounded-full ring-2 ring-primary/30 group-hover:ring-primary/50 transition" />
             </span>
             <span
+              data-builder-field="navigation.brand"
               className={`font-display font-bold tracking-tight text-lg ${
                 scrolled ? 'text-ink' : 'text-white'
               } transition-colors`}
@@ -122,7 +123,7 @@ function Navbar() {
             href="#contact"
             className="hidden lg:inline-flex magnetic-btn items-center gap-1.5 bg-primary text-deep px-4 py-2 rounded-full text-sm font-semibold shadow-lg shadow-primary/30"
           >
-            Vraag offerte
+            <span data-builder-field="navigation.cta">Vraag offerte</span>
             <ArrowUpRight className="h-4 w-4" strokeWidth={2.5} />
           </a>
 
@@ -149,7 +150,7 @@ function Navbar() {
           }`}
         >
           <div className="flex items-center justify-between mb-10">
-            <span className="font-display font-bold text-xl text-ink">Vink Elektrotechniek</span>
+            <span data-builder-field="navigation.brand" className="font-display font-bold text-xl text-ink">Vink Elektrotechniek</span>
             <button onClick={() => setOpen(false)} className="p-2 rounded-full bg-divider/40">
               <X className="h-5 w-5" />
             </button>
@@ -171,7 +172,7 @@ function Navbar() {
             onClick={() => setOpen(false)}
             className="mt-8 magnetic-btn flex items-center justify-center gap-2 bg-primary text-deep px-6 py-4 rounded-full font-semibold w-full"
           >
-            Vraag offerte
+            <span data-builder-field="navigation.cta">Vraag offerte</span>
             <ArrowUpRight className="h-4 w-4" />
           </a>
         </div>
@@ -202,6 +203,7 @@ function Hero() {
       {/* Background image — modern electrical panel / architectural lighting */}
       <div className="absolute inset-0">
         <img
+          data-builder-field="hero.imageUrl"
           src="https://images.unsplash.com/photo-1558449028-b53a39d100fc?auto=format&fit=crop&w=2400&q=80"
           alt="Elektrotechnisch installatiewerk"
           className="w-full h-full object-cover"
@@ -223,14 +225,15 @@ function Hero() {
       {/* Content */}
       <div className="relative z-10 flex min-h-[100dvh] flex-col items-center justify-center text-center">
         <div className="px-6 sm:px-10 lg:px-16 max-w-4xl">
-          <p className="hero-meta font-mono text-xs uppercase tracking-[0.3em] text-primary/90 mb-6">
+          <p data-builder-field="hero.eyebrow" className="hero-meta font-mono text-xs uppercase tracking-[0.3em] text-primary/90 mb-6">
             ╱ Sinds decennia gevestigd in Zaandam
           </p>
           <h1 className="font-display font-extrabold text-white leading-[0.95] tracking-tight">
-            <span className="hero-line-1 block text-4xl sm:text-5xl md:text-6xl">
+            <span data-builder-field="hero.titlePrimary" className="hero-line-1 block text-4xl sm:text-5xl md:text-6xl">
               Uw partner in
             </span>
             <span
+              data-builder-field="hero.titleAccent"
               className="hero-line-2 block font-serif italic font-medium text-primary text-6xl sm:text-7xl md:text-8xl lg:text-9xl mt-2"
               style={{ lineHeight: '0.92' }}
             >
@@ -239,8 +242,10 @@ function Hero() {
           </h1>
 
           <p className="hero-meta mx-auto max-w-xl text-white/75 text-base sm:text-lg mt-8 leading-relaxed">
-            Gespecialiseerd in utiliteitsbouw en renovatiewerken.
-            Alles voor in en om het huis of bedrijfspand.
+            <span data-builder-field="hero.description">
+              Gespecialiseerd in utiliteitsbouw en renovatiewerken.
+              Alles voor in en om het huis of bedrijfspand.
+            </span>
             <span className="text-white"> Ook voor service en onderhoud.</span>
           </p>
 
@@ -249,15 +254,16 @@ function Hero() {
               href="#contact"
               className="magnetic-btn group inline-flex items-center justify-center gap-2 bg-primary text-deep font-semibold px-7 py-4 rounded-full shadow-2xl shadow-primary/40"
             >
-              Vraag een offerte aan
+              <span data-builder-field="hero.primaryCta">Vraag een offerte aan</span>
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
             </a>
             <a
+              data-builder-link="contact.officePhone"
               href="tel:0757717667"
               className="lift-on-hover inline-flex items-center justify-center gap-2 bg-white/10 backdrop-blur-md text-white border border-white/20 font-medium px-7 py-4 rounded-full"
             >
               <Phone className="h-4 w-4" />
-              075 - 77 17 667
+              <span data-builder-field="contact.officePhone">075 - 77 17 667</span>
             </a>
           </div>
         </div>
@@ -695,12 +701,12 @@ function Features() {
     <section id="diensten" ref={sectionRef} className="relative py-28 sm:py-40 px-6 sm:px-10 lg:px-16">
       <div className="max-w-7xl mx-auto">
         <div className="feature-heading max-w-3xl mb-16 sm:mb-24">
-          <span className="font-mono text-xs uppercase tracking-[0.25em] text-primary-dark">
+          <span data-builder-field="services.eyebrow" className="font-mono text-xs uppercase tracking-[0.25em] text-primary-dark">
             ╱ Onze kernthema's
           </span>
           <h2 className="font-display font-extrabold text-4xl sm:text-5xl md:text-6xl text-ink mt-4 leading-[1.05] tracking-tight">
-            Drie pijlers.
-            <span className="block font-serif italic font-medium text-primary-dark mt-1">
+            <span data-builder-field="services.titlePrimary">Drie pijlers.</span>
+            <span data-builder-field="services.titleAccent" className="block font-serif italic font-medium text-primary-dark mt-1">
               Eén ambacht.
             </span>
           </h2>
@@ -725,13 +731,13 @@ function Features() {
               <card.Component />
 
               <div className="mt-6">
-                <h3 className="font-display font-bold text-2xl text-ink leading-tight">
+                <h3 data-builder-field={`services.cards.${idx}.title`} className="font-display font-bold text-2xl text-ink leading-tight">
                   {card.heading}
                 </h3>
-                <p className="font-serif italic text-primary-dark text-sm mt-1">
+                <p data-builder-field={`services.cards.${idx}.subtitle`} className="font-serif italic text-primary-dark text-sm mt-1">
                   {card.sub}
                 </p>
-                <p className="text-muted text-[15px] mt-4 leading-relaxed">{card.text}</p>
+                <p data-builder-field={`services.cards.${idx}.description`} className="text-muted text-[15px] mt-4 leading-relaxed">{card.text}</p>
               </div>
             </article>
           ))}
@@ -979,12 +985,12 @@ function Protocol() {
   return (
     <section id="werkwijze" ref={containerRef} className="relative px-4 sm:px-6 py-20">
       <div className="max-w-7xl mx-auto mb-16 px-2 sm:px-10">
-        <span className="font-mono text-xs uppercase tracking-[0.25em] text-primary-dark">
+        <span data-builder-field="process.eyebrow" className="font-mono text-xs uppercase tracking-[0.25em] text-primary-dark">
           ╱ Zo werken wij
         </span>
         <h2 className="font-display font-extrabold text-4xl sm:text-5xl md:text-6xl text-ink mt-4 leading-[1.05] tracking-tight max-w-3xl">
-          Drie stappen.
-          <span className="block font-serif italic font-medium text-primary-dark">
+          <span data-builder-field="process.titlePrimary">Drie stappen.</span>
+          <span data-builder-field="process.titleAccent" className="block font-serif italic font-medium text-primary-dark">
             Geen verrassingen.
           </span>
         </h2>
@@ -1011,15 +1017,15 @@ function Protocol() {
                   <span className="font-display font-extrabold text-[7rem] sm:text-[10rem] leading-none text-primary/20 -mb-4 block">
                     {step.num}
                   </span>
-                  <h3 className="font-display font-bold text-4xl sm:text-5xl md:text-6xl text-ink leading-[1.02] tracking-tight">
+                  <h3 data-builder-field={`process.steps.${idx}.title`} className="font-display font-bold text-4xl sm:text-5xl md:text-6xl text-ink leading-[1.02] tracking-tight">
                     {step.title}
                   </h3>
-                  <p className="font-serif italic text-primary-dark text-2xl sm:text-3xl mt-3">
+                  <p data-builder-field={`process.steps.${idx}.tagline`} className="font-serif italic text-primary-dark text-2xl sm:text-3xl mt-3">
                     {step.tagline}
                   </p>
                 </div>
 
-                <p className="text-muted text-base sm:text-lg leading-relaxed max-w-lg">
+                <p data-builder-field={`process.steps.${idx}.description`} className="text-muted text-base sm:text-lg leading-relaxed max-w-lg">
                   {step.text}
                 </p>
               </div>
@@ -1156,13 +1162,13 @@ function TrustSignals() {
   ]
 
   return (
-    <section ref={ref} className="relative py-14 sm:py-20 px-6">
+    <section id="waarom-vink" ref={ref} className="relative py-14 sm:py-20 px-6">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-8">
-          <span className="font-mono text-xs uppercase tracking-[0.25em] text-primary-dark">
+          <span data-builder-field="trust.eyebrow" className="font-mono text-xs uppercase tracking-[0.25em] text-primary-dark">
             ╱ Waarom Vink
           </span>
-          <h2 className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl text-ink mt-3 tracking-tight">
+          <h2 data-builder-field="trust.heading" className="font-display font-extrabold text-3xl sm:text-4xl md:text-5xl text-ink mt-3 tracking-tight">
             Meer dan een offerte.
           </h2>
         </div>
@@ -1177,8 +1183,8 @@ function TrustSignals() {
               }`}
             >
               <Icon className="h-6 w-6 text-primary-dark mb-3" strokeWidth={1.8} />
-              <h3 className="font-display font-bold text-lg text-ink mb-1.5">{title}</h3>
-              <p className="text-muted text-sm leading-relaxed">{text}</p>
+              <h3 data-builder-field={`trust.cards.${i}.title`} className="font-display font-bold text-lg text-ink mb-1.5">{title}</h3>
+              <p data-builder-field={`trust.cards.${i}.description`} className="text-muted text-sm leading-relaxed">{text}</p>
             </div>
           ))}
         </div>
@@ -1188,7 +1194,7 @@ function TrustSignals() {
             href="#contact"
             className="magnetic-btn inline-flex items-center gap-2 bg-primary text-deep font-semibold px-7 py-3.5 rounded-full shadow-xl shadow-primary/30"
           >
-            Vraag een offerte aan
+            <span data-builder-field="trust.cta">Vraag een offerte aan</span>
             <ArrowRight className="h-4 w-4" />
           </a>
         </div>
@@ -1243,17 +1249,17 @@ function ContactForm() {
               ╱ Contact
             </span>
             <h2 className="font-display font-extrabold text-4xl sm:text-5xl md:text-6xl text-ink mt-4 leading-[1.05] tracking-tight">
-              Waarmee kunnen
-              <span className="block font-serif italic font-medium text-primary-dark">
+              <span data-builder-field="contact.titlePrimary">Waarmee kunnen</span>
+              <span data-builder-field="contact.titleAccent" className="block font-serif italic font-medium text-primary-dark">
                 we u helpen?
               </span>
             </h2>
-            <p className="text-muted text-lg mt-6 leading-relaxed max-w-md">
+            <p data-builder-field="contact.description" className="text-muted text-lg mt-6 leading-relaxed max-w-md">
               Laat uw gegevens achter en we nemen zo snel mogelijk contact op om uw wensen te bespreken.
             </p>
 
             <div className="mt-10 space-y-4">
-              <a href="tel:0757717667" className="lift-on-hover flex items-center gap-4 group">
+              <a data-builder-link="contact.officePhone" href="tel:0757717667" className="lift-on-hover flex items-center gap-4 group">
                 <span className="h-12 w-12 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center group-hover:bg-primary transition">
                   <Phone className="h-5 w-5 text-primary-dark group-hover:text-deep" />
                 </span>
@@ -1261,13 +1267,13 @@ function ContactForm() {
                   <span className="block font-mono text-[10px] uppercase tracking-widest text-muted">
                     Kantoor
                   </span>
-                  <span className="font-display font-semibold text-ink text-lg">
+                  <span data-builder-field="contact.officePhone" className="font-display font-semibold text-ink text-lg">
                     075 - 77 17 667
                   </span>
                 </span>
               </a>
 
-              <a href="tel:0622865768" className="lift-on-hover flex items-center gap-4 group">
+              <a data-builder-link="contact.mobilePhone" href="tel:0622865768" className="lift-on-hover flex items-center gap-4 group">
                 <span className="h-12 w-12 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center group-hover:bg-primary transition">
                   <Phone className="h-5 w-5 text-primary-dark group-hover:text-deep" />
                 </span>
@@ -1275,13 +1281,13 @@ function ContactForm() {
                   <span className="block font-mono text-[10px] uppercase tracking-widest text-muted">
                     Mobiel · Storingsdienst
                   </span>
-                  <span className="font-display font-semibold text-ink text-lg">
+                  <span data-builder-field="contact.mobilePhone" className="font-display font-semibold text-ink text-lg">
                     06 - 22 86 57 68
                   </span>
                 </span>
               </a>
 
-              <a href="mailto:info@vink-elektrotechniek.nl" className="lift-on-hover flex items-center gap-4 group">
+              <a data-builder-link="contact.email" href="mailto:info@vink-elektrotechniek.nl" className="lift-on-hover flex items-center gap-4 group">
                 <span className="h-12 w-12 rounded-2xl bg-primary/15 border border-primary/30 flex items-center justify-center group-hover:bg-primary transition">
                   <Mail className="h-5 w-5 text-primary-dark group-hover:text-deep" />
                 </span>
@@ -1289,7 +1295,7 @@ function ContactForm() {
                   <span className="block font-mono text-[10px] uppercase tracking-widest text-muted">
                     Email
                   </span>
-                  <span className="font-display font-semibold text-ink text-lg break-all">
+                  <span data-builder-field="contact.email" className="font-display font-semibold text-ink text-lg break-all">
                     info@vink-elektrotechniek.nl
                   </span>
                 </span>
@@ -1303,7 +1309,7 @@ function ContactForm() {
                   <span className="block font-mono text-[10px] uppercase tracking-widest text-muted">
                     Werkgebied
                   </span>
-                  <span className="font-display font-semibold text-ink text-lg">
+                  <span data-builder-field="contact.address" className="font-display font-semibold text-ink text-lg">
                     Harmoniehof 15, 1507 TX Zaandam
                   </span>
                 </span>
@@ -1437,27 +1443,27 @@ function ContactForm() {
 ---------------------------------------------------------------- */
 function Footer() {
   return (
-    <footer className="relative bg-deep text-white rounded-t-6xl mt-12 overflow-hidden">
+    <footer id="footer" className="relative bg-deep text-white rounded-t-6xl mt-12 overflow-hidden">
       <div className="absolute inset-0 grid-bg opacity-15" />
       <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-64 w-[40rem] rounded-full bg-primary/25 blur-3xl" />
 
       <div className="relative px-6 sm:px-10 lg:px-16 pt-20 pb-10 max-w-7xl mx-auto">
         <div className="border-b border-white/10 pb-12 mb-12">
           <h2 className="font-display font-extrabold text-5xl sm:text-7xl md:text-8xl leading-[0.92] tracking-tight">
-            Vakwerk met
-            <span className="font-serif italic font-medium text-primary block">
+            <span data-builder-field="footer.titlePrimary">Vakwerk met</span>
+            <span data-builder-field="footer.titleAccent" className="font-serif italic font-medium text-primary block">
               spanning erop.
             </span>
           </h2>
           <div className="flex flex-col sm:flex-row sm:items-end justify-between mt-8 gap-6">
-            <p className="text-white/50 max-w-md">
+            <p data-builder-field="footer.description" className="text-white/50 max-w-md">
               Vink Elektrotechniek — thuis in Zaandam, actief in de hele Zaanstreek en omgeving.
             </p>
             <a
               href="#contact"
               className="magnetic-btn inline-flex items-center gap-2 bg-primary text-deep font-semibold px-7 py-3.5 rounded-full self-start sm:self-auto"
             >
-              Vraag offerte
+              <span data-builder-field="footer.cta">Vraag offerte</span>
               <ArrowRight className="h-4 w-4" />
             </a>
           </div>
@@ -1469,9 +1475,9 @@ function Footer() {
               <span className="h-9 w-9 rounded-full bg-primary flex items-center justify-center">
                 <Zap className="h-5 w-5 text-deep" strokeWidth={2.4} fill="currentColor" />
               </span>
-              <span className="font-display font-bold text-lg">Vink Elektrotechniek</span>
+              <span data-builder-field="footer.brand" className="font-display font-bold text-lg">Vink Elektrotechniek</span>
             </div>
-            <p className="text-white/50 text-sm leading-relaxed max-w-xs">
+            <p data-builder-field="footer.summary" className="text-white/50 text-sm leading-relaxed max-w-xs">
               Gespecialiseerd in utiliteitsbouw en renovatie­werken. Ook voor service en onderhoud van installaties.
             </p>
             <p className="font-mono text-[10px] uppercase tracking-widest text-white/30 mt-6">

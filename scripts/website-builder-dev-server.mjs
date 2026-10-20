@@ -2,10 +2,18 @@
 
 import { createServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
-import { extname, join, normalize, resolve } from 'node:path';
+import {
+  extname,
+  isAbsolute,
+  join,
+  normalize,
+  relative,
+  resolve,
+} from 'node:path';
 import { maybeHandleWebsiteBuilderApiRequest } from './lib/website-builder-api.mjs';
 
 const appRoot = resolve('apps', 'website-builder');
+const sitesRoot = resolve('sites');
 const host = '127.0.0.1';
 const port = Number.parseInt(process.env.WEBSITE_BUILDER_PORT || '4173', 10);
 
@@ -23,9 +31,22 @@ const contentTypes = new Map([
 
 function resolveRequestPath(requestUrl = '/') {
   const pathname = requestUrl.split('?')[0] || '/';
-  const cleanPath = pathname === '/' ? '/index.html' : pathname;
+  const servesPublishedSite = pathname.startsWith('/ruflo/sites/');
+  const root = servesPublishedSite ? sitesRoot : appRoot;
+  const mountedPath = servesPublishedSite
+    ? pathname.slice('/ruflo/sites'.length)
+    : pathname;
+  const cleanPath = mountedPath === '/' || mountedPath.endsWith('/')
+    ? `${mountedPath}index.html`
+    : mountedPath;
   const safePath = normalize(cleanPath).replace(/^(\.\.[/\\])+/, '');
-  return join(appRoot, safePath);
+  return { root, filePath: join(root, safePath) };
+}
+
+function isPathInside(root, filePath) {
+  const relativePath = relative(root, filePath);
+  return relativePath === ''
+    || (!relativePath.startsWith('..') && !isAbsolute(relativePath));
 }
 
 function send(response, statusCode, body, contentType) {
@@ -39,8 +60,8 @@ const server = createServer((request, response) => {
       return;
     }
 
-    const filePath = resolveRequestPath(request.url);
-    if (!filePath.startsWith(appRoot) || !existsSync(filePath)) {
+    const { root, filePath } = resolveRequestPath(request.url);
+    if (!isPathInside(root, filePath) || !existsSync(filePath)) {
       send(response, 404, 'Not found', 'text/plain; charset=utf-8');
       return;
     }

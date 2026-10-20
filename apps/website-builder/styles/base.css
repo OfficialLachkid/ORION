@@ -13,6 +13,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
@@ -62,10 +66,11 @@ body.website-builder-editor-mode .shell {
 }
 
 body.website-builder-editor-mode .sidebar {
-  display: flex;
-  flex-direction: column;
   height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .main-stage {
@@ -77,6 +82,18 @@ body.website-builder-editor-mode .sidebar {
 
 body.website-builder-editor-mode .main-stage {
   height: 100vh;
+  min-width: 0;
+  overflow: hidden;
+}
+
+body.website-builder-editor-mode #preview-stage {
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.website-builder-editor-mode #preview-frame {
+  height: 100%;
+  min-height: 0;
 }
 
 .brand-block h1,
@@ -119,11 +136,7 @@ body.website-builder-editor-mode .main-stage {
 }
 
 body.website-builder-editor-mode #editor-panel {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
   margin-bottom: 0;
-  min-height: 0;
 }
 
 .topbar {
