@@ -2,7 +2,7 @@
 
 This service is the first bounded implementation slice of issue #149. It observes one public marketplace source, stores timestamped evidence, asks a local Ollama text model for a recommendation only after comparable history exists, and sends that recommendation to Discord for human review.
 
-It does not generate images, create a release, or update itch.io. The guarded collection phase is owned by the existing night-shift orchestrator rather than a separate timer.
+An approved recommendation now creates a durable T7 generation job. A detached worker generates and packages the assets locally, then posts a creative package review in Discord. It does not create an itch.io project, stage a listing, or authorize publication. The guarded collection phase is owned by the existing night-shift orchestrator rather than a separate timer.
 
 ## Initial source and evidence limits
 
@@ -41,7 +41,28 @@ npm run digital-assets:research:analyze -- \
 The `analyze` command never requests marketplace pages. It reuses the timestamped evidence already
 stored in Supabase and on the T7.
 
-The bot finds or creates `#asset-research` under the existing `DIGITAL ASSETS` category. A recommendation offers `Approve Planning Handoff`, `Keep Monitoring`, and `Reject`. Approval stores an exact `product-opportunity.json` handoff on the T7 and records the decision in Supabase. The handoff explicitly records `generation_enqueued: false`.
+The bot finds or creates `#asset-research` under the existing `DIGITAL ASSETS` category. A recommendation offers `Approve & Queue Generation`, `Keep Monitoring`, and `Reject`. Approval records the decision in Supabase, writes an exact `product-opportunity.json` handoff, and creates an idempotent job under `research/generation-jobs` on the T7. The Discord bot launches the worker outside the interaction callback so generation cannot cause a Discord timeout.
+
+The worker runs this bounded chain:
+
+1. validate the exact approved opportunity;
+2. generate every base asset sequentially with the local image model;
+3. run alpha, canvas, palette, and file-integrity checks;
+4. assemble the internal buyer preview and deterministic marketing media;
+5. create the pack channel, overview gate, and per-asset review thread;
+6. stop for human creative approval.
+
+Creative approval marks the exact manifest as ready for a separate marketplace-setup step. It never doubles as distribution approval.
+
+For an explicit end-to-end test using the existing evidence store, post the labelled magic-pack simulation:
+
+```bash
+npm run digital-assets:research:simulate-magic -- \
+  --archive-root "/Volumes/T7/O.R.I.O.N. Digital Assets/research" \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env"
+```
+
+The simulation is visibly labelled in Discord and must not be interpreted as a market conclusion. It proposes eight static assets in **Arcane Relics & Potions** because the static base-asset recipe is production-tested. Generalized spell animation recipes remain a separate future capability.
 
 The primary night shift starts at 01:30 and runs this service first, before qualification, video maintenance, and the final detached lead-generation sweep. There is no separate research LaunchAgent. The phase has a ten-minute ceiling, requires the T7, observes a 23-hour minimum snapshot interval, and defers if image generation, rendering, deployment/sync maintenance, another Ollama job, or another night shift is active. A resource-busy start gets one sequential retry after the awaited maintenance phases and immediately before lead generation; non-resource deferrals are not retried. The 07:00 fallback does not repeat research.
 

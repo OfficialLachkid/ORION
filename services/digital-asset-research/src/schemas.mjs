@@ -62,6 +62,7 @@ export const ResearchObservationSchema = z.object({
 export const ResearchRecommendationSchema = z.object({
   schema_version: z.literal('1.0'),
   recommendation_id: Identifier.max(48),
+  simulation: z.boolean().default(false),
   action: z.enum(['new_product', 'extend_existing_product']),
   existing_product_slug: Identifier.nullable().default(null),
   title: z.string().min(1).max(120),

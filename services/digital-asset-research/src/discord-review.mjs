@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 import { discordRequest } from '../../digital-asset-engine/src/discord-review.mjs';
 import { DigitalAssetResearchStore } from './research-store.mjs';
 import { ResearchRecommendationSchema, ResearchReviewDecisionSchema } from './schemas.mjs';
+import { enqueueResearchGenerationJob } from './generation-jobs.mjs';
 
 const PREFIX = 'dar';
 const CATEGORY = 4;
@@ -69,7 +70,9 @@ export function buildResearchEmbed(report, recommendation = null) {
     };
   }
   return {
-    title: `${recommendation.title} · RESEARCH RECOMMENDATION`,
+    title: recommendation.simulation
+      ? `${recommendation.title} · WORKFLOW SIMULATION`
+      : `${recommendation.title} · RESEARCH RECOMMENDATION`,
     color: 0x35d9ff,
     description: clean(recommendation.summary, 4000),
     fields: [
@@ -77,7 +80,18 @@ export function buildResearchEmbed(report, recommendation = null) {
       { name: 'Confidence', value: `**${recommendation.confidence}%**`, inline: true },
       { name: 'Evidence', value: `**${recommendation.evidence_ids.length}** cited observations across **${report.snapshot_count}** snapshots`, inline: true },
       { name: 'Why', value: recommendation.rationale.map((item) => `- ${clean(item, 350)}`).join('\n'), inline: false },
-      { name: 'Safety boundary', value: 'Approval creates a planning handoff only. It does **not** start image generation or publication.', inline: false },
+      ...(recommendation.simulation ? [{
+        name: 'Simulation notice',
+        value: 'This candidate tests ORION\'s workflow. Its product choice is **not** presented as a market conclusion.',
+        inline: false,
+      }] : []),
+      {
+        name: 'Safety boundary',
+        value: recommendation.action === 'new_product'
+          ? 'Approval queues local generation. It does **not** create an itch.io page or authorize publication.'
+          : 'Approval creates an extension handoff only. Versioned extension generation remains blocked until its recipe is supported.',
+        inline: false,
+      },
     ],
     footer: { text: 'itch.io ranks are demand proxies, not sales counts' },
   };
@@ -98,7 +112,12 @@ export async function postResearchReview(options) {
   const components = recommendation ? [{
     type: 1,
     components: [
-      { type: 2, style: 3, label: 'Approve Planning Handoff', custom_id: customId('a', recommendation.recommendation_id, options.evidenceHash) },
+      {
+        type: 2,
+        style: 3,
+        label: recommendation.action === 'new_product' ? 'Approve & Queue Generation' : 'Approve Extension Handoff',
+        custom_id: customId('a', recommendation.recommendation_id, options.evidenceHash),
+      },
       { type: 2, style: 2, label: 'Keep Monitoring', custom_id: customId('m', recommendation.recommendation_id, options.evidenceHash) },
       { type: 2, style: 4, label: 'Reject', custom_id: customId('r', recommendation.recommendation_id, options.evidenceHash) },
     ],
@@ -166,14 +185,22 @@ export async function recordResearchReviewDecision(options) {
     discord_interaction_id: String(options.interaction.id || ''),
   });
   await store.insertReview(review);
-  await store.updateRecommendation(reference.recommendationId, {
-    status: decision === 'approve_handoff' ? 'approved_handoff' : decision,
-    decided_at: decidedAt,
-  });
   let handoffPath = null;
+  let generationJob = null;
   if (decision === 'approve_handoff') {
     const recommendation = ResearchRecommendationSchema.parse(row.recommendation);
     handoffPath = resolve(archiveRoot(options.config), 'approved', recommendation.recommendation_id, 'product-opportunity.json');
+    if (recommendation.action === 'new_product') {
+      generationJob = await (options.enqueueGenerationJob || enqueueResearchGenerationJob)({
+        archiveRoot: archiveRoot(options.config),
+        recommendation,
+        evidenceHash: row.evidence_hash,
+        queuedAt: decidedAt,
+        queuedByDiscordId: actorId,
+        researchChannelId: row.discord_channel_id,
+        researchMessageId: row.discord_message_id,
+      });
+    }
     await mkdir(dirname(handoffPath), { recursive: true });
     await writeFile(handoffPath, `${JSON.stringify({
       approved_at: decidedAt,
@@ -182,19 +209,30 @@ export async function recordResearchReviewDecision(options) {
       recommendation_id: recommendation.recommendation_id,
       action: recommendation.action,
       existing_product_slug: recommendation.existing_product_slug,
-      generation_enqueued: false,
+      simulation: recommendation.simulation,
+      generation_enqueued: Boolean(generationJob),
+      generation_job_path: generationJob?.path || null,
+      generation_job_hash: generationJob?.jobHash || null,
       opportunity: recommendation.opportunity,
     }, null, 2)}\n`, 'utf8');
   }
+  await store.updateRecommendation(reference.recommendationId, {
+    status: decision === 'approve_handoff' ? 'approved_handoff' : decision,
+    decided_at: decidedAt,
+  });
   return {
     review,
     handoffPath,
+    generationJobPath: generationJob?.path || null,
+    generationQueued: Boolean(generationJob),
     channelId: row.discord_channel_id,
     messageId: row.discord_message_id,
     messagePatch: {
       components: [],
       content: decision === 'approve_handoff'
-        ? 'Planning handoff approved. No generation job was started.'
+        ? generationJob
+          ? 'Research handoff approved. A durable local generation job was queued; marketplace staging remains blocked.'
+          : 'Extension handoff approved. No generation job was started because versioned extension recipes require a separate guarded workflow.'
         : decision === 'monitor' ? 'Recommendation kept in monitoring.' : 'Recommendation rejected.',
     },
   };

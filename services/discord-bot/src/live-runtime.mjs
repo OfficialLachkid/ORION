@@ -312,6 +312,27 @@ export function shouldScheduleDeferredDiscordBotRestart(execution) {
     && execution?.executionResult?.report?.restartDiscordBotDeferred === true;
 }
 
+export function scheduleResearchGenerationWorker(jobPath, options = {}) {
+  if (!jobPath) return false;
+  try {
+    const spawnImpl = options.spawnImpl || spawn;
+    const child = spawnImpl(
+      process.execPath,
+      [`${projectRoot}/services/digital-asset-research/generation-worker.mjs`, '--job', jobPath],
+      {
+        cwd: projectRoot,
+        detached: true,
+        stdio: 'ignore',
+      },
+    );
+    child.unref();
+    return true;
+  } catch (error) {
+    process.stderr.write(`Could not start research generation worker: ${error.message}\n`);
+    return false;
+  }
+}
+
 function truncateMessage(content) {
   const text = String(content || '').trim();
   if (text.length <= 2000) {
@@ -1393,16 +1414,23 @@ export async function runLiveDiscordBot(config) {
               },
               failurePrefix: 'Research decision was not recorded',
               successContent: (decision) => decision.review.decision === 'approve_handoff'
-                  ? 'Research handoff approved. No image generation job was started.'
+                  ? decision.generationQueued
+                    ? 'Research handoff approved. Local generation was queued; no marketplace action was authorized.'
+                    : 'Extension handoff approved. Generation remains blocked pending its versioned recipe.'
                   : decision.review.decision === 'monitor'
                     ? 'Recommendation kept in monitoring.'
                     : 'Research recommendation rejected.',
             });
             if (error) return;
+            const workerScheduled = !recorded.generationQueued
+              || scheduleResearchGenerationWorker(recorded.generationJobPath);
             await sendDiscordApiRequest(
               token,
               `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
-              recorded.messagePatch,
+              workerScheduled ? recorded.messagePatch : {
+                ...recorded.messagePatch,
+                content: 'Generation is durably queued, but the worker could not be started. No marketplace action occurred.',
+              },
               'PATCH',
             );
             return;
@@ -1518,9 +1546,9 @@ export async function runLiveDiscordBot(config) {
                 return decision;
               },
               failurePrefix: 'Digital asset decision was not recorded',
-              successContent: (decision) => (
-                `Recorded ${decision.row.decision.toUpperCase()} for package revision ${decision.row.review_revision}.`
-              ),
+              successContent: (decision) => decision.nextAction === 'marketplace_setup'
+                ? `Package revision ${decision.row.review_revision} approved creatively. It is ready for a separate marketplace setup step; nothing was published.`
+                : `Recorded ${decision.row.decision.toUpperCase()} for package revision ${decision.row.review_revision}.`,
             });
             if (error) return;
             try {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import {
@@ -189,6 +189,27 @@ test('approves every exact asset hash in one package decision', async () => {
     result.actor,
   );
   assert.match(resolved[0].title, /PACK APPROVED/u);
+});
+
+test('local creative approval marks the package ready for separate marketplace setup', async () => {
+  const archiveRoot = await createArchiveFixture({ marketplaceReviewMode: 'local_generation' });
+  const inserted = [];
+  const result = await recordDigitalAssetReviewDecision({
+    interaction: packInteraction(),
+    archiveRoot,
+    config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+    store: { async insert(row) { inserted.push(row); } },
+    now: '2026-10-20T17:00:00.000Z',
+  });
+  const product = JSON.parse(await readFile(resolve(archiveRoot, context.productSlug, 'product.json'), 'utf8'));
+  const state = JSON.parse(await readFile(resolve(archiveRoot, context.productSlug, 'review', 'discord.json'), 'utf8'));
+  assert.equal(result.nextAction, 'marketplace_setup');
+  assert.equal(product.status, 'approved');
+  assert.equal(product.approvals.distribution, 'pending');
+  assert.equal(state.creative_approval.next_step, 'marketplace_setup');
+  assert.deepEqual(result.messagePatch.components[0].components.map((component) => component.label), [
+    'Open Manifest',
+  ]);
 });
 
 test('approves the exact immutable versioned candidate stored in the Discord review state', async () => {

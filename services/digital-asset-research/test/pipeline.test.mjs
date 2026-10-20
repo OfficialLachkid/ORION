@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import {
   analyzeResearchHistory,
+  createMagicWorkflowSimulation,
   loadExistingProductCatalog,
   runResearchCollection,
 } from '../src/pipeline.mjs';
@@ -116,6 +117,55 @@ test('keeps mature evidence in monitoring when the local model fails quality gat
   assert.equal(result.report.status, 'monitoring');
   assert.match(result.analysisIssue, /No coherent evidence/iu);
   assert.equal(posted.recommendation, null);
+});
+
+test('magic workflow simulation is clearly labelled and uses stored evidence without model inference', async () => {
+  const config = JSON.parse(await readFile(resolve(
+    process.cwd(),
+    'services/digital-asset-research/config.example.json',
+  ), 'utf8'));
+  const observations = [
+    {
+      run_id: 'run-2', observation_id: '21111111-1111-4111-8111-111111111111',
+      source_id: config.source.id, view_id: 'top-sellers-pixel-art', signal: 'marketplace_rank_proxy',
+      listing_url: 'https://maker.itch.io/fantasy-rpg', title: 'Cute Fantasy RPG', creator: 'Maker',
+      price_text: '$4.99', summary: '', tags: [], observed_at: '2026-10-19T23:30:00.000Z', rank: 4,
+      evidence_hash: 'a'.repeat(64),
+    },
+    {
+      run_id: 'run-1', observation_id: '11111111-1111-4111-8111-111111111111',
+      source_id: config.source.id, view_id: 'top-sellers-pixel-art', signal: 'marketplace_rank_proxy',
+      listing_url: 'https://maker.itch.io/pixel-effects', title: 'Pixel Effects Pack', creator: 'Maker',
+      price_text: '$4.99', summary: '', tags: [], observed_at: '2026-10-18T23:30:00.000Z', rank: 5,
+      evidence_hash: 'b'.repeat(64),
+    },
+  ];
+  const inserted = [];
+  const updated = [];
+  let posted;
+  const result = await createMagicWorkflowSimulation({
+    config,
+    runtimeConfig: {},
+    now: '2026-10-20T16:30:00.000Z',
+    store: {
+      async listRecentObservations() { return observations; },
+      async insertRecommendation(row) { inserted.push(row); },
+      async updateRecommendation(id, patch) { updated.push({ id, patch }); },
+    },
+    postReview: async (value) => {
+      posted = value;
+      return { channelId: 'channel-1', messageId: 'message-1' };
+    },
+  });
+  assert.equal(result.recommendation.simulation, true);
+  assert.equal(result.recommendation.opportunity.generation.assets.length, 8);
+  assert.equal(result.recommendation.opportunity.title, 'Arcane Relics & Potions');
+  assert.equal(inserted[0].status, 'awaiting_review');
+  assert.equal(posted.recommendation.simulation, true);
+  assert.deepEqual(updated[0].patch, {
+    discord_channel_id: 'channel-1',
+    discord_message_id: 'message-1',
+  });
 });
 
 test('scheduled collection fails closed when scheduling is disabled', async () => {

@@ -144,6 +144,12 @@ function normalizedItchUrl(value, label) {
 
 function validateMarketplaceReviewState({ product, reviewState, manifest, itchState, publishedState }) {
   const mode = String(reviewState.marketplace_review_mode || 'draft');
+  if (mode === 'local_generation') {
+    if (manifest.listing_hash !== reviewState.listing_hash) {
+      throw new Error('The local package listing no longer matches this creative review.');
+    }
+    return { mode, url: null };
+  }
   if (mode === 'draft') {
     if (manifest.listing_hash !== reviewState.listing_hash
       || itchState?.status !== 'verified'
@@ -259,7 +265,7 @@ export function buildResolvedDigitalAssetReviewEmbeds(embeds, decision, actor) {
     color: DECISION_COLORS[decision.decision],
     ...(index === 0 ? {
       title: `${String(embed.title || 'Pack Review').replace(/ · (PACK APPROVED|PACK CHANGES REQUESTED|PACK REJECTED)$/u, '')} · ${DECISION_LABELS[decision.decision]}`,
-      description: 'Decision recorded for this exact package manifest and populated listing.',
+      description: 'Decision recorded for this exact package manifest and listing candidate.',
       fields: [
         ...(Array.isArray(embed.fields) ? embed.fields.filter((field) => field?.name !== 'Decision') : []),
         { name: 'Decision', value: decisionFieldValue(decision, actor), inline: false },
@@ -358,6 +364,28 @@ export async function recordDigitalAssetReviewDecision(options) {
     decided_at: row.decided_at,
     discord_interaction_id: row.discord_interaction_id,
   };
+  if (context.marketplaceReview.mode === 'local_generation' && row.decision === 'approve') {
+    context.reviewState.creative_approval = {
+      status: 'approved',
+      manifest_hash: row.manifest_hash,
+      listing_hash: row.listing_hash,
+      approved_at: row.decided_at,
+      approved_by_discord_id: row.reviewer_discord_id,
+      next_step: 'marketplace_setup',
+    };
+    context.product.status = 'approved';
+    context.product.approvals = {
+      ...(context.product.approvals || {}),
+      generation: 'approved',
+      distribution: 'pending',
+    };
+    context.product.updated_at = decidedAt;
+    await writeFile(
+      resolve(context.productRoot, 'product.json'),
+      `${JSON.stringify(context.product, null, 2)}\n`,
+      'utf8',
+    );
+  }
   await writeFile(
     resolve(context.productRoot, 'review', 'discord.json'),
     `${JSON.stringify(context.reviewState, null, 2)}\n`,
@@ -378,6 +406,9 @@ export async function recordDigitalAssetReviewDecision(options) {
     channelId: context.reviewState.channel_id,
     messageId: context.reviewState.overview_message_id,
     threadId: context.reviewState.thread_id,
+    nextAction: context.marketplaceReview.mode === 'local_generation' && row.decision === 'approve'
+      ? 'marketplace_setup'
+      : null,
     messagePatch: { components: buildResolvedDigitalAssetReviewComponents(linkContext) },
     assetMessagePatches: assetDecisions.map((assetDecision) => ({
       ...assetDecision,
