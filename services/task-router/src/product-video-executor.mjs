@@ -27,7 +27,10 @@ import {
   deleteYoutubeVideo,
   loadYoutubeClientCredentials,
 } from '../../product-video-agent/src/youtube-publication-executor.mjs';
-import { syncPublicationReviewMessage } from '../../product-video-agent/src/publication-review-message-sync.mjs';
+import {
+  buildPublicationReviewTaskAndPayload,
+  syncPublicationReviewMessage,
+} from '../../product-video-agent/src/publication-review-message-sync.mjs';
 import {
   buildStoredSocialPublicationApproval,
   upsertAdditionalPlatformPublicationTargets,
@@ -302,13 +305,54 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
   );
   const channelSelector = review.channelSelector || DEFAULT_CHANNEL_SELECTOR;
   const channelProfile = await resolveChannelProfileForSelector(channelSelector, dependencies);
+
+  // Resolve per-platform approval settings from the review task. Manual
+  // approvals (Discord click) pass them in via `task.poke_quizz_publication_review`.
+  // Night-shift auto-publish (buildNightShiftAutoPublishTask) builds a
+  // minimal task without them, so we fall back to rebuilding the review
+  // task from the publication + channel profile — same source the
+  // manual flow draws from — so the stored approval always carries the
+  // per-platform settings. Without this, `addTikTokDirectPostApproval`
+  // and `addInstagramReelApproval` throw during the fan-out
+  // (`reconcileScheduledAdditionalPlatformTargets`), the throw is
+  // silently caught, and no TikTok / Instagram publication rows get
+  // created. Observed 2026-10-19 across trivamon / dexguess / proffmon
+  // / poke-guess after they flipped to auto-publish.
+  const rebuildReviewTaskImpl = dependencies.buildPublicationReviewTaskAndPayload
+    || buildPublicationReviewTaskAndPayload;
+  let tiktokDirectPost = review.tiktokDirectPost || null;
+  let instagramReels = Array.isArray(review.instagramReels) ? review.instagramReels : [];
+  if (!tiktokDirectPost && instagramReels.length === 0) {
+    try {
+      const rebuilt = await rebuildReviewTaskImpl({
+        publication, videoRow, channelProfile, channelSelector,
+      });
+      // buildPokeQuizzPublicationReviewTask returns the full task with
+      // the review payload nested at `.poke_quizz_publication_review`
+      // (same shape assertPublicationReviewTask unwraps for the
+      // manual flow). Read from there, NOT from the top-level reviewTask.
+      const reviewPayload = rebuilt?.reviewTask?.poke_quizz_publication_review || {};
+      tiktokDirectPost = reviewPayload.tiktokDirectPost || null;
+      instagramReels = Array.isArray(reviewPayload.instagramReels)
+        ? reviewPayload.instagramReels
+        : [];
+    } catch (error) {
+      // Fallback must not break the YouTube publish — log + continue
+      // with empty per-platform settings (matches prior behavior; the
+      // fan-out will still skip but YouTube publishes successfully).
+      process.stderr.write(
+        `Could not rebuild per-platform approval settings for ${publication.id}: ${error.message || error}\n`,
+      );
+    }
+  }
+
   const socialPublicationApproval = {
     approvedAt,
     approvedBy: task.approved_by || '',
     approvedById: task.approved_by_id || '',
     reviewTaskId: task.task_id || '',
-    tiktokDirectPost: review.tiktokDirectPost || null,
-    instagramReels: Array.isArray(review.instagramReels) ? review.instagramReels : [],
+    tiktokDirectPost,
+    instagramReels,
   };
   const updated = await store.updatePublication(publication.id, {
     status: 'approved',

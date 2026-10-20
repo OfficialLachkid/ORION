@@ -599,6 +599,157 @@ test('publish approval fans out scheduled publications to configured additional 
   assert.equal(result.report.severity, 'success');
 });
 
+test('publish approval: night-shift auto task (empty per-platform fields) rebuilds them from the publication so fan-out works', async () => {
+  // Regression guard for the 2026-10-19 bug: buildNightShiftAutoPublishTask
+  // creates a minimal task payload with no tiktokDirectPost / instagramReels.
+  // Before the fix, that resulted in a stored social_publication_approval
+  // with empty per-platform settings, which made addTikTokDirectPostApproval
+  // and addInstagramReelApproval throw during fan-out
+  // (reconcileScheduledAdditionalPlatformTargets caught + swallowed, so
+  // zero TikTok/Instagram publication rows got created).
+  // Fix: when the task doesn't carry per-platform settings, synthesise
+  // them from buildPublicationReviewTaskAndPayload — same source the
+  // manual Discord-click flow uses.
+  const initialPublication = {
+    id: 'publication-auto-fanout',
+    video_id: 'video-auto-fanout',
+    platform: 'youtube_shorts',
+    account_key: 'trivamon-youtube',
+    status: 'pending',
+    metadata: { workflow_state: 'preview_uploaded' },
+  };
+  const scheduledPublication = {
+    ...initialPublication, status: 'scheduled', scheduled_for: '2026-10-21T06:00:00.000Z',
+    metadata: { ...initialPublication.metadata, workflow_state: 'scheduled' },
+  };
+  let fetchCount = 0;
+  const fanOutCalls = [];
+  const rebuildCalls = [];
+  const publicationStore = {
+    async fetchPublicationById() { fetchCount += 1; return fetchCount === 1 ? initialPublication : scheduledPublication; },
+    async fetchVideoById(id) { return { id, render: { output_path: 'data/.../auto.mp4' } }; },
+    async updatePublication(_id, patch) {
+      return { ...initialPublication, status: patch.status || initialPublication.status, metadata: { ...initialPublication.metadata, ...(patch.metadata || {}) } };
+    },
+  };
+  await executeProductVideoAction(
+    'poke_quizz_publish_preview',
+    {
+      // Mirror what buildNightShiftAutoPublishTask produces — NO tiktokDirectPost / instagramReels
+      task_id: 'TASK-ORION-PQ-AUTO-PUBLISH-publication-auto-fanout',
+      approved_by: 'Night Shift Auto',
+      approved_by_id: 'night-shift-auto',
+      poke_quizz_publication_review: {
+        publicationId: 'publication-auto-fanout',
+        channelSelector: 'trivamon-youtube',
+        scheduleMaxDays: 3,
+      },
+    },
+    { env: {} },
+    {
+      publicationStore,
+      loadPublicationChannelProfiles: async () => ([{
+        platform: 'youtube_shorts', account_key: 'trivamon-youtube',
+        metadata: { publisher: { targets: [
+          { platform: 'tiktok_video', account_key: 'trivamon-tiktok', enabled: true },
+          { platform: 'instagram_reels', account_key: 'trivamon-instagram', enabled: true },
+        ] } },
+      }]),
+      findPublicationChannelProfile: (profiles) => profiles[0],
+      // Mock the rebuilder — proves the executor invoked it and passed its output through
+      buildPublicationReviewTaskAndPayload: async (opts) => {
+        rebuildCalls.push(opts);
+        // Shape matches buildPokeQuizzPublicationReviewTask's actual
+        // output: per-platform fields are NESTED under
+        // `poke_quizz_publication_review` (same place
+        // assertPublicationReviewTask unwraps for the manual flow).
+        return {
+          reviewTask: {
+            poke_quizz_publication_review: {
+              tiktokDirectPost: { accountKey: 'trivamon-tiktok', creatorUsername: 'trivamon', privacyLevel: 'PUBLIC' },
+              instagramReels: [{ accountKey: 'trivamon-instagram', instagramUserId: '17841449539714324', creatorUsername: 'trivamon' }],
+            },
+          },
+        };
+      },
+      runProcess: async () => ({ stdout: JSON.stringify([{ publication_id: 'publication-auto-fanout', action: 'schedule_update', scheduled_for: '2026-10-21T06:00:00.000Z' }]) }),
+      syncQueueStatusMessage: async () => ({ posted: true }),
+      syncPublicationReviewMessage: async () => ({ updated: true, moved: true }),
+      upsertAdditionalPlatformPublicationTargets: async (options) => {
+        fanOutCalls.push(options);
+        return [
+          { platform: 'tiktok_video', account_key: 'trivamon-tiktok', publication_id: 'publication-target-tt', workflow_state: 'scheduled', scheduled_for: options.scheduledFor },
+          { platform: 'instagram_reels', account_key: 'trivamon-instagram', publication_id: 'publication-target-ig', workflow_state: 'scheduled', scheduled_for: options.scheduledFor },
+        ];
+      },
+      queueStatusChannelProfile: { platform: 'youtube_shorts', account_key: 'trivamon-youtube' },
+      executePublicationScriptPath: '/tmp/execute-youtube-publication.mjs',
+    },
+  );
+
+  // The rebuilder MUST have been called (task was missing per-platform fields)
+  assert.equal(rebuildCalls.length, 1, 'auto-publish task missing per-platform settings → rebuilder must be invoked');
+  assert.equal(rebuildCalls[0].publication.id, 'publication-auto-fanout');
+  assert.equal(rebuildCalls[0].channelSelector, 'trivamon-youtube');
+
+  // And the fan-out MUST have received the rebuilt settings
+  assert.equal(fanOutCalls.length, 1);
+  const approval = fanOutCalls[0].approval;
+  assert.equal(approval.tiktokDirectPost?.accountKey, 'trivamon-tiktok');
+  assert.equal(approval.instagramReels?.length, 1);
+  assert.equal(approval.instagramReels[0].accountKey, 'trivamon-instagram');
+  assert.equal(approval.approvedBy, 'Night Shift Auto', 'approvedBy reflects the auto path identity');
+});
+
+test('publish approval: manual task (populated per-platform fields) does NOT trigger the rebuilder', async () => {
+  // Flip-side regression guard: the rebuilder is a fallback, not a
+  // mandatory step. Manual approvals already carry the fields.
+  const initialPublication = {
+    id: 'publication-manual-fanout',
+    video_id: 'video-manual-fanout',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'pending',
+    metadata: { workflow_state: 'preview_uploaded' },
+  };
+  const scheduledPublication = { ...initialPublication, status: 'scheduled', scheduled_for: '2026-10-21T06:00:00.000Z', metadata: { ...initialPublication.metadata, workflow_state: 'scheduled' } };
+  let fetchCount = 0;
+  const rebuildCalls = [];
+  const publicationStore = {
+    async fetchPublicationById() { fetchCount += 1; return fetchCount === 1 ? initialPublication : scheduledPublication; },
+    async fetchVideoById(id) { return { id, render: { output_path: 'data/.../manual.mp4' } }; },
+    async updatePublication(_id, patch) { return { ...initialPublication, status: patch.status || initialPublication.status, metadata: { ...initialPublication.metadata, ...(patch.metadata || {}) } }; },
+  };
+  await executeProductVideoAction(
+    'poke_quizz_publish_preview',
+    {
+      task_id: 'TASK-ORION-PQ-PUBLISH-MANUAL',
+      approved_by: 'Lachkid',
+      approved_by_id: '374565340644114433',
+      poke_quizz_publication_review: {
+        publicationId: 'publication-manual-fanout',
+        channelSelector: 'poke-quizz-youtube',
+        tiktokDirectPost: { accountKey: 'poke-quizz-tiktok', creatorUsername: 'pokequizz7', privacyLevel: 'PUBLIC' },
+        instagramReels: [{ accountKey: 'poke-quizzz-instagram', creatorUsername: 'pokequizzz', instagramUserId: '17841467563066221' }],
+      },
+    },
+    { env: {} },
+    {
+      publicationStore,
+      loadPublicationChannelProfiles: async () => ([{ platform: 'youtube_shorts', account_key: 'poke-quizz-youtube', metadata: { publisher: { targets: [] } } }]),
+      findPublicationChannelProfile: (profiles) => profiles[0],
+      buildPublicationReviewTaskAndPayload: async (opts) => { rebuildCalls.push(opts); return { reviewTask: { poke_quizz_publication_review: {} } }; },
+      runProcess: async () => ({ stdout: JSON.stringify([{ publication_id: 'publication-manual-fanout', action: 'schedule_update', scheduled_for: '2026-10-21T06:00:00.000Z' }]) }),
+      syncQueueStatusMessage: async () => ({ posted: true }),
+      syncPublicationReviewMessage: async () => ({ updated: true, moved: true }),
+      upsertAdditionalPlatformPublicationTargets: async () => [],
+      queueStatusChannelProfile: { platform: 'youtube_shorts', account_key: 'poke-quizz-youtube' },
+      executePublicationScriptPath: '/tmp/execute-youtube-publication.mjs',
+    },
+  );
+  assert.equal(rebuildCalls.length, 0, 'manual task carries settings → rebuilder must NOT be invoked');
+});
+
 test('publish approval forwards an optional max-scheduled-days cap to the scheduler', async () => {
   const initialPublication = {
     id: 'publication-auto-publish-window',
