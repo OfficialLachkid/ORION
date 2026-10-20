@@ -139,8 +139,70 @@ const CONTACT_FALLBACK_PATHS = ['/contact', '/contactgegevens', '/contact-ons', 
 const CONTACT_FETCH_TIMEOUT_MS = 8000;
 const CONTACT_FETCH_MAX_BYTES = 200_000;
 const CONTACT_FETCH_USER_AGENT = 'ORION-leadgen/1.0 (+contact-fallback)';
-const EMAIL_REGEX = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
+const EMAIL_REGEX = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 const DUTCH_PHONE_REGEX = /(?:\+31|0031|0)(?:[\s-]?\d){9}/;
+
+// Email TLDs we accept. The old `.[a-z]{2,}` tail accepted anything —
+// which pulled `flags@2x.webp` out of a `<img src="…">` attribute,
+// `contact@verhuisbedrijfhaarlem.commaandag` where the scraper
+// swallowed the following Dutch word, and `info@website.com` from
+// template placeholder text. All three bounced on send 2026-10-20
+// and polluted the outreach queue.
+//
+// Allowlist is curated for the Netherlands + EU + common international
+// business ccTLDs/gTLDs. Unknown-but-genuine TLDs can be added here;
+// the scraper falls back to a null email rather than guessing.
+const EMAIL_TLD_ALLOWLIST = new Set([
+  // EU + NL-adjacent ccTLDs
+  'nl', 'be', 'de', 'fr', 'uk', 'es', 'it', 'pt', 'pl', 'se', 'no', 'dk',
+  'fi', 'at', 'ch', 'lu', 'ie', 'cz', 'gr', 'ro', 'hu', 'bg', 'hr', 'si',
+  'sk', 'lt', 'lv', 'ee', 'mt', 'cy', 'is', 'li', 'mc', 'tr', 'ru', 'ua',
+  'rs', 'ba', 'mk', 'me', 'al', 'md', 'by', 'ge', 'am', 'az', 'kz',
+  // Rest of world common
+  'us', 'ca', 'mx', 'br', 'ar', 'cl', 'co', 'pe',
+  'au', 'nz', 'jp', 'kr', 'cn', 'in', 'hk', 'sg', 'tw', 'th', 'my', 'id',
+  'ph', 'vn', 'pk', 'bd', 'il', 'ae', 'sa', 'za', 'ng', 'ke', 'eg', 'ma', 'tn',
+  // Country codes also commonly used as "generic"
+  'io', 'tv', 'cc', 'ws', 'ai', 'so', 'gg', 'fm', 'eu',
+  // Core gTLDs
+  'com', 'net', 'org', 'info', 'biz', 'pro', 'name', 'mobi', 'asia',
+  'travel', 'jobs', 'tel', 'mail', 'email',
+  // Modern business gTLDs commonly seen in Dutch SME contact pages
+  'app', 'dev', 'cloud', 'tech', 'store', 'shop', 'online', 'site',
+  'website', 'agency', 'studio', 'design', 'media', 'group', 'services',
+  'solutions', 'consulting', 'systems', 'software', 'digital', 'marketing',
+  'business', 'company', 'academy', 'foundation', 'world', 'today', 'works',
+  'club', 'zone', 'center', 'team', 'support', 'press', 'blog', 'news',
+  'gallery', 'photography', 'video', 'film', 'music', 'cafe', 'pizza',
+  'bar', 'restaurant', 'pub', 'build', 'builders', 'contractors',
+  'plumbing', 'electrician', 'law', 'legal', 'finance', 'bank', 'insurance',
+  'health', 'clinic', 'dental', 'doctor', 'care', 'fit', 'fitness',
+  'wellness', 'spa', 'yoga', 'life', 'family', 'school', 'university',
+  'education', 'training', 'institute', 'house', 'home', 'properties',
+  'realty', 'estate', 'rentals', 'apartments', 'holiday', 'hotel', 'tours',
+  'vacation', 'flights', 'auto', 'cars', 'bike', 'motorcycle', 'green',
+  'eco', 'organic', 'farm', 'garden', 'network', 'guru', 'ninja', 'rocks',
+  'xyz', 'top', 'vip', 'link', 'page', 'space', 'international',
+]);
+
+export function hasValidEmailTld(email) {
+  const dot = String(email || '').lastIndexOf('.');
+  if (dot < 0) return false;
+  const tld = email.slice(dot + 1).toLowerCase();
+  return EMAIL_TLD_ALLOWLIST.has(tld);
+}
+
+// Scan `text` for the first email whose TLD is in the allowlist.
+// Returns null when nothing matches. Case-insensitive; result is
+// lowercased by the caller (extractContactFromHtml).
+export function pickFirstValidEmail(text) {
+  if (!text) return null;
+  for (const match of String(text).matchAll(EMAIL_REGEX)) {
+    const candidate = match[0];
+    if (hasValidEmailTld(candidate)) return candidate;
+  }
+  return null;
+}
 
 async function fetchWithTimeout(url) {
   const controller = new AbortController();
@@ -173,9 +235,14 @@ export function extractContactFromHtml(html) {
   // Strip <a href="mailto:..."> and tel: link href attributes first — those
   // are the highest-signal source and often the ONLY place contact info
   // lives on a site that renders phone as an image or SVG.
+  // Prefer the mailto: href when present (highest-signal source), but
+  // still validate its TLD — stale template placeholders or scraper
+  // concatenation glitches can land invalid TLDs in href attributes
+  // too. Falls through to the body-scan allowlist walker on invalid.
+  const mailtoCandidate = html.match(/mailto:([^"'\s>]+)/i)?.[1];
   const email = (
-    html.match(/mailto:([^"'\s>]+)/i)?.[1]
-    || html.match(EMAIL_REGEX)?.[0]
+    (mailtoCandidate && hasValidEmailTld(mailtoCandidate) ? mailtoCandidate : null)
+    || pickFirstValidEmail(html)
     || null
   );
   const rawPhone = (
