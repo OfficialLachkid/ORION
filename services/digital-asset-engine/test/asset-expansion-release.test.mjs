@@ -6,6 +6,10 @@ import { resolve } from 'node:path';
 import test from 'node:test';
 import sharp from 'sharp';
 import { prepareApprovedAssetExpansionRelease } from '../src/asset-expansion-release.mjs';
+import {
+  selectLifecyclePreviewPath,
+  weaponEffectPhase,
+} from '../src/expansion-release-marketing.mjs';
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -55,10 +59,14 @@ async function fixture() {
     'download/assets/individual/arc-launcher.png': png,
     'download/LICENSE.md': Buffer.from('Test buyer license\n'),
     'download/README.md': Buffer.from('Old readme\n'),
+    'weapon-inventory.png': png,
+    'effects-breakdown.png': png,
+    'firing-cycle-montage.gif': Buffer.from('GIF89a-base-montage'),
   };
   const listing = {
     schema_version: '1.0', title: 'Neon Plasma Armory', short_description: 'Weapons.',
     description: 'Base description.', price: { amount: 4.99, currency: 'USD' }, visibility: 'draft',
+    screenshot_paths: ['weapon-inventory.png', 'effects-breakdown.png', 'firing-cycle-montage.gif'],
     technical_information: ['Transparent PNG'], listing_hash: '',
   };
   delete listing.listing_hash;
@@ -135,7 +143,7 @@ async function fixture() {
       target_name: 'Plasma Shield', buyer_group: 'vfx',
     }],
   };
-  async function marketingBuilder({ candidateRoot }) {
+  async function marketingBuilder({ candidateRoot, inheritedScreenshotPaths }) {
     await Promise.all([
       write(resolve(candidateRoot, 'cover.gif'), Buffer.from('GIF89a-cover')),
       write(resolve(candidateRoot, 'cover-still.png'), png),
@@ -145,7 +153,12 @@ async function fixture() {
     ]);
     return {
       cover_path: 'cover.gif', cover_fallback_path: 'cover-still.png',
-      screenshot_paths: ['complete-inventory.png', 'armory-items-and-vfx.png', 'interactive-expansion-montage.gif'],
+      screenshot_paths: [
+        'complete-inventory.png',
+        ...inheritedScreenshotPaths,
+        'armory-items-and-vfx.png',
+        'interactive-expansion-montage.gif',
+      ],
       motion: { rapid_flashing: false },
     };
   }
@@ -165,6 +178,18 @@ test('builds an immutable 0.3.0 package from the exact approved expansion review
   assert.equal(result.manifest.gates.expansion_review_approved, true);
   assert.equal(result.listing.cover_path, 'cover.gif');
   assert.equal(result.manifest.marketing_media.motion.rapid_flashing, false);
+  assert.deepEqual(result.listing.screenshot_paths, [
+    'complete-inventory.png',
+    'previous-release-media/weapon-inventory.png',
+    'previous-release-media/effects-breakdown.png',
+    'previous-release-media/firing-cycle-montage.gif',
+    'armory-items-and-vfx.png',
+    'interactive-expansion-montage.gif',
+  ]);
+  assert.equal(
+    await readFile(resolve(result.candidateRoot, 'previous-release-media/firing-cycle-montage.gif'), 'utf8'),
+    'GIF89a-base-montage',
+  );
   assert.equal((await readFile(resolve(result.candidateRoot, 'download/assets/expansion/vfx/plasma-shield.png'))).length > 0, true);
   assert.equal((await readFile(resolve(result.candidateRoot, 'download/animations/plasma-shield/frames/active/00.png'))).length > 0, true);
   await assert.rejects(readFile(resolve(result.candidateRoot, 'download/animations/plasma-shield/previews/active.gif')));
@@ -176,6 +201,34 @@ test('builds an immutable 0.3.0 package from the exact approved expansion review
   });
   assert.equal(reused.reused, true);
   assert.equal(reused.manifest.manifest_hash, result.manifest.manifest_hash);
+});
+
+test('marketing previews sample every declared shield animation instead of early sorted frames only', () => {
+  const asset = {
+    asset_key: 'plasma-shield',
+    buyer_path: 'assets/expansion/vfx/plasma-shield.png',
+    animations: [
+      'power-up', 'active-loop', 'shield-hit', 'integrity-decay', 'shield-break', 'power-down',
+    ].map((animationKey) => ({ animation_key: animationKey })),
+  };
+  asset.runtime_paths = asset.animations.flatMap(({ animation_key: animationKey }) => [
+    `animations/plasma-shield/frames/${animationKey}/00.png`,
+    `animations/plasma-shield/frames/${animationKey}/01.png`,
+  ]);
+  const selected = Array.from(
+    { length: 12 },
+    (unused, index) => selectLifecyclePreviewPath(asset, index, 12),
+  );
+  for (const { animation_key: animationKey } of asset.animations) {
+    assert.ok(selected.some((path) => path.includes(`/frames/${animationKey}/`)), animationKey);
+  }
+  assert.deepEqual(
+    Array.from({ length: 8 }, (unused, index) => weaponEffectPhase(index)),
+    [
+      'weapon', 'muzzle_flash', 'projectile', 'impact_decay',
+      'weapon', 'muzzle_flash', 'projectile', 'impact_decay',
+    ],
+  );
 });
 
 test('fails closed when the approval does not cover the exact expansion manifest', async () => {

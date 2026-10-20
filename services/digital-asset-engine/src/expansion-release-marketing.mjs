@@ -19,7 +19,7 @@ const COLORS = Object.freeze({
   violet: '#7d6cf2',
 });
 
-export const EXPANSION_RELEASE_MARKETING_VERSION = '1.0.2';
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.1.0';
 
 function escapeXml(value) {
   return String(value)
@@ -53,23 +53,142 @@ async function contained(buffer, width, height) {
   }).ensureAlpha().png().toBuffer();
 }
 
-async function weaponEntries(candidateRoot, product) {
+async function readJson(path) {
+  return JSON.parse(await readFile(path, 'utf8'));
+}
+
+async function readOptionalJson(path) {
+  try {
+    return await readJson(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+function animationFramePaths(asset, animation) {
+  const prefix = `animations/${asset.asset_key}/frames/${animation.animation_key}/`;
+  return (asset.runtime_paths || [])
+    .filter((path) => path.startsWith(prefix) && path.endsWith('.png'))
+    .sort();
+}
+
+export function selectLifecyclePreviewPath(asset, frameIndex, frameCount) {
+  const animations = (asset.animations || [])
+    .map((animation) => ({ animation, paths: animationFramePaths(asset, animation) }))
+    .filter(({ paths }) => paths.length);
+  if (animations.length) {
+    const count = Math.max(1, Number(frameCount) || 1);
+    const index = Math.max(0, Math.min(count - 1, Number(frameIndex) || 0));
+    const animationIndex = Math.min(
+      animations.length - 1,
+      Math.floor((index * animations.length) / count),
+    );
+    const start = Math.ceil((animationIndex * count) / animations.length);
+    const end = Math.ceil(((animationIndex + 1) * count) / animations.length);
+    const slots = Math.max(1, end - start);
+    const progress = slots === 1 ? 0.5 : (index - start) / (slots - 1);
+    const paths = animations[animationIndex].paths;
+    return paths[Math.min(paths.length - 1, Math.round(progress * (paths.length - 1)))];
+  }
+  const states = (asset.states || [])
+    .map((state) => state.path)
+    .filter((path) => (asset.runtime_paths || []).includes(path));
+  if (states.length) {
+    const count = Math.max(1, Number(frameCount) || 1);
+    const index = Math.max(0, Math.min(count - 1, Number(frameIndex) || 0));
+    return states[Math.min(states.length - 1, Math.floor((index * states.length) / count))];
+  }
+  return asset.buyer_path;
+}
+
+async function effectSample(candidateRoot, assetKey, kind, preferredFrame) {
+  const root = resolve(candidateRoot, 'download', 'effects', assetKey, kind);
+  const metadata = await readOptionalJson(resolve(root, 'animation.json'));
+  if (!metadata?.frames?.length || !metadata.origin) return null;
+  const frame = metadata.frames[Math.min(preferredFrame, metadata.frames.length - 1)];
+  return {
+    buffer: await readFile(resolve(root, frame.path)),
+    origin: metadata.origin,
+    canvas: metadata.canvas,
+  };
+}
+
+export function weaponEffectPhase(frameIndex) {
+  return ['weapon', 'muzzle_flash', 'projectile', 'impact_decay'][
+    Math.max(0, Number(frameIndex) || 0) % 4
+  ];
+}
+
+async function weaponLifecycleBuffer(candidateRoot, asset, anchor, frameIndex) {
+  const weapon = await readFile(resolve(
+    candidateRoot, 'download', 'assets', 'individual', basename(asset.final_path),
+  ));
+  if (!anchor) return weapon;
+  const phase = weaponEffectPhase(frameIndex);
+  if (phase === 'weapon') return weapon;
+  const [muzzle, projectile, impact] = await Promise.all([
+    effectSample(candidateRoot, asset.asset_key, 'muzzle_flash', 2),
+    effectSample(candidateRoot, asset.asset_key, 'projectile', 0),
+    effectSample(candidateRoot, asset.asset_key, 'impact_decay', 2),
+  ]);
+  if (!muzzle || !projectile || !impact) return weapon;
+  const width = 256;
+  const height = 128;
+  const weaponTop = 32;
+  const composites = [{ input: weapon, left: 0, top: weaponTop }];
+  if (phase === 'muzzle_flash' || phase === 'projectile') {
+    composites.push({
+      input: muzzle.buffer,
+      left: anchor.x - muzzle.origin.x,
+      top: weaponTop + anchor.y - muzzle.origin.y,
+    });
+  }
+  if (phase === 'projectile') {
+    composites.push({
+      input: projectile.buffer,
+      left: anchor.x + 34 - projectile.origin.x,
+      top: weaponTop + anchor.y - projectile.origin.y,
+    });
+  }
+  if (phase === 'impact_decay') {
+    composites.push({
+      input: impact.buffer,
+      left: width - ((impact.canvas?.width || 64) - impact.origin.x),
+      top: weaponTop + anchor.y - impact.origin.y,
+    });
+  }
+  return sharp({
+    create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite(composites).png({ compressionLevel: 9 }).toBuffer();
+}
+
+async function weaponEntries(candidateRoot, product, frameIndex = 0) {
+  const anchors = await readOptionalJson(resolve(
+    candidateRoot, 'download', 'effects', 'weapon-anchors.json',
+  ));
+  const anchorByKey = new Map((anchors?.weapons || []).map((item) => [
+    item.source_asset_key,
+    item.muzzle_anchor,
+  ]));
   return Promise.all(product.assets.map(async (asset) => ({
     asset_key: asset.asset_key,
     name: asset.name,
     group: 'weapons',
-    buffer: await readFile(resolve(
-      candidateRoot, 'download', 'assets', 'individual', basename(asset.final_path),
-    )),
+    buffer: await weaponLifecycleBuffer(
+      candidateRoot,
+      asset,
+      anchorByKey.get(asset.asset_key),
+      frameIndex,
+    ),
   })));
 }
 
-async function expansionEntries(candidateRoot, expansionAssets, frameIndex = 0) {
+async function expansionEntries(candidateRoot, expansionAssets, frameIndex = null, frameCount = null) {
   return Promise.all(expansionAssets.map(async (asset) => {
-    const runtimeFrames = (asset.runtime_paths || []).filter((path) => path.includes('/frames/') && path.endsWith('.png'));
-    const states = (asset.runtime_paths || []).filter((path) => path.includes('/states/') && path.endsWith('.png'));
-    const sequence = runtimeFrames.length ? runtimeFrames : states;
-    const selected = sequence.length ? sequence[frameIndex % sequence.length] : asset.buyer_path;
+    const selected = frameIndex === null
+      ? asset.buyer_path
+      : selectLifecyclePreviewPath(asset, frameIndex, frameCount);
     return {
       asset_key: asset.asset_key,
       name: asset.name,
@@ -163,7 +282,7 @@ async function buildAnimatedGrid({ tempRoot, outputPath, frameFactory, frameCoun
 
 export async function buildExpansionReleaseMarketingMedia(options) {
   const weapons = await weaponEntries(options.candidateRoot, options.product);
-  const firstExpansion = await expansionEntries(options.candidateRoot, options.expansionAssets, 0);
+  const firstExpansion = await expansionEntries(options.candidateRoot, options.expansionAssets);
   const tempRoot = await mkdtemp(join(tmpdir(), 'orion-expansion-marketing-'));
   const files = {
     cover: 'cover.gif',
@@ -176,16 +295,19 @@ export async function buildExpansionReleaseMarketingMedia(options) {
     const coverFirstFrame = await buildAnimatedGrid({
       tempRoot,
       outputPath: resolve(options.candidateRoot, files.cover),
-      frameCount: 8,
-      delayMs: 520,
+      frameCount: 12,
+      delayMs: 420,
       frameFactory: async (frameIndex) => {
-        const expansion = await expansionEntries(options.candidateRoot, options.expansionAssets, frameIndex);
+        const [animatedWeapons, expansion] = await Promise.all([
+          weaponEntries(options.candidateRoot, options.product, frameIndex),
+          expansionEntries(options.candidateRoot, options.expansionAssets, frameIndex, 12),
+        ]);
         return gridImage({
           width: COVER_WIDTH,
           height: COVER_HEIGHT,
           title: options.product.title,
-          subtitle: 'Weapons, items, props & interactive VFX',
-          entries: representativeEntries(weapons, expansion),
+          subtitle: 'Weapons, effects, items, props & interactive VFX',
+          entries: representativeEntries(animatedWeapons, expansion),
           columns: 4,
           footer: `VERSION ${options.version} · ANIMATED PREVIEW`,
         });
@@ -220,7 +342,7 @@ export async function buildExpansionReleaseMarketingMedia(options) {
         height: HEIGHT,
         title: 'Interactive States & VFX',
         subtitle: 'Representative buyer-runtime frames · zero root motion',
-        entries: await expansionEntries(options.candidateRoot, options.expansionAssets, frameIndex),
+        entries: await expansionEntries(options.candidateRoot, options.expansionAssets, frameIndex, 12),
         columns: 4,
         footer: 'VBJSERVICES · PROTECTED ANIMATED PREVIEW',
       }),
@@ -228,9 +350,20 @@ export async function buildExpansionReleaseMarketingMedia(options) {
     return {
       cover_path: files.cover,
       cover_fallback_path: files.coverStill,
-      screenshot_paths: [files.inventory, files.expansion, files.montage],
+      screenshot_paths: [
+        files.inventory,
+        ...(options.inheritedScreenshotPaths || []),
+        files.expansion,
+        files.montage,
+      ],
       palette: COLORS,
-      motion: { cover_frame_count: 8, cover_frame_delay_ms: 520, rapid_flashing: false },
+      motion: {
+        cover_frame_count: 12,
+        cover_frame_delay_ms: 420,
+        rapid_flashing: false,
+        weapon_effect_phases: ['weapon', 'muzzle_flash', 'projectile', 'impact_decay'],
+        expansion_sampling: 'declared_animation_lifecycle',
+      },
     };
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import {
   buildExpansionReleaseMarketingMedia,
@@ -137,6 +137,24 @@ async function copyApprovedExpansionAssets({ candidateRoot, reviewRoot, reviewMa
 
 function unique(values) {
   return [...new Set(values)];
+}
+
+async function copyInheritedMarketplaceScreenshots({ baseRoot, candidateRoot, listing }) {
+  const inherited = [];
+  for (const path of unique(listing.screenshot_paths || [])) {
+    const normalized = normalizePath(path);
+    const source = resolveInside(baseRoot, normalized, 'Inherited marketplace screenshot');
+    const destinationPath = `previous-release-media/${normalized}`;
+    const destination = resolveInside(
+      candidateRoot,
+      destinationPath,
+      'Inherited marketplace screenshot destination',
+    );
+    await mkdir(dirname(destination), { recursive: true });
+    await writeFile(destination, await readFile(source));
+    inherited.push(destinationPath);
+  }
+  return inherited;
 }
 
 function releaseListing(baseListing, product, plan, expansionAssets, marketingMedia) {
@@ -312,11 +330,17 @@ export async function prepareApprovedAssetExpansionRelease(options) {
     reviewRoot: approved.reviewRoot,
     reviewManifest: approved.manifest,
   });
+  const inheritedScreenshotPaths = await copyInheritedMarketplaceScreenshots({
+    baseRoot: base.root,
+    candidateRoot,
+    listing: base.listing,
+  });
   const marketingMedia = await (options.marketingBuilder || buildExpansionReleaseMarketingMedia)({
     candidateRoot,
     product,
     version: plan.target_version,
     expansionAssets,
+    inheritedScreenshotPaths,
   });
   const listing = releaseListing(base.listing, product, plan, expansionAssets, marketingMedia);
   const assetIndex = {

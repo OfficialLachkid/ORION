@@ -6,7 +6,7 @@ This note preserves the product-specific decisions that should survive beyond on
 
 Version `0.3.0` extends the approved weapons and independent firing effects with eight armory items, props, and interactive plasma VFX. The release is built only from the exact expansion manifest approved in Discord. Storefront media is regenerated from the complete current package rather than accumulating obsolete screenshots from older releases.
 
-The storefront cover is a deterministic animated GIF assembled from approved assets. Its first frame is a readable static composition for mobile clients and reduced-motion or non-playing contexts. The animation uses slow transitions, protected montage layouts, no rapid flashing, and a medium-light desaturated steel-blue background so the dark sprites remain legible. Clean transparent assets are available only in the buyer download.
+The storefront cover is a deterministic animated GIF assembled from approved assets. Its first frame is a readable static composition for mobile clients and reduced-motion or non-playing contexts. The animation cycles representative weapon, muzzle-flash, projectile, impact, and declared expansion-lifecycle frames; versioned updates preserve the established weapon/effects presentation and append approved expansion media. It uses slow transitions, protected montage layouts, no rapid flashing, and a medium-light desaturated steel-blue background so the dark sprites remain legible. Clean transparent assets are available only in the buyer download.
 
 ## Prompt and recipe learning
 
