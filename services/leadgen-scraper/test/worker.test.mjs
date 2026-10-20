@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   extractContactFromHtml,
+  hasValidEmailTld,
   isNoResultsLeadgenError,
   mapLeadToRow,
+  pickFirstValidEmail,
   sanitizeBusinessType,
   sanitizePlaceholderString,
 } from '../src/worker.mjs';
@@ -156,4 +158,60 @@ test('extractContactFromHtml returns nulls on empty input', () => {
   assert.deepEqual(extractContactFromHtml(''), { email: null, phone: null });
   assert.deepEqual(extractContactFromHtml(null), { email: null, phone: null });
   assert.deepEqual(extractContactFromHtml(undefined), { email: null, phone: null });
+});
+
+test('hasValidEmailTld: accepts common ccTLDs + gTLDs, rejects known false-positives', () => {
+  // Real-world business TLDs — must pass
+  for (const email of [
+    'info@acme.nl', 'contact@example.com', 'hello@foo.co.uk', 'sales@shop.be',
+    'test@startup.io', 'contact@firm.app', 'info@shop.store', 'me@acme.me',
+    'info@firma.de', 'office@entreprise.fr',
+  ]) {
+    assert.equal(hasValidEmailTld(email), true, `${email} should pass`);
+  }
+  // Known false-positives from the 2026-10-20 bulk-send dedup report — must reject
+  for (const bogus of [
+    'flags@2x.webp',                                   // image filename parsed as email
+    'contact@verhuisbedrijfhaarlem.commaandag',        // Dutch "maandag" glued to .com
+    'klantenservice@arnhemglaszetter.comtelefoonnummer', // "telefoonnummer" glued to .com
+    'logo@site.png',                                    // image ref
+    'file@thing.pdf',                                   // doc ref
+    'intro@video.mp4',                                  // video ref
+  ]) {
+    assert.equal(hasValidEmailTld(bogus), false, `${bogus} should be rejected`);
+  }
+  // Edge cases
+  assert.equal(hasValidEmailTld(''), false);
+  assert.equal(hasValidEmailTld(null), false);
+  assert.equal(hasValidEmailTld('no-at-sign'), false);
+});
+
+test('pickFirstValidEmail: scans text, skips bogus TLDs, returns first valid email', () => {
+  // Image attr followed by a real contact link — must skip the image, pick the real one
+  const html = '<img src="flags@2x.webp" alt="flag"><a href="mailto:hello@shop.nl">Contact</a>';
+  assert.equal(pickFirstValidEmail(html), 'hello@shop.nl');
+  // All-bogus text — returns null (nothing valid)
+  assert.equal(pickFirstValidEmail('junk flags@2x.webp more flags@foo.pdf'), null);
+  // Null-safe
+  assert.equal(pickFirstValidEmail(null), null);
+  assert.equal(pickFirstValidEmail(''), null);
+});
+
+test('extractContactFromHtml: rejects a `<img src="flags@2x.webp">` false positive even when it is the only "email" in the page', () => {
+  // Regression guard for the 2026-10-20 incident: the pre-fix regex
+  // pulled `flags@2x.webp` as a contact email, which bounced on send.
+  const html = '<html><body><img src="flags@2x.webp"></body></html>';
+  assert.equal(extractContactFromHtml(html).email, null);
+});
+
+test('extractContactFromHtml: a bogus mailto: href falls through to body-scan (if body has a valid one)', () => {
+  // If someone encodes a bogus TLD in a mailto: href (e.g. template
+  // output), we should NOT prefer it — fall through to body text.
+  const html = '<a href="mailto:foo@bar.commaandag">bad</a> <p>Reach us: real@shop.nl</p>';
+  assert.equal(extractContactFromHtml(html).email, 'real@shop.nl');
+});
+
+test('extractContactFromHtml: picks the real email even when the HTML also contains an image-attr lookalike', () => {
+  const html = '<img src="logo@2x.png" alt="logo"><p>Mail <a href="mailto:info@firm.nl">info@firm.nl</a></p>';
+  assert.equal(extractContactFromHtml(html).email, 'info@firm.nl');
 });
