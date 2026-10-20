@@ -11,9 +11,12 @@ import {
 } from '../src/asset-expansion-release.mjs';
 import {
   coverScene,
+  cropVisibleAlpha,
   selectCoverLifecyclePreviewPath,
   selectLifecyclePreviewPath,
+  visibleAlphaBounds,
   weaponEffectPhase,
+  weaponEffectSubtitle,
 } from '../src/expansion-release-marketing.mjs';
 
 function sha256(value) {
@@ -236,13 +239,27 @@ test('marketing previews sample every declared shield animation instead of early
   assert.deepEqual(
     Array.from({ length: 8 }, (unused, index) => weaponEffectPhase(index)),
     [
-      'weapon', 'muzzle_flash', 'projectile', 'impact_decay',
-      'weapon', 'muzzle_flash', 'projectile', 'impact_decay',
+      'weapon', 'weapon', 'muzzle_flash', 'muzzle_flash',
+      'projectile', 'projectile', 'impact_decay', 'impact_decay',
     ],
   );
   assert.deepEqual(
-    Array.from({ length: 16 }, (unused, index) => coverScene(index).kind),
+    Array.from({ length: 8 }, (unused, index) => weaponEffectSubtitle(index)),
     [
+      '8 transparent weapon sprites',
+      '8 transparent weapon sprites',
+      'Independent muzzle-flash overlays',
+      'Independent muzzle-flash overlays',
+      'Independent projectile sprites',
+      'Independent projectile sprites',
+      'Independent impact & decay frames',
+      'Independent impact & decay frames',
+    ],
+  );
+  assert.deepEqual(
+    Array.from({ length: 20 }, (unused, index) => coverScene(index).kind),
+    [
+      'weapons', 'weapons', 'weapons', 'weapons',
       'weapons', 'weapons', 'weapons', 'weapons',
       'expansion', 'expansion', 'expansion', 'expansion',
       'expansion', 'expansion', 'expansion', 'expansion',
@@ -250,8 +267,25 @@ test('marketing previews sample every declared shield animation instead of early
     ],
   );
   assert.equal(coverScene(0).frame_index, 0);
-  assert.equal(coverScene(4).frame_index, 0);
-  assert.equal(coverScene(15).frame_index, 11);
+  assert.equal(coverScene(8).frame_index, 0);
+  assert.equal(coverScene(19).frame_index, 11);
+});
+
+test('marketing media crops transparent padding to visible alpha before fitting grid entries', async () => {
+  const padded = await sharp({
+    create: { width: 64, height: 48, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite([{
+    input: await sharp({
+      create: { width: 20, height: 8, channels: 4, background: { r: 32, g: 216, b: 244, alpha: 1 } },
+    }).png().toBuffer(),
+    left: 31,
+    top: 19,
+  }]).png().toBuffer();
+  const { data, info } = await sharp(padded).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.deepEqual(visibleAlphaBounds(data, info), { left: 31, top: 19, width: 20, height: 8 });
+  const croppedMetadata = await sharp(await cropVisibleAlpha(padded)).metadata();
+  assert.equal(croppedMetadata.width, 20);
+  assert.equal(croppedMetadata.height, 8);
 });
 
 test('inherited marketplace media stays flat across any number of future release updates', () => {
