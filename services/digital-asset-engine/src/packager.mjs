@@ -31,6 +31,8 @@ function escapeXml(value) {
 export function describeAssetCollection(product, candidates) {
   const kinds = [...new Set(candidates.map(({ asset }) => asset.kind))];
   const weaponsOnly = kinds.length === 1 && kinds[0] === 'weapon';
+  const identity = `${product.theme} ${product.category} ${product.product_type}`.toLowerCase();
+  const arcaneFantasy = /arcane|fantasy|magic|alchemy/iu.test(identity);
   if (weaponsOnly) {
     return {
       weaponsOnly: true,
@@ -44,18 +46,49 @@ export function describeAssetCollection(product, candidates) {
     };
   }
   const friendlyKinds = kinds.map((kind) => kind.replaceAll('-', ' '));
+  const collectionName = arcaneFantasy
+    ? 'arcane fantasy pixel-art items and relics'
+    : `${product.theme} pixel-art game assets`;
   return {
     weaponsOnly: false,
     coverLabel: `${candidates.length} PIXEL ART ASSETS`,
     marketplaceLabel: `${candidates.length} INCLUDED PIXEL ART ASSETS`,
-    collectionName: 'science-fiction pixel-art game assets',
-    shortDescription: `${candidates.length} original sci-fi pixel-art game assets for 2D games.`,
+    collectionName,
+    shortDescription: `${candidates.length} original ${collectionName} for 2D games.`,
     viewLines: [`Presentation: ${product.style.perspective}`, `Asset types: ${friendlyKinds.join(', ')}`],
     technicalLines: [
       'Side, three-quarter, or centered presentation according to asset function',
       `Asset types: ${friendlyKinds.join(', ')}`,
     ],
-    tags: ['2D', 'Pixel Art', 'Sci-fi', 'Game Assets', 'Props', 'VFX', 'Sprites'],
+    tags: arcaneFantasy
+      ? ['2D', 'Pixel Art', 'Fantasy', 'Magic', 'Game Assets', 'Inventory', 'Sprites']
+      : ['2D', 'Pixel Art', 'Game Assets', 'Props', 'Sprites'],
+  };
+}
+
+function previewTheme(product) {
+  const identity = `${product.theme} ${product.category} ${product.product_type}`.toLowerCase();
+  if (/arcane|fantasy|magic|alchemy/iu.test(identity)) {
+    return {
+      background: '#151020',
+      panel: '#21172f',
+      card: '#291d3b',
+      accent: '#b979ff',
+      border: '#6e4b91',
+      title: '#fff8e9',
+      label: '#e8d8ff',
+      muted: '#aa96bd',
+    };
+  }
+  return {
+    background: '#10131d',
+    panel: '#161c2a',
+    card: '#151c2a',
+    accent: '#35d9ff',
+    border: '#2f4160',
+    title: '#f4f7ff',
+    label: '#d8e2f7',
+    muted: '#8998b8',
   };
 }
 
@@ -112,6 +145,7 @@ async function createSpriteSheet(candidates, product) {
 
 async function createCover(candidates, product) {
   const collection = describeAssetCollection(product, candidates);
+  const theme = previewTheme(product);
   const cellWidth = 142;
   const rows = Math.ceil(candidates.length / 4);
   const cellHeight = collection.weaponsOnly && rows <= 2
@@ -119,8 +153,8 @@ async function createCover(candidates, product) {
     : Math.floor(324 / rows);
   const gridLeft = 31;
   const gridTop = collection.weaponsOnly && rows <= 2 ? 112 : 105;
-  const assetWidth = collection.weaponsOnly ? 128 : 96;
-  const assetHeight = collection.weaponsOnly ? 64 : Math.min(72, cellHeight - 34);
+  const assetWidth = collection.weaponsOnly ? 128 : 112;
+  const assetHeight = collection.weaponsOnly ? 64 : Math.min(112, cellHeight - 30);
   const composites = [];
   for (let index = 0; index < candidates.length; index += 1) {
     const column = index % 4;
@@ -144,12 +178,12 @@ async function createCover(candidates, product) {
   const titleFontSize = Math.max(22, Math.min(38, Math.floor(600 / Math.max(1, product.title.length * 0.6))));
   const overlay = Buffer.from([
     `<svg width="${COVER_WIDTH}" height="${COVER_HEIGHT}" xmlns="http://www.w3.org/2000/svg">`,
-    '<rect width="630" height="500" fill="#10131d"/>',
-    '<rect x="18" y="18" width="594" height="464" rx="18" fill="#161c2a" stroke="#35d9ff" stroke-width="3"/>',
-    `<text x="315" y="66" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="${titleFontSize}" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
-    `<text x="315" y="96" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${escapeXml(collection.coverLabel)}</text>`,
+    `<rect width="630" height="500" fill="${theme.background}"/>`,
+    `<rect x="18" y="18" width="594" height="464" rx="18" fill="${theme.panel}" stroke="${theme.accent}" stroke-width="3"/>`,
+    `<text x="315" y="66" text-anchor="middle" fill="${theme.title}" font-family="Arial, sans-serif" font-size="${titleFontSize}" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
+    `<text x="315" y="96" text-anchor="middle" fill="${theme.accent}" font-family="Arial, sans-serif" font-size="18">${escapeXml(collection.coverLabel)}</text>`,
     labels,
-    `<text x="315" y="456" text-anchor="middle" fill="#7785a6" font-family="Arial, sans-serif" font-size="14">Protected preview · clean transparent PNG files in download · ${product.style.width} × ${product.style.height} px</text>`,
+    `<text x="315" y="456" text-anchor="middle" fill="${theme.muted}" font-family="Arial, sans-serif" font-size="14">Protected preview · clean transparent PNG files in download · ${product.style.width} × ${product.style.height} px</text>`,
     '</svg>',
   ].join(''));
   const protectionMarks = candidates.map((_, index) => {
@@ -165,9 +199,9 @@ async function createCover(candidates, product) {
     '</svg>',
   ].join(''));
   return sharp({
-    create: { width: COVER_WIDTH, height: COVER_HEIGHT, channels: 3, background: '#10131d' },
+    create: { width: COVER_WIDTH, height: COVER_HEIGHT, channels: 3, background: theme.background },
   }).composite([{ input: overlay }, ...composites, { input: protectionOverlay }])
-    .flatten({ background: '#10131d' })
+    .flatten({ background: theme.background })
     .removeAlpha()
     .png({ compressionLevel: 9 })
     .toBuffer();
@@ -175,6 +209,7 @@ async function createCover(candidates, product) {
 
 async function createMarketplacePreview(candidates, product) {
   const collection = describeAssetCollection(product, candidates);
+  const theme = previewTheme(product);
   const columns = Math.min(4, candidates.length);
   const rows = Math.ceil(candidates.length / columns);
   const gridWidth = 880;
@@ -206,18 +241,18 @@ async function createMarketplacePreview(candidates, product) {
     const centerX = left + (cellWidth / 2);
     const labelY = top + cellHeight - 18;
     return [
-      `<rect x="${left + 5}" y="${top + 5}" width="${cellWidth - 10}" height="${cellHeight - 10}" rx="12" fill="#151c2a" stroke="#2f4160"/>`,
-      `<text x="${centerX}" y="${labelY}" text-anchor="middle" fill="#d8e2f7" font-family="Arial, sans-serif" font-size="${previewLabelFontSize(asset.name, 14)}">${escapeXml(asset.name)}</text>`,
+      `<rect x="${left + 5}" y="${top + 5}" width="${cellWidth - 10}" height="${cellHeight - 10}" rx="12" fill="${theme.card}" stroke="${theme.border}"/>`,
+      `<text x="${centerX}" y="${labelY}" text-anchor="middle" fill="${theme.label}" font-family="Arial, sans-serif" font-size="${previewLabelFontSize(asset.name, 14)}">${escapeXml(asset.name)}</text>`,
     ].join('');
   }).join('');
   const base = Buffer.from([
     `<svg width="${MARKETPLACE_PREVIEW_WIDTH}" height="${MARKETPLACE_PREVIEW_HEIGHT}" xmlns="http://www.w3.org/2000/svg">`,
-    '<rect width="100%" height="100%" fill="#0c1019"/>',
-    '<rect x="20" y="20" width="920" height="500" rx="22" fill="#111827" stroke="#35d9ff" stroke-width="2"/>',
-    `<text x="480" y="65" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="34" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
-    `<text x="480" y="99" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${escapeXml(collection.marketplaceLabel)}</text>`,
+    `<rect width="100%" height="100%" fill="${theme.background}"/>`,
+    `<rect x="20" y="20" width="920" height="500" rx="22" fill="${theme.panel}" stroke="${theme.accent}" stroke-width="2"/>`,
+    `<text x="480" y="65" text-anchor="middle" fill="${theme.title}" font-family="Arial, sans-serif" font-size="34" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
+    `<text x="480" y="99" text-anchor="middle" fill="${theme.accent}" font-family="Arial, sans-serif" font-size="18">${escapeXml(collection.marketplaceLabel)}</text>`,
     cells,
-    '<text x="480" y="501" text-anchor="middle" fill="#8998b8" font-family="Arial, sans-serif" font-size="14">Protected marketplace preview · clean transparent PNG files are included in the paid download</text>',
+    `<text x="480" y="501" text-anchor="middle" fill="${theme.muted}" font-family="Arial, sans-serif" font-size="14">Protected marketplace preview · clean transparent PNG files are included in the paid download</text>`,
     '</svg>',
   ].join(''));
   const watermarkCells = candidates.map((_, index) => {
@@ -230,7 +265,7 @@ async function createMarketplacePreview(candidates, product) {
   const watermark = Buffer.from([
     `<svg width="${MARKETPLACE_PREVIEW_WIDTH}" height="${MARKETPLACE_PREVIEW_HEIGHT}" xmlns="http://www.w3.org/2000/svg">`,
     watermarkCells,
-    '<text x="928" y="507" text-anchor="end" fill="#35d9ff" fill-opacity="0.8" font-family="Arial, sans-serif" font-size="12" font-weight="700">VBJSERVICES</text>',
+    `<text x="928" y="507" text-anchor="end" fill="${theme.accent}" fill-opacity="0.8" font-family="Arial, sans-serif" font-size="12" font-weight="700">VBJSERVICES</text>`,
     '</svg>',
   ].join(''));
 
@@ -239,10 +274,10 @@ async function createMarketplacePreview(candidates, product) {
       width: MARKETPLACE_PREVIEW_WIDTH,
       height: MARKETPLACE_PREVIEW_HEIGHT,
       channels: 3,
-      background: '#0c1019',
+      background: theme.background,
     },
   }).composite([{ input: base }, ...composites, { input: watermark }])
-    .flatten({ background: '#0c1019' })
+    .flatten({ background: theme.background })
     .removeAlpha()
     .png({ compressionLevel: 9 })
     .toBuffer();

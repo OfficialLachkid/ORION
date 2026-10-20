@@ -216,6 +216,7 @@ export function buildPackReviewEmbed({
     ...(manifest.expansion_assets || []),
   ];
   const publishedUpdate = marketplaceReviewMode === 'published_update';
+  const localGeneration = marketplaceReviewMode === 'local_generation';
   const licenseField = manifest.buyer_license ? [{
     name: 'Customer license',
     value: `\`${manifest.buyer_license.license_id} ${manifest.buyer_license.version}\`\nSHA-256: \`${manifest.buyer_license.content_sha256}\`\nAttached as \`LICENSE.md\`; approval covers these exact terms.`,
@@ -223,8 +224,10 @@ export function buildPackReviewEmbed({
   }] : [];
   return {
     title: `${product.title} · Pack Review · Revision ${revision}`,
-    url: itchUrl,
-    description: publishedUpdate
+    ...(itchUrl ? { url: itchUrl } : {}),
+    description: localGeneration
+      ? 'Review the locally generated package and every individual asset. Marketplace staging and publication remain blocked.'
+      : publishedUpdate
       ? `Review the exact update package and generated storefront media. The linked itch.io page remains on approved version ${currentReleaseVersion || 'current'}; this candidate has not been applied.`
       : 'Review the exact package and populated itch.io draft. Public distribution remains blocked.',
     color: REVIEW_COLOR,
@@ -247,7 +250,9 @@ export function buildPackReviewEmbed({
         value: `**${mediaCount}** exact candidate image${mediaCount === 1 ? '' : 's'} attached to this package review.`,
         inline: false,
       },
-      publishedUpdate
+      localGeneration
+        ? { name: 'Marketplace state', value: 'Not staged. Approval accepts the creative package and makes it eligible for a separate marketplace setup step.', inline: false }
+        : publishedUpdate
         ? { name: 'Current itch.io release', value: `[Open current approved listing](${itchUrl})\nCandidate storefront media is attached for review and is not live.`, inline: false }
         : { name: 'itch.io draft', value: `[Open populated draft listing](${itchUrl})`, inline: false },
       { name: 'Approval', value: 'Approve the complete pack, request changes for selected numbered assets, or reject this revision.', inline: false },
@@ -304,7 +309,7 @@ async function saveState(path, state) {
   await writeFile(path, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 }
 
-function validateMarketplaceReview(itchState, publishedState, manifest, requestedUrl) {
+function validateMarketplaceReview(itchState, publishedState, manifest, requestedUrl, allowLocalReview = false) {
   if (itchState?.status === 'verified'
     && itchState.manifest_hash === manifest.manifest_hash
     && itchState.listing_hash === manifest.listing_hash) {
@@ -331,6 +336,9 @@ function validateMarketplaceReview(itchState, publishedState, manifest, requeste
   }
   if (itchState?.status === 'verified') {
     throw new Error('The verified itch.io draft belongs to a different package revision.');
+  }
+  if (allowLocalReview) {
+    return { url: null, mode: 'local_generation', stagedAt: null, currentReleaseVersion: null };
   }
   throw new Error('The itch.io draft must be populated and verified before Discord review is created.');
 }
@@ -361,6 +369,7 @@ export async function postDigitalAssetReview(options) {
     publishedState,
     manifest,
     options.itchUrl,
+    options.localReview === true,
   );
   const itchUrl = marketplaceReview.url;
   const statePath = resolve(productRoot, 'review', 'discord.json');

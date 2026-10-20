@@ -25,6 +25,7 @@ import {
   resolveInteractionApprovalOrigin,
   searchApprovalMessageInThreads,
   sendDiscordApiRequest,
+  scheduleResearchGenerationWorker,
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
 
@@ -314,6 +315,22 @@ test('shouldScheduleDeferredDiscordBotRestart only triggers for deferred Mac syn
       },
     },
   }), false);
+});
+
+test('research generation worker is detached from the Discord interaction lifecycle', () => {
+  const calls = [];
+  const scheduled = scheduleResearchGenerationWorker('/tmp/research/job.json', {
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return { unref() { calls.push({ unref: true }); } };
+    },
+  });
+  assert.equal(scheduled, true);
+  assert.equal(calls[0].command, process.execPath);
+  assert.match(calls[0].args[0], /generation-worker\.mjs$/u);
+  assert.deepEqual(calls[0].args.slice(1), ['--job', '/tmp/research/job.json']);
+  assert.equal(calls[0].options.detached, true);
+  assert.deepEqual(calls[1], { unref: true });
 });
 
 test('normalizeInteractionAsApprovalMessage converts an approve button click into approval text', () => {

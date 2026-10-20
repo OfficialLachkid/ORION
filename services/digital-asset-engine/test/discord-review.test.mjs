@@ -271,6 +271,53 @@ test('Discord review requires a verified itch.io draft for the exact hashes', as
   }), /different package revision/u);
 });
 
+test('local generation review posts a creative approval gate without an itch.io link', async () => {
+  const fixture = await createReviewFixture();
+  let messageNumber = 0;
+  let overviewComponents;
+  const fetchImpl = async (url, options = {}) => {
+    if (options.method === 'GET' && String(url).endsWith('/guilds/guild-1/channels')) {
+      return jsonResponse([{ id: 'category-1', name: 'DIGITAL ASSETS', type: 4 }]);
+    }
+    if (options.method === 'POST' && String(url).endsWith('/guilds/guild-1/channels')) {
+      return jsonResponse({ id: 'channel-local', name: fixture.product.slug, type: 0, parent_id: 'category-1' });
+    }
+    if (options.method === 'POST' && String(url).endsWith('/messages/overview-local/threads')) {
+      return jsonResponse({ id: 'thread-local' });
+    }
+    if (options.method === 'POST' && String(url).endsWith('/messages')) {
+      messageNumber += 1;
+      return jsonResponse({ id: messageNumber === 1 ? 'overview-local' : 'asset-local' });
+    }
+    if (options.method === 'PATCH') {
+      if (!(options.body instanceof FormData)) {
+        const payload = JSON.parse(options.body);
+        if (payload.components) overviewComponents = payload.components;
+      }
+      return jsonResponse({ id: 'overview-local' });
+    }
+    return jsonResponse({ message: 'unexpected request' }, 500);
+  };
+  const review = await postDigitalAssetReview({
+    runtimeConfig: { env: { DISCORD_BOT_TOKEN: 'test-token' }, guildId: 'guild-1' },
+    outputRoot: fixture.outputRoot,
+    slug: fixture.product.slug,
+    categoryName: 'DIGITAL ASSETS',
+    itchState: { status: 'not_staged' },
+    publishedState: { status: 'not_published' },
+    localReview: true,
+    fetchImpl,
+  });
+  assert.equal(review.marketplace_review_mode, 'local_generation');
+  assert.equal(review.itch_url, null);
+  assert.deepEqual(overviewComponents[0].components.map((component) => component.label), [
+    'Approve Pack',
+    'Request Changes',
+    'Reject Pack',
+    'Open Manifest',
+  ]);
+});
+
 test('review revision updates the existing pack and asset messages instead of reposting', async () => {
   const fixture = await createReviewFixture();
   const calls = [];

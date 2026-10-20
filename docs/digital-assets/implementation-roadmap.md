@@ -218,11 +218,13 @@ Add a second adapter without modifying opportunity validation, asset generation,
 
 ### Phase 5 — Scheduling and analytics
 
-Status: **research collection scheduled; generation deferred**
+Status: **research collection scheduled; approval-triggered generation implemented for validation**
 
 - [x] Run evidence collection and local recommendation analysis first inside the existing 01:30 night-shift sequence, with a ten-minute ceiling and no separate timer.
 - [x] Enforce a 23-hour minimum snapshot interval and defer when the T7, Ollama, generation, rendering, deployment/sync, or another night-shift resource is busy.
-- Add a dedicated low-contention generation window only after manual reliability is proven and a recommendation receives human approval.
+- [x] Persist a human-approved recommendation as an idempotent T7 generation job and run generation outside the Discord interaction callback.
+- [x] Stop new-product generation at a local Discord creative-review gate before marketplace setup.
+- Add a low-contention retry/recovery schedule after the first autonomous approval-to-review run is proven on the Mac.
 - Never overlap image generation with lead qualification, video rendering, or another Ollama model.
 - Report generated products and failures in the existing morning/Discord operational flow.
 - Normalize marketplace sales metrics while retaining provider-specific details.
@@ -330,7 +332,9 @@ Issue #149 remains valuable as the architecture charter for answering *what shou
 
 Before implementation, split the epic into bounded work items for source capability research, historical observations, opportunity scoring, Discord research digests, the handoff contract, and first-party sales feedback. Do not assume that public competitor sales or download counts are available: each source adapter must distinguish observed evidence from inferred proxies and document its allowed access method and cadence. Research creates proposals; only human-promoted opportunities enter the generation backlog.
 
-The research reasoner is a local text/reasoning model served through Ollama, separate from the local image model. The first vertical slice uses one itch.io adapter with newest and top-seller pixel-art views, stores raw evidence on the T7 and compact observations in Supabase, and requires two comparable snapshots before analysis. Marketplace rank is labelled as a proxy rather than a sales count. Discord approval writes a `ProductOpportunitySchema` planning handoff but explicitly does not enqueue generation.
+The research reasoner is a local text/reasoning model served through Ollama, separate from the local image model. The first vertical slice uses one itch.io adapter with newest and top-seller pixel-art views, stores raw evidence on the T7 and compact observations in Supabase, and requires two comparable snapshots before analysis. Marketplace rank is labelled as a proxy rather than a sales count. Discord approval writes an exact `ProductOpportunitySchema` handoff and an idempotent T7 generation job. The detached worker generates, validates, packages, and posts a local creative-review gate; it cannot create an itch.io page or authorize publication.
+
+The first end-to-end validation uses an explicitly labelled `Arcane Relics & Potions` simulation. The simulated choice does not claim to be a research conclusion. Its static inventory/relic scope tests the established base-sprite recipe across a new visual genre. Generalized spell animations remain deferred until an animation recipe can define useful frames, anchors, timing, sprite sheets, metadata, and previews as one coherent job.
 
 The first safe cadence is enabled inside the existing 01:30 primary night shift. Collection and short analysis run before qualification, video maintenance, and lead generation; lead generation remains the final and most intensive phase. A resource-busy start gets one sequential retry after awaited maintenance and immediately before lead generation. The research phase has no independent LaunchAgent, does not run in the 07:00 fallback, and skips the night if that bounded retry also finds shared resources unavailable. Nightly snapshots feed the same rolling evidence history; future weekly/monthly scoring should aggregate that history rather than creating a separate one-time “evergreen map.”
 

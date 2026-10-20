@@ -56,6 +56,10 @@ function linkButton(label, url) {
 }
 
 export function buildDigitalAssetPackReviewComponents(context) {
+  const links = [
+    ...(context.itchUrl ? [linkButton(context.itchLabel || 'Open itch.io Draft', context.itchUrl)] : []),
+    linkButton('Open Manifest', context.manifestUrl),
+  ];
   return [{
     type: ACTION_ROW,
     components: [
@@ -77,8 +81,7 @@ export function buildDigitalAssetPackReviewComponents(context) {
         label: 'Reject Pack',
         custom_id: buildReviewReference(BUTTON_PREFIX, 'reject', context),
       },
-      linkButton(context.itchLabel || 'Open itch.io Draft', context.itchUrl),
-      linkButton('Open Manifest', context.manifestUrl),
+      ...links,
     ],
   }];
 }
@@ -87,7 +90,7 @@ export function buildResolvedDigitalAssetReviewComponents(context) {
   return [{
     type: ACTION_ROW,
     components: [
-      linkButton(context.itchLabel || 'Open itch.io Draft', context.itchUrl),
+      ...(context.itchUrl ? [linkButton(context.itchLabel || 'Open itch.io Draft', context.itchUrl)] : []),
       linkButton('Open Manifest', context.manifestUrl),
     ],
   }];
