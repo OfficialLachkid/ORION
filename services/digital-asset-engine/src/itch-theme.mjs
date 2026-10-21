@@ -256,10 +256,24 @@ async (page) => {
     size: page.locator('select[name="layout[font_size]"]').first(),
     screenshots: page.locator('select[name="layout[screenshots_loc]"]').first(),
   };
-  await selects.body.selectOption({ label: input.design.typography.body_font });
-  await selects.header.selectOption({ label: input.design.typography.header_font });
-  await selects.size.selectOption({ label: input.design.typography.size });
-  await selects.screenshots.selectOption({ label: input.design.screenshots });
+  const select = async (field, label) => {
+    if (!(await field.count().catch(() => 0))) return false;
+    return field.evaluate((node, target) => {
+      const option = [...node.options].find((item) => item.label === target
+        || item.textContent.trim() === target);
+      if (!option) return false;
+      node.value = option.value;
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+      return node.value === option.value;
+    }, label).catch(() => false);
+  };
+  const selectChecks = await Promise.all([
+    select(selects.body, input.design.typography.body_font),
+    select(selects.header, input.design.typography.header_font),
+    select(selects.size, input.design.typography.size),
+    select(selects.screenshots, input.design.screenshots),
+  ]);
   const alphaTarget = Math.round(input.design.panel_alpha * 100);
   const alphaButton = page.getByRole('button', { name: /^BG2 Alpha(?: \d+)?$/i }).first();
   let alpha = { found: false, value: null };
@@ -293,8 +307,9 @@ async (page) => {
     }
   }
   return {
-    status: colorChecks.every(Boolean) && alpha.found ? 'prepared' : 'controls_missing',
+    status: colorChecks.every(Boolean) && selectChecks.every(Boolean) && alpha.found ? 'prepared' : 'controls_missing',
     colorChecks,
+    selectChecks,
     alpha,
     url: page.url(),
   };

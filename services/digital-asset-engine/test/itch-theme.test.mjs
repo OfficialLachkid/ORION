@@ -336,6 +336,8 @@ test('theme editor preparation restores a desktop viewport before checking respo
   assert.ok(code.indexOf('setViewportSize') < code.indexOf('page.goto'));
   assert.match(code, /input\[name="layout\[bg2_alpha\]"\]/u);
   assert.match(code, /select\[name="layout\[header_font_family\]"\]/u);
+  assert.match(code, /node\.dispatchEvent\(new Event\('change'/u);
+  assert.match(code, /selectChecks\.every\(Boolean\)/u);
   assert.match(code, /dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/u);
 });
 
