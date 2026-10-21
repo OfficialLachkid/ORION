@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 // Installs the durable night-shift schedule and reconfigures the old
-// qualification schedule into the 07:00 fallback.
+// qualification schedule into the 07:15 fallback.
 //
 // After this runs:
 //   io.vbj.orion.night-shift          01:30 → run-night-shift.mjs (primary)
-//   io.vbj.orion.qualification-schedule 07:00 → run-night-shift.mjs --fallback
+//   io.vbj.orion.qualification-schedule 07:15 → run-night-shift.mjs --fallback
 //     (no-op if the 01:30 run already succeeded; recovers it if not)
+//
+// 07:15 (not 07:00) so the morning-shift at 07:00 — which SENDS the
+// follow-up drafts the night produced — always runs first. Sending a
+// handful of mails is a sub-minute job; the fallback's redraft loop can
+// take several minutes, so putting it after keeps the follow-up SLA tight
+// on the exceptional morning when 01:30 failed.
 //
 // The 07:00 LEADGEN sweep (io.vbj.orion.leadgen-schedule) is left untouched —
 // leadgen is tokenless (local Ollama) and has no reason to move; and at 01:30
@@ -141,7 +147,7 @@ function main() {
     workingDirectory: projectRoot,
     stdoutPath: resolve(logDir, 'qualification-schedule.stdout.log'),
     stderrPath: resolve(logDir, 'qualification-schedule.stderr.log'),
-    hour: 7, minute: 0,
+    hour: 7, minute: 15,
   }), 'utf8');
 
   if (shouldLoad) {
@@ -151,7 +157,7 @@ function main() {
 
   process.stdout.write([
     `Installed ${basename(nightPlistPath)} — ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')} nightly, qualify up to ${limit}.`,
-    `Reconfigured ${basename(fallbackPlistPath)} — 07:00 fallback (no-op if the night shift already ran).`,
+    `Reconfigured ${basename(fallbackPlistPath)} — 07:15 fallback (no-op if the night shift already ran; follows morning-shift at 07:00).`,
     `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
     `Leadgen sweep (io.vbj.orion.leadgen-schedule) left unchanged at 07:00.`,
   ].join('\n') + '\n');
