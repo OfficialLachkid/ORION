@@ -246,20 +246,37 @@ async (page) => {
     return true;
   };
   const colors = input.design.colors;
-  const colorChecks = await Promise.all([
-    fill('BG', colors.background), fill('BG 2', colors.panel), fill('Text', colors.text),
-    fill('Link', colors.link), fill('Headers', colors.header), fill('Buttons', colors.button),
-  ]);
+  const colorChecks = [];
+  for (const [name, value] of [
+    ['BG', colors.background], ['BG 2', colors.panel], ['Text', colors.text],
+    ['Link', colors.link], ['Headers', colors.header], ['Buttons', colors.button],
+  ]) {
+    colorChecks.push(await fill(name, value));
+  }
   const selects = {
-    body: page.getByRole('combobox', { name: /^Font /i }).first(),
-    header: page.getByRole('combobox', { name: /^Header font /i }).first(),
-    size: page.getByRole('combobox', { name: /^Size /i }).first(),
-    screenshots: page.getByRole('combobox', { name: /^Screenshots /i }).first(),
+    body: page.locator('select[name="layout[font_family]"]').first(),
+    header: page.locator('select[name="layout[header_font_family]"]').first(),
+    size: page.locator('select[name="layout[font_size]"]').first(),
+    screenshots: page.locator('select[name="layout[screenshots_loc]"]').first(),
   };
-  await selects.body.selectOption({ label: input.design.typography.body_font });
-  await selects.header.selectOption({ label: input.design.typography.header_font });
-  await selects.size.selectOption({ label: input.design.typography.size });
-  await selects.screenshots.selectOption({ label: input.design.screenshots });
+  const select = async (field, label) => {
+    if (!(await field.count().catch(() => 0))) return false;
+    return field.evaluate((node, target) => {
+      const option = [...node.options].find((item) => item.label === target
+        || item.textContent.trim() === target);
+      if (!option) return false;
+      node.value = option.value;
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+      return node.value === option.value;
+    }, label).catch(() => false);
+  };
+  const selectChecks = await Promise.all([
+    select(selects.body, input.design.typography.body_font),
+    select(selects.header, input.design.typography.header_font),
+    select(selects.size, input.design.typography.size),
+    select(selects.screenshots, input.design.screenshots),
+  ]);
   const alphaTarget = Math.round(input.design.panel_alpha * 100);
   const alphaButton = page.getByRole('button', { name: /^BG2 Alpha(?: \d+)?$/i }).first();
   let alpha = { found: false, value: null };
@@ -280,9 +297,25 @@ async (page) => {
       await alphaButton.press(current > alphaTarget ? 'ArrowLeft' : 'ArrowRight');
     }
   }
+  if (!alpha.found) {
+    const alphaInput = page.locator('input[name="layout[bg2_alpha]"]').first();
+    if (await alphaInput.count().catch(() => 0)) {
+      const alphaNub = alphaInput.locator('xpath=following-sibling::div[contains(@class, "slider_track")]//button[contains(@class, "slider_nub")]');
+      let current = Number(await alphaInput.inputValue().catch(() => Number.NaN));
+      if (Number.isFinite(current) && await alphaNub.count().catch(() => 0)) {
+        await alphaNub.focus();
+        for (let attempts = 0; attempts <= 100 && current !== alphaTarget; attempts += 1) {
+          await alphaNub.press(current > alphaTarget ? 'ArrowLeft' : 'ArrowRight');
+          current = Number(await alphaInput.inputValue().catch(() => Number.NaN));
+        }
+        if (current === alphaTarget) alpha = { found: true, value: current };
+      }
+    }
+  }
   return {
-    status: colorChecks.every(Boolean) && alpha.found ? 'prepared' : 'controls_missing',
+    status: colorChecks.every(Boolean) && selectChecks.every(Boolean) && alpha.found ? 'prepared' : 'controls_missing',
     colorChecks,
+    selectChecks,
     alpha,
     url: page.url(),
   };
@@ -644,6 +677,14 @@ export async function applyApprovedItchTheme(options) {
           code: buildThemeImageReadyCode(expectedImageCount),
         });
         if (ready.status !== 'image_ready') throw new Error(`Theme ${kind} upload did not settle: ${JSON.stringify(ready)}`);
+      }
+      const restored = runBrowserCode({
+        executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
+        filename: 'restore-after-uploads.js',
+        code: buildThemePrepareCode({ design: themeState.design, url: cleanPublicUrl(storefront.public_url) }),
+      });
+      if (restored.status !== 'prepared') {
+        throw new Error(`Theme controls could not be restored after image uploads: ${JSON.stringify(restored)}`);
       }
       details = runBrowserCode({
         executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,

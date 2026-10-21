@@ -334,6 +334,13 @@ test('theme editor preparation restores a desktop viewport before checking respo
   assert.doesNotThrow(() => new Function(`return (${code});`));
   assert.match(code, /setViewportSize\(\{ width: 1440, height: 1000 \}\)/u);
   assert.ok(code.indexOf('setViewportSize') < code.indexOf('page.goto'));
+  assert.match(code, /input\[name="layout\[bg2_alpha\]"\]/u);
+  assert.match(code, /slider_nub/u);
+  assert.match(code, /select\[name="layout\[header_font_family\]"\]/u);
+  assert.match(code, /node\.dispatchEvent\(new Event\('change'/u);
+  assert.match(code, /selectChecks\.every\(Boolean\)/u);
+  assert.doesNotMatch(code, /colorChecks = await Promise\.all/u);
+  assert.match(code, /dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/u);
 });
 
 test('theme candidate renders deterministic media and creates desktop/mobile previews without saving', async () => {
@@ -438,12 +445,14 @@ test('theme approval is persisted before the exact candidate may be applied', as
   assert.equal(recorded.state.status, 'approved');
   assert.equal(recorded.row.theme_hash, candidate.theme_hash);
 
+  const browserCodeFiles = [];
   const cliRunner = (_executable, args) => {
     assertBrowserCodeParses(args);
     if (args[2] === 'run-code') {
       const file = basename(args[4]);
+      browserCodeFiles.push(file);
       const status = file === 'verify-live.js' ? 'verification_failed'
-        : file === 'prepare.js' ? 'prepared'
+        : file === 'prepare.js' || file === 'restore-after-uploads.js' ? 'prepared'
           : file.startsWith('upload-') ? 'chooser_opened'
             : file.startsWith('ready-') ? 'image_ready'
               : 'verified_applied';
@@ -463,6 +472,8 @@ test('theme approval is persisted before the exact candidate may be applied', as
     now: '2026-10-16T13:00:00.000Z',
   });
   assert.equal(applied.status, 'verified_applied');
+  assert.ok(browserCodeFiles.indexOf('restore-after-uploads.js') > browserCodeFiles.indexOf('ready-background.js'));
+  assert.ok(browserCodeFiles.indexOf('save-verify.js') > browserCodeFiles.indexOf('restore-after-uploads.js'));
   const state = JSON.parse(await readFile(resolve(fixture.productRoot, 'review', 'itch-theme.json'), 'utf8'));
   assert.equal(state.status, 'applied');
 });
