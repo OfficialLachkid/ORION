@@ -46,11 +46,15 @@ The bot finds or creates `#asset-research` under the existing `DIGITAL ASSETS` c
 The worker runs this bounded chain:
 
 1. validate the exact approved opportunity;
-2. generate every base asset sequentially with the local image model;
-3. run alpha, canvas, palette, and file-integrity checks;
-4. assemble the internal buyer preview and deterministic marketing media;
-5. create the pack channel, overview gate, and per-asset review thread;
-6. stop for human creative approval.
+2. immediately create or reuse the pack channel, live overview, and asset-review thread;
+3. generate every base asset sequentially with the local image model;
+4. edit the overview every 30 seconds and after each asset with a dynamic completed/total count, elapsed time, and current asset;
+5. post each asset to the thread as soon as its alpha, canvas, palette, and file-integrity checks pass;
+6. assemble the internal buyer preview and deterministic marketing media;
+7. convert the same overview and asset messages into the final creative-review surface;
+8. stop for human creative approval.
+
+Each job stores its worker PID and per-asset product state on the T7. When the Discord runtime starts, it scans queued and interrupted research-generation jobs. A live worker is left alone; a queued job or a `running` job whose worker no longer exists is requeued and resumed. Previously validated assets are hash-checked and reused instead of being regenerated.
 
 Creative approval marks the exact manifest as ready for a separate marketplace-setup step. It never doubles as distribution approval.
 

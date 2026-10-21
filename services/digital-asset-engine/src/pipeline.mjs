@@ -109,6 +109,14 @@ async function loadExistingSource(store, product, asset) {
 
 export async function generateDigitalAssetProduct(options) {
   const planned = await planDigitalAssetProduct({ ...options, resume: true });
+  if (options.onProgress) {
+    await options.onProgress({
+      type: 'generation_started',
+      product: planned.product,
+      total: planned.product.assets.length,
+      at: options.now || new Date().toISOString(),
+    });
+  }
   const adapter = options.adapter || new OllamaImageAdapter(options.config.generation);
   const readiness = await adapter.checkReadiness();
   if (readiness.status !== 'ready') throw new Error(readiness.detail);
@@ -126,10 +134,32 @@ export async function generateDigitalAssetProduct(options) {
     await planned.store.saveProduct(product);
 
     const results = [];
-    for (const asset of product.assets) {
+    for (let index = 0; index < product.assets.length; index += 1) {
+      const asset = product.assets[index];
+      if (options.onProgress) {
+        await options.onProgress({
+          type: 'asset_started',
+          product,
+          asset,
+          index,
+          total: product.assets.length,
+          at: new Date().toISOString(),
+        });
+      }
       const reusable = await loadReusableAsset(planned.store, product, asset);
       if (reusable) {
         results.push(reusable);
+        if (options.onProgress) {
+          await options.onProgress({
+            type: 'asset_completed',
+            product,
+            asset,
+            result: reusable,
+            index,
+            total: product.assets.length,
+            at: new Date().toISOString(),
+          });
+        }
         continue;
       }
       const generated = await loadExistingSource(planned.store, product, asset)
@@ -207,6 +237,17 @@ export async function generateDigitalAssetProduct(options) {
         updated_at: options.now || new Date().toISOString(),
       });
       await planned.store.saveProduct(product);
+      if (options.onProgress) {
+        await options.onProgress({
+          type: 'asset_completed',
+          product,
+          asset: product.assets[index],
+          result: latest,
+          index,
+          total: product.assets.length,
+          at: new Date().toISOString(),
+        });
+      }
     }
 
     const resultById = new Map(results.map((result) => [result.asset_id, result]));
@@ -226,6 +267,14 @@ export async function generateDigitalAssetProduct(options) {
       updated_at: options.now || new Date().toISOString(),
     });
     await planned.store.saveProduct(product);
+    if (options.onProgress) {
+      await options.onProgress({
+        type: 'assets_completed',
+        product,
+        total: product.assets.length,
+        at: new Date().toISOString(),
+      });
+    }
 
     return {
       product,

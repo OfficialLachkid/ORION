@@ -5,6 +5,7 @@ import { loadEngineConfig, resolveOutputRoot } from '../../digital-asset-engine/
 import { postDigitalAssetReview, discordRequest } from '../../digital-asset-engine/src/discord-review.mjs';
 import { packageDigitalAssetPreview } from '../../digital-asset-engine/src/packager.mjs';
 import { generateDigitalAssetProduct } from '../../digital-asset-engine/src/pipeline.mjs';
+import { updateDigitalAssetGenerationProgress } from '../../digital-asset-engine/src/generation-progress.mjs';
 import { ProductOpportunitySchema } from '../../digital-asset-engine/src/schemas.mjs';
 
 const ENGINE_CONFIG = 'services/digital-asset-engine/config.example.json';
@@ -109,8 +110,42 @@ export async function runResearchGenerationJob(options) {
     started_at: now,
     completed_at: null,
     error: null,
+    worker_pid: process.pid,
   };
   await writeJsonAtomic(jobPath, job);
+
+  let progressProduct = null;
+  let progressQueue = Promise.resolve();
+  let heartbeatTimer = null;
+  const heartbeatIntervalMs = options.heartbeatIntervalMs === undefined
+    ? 30_000
+    : Math.max(0, Number(options.heartbeatIntervalMs) || 0);
+  const updateProgress = options.updateProgress || updateDigitalAssetGenerationProgress;
+  const enqueueProgress = (event, { required = true } = {}) => {
+    if (event.product) progressProduct = event.product;
+    if (!progressProduct) return Promise.resolve(null);
+    const run = progressQueue
+      .catch(() => null)
+      .then(() => updateProgress({
+        runtimeConfig: options.runtimeConfig,
+        outputRoot: String(options.runtimeConfig?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim(),
+        product: progressProduct,
+        categoryName: options.categoryName || 'DIGITAL ASSETS',
+        fetchImpl: options.fetchImpl,
+        event,
+      }));
+    progressQueue = run;
+    return required ? run : run.catch(() => null);
+  };
+  const reportProgress = async (event) => {
+    await enqueueProgress(event);
+    if (event.type === 'generation_started' && heartbeatIntervalMs > 0 && !heartbeatTimer) {
+      heartbeatTimer = setInterval(() => {
+        void enqueueProgress({ type: 'heartbeat', at: new Date().toISOString() }, { required: false });
+      }, heartbeatIntervalMs);
+      heartbeatTimer.unref?.();
+    }
+  };
 
   try {
     const archiveRoot = String(options.runtimeConfig?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim();
@@ -127,10 +162,16 @@ export async function runResearchGenerationJob(options) {
       projectRoot,
       fetchImpl: options.fetchImpl,
       now,
+      onProgress: reportProgress,
     });
     if (!generation.gates.all_assets_valid) {
       throw new Error('One or more generated assets failed automated validation.');
     }
+    await enqueueProgress({
+      type: 'packaging_started',
+      product: generation.product,
+      at: new Date().toISOString(),
+    });
     const packaged = await (options.packageProduct || packageDigitalAssetPreview)({
       outputRoot,
       slug: generation.product.slug,
@@ -154,7 +195,15 @@ export async function runResearchGenerationJob(options) {
       review_message_id: review.overview_message_id,
       incurred_cost: 0,
     };
-    job = { ...job, status: 'completed', completed_at: new Date().toISOString(), result };
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    await progressQueue.catch(() => null);
+    job = {
+      ...job,
+      status: 'completed',
+      completed_at: new Date().toISOString(),
+      worker_pid: null,
+      result,
+    };
     await writeJsonAtomic(jobPath, job);
     await updateResearchMessage(
       options.runtimeConfig,
@@ -164,11 +213,18 @@ export async function runResearchGenerationJob(options) {
     );
     return { ...result, reused: false };
   } catch (error) {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    await enqueueProgress({
+      type: 'failed',
+      error: String(error?.message || error),
+      at: new Date().toISOString(),
+    }, { required: false });
     job = {
       ...job,
       status: 'failed',
       completed_at: new Date().toISOString(),
       error: String(error?.stack || error?.message || error).slice(0, 8000),
+      worker_pid: null,
     };
     await writeJsonAtomic(jobPath, job);
     await updateResearchMessage(

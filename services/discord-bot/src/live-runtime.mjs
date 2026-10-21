@@ -1,5 +1,6 @@
 import process from 'node:process';
 import { spawn } from 'node:child_process';
+import { resolve } from 'node:path';
 import WebSocket from 'ws';
 import { processDiscordEvent } from './intake.mjs';
 import {
@@ -91,6 +92,7 @@ import {
   isResearchReviewInteraction,
   recordResearchReviewDecision,
 } from '../../digital-asset-research/src/discord-review.mjs';
+import { recoverResearchGenerationJobs } from '../../digital-asset-research/src/generation-recovery.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -331,6 +333,13 @@ export function scheduleResearchGenerationWorker(jobPath, options = {}) {
     process.stderr.write(`Could not start research generation worker: ${error.message}\n`);
     return false;
   }
+}
+
+export function resolveResearchGenerationArchiveRoot(config) {
+  const explicit = String(config?.env?.DIGITAL_ASSET_RESEARCH_ARCHIVE_ROOT || '').trim();
+  if (explicit) return resolve(explicit);
+  const products = String(config?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim();
+  return products ? resolve(products, '..', 'research') : '';
 }
 
 function truncateMessage(content) {
@@ -2774,6 +2783,20 @@ export async function runLiveDiscordBot(config) {
 
     ensureExecutionDrain();
   };
+
+  try {
+    const recovery = await recoverResearchGenerationJobs({
+      archiveRoot: resolveResearchGenerationArchiveRoot(config),
+      scheduleJob: (jobPath) => scheduleResearchGenerationWorker(jobPath),
+    });
+    if (recovery.recovered.length > 0 || recovery.active.length > 0) {
+      process.stdout.write(
+        `Research generation recovery: ${recovery.recovered.length} resumed, ${recovery.active.length} already active.\n`,
+      );
+    }
+  } catch (error) {
+    process.stderr.write(`Research generation recovery check failed: ${error.message}\n`);
+  }
 
   connect();
 

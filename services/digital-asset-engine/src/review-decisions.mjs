@@ -216,7 +216,10 @@ async function loadReviewContext({ archiveRoot, reference, interaction }) {
     throw new Error('The Discord review reference does not match the canonical product.');
   }
   const manifest = await readJson(resolveReviewedManifestPath(productRoot, reviewState));
-  if (reviewState.target_version && manifest.target_version !== reviewState.target_version) {
+  const reviewedManifestVersion = reviewState.marketplace_review_mode === 'local_generation'
+    ? manifest.product_version
+    : manifest.target_version;
+  if (reviewState.target_version && reviewedManifestVersion !== reviewState.target_version) {
     throw new Error('The reviewed release candidate does not match its target version.');
   }
   if (manifest.manifest_hash !== reviewState.manifest_hash

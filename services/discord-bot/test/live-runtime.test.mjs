@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 import {
   buildApprovalDecisionModal,
   buildApprovalRejectModal,
@@ -22,6 +23,7 @@ import {
   prepareCommandTasksForExecution,
   recordDeferredInteractionDecision,
   rehydratePokeQuizzReviewTask,
+  resolveResearchGenerationArchiveRoot,
   resolveInteractionApprovalOrigin,
   searchApprovalMessageInThreads,
   sendDiscordApiRequest,
@@ -331,6 +333,21 @@ test('research generation worker is detached from the Discord interaction lifecy
   assert.deepEqual(calls[0].args.slice(1), ['--job', '/tmp/research/job.json']);
   assert.equal(calls[0].options.detached, true);
   assert.deepEqual(calls[1], { unref: true });
+});
+
+test('research generation recovery resolves its archive beside the product archive', () => {
+  assert.equal(
+    resolveResearchGenerationArchiveRoot({
+      env: { DIGITAL_ASSET_ARCHIVE_ROOT: '/Volumes/T7/O.R.I.O.N. Digital Assets' },
+    }),
+    resolve('/Volumes/T7/O.R.I.O.N. Digital Assets', '..', 'research'),
+  );
+  assert.equal(
+    resolveResearchGenerationArchiveRoot({
+      env: { DIGITAL_ASSET_RESEARCH_ARCHIVE_ROOT: '/Volumes/T7/custom-research' },
+    }),
+    resolve('/Volumes/T7/custom-research'),
+  );
 });
 
 test('normalizeInteractionAsApprovalMessage converts an approve button click into approval text', () => {
