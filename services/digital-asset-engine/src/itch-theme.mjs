@@ -657,6 +657,14 @@ export async function applyApprovedItchTheme(options) {
         });
         if (ready.status !== 'image_ready') throw new Error(`Theme ${kind} upload did not settle: ${JSON.stringify(ready)}`);
       }
+      const restored = runBrowserCode({
+        executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
+        filename: 'restore-after-uploads.js',
+        code: buildThemePrepareCode({ design: themeState.design, url: cleanPublicUrl(storefront.public_url) }),
+      });
+      if (restored.status !== 'prepared') {
+        throw new Error(`Theme controls could not be restored after image uploads: ${JSON.stringify(restored)}`);
+      }
       details = runBrowserCode({
         executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
         filename: 'save-verify.js',
