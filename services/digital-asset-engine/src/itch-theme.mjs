@@ -251,10 +251,10 @@ async (page) => {
     fill('Link', colors.link), fill('Headers', colors.header), fill('Buttons', colors.button),
   ]);
   const selects = {
-    body: page.getByRole('combobox', { name: /^Font /i }).first(),
-    header: page.getByRole('combobox', { name: /^Header font /i }).first(),
-    size: page.getByRole('combobox', { name: /^Size /i }).first(),
-    screenshots: page.getByRole('combobox', { name: /^Screenshots /i }).first(),
+    body: page.locator('select[name="layout[font_family]"]').first(),
+    header: page.locator('select[name="layout[header_font_family]"]').first(),
+    size: page.locator('select[name="layout[font_size]"]').first(),
+    screenshots: page.locator('select[name="layout[screenshots_loc]"]').first(),
   };
   await selects.body.selectOption({ label: input.design.typography.body_font });
   await selects.header.selectOption({ label: input.design.typography.header_font });
