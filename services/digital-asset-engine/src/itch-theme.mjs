@@ -415,26 +415,35 @@ function runBrowserCode({ executable, sessionName, cliRunner, cwd, env, codeRoot
   return details;
 }
 
-async function releaseContext(options) {
+async function storefrontContext(options) {
   const store = options.store || new CanonicalProductStore(options.outputRoot);
   const product = options.product || await store.loadProduct(options.slug);
   const productRoot = store.productRoot(product);
   const packaged = await resolvePackagedRelease({ productRoot, releaseVersion: options.releaseVersion });
-  const [release, itch] = await Promise.all([
-    readJson(resolve(productRoot, 'review', 'itch-release.json')),
-    readJson(resolve(productRoot, 'review', 'itch.json')),
+  const [published, draft] = await Promise.all([
+    readOptionalJson(resolve(productRoot, 'review', 'itch-release.json')),
+    readOptionalJson(resolve(productRoot, 'review', 'itch.json')),
   ]);
-  if (release.status !== 'verified_public'
-    || release.manifest_hash !== packaged.manifest.manifest_hash
-    || release.listing_hash !== packaged.manifest.listing_hash) {
-    throw new Error('Theme work requires the exact verified public release.');
+  const matchesPackage = (state) => state?.manifest_hash === packaged.manifest.manifest_hash
+    && state?.listing_hash === packaged.manifest.listing_hash;
+  let storefront = null;
+  let storefrontStage = null;
+  if (published?.status === 'verified_public' && matchesPackage(published)) {
+    storefront = published;
+    storefrontStage = 'public';
+  } else if (draft?.status === 'verified' && matchesPackage(draft)) {
+    storefront = draft;
+    storefrontStage = 'draft';
   }
-  return { store, product, productRoot, packaged, release, itch };
+  if (!storefront) {
+    throw new Error('Theme work requires the exact verified itch.io draft or public release.');
+  }
+  return { store, product, productRoot, packaged, storefront, storefrontStage, draft, published };
 }
 
 export async function prepareItchThemeCandidate(options) {
-  const context = await releaseContext(options);
-  const { product, productRoot, packaged, release } = context;
+  const context = await storefrontContext(options);
+  const { product, productRoot, packaged, storefront, storefrontStage } = context;
   const adapter = options.themeAdapter || new OllamaThemeAdapter({
     endpoint: options.ollamaEndpoint || process.env.OLLAMA_URL,
     model: options.themeModel || process.env.DIGITAL_ASSET_THEME_MODEL || 'llama3.1:8b',
@@ -460,6 +469,7 @@ export async function prepareItchThemeCandidate(options) {
       contrast_adjustments: proposal.contrast_adjustments || [],
     },
     design: proposal.design,
+    storefront_stage: storefrontStage,
   };
   const themeHash = sha256(JSON.stringify(identity));
   const candidateRoot = resolve(productRoot, 'review', 'theme', 'candidates', themeHash.slice(0, 16));
@@ -485,7 +495,7 @@ export async function prepareItchThemeCandidate(options) {
   const profileDir = expandHomeDirectory(options.profileDir || env.ITCH_PLAYWRIGHT_PROFILE || '~/.orion/playwright-profile-itch');
   const codeRoot = mkdtempSync(resolve(os.tmpdir(), 'orion-itch-theme-preview-'));
   openBrowser({
-    executable, sessionName, profileDir, url: release.public_url, headed: options.headed,
+    executable, sessionName, profileDir, url: storefront.public_url, headed: options.headed,
     cliRunner, cwd: options.cwd, env,
   });
   try {
@@ -500,7 +510,7 @@ export async function prepareItchThemeCandidate(options) {
       code: buildThemePreviewCode({
         design: proposal.design,
         productTitle: product.title,
-        url: cleanPublicUrl(release.public_url),
+        url: cleanPublicUrl(storefront.public_url),
         bannerDataUrl: `data:image/png;base64,${(await readFile(bannerPath)).toString('base64')}`,
         backgroundDataUrl: `data:image/png;base64,${(await readFile(backgroundPath)).toString('base64')}`,
         desktopPath: previewDesktopPath,
@@ -516,7 +526,8 @@ export async function prepareItchThemeCandidate(options) {
     ...identity,
     theme_hash: themeHash,
     status: 'previewed',
-    public_url: cleanPublicUrl(release.public_url),
+    public_url: cleanPublicUrl(storefront.public_url),
+    edit_url: storefront.edit_url || null,
     candidate_path: relative(productRoot, candidateRoot).replaceAll('\\', '/'),
     media: {
       banner_path: relative(candidateRoot, bannerPath).replaceAll('\\', '/'),
@@ -533,15 +544,15 @@ export async function prepareItchThemeCandidate(options) {
 }
 
 export async function applyApprovedItchTheme(options) {
-  const context = await releaseContext(options);
-  const { product, productRoot, packaged, release } = context;
+  const context = await storefrontContext(options);
+  const { product, productRoot, packaged, storefront, storefrontStage } = context;
   const statePath = resolve(productRoot, 'review', 'itch-theme.json');
   const themeState = await readJson(statePath);
   if (themeState.status !== 'approved'
     || themeState.last_decision?.decision !== 'approve'
     || themeState.manifest_hash !== packaged.manifest.manifest_hash
     || themeState.listing_hash !== packaged.manifest.listing_hash) {
-    throw new Error('Applying an itch.io theme requires approval for the exact public release and theme hash.');
+    throw new Error('Applying an itch.io theme requires approval for the exact verified storefront release and theme hash.');
   }
   const receiptPath = resolve(productRoot, 'review', 'itch-theme-release.json');
   const previous = await readOptionalJson(receiptPath);
@@ -565,13 +576,13 @@ export async function applyApprovedItchTheme(options) {
   const profileDir = expandHomeDirectory(options.profileDir || env.ITCH_PLAYWRIGHT_PROFILE || '~/.orion/playwright-profile-itch');
   const codeRoot = mkdtempSync(resolve(os.tmpdir(), 'orion-itch-theme-apply-'));
   openBrowser({
-    executable, sessionName, profileDir, url: release.public_url, headed: options.headed,
+    executable, sessionName, profileDir, url: storefront.public_url, headed: options.headed,
     cliRunner, cwd: options.cwd, env,
   });
   try {
     const verificationInput = {
       design: themeState.design,
-      url: cleanPublicUrl(release.public_url),
+      url: cleanPublicUrl(storefront.public_url),
       desktopPath: appliedDesktopPath,
       mobilePath: appliedMobilePath,
     };
@@ -585,7 +596,7 @@ export async function applyApprovedItchTheme(options) {
       const prepared = runBrowserCode({
         executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
         filename: 'prepare.js',
-        code: buildThemePrepareCode({ design: themeState.design, url: cleanPublicUrl(release.public_url) }),
+        code: buildThemePrepareCode({ design: themeState.design, url: cleanPublicUrl(storefront.public_url) }),
       });
       if (prepared.status !== 'prepared') {
         throw new Error(`Theme editor preparation failed: ${JSON.stringify({ verification: details, preparation: prepared })}`);
@@ -633,7 +644,8 @@ export async function applyApprovedItchTheme(options) {
       manifest_hash: packaged.manifest.manifest_hash,
       listing_hash: packaged.manifest.listing_hash,
       theme_hash: themeState.theme_hash,
-      public_url: cleanPublicUrl(release.public_url),
+      public_url: cleanPublicUrl(storefront.public_url),
+      storefront_stage: storefrontStage,
       applied_at: appliedAt,
       verified_at: appliedAt,
       recovered_existing_theme: recoveredExistingTheme,

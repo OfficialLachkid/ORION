@@ -5,7 +5,9 @@ import { discordRequest } from './discord-review.mjs';
 import { postDigitalAssetDistributionReview } from './distribution-review.mjs';
 import { stageItchDraft } from './itch-draft-stager.mjs';
 import { inspectItchSellerReadiness } from './itch-seller-preflight.mjs';
+import { applyApprovedItchTheme, prepareItchThemeCandidate } from './itch-theme.mjs';
 import { resolvePackagedRelease } from './packaged-release.mjs';
+import { markItchThemeApplied, postItchThemeReview } from './theme-review.mjs';
 
 const ACTION_ROW = 1;
 const BUTTON = 2;
@@ -75,14 +77,17 @@ function link(label, url) {
 export function buildMarketplaceSetupComponents(state) {
   const controls = [];
   if (['awaiting_setup', 'failed'].includes(state.status)) {
+    const retryingTheme = state.status === 'failed' && state.phase === 'apply_theme';
     controls.push({
       type: BUTTON,
       style: state.status === 'failed' ? BUTTON_SECONDARY : BUTTON_SUCCESS,
-      label: state.status === 'failed' ? 'Retry itch.io Draft' : 'Create itch.io Draft',
+      label: retryingTheme ? 'Retry Theme Application'
+        : state.status === 'failed' ? 'Retry itch.io Draft' : 'Create itch.io Draft',
       custom_id: customId({ productSlug: state.product_slug, manifestHash: state.manifest_hash }),
     });
   }
   if (state.public_url) controls.push(link('Open itch.io Draft', state.public_url));
+  if (state.theme_message_url) controls.push(link('Open Theme Review', state.theme_message_url));
   if (state.distribution_message_url) {
     controls.push(link('Open Publication Gate', state.distribution_message_url));
   }
@@ -95,6 +100,7 @@ export function buildMarketplaceSetupEmbeds(state) {
     awaiting_setup: 'MARKETPLACE SETUP REQUIRED',
     queued: 'MARKETPLACE SETUP QUEUED',
     running: 'CREATING ITCH.IO DRAFT',
+    awaiting_theme_approval: 'THEME APPROVAL REQUIRED',
     completed: 'ITCH.IO DRAFT VERIFIED',
     failed: 'MARKETPLACE SETUP NEEDS ATTENTION',
   };
@@ -102,15 +108,20 @@ export function buildMarketplaceSetupEmbeds(state) {
     awaiting_setup: 0x5865f2,
     queued: 0xfee75c,
     running: 0xfee75c,
+    awaiting_theme_approval: 0x5865f2,
     completed: 0x57f287,
     failed: 0xed4245,
   };
   const description = state.status === 'completed'
-    ? 'The draft page, buyer download, cover, screenshots, listing fields, price, and draft visibility were verified. Publication still requires the separate gate.'
+    ? 'The draft page, buyer download, listing fields, storefront theme, price, and draft visibility were verified. Publication still requires the separate gate.'
+    : state.status === 'awaiting_theme_approval'
+      ? 'The draft and buyer download are verified. Review the locally proposed storefront theme; publication remains blocked until that theme is approved, applied, and verified.'
     : state.status === 'failed'
       ? `The setup stopped safely and nothing was published. ${String(state.error || '').split('\n')[0].slice(0, 900)}`
       : state.status === 'running'
-        ? 'ORION is creating or reconciling the draft, uploading the buyer package, and reading the result back.'
+        ? state.phase === 'apply_theme'
+          ? 'ORION is applying the approved storefront theme, verifying desktop and mobile, and preparing the separate publication gate.'
+          : 'ORION is creating or reconciling the draft, uploading the buyer package, and reading the result back.'
         : state.status === 'queued'
           ? 'The exact creatively approved package is queued for marketplace setup. Nothing will be published.'
           : 'This exact creatively approved package may now receive its own itch.io draft. Creating the draft does not authorize publication.';
@@ -159,7 +170,7 @@ export async function postMarketplaceSetupReview(options) {
   const previous = await readOptionalJson(path);
   const exactPrevious = previous?.manifest_hash === packaged.manifest.manifest_hash
     && previous?.listing_hash === packaged.manifest.listing_hash;
-  const status = exactPrevious && ['queued', 'running', 'completed', 'failed'].includes(previous.status)
+  const status = exactPrevious && ['queued', 'running', 'awaiting_theme_approval', 'completed', 'failed'].includes(previous.status)
     ? previous.status
     : 'awaiting_setup';
   const amount = Number(packaged.listing.suggested_price?.amount);
@@ -184,6 +195,9 @@ export async function postMarketplaceSetupReview(options) {
     public_url: exactPrevious ? previous.public_url || null : null,
     edit_url: exactPrevious ? previous.edit_url || null : null,
     distribution_message_url: exactPrevious ? previous.distribution_message_url || null : null,
+    theme_message_url: exactPrevious ? previous.theme_message_url || null : null,
+    theme_hash: exactPrevious ? previous.theme_hash || null : null,
+    phase: exactPrevious ? previous.phase || 'stage_draft' : 'stage_draft',
     updated_at: options.now || new Date().toISOString(),
     ...(exactPrevious && previous.request ? { request: previous.request } : {}),
     ...(exactPrevious && previous.error ? { error: previous.error } : {}),
@@ -242,6 +256,7 @@ export async function recordMarketplaceSetupRequest(options) {
   const actor = actorFromInteraction(options.interaction);
   const requestedAt = options.now || new Date().toISOString();
   state.status = 'queued';
+  state.phase = state.phase === 'apply_theme' ? 'apply_theme' : 'stage_draft';
   state.worker_pid = null;
   state.error = null;
   state.request = {
@@ -313,6 +328,57 @@ export async function runMarketplaceSetupJob(options) {
   await writeJsonAtomic(path, state);
   await updateSetupMessage(runtimeConfig, state, options.fetchImpl).catch(() => {});
   try {
+    if (state.phase === 'apply_theme') {
+      const applied = await (options.applyTheme || applyApprovedItchTheme)({
+        outputRoot: archiveRoot,
+        slug: product.slug,
+        releaseVersion: state.release_version,
+        profileDir: options.profileDir,
+        headed: options.headed,
+        env: options.env,
+        now: options.now,
+      });
+      await (options.markThemeApplied || markItchThemeApplied)({
+        statePath: applied.themeStatePath,
+        runtimeConfig,
+        fetchImpl: options.fetchImpl,
+      });
+      await (options.inspectSeller || inspectItchSellerReadiness)({
+        outputRoot: archiveRoot,
+        slug: product.slug,
+        releaseVersion: state.release_version,
+        profileDir: options.profileDir,
+        headed: options.headed,
+        env: options.env,
+        now: options.now,
+      });
+      const distribution = await (options.postDistribution || postDigitalAssetDistributionReview)({
+        runtimeConfig,
+        outputRoot: archiveRoot,
+        slug: product.slug,
+        releaseVersion: state.release_version,
+        fetchImpl: options.fetchImpl,
+        now: options.now,
+      });
+      const completedAt = options.now || new Date().toISOString();
+      state = {
+        ...state,
+        status: 'completed',
+        phase: 'completed',
+        worker_pid: null,
+        completed_at: completedAt,
+        updated_at: completedAt,
+        theme_hash: applied.theme_hash,
+        theme_receipt_path: relative(productRoot, applied.statePath).replaceAll('\\', '/'),
+        distribution_message_id: distribution.discord_message_id,
+        distribution_message_url: `https://discord.com/channels/${runtimeConfig.guildId}/${distribution.channel_id}/${distribution.discord_message_id}`,
+        seller_status: distribution.seller_ready ? 'ready' : 'blocked',
+      };
+      await writeJsonAtomic(path, state);
+      await updateSetupMessage(runtimeConfig, state, options.fetchImpl);
+      return { ...state, reused: false };
+    }
+
     const staged = await (options.stageDraft || stageItchDraft)({
       outputRoot: archiveRoot,
       slug: product.slug,
@@ -333,36 +399,49 @@ export async function runMarketplaceSetupJob(options) {
     discordState.updated_at = options.now || new Date().toISOString();
     await writeJsonAtomic(discordPath, discordState);
 
-    await (options.inspectSeller || inspectItchSellerReadiness)({
+    state = {
+      ...state,
+      public_url: staged.public_url,
+      edit_url: staged.edit_url,
+      butler_target: staged.butler_target,
+    };
+    await writeJsonAtomic(path, state);
+    const candidate = await (options.prepareTheme || prepareItchThemeCandidate)({
       outputRoot: archiveRoot,
       slug: product.slug,
       releaseVersion: state.release_version,
       profileDir: options.profileDir,
       headed: options.headed,
       env: options.env,
-      now: options.now,
-    });
-    const distribution = await (options.postDistribution || postDigitalAssetDistributionReview)({
-      runtimeConfig,
-      outputRoot: archiveRoot,
-      slug: product.slug,
-      releaseVersion: state.release_version,
       fetchImpl: options.fetchImpl,
       now: options.now,
     });
-    const completedAt = options.now || new Date().toISOString();
+    const waitingAt = options.now || new Date().toISOString();
     state = {
       ...state,
-      status: 'completed',
+      status: 'awaiting_theme_approval',
+      phase: 'theme_review',
       worker_pid: null,
-      completed_at: completedAt,
-      updated_at: completedAt,
-      public_url: staged.public_url,
-      edit_url: staged.edit_url,
-      butler_target: staged.butler_target,
-      distribution_message_id: distribution.discord_message_id,
-      distribution_message_url: `https://discord.com/channels/${runtimeConfig.guildId}/${distribution.channel_id}/${distribution.discord_message_id}`,
-      seller_status: distribution.seller_ready ? 'ready' : 'blocked',
+      theme_hash: candidate.theme_hash,
+      awaiting_theme_approval_at: waitingAt,
+      updated_at: waitingAt,
+    };
+    await writeJsonAtomic(path, state);
+    await updateSetupMessage(runtimeConfig, state, options.fetchImpl);
+    const theme = await (options.postTheme || postItchThemeReview)({
+      runtimeConfig,
+      outputRoot: archiveRoot,
+      slug: product.slug,
+      candidate,
+      fetchImpl: options.fetchImpl,
+      now: options.now,
+    });
+    state = {
+      ...state,
+      theme_hash: theme.theme_hash,
+      theme_message_id: theme.discord_message_id,
+      theme_message_url: `https://discord.com/channels/${runtimeConfig.guildId}/${theme.channel_id}/${theme.discord_message_id}`,
+      updated_at: options.now || new Date().toISOString(),
     };
     await writeJsonAtomic(path, state);
     await updateSetupMessage(runtimeConfig, state, options.fetchImpl);
@@ -381,6 +460,47 @@ export async function runMarketplaceSetupJob(options) {
     await updateSetupMessage(runtimeConfig, state, options.fetchImpl).catch(() => {});
     throw error;
   }
+}
+
+export async function queueMarketplaceSetupAfterThemeApproval(options) {
+  const archiveRoot = String(options.archiveRoot || '').trim();
+  if (!archiveRoot) throw new Error('DIGITAL_ASSET_ARCHIVE_ROOT is required to continue marketplace setup.');
+  const themeDecision = options.themeDecision;
+  if (themeDecision?.row?.decision !== 'approve' || themeDecision?.state?.status !== 'approved') {
+    return null;
+  }
+  const productRoot = resolve(archiveRoot, themeDecision.state.product_slug);
+  const path = statePathFor(productRoot);
+  const state = await readOptionalJson(path);
+  if (!state || state.status === 'completed') return null;
+  if (state.status !== 'awaiting_theme_approval'
+    || state.phase !== 'theme_review'
+    || state.manifest_hash !== themeDecision.state.manifest_hash
+    || state.listing_hash !== themeDecision.state.listing_hash
+    || state.theme_hash !== themeDecision.state.theme_hash) {
+    throw new Error('The approved theme no longer matches the pending marketplace workflow.');
+  }
+  const queuedAt = options.now || new Date().toISOString();
+  const queued = {
+    ...state,
+    status: 'queued',
+    phase: 'apply_theme',
+    worker_pid: null,
+    updated_at: queuedAt,
+    theme_approved_at: themeDecision.row.decided_at,
+  };
+  await writeJsonAtomic(path, queued);
+  return {
+    state: queued,
+    statePath: path,
+    channelId: queued.channel_id,
+    messageId: queued.discord_message_id,
+    messagePatch: {
+      embeds: buildMarketplaceSetupEmbeds(queued),
+      components: buildMarketplaceSetupComponents(queued),
+    },
+    reused: false,
+  };
 }
 
 function defaultProcessAlive(pid) {
@@ -410,6 +530,30 @@ export async function recoverMarketplaceSetupJobs(options) {
     const state = await readOptionalJson(statePath);
     if (!state) continue;
     report.scanned += 1;
+    if (state.status === 'awaiting_theme_approval' && state.phase === 'theme_review') {
+      const theme = await readOptionalJson(resolve(dirname(statePath), 'itch-theme.json'));
+      if (theme?.status === 'approved'
+        && theme.manifest_hash === state.manifest_hash
+        && theme.listing_hash === state.listing_hash
+        && theme.theme_hash === state.theme_hash) {
+        const recoveredAt = options.now || new Date().toISOString();
+        const recovered = {
+          ...state,
+          status: 'queued',
+          phase: 'apply_theme',
+          worker_pid: null,
+          recovery_count: Number(state.recovery_count || 0) + 1,
+          recovered_at: recoveredAt,
+        };
+        await writeJsonAtomic(statePath, recovered);
+        report.recovered.push({
+          product_slug: recovered.product_slug || basename(dirname(dirname(statePath))),
+          path: statePath,
+          scheduled: options.scheduleJob?.(statePath) === true,
+        });
+      }
+      continue;
+    }
     if (state.status === 'running' && processAlive(Number(state.worker_pid))) {
       report.active.push({ product_slug: state.product_slug, worker_pid: Number(state.worker_pid) });
       continue;

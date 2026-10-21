@@ -1,9 +1,37 @@
 import { z } from 'zod';
 
 const IdentifierSchema = z.string().regex(/^[a-z0-9][a-z0-9-]*$/u);
+const RecipeKeySchema = z.string().regex(/^[a-z0-9][a-z0-9_-]*$/u);
 const HexColorSchema = z.string().regex(/^#[0-9a-f]{6}$/iu);
 const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const SemanticVersionSchema = z.string().regex(/^\d+\.\d+\.\d+$/u);
+
+const AssetProductionRecipeSchema = z.object({
+  recipe_id: RecipeKeySchema,
+  version: z.string().min(1),
+  matched_by: z.enum(['exact', 'alias', 'fallback']),
+  source_kind: z.string(),
+  label: z.string().min(1),
+  required_views: z.array(z.string().min(1)).min(1),
+  states: z.array(z.string().min(1)).min(1),
+  animations: z.array(z.object({
+    key: IdentifierSchema,
+    primitives: z.array(RecipeKeySchema).min(1),
+    playback: z.enum(['once', 'loop', 'ping_pong']),
+    mode: z.literal('fixed_root'),
+    root_motion: z.object({ x: z.literal(0), y: z.literal(0) }),
+    anchor: RecipeKeySchema.optional(),
+  })),
+  anchors: z.array(RecipeKeySchema),
+  deliverables: z.array(RecipeKeySchema).min(1),
+  quality_validation: z.array(RecipeKeySchema).min(1),
+  marketplace_preview: z.array(RecipeKeySchema).min(1),
+  executor: z.object({
+    status: z.enum(['available', 'planned']),
+    id: RecipeKeySchema.nullable(),
+    orchestration: z.enum(['automatic', 'manual']),
+  }),
+});
 
 export const AssetRequestSchema = z.object({
   asset_key: IdentifierSchema,
@@ -127,6 +155,7 @@ export const ProductSpecificationSchema = z.object({
     alpha_mode: z.enum(['chroma', 'palette_only']).default('chroma'),
     alpha_palette: z.array(HexColorSchema).max(32).default([]),
     alpha_tolerance: z.number().int().min(0).max(441).default(48),
+    production_recipe: AssetProductionRecipeSchema.optional(),
     seed: z.number().int().nonnegative(),
     status: z.enum(['planned', 'generated', 'failed']),
     source_path: z.string().nullable(),

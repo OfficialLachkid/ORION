@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import sharp from 'sharp';
 import { validateGeneratedAsset } from './asset-validator.mjs';
+import { resolveAssetRecipe } from './asset-recipe-registry.mjs';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { assembleEffectSpriteSheet, writeAnimatedGifPreview } from './effect-pilot.mjs';
 import { withGenerationLock } from './generation-lock.mjs';
@@ -896,6 +897,12 @@ async function generateCrateRecipe(context) {
 }
 
 async function generateItem(options, plan, item, batchRoot, adapter, targetProduct) {
+  const registeredRecipe = resolveAssetRecipe(item.recipe);
+  if (registeredRecipe.recipe_id !== item.recipe
+    || registeredRecipe.executor.id !== 'interactive_items_v1'
+    || registeredRecipe.executor.status !== 'available') {
+    throw new Error(`Interactive item recipe ${item.recipe} is not registered for the interactive_items_v1 executor.`);
+  }
   const sourceStore = options.store || new CanonicalProductStore(options.outputRoot);
   const source = await resolveSourceProduct(sourceStore, targetProduct, item.source_product_slug);
   const sourceProduct = source.product;

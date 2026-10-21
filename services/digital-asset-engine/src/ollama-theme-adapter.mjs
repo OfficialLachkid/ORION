@@ -165,8 +165,10 @@ export class OllamaThemeAdapter {
       `Short description: ${listing.short_description}`,
       '',
       'Design a polished itch.io built-in theme for this exact product.',
-      'Use a dark navy science-fiction presentation, cyan information accents, and one restrained violet or magenta purchase accent.',
-      'Prefer Lato for body text and Pixel for headings unless another allowed pairing is materially clearer.',
+      'Derive the visual direction from this product theme, type, approved palette, and description.',
+      'Do not reuse science-fiction, fantasy, nature, cartoon, industrial, or other genre conventions unless this product supports them.',
+      'Choose a restrained background, readable content panel, clear information accent, and distinct purchase-button accent.',
+      'Prefer Lato for body text and select the clearest allowed heading font for this product.',
       'Maintain accessible contrast, keep screenshots in the sidebar, and do not propose CSS or new product artwork.',
     ].join('\n');
     const response = await fetchWithTimeout(this.fetchImpl, `${this.endpoint}/api/chat`, {

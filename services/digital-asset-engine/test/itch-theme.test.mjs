@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, resolve } from 'node:path';
 import sharp from 'sharp';
@@ -330,6 +330,27 @@ test('theme candidate renders deterministic media and creates desktop/mobile pre
   for (const name of ['banner.png', 'background.png', 'theme.json']) {
     assert.ok((await readFile(resolve(result.candidateRoot, name))).length > 0);
   }
+});
+
+test('theme candidate can be prepared from the exact verified draft before publication', async () => {
+  const fixture = await createFixture();
+  await unlink(resolve(fixture.productRoot, 'review', 'itch-release.json'));
+  const result = await prepareItchThemeCandidate({
+    ...fixture,
+    slug: fixture.product.slug,
+    releaseVersion: '0.2.0',
+    themeAdapter: themeAdapter(),
+    cliRunner(_executable, args) {
+      assertBrowserCodeParses(args);
+      if (args[2] === 'run-code') {
+        return { ok: true, stdout: JSON.stringify({ result: JSON.stringify({ status: 'previewed' }) }) };
+      }
+      return { ok: true, stdout: '{}' };
+    },
+    headed: false,
+  });
+  assert.equal(result.storefront_stage, 'draft');
+  assert.equal(result.status, 'previewed');
 });
 
 test('theme approval is persisted before the exact candidate may be applied', async () => {

@@ -21,6 +21,14 @@ It is separate from the Product Video Agent because its canonical output is a do
 
 The marketplace-independent product is always primary. Marketplace exports are derived artifacts.
 
+## Asset recipe registry
+
+Research selects semantic asset kinds; it does not invent production workflows. The versioned registry in `services/digital-asset-engine/src/asset-recipe-registry.mjs` resolves each kind into required views, states, animation primitives, anchors, zero-root-motion rules, buyer deliverables, validation, preview requirements, and an executor capability declaration.
+
+New product specifications persist that resolved recipe beside every asset. Known aliases such as `pistol -> weapon` and `book -> tome` resolve deterministically. Unknown kinds fall back to the safe static base-sprite recipe and cannot accidentally invoke the Neon weapon/effects implementation.
+
+The registry distinguishes executor availability from orchestration maturity. Existing weapon and interactive-item executors are registered as available but remain manually orchestrated. Potion, crystal, rune-stone, tome, flask, candle, and wand recipes describe the approved production contract while their generalized executors remain planned. This avoids presenting static base art as a complete animated product and avoids letting the local model choose unsupported operations.
+
 ## Proven technical baseline
 
 - Runtime: Mac mini M4 with 16 GB unified memory.
@@ -207,6 +215,8 @@ Status: **in progress; draft staging and verification implemented**
 - [x] Add a guarded public-slug migration that preserves the approved title and reconciles Butler, T7, and Discord references.
 - [x] Add a local, versioned built-in-theme proposal with deterministic media and Discord approval.
 - [x] Apply only the exact approved theme and verify the public result on desktop and mobile.
+- [x] Insert local theme generation and approval between verified draft creation and the publication gate for new products.
+- [x] Resume an approved-but-not-applied draft theme after a bot or Mac restart.
 - Improve the buyer-facing description formatting with stable sections and lists.
 - Collect the first analytics baseline after the storefront presentation is complete.
 
@@ -271,7 +281,7 @@ The first asset-level decisions remain immutable in `digital_asset_review_decisi
 
 Existing-product updates continue to stage and verify the existing itch.io page before package review. A new research-generated product instead stops at local creative approval. Approval posts one separate `Marketplace Setup Required` card in the existing pack channel. Its `Create itch.io Draft` action durably records the exact manifest on the T7, starts a recoverable worker, and authorizes Playwright to discover or create only that product's itch.io draft. ORION pins downloadable asset classification, release status, AI disclosure, paid price, title, slug, descriptions, tags, cover, complete dynamic screenshot set, and draft visibility; Butler uploads the buyer directory. ORION then reads the editor back and stores the verified URL, hashes, media counts, price, and package target in `review/itch.json`. Nothing in this setup step can publish the page.
 
-After successful setup, the same setup card becomes `ITCH.IO DRAFT VERIFIED` and links to both the private draft and the newly reconciled publication gate. Queued or interrupted setup work is recovered after a Mac or bot restart; exact completed work is idempotently reused. The independent `Approve itch.io Publish` decision remains manifest- and listing-bound, so creative approval, marketplace setup, and publication are three distinct human-authorized boundaries.
+After draft staging, the same setup card pauses at `THEME APPROVAL REQUIRED`. A local Ollama proposal derives its visual direction from the current product rather than inheriting Neon-specific styling. ORION renders desktop and mobile previews without changing itch.io. `Approve Theme` durably requeues the marketplace worker; it applies the exact theme, verifies both viewports, then runs seller preflight and creates the separate publication gate. Queued, interrupted, and approved-but-not-applied work is recovered after a Mac or bot restart. The independent `Approve itch.io Publish` decision remains manifest- and listing-bound, so creative approval, marketplace setup, theme approval, and publication are distinct boundaries.
 
 The review card shows the revision, overview preview, bold numbered asset list, asset count, local generation cost, populated draft link, listing hash, and manifest hash. The attached `manifest.json` is a machine-readable receipt of the exact file list and SHA-256 hashes covered by the decision; it is not buyer-facing marketing content.
 
