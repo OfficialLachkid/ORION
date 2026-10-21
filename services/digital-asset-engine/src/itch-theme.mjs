@@ -300,13 +300,16 @@ async (page) => {
   if (!alpha.found) {
     const alphaInput = page.locator('input[name="layout[bg2_alpha]"]').first();
     if (await alphaInput.count().catch(() => 0)) {
-      const value = await alphaInput.evaluate((node, target) => {
-        node.value = String(target);
-        node.dispatchEvent(new Event('input', { bubbles: true }));
-        node.dispatchEvent(new Event('change', { bubbles: true }));
-        return Number(node.value);
-      }, alphaTarget).catch(() => null);
-      if (value === alphaTarget) alpha = { found: true, value };
+      const alphaNub = alphaInput.locator('xpath=following-sibling::div[contains(@class, "slider_track")]//button[contains(@class, "slider_nub")]');
+      let current = Number(await alphaInput.inputValue().catch(() => Number.NaN));
+      if (Number.isFinite(current) && await alphaNub.count().catch(() => 0)) {
+        await alphaNub.focus();
+        for (let attempts = 0; attempts <= 100 && current !== alphaTarget; attempts += 1) {
+          await alphaNub.press(current > alphaTarget ? 'ArrowLeft' : 'ArrowRight');
+          current = Number(await alphaInput.inputValue().catch(() => Number.NaN));
+        }
+        if (current === alphaTarget) alpha = { found: true, value: current };
+      }
     }
   }
   return {
