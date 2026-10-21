@@ -162,7 +162,9 @@ test('Playwright new-project preparation pins assets, AI disclosure, draft visib
   assert.match(discovery, /existing_project/u);
   assert.doesNotMatch(discovery, /\bnew URL\b/u);
   assert.doesNotMatch(code, /\bnew URL\b/u);
+  assert.match(code, /game\[user_classification\]/u);
   assert.match(code, /game\[classification\]/u);
+  assert.match(code, /page\.locator\('input, select'\)/u);
   assert.match(code, /Game assets/u);
   assert.match(code, /Downloadable .*only have files/u);
   assert.match(code, /Released .*Project is complete/u);
@@ -182,6 +184,7 @@ test('Playwright new-project preparation pins assets, AI disclosure, draft visib
     editUrl: 'https://itch.io/game/edit/12345',
     slug: 'arcane-relics-potions',
   });
+  assert.ok(verify.includes('select[name="game[user_classification]"]'));
   assert.match(verify, /classificationValue === 'assets'/u);
   assert.match(verify, /ai_disclosure: aiDisclosure/u);
   assert.match(verify, /slugValue === input\.slug/u);
