@@ -156,13 +156,21 @@ export class OllamaThemeAdapter {
     this.fetchImpl = options.fetchImpl || globalThis.fetch;
   }
 
-  async propose({ product, listing }) {
+  async propose({ product, listing, revision = null }) {
     const prompt = [
       `Product: ${product.title}`,
       `Product theme: ${product.theme}`,
       `Product type: ${product.product_type}`,
       `Approved palette: ${product.style.palette.join(', ')}`,
       `Short description: ${listing.short_description}`,
+      ...(revision ? [
+        '',
+        `Theme revision: ${revision.number}`,
+        `Previous built-in theme: ${JSON.stringify(revision.previous_design)}`,
+        `Binding human feedback: ${revision.feedback}`,
+        'Return a visibly revised design that directly resolves the feedback while retaining unaffected strengths.',
+        'Do not repeat the previous design unchanged, and do not introduce white or unthemed surfaces unless the feedback explicitly requests them.',
+      ] : []),
       '',
       'Design a polished itch.io built-in theme for this exact product.',
       'Derive the visual direction from this product theme, type, approved palette, and description.',
