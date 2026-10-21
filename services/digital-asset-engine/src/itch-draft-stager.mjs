@@ -245,6 +245,7 @@ async (page) => {
   if (input.create) {
     changes.push(await fill('slug', [
       page.locator('input[name="game[url]"]'),
+      page.locator('input[name="game[slug]"]'),
       page.getByLabel(/project url/i),
     ], input.slug));
     const classification = await page.locator('input, select').evaluateAll((nodes) => {
@@ -353,8 +354,10 @@ async (page) => {
     if (!(await saveButton.count().catch(() => 0))) {
       return { status: 'save_not_found', url: page.url(), changes };
     }
+    const normalizedFormAction = formAction.replace(/\\/$/u, '');
     const responsePromise = page.waitForResponse((response) => response.request().method() === 'POST'
-      && response.url().includes('/game/edit/')
+      && (response.url().replace(/\\/$/u, '') === normalizedFormAction
+        || response.url().includes('/game/edit/'))
       && String(response.request().postData() || '').includes('game%5Bdescription%5D='),
     { timeout: 15000 }).catch(() => null);
     await saveButton.click({ timeout: 5000 });
@@ -365,7 +368,10 @@ async (page) => {
     }
     await wait(2500);
     const savedUrl = page.url();
-    const savedEditUrl = formAction || input.editUrl;
+    const ownerEditHref = await page.locator('a[href*="/game/edit/"]').first()
+      .evaluate((node) => node.href).catch(() => '');
+    const savedEditUrl = ownerEditHref
+      || (formAction.includes('/game/edit/') ? formAction : input.editUrl);
     const previewHref = await page.locator(
       \`a[href*=".itch.io/\${input.slug}"]\`,
     ).first().evaluate((node) => node.href).catch(() => '');
@@ -497,7 +503,10 @@ async (page) => {
     && expectedTags.every((tag) => actualTags.includes(tag));
   const coverId = await page.locator('input[name="game[cover_image_id]"]').first().inputValue().catch(() => '');
   const actualScreenshotCount = await page.locator('button.delete_screen_btn').count().catch(() => 0);
-  const slugValue = await page.locator('input[name="game[url]"]').first().inputValue().catch(() => '');
+  const slugValue = await page.locator([
+    'input[name="game[slug]"]',
+    'input[name="game[url]"]',
+  ].join(', ')).first().inputValue().catch(() => '');
   const classificationValue = await page.locator([
     'select[name="game[user_classification]"]',
     'input[name="game[user_classification]"]',

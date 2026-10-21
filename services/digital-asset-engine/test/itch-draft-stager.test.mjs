@@ -170,6 +170,10 @@ test('Playwright new-project preparation pins assets, AI disclosure, draft visib
   assert.match(code, /Released .*Project is complete/u);
   assert.match(code, /Generative AI/u);
   assert.match(code, /Save & view page/u);
+  assert.ok(code.includes('input[name="game[slug]"]'));
+  assert.match(code, /normalizedFormAction/u);
+  assert.match(code, /response\.url\(\)\.replace/u);
+  assert.match(code, /ownerEditHref/u);
   assert.match(code, /previewHref/u);
   const verify = buildVerifyRunCode({
     listing: {
@@ -184,6 +188,7 @@ test('Playwright new-project preparation pins assets, AI disclosure, draft visib
     editUrl: 'https://itch.io/game/edit/12345',
     slug: 'arcane-relics-potions',
   });
+  assert.ok(verify.includes('input[name="game[slug]"]'));
   assert.ok(verify.includes('select[name="game[user_classification]"]'));
   assert.match(verify, /classificationValue === 'assets'/u);
   assert.match(verify, /ai_disclosure: aiDisclosure/u);
