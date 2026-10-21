@@ -156,7 +156,9 @@ async (page) => {
   const title = await page.locator('h1.game_title, h1[itemprop="name"]').first()
     .innerText({ timeout: 5000 }).catch(() => '');
   const documentTitle = await page.title().catch(() => '');
-  const buyButton = page.getByText(/buy now|download now|purchase/i).first();
+  const buyButton = page.locator('a[href$="/purchase"], button').filter({
+    hasText: /buy now|download now|purchase/i,
+  }).first();
   const buyVisible = await buyButton.isVisible().catch(() => false);
   if (buyVisible) {
     await buyButton.click({ timeout: 5000 }).catch(() => {});

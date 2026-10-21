@@ -27,6 +27,7 @@ import {
   resolveInteractionApprovalOrigin,
   searchApprovalMessageInThreads,
   sendDiscordApiRequest,
+  scheduleItchPublicationWorker,
   scheduleMarketplaceSetupWorker,
   scheduleResearchGenerationWorker,
   shouldScheduleDeferredDiscordBotRestart,
@@ -350,6 +351,25 @@ test('marketplace setup worker is detached from the Discord interaction lifecycl
   assert.deepEqual(calls[0].args.slice(1), [
     '--state',
     '/tmp/products/pack/review/marketplace-setup.json',
+  ]);
+  assert.equal(calls[0].options.detached, true);
+  assert.deepEqual(calls[1], { unref: true });
+});
+
+test('itch publication worker is detached from the Discord interaction lifecycle', () => {
+  const calls = [];
+  const scheduled = scheduleItchPublicationWorker('/tmp/products/pack/review/distribution.json', {
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return { unref() { calls.push({ unref: true }); } };
+    },
+  });
+  assert.equal(scheduled, true);
+  assert.equal(calls[0].command, process.execPath);
+  assert.match(calls[0].args[0], /itch-publication-worker\.mjs$/u);
+  assert.deepEqual(calls[0].args.slice(1), [
+    '--state',
+    '/tmp/products/pack/review/distribution.json',
   ]);
   assert.equal(calls[0].options.detached, true);
   assert.deepEqual(calls[1], { unref: true });

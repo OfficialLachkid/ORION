@@ -101,7 +101,7 @@ npm run digital-assets:distribution-review -- \
   --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
 ```
 
-The seller preflight reads payout mode and tax-interview readiness without modifying the itch.io account. The distribution gate uses a dedicated message in the pack channel so package approval and marketplace authorization remain visibly separate and old package cards do not exhaust Discord's edit limit. A ready initial release exposes `Approve itch.io Publish` and `Keep Draft`; a versioned update exposes `Approve itch.io Update` and `Keep Current Release`. Published updates are bound to both the exact approved candidate and the verified current public-release receipt. The append-only decision in `digital_asset_distribution_reviews` authorizes a later adapter job; clicking it does not itself change itch.io.
+The seller preflight reads payout mode and tax-interview readiness without modifying the itch.io account. The distribution gate uses a dedicated message in the pack channel so package approval and marketplace authorization remain visibly separate and old package cards do not exhaust Discord's edit limit. A ready initial release exposes `Approve itch.io Publish` and `Keep Draft`; a versioned update exposes `Approve itch.io Update` and `Keep Current Release`. Published updates are bound to both the exact approved candidate and the verified current public-release receipt. The append-only decision in `digital_asset_distribution_reviews` durably queues the manifest-bound publisher. Interrupted approved jobs are recovered when the Discord bot restarts.
 
 After `Approve itch.io Publish` is recorded for the exact release, run the explicit publication adapter:
 
