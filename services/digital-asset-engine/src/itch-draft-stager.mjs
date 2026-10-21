@@ -247,8 +247,11 @@ async (page) => {
       page.locator('input[name="game[url]"]'),
       page.getByLabel(/project url/i),
     ], input.slug));
-    const classification = await page.locator('input').evaluateAll((nodes) => {
-      const field = nodes.find((node) => node.name === 'game[classification]');
+    const classification = await page.locator('input, select').evaluateAll((nodes) => {
+      const field = nodes.find((node) => [
+        'game[user_classification]',
+        'game[classification]',
+      ].includes(node.name));
       const widget = field?.selectize;
       if (!widget) return { ok: false, reason: 'widget_not_found' };
       widget.setValue('assets', true);
@@ -495,7 +498,11 @@ async (page) => {
   const coverId = await page.locator('input[name="game[cover_image_id]"]').first().inputValue().catch(() => '');
   const actualScreenshotCount = await page.locator('button.delete_screen_btn').count().catch(() => 0);
   const slugValue = await page.locator('input[name="game[url]"]').first().inputValue().catch(() => '');
-  const classificationValue = await page.locator('input[name="game[classification]"]').first().inputValue().catch(() => '');
+  const classificationValue = await page.locator([
+    'select[name="game[user_classification]"]',
+    'input[name="game[user_classification]"]',
+    'input[name="game[classification]"]',
+  ].join(', ')).first().inputValue().catch(() => '');
   const aiDisclosure = await page.getByRole('radio', { name: /Yes .*Generative AI/i }).isChecked().catch(() => false);
   const pageText = await page.locator('body').innerText().catch(() => '');
   const isDraft = await page.locator('input[name="game[published]"][value="draft"]').isChecked().catch(() => false);
