@@ -280,6 +280,18 @@ async (page) => {
       await alphaButton.press(current > alphaTarget ? 'ArrowLeft' : 'ArrowRight');
     }
   }
+  if (!alpha.found) {
+    const alphaInput = page.locator('input[name="layout[bg2_alpha]"]').first();
+    if (await alphaInput.count().catch(() => 0)) {
+      const value = await alphaInput.evaluate((node, target) => {
+        node.value = String(target);
+        node.dispatchEvent(new Event('input', { bubbles: true }));
+        node.dispatchEvent(new Event('change', { bubbles: true }));
+        return Number(node.value);
+      }, alphaTarget).catch(() => null);
+      if (value === alphaTarget) alpha = { found: true, value };
+    }
+  }
   return {
     status: colorChecks.every(Boolean) && alpha.found ? 'prepared' : 'controls_missing',
     colorChecks,
