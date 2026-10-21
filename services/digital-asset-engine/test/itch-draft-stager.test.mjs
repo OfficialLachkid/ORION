@@ -160,6 +160,8 @@ test('Playwright new-project preparation pins assets, AI disclosure, draft visib
   });
   assert.match(discovery, /new_project_form/u);
   assert.match(discovery, /existing_project/u);
+  assert.doesNotMatch(discovery, /\bnew URL\b/u);
+  assert.doesNotMatch(code, /\bnew URL\b/u);
   assert.match(code, /game\[classification\]/u);
   assert.match(code, /Game assets/u);
   assert.match(code, /Downloadable .*only have files/u);
@@ -186,6 +188,40 @@ test('Playwright new-project preparation pins assets, AI disclosure, draft visib
   assert.doesNotThrow(() => new Function(`return (${discovery})`));
   assert.doesNotThrow(() => new Function(`return (${code})`));
   assert.doesNotThrow(() => new Function(`return (${verify})`));
+});
+
+test('project discovery works when the Playwright sandbox does not expose URL', async () => {
+  const discovery = buildItchProjectDiscoveryRunCode({ slug: 'arcane-relics-potions' });
+  const discover = new Function('URL', `return (${discovery})`)(undefined);
+  let currentUrl = 'about:blank';
+  const editLink = {
+    async count() { return 0; },
+  };
+  const projectRow = {
+    locator() { return { first() { return editLink; } }; },
+  };
+  const page = {
+    async goto(url) { currentUrl = url; },
+    async waitForTimeout() {},
+    url() { return currentUrl; },
+    locator(selector) {
+      if (selector.startsWith('a[href^="https://"]')) {
+        return {
+          async evaluateAll(callback) { return callback([{ href: 'https://vbjservices.itch.io/' }]); },
+        };
+      }
+      if (selector === '.game_row') {
+        return { filter() { return { first() { return projectRow; } }; } };
+      }
+      return { first() { return {}; } };
+    },
+  };
+  const result = await discover(page);
+  assert.deepEqual(result, {
+    status: 'new_project_form',
+    publicUrl: 'https://vbjservices.itch.io/arcane-relics-potions',
+    editUrl: 'https://itch.io/game/new',
+  });
 });
 
 test('renders itch descriptions as safe headings, paragraphs, and lists', () => {

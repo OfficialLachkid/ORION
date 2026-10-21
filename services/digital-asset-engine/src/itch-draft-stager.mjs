@@ -131,18 +131,16 @@ async (page) => {
   }
   const creatorHref = await page.locator('a[href^="https://"][href*=".itch.io"]').evaluateAll((nodes) => {
     const link = nodes.find((node) => {
-      try {
-        const parsed = new URL(node.href);
-        return parsed.hostname.endsWith('.itch.io') && parsed.pathname === '/';
-      } catch {
-        return false;
-      }
+      const href = String(node.href || '');
+      if (!href.startsWith('https://') || !href.endsWith('.itch.io/')) return false;
+      const account = href.slice('https://'.length, -'.itch.io/'.length);
+      return /^[a-z0-9-]+$/iu.test(account);
     });
     return link?.href || '';
   }).catch(() => '');
   if (!creatorHref) return { status: 'creator_url_not_found', url: page.url() };
   const creatorRoot = creatorHref.endsWith('/') ? creatorHref : creatorHref + '/';
-  const publicUrl = new URL(slug, creatorRoot).toString();
+  const publicUrl = creatorRoot + slug;
   const projectUrl = publicUrl.replace(/\\/$/u, '');
   const projectLink = page.locator(\`a[href="\${projectUrl}"], a[href="\${projectUrl}/"]\`).first();
   const projectRow = page.locator('.game_row').filter({ has: projectLink }).first();
@@ -151,7 +149,7 @@ async (page) => {
     return {
       status: 'existing_project',
       publicUrl,
-      editUrl: new URL(await editLink.getAttribute('href'), page.url()).toString(),
+      editUrl: await editLink.evaluate((node) => node.href),
     };
   }
   await page.goto('https://itch.io/game/new', { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -344,7 +342,8 @@ async (page) => {
   const missing = changes.filter((change) => !change.ok);
   if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
   if (input.save) {
-    const formAction = await page.locator('form.game_edit_form').first().getAttribute('action').catch(() => '');
+    const formAction = await page.locator('form.game_edit_form').first()
+      .evaluate((form) => form.action).catch(() => '');
     const saveButton = input.create
       ? page.getByRole('button', { name: /Save & view page/i }).first()
       : page.locator('form.game_edit_form button.save_btn').first();
@@ -363,19 +362,24 @@ async (page) => {
     }
     await wait(2500);
     const savedUrl = page.url();
-    const savedEditUrl = formAction ? new URL(formAction, 'https://itch.io').toString() : input.editUrl;
+    const savedEditUrl = formAction || input.editUrl;
     const previewHref = await page.locator(
       \`a[href*=".itch.io/\${input.slug}"]\`,
-    ).first().getAttribute('href').catch(() => '');
+    ).first().evaluate((node) => node.href).catch(() => '');
     const savedPublicUrl = (() => {
       for (const candidate of [savedUrl, previewHref, input.publicUrl]) {
-        try {
-          const parsed = new URL(candidate, savedUrl);
-          if (parsed.hostname.endsWith('.itch.io') && parsed.hostname !== 'itch.io') {
-            return parsed.toString();
-          }
-        } catch {
-          // Continue to the next candidate.
+        const value = String(candidate || '').trim();
+        if (!value.startsWith('https://')) continue;
+        const authorityAndPath = value.slice('https://'.length);
+        const slashIndex = authorityAndPath.indexOf('/');
+        const hostname = slashIndex >= 0
+          ? authorityAndPath.slice(0, slashIndex)
+          : authorityAndPath;
+        const account = hostname.endsWith('.itch.io')
+          ? hostname.slice(0, -'.itch.io'.length)
+          : '';
+        if (account && /^[a-z0-9-]+$/iu.test(account)) {
+          return value;
         }
       }
       return input.publicUrl;
