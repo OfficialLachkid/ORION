@@ -246,10 +246,13 @@ async (page) => {
     return true;
   };
   const colors = input.design.colors;
-  const colorChecks = await Promise.all([
-    fill('BG', colors.background), fill('BG 2', colors.panel), fill('Text', colors.text),
-    fill('Link', colors.link), fill('Headers', colors.header), fill('Buttons', colors.button),
-  ]);
+  const colorChecks = [];
+  for (const [name, value] of [
+    ['BG', colors.background], ['BG 2', colors.panel], ['Text', colors.text],
+    ['Link', colors.link], ['Headers', colors.header], ['Buttons', colors.button],
+  ]) {
+    colorChecks.push(await fill(name, value));
+  }
   const selects = {
     body: page.locator('select[name="layout[font_family]"]').first(),
     header: page.locator('select[name="layout[header_font_family]"]').first(),
