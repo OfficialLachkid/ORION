@@ -97,6 +97,10 @@ import {
   recordItchThemeDecision,
 } from '../../digital-asset-engine/src/theme-review.mjs';
 import {
+  queueItchThemeRevision,
+  recoverItchThemeRevisionJobs,
+} from '../../digital-asset-engine/src/theme-revision.mjs';
+import {
   isResearchReviewInteraction,
   recordResearchReviewDecision,
 } from '../../digital-asset-research/src/discord-review.mjs';
@@ -360,6 +364,27 @@ export function scheduleMarketplaceSetupWorker(statePath, options = {}) {
     return true;
   } catch (error) {
     process.stderr.write(`Could not start marketplace setup worker: ${error.message}\n`);
+    return false;
+  }
+}
+
+export function scheduleItchThemeRevisionWorker(statePath, options = {}) {
+  if (!statePath) return false;
+  try {
+    const spawnImpl = options.spawnImpl || spawn;
+    const child = spawnImpl(
+      process.execPath,
+      [`${projectRoot}/services/digital-asset-engine/theme-revision-worker.mjs`, '--state', statePath],
+      {
+        cwd: projectRoot,
+        detached: true,
+        stdio: 'ignore',
+      },
+    );
+    child.unref();
+    return true;
+  } catch (error) {
+    process.stderr.write(`Could not start itch theme revision worker: ${error.message}\n`);
     return false;
   }
 }
@@ -1441,10 +1466,11 @@ export async function runLiveDiscordBot(config) {
               failurePrefix: 'Theme decision was not recorded',
               successContent: (decision) => decision.row.decision === 'approve'
                   ? 'Theme approval recorded. Draft workflows queue the exact theme for application and verification automatically.'
-                  : 'Theme changes requested. The public itch.io page remains unchanged.',
+                  : 'Theme feedback recorded. ORION is preparing a revised local candidate; the itch.io page remains unchanged.',
             });
             if (error) return;
             let continuation = null;
+            let revision = null;
             let workerScheduled = false;
             if (recorded.row.decision === 'approve') {
               continuation = await queueMarketplaceSetupAfterThemeApproval({
@@ -1453,6 +1479,11 @@ export async function runLiveDiscordBot(config) {
               });
               workerScheduled = continuation?.reused === true
                 || scheduleMarketplaceSetupWorker(continuation?.statePath);
+            } else {
+              revision = await queueItchThemeRevision({
+                archiveRoot: String(config?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim(),
+                productSlug: recorded.state.product_slug,
+              });
             }
             const currentMessage = await sendDiscordApiRequest(
               token,
@@ -1465,11 +1496,28 @@ export async function runLiveDiscordBot(config) {
               `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
               {
                 ...recorded.messagePatch,
+                ...(revision ? {
+                  content: `Theme feedback recorded. Generating revision **${revision.state.revision_number}** locally; the itch.io page remains unchanged.`,
+                } : {}),
                 embeds: buildItchThemeReviewEmbeds(recorded.state, recorded.row.decision, recorded.actor),
                 attachments: currentMessage.attachments,
               },
               'PATCH',
             );
+            if (revision) {
+              workerScheduled = revision.state.status !== 'queued'
+                || scheduleItchThemeRevisionWorker(revision.statePath);
+              if (!workerScheduled) {
+                await sendDiscordApiRequest(
+                  token,
+                  `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+                  {
+                    content: 'Theme revision is durably queued, but its worker could not be started. It will be recovered after the next bot restart.',
+                  },
+                  'PATCH',
+                );
+              }
+            }
             if (continuation && !continuation.reused) {
               await sendDiscordApiRequest(
                 token,
@@ -2904,6 +2952,20 @@ export async function runLiveDiscordBot(config) {
     }
   } catch (error) {
     process.stderr.write(`Research generation recovery check failed: ${error.message}\n`);
+  }
+
+  try {
+    const recovery = await recoverItchThemeRevisionJobs({
+      archiveRoot: String(config?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim(),
+      scheduleJob: (statePath) => scheduleItchThemeRevisionWorker(statePath),
+    });
+    if (recovery.recovered.length > 0 || recovery.active.length > 0) {
+      process.stdout.write(
+        `Itch theme revision recovery: ${recovery.recovered.length} resumed, ${recovery.active.length} already active.\n`,
+      );
+    }
+  } catch (error) {
+    process.stderr.write(`Itch theme revision recovery check failed: ${error.message}\n`);
   }
 
   try {

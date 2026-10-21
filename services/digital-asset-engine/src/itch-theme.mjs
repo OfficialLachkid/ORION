@@ -183,7 +183,8 @@ async (page) => {
     return { status: 'public_page_unavailable', url: page.url() };
   }
   await page.addStyleTag({ content: \`
-    #wrapper { background-color: \${input.design.colors.background} !important; background-image: url(\${input.backgroundDataUrl}) !important; background-size: cover !important; background-attachment: fixed !important; }
+    html, body { background-color: \${input.design.colors.background} !important; min-height: 100% !important; }
+    body, #wrapper { background-color: \${input.design.colors.background} !important; background-image: url(\${input.backgroundDataUrl}) !important; background-size: cover !important; background-attachment: fixed !important; }
     #inner_column { background-color: \${hex(input.design.colors.panel, input.design.panel_alpha)} !important; color: \${input.design.colors.text} !important; font-family: \${font(input.design.typography.body_font)} !important; }
     #inner_column h1, #inner_column h2, #inner_column h3 { color: \${input.design.colors.header} !important; font-family: \${font(input.design.typography.header_font)} !important; }
     #inner_column a { color: \${input.design.colors.link} !important; }
@@ -450,7 +451,18 @@ export async function prepareItchThemeCandidate(options) {
     timeoutMs: options.themeTimeoutMs,
     fetchImpl: options.ollamaFetchImpl,
   });
-  const proposal = await adapter.propose({ product, listing: packaged.listing });
+  const revision = options.revision ? {
+    number: Math.max(2, Number(options.revision.number) || 2),
+    parent_theme_hash: String(options.revision.parent_theme_hash || ''),
+    feedback: String(options.revision.feedback || '').trim(),
+    previous_design: options.revision.previous_design,
+  } : null;
+  if (revision && (!/^[a-f0-9]{64}$/u.test(revision.parent_theme_hash)
+    || !revision.feedback
+    || !revision.previous_design)) {
+    throw new Error('Theme revisions require a parent theme hash, feedback, and previous design.');
+  }
+  const proposal = await adapter.propose({ product, listing: packaged.listing, revision });
   const createdAt = options.now || proposal.created_at || new Date().toISOString();
   const identity = {
     schema_version: '1.0',
@@ -470,6 +482,14 @@ export async function prepareItchThemeCandidate(options) {
     },
     design: proposal.design,
     storefront_stage: storefrontStage,
+    release_version: packaged.releaseVersion,
+    ...(revision ? {
+      revision: {
+        number: revision.number,
+        parent_theme_hash: revision.parent_theme_hash,
+        feedback: revision.feedback,
+      },
+    } : {}),
   };
   const themeHash = sha256(JSON.stringify(identity));
   const candidateRoot = resolve(productRoot, 'review', 'theme', 'candidates', themeHash.slice(0, 16));

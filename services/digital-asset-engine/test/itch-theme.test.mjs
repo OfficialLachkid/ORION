@@ -195,6 +195,34 @@ test('local theme adapter repairs model-selected contrast without discarding its
   assert.match(repaired.design.rationale, /adjusted deterministically/u);
 });
 
+test('local theme adapter treats human revision feedback as binding context', async () => {
+  let requestBody;
+  const adapter = new OllamaThemeAdapter({
+    endpoint: 'http://127.0.0.1:11434',
+    fetchImpl: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        message: { content: JSON.stringify(design) },
+      }), { status: 200 });
+    },
+  });
+  await adapter.propose({
+    product: {
+      title: 'Arcane Relics & Potions', theme: 'arcane fantasy alchemy', product_type: 'sprite pack',
+      style: { palette: ['#171329', '#2c204f'] },
+    },
+    listing: { short_description: 'Eight arcane inventory sprites.' },
+    revision: {
+      number: 2,
+      feedback: 'Remove the white lower background section.',
+      previous_design: design,
+    },
+  });
+  assert.match(requestBody.messages[1].content, /Theme revision: 2/u);
+  assert.match(requestBody.messages[1].content, /Remove the white lower background section/u);
+  assert.match(requestBody.messages[1].content, /Do not repeat the previous design unchanged/u);
+});
+
 test('theme banner summary derives product counts and kinds from each release', () => {
   assert.equal(buildThemeBannerSummary({
     assets: [{ kind: 'character' }, { kind: 'character' }, { kind: 'character' }],
@@ -219,6 +247,8 @@ test('browser theme preview passes the dynamic product title into the page conte
     desktopPath: '/tmp/desktop.png',
     mobilePath: '/tmp/mobile.png',
   });
+  assert.match(code, /html, body \{ background-color/u);
+  assert.match(code, /body, #wrapper \{ background-color/u);
   const preview = new Function(`return (${code});`)();
   let evaluateInput = null;
   const wrapper = { async screenshot() {} };

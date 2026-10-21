@@ -75,7 +75,13 @@ export function buildItchThemeReviewEmbeds(state, decision = null, actor = null)
       description: outcome,
       color,
       fields: [
+        { name: 'Revision', value: `**${state.revision?.number || 1}**`, inline: true },
         { name: 'Theme hash', value: `\`${state.theme_hash}\``, inline: false },
+        ...(state.revision?.feedback ? [{
+          name: 'Requested change addressed',
+          value: state.revision.feedback,
+          inline: false,
+        }] : []),
         { name: 'Palette', value: paletteText(state.design), inline: false },
         {
           name: 'Typography & layout',

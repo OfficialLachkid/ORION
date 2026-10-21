@@ -152,6 +152,8 @@ npm run digital-assets:itch-theme-review -- \
 
 The banner uses only approved packaged assets and carries preview markings; the procedural background contains no invented product artwork. The text model runs locally through Ollama, has no cloud fallback, and incurs no per-call API cost. The preview action does not mutate the public page. After `Approve Theme` is stored for the exact manifest, listing, and theme hashes, apply and read the built-in theme back on desktop and mobile:
 
+`Request Theme Changes` stores the operator feedback, queues a durable local revision job, and includes the previous design plus that binding feedback in the next Ollama prompt. Rejected candidates remain immutable on the T7. The worker replaces the two preview attachments on the existing Discord message, increments the visible revision, and restores the approval controls. Queued or interrupted revisions are recovered after a Discord bot restart rather than creating duplicate messages.
+
 ```bash
 npm run digital-assets:itch-theme-apply -- \
   --apply-itch-theme \
