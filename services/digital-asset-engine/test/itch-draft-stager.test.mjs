@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import {
   buildItchDraftRunCode,
+  buildItchProjectDiscoveryRunCode,
+  buildVerifyRunCode,
   renderItchDescriptionHtml,
   renderItchDescriptionText,
   stageItchDraft,
@@ -17,7 +19,9 @@ function suppliedBrowserCode(args) {
 }
 
 function browserStatus(code) {
-  return code.includes("status: 'ready'")
+  return code.includes("status: 'existing_project'") && code.includes("status: 'new_project_form'")
+    ? 'discovery'
+    : code.includes("status: 'ready'")
     ? 'ready'
     : code.includes('Object.values(checks)')
       ? 'verified'
@@ -135,8 +139,53 @@ test('Playwright draft preparation includes listing fields and exact price contr
   assert.match(code, /\.game_row/u);
   assert.match(code, /projectUrl/u);
   assert.match(code, /currentUrl !== requestedEditUrl/u);
-  assert.doesNotMatch(code, /new URL/u);
   assert.doesNotThrow(() => new Function(`return (${code})`));
+});
+
+test('Playwright new-project preparation pins assets, AI disclosure, draft visibility, and slug', () => {
+  const discovery = buildItchProjectDiscoveryRunCode({ slug: 'arcane-relics-potions' });
+  const code = buildItchDraftRunCode({
+    listing: {
+      title: 'Arcane Relics & Potions',
+      short_description: 'Fantasy inventory assets.',
+      description: 'Full description',
+      suggested_price: { amount: 3.99 },
+      tags: ['2D', 'Pixel Art'],
+    },
+    publicUrl: 'https://vbjservices.itch.io/arcane-relics-potions',
+    editUrl: 'https://itch.io/game/new',
+    slug: 'arcane-relics-potions',
+    create: true,
+    save: true,
+  });
+  assert.match(discovery, /new_project_form/u);
+  assert.match(discovery, /existing_project/u);
+  assert.match(code, /game\[classification\]/u);
+  assert.match(code, /Game assets/u);
+  assert.match(code, /Downloadable .*only have files/u);
+  assert.match(code, /Released .*Project is complete/u);
+  assert.match(code, /Generative AI/u);
+  assert.match(code, /Save & view page/u);
+  assert.match(code, /previewHref/u);
+  const verify = buildVerifyRunCode({
+    listing: {
+      title: 'Arcane Relics & Potions',
+      short_description: 'Fantasy inventory assets.',
+      description: 'Full description',
+      suggested_price: { amount: 3.99 },
+      tags: ['2D', 'Pixel Art'],
+    },
+    screenshotCount: 2,
+    screenshotPath: '/tmp/verified.png',
+    editUrl: 'https://itch.io/game/edit/12345',
+    slug: 'arcane-relics-potions',
+  });
+  assert.match(verify, /classificationValue === 'assets'/u);
+  assert.match(verify, /ai_disclosure: aiDisclosure/u);
+  assert.match(verify, /slugValue === input\.slug/u);
+  assert.doesNotThrow(() => new Function(`return (${discovery})`));
+  assert.doesNotThrow(() => new Function(`return (${code})`));
+  assert.doesNotThrow(() => new Function(`return (${verify})`));
 });
 
 test('renders itch descriptions as safe headings, paragraphs, and lists', () => {
@@ -221,6 +270,45 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
   const reused = await stageItchDraft(options);
   assert.equal(reused.reused, true);
   assert.equal(calls.length, beforeReuse);
+});
+
+test('creates a missing itch.io project before Butler upload and verifies the draft', async () => {
+  const fixture = await createFixture();
+  const calls = [];
+  const publicUrl = 'https://vbjservices.itch.io/neon-plasma-armory';
+  const editUrl = 'https://itch.io/game/edit/12345';
+  const cliRunner = (executable, args) => {
+    const code = args.includes('run-code') ? suppliedBrowserCode(args) : '';
+    calls.push({ executable, args, code });
+    if (!code) return { ok: true, stdout: '', stderr: '' };
+    const status = browserStatus(code);
+    const details = status === 'discovery'
+      ? { status: 'new_project_form', publicUrl, editUrl: 'https://itch.io/game/new' }
+      : status === 'media_ready'
+        ? { status, coverId: 'cover-1', screenshotCount: 2, url: 'https://itch.io/game/new' }
+        : status === 'submitted'
+          ? { status, publicUrl: `${publicUrl}?secret=review`, editUrl, url: `${publicUrl}?secret=review` }
+          : { status, url: status === 'verified' ? editUrl : 'https://itch.io/game/new' };
+    return {
+      ok: true,
+      stdout: JSON.stringify({ result: JSON.stringify(details) }),
+      stderr: '',
+    };
+  };
+  const staged = await stageItchDraft({
+    outputRoot: fixture.outputRoot,
+    slug: fixture.product.slug,
+    store: fixture.store,
+    profileDir: fixture.outputRoot,
+    cliRunner,
+  });
+  assert.equal(staged.public_url, `${publicUrl}?secret=review`);
+  assert.equal(staged.edit_url, editUrl);
+  assert.equal(staged.butler_target, 'vbjservices/neon-plasma-armory:assets');
+  const discoveryIndex = calls.findIndex((call) => browserStatus(call.code) === 'discovery');
+  const butlerIndex = calls.findIndex((call) => call.args[0] === 'push');
+  assert.ok(discoveryIndex >= 0);
+  assert.ok(butlerIndex > discoveryIndex);
 });
 
 test('fails closed when browser verification does not confirm draft state', async () => {

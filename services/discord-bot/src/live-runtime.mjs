@@ -82,6 +82,12 @@ import {
   recordDigitalAssetDistributionDecision,
 } from '../../digital-asset-engine/src/distribution-review.mjs';
 import {
+  isMarketplaceSetupInteraction,
+  postMarketplaceSetupReview,
+  recordMarketplaceSetupRequest,
+  recoverMarketplaceSetupJobs,
+} from '../../digital-asset-engine/src/marketplace-setup.mjs';
+import {
   buildItchThemeFeedbackModal,
   buildItchThemeReviewEmbeds,
   getItchThemeModalRequest,
@@ -331,6 +337,27 @@ export function scheduleResearchGenerationWorker(jobPath, options = {}) {
     return true;
   } catch (error) {
     process.stderr.write(`Could not start research generation worker: ${error.message}\n`);
+    return false;
+  }
+}
+
+export function scheduleMarketplaceSetupWorker(statePath, options = {}) {
+  if (!statePath) return false;
+  try {
+    const spawnImpl = options.spawnImpl || spawn;
+    const child = spawnImpl(
+      process.execPath,
+      [`${projectRoot}/services/digital-asset-engine/marketplace-setup-worker.mjs`, '--state', statePath],
+      {
+        cwd: projectRoot,
+        detached: true,
+        stdio: 'ignore',
+      },
+    );
+    child.unref();
+    return true;
+  } catch (error) {
+    process.stderr.write(`Could not start marketplace setup worker: ${error.message}\n`);
     return false;
   }
 }
@@ -1445,6 +1472,31 @@ export async function runLiveDiscordBot(config) {
             return;
           }
 
+          if (isMarketplaceSetupInteraction(payload.d)) {
+            const { result: recorded, error } = await recordDeferredInteractionDecision({
+              interaction: payload.d,
+              record: async () => {
+                const request = await recordMarketplaceSetupRequest({ interaction: payload.d, config });
+                if (!request) throw new Error('Unsupported marketplace setup action.');
+                return request;
+              },
+              failurePrefix: 'Marketplace setup was not queued',
+              successContent: () => 'Marketplace setup queued. ORION will create or reconcile the itch.io draft, upload the package, verify it, and then post a separate publication gate.',
+            });
+            if (error) return;
+            const workerScheduled = scheduleMarketplaceSetupWorker(recorded.statePath);
+            await sendDiscordApiRequest(
+              token,
+              `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
+              workerScheduled ? recorded.messagePatch : {
+                ...recorded.messagePatch,
+                content: 'Marketplace setup is durably queued, but its worker could not be started. It will be recovered after the next bot restart.',
+              },
+              'PATCH',
+            );
+            return;
+          }
+
           if (isDigitalAssetDistributionInteraction(payload.d)) {
             const { result: recorded, error } = await recordDeferredInteractionDecision({
               interaction: payload.d,
@@ -1601,6 +1653,13 @@ export async function runLiveDiscordBot(config) {
                   },
                   'PATCH',
                 );
+              }
+              if (recorded.nextAction === 'marketplace_setup') {
+                await postMarketplaceSetupReview({
+                  runtimeConfig: config,
+                  outputRoot: config.env.DIGITAL_ASSET_ARCHIVE_ROOT,
+                  slug: recorded.productSlug,
+                });
               }
             } catch (error) {
               process.stderr.write(
@@ -2796,6 +2855,20 @@ export async function runLiveDiscordBot(config) {
     }
   } catch (error) {
     process.stderr.write(`Research generation recovery check failed: ${error.message}\n`);
+  }
+
+  try {
+    const recovery = await recoverMarketplaceSetupJobs({
+      archiveRoot: String(config?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim(),
+      scheduleJob: (statePath) => scheduleMarketplaceSetupWorker(statePath),
+    });
+    if (recovery.recovered.length > 0 || recovery.active.length > 0) {
+      process.stdout.write(
+        `Marketplace setup recovery: ${recovery.recovered.length} resumed, ${recovery.active.length} already active.\n`,
+      );
+    }
+  } catch (error) {
+    process.stderr.write(`Marketplace setup recovery check failed: ${error.message}\n`);
   }
 
   connect();

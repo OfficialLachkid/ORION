@@ -120,7 +120,54 @@ export function renderItchDescriptionText(description) {
     .join(' ');
 }
 
-export function buildItchDraftRunCode({ listing, publicUrl, editUrl, save = false }) {
+export function buildItchProjectDiscoveryRunCode({ slug }) {
+  return `
+async (page) => {
+  const slug = ${JSON.stringify(String(slug || ''))};
+  await page.goto('https://itch.io/dashboard', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForTimeout(1000);
+  if (page.url().includes('/login') || page.url().includes('/register')) {
+    return { status: 'login_required', url: page.url() };
+  }
+  const creatorHref = await page.locator('a[href^="https://"][href*=".itch.io"]').evaluateAll((nodes) => {
+    const link = nodes.find((node) => {
+      try {
+        const parsed = new URL(node.href);
+        return parsed.hostname.endsWith('.itch.io') && parsed.pathname === '/';
+      } catch {
+        return false;
+      }
+    });
+    return link?.href || '';
+  }).catch(() => '');
+  if (!creatorHref) return { status: 'creator_url_not_found', url: page.url() };
+  const creatorRoot = creatorHref.endsWith('/') ? creatorHref : creatorHref + '/';
+  const publicUrl = new URL(slug, creatorRoot).toString();
+  const projectUrl = publicUrl.replace(/\\/$/u, '');
+  const projectLink = page.locator(\`a[href="\${projectUrl}"], a[href="\${projectUrl}/"]\`).first();
+  const projectRow = page.locator('.game_row').filter({ has: projectLink }).first();
+  const editLink = projectRow.locator('a[href*="/game/edit/"]').first();
+  if (await editLink.count().catch(() => 0)) {
+    return {
+      status: 'existing_project',
+      publicUrl,
+      editUrl: new URL(await editLink.getAttribute('href'), page.url()).toString(),
+    };
+  }
+  await page.goto('https://itch.io/game/new', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForTimeout(750);
+  return { status: 'new_project_form', publicUrl, editUrl: page.url() };
+}`.trim();
+}
+
+export function buildItchDraftRunCode({
+  listing,
+  publicUrl,
+  editUrl,
+  slug = '',
+  create = false,
+  save = false,
+}) {
   return `
 async (page) => {
   const input = ${JSON.stringify({
@@ -129,6 +176,8 @@ async (page) => {
     descriptionText: renderItchDescriptionText(listing.description),
     publicUrl,
     editUrl,
+    slug,
+    create,
     save,
   })};
   const wait = (ms) => page.waitForTimeout(ms);
@@ -163,9 +212,11 @@ async (page) => {
 
   const currentUrl = page.url().replace(/#.*$/u, '').replace(/\\/$/u, '');
   const requestedEditUrl = input.editUrl.replace(/#.*$/u, '').replace(/\\/$/u, '');
-  if (input.editUrl && currentUrl !== requestedEditUrl) {
+  if (input.create && !page.url().includes('/game/new')) {
+    await page.goto('https://itch.io/game/new', { waitUntil: 'domcontentloaded', timeout: 30000 });
+  } else if (!input.create && input.editUrl && currentUrl !== requestedEditUrl) {
     await page.goto(input.editUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  } else if (!page.url().includes('/game/edit/')) {
+  } else if (!input.create && !page.url().includes('/game/edit/')) {
     const projectUrl = input.publicUrl.split('?')[0].replace(/\\/$/u, '');
     const projectLink = page.locator(\`a[href="\${projectUrl}"], a[href="\${projectUrl}/"]\`).first();
     const projectRow = page.locator('.game_row').filter({ has: projectLink }).first();
@@ -182,7 +233,7 @@ async (page) => {
     || (/log in|sign in/i.test(text) && !/edit game|edit project|uploads/i.test(text))) {
     return { status: 'login_required', url: page.url() };
   }
-  if (!page.url().includes('itch.io/game/edit/') && !/edit game|edit project/i.test(text)) {
+  if (!input.create && !page.url().includes('itch.io/game/edit/') && !/edit game|edit project/i.test(text)) {
     return { status: 'unexpected_page', url: page.url(), body: text.slice(0, 500) };
   }
 
@@ -193,6 +244,50 @@ async (page) => {
   changes.push(await fill('short_description', [
     page.locator('input[name="game[short_text]"]'),
   ], input.listing.short_description));
+  if (input.create) {
+    changes.push(await fill('slug', [
+      page.locator('input[name="game[url]"]'),
+      page.getByLabel(/project url/i),
+    ], input.slug));
+    const classification = await page.locator('input').evaluateAll((nodes) => {
+      const field = nodes.find((node) => node.name === 'game[classification]');
+      const widget = field?.selectize;
+      if (!widget) return { ok: false, reason: 'widget_not_found' };
+      widget.setValue('assets', true);
+      widget.updateOriginalInput({ silent: true });
+      return { ok: widget.getValue() === 'assets', value: widget.getValue() };
+    }).catch((error) => ({ ok: false, reason: String(error?.message || error).slice(0, 160) }));
+    if (!classification.ok) {
+      const selector = await firstVisible([page.getByText(/^Games .*piece of software/iu)]);
+      await selector?.click({ timeout: 5000 });
+      const option = await firstVisible([page.getByText(/^Game assets .*Graphics/iu)]);
+      await option?.click({ timeout: 5000 });
+    }
+    const classificationText = await bodyText();
+    changes.push({ name: 'classification', ok: classification.ok || /Game assets .*Graphics/iu.test(classificationText) });
+    changes.push({
+      name: 'kind',
+      ok: /Downloadable .*only have files/iu.test(classificationText),
+      reason: /Downloadable .*only have files/iu.test(classificationText) ? undefined : 'unexpected_default',
+    });
+    changes.push({
+      name: 'release_status',
+      ok: /Released .*Project is complete/iu.test(classificationText),
+      reason: /Released .*Project is complete/iu.test(classificationText) ? undefined : 'unexpected_default',
+    });
+    const aiDisclosure = await firstVisible([
+      page.getByRole('radio', { name: /Yes .*Generative AI/i }),
+      page.locator('input[name="game[ai_disclosure]"][value="yes"]'),
+    ]);
+    if (aiDisclosure) await aiDisclosure.check({ timeout: 5000 });
+    changes.push({ name: 'ai_disclosure', ok: Boolean(aiDisclosure) });
+    const draftVisibility = await firstVisible([
+      page.getByRole('radio', { name: /^Draft/iu }),
+      page.locator('input[name="game[published]"][value="draft"]'),
+    ]);
+    if (draftVisibility) await draftVisibility.check({ timeout: 5000 });
+    changes.push({ name: 'visibility', ok: Boolean(draftVisibility) });
+  }
   const paidButton = await firstVisible([
     page.locator('button.payment_mode_paid'),
     page.getByRole('button', { name: /^paid$/i }),
@@ -249,7 +344,10 @@ async (page) => {
   const missing = changes.filter((change) => !change.ok);
   if (missing.length) return { status: 'fields_not_found', url: page.url(), changes, missing };
   if (input.save) {
-    const saveButton = page.locator('form.game_edit_form button.save_btn').first();
+    const formAction = await page.locator('form.game_edit_form').first().getAttribute('action').catch(() => '');
+    const saveButton = input.create
+      ? page.getByRole('button', { name: /Save & view page/i }).first()
+      : page.locator('form.game_edit_form button.save_btn').first();
     if (!(await saveButton.count().catch(() => 0))) {
       return { status: 'save_not_found', url: page.url(), changes };
     }
@@ -264,7 +362,32 @@ async (page) => {
       return { status: 'save_failed', url: page.url(), httpStatus: response.status(), changes };
     }
     await wait(2500);
-    return { status: 'submitted', url: page.url(), httpStatus: response.status(), changes };
+    const savedUrl = page.url();
+    const savedEditUrl = formAction ? new URL(formAction, 'https://itch.io').toString() : input.editUrl;
+    const previewHref = await page.locator(
+      \`a[href*=".itch.io/\${input.slug}"]\`,
+    ).first().getAttribute('href').catch(() => '');
+    const savedPublicUrl = (() => {
+      for (const candidate of [savedUrl, previewHref, input.publicUrl]) {
+        try {
+          const parsed = new URL(candidate, savedUrl);
+          if (parsed.hostname.endsWith('.itch.io') && parsed.hostname !== 'itch.io') {
+            return parsed.toString();
+          }
+        } catch {
+          // Continue to the next candidate.
+        }
+      }
+      return input.publicUrl;
+    })();
+    return {
+      status: 'submitted',
+      url: savedUrl,
+      editUrl: savedEditUrl,
+      publicUrl: savedPublicUrl,
+      httpStatus: response.status(),
+      changes,
+    };
   }
   return { status: 'prepared', url: page.url(), changes };
 }`.trim();
@@ -327,6 +450,8 @@ export function buildVerifyRunCode({
   listing,
   screenshotCount,
   screenshotPath,
+  editUrl = '',
+  slug = '',
   expectedVisibility = 'draft',
 }) {
   return `
@@ -337,8 +462,13 @@ async (page) => {
     descriptionText: renderItchDescriptionText(listing.description),
     screenshotCount,
     screenshotPath,
+    editUrl,
+    slug,
     expectedVisibility,
   })};
+  if (input.editUrl && page.url().replace(/#.*$/u, '') !== input.editUrl.replace(/#.*$/u, '')) {
+    await page.goto(input.editUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  }
   await page.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(2500);
@@ -360,6 +490,10 @@ async (page) => {
     && expectedTags.every((tag) => actualTags.includes(tag));
   const coverId = await page.locator('input[name="game[cover_image_id]"]').first().inputValue().catch(() => '');
   const actualScreenshotCount = await page.locator('button.delete_screen_btn').count().catch(() => 0);
+  const slugValue = await page.locator('input[name="game[url]"]').first().inputValue().catch(() => '');
+  const classificationValue = await page.locator('input[name="game[classification]"]').first().inputValue().catch(() => '');
+  const aiDisclosure = await page.getByRole('radio', { name: /Yes .*Generative AI/i }).isChecked().catch(() => false);
+  const pageText = await page.locator('body').innerText().catch(() => '');
   const isDraft = await page.locator('input[name="game[published]"][value="draft"]').isChecked().catch(() => false);
   const isPublished = await page.locator('input[name="game[published]"][value="published"]').isChecked().catch(() => false);
   await page.screenshot({ path: input.screenshotPath, fullPage: true }).catch(() => {});
@@ -376,6 +510,11 @@ async (page) => {
     tags: tagsMatch,
     cover: Boolean(coverId),
     screenshots: actualScreenshotCount === input.screenshotCount,
+    slug: !input.slug || slugValue === input.slug,
+    classification: classificationValue === 'assets',
+    kind: /Downloadable .*only have files/iu.test(pageText),
+    release_status: /Released .*Project is complete/iu.test(pageText),
+    ai_disclosure: aiDisclosure,
     visibility: input.expectedVisibility === 'published' ? isPublished : isDraft,
   };
   return {
@@ -387,6 +526,9 @@ async (page) => {
     priceValue,
     paymentMode,
     actualTags,
+    slugValue,
+    classificationValue,
+    aiDisclosure,
     coverId,
     actualScreenshotCount,
   };
@@ -403,8 +545,9 @@ export async function stageItchDraft(options) {
   });
   const exportRoot = packaged.root;
   const { manifest, listing } = packaged;
-  const publicUrl = normalizeItchUrl(options.itchUrl).toString();
-  const target = butlerTargetFromUrl(publicUrl);
+  let publicUrl = String(options.itchUrl || '').trim();
+  if (publicUrl) publicUrl = normalizeItchUrl(publicUrl).toString();
+  let editUrl = String(options.itchEditUrl || '').trim();
   const downloadRoot = resolve(exportRoot, 'download');
   if (!existsSync(downloadRoot)) {
     throw new Error('The packaged buyer download directory is missing; run the package step first.');
@@ -437,17 +580,6 @@ export async function stageItchDraft(options) {
   const butlerExecutable = options.butlerExecutable
     || env.ITCH_BUTLER_EXECUTABLE
     || (existsSync(homeButler) ? homeButler : 'butler');
-  const butler = cliRunner(butlerExecutable, [
-    'push',
-    downloadRoot,
-    `${target}:assets`,
-    '--userversion',
-    `${manifest.target_version || product.version || 'review'}-${manifest.manifest_hash.slice(0, 12)}`,
-    '--if-changed',
-  ], { cwd: options.cwd, env, timeoutMs: 15 * 60_000 });
-  if (!butler.ok) {
-    throw new Error(`Butler could not stage the package: ${butler.stderr || butler.stdout || butler.error}`);
-  }
 
   const profileDir = expandHomeDirectory(
     options.profileDir || env.ITCH_PLAYWRIGHT_PROFILE || '~/.orion/playwright-profile-itch',
@@ -457,7 +589,7 @@ export async function stageItchDraft(options) {
   await mkdir(reviewRoot, { recursive: true });
   const executable = options.playwrightExecutable || env.PLAYWRIGHT_CLI || 'playwright-cli';
   const sessionName = options.sessionName || `orion-itch-${product.slug}`;
-  const openUrl = String(options.itchEditUrl || '').trim() || 'https://itch.io/dashboard';
+  const openUrl = editUrl || 'https://itch.io/dashboard';
   const openArgs = ['-s', sessionName, 'open', openUrl, '--browser', 'chrome', '--persistent', '--profile', profileDir, '--json'];
   if (options.headed !== false && env.ITCH_PLAYWRIGHT_HEADED !== 'false') openArgs.splice(-1, 0, '--headed');
 
@@ -513,11 +645,26 @@ async (page) => {
       throw new Error(`itch.io browser readiness failed: ${diagnostic(readiness)}`);
     }
 
+    let createProject = false;
+    if (!publicUrl) {
+      const discovery = runBrowserCode('project discovery', buildItchProjectDiscoveryRunCode({
+        slug: product.slug,
+      }), 3);
+      if (!['existing_project', 'new_project_form'].includes(discovery.details.status)) {
+        throw new Error(`itch.io project discovery failed (${discovery.details.status || 'unknown'}): ${diagnostic(discovery)}`);
+      }
+      publicUrl = normalizeItchUrl(discovery.details.publicUrl).toString();
+      editUrl = String(discovery.details.editUrl || '');
+      createProject = discovery.details.status === 'new_project_form';
+    }
+
     const prepareDraft = (save = false) => {
       const prepared = runBrowserCode('draft preparation', buildItchDraftRunCode({
         listing,
         publicUrl,
-        editUrl: String(options.itchEditUrl || '').trim(),
+        editUrl,
+        slug: product.slug,
+        create: createProject,
         save,
       }), 3);
       const expectedStatus = save ? 'submitted' : 'prepared';
@@ -568,12 +715,36 @@ async (page) => {
     if (!media.details.coverId || Number(media.details.screenshotCount) !== screenshotPaths.length) {
       throw new Error(`itch.io media did not settle before save: ${diagnostic(media)}`);
     }
-    prepareDraft(true);
+    const submitted = prepareDraft(true);
+    publicUrl = normalizeItchUrl(submitted.details.publicUrl || publicUrl).toString();
+    editUrl = String(
+      submitted.details.editUrl
+      || (String(submitted.details.url || '').includes('itch.io/game/edit/') ? submitted.details.url : '')
+      || editUrl,
+    );
+    if (createProject && !editUrl.includes('itch.io/game/edit/')) {
+      throw new Error(`itch.io did not return a canonical editor URL after save: ${diagnostic(submitted)}`);
+    }
+
+    const target = butlerTargetFromUrl(publicUrl);
+    const butler = cliRunner(butlerExecutable, [
+      'push',
+      downloadRoot,
+      `${target}:assets`,
+      '--userversion',
+      `${manifest.target_version || product.version || 'review'}-${manifest.manifest_hash.slice(0, 12)}`,
+      '--if-changed',
+    ], { cwd: options.cwd, env, timeoutMs: 15 * 60_000 });
+    if (!butler.ok) {
+      throw new Error(`Butler could not stage the package: ${butler.stderr || butler.stdout || butler.error}`);
+    }
 
     const verified = runBrowserCode('draft verification', buildVerifyRunCode({
       listing,
       screenshotCount: screenshotPaths.length,
       screenshotPath,
+      editUrl,
+      slug: product.slug,
     }), 3);
     const details = verified.details;
     if (details.status !== 'verified') {
@@ -588,7 +759,7 @@ async (page) => {
       manifest_hash: manifest.manifest_hash,
       listing_hash: listing.listing_hash,
       public_url: publicUrl,
-      edit_url: details.url,
+      edit_url: editUrl || details.url,
       butler_target: `${target}:assets`,
       package_root: relative(productRoot, exportRoot).replaceAll('\\', '/'),
       screenshot_path: screenshotPath,
