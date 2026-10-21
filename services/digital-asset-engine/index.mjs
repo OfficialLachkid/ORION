@@ -5,6 +5,7 @@ import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
 import { loadEngineConfig, resolveOutputRoot } from './src/config.mjs';
 import { postDigitalAssetReview } from './src/discord-review.mjs';
 import { postDigitalAssetDistributionReview } from './src/distribution-review.mjs';
+import { postMarketplaceSetupReview } from './src/marketplace-setup.mjs';
 import { updatePublishedItchDescription } from './src/itch-description-maintainer.mjs';
 import { generateEffectBatch } from './src/effect-batch.mjs';
 import { postEffectsDiscordReview } from './src/effect-discord-review.mjs';
@@ -65,6 +66,7 @@ function parseArguments(argv) {
     else if (token === '--expansion-plan') args.expansionPlan = argv[++index];
     else if (token === '--item-animation-plan') args.itemAnimationPlan = argv[++index];
     else if (token === '--release-version') args.releaseVersion = argv[++index];
+    else if (token === '--slug') args.slug = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
     else if (token === '--category-name') args.categoryName = argv[++index];
@@ -91,6 +93,7 @@ function printHelp() {
     '  discord-review  Create the pack review channel/thread and post previews.',
     '  seller-preflight  Verify itch.io payout mode and tax-interview readiness.',
     '  distribution-review  Reconcile the separate marketplace approval gate in Discord.',
+    '  marketplace-setup-review  Post or reconcile the separate itch.io draft-creation gate.',
     '  itch-publish  Publish and verify the separately approved itch.io release.',
     '  itch-slug  Migrate the verified public project URL and reconcile every stored target.',
     '  itch-theme-review  Generate a local theme candidate and post desktop/mobile previews.',
@@ -117,6 +120,7 @@ function printHelp() {
     `  --expansion-plan <path> Default: ${DEFAULT_EXPANSION_REVIEW}`,
     `  --item-animation-plan <path> Default: ${DEFAULT_ITEM_ANIMATION_BATCH}`,
     '  --release-version <semver>  Stage/review the latest immutable candidate for this version.',
+    '  --slug <product-slug>  Canonical product slug for marketplace setup reconciliation.',
     '  --output-root <path>  Override canonical product storage.',
     '  --now <ISO datetime>  Deterministic validation/testing time.',
     '  --execute             Required for image generation.',
@@ -145,14 +149,14 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension', 'prepare-expansion-review', 'prepare-expansion-release', 'expansion-review', 'interactive-items'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'marketplace-setup-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension', 'prepare-expansion-review', 'prepare-expansion-release', 'expansion-review', 'interactive-items'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects', 'interactive-items'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
   if (['package', 'prepare-extension', 'prepare-expansion-review', 'prepare-expansion-release'].includes(args.command) && !args.internalPreview) {
     throw new Error('Packaging unapproved candidates requires --internal-preview.');
   }
-  if (['discord-review', 'distribution-review', 'effects-review', 'itch-theme-review', 'expansion-review'].includes(args.command) && !args.postToDiscord) {
+  if (['discord-review', 'distribution-review', 'marketplace-setup-review', 'effects-review', 'itch-theme-review', 'expansion-review'].includes(args.command) && !args.postToDiscord) {
     throw new Error('Live Discord review posting requires --post-to-discord.');
   }
   if (args.command === 'itch-draft' && !args.stageItchDraft) {
@@ -170,8 +174,11 @@ async function main() {
   if (args.command === 'itch-description' && !args.updateItchDescription) {
     throw new Error('Live itch.io description maintenance requires --update-itch-description.');
   }
-  if (['itch-draft', 'discord-review'].includes(args.command) && !args.itchUrl) {
+  if (args.command === 'discord-review' && !args.itchUrl) {
     throw new Error(`${args.command} requires --itch-url for the existing itch.io draft.`);
+  }
+  if (args.command === 'marketplace-setup-review' && !args.slug) {
+    throw new Error('marketplace-setup-review requires --slug.');
   }
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
@@ -277,6 +284,17 @@ async function main() {
       runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
       outputRoot: resolveOutputRoot(config),
       slug: slugify(opportunity.title),
+      releaseVersion: args.releaseVersion,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);
+    return;
+  }
+  if (args.command === 'marketplace-setup-review') {
+    const result = await postMarketplaceSetupReview({
+      runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
+      outputRoot: resolveOutputRoot(config),
+      slug: args.slug,
       releaseVersion: args.releaseVersion,
       now: args.now,
     });

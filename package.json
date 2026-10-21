@@ -112,6 +112,7 @@
     "digital-assets:discord-review": "node services/digital-asset-engine/index.mjs discord-review",
     "digital-assets:seller-preflight": "node services/digital-asset-engine/index.mjs seller-preflight",
     "digital-assets:distribution-review": "node services/digital-asset-engine/index.mjs distribution-review",
+    "digital-assets:marketplace-setup-review": "node services/digital-asset-engine/index.mjs marketplace-setup-review",
     "digital-assets:itch-publish": "node services/digital-asset-engine/index.mjs itch-publish",
     "digital-assets:itch-slug": "node services/digital-asset-engine/index.mjs itch-slug",
     "digital-assets:itch-theme-review": "node services/digital-asset-engine/index.mjs itch-theme-review",

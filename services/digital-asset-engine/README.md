@@ -71,6 +71,20 @@ The overview message owns the single package gate: `Approve Pack`, `Request Chan
 
 Before a decision is stored, the live bot verifies the operator allowlist, overview message, populated itch.io listing hash, package manifest hash, and every exported asset hash against the canonical T7 files. It appends one atomic decision to `digital_asset_release_reviews`, including each asset's resulting outcome. This creative decision does not approve marketplace distribution.
 
+For a newly generated product that does not have an itch.io page yet, creative approval now creates a separate `Marketplace Setup Required` card in the same pack channel. `Create itch.io Draft` authorizes only this setup job: ORION discovers or creates the canonical project through the authenticated Playwright profile, pins it to downloadable game assets with AI disclosure and draft visibility, applies the generated listing and media, uploads the buyer package through Butler, and reads the result back. The job is durable on the T7 and is resumed after a bot restart if its worker was interrupted. Nothing is published by this action.
+
+Reconcile that card manually for a package that was approved before the bot deployed this workflow:
+
+```bash
+npm run digital-assets:marketplace-setup-review -- \
+  --post-to-discord \
+  --slug arcane-relics-potions \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env" \
+  --output-root "/Volumes/T7/O.R.I.O.N. Digital Assets"
+```
+
+After the draft, download, cover, screenshots, listing fields, price, and draft visibility are verified, ORION updates the setup card and posts the independent publication card. `Approve itch.io Publish` remains a separate manifest-bound decision; the setup button can never make the page public.
+
 After creative approval, verify the seller account and reconcile the separate distribution gate:
 
 ```bash

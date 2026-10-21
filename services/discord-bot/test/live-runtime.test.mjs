@@ -27,6 +27,7 @@ import {
   resolveInteractionApprovalOrigin,
   searchApprovalMessageInThreads,
   sendDiscordApiRequest,
+  scheduleMarketplaceSetupWorker,
   scheduleResearchGenerationWorker,
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
@@ -331,6 +332,25 @@ test('research generation worker is detached from the Discord interaction lifecy
   assert.equal(calls[0].command, process.execPath);
   assert.match(calls[0].args[0], /generation-worker\.mjs$/u);
   assert.deepEqual(calls[0].args.slice(1), ['--job', '/tmp/research/job.json']);
+  assert.equal(calls[0].options.detached, true);
+  assert.deepEqual(calls[1], { unref: true });
+});
+
+test('marketplace setup worker is detached from the Discord interaction lifecycle', () => {
+  const calls = [];
+  const scheduled = scheduleMarketplaceSetupWorker('/tmp/products/pack/review/marketplace-setup.json', {
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return { unref() { calls.push({ unref: true }); } };
+    },
+  });
+  assert.equal(scheduled, true);
+  assert.equal(calls[0].command, process.execPath);
+  assert.match(calls[0].args[0], /marketplace-setup-worker\.mjs$/u);
+  assert.deepEqual(calls[0].args.slice(1), [
+    '--state',
+    '/tmp/products/pack/review/marketplace-setup.json',
+  ]);
   assert.equal(calls[0].options.detached, true);
   assert.deepEqual(calls[1], { unref: true });
 });

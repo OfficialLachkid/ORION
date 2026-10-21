@@ -420,6 +420,7 @@ export async function recordDigitalAssetReviewDecision(options) {
   };
   return {
     row,
+    productSlug: context.product.slug,
     decision: reference,
     actor,
     channelId: context.reviewState.channel_id,
