@@ -87,6 +87,7 @@ import {
   recordMarketplaceSetupRequest,
   recoverMarketplaceSetupJobs,
 } from '../../digital-asset-engine/src/marketplace-setup.mjs';
+import { recoverItchPublicationJobs } from '../../digital-asset-engine/src/itch-publication-job.mjs';
 import {
   buildItchThemeFeedbackModal,
   buildItchThemeReviewEmbeds,
@@ -358,6 +359,27 @@ export function scheduleMarketplaceSetupWorker(statePath, options = {}) {
     return true;
   } catch (error) {
     process.stderr.write(`Could not start marketplace setup worker: ${error.message}\n`);
+    return false;
+  }
+}
+
+export function scheduleItchPublicationWorker(statePath, options = {}) {
+  if (!statePath) return false;
+  try {
+    const spawnImpl = options.spawnImpl || spawn;
+    const child = spawnImpl(
+      process.execPath,
+      [`${projectRoot}/services/digital-asset-engine/itch-publication-worker.mjs`, '--state', statePath],
+      {
+        cwd: projectRoot,
+        detached: true,
+        stdio: 'ignore',
+      },
+    );
+    child.unref();
+    return true;
+  } catch (error) {
+    process.stderr.write(`Could not start itch publication worker: ${error.message}\n`);
     return false;
   }
 }
@@ -1510,10 +1532,12 @@ export async function runLiveDiscordBot(config) {
               },
               failurePrefix: 'Distribution decision was not recorded',
               successContent: (decision) => decision.row.decision === 'approve_publish'
-                  ? 'Distribution approval recorded. The exact itch.io draft is authorized for the publish step.'
+                  ? 'Distribution approval recorded. Publication is queued for the exact verified itch.io draft.'
                   : 'The package will remain an itch.io draft.',
             });
             if (error) return;
+            const publicationScheduled = recorded.row.decision !== 'approve_publish'
+              || scheduleItchPublicationWorker(recorded.statePath);
             const currentMessage = await sendDiscordApiRequest(
               token,
               `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
@@ -1525,6 +1549,9 @@ export async function runLiveDiscordBot(config) {
               `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
               {
                 ...recorded.messagePatch,
+                ...(!publicationScheduled ? {
+                  content: 'Publication is durably approved, but its worker could not be started. It will be recovered after the next bot restart.',
+                } : {}),
                 embeds: buildDistributionReviewEmbeds(currentMessage?.embeds, recorded.state, recorded.actor),
               },
               'PATCH',
@@ -2869,6 +2896,20 @@ export async function runLiveDiscordBot(config) {
     }
   } catch (error) {
     process.stderr.write(`Marketplace setup recovery check failed: ${error.message}\n`);
+  }
+
+  try {
+    const recovery = await recoverItchPublicationJobs({
+      archiveRoot: String(config?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim(),
+      scheduleJob: (statePath) => scheduleItchPublicationWorker(statePath),
+    });
+    if (recovery.recovered.length > 0 || recovery.active.length > 0) {
+      process.stdout.write(
+        `Itch publication recovery: ${recovery.recovered.length} resumed, ${recovery.active.length} already active.\n`,
+      );
+    }
+  } catch (error) {
+    process.stderr.write(`Itch publication recovery check failed: ${error.message}\n`);
   }
 
   connect();

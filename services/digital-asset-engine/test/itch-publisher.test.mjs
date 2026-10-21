@@ -122,6 +122,7 @@ test('public verification requires title, price, buy action, and non-draft page'
     screenshotPath: '/tmp/public.png',
   });
   assert.match(code, /buy_action/u);
+  assert.ok(code.includes('a[href$="/purchase"]'));
   assert.match(code, /included_file/u);
   assert.match(code, /payment_options/u);
   assert.match(code, /not_draft_error/u);

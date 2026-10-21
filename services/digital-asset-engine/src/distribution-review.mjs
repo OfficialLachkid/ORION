@@ -435,13 +435,15 @@ export async function recordDigitalAssetDistributionDecision(options) {
     decided_at: decidedAt,
     discord_interaction_id: row.discord_interaction_id,
   };
-  await writeFile(resolve(productRoot, 'review', 'distribution.json'), `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  const statePath = resolve(productRoot, 'review', 'distribution.json');
+  await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
   return {
     row,
     actor,
     state,
     channelId: state.channel_id,
     messageId: state.discord_message_id,
+    statePath,
     messagePatch: {
       components: [{
         type: ACTION_ROW,
