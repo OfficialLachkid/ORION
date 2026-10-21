@@ -32,13 +32,18 @@ function link(label, url) {
 }
 
 function reviewComponents(state) {
-  return [{
-    type: ACTION_ROW,
-    components: [
+  const pageLabel = state.storefront_stage === 'draft' ? 'Open itch.io Draft' : 'Open Public Page';
+  const controls = [];
+  if (state.status === 'awaiting_approval') {
+    controls.push(
       { type: BUTTON, style: BUTTON_SUCCESS, label: 'Approve Theme', custom_id: customId('a', state) },
       { type: BUTTON, style: BUTTON_SECONDARY, label: 'Request Theme Changes', custom_id: customId('r', state) },
-      link('Open Public Page', state.public_url),
-    ],
+    );
+  }
+  controls.push(link(pageLabel, state.public_url));
+  return [{
+    type: ACTION_ROW,
+    components: controls,
   }];
 }
 
@@ -60,10 +65,10 @@ export function buildItchThemeReviewEmbeds(state, decision = null, actor = null)
   const status = applied ? 'APPLIED AND VERIFIED' : approved ? 'APPROVED' : changes ? 'CHANGES REQUESTED' : 'APPROVAL REQUIRED';
   const color = applied || approved ? 0x57f287 : changes ? 0xfee75c : 0x5865f2;
   const outcome = applied
-    ? `[The live itch.io theme](${state.public_url}) was saved and verified on desktop and mobile.`
+    ? `[The itch.io ${state.storefront_stage === 'draft' ? 'draft' : 'page'} theme](${state.public_url}) was saved and verified on desktop and mobile.`
     : actor
       ? `${approved ? 'Approved' : 'Changes requested'} by ${actor.displayName}.`
-      : 'This is a non-public browser simulation. The live page is unchanged until approval and the explicit apply step.';
+      : `This is a local browser simulation. The itch.io ${state.storefront_stage === 'draft' ? 'draft' : 'page'} is unchanged until approval; approval queues application automatically.`;
   return [
     {
       title: `${state.product_title || 'Storefront Theme'} · THEME ${status}`,
@@ -104,14 +109,22 @@ export async function postItchThemeReview(options) {
   try { previous = await readJson(statePath); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
   const state = {
     ...candidate,
-    status: 'awaiting_approval',
+    status: previous?.theme_hash === candidate.theme_hash && ['approved', 'applied'].includes(previous.status)
+      ? previous.status
+      : 'awaiting_approval',
     channel_id: discordState.channel_id,
     discord_message_id: previous?.discord_message_id || null,
     posted_at: options.now || new Date().toISOString(),
+    ...(previous?.theme_hash === candidate.theme_hash && previous.last_decision
+      ? { last_decision: previous.last_decision }
+      : {}),
+    ...(previous?.theme_hash === candidate.theme_hash && previous.application
+      ? { application: previous.application }
+      : {}),
   };
   const candidateRoot = resolve(productRoot, candidate.candidate_path);
   const message = await sendMessageWithFiles(token, state.channel_id, {
-    content: 'Storefront theme review. These screenshots are staged locally; the public itch.io page has not been changed.',
+    content: `Storefront theme review. These screenshots are staged locally; the itch.io ${state.storefront_stage === 'draft' ? 'draft' : 'page'} has not been changed.`,
     embeds: buildItchThemeReviewEmbeds(state),
     components: reviewComponents(state),
   }, [
@@ -280,9 +293,12 @@ export async function markItchThemeApplied(options) {
   return discordRequest(token, `/channels/${state.channel_id}/messages/${state.discord_message_id}`, {
     method: 'PATCH',
     body: {
-      content: 'Storefront theme applied and verified on the public itch.io page.',
+      content: `Storefront theme applied and verified on the itch.io ${state.storefront_stage === 'draft' ? 'draft' : 'page'}.`,
       embeds: buildItchThemeReviewEmbeds(state),
-      components: [{ type: ACTION_ROW, components: [link('Open Public Page', state.public_url)] }],
+      components: [{
+        type: ACTION_ROW,
+        components: [link(state.storefront_stage === 'draft' ? 'Open itch.io Draft' : 'Open Public Page', state.public_url)],
+      }],
       attachments: current.attachments,
     },
     fetchImpl: options.fetchImpl,

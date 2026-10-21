@@ -84,6 +84,7 @@ import {
 import {
   isMarketplaceSetupInteraction,
   postMarketplaceSetupReview,
+  queueMarketplaceSetupAfterThemeApproval,
   recordMarketplaceSetupRequest,
   recoverMarketplaceSetupJobs,
 } from '../../digital-asset-engine/src/marketplace-setup.mjs';
@@ -1439,10 +1440,20 @@ export async function runLiveDiscordBot(config) {
               },
               failurePrefix: 'Theme decision was not recorded',
               successContent: (decision) => decision.row.decision === 'approve'
-                  ? 'Theme approval recorded. The exact preview is authorized for the explicit apply step.'
+                  ? 'Theme approval recorded. Draft workflows queue the exact theme for application and verification automatically.'
                   : 'Theme changes requested. The public itch.io page remains unchanged.',
             });
             if (error) return;
+            let continuation = null;
+            let workerScheduled = false;
+            if (recorded.row.decision === 'approve') {
+              continuation = await queueMarketplaceSetupAfterThemeApproval({
+                archiveRoot: String(config?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim(),
+                themeDecision: recorded,
+              });
+              workerScheduled = continuation?.reused === true
+                || scheduleMarketplaceSetupWorker(continuation?.statePath);
+            }
             const currentMessage = await sendDiscordApiRequest(
               token,
               `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
@@ -1459,6 +1470,17 @@ export async function runLiveDiscordBot(config) {
               },
               'PATCH',
             );
+            if (continuation && !continuation.reused) {
+              await sendDiscordApiRequest(
+                token,
+                `/channels/${continuation.channelId}/messages/${continuation.messageId}`,
+                workerScheduled ? continuation.messagePatch : {
+                  ...continuation.messagePatch,
+                  content: 'Theme application is durably queued, but its worker could not be started. It will be recovered after the next bot restart.',
+                },
+                'PATCH',
+              );
+            }
             return;
           }
 

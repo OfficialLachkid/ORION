@@ -7,6 +7,7 @@ import {
   buildMarketplaceSetupComponents,
   isMarketplaceSetupInteraction,
   postMarketplaceSetupReview,
+  queueMarketplaceSetupAfterThemeApproval,
   recordMarketplaceSetupRequest,
   recoverMarketplaceSetupJobs,
   runMarketplaceSetupJob,
@@ -162,7 +163,7 @@ test('authorized Discord request queues a manifest-bound marketplace job', async
   assert.equal(recorded.messagePatch.components[0].components[0].label, 'Open Manifest');
 });
 
-test('marketplace worker stages, verifies seller state, and posts the separate publication gate', async () => {
+test('marketplace worker stages the draft, pauses for theme approval, then applies and posts publication gate', async () => {
   const fixture = await createFixture();
   const setupPath = resolve(fixture.productRoot, 'review', 'marketplace-setup.json');
   await writeFile(setupPath, JSON.stringify({
@@ -181,23 +182,13 @@ test('marketplace worker stages, verifies seller state, and posts the separate p
     discord_message_id: 'setup-message-1',
     manifest_url: 'https://discord.com/channels/guild-1/channel-1/review-message-1',
   }));
-  const result = await runMarketplaceSetupJob({
+  let sellerChecks = 0;
+  let distributionPosts = 0;
+  const common = {
     statePath: setupPath,
     outputRoot: fixture.outputRoot,
     runtimeConfig: runtimeConfig(),
     store: fixture.store,
-    stageDraft: async () => ({
-      public_url: 'https://vbjservices.itch.io/arcane-relics-potions?secret=review',
-      edit_url: 'https://itch.io/game/edit/12345',
-      butler_target: 'vbjservices/arcane-relics-potions:assets',
-      staged_at: '2026-10-21T08:10:00.000Z',
-    }),
-    inspectSeller: async () => ({ status: 'ready' }),
-    postDistribution: async () => ({
-      channel_id: 'channel-1',
-      discord_message_id: 'distribution-message-1',
-      seller_ready: true,
-    }),
     fetchImpl: async () => ({
       ok: true,
       status: 200,
@@ -205,9 +196,81 @@ test('marketplace worker stages, verifies seller state, and posts the separate p
       async text() { return ''; },
     }),
     now: '2026-10-21T08:10:00.000Z',
+  };
+  const staged = await runMarketplaceSetupJob({
+    ...common,
+    stageDraft: async () => ({
+      public_url: 'https://vbjservices.itch.io/arcane-relics-potions?secret=review',
+      edit_url: 'https://itch.io/game/edit/12345',
+      butler_target: 'vbjservices/arcane-relics-potions:assets',
+      staged_at: '2026-10-21T08:10:00.000Z',
+    }),
+    prepareTheme: async () => ({
+      theme_hash: 'c'.repeat(64),
+      product_slug: fixture.product.slug,
+      manifest_hash: manifestHash,
+      listing_hash: listingHash,
+    }),
+    postTheme: async (options) => ({
+      ...options.candidate,
+      status: 'awaiting_approval',
+      channel_id: 'channel-1',
+      discord_message_id: 'theme-message-1',
+    }),
+    inspectSeller: async () => { sellerChecks += 1; return { status: 'ready' }; },
+    postDistribution: async () => {
+      distributionPosts += 1;
+      return {
+        channel_id: 'channel-1',
+        discord_message_id: 'distribution-message-1',
+        seller_ready: true,
+      };
+    },
+  });
+  assert.equal(staged.status, 'awaiting_theme_approval');
+  assert.equal(staged.theme_hash, 'c'.repeat(64));
+  assert.equal(sellerChecks, 0);
+  assert.equal(distributionPosts, 0);
+
+  const continuation = await queueMarketplaceSetupAfterThemeApproval({
+    archiveRoot: fixture.outputRoot,
+    themeDecision: {
+      row: { decision: 'approve', decided_at: '2026-10-21T08:11:00.000Z' },
+      state: {
+        status: 'approved',
+        product_slug: fixture.product.slug,
+        manifest_hash: manifestHash,
+        listing_hash: listingHash,
+        theme_hash: 'c'.repeat(64),
+      },
+    },
+    now: '2026-10-21T08:11:00.000Z',
+  });
+  assert.equal(continuation.state.phase, 'apply_theme');
+
+  const result = await runMarketplaceSetupJob({
+    ...common,
+    applyTheme: async () => ({
+      status: 'verified_applied',
+      theme_hash: 'c'.repeat(64),
+      statePath: resolve(fixture.productRoot, 'review', 'itch-theme-release.json'),
+      themeStatePath: resolve(fixture.productRoot, 'review', 'itch-theme.json'),
+    }),
+    markThemeApplied: async () => ({ id: 'theme-message-1' }),
+    inspectSeller: async () => { sellerChecks += 1; return { status: 'ready' }; },
+    postDistribution: async () => {
+      distributionPosts += 1;
+      return {
+        channel_id: 'channel-1',
+        discord_message_id: 'distribution-message-1',
+        seller_ready: true,
+      };
+    },
   });
   assert.equal(result.status, 'completed');
   assert.equal(result.distribution_message_id, 'distribution-message-1');
+  assert.equal(sellerChecks, 1);
+  assert.equal(distributionPosts, 1);
   const discordState = JSON.parse(await readFile(resolve(fixture.productRoot, 'review', 'discord.json'), 'utf8'));
   assert.equal(discordState.marketplace_review_mode, 'draft');
   assert.match(discordState.itch_url, /secret=review/u);
@@ -234,4 +297,36 @@ test('startup recovery requeues an interrupted marketplace setup worker', async 
   const state = JSON.parse(await readFile(path, 'utf8'));
   assert.equal(state.status, 'queued');
   assert.equal(state.recovery_count, 1);
+});
+
+test('startup recovery resumes an approved theme that was not yet applied', async () => {
+  const fixture = await createFixture();
+  const path = resolve(fixture.productRoot, 'review', 'marketplace-setup.json');
+  await Promise.all([
+    writeFile(path, JSON.stringify({
+      status: 'awaiting_theme_approval',
+      phase: 'theme_review',
+      product_slug: fixture.product.slug,
+      manifest_hash: manifestHash,
+      listing_hash: listingHash,
+      theme_hash: 'c'.repeat(64),
+    })),
+    writeFile(resolve(fixture.productRoot, 'review', 'itch-theme.json'), JSON.stringify({
+      status: 'approved',
+      manifest_hash: manifestHash,
+      listing_hash: listingHash,
+      theme_hash: 'c'.repeat(64),
+    })),
+  ]);
+  const scheduled = [];
+  const report = await recoverMarketplaceSetupJobs({
+    archiveRoot: fixture.outputRoot,
+    scheduleJob(statePath) { scheduled.push(statePath); return true; },
+    now: '2026-10-21T08:20:00.000Z',
+  });
+  assert.equal(report.recovered.length, 1);
+  assert.deepEqual(scheduled, [path]);
+  const state = JSON.parse(await readFile(path, 'utf8'));
+  assert.equal(state.status, 'queued');
+  assert.equal(state.phase, 'apply_theme');
 });

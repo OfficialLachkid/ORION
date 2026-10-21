@@ -1,4 +1,5 @@
 import { createStableId } from './ids.mjs';
+import { resolveAssetRecipe } from './asset-recipe-registry.mjs';
 import { ProductSpecificationSchema } from './schemas.mjs';
 
 export function slugify(value) {
@@ -73,6 +74,7 @@ export function createProductSpecification(validation, config, options = {}) {
       alpha_mode: asset.alpha_mode,
       alpha_palette: asset.alpha_palette,
       alpha_tolerance: asset.alpha_tolerance,
+      production_recipe: resolveAssetRecipe(asset.kind),
       seed: (opportunity.generation.seed ?? config.generation.seed) + index,
       status: 'planned',
       source_path: null,
