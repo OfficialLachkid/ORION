@@ -231,13 +231,19 @@ async function generateTome(context, services) {
   } = context;
   const { frames: pulses, isolation } = await pulseFrames(baseBuffer, detection, [0, 0.28, 0.64, 0.88, 0.42]);
   const empty = await transparentFrame(canvas);
+  const tomeBounds = await detectOpaqueObjectAnchor(baseBuffer);
+  const auraGeometry = {
+    center: tomeBounds.anchor,
+    radiusX: Math.round((tomeBounds.bounds.width / 2) + 8),
+    radiusY: Math.round((tomeBounds.bounds.height / 2) + 8),
+  };
   const auraIntensities = [0, 0.48, 0.72, 1, 0.58];
   const auras = await Promise.all(auraIntensities.map((intensity, index) => createArcaneAuraFrame(
     baseBuffer,
     detection,
     intensity,
     index,
-    { maxPaletteColors: plan.style.max_palette_colors },
+    { ...auraGeometry, maxPaletteColors: plan.style.max_palette_colors },
   )));
   const awakenedFrames = await Promise.all(pulses.map((pulse, index) => compositeItemFrame(
     pulse.compositeBuffer,
@@ -270,6 +276,7 @@ async function generateTome(context, services) {
       energy_region: detection.report,
       pulse_isolation: isolation,
       awakened_aura: auras.map((frame) => frame.report),
+      awakened_aura_geometry: auraGeometry,
       identity_preservation: item.replacement_base_description
         ? 'local_model_replacement_base_bound_to_human_review'
         : 'approved_base_only_no_model_redraw',

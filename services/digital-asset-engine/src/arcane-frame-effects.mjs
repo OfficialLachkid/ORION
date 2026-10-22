@@ -182,7 +182,7 @@ export async function orientSmokeAboveWick(effectBuffer, wick, options = {}) {
 export async function createArcaneAuraFrame(baseBuffer, detection, intensity, phase, options = {}) {
   const output = Buffer.from(detection.decoded.data);
   const overlay = Buffer.alloc(output.length);
-  const center = primaryComponent(detection).centroid;
+  const center = options.center || primaryComponent(detection).centroid;
   if (intensity <= 0) {
     return {
       compositeBuffer: await encode(output, detection.decoded.info, options.maxPaletteColors),
@@ -190,10 +190,11 @@ export async function createArcaneAuraFrame(baseBuffer, detection, intensity, ph
       report: { strategy: 'broken_arcane_aura_ring', intensity, phase, center },
     };
   }
-  const radiusX = Math.max(10, Math.round((options.radiusX ?? 18) * intensity));
-  const radiusY = Math.max(8, Math.round((options.radiusY ?? 14) * intensity));
+  const radiusScale = 0.72 + (intensity * 0.28);
+  const radiusX = Math.max(10, Math.round((options.radiusX ?? 18) * radiusScale));
+  const radiusY = Math.max(8, Math.round((options.radiusY ?? 14) * radiusScale));
   const colors = [[68, 198, 191, 255], [185, 255, 241, 255], [180, 129, 209, 255]];
-  const points = Math.max(8, Math.round(18 * intensity));
+  const points = Math.max(10, Math.round(12 + (10 * intensity)));
   for (let index = 0; index < points; index += 1) {
     if ((index + phase) % 4 === 3) continue;
     const angle = ((Math.PI * 2 * index) / points) + (phase * 0.32);
