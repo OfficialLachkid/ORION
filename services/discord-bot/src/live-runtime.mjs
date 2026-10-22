@@ -84,9 +84,12 @@ import {
 import {
   buildDistributionReviewEmbeds,
   isDigitalAssetDistributionInteraction,
-  postDigitalAssetDistributionReview,
   recordDigitalAssetDistributionDecision,
 } from '../../digital-asset-engine/src/distribution-review.mjs';
+import {
+  queueDigitalAssetDistributionPreparation,
+  recoverDigitalAssetDistributionPreparationJobs,
+} from '../../digital-asset-engine/src/distribution-preparation-job.mjs';
 import {
   isMarketplaceSetupInteraction,
   postMarketplaceSetupReview,
@@ -433,6 +436,27 @@ export function scheduleItchPublicationWorker(statePath, options = {}) {
     return true;
   } catch (error) {
     process.stderr.write(`Could not start itch publication worker: ${error.message}\n`);
+    return false;
+  }
+}
+
+export function scheduleDigitalAssetDistributionPreparationWorker(statePath, options = {}) {
+  if (!statePath) return false;
+  try {
+    const spawnImpl = options.spawnImpl || spawn;
+    const child = spawnImpl(
+      process.execPath,
+      [`${projectRoot}/services/digital-asset-engine/distribution-preparation-worker.mjs`, '--state', statePath],
+      {
+        cwd: projectRoot,
+        detached: true,
+        stdio: 'ignore',
+      },
+    );
+    child.unref();
+    return true;
+  } catch (error) {
+    process.stderr.write(`Could not start digital asset distribution preparation worker: ${error.message}\n`);
     return false;
   }
 }
@@ -1808,12 +1832,14 @@ export async function runLiveDiscordBot(config) {
                   slug: recorded.productSlug,
                 });
               } else if (recorded.nextAction === 'distribution_review') {
-                await postDigitalAssetDistributionReview({
-                  runtimeConfig: config,
+                const continuation = await queueDigitalAssetDistributionPreparation({
                   outputRoot: config.env.DIGITAL_ASSET_ARCHIVE_ROOT,
                   slug: recorded.productSlug,
                   releaseVersion: recorded.releaseVersion,
                 });
+                if (!continuation.reused) {
+                  scheduleDigitalAssetDistributionPreparationWorker(continuation.statePath);
+                }
               }
             } catch (error) {
               process.stderr.write(
@@ -3051,6 +3077,20 @@ export async function runLiveDiscordBot(config) {
     }
   } catch (error) {
     process.stderr.write(`Marketplace setup recovery check failed: ${error.message}\n`);
+  }
+
+  try {
+    const recovery = await recoverDigitalAssetDistributionPreparationJobs({
+      archiveRoot: String(config?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim(),
+      scheduleJob: (statePath) => scheduleDigitalAssetDistributionPreparationWorker(statePath),
+    });
+    if (recovery.recovered.length > 0 || recovery.active.length > 0) {
+      process.stdout.write(
+        `Digital asset distribution preparation recovery: ${recovery.recovered.length} resumed, ${recovery.active.length} already active.\n`,
+      );
+    }
+  } catch (error) {
+    process.stderr.write(`Digital asset distribution preparation recovery check failed: ${error.message}\n`);
   }
 
   try {
