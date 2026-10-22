@@ -280,7 +280,7 @@ test('edge-anchored recipe effects retain a drawable preprocessing area', async 
   const canvas = { width: 96, height: 96 };
   const target = { x: 92, y: 48 };
   const padding = boundedEffectPadding(canvas, target);
-  assert.equal(padding, 47);
+  assert.equal(padding, 24);
   assert.equal((canvas.width - (padding * 2)) > 0, true);
   assert.equal((canvas.height - (padding * 2)) > 0, true);
 });

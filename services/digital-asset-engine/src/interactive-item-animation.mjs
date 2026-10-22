@@ -268,7 +268,10 @@ export function boundedEffectPadding(canvas, targetOrigin) {
     Math.abs(targetOrigin.y - center.y),
   )) : 0;
   const desired = Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.12)) + anchorReserve;
-  const maximum = Math.max(0, Math.floor((Math.min(canvas.width, canvas.height) - 2) / 2));
+  // Retain at least half of the source canvas for palette/detail extraction.
+  // Extreme edge anchors are handled by the compact alignment retries below,
+  // rather than by collapsing the generated source to only a few pixels.
+  const maximum = Math.max(0, Math.floor(Math.min(canvas.width, canvas.height) / 4));
   return Math.min(desired, maximum);
 }
 
@@ -298,7 +301,7 @@ async function generateIsolatedEffect({ adapter, config, item, plan, canvas, pro
     : { buffer: processed.buffer, report: null };
   if (aligned.report && !aligned.report.passed) {
     const detectedOrigin = aligned.report.detected_origin;
-    for (const scale of [0.78, 0.62, 0.48]) {
+    for (const scale of [0.78, 0.62, 0.48, 0.32, 0.22, 0.16]) {
       const compact = await derivePixelArtEffectFrame(processed.buffer, {
         scale,
         opacity: 1,
