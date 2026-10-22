@@ -402,10 +402,14 @@ export async function recordAssetExpansionReviewDecision(options) {
   if (unknown.length) throw new Error(`Unknown expansion assets selected: ${unknown.join(', ')}.`);
   const affected = new Set(decision.affectedAssetIds);
   const reviewer = options.interaction?.member?.user || options.interaction?.user || {};
+  const baseReleaseId = String(context.manifest.base_release_id || '').trim();
+  if (!baseReleaseId) {
+    throw new Error('The immutable expansion manifest has no base release ID. Regenerate the review candidate before deciding.');
+  }
   const row = {
     product_id: context.manifest.product_id,
     expansion_id: context.manifest.expansion_id,
-    base_release_id: context.manifest.base_release_id,
+    base_release_id: baseReleaseId,
     target_version: context.manifest.target_version,
     manifest_hash: context.manifest.manifest_hash,
     decision: decision.decision,

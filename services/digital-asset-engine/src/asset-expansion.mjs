@@ -12,6 +12,16 @@ function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function expansionBaseReleaseId(manifest) {
+  const explicitReleaseId = String(manifest?.release_id || '').trim();
+  if (explicitReleaseId) return explicitReleaseId;
+  const manifestHash = String(manifest?.manifest_hash || '').trim();
+  if (!/^[a-f0-9]{64}$/u.test(manifestHash)) {
+    throw new Error('Expansion base manifest needs a release ID or a valid manifest hash.');
+  }
+  return `asset-release-${manifestHash.slice(0, 24)}`;
+}
+
 function normalizePath(value) {
   return value.replaceAll('\\', '/');
 }
@@ -236,6 +246,7 @@ export async function prepareAssetExpansionReview(options) {
   if (base.manifest.manifest_hash !== plan.base_manifest_hash) {
     throw new Error('Expansion plan targets a different immutable base release.');
   }
+  const baseReleaseId = expansionBaseReleaseId(base.manifest);
   const selected = [];
   for (const request of plan.assets) {
     const existingAsset = product.assets.find((asset) => asset.asset_key === request.target_asset_key);
@@ -307,7 +318,7 @@ export async function prepareAssetExpansionReview(options) {
   const inputHash = sha256(Buffer.from(JSON.stringify({
     plan,
     product_id: product.product_id,
-    base_release_id: base.manifest.release_id,
+    base_release_id: baseReleaseId,
     assets: selected.map(({ buffer, animation, ...asset }) => ({
       ...asset,
       animation: animation ? {
@@ -360,7 +371,7 @@ export async function prepareAssetExpansionReview(options) {
     title: plan.title,
     base_version: plan.base_version,
     target_version: plan.target_version,
-    base_release_id: base.manifest.release_id,
+    base_release_id: baseReleaseId,
     base_manifest_hash: base.manifest.manifest_hash,
     input_hash: inputHash,
     expansion_review_version: EXPANSION_REVIEW_VERSION,

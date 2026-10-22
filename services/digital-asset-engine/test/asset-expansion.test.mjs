@@ -189,7 +189,7 @@ test('reviews animations as enhancements of existing asset identities on an init
   }));
   await write(resolve(setup.productRoot, 'exports/itch-preview/manifest.json'), JSON.stringify({
     release_state: 'internal_preview', distribution_ready: false, product_version: '0.1.0',
-    release_id: 'asset-release-initial', manifest_hash: setup.plan.base_manifest_hash,
+    manifest_hash: setup.plan.base_manifest_hash,
     listing_hash: 'e'.repeat(64), files: [],
   }));
   await write(resolve(setup.productRoot, 'exports/itch-preview/itch-listing-preview.json'), JSON.stringify({
@@ -221,6 +221,7 @@ test('reviews animations as enhancements of existing asset identities on an init
     plan: setup.plan,
     now: '2026-10-22T10:00:00.000Z',
   });
+  assert.equal(prepared.manifest.base_release_id, `asset-release-${setup.plan.base_manifest_hash.slice(0, 24)}`);
   assert.equal(prepared.manifest.new_asset_count, 0);
   assert.equal(prepared.manifest.enhanced_asset_count, 1);
   assert.equal(prepared.manifest.assets[0].operation, 'enhance_existing');
@@ -234,6 +235,51 @@ test('reviews animations as enhancements of existing asset identities on an init
     reviewMode: 'enhancement',
   });
   assert.equal(components[0].components[0].label, 'Approve Animation Upgrade');
+  const statePath = resolve(
+    setup.productRoot, 'extensions', setup.plan.expansion_id, 'review', 'discord.json',
+  );
+  await write(statePath, JSON.stringify({
+    product_slug: canonical.slug,
+    expansion_id: setup.plan.expansion_id,
+    manifest_hash: prepared.manifest.manifest_hash,
+    package_root: prepared.candidateRoot.slice(setup.productRoot.length + 1).replaceAll('\\', '/'),
+    channel_id: 'channel-1',
+    overview_message_id: 'overview-1',
+    thread_id: 'thread-1',
+    asset_messages: {},
+  }));
+  const decision = await recordAssetExpansionReviewDecision({
+    interaction: {
+      id: 'initial-release-upgrade-approval',
+      type: 3,
+      guild_id: 'guild-1',
+      channel_id: 'channel-1',
+      data: { custom_id: components[0].components[0].custom_id },
+      message: { id: 'overview-1' },
+      member: { roles: ['operator-role'], user: { id: 'reviewer-1' } },
+    },
+    config: {
+      guildId: 'guild-1',
+      operatorRoleId: 'operator-role',
+      operatorUserIds: [],
+      env: {
+        DIGITAL_ASSET_ARCHIVE_ROOT: setup.outputRoot,
+        SUPABASE_URL: 'https://project.supabase.co',
+        SUPABASE_SECRET_KEY: 'secret',
+      },
+    },
+    async fetchImpl(_url, options) {
+      assert.equal(
+        JSON.parse(options.body).base_release_id,
+        `asset-release-${setup.plan.base_manifest_hash.slice(0, 24)}`,
+      );
+      return { ok: true, status: 201, async text() { return '[]'; } };
+    },
+  });
+  assert.equal(
+    decision.row.base_release_id,
+    `asset-release-${setup.plan.base_manifest_hash.slice(0, 24)}`,
+  );
 });
 
 test('reviews a replacement base without mutating the existing asset identity or public release', async () => {
