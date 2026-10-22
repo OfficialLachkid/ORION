@@ -1,11 +1,12 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { basename, isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, relative, resolve } from 'node:path';
 import {
   buildDigitalAssetReviewModal,
   buildResolvedDigitalAssetReviewComponents,
   getDigitalAssetReviewModalRequest,
   parseDigitalAssetReviewDecision,
 } from './review-components.mjs';
+import { resolveReviewedReleaseAssets } from './release-asset-inventory.mjs';
 
 const DECISION_TABLE = 'digital_asset_release_reviews';
 const DECISION_COLORS = Object.freeze({
@@ -88,14 +89,6 @@ function resolveArchiveRoot(options, config) {
   const root = String(options.archiveRoot || config?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim();
   if (!root) throw new Error('DIGITAL_ASSET_ARCHIVE_ROOT is required for digital asset review decisions.');
   return resolve(root);
-}
-
-function exportedAssetHash(manifest, asset) {
-  const filename = basename(asset.final_path);
-  return manifest.files?.find((file) => (
-    file.path === `assets/individual/${filename}`
-    || file.path.endsWith(`/assets/individual/${filename}`)
-  ))?.content_sha256;
 }
 
 function resolveInside(rootPath, candidatePath, label) {
@@ -241,13 +234,41 @@ async function loadReviewContext({ archiveRoot, reference, interaction }) {
     throw new Error('The Discord message does not match the canonical package review message.');
   }
   const assets = [];
-  for (const asset of product.assets) {
-    const validation = await readJson(resolve(productRoot, asset.validation_path));
-    const assetHash = String(validation?.metrics?.content_sha256 || '');
-    if (!/^[a-f0-9]{64}$/u.test(assetHash) || exportedAssetHash(manifest, asset) !== assetHash) {
+  for (const asset of resolveReviewedReleaseAssets(product, manifest)) {
+    const canonicalAsset = asset.canonical_asset;
+    const canonicalHash = canonicalAsset
+      ? String((await readJson(resolve(productRoot, canonicalAsset.validation_path)))?.metrics?.content_sha256 || '')
+      : null;
+    if (canonicalAsset && !/^[a-f0-9]{64}$/u.test(canonicalHash)) {
+      throw new Error(`The canonical hash for ${asset.asset_id} is invalid.`);
+    }
+    if (asset.content_origin === 'canonical' && canonicalHash !== asset.content_sha256) {
       throw new Error(`The canonical hash for ${asset.asset_id} does not match the reviewed export.`);
     }
-    assets.push({ ...asset, asset_hash: assetHash });
+    if (asset.content_origin === 'replacement') {
+      const replacement = (manifest.expansion_assets || []).find((entry) => (
+        entry.asset_id === asset.asset_id
+        && entry.operation === 'replace_existing'
+        && entry.content_sha256 === asset.content_sha256
+      ));
+      const inventoryReplacement = (manifest.asset_inventory || []).find((entry) => (
+        entry.asset_id === asset.asset_id
+        && entry.content_origin === 'replacement'
+        && entry.content_sha256 === asset.content_sha256
+        && /^[a-f0-9]{64}$/u.test(String(entry.origin_manifest_hash || ''))
+      ));
+      if ((!replacement && !inventoryReplacement)
+        || manifest.gates?.expansion_review_approved !== true
+        || !/^[a-f0-9]{64}$/u.test(String(manifest.expansion_manifest_hash || ''))) {
+        throw new Error(`The replacement hash for ${asset.asset_id} lacks approved expansion provenance.`);
+      }
+    }
+    if (asset.content_origin === 'addition'
+      && (manifest.gates?.expansion_review_approved !== true
+        || !/^[a-f0-9]{64}$/u.test(String(manifest.expansion_manifest_hash || '')))) {
+      throw new Error(`The added asset ${asset.asset_id} lacks approved expansion provenance.`);
+    }
+    assets.push({ ...asset, canonical_asset: undefined, asset_hash: asset.content_sha256 });
   }
   return {
     productRoot,

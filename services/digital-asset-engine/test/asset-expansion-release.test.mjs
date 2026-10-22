@@ -373,6 +373,11 @@ test('builds a generic animated update from an initial public release without du
   assert.equal(result.manifest.asset_count, 1);
   assert.equal(result.manifest.replaced_asset_count, 1);
   assert.equal(result.manifest.added_asset_count, 0);
+  assert.equal(result.manifest.asset_inventory.length, 1);
+  assert.equal(result.manifest.asset_inventory[0].asset_id, 'asset-spell-tome');
+  assert.equal(result.manifest.asset_inventory[0].content_origin, 'replacement');
+  assert.equal(result.manifest.asset_inventory[0].content_sha256, sha256(replacementPng));
+  assert.equal(result.manifest.asset_inventory[0].origin_manifest_hash, reviewHash);
   assert.equal(result.manifest.expansion_assets[0].buyer_path, 'assets/individual/spell-tome.png');
   assert.deepEqual(
     await readFile(resolve(result.candidateRoot, 'download/assets/individual/spell-tome.png')),
