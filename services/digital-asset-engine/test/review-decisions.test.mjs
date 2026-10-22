@@ -322,6 +322,8 @@ test('approves a published update against the verified current public release in
   assert.equal(inserted.length, 1);
   assert.equal(result.row.manifest_hash, manifestHash);
   assert.equal(result.messagePatch.components[0].components[0].label, 'Open Current itch.io Page');
+  assert.equal(result.nextAction, 'distribution_review');
+  assert.equal(result.releaseVersion, '0.3.0');
 });
 
 test('rejects a published update when its verified current release receipt changed', async () => {

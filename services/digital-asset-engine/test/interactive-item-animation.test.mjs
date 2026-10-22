@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import sharp from 'sharp';
 import {
   alignEffectCoreToAnchor,
+  boundedEffectPadding,
   createEnergyPulseFrame,
   createRadialEnergyPulseFrame,
   detectDynamicEnergyRegion,
@@ -19,7 +20,32 @@ import {
   createShieldIntegrityFrame,
 } from '../src/interactive-item-states.mjs';
 import { processPixelArtAsset } from '../src/image-processor.mjs';
+import { createFlameDanceFrame } from '../src/arcane-frame-effects.mjs';
 import { InteractiveItemAnimationBatchSchema } from '../src/schemas.mjs';
+
+test('flame stretching uses inverse sampling without transparent stripe rows', async () => {
+  const base = await sharp({
+    create: { width: 32, height: 32, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite([
+    { input: Buffer.from('<svg width="8" height="12"><rect width="8" height="12" fill="#f4b96b"/></svg>'), left: 12, top: 3 },
+    { input: Buffer.from('<svg width="16" height="12"><rect width="16" height="12" fill="#2c204f"/></svg>'), left: 8, top: 16 },
+  ]).png({ palette: true, colours: 8, dither: 0 }).toBuffer();
+  const detection = await detectDynamicEnergyRegion(base, { colors: ['#f4b96b'], tolerance: 8 });
+  const danced = await createFlameDanceFrame(base, detection, 1, { maxPaletteColors: 8 });
+  const decoded = await sharp(danced.compositeBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const warmRows = [];
+  for (let y = 0; y < 16; y += 1) {
+    let warmPixels = 0;
+    for (let x = 0; x < decoded.info.width; x += 1) {
+      const offset = ((y * decoded.info.width) + x) * 4;
+      if (decoded.data[offset + 3] > 0 && decoded.data[offset] > 150 && decoded.data[offset + 1] > 80) warmPixels += 1;
+    }
+    if (warmPixels) warmRows.push(y);
+  }
+  const first = Math.min(...warmRows);
+  const last = Math.max(...warmRows);
+  assert.deepEqual(warmRows, Array.from({ length: last - first + 1 }, (_, index) => first + index));
+});
 
 async function itemSprite({ energyX, energyY }) {
   return sharp({
@@ -275,6 +301,15 @@ test('effect alignment moves an asymmetric energy core onto the detected item an
   assert.equal(aligned.report.clipped_pixels, 0);
 });
 
+test('edge-anchored recipe effects retain a drawable preprocessing area', async () => {
+  const canvas = { width: 96, height: 96 };
+  const target = { x: 92, y: 48 };
+  const padding = boundedEffectPadding(canvas, target);
+  assert.equal(padding, 24);
+  assert.equal((canvas.width - (padding * 2)) > 0, true);
+  assert.equal((canvas.height - (padding * 2)) > 0, true);
+});
+
 test('composited item frames retain the configured pixel-art palette cap', async () => {
   const width = 16;
   const height = 16;
@@ -349,6 +384,8 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     'source-mine': resolve(targetRoot, 'experiments/source-mine'),
     'source-cell': resolve(targetRoot, 'experiments/source-cell'),
     'source-shield': resolve(targetRoot, 'experiments/source-shield'),
+    'source-wand': resolve(targetRoot, 'experiments/source-wand'),
+    'source-potion': resolve(targetRoot, 'experiments/source-potion'),
     'target-product': targetRoot,
   };
   const products = {
@@ -407,16 +444,46 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       final_path: 'assets/items/shield-source.png',
       validation_path: 'validation/shield-source.json',
     }]),
+    'source-wand': canonicalProduct('source-wand', [{
+      asset_id: 'asset-wand-source',
+      asset_key: 'wand-source',
+      name: 'Wand',
+      kind: 'focus',
+      description: 'An enchanted wand.',
+      generation_prompt: 'Generate an enchanted wand.',
+      seed: 5,
+      status: 'generated',
+      source_path: 'assets/source/wand-source.png',
+      final_path: 'assets/items/wand-source.png',
+      validation_path: 'validation/wand-source.json',
+    }]),
+    'source-potion': canonicalProduct('source-potion', [{
+      asset_id: 'asset-potion-source',
+      asset_key: 'potion-source',
+      name: 'Potion',
+      kind: 'potion',
+      description: 'A magic potion.',
+      generation_prompt: 'Generate a magic potion.',
+      seed: 6,
+      status: 'generated',
+      source_path: 'assets/source/potion-source.png',
+      final_path: 'assets/items/potion-source.png',
+      validation_path: 'validation/potion-source.json',
+    }]),
   };
   const grenade = await itemSprite({ energyX: 54, energyY: 58 });
   const mine = await itemSprite({ energyX: 70, energyY: 74 });
   const cell = await itemSprite({ energyX: 62, energyY: 58 });
   const shield = await itemSprite({ energyX: 58, energyY: 54 });
+  const wand = await itemSprite({ energyX: 74, energyY: 54 });
+  const potion = await itemSprite({ energyX: 58, energyY: 66 });
   const sourcePaths = [
     [resolve(sourceRoots['source-grenade'], 'assets/items/grenade-source.png'), grenade],
     [resolve(sourceRoots['source-mine'], 'assets/items/mine-source.png'), mine],
     [resolve(sourceRoots['source-cell'], 'assets/items/cell-source.png'), cell],
     [resolve(sourceRoots['source-shield'], 'assets/items/shield-source.png'), shield],
+    [resolve(sourceRoots['source-wand'], 'assets/items/wand-source.png'), wand],
+    [resolve(sourceRoots['source-potion'], 'assets/items/potion-source.png'), potion],
   ];
   for (const [path, buffer] of sourcePaths) {
     await mkdir(dirname(path), { recursive: true });
@@ -462,6 +529,24 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       impact_description: 'Cracked shield surface.',
       break_description: 'Scattering shield fragments.',
     },
+    {
+      source_product_slug: 'source-wand',
+      source_asset_key: 'wand-source',
+      target_asset_key: 'enchanted-wand',
+      name: 'Enchanted Wand',
+      recipe: 'wand',
+      seed: 46,
+      release_description: 'Compact cyan and violet spark burst from the wand tip.',
+    },
+    {
+      source_product_slug: 'source-potion',
+      source_asset_key: 'potion-source',
+      target_asset_key: 'mana-potion',
+      name: 'Mana Potion',
+      recipe: 'potion',
+      seed: 47,
+      break_description: 'Compact magical glass and liquid release.',
+    },
   ]);
   let generationCalls = 0;
   const result = await generateInteractiveItemAnimationBatch({
@@ -505,8 +590,8 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     },
   });
 
-  assert.equal(generationCalls, 4);
-  assert.equal(result.manifest.generation_calls, 4);
+  assert.equal(generationCalls, 5);
+  assert.equal(result.manifest.generation_calls, 5);
   assert.equal(result.manifest.gates.all_items_valid, true);
   assert.equal(result.manifest.gates.package_modified, false);
   assert.equal(result.results.every((item) => item.manifest.base_regenerated === false), true);
@@ -535,4 +620,23 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     'power-up', 'active-loop', 'shield-hit', 'integrity-decay', 'shield-break', 'power-down',
   ]);
   assert.equal(shieldManifest.generation_calls, 2);
+  const wandManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'enchanted-wand/manifest.json'), 'utf8'));
+  assert.deepEqual(wandManifest.animations, ['wand-charge', 'spell-burst']);
+  assert.equal(wandManifest.generation_calls, 1);
+  assert.equal(wandManifest.base_regenerated, false);
+  const spellMetadata = JSON.parse(await readFile(
+    resolve(result.batchRoot, 'enchanted-wand/metadata/spell-burst/animation.json'),
+    'utf8',
+  ));
+  assert.equal(spellMetadata.base_sprite, null);
+  assert.equal(spellMetadata.composition_role, 'independent_effect');
+  assert.deepEqual(spellMetadata.effect_origin, {
+    x: Math.floor(spellMetadata.canvas.width / 2),
+    y: Math.floor(spellMetadata.canvas.height / 2),
+  });
+  assert.equal(spellMetadata.frames.every((frame) => frame.overlay_path.endsWith('.png')), true);
+  const potionManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'mana-potion/manifest.json'), 'utf8'));
+  assert.deepEqual(potionManifest.states, ['sealed', 'broken', 'consumed']);
+  assert.deepEqual(potionManifest.animations, ['idle-loop', 'consume-break']);
+  assert.equal(potionManifest.generation_calls, 0);
 });

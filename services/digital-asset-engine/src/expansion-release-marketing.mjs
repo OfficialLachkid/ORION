@@ -18,8 +18,18 @@ const COLORS = Object.freeze({
   cyan: '#20d8f4',
   violet: '#7d6cf2',
 });
+const ARCANE_COLORS = Object.freeze({
+  background: '#21172f',
+  backgroundLight: '#3b2752',
+  panel: '#151020',
+  panelSoft: '#291d3b',
+  text: '#fff8e9',
+  ink: '#120c1b',
+  cyan: '#b979ff',
+  violet: '#44c6bf',
+});
 
-export const EXPANSION_RELEASE_MARKETING_VERSION = '1.4.0';
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.5.0';
 
 const WEAPON_COVER_FRAME_COUNT = 8;
 const EXPANSION_COVER_FRAME_COUNT = 12;
@@ -38,14 +48,19 @@ function protectionText(x, y, size = 18) {
   return `<text x="${x}" y="${y}" text-anchor="middle" fill="#ffffff" fill-opacity="0.34" stroke="#0c1520" stroke-opacity="0.62" stroke-width="1" font-family="Arial, sans-serif" font-size="${size}" font-weight="800" transform="rotate(-14 ${x} ${y})">PREVIEW</text>`;
 }
 
-function shell({ width, height, title, subtitle, titleSize = 40 }) {
+function paletteForProduct(product) {
+  const identity = `${product?.theme || ''} ${product?.category || ''} ${product?.title || ''}`;
+  return /arcane|fantasy|magic|alchemy|potion/iu.test(identity) ? ARCANE_COLORS : COLORS;
+}
+
+function shell({ width, height, title, subtitle, titleSize = 40, colors = COLORS }) {
   return [
-    `<rect width="${width}" height="${height}" fill="${COLORS.background}"/>`,
-    `<path d="M0 ${height - 92} L${width} ${height - 170} L${width} ${height} L0 ${height} Z" fill="${COLORS.backgroundLight}" fill-opacity="0.72"/>`,
-    `<rect x="18" y="18" width="${width - 36}" height="104" rx="18" fill="${COLORS.panel}" stroke="${COLORS.cyan}" stroke-width="3"/>`,
-    `<rect x="34" y="34" width="10" height="72" rx="5" fill="${COLORS.violet}"/>`,
-    `<text x="${width / 2}" y="67" text-anchor="middle" fill="${COLORS.text}" stroke="#09111c" stroke-width="4" paint-order="stroke" font-family="Arial, sans-serif" font-size="${titleSize}" font-weight="900" letter-spacing="1">${escapeXml(title.toUpperCase())}</text>`,
-    `<text x="${width / 2}" y="100" text-anchor="middle" fill="${COLORS.cyan}" stroke="#09111c" stroke-width="2" paint-order="stroke" font-family="Arial, sans-serif" font-size="18" font-weight="800">${escapeXml(subtitle.toUpperCase())}</text>`,
+    `<rect width="${width}" height="${height}" fill="${colors.background}"/>`,
+    `<path d="M0 ${height - 92} L${width} ${height - 170} L${width} ${height} L0 ${height} Z" fill="${colors.backgroundLight}" fill-opacity="0.72"/>`,
+    `<rect x="18" y="18" width="${width - 36}" height="104" rx="18" fill="${colors.panel}" stroke="${colors.cyan}" stroke-width="3"/>`,
+    `<rect x="34" y="34" width="10" height="72" rx="5" fill="${colors.violet}"/>`,
+    `<text x="${width / 2}" y="67" text-anchor="middle" fill="${colors.text}" stroke="#09111c" stroke-width="4" paint-order="stroke" font-family="Arial, sans-serif" font-size="${titleSize}" font-weight="900" letter-spacing="1">${escapeXml(title.toUpperCase())}</text>`,
+    `<text x="${width / 2}" y="100" text-anchor="middle" fill="${colors.cyan}" stroke="#09111c" stroke-width="2" paint-order="stroke" font-family="Arial, sans-serif" font-size="18" font-weight="800">${escapeXml(subtitle.toUpperCase())}</text>`,
   ].join('');
 }
 
@@ -295,7 +310,47 @@ async function expansionEntries(
   }));
 }
 
-async function gridImage({ width, height, title, subtitle, entries, columns, top = 138, footer }) {
+async function completePackEntries(
+  candidateRoot,
+  product,
+  expansionAssets,
+  frameIndex = null,
+  frameCount = null,
+) {
+  const upgradeByKey = new Map(expansionAssets.map((asset) => [asset.asset_key, asset]));
+  const baseEntries = await Promise.all(product.assets.map(async (asset) => {
+    const upgrade = upgradeByKey.get(asset.asset_key);
+    const selected = upgrade
+      ? frameIndex === null
+        ? upgrade.buyer_path
+        : selectCoverLifecyclePreviewPath(upgrade, frameIndex, frameCount)
+      : `assets/individual/${basename(asset.final_path)}`;
+    return {
+      asset_key: asset.asset_key,
+      name: asset.name,
+      group: upgrade?.buyer_group || 'assets',
+      buffer: await readFile(resolve(candidateRoot, 'download', selected)),
+    };
+  }));
+  const additions = expansionAssets.filter((asset) => (
+    asset.operation === 'add_asset'
+    && !product.assets.some((existing) => existing.asset_key === asset.asset_key)
+  ));
+  const addedEntries = await Promise.all(additions.map(async (asset) => {
+    const selected = frameIndex === null
+      ? asset.buyer_path
+      : selectCoverLifecyclePreviewPath(asset, frameIndex, frameCount);
+    return {
+      asset_key: asset.asset_key,
+      name: asset.name,
+      group: asset.buyer_group,
+      buffer: await readFile(resolve(candidateRoot, 'download', selected)),
+    };
+  }));
+  return [...baseEntries, ...addedEntries];
+}
+
+async function gridImage({ width, height, title, subtitle, entries, columns, top = 138, footer, colors = COLORS }) {
   const left = 28;
   const gap = 10;
   const rows = Math.ceil(entries.length / columns);
@@ -317,8 +372,8 @@ async function gridImage({ width, height, title, subtitle, entries, columns, top
       top: y + 5,
     });
     cards.push(
-      `<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" rx="11" fill="${COLORS.panel}" stroke="#405b78" stroke-width="2"/>`,
-      `<text x="${x + (cellWidth / 2)}" y="${y + cellHeight - 10}" text-anchor="middle" fill="${COLORS.text}" font-family="Arial, sans-serif" font-size="${Math.min(14, Math.max(10, Math.floor(175 / entry.name.length)))}" font-weight="700">${escapeXml(entry.name)}</text>`,
+      `<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" rx="11" fill="${colors.panel}" stroke="${colors.panelSoft}" stroke-width="2"/>`,
+      `<text x="${x + (cellWidth / 2)}" y="${y + cellHeight - 10}" text-anchor="middle" fill="${colors.text}" font-family="Arial, sans-serif" font-size="${Math.min(14, Math.max(10, Math.floor(175 / entry.name.length)))}" font-weight="700">${escapeXml(entry.name)}</text>`,
     );
     watermarks.push(protectionText(x + (cellWidth / 2), y + (cellHeight / 2), Math.min(22, cellWidth / 7)));
   }
@@ -332,9 +387,10 @@ async function gridImage({ width, height, title, subtitle, entries, columns, top
       titleSize: title.length > 26
         ? 30
         : Math.max(24, Math.min(width < 700 ? 35 : 40, Math.floor((width - 90) / (title.length * 0.62)))),
+      colors,
     }),
     ...cards,
-    `<text x="${width - 28}" y="${height - 13}" text-anchor="end" fill="${COLORS.ink}" font-family="Arial, sans-serif" font-size="12" font-weight="800">${escapeXml(footer)}</text>`,
+    `<text x="${width - 28}" y="${height - 13}" text-anchor="end" fill="${colors.text}" fill-opacity="0.72" font-family="Arial, sans-serif" font-size="12" font-weight="800">${escapeXml(footer)}</text>`,
     '</svg>',
   ].join(''));
   const protection = Buffer.from([
@@ -342,7 +398,7 @@ async function gridImage({ width, height, title, subtitle, entries, columns, top
     ...watermarks,
     '</svg>',
   ].join(''));
-  return sharp({ create: { width, height, channels: 3, background: COLORS.background } })
+  return sharp({ create: { width, height, channels: 3, background: colors.background } })
     .composite([{ input: background }, ...composites, { input: protection }])
     .png({ compressionLevel: 9 })
     .toBuffer();
@@ -379,7 +435,103 @@ async function buildAnimatedGrid({ tempRoot, outputPath, frameFactory, frameCoun
   return framePaths[0];
 }
 
+async function buildGenericUpgradeMarketingMedia(options) {
+  const colors = paletteForProduct(options.product);
+  const totalAssetCount = options.product.assets.length
+    + options.expansionAssets.filter((asset) => asset.operation === 'add_asset').length;
+  const firstUpgradeFrame = await expansionEntries(options.candidateRoot, options.expansionAssets);
+  const tempRoot = await mkdtemp(join(tmpdir(), 'orion-asset-upgrade-marketing-'));
+  const files = {
+    cover: 'cover.gif',
+    coverStill: 'cover-still.png',
+    overview: 'asset-upgrade-overview.png',
+    montage: 'animated-asset-montage.gif',
+  };
+  try {
+    const coverFirstFrame = await buildAnimatedGrid({
+      tempRoot,
+      outputPath: resolve(options.candidateRoot, files.cover),
+      frameCount: 12,
+      delayMs: 360,
+      frameFactory: async (frameIndex) => gridImage({
+        width: COVER_WIDTH,
+        height: COVER_HEIGHT,
+        title: options.product.title,
+        subtitle: frameIndex === 0
+          ? `${totalAssetCount} transparent pixel-art assets`
+          : 'States & fixed-anchor animation previews',
+        entries: await completePackEntries(
+          options.candidateRoot,
+          options.product,
+          options.expansionAssets,
+          frameIndex,
+          12,
+        ),
+        columns: Math.min(4, totalAssetCount),
+        footer: `VERSION ${options.version} · ANIMATED PREVIEW`,
+        colors,
+      }),
+    });
+    await writeFile(resolve(options.candidateRoot, files.coverStill), await readFile(coverFirstFrame));
+    await writeFile(resolve(options.candidateRoot, files.overview), await gridImage({
+      width: WIDTH,
+      height: HEIGHT,
+      title: `${options.product.title} Upgrade`,
+      subtitle: 'Transparent states, frames, sheets & metadata',
+      entries: firstUpgradeFrame,
+      columns: Math.min(4, firstUpgradeFrame.length),
+      footer: 'CLEAN TRANSPARENT RUNTIME FILES INCLUDED IN DOWNLOAD',
+      colors,
+    }));
+    await buildAnimatedGrid({
+      tempRoot,
+      outputPath: resolve(options.candidateRoot, files.montage),
+      frameCount: 12,
+      delayMs: 260,
+      frameFactory: async (frameIndex) => gridImage({
+        width: WIDTH,
+        height: HEIGHT,
+        title: 'Animated Assets & States',
+        subtitle: 'Representative buyer-runtime frames · zero root motion',
+        entries: await expansionEntries(
+          options.candidateRoot,
+          options.expansionAssets,
+          frameIndex,
+          12,
+        ),
+        columns: Math.min(4, options.expansionAssets.length),
+        footer: 'VBJSERVICES · PROTECTED ANIMATED PREVIEW',
+        colors,
+      }),
+    });
+    return {
+      cover_path: files.cover,
+      cover_fallback_path: files.coverStill,
+      screenshot_paths: [
+        ...(options.inheritedScreenshotPaths || []),
+        files.overview,
+        files.montage,
+      ],
+      palette: colors,
+      motion: {
+        cover_frame_count: 12,
+        cover_frame_delay_ms: 360,
+        rapid_flashing: false,
+        cover_sequence: ['complete_pack_animation_lifecycle'],
+        mixed_asset_families_per_frame: false,
+        entry_scaling: 'visible_alpha_bounds',
+        expansion_sampling: 'declared_animation_lifecycle',
+      },
+    };
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+}
+
 export async function buildExpansionReleaseMarketingMedia(options) {
+  const weaponProduct = options.product.assets.length > 0
+    && options.product.assets.every((asset) => asset.kind === 'weapon');
+  if (!weaponProduct) return buildGenericUpgradeMarketingMedia(options);
   const firstExpansion = await expansionEntries(options.candidateRoot, options.expansionAssets);
   const tempRoot = await mkdtemp(join(tmpdir(), 'orion-expansion-marketing-'));
   const files = {

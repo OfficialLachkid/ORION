@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "arcane-relics-potions-animation-v6",
+  "product_slug": "arcane-relics-potions",
+  "title": "Arcane Relics & Potions - Animation Upgrade Revision 4 Final",
+  "items": [
+    { "source_product_slug": "arcane-relics-potions", "source_asset_key": "mana-potion", "target_asset_key": "mana-potion", "name": "Mana Potion", "recipe": "potion", "seed": 14920, "break_style": "fracture_scatter", "break_description": "Deterministic fracture and liquid scatter derived from the approved potion." },
+    { "source_product_slug": "arcane-relics-potions", "source_asset_key": "healing-elixir", "target_asset_key": "healing-elixir", "name": "Healing Elixir", "recipe": "potion", "seed": 14921, "break_style": "restorative_release", "break_description": "A distinct upward restorative energy release and dissolve, without copying the mana potion fracture." },
+    { "source_product_slug": "arcane-relics-potions", "source_asset_key": "arcane-crystal", "target_asset_key": "arcane-crystal", "name": "Arcane Crystal", "recipe": "crystal", "seed": 14922, "orbit_description": "Turn the approved crystal through readable faceted orientations while retaining body volume and its fixed canvas anchor." },
+    { "source_product_slug": "arcane-relics-potions", "source_asset_key": "rune-stone", "target_asset_key": "rune-stone", "name": "Rune Stone", "recipe": "rune_stone", "seed": 14923 },
+    { "source_product_slug": "arcane-relics-potions", "source_asset_key": "spell-tome", "target_asset_key": "spell-tome", "name": "Spell Tome", "recipe": "tome", "seed": 15024, "open_description": "Animate the replacement tome with a clearly visible external arcane aura and centered rune energy.", "replacement_base_description": "A clearly recognizable thick closed arcane spell tome made from dark violet leather, with a visible pale page block, broad spine, brass corner guards, clasp, and one glowing cyan rune centered on the front cover." },
+    { "source_product_slug": "arcane-relics-potions", "source_asset_key": "alchemist-flask", "target_asset_key": "alchemist-flask", "name": "Alchemist Flask", "recipe": "flask", "seed": 14925, "reaction_description": "Animate a clearly visible clockwise liquid swirl with moving bubbles inside the flask." },
+    { "source_product_slug": "arcane-relics-potions", "source_asset_key": "ritual-candle", "target_asset_key": "ritual-candle", "name": "Ritual Candle", "recipe": "candle", "seed": 14926, "smoke_description": "A small delicate curl of pale violet-gray pixel smoke rising upward from an empty candle wick, sparse and narrow with generous transparent space." },
+    { "source_product_slug": "arcane-relics-potions", "source_asset_key": "enchanted-wand", "target_asset_key": "enchanted-wand", "name": "Enchanted Wand", "recipe": "wand", "seed": 14927, "release_description": "A compact cyan-and-violet magical spell burst with a bright core, short rays, and a few tiny particles. It must be a standalone transparent VFX asset with no wand baked into it." }
+  ],
+  "style": {
+    "medium": "pixel_art",
+    "palette": ["#171329", "#2c204f", "#513b79", "#8157a6", "#b481d1", "#ead7ff", "#193f58", "#1f7d8d", "#44c6bf", "#b9fff1", "#7a3d2b", "#cf7048", "#f4b96b", "#fff0b8"],
+    "energy_colors": ["#b481d1", "#ead7ff", "#44c6bf", "#b9fff1", "#f4b96b", "#fff0b8"],
+    "energy_color_tolerance": 54,
+    "max_palette_colors": 24,
+    "chroma_key": "#ff00ff",
+    "source_width": 1024,
+    "source_height": 1024
+  }
+}

@@ -27,6 +27,7 @@ import {
   resolveInteractionApprovalOrigin,
   searchApprovalMessageInThreads,
   sendDiscordApiRequest,
+  scheduleAssetExpansionReleaseWorker,
   scheduleItchPublicationWorker,
   scheduleItchThemeRevisionWorker,
   scheduleMarketplaceSetupWorker,
@@ -354,6 +355,26 @@ test('marketplace setup worker is detached from the Discord interaction lifecycl
     '/tmp/products/pack/review/marketplace-setup.json',
   ]);
   assert.equal(calls[0].options.detached, true);
+  assert.deepEqual(calls[1], { unref: true });
+});
+
+test('asset expansion release worker is detached from the Discord interaction lifecycle', () => {
+  const calls = [];
+  const scheduled = scheduleAssetExpansionReleaseWorker('/tmp/products/pack/extensions/upgrade/review/discord.json', {
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return { unref() { calls.push({ unref: true }); } };
+    },
+  });
+  assert.equal(scheduled, true);
+  assert.equal(calls[0].command, process.execPath);
+  assert.match(calls[0].args[0], /asset-expansion-release-worker\.mjs$/u);
+  assert.deepEqual(calls[0].args.slice(1), [
+    '--state',
+    '/tmp/products/pack/extensions/upgrade/review/discord.json',
+  ]);
+  assert.equal(calls[0].options.detached, true);
+  assert.equal(calls[0].options.stdio, 'ignore');
   assert.deepEqual(calls[1], { unref: true });
 });
 

@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import sharp from 'sharp';
 import { validateGeneratedAsset } from './asset-validator.mjs';
+import { generateArcaneItemRecipe, isArcaneItemRecipe } from './arcane-item-recipes.mjs';
 import { resolveAssetRecipe } from './asset-recipe-registry.mjs';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { assembleEffectSpriteSheet, writeAnimatedGifPreview } from './effect-pilot.mjs';
@@ -199,7 +200,9 @@ async function writeAnimation(root, item, key, definition, frames, overlays, opt
     name: definition.name,
     playback: definition.playback,
     root_motion: { x: 0, y: 0 },
-    base_sprite: '../../base.png',
+    base_sprite: definition.effectOnly ? null : '../../base.png',
+    composition_role: definition.effectOnly ? 'independent_effect' : 'fixed_root_asset_animation',
+    ...(definition.origin ? { effect_origin: definition.origin } : {}),
     canvas: definition.canvas,
     sprite_sheet: {
       path: `../../sheets/${key}.png`,
@@ -260,21 +263,30 @@ function isolatedEffectPrompt(plan, item, description, exclusions) {
   ].join(' ');
 }
 
+export function boundedEffectPadding(canvas, targetOrigin) {
+  const center = { x: Math.floor(canvas.width / 2), y: Math.floor(canvas.height / 2) };
+  const anchorReserve = targetOrigin ? Math.ceil(Math.max(
+    Math.abs(targetOrigin.x - center.x),
+    Math.abs(targetOrigin.y - center.y),
+  )) : 0;
+  const desired = Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.12)) + anchorReserve;
+  // Retain at least half of the source canvas for palette/detail extraction.
+  // Extreme edge anchors are handled by the compact alignment retries below,
+  // rather than by collapsing the generated source to only a few pixels.
+  const maximum = Math.max(0, Math.floor(Math.min(canvas.width, canvas.height) / 4));
+  return Math.min(desired, maximum);
+}
+
 async function generateIsolatedEffect({ adapter, config, item, plan, canvas, prompt, targetOrigin, seedOffset = 0 }) {
   const generated = await adapter.generateAsset({
     asset: { generation_prompt: prompt, seed: item.seed + seedOffset },
     sourceWidth: plan.style.source_width,
     sourceHeight: plan.style.source_height,
   });
-  const center = { x: Math.floor(canvas.width / 2), y: Math.floor(canvas.height / 2) };
-  const anchorReserve = targetOrigin ? Math.ceil(Math.max(
-    Math.abs(targetOrigin.x - center.x),
-    Math.abs(targetOrigin.y - center.y),
-  )) : 0;
   const processed = await processPixelArtEffectFrame(generated.buffer, {
     width: canvas.width,
     height: canvas.height,
-    padding: Math.max(8, Math.round(Math.min(canvas.width, canvas.height) * 0.12)) + anchorReserve,
+    padding: boundedEffectPadding(canvas, targetOrigin),
     placement: 'center',
     maxPaletteColors: plan.style.max_palette_colors,
     chromaKey: plan.style.chroma_key,
@@ -291,7 +303,7 @@ async function generateIsolatedEffect({ adapter, config, item, plan, canvas, pro
     : { buffer: processed.buffer, report: null };
   if (aligned.report && !aligned.report.passed) {
     const detectedOrigin = aligned.report.detected_origin;
-    for (const scale of [0.78, 0.62, 0.48]) {
+    for (const scale of [0.78, 0.62, 0.48, 0.32, 0.22, 0.16]) {
       const compact = await derivePixelArtEffectFrame(processed.buffer, {
         scale,
         opacity: 1,
@@ -372,8 +384,11 @@ async function finalizeRecipeItem({
   validationBuffers,
   validationDetails = {},
   generationCalls = 0,
+  baseRegenerated = false,
   qualityHolds = [],
 }) {
+  const resolvedBaseRegenerated = baseRegenerated || Boolean(item.replacement_base_description);
+  const totalGenerationCalls = generationCalls + (resolvedBaseRegenerated ? 1 : 0);
   const reports = await validateRuntimeBuffers(validationBuffers, { ...options, plan }, {
     width: (await sharp(baseBuffer).metadata()).width,
     height: (await sharp(baseBuffer).metadata()).height,
@@ -382,7 +397,7 @@ async function finalizeRecipeItem({
     status: reports.every((report) => report.status === 'passed') ? 'passed' : 'failed',
     root_motion: { x: 0, y: 0, passed: true },
     base_sha256: sha256(baseBuffer),
-    base_regenerated: false,
+    base_regenerated: resolvedBaseRegenerated,
     quality_holds: qualityHolds,
     frame_reports: reports,
     ...validationDetails,
@@ -400,8 +415,8 @@ async function finalizeRecipeItem({
       source_layout: sourceLayout,
     },
     status: 'awaiting_animation_review',
-    base_regenerated: false,
-    generation_calls: generationCalls,
+    base_regenerated: resolvedBaseRegenerated,
+    generation_calls: totalGenerationCalls,
     incurred_cost: 0,
     quality_holds: qualityHolds,
     buyer_runtime_formats: [
@@ -912,12 +927,44 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
   }
   const sourceRoot = source.root;
   const sourceBaseBuffer = await readFile(resolveInside(sourceRoot, sourceAsset.final_path, 'Interactive item base'));
-  const baseBuffer = item.recipe === 'plasma_shield'
+  const sourceMetadata = await sharp(sourceBaseBuffer).metadata();
+  const sourceCanvas = { width: sourceMetadata.width, height: sourceMetadata.height };
+  const itemRoot = resolveInside(batchRoot, item.target_asset_key, 'Interactive item root');
+  let baseBuffer = item.recipe === 'plasma_shield'
     ? await clearDenseShieldInterior(sourceBaseBuffer)
     : sourceBaseBuffer;
+  if (item.replacement_base_description) {
+    const generated = await adapter.generateAsset({
+      asset: {
+        seed: item.seed,
+        generation_prompt: [
+          item.replacement_base_description,
+          `Use only this palette: ${plan.style.palette.join(', ')}.`,
+          'Create one unmistakable complete spell book in crisp low-resolution pixel art with deliberate square pixel clusters and no antialiasing.',
+          'The silhouette must clearly show a thick rectangular leather cover, a visible pale page block, a spine, metal corner guards, and a centered arcane clasp or rune.',
+          'Show the closed book in a slight three-quarter inventory-icon view with generous empty padding.',
+          `Use a perfectly flat ${plan.style.chroma_key} background touching every border pixel.`,
+          'No chest, box, pedestal, altar, stone slab, tablet, scenery, floor, cast shadow, character, hand, text, logo, or duplicate object.',
+        ].join(' '),
+      },
+      sourceWidth: plan.style.source_width,
+      sourceHeight: plan.style.source_height,
+    });
+    const processed = await processPixelArtAsset(generated.buffer, {
+      width: sourceCanvas.width,
+      height: sourceCanvas.height,
+      maxPaletteColors: plan.style.max_palette_colors,
+      chromaKey: plan.style.chroma_key,
+      chromaTolerance: options.config.generation.chroma_tolerance,
+    });
+    baseBuffer = processed.buffer;
+    await writeBuffer(
+      resolveInside(itemRoot, `source/replacement-base.${generated.format}`, 'Replacement base source'),
+      generated.buffer,
+    );
+  }
   const metadata = await sharp(baseBuffer).metadata();
   const canvas = { width: metadata.width, height: metadata.height };
-  const itemRoot = resolveInside(batchRoot, item.target_asset_key, 'Interactive item root');
   await writeBuffer(resolveInside(itemRoot, 'base.png', 'Base sprite'), baseBuffer);
   await writeBuffer(
     resolveInside(itemRoot, 'previews/base-transparency.png', 'Base transparency preview'),
@@ -938,8 +985,17 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
     canvas,
     detection,
     source,
+    sourceAsset,
     adapter,
   };
+  if (isArcaneItemRecipe(item.recipe)) {
+    return generateArcaneItemRecipe(recipeContext, {
+      finalizeRecipeItem,
+      generateIsolatedEffect,
+      writeAnimation,
+      writeStates,
+    });
+  }
   if (item.recipe === 'power_cell' || item.recipe === 'workbench') {
     return generateEnergyStatesRecipe(recipeContext);
   }

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { cp, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, relative, resolve } from 'node:path';
+import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
+import sharp from 'sharp';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import {
   buildExpansionReleaseMarketingMedia,
@@ -9,8 +10,15 @@ import {
 import { resolvePackagedRelease } from './packaged-release.mjs';
 import { AssetExpansionReviewPlanSchema } from './schemas.mjs';
 
-const EXPANSION_RELEASE_VERSION = '1.0.1';
+const EXPANSION_RELEASE_VERSION = '1.1.0';
 const RUNTIME_PREFIXES = Object.freeze(['frames/', 'overlays/', 'sheets/', 'states/', 'metadata/']);
+const BUYER_LICENSE = Object.freeze({
+  license_id: 'vbjservices-digital-asset-license',
+  version: '1.0',
+  source_url: new URL('../templates/vbjservices-digital-asset-license-v1.md', import.meta.url),
+});
+const SHEET_COLUMNS = 4;
+const SHEET_PADDING = 16;
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
@@ -34,6 +42,30 @@ async function readJson(path) {
 
 async function exists(path) {
   try { await stat(path); return true; } catch (error) { if (error?.code === 'ENOENT') return false; throw error; }
+}
+
+async function resolveExpansionBase(productRoot, product, plan) {
+  try {
+    return await resolvePackagedRelease({ productRoot, releaseVersion: plan.base_version });
+  } catch (error) {
+    if (error?.code !== 'ENOENT' || product.version !== plan.base_version) throw error;
+  }
+  const base = await resolvePackagedRelease({ productRoot });
+  if (base.manifest.product_version !== plan.base_version) {
+    throw new Error('Canonical preview does not match the requested expansion base version.');
+  }
+  const distribution = await readJson(resolveInside(
+    productRoot,
+    'review/distribution.json',
+    'Published distribution receipt',
+  ));
+  if (distribution.status !== 'published'
+    || distribution.target_version !== plan.base_version
+    || distribution.manifest_hash !== base.manifest.manifest_hash
+    || distribution.publication_job?.status !== 'completed') {
+    throw new Error('The initial packaged release is not the exact verified public expansion base.');
+  }
+  return base;
 }
 
 async function filesBelow(root) {
@@ -77,7 +109,7 @@ function runtimeRelativePath(path, assetKey) {
     : null;
 }
 
-async function copyApprovedExpansionAssets({ candidateRoot, reviewRoot, reviewManifest }) {
+async function copyApprovedExpansionAssets({ candidateRoot, reviewRoot, reviewManifest, product }) {
   const packaged = [];
   for (const asset of reviewManifest.assets) {
     const sourceEntry = reviewManifest.files.find((file) => file.path === asset.path);
@@ -87,7 +119,14 @@ async function copyApprovedExpansionAssets({ candidateRoot, reviewRoot, reviewMa
     if (sourceBuffer.length !== sourceEntry.size_bytes || sha256(sourceBuffer) !== sourceEntry.content_sha256) {
       throw new Error(`Approved expansion asset changed: ${asset.asset_key}.`);
     }
-    const buyerPath = `assets/expansion/${asset.buyer_group}/${asset.asset_key}.png`;
+    const existingAsset = product.assets.find((candidate) => candidate.asset_id === asset.asset_id);
+    const existingOperation = ['enhance_existing', 'replace_existing'].includes(asset.operation);
+    if (existingOperation && !existingAsset) {
+      throw new Error(`Expansion operation lost its existing asset identity: ${asset.asset_key}.`);
+    }
+    const buyerPath = existingOperation
+      ? `assets/individual/${basename(existingAsset.final_path)}`
+      : `assets/expansion/${asset.buyer_group}/${asset.asset_key}.png`;
     const destination = resolveInside(candidateRoot, `download/${buyerPath}`, 'Expansion buyer asset');
     await mkdir(resolve(destination, '..'), { recursive: true });
     await writeFile(destination, sourceBuffer);
@@ -119,6 +158,7 @@ async function copyApprovedExpansionAssets({ candidateRoot, reviewRoot, reviewMa
     packaged.push({
       asset_id: asset.asset_id,
       asset_key: asset.asset_key,
+      operation: asset.operation || 'add_asset',
       name: asset.name,
       kind: asset.kind,
       description: asset.description,
@@ -133,6 +173,37 @@ async function copyApprovedExpansionAssets({ candidateRoot, reviewRoot, reviewMa
     });
   }
   return packaged;
+}
+
+async function rebuildBaseSpriteSheet({ candidateRoot, product }) {
+  const columns = Math.min(SHEET_COLUMNS, product.assets.length);
+  const rows = Math.ceil(product.assets.length / SHEET_COLUMNS);
+  const cellWidth = product.style.width + (SHEET_PADDING * 2);
+  const cellHeight = product.style.height + (SHEET_PADDING * 2);
+  const buffers = await Promise.all(product.assets.map((asset) => readFile(resolveInside(
+    candidateRoot,
+    `download/assets/individual/${basename(asset.final_path)}`,
+    'Buyer base asset',
+  ))));
+  const sheet = await sharp({
+    create: {
+      width: cellWidth * columns,
+      height: cellHeight * rows,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).composite(buffers.map((buffer, index) => ({
+    input: buffer,
+    left: ((index % SHEET_COLUMNS) * cellWidth) + SHEET_PADDING,
+    top: (Math.floor(index / SHEET_COLUMNS) * cellHeight) + SHEET_PADDING,
+  }))).png({ compressionLevel: 9 }).toBuffer();
+  const path = resolveInside(
+    candidateRoot,
+    `download/assets/${product.slug}-sprite-sheet.png`,
+    'Buyer sprite sheet',
+  );
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(path, sheet);
 }
 
 function unique(values) {
@@ -173,15 +244,21 @@ async function copyInheritedMarketplaceScreenshots({ baseRoot, candidateRoot, li
 
 function releaseListing(baseListing, product, plan, expansionAssets, marketingMedia) {
   const animated = expansionAssets.filter((asset) => asset.runtime_paths.length);
+  const additions = expansionAssets.filter((asset) => asset.operation === 'add_asset');
+  const upgrades = expansionAssets.filter((asset) => asset.operation !== 'add_asset');
+  const scope = [
+    upgrades.length ? `upgrades ${upgrades.length} existing asset${upgrades.length === 1 ? '' : 's'}` : '',
+    additions.length ? `adds ${additions.length} new asset${additions.length === 1 ? '' : 's'}` : '',
+  ].filter(Boolean).join(' and ');
   const addition = [
     '',
-    `## Version ${plan.target_version} — Armory Items, Props & Interactive VFX`,
+    `## Version ${plan.target_version} — Asset Pack Update`,
     '',
-    `This update adds ${expansionAssets.length} coordinated assets to the existing weapon and effects pack:`,
+    `This update ${scope}:`,
     '',
     ...expansionAssets.map((asset) => `- ${asset.name}`),
     '',
-    `${animated.length} additions include fixed-anchor states or animation sequences. Buyer runtime files use transparent PNG frames, sprite sheets, overlays, and JSON metadata with zero baked root motion.`,
+    `${animated.length} assets include fixed-anchor states or animation sequences. Buyer runtime files use transparent PNG frames, sprite sheets, overlays, and JSON metadata with zero baked root motion.`,
     '',
     'The animated storefront media is a protected preview. Clean transparent source-sized assets are included in the paid download.',
   ].join('\n');
@@ -189,14 +266,14 @@ function releaseListing(baseListing, product, plan, expansionAssets, marketingMe
     ...baseListing,
     schema_version: '1.0',
     title: product.title,
-    short_description: `${product.assets.length} sci-fi weapons plus effects, items, props, and interactive plasma VFX.`,
+    short_description: baseListing.short_description,
     description: `${String(baseListing.description || '').trim()}${addition}`,
     visibility: 'draft',
     cover_path: marketingMedia.cover_path,
     screenshot_paths: marketingMedia.screenshot_paths,
     technical_information: unique([
       ...(baseListing.technical_information || []),
-      `${expansionAssets.length} armory items, props, and VFX additions`,
+      `${expansionAssets.length} assets with reviewed states or animation upgrades`,
       'Transparent PNG states and fixed-anchor animation frames',
       'Sprite sheets, overlays, and JSON animation metadata',
       'Zero baked root motion',
@@ -208,30 +285,34 @@ function releaseListing(baseListing, product, plan, expansionAssets, marketingMe
 
 function buyerReadme(product, plan, expansionAssets) {
   const animatedCount = expansionAssets.filter((asset) => asset.runtime_paths.length).length;
+  const additions = expansionAssets.filter((asset) => asset.operation === 'add_asset').length;
+  const upgrades = expansionAssets.length - additions;
+  const scope = [
+    upgrades ? `upgrades ${upgrades} existing asset${upgrades === 1 ? '' : 's'}` : '',
+    additions ? `adds ${additions} new asset${additions === 1 ? '' : 's'}` : '',
+  ].filter(Boolean).join(' and ');
   return [
     `# ${product.title}`,
     '',
     `Version ${plan.target_version}`,
     '',
-    `${product.assets.length} transparent side-view weapon sprites, their independent firing effects, and ${expansionAssets.length} matching armory items, props, and VFX are included.`,
+    `${product.assets.length + additions} transparent pixel-art assets are included. Version ${plan.target_version} ${scope}.`,
     '',
     '## Package contents',
     '',
-    '- `assets/individual/`: stationary weapon PNG files.',
-    `- \`assets/${product.slug}-sprite-sheet.png\`: all weapons on one transparent sprite sheet.`,
-    '- `effects/<weapon>/`: independent muzzle-flash, projectile, and impact/decay runtime files.',
-    '- `assets/expansion/`: the added items, props, and VFX grouped by buyer use.',
-    `- \`animations/<asset>/\`: transparent states, frames, overlays, sheets, and metadata for ${animatedCount} interactive additions.`,
-    '- `asset-index.json`: paths, hashes, states, and animation identifiers for the expansion.',
+    '- `assets/individual/`: clean transparent base PNG files.',
+    `- \`assets/${product.slug}-sprite-sheet.png\`: all primary assets on one transparent sprite sheet.`,
+    ...(additions ? ['- `assets/expansion/`: newly added assets grouped by buyer use.'] : []),
+    `- \`animations/<asset>/\`: transparent states, frames, overlays, sheets, and metadata for ${animatedCount} animated assets.`,
+    '- `asset-index.json`: paths, hashes, states, and animation identifiers for this update.',
     '- `LICENSE.md`: permitted use and redistribution restrictions.',
     '- `CHANGELOG.md`: buyer-relevant changes.',
     '',
     '## Runtime behavior',
     '',
     '- All canonical sprites and animation frames retain a fixed canvas and zero root motion.',
-    '- Move projectiles, items, and characters in the game engine rather than relying on preview motion.',
+    '- Move gameplay objects in the game engine rather than relying on preview motion.',
     '- Storefront and Discord GIFs are previews; use the transparent PNG frames and metadata in a project.',
-    '- Right-facing weapon sprites can be mirrored when a game needs the opposite direction.',
     '',
   ].join('\n');
 }
@@ -244,14 +325,14 @@ function buyerChangelog(plan, expansionAssets) {
     '',
     `## ${plan.target_version}`,
     '',
-    `- Added ${expansionAssets.length} armory items, props, and interactive plasma VFX.`,
+    `- Added or upgraded ${expansionAssets.length} reviewed assets.`,
     `- Added ${stateCount} named states and ${animationCount} fixed-anchor animation sequences.`,
     '- Added transparent runtime frames, overlays, sprite sheets, and JSON metadata where applicable.',
     '- Refreshed the package index and buyer documentation.',
     '',
     `## ${plan.base_version}`,
     '',
-    '- Added independent muzzle flashes, stationary projectiles, impact/decay animations, and weapon-local muzzle anchors for all weapons.',
+    '- Initial published asset pack.',
     '',
   ].join('\n');
 }
@@ -310,7 +391,7 @@ export async function prepareApprovedAssetExpansionRelease(options) {
   const product = await store.loadProduct(plan.product_slug);
   const productRoot = store.productRoot(product);
   const [base, approved] = await Promise.all([
-    resolvePackagedRelease({ productRoot, releaseVersion: plan.base_version }),
+    resolveExpansionBase(productRoot, product, plan),
     loadApprovedExpansion({ productRoot, plan }),
   ]);
   if (base.manifest.manifest_hash !== plan.base_manifest_hash) {
@@ -343,7 +424,9 @@ export async function prepareApprovedAssetExpansionRelease(options) {
     candidateRoot,
     reviewRoot: approved.reviewRoot,
     reviewManifest: approved.manifest,
+    product,
   });
+  await rebuildBaseSpriteSheet({ candidateRoot, product });
   const inheritedScreenshotPaths = await copyInheritedMarketplaceScreenshots({
     baseRoot: base.root,
     candidateRoot,
@@ -374,14 +457,30 @@ export async function prepareApprovedAssetExpansionRelease(options) {
   ]);
 
   const licensePath = resolve(candidateRoot, 'download', 'LICENSE.md');
-  const licenseBuffer = await readFile(licensePath);
-  if (base.manifest.buyer_license?.content_sha256
-    && sha256(licenseBuffer) !== base.manifest.buyer_license.content_sha256) {
-    throw new Error('Inherited buyer license no longer matches the approved base release.');
+  let licenseBuffer;
+  let buyerLicense;
+  if (base.manifest.buyer_license?.content_sha256) {
+    licenseBuffer = await readFile(licensePath);
+    if (sha256(licenseBuffer) !== base.manifest.buyer_license.content_sha256) {
+      throw new Error('Inherited buyer license no longer matches the approved base release.');
+    }
+    buyerLicense = base.manifest.buyer_license;
+  } else {
+    licenseBuffer = await readFile(BUYER_LICENSE.source_url);
+    await writeFile(licensePath, licenseBuffer);
+    await rm(resolve(candidateRoot, 'download', 'LICENSE-DRAFT.md'), { force: true });
+    buyerLicense = {
+      license_id: BUYER_LICENSE.license_id,
+      version: BUYER_LICENSE.version,
+      content_sha256: sha256(licenseBuffer),
+    };
   }
   const files = await Promise.all((await filesBelow(candidateRoot)).map((path) => hashedFile(path, candidateRoot)));
   const expansionAnimationCount = expansionAssets.reduce((total, asset) => total + asset.animations.length, 0);
   const expansionStateCount = expansionAssets.reduce((total, asset) => total + asset.states.length, 0);
+  const addedAssetCount = expansionAssets.filter((asset) => asset.operation === 'add_asset').length;
+  const enhancedAssetCount = expansionAssets.filter((asset) => asset.operation === 'enhance_existing').length;
+  const replacedAssetCount = expansionAssets.filter((asset) => asset.operation === 'replace_existing').length;
   const gates = {
     base_release_verified: true,
     expansion_review_approved: true,
@@ -409,13 +508,18 @@ export async function prepareApprovedAssetExpansionRelease(options) {
     expansion_manifest_hash: approved.manifest.manifest_hash,
     expansion_approved_at: approved.decision.decided_at,
     input_hash: inputHash,
-    weapon_count: product.assets.length,
-    asset_count: product.assets.length + expansionAssets.length,
+    base_asset_count: product.assets.length,
+    weapon_count: product.assets.filter((asset) => asset.kind === 'weapon').length,
+    asset_count: product.assets.length + addedAssetCount,
     expansion_asset_count: expansionAssets.length,
+    added_asset_count: addedAssetCount,
+    enhanced_asset_count: enhancedAssetCount,
+    replaced_asset_count: replacedAssetCount,
     expansion_assets: expansionAssets.map((asset) => ({
       asset_id: asset.asset_id,
       asset_key: asset.asset_key,
       name: asset.name,
+      operation: asset.operation,
       description: asset.description,
       buyer_group: asset.buyer_group,
       buyer_path: asset.buyer_path,
@@ -427,7 +531,7 @@ export async function prepareApprovedAssetExpansionRelease(options) {
     effect_animation_count: base.manifest.effect_animation_count || 0,
     expansion_animation_count: expansionAnimationCount,
     expansion_state_count: expansionStateCount,
-    buyer_license: base.manifest.buyer_license,
+    buyer_license: buyerLicense,
     marketing_media: marketingMedia,
     marketing_version: EXPANSION_RELEASE_MARKETING_VERSION,
     expansion_release_version: EXPANSION_RELEASE_VERSION,

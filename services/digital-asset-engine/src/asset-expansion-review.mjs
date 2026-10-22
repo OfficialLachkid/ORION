@@ -57,8 +57,9 @@ function parseReference(value, expectedPrefix) {
 }
 
 export function buildAssetExpansionReviewComponents(context, resolved = false) {
+  const enhancementOnly = ['enhancement', 'upgrade'].includes(context.reviewMode);
   const buttons = resolved ? [] : [
-    { type: 2, style: 3, label: 'Approve Expansion', custom_id: buildReference(BUTTON_PREFIX, 'approve', context) },
+    { type: 2, style: 3, label: context.reviewMode === 'upgrade' ? 'Approve Asset Upgrade' : enhancementOnly ? 'Approve Animation Upgrade' : 'Approve Expansion', custom_id: buildReference(BUTTON_PREFIX, 'approve', context) },
     { type: 2, style: 2, label: 'Request Changes', custom_id: buildReference(BUTTON_PREFIX, 'request_changes', context) },
     { type: 2, style: 4, label: 'Reject Expansion', custom_id: buildReference(BUTTON_PREFIX, 'reject', context) },
   ];
@@ -75,30 +76,58 @@ function manifestUrl(guildId, state) {
   return `https://discord.com/channels/${guildId}/${state.channel_id}/${state.overview_message_id}`;
 }
 
+function manifestReviewMode(manifest) {
+  if (manifest.new_asset_count === 0 && (manifest.replaced_asset_count || 0) > 0) return 'upgrade';
+  if (manifest.enhanced_asset_count > 0 && manifest.new_asset_count === 0) return 'enhancement';
+  return 'expansion';
+}
+
+function assertReleasePlanMatchesManifest(plan, manifest) {
+  if (!plan
+    || plan.product_slug !== manifest.product_slug
+    || plan.expansion_id !== manifest.expansion_id
+    || plan.base_version !== manifest.base_version
+    || plan.target_version !== manifest.target_version
+    || plan.base_manifest_hash !== manifest.base_manifest_hash
+    || plan.title !== manifest.title) {
+    throw new Error('Expansion release plan does not match its immutable review manifest.');
+  }
+}
+
 function overviewEmbed(manifest, revision) {
+  const upgradeOnly = (manifest.enhanced_asset_count + (manifest.replaced_asset_count || 0)) > 0
+    && manifest.new_asset_count === 0;
+  const hasReplacement = (manifest.replaced_asset_count || 0) > 0;
   const assets = manifest.assets.map((asset, index) => (
     `**${String(index + 1).padStart(2, '0')}** — ${asset.name} · ${asset.buyer_group}${asset.animation ? ` · ${(asset.animation.states || []).length} states · ${asset.animation.animations.length} animations` : ''}`
   )).join('\n');
   return {
-    title: `${manifest.title} · Expansion Review · Revision ${revision}`,
-    description: 'Review these complete additions before ORION builds a new version of the existing product. Animated items include their exact runtime frames, overlays, sheets, metadata, and review GIFs. The current public release remains unchanged.',
+    title: `${manifest.title} · ${upgradeOnly ? 'Asset Upgrade' : 'Expansion'} Review · Revision ${revision}`,
+    description: upgradeOnly
+      ? hasReplacement
+        ? 'Review these animations, states, and the explicitly replaced Spell Tome base before ORION builds a new product version. Existing asset IDs remain stable; the reviewed tome artwork replaces its prior base only in the future candidate. Runtime files and review GIFs are bound to this manifest. The current public release remains unchanged.'
+        : 'Review these animations and states for the existing assets before ORION builds a new product version. The asset identities and approved base sprites remain unchanged. Runtime frames, overlays, sheets, metadata, and review GIFs are bound to this manifest. The current public release remains unchanged.'
+      : 'Review these complete additions before ORION builds a new version of the existing product. Animated items include their exact runtime frames, overlays, sheets, metadata, and review GIFs. The current public release remains unchanged.',
     color: COLOR,
     fields: [
       { name: 'Target release', value: `\`${manifest.base_version}\` → \`${manifest.target_version}\``, inline: true },
-      { name: 'Assets', value: String(manifest.asset_count), inline: true },
+      { name: upgradeOnly ? 'Upgraded assets' : 'Assets', value: String(manifest.asset_count), inline: true },
+      ...(hasReplacement ? [{ name: 'Replaced bases', value: String(manifest.replaced_asset_count), inline: true }] : []),
       { name: 'Animations', value: String(manifest.animation_count || 0), inline: true },
       { name: 'States', value: String(manifest.state_count || 0), inline: true },
       { name: 'Generation cost', value: '€0 API cost', inline: true },
-      { name: 'Proposed additions', value: assets, inline: false },
-      { name: 'Expansion manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
+      { name: upgradeOnly ? 'Upgrade scope' : 'Proposed additions', value: assets, inline: false },
+      { name: upgradeOnly ? 'Upgrade manifest' : 'Expansion manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
       { name: 'Safety', value: 'Approval authorizes a versioned candidate build only. It does not update itch.io or publish anything.', inline: false },
     ],
     image: { url: 'attachment://expansion-overview.png' },
-    footer: { text: 'ORION Digital Asset Engine · immutable expansion proposal' },
+    footer: { text: `ORION Digital Asset Engine · immutable ${upgradeOnly ? 'asset upgrade' : 'expansion'} proposal` },
   };
 }
 
 function assetEmbed(asset, index, total) {
+  const enhancement = asset.operation === 'enhance_existing';
+  const replacement = asset.operation === 'replace_existing';
   const interactiveSummary = asset.animation
     ? [
       ...(asset.animation.states || []).map((state) => `- State: ${state.state_key}`),
@@ -107,7 +136,7 @@ function assetEmbed(asset, index, total) {
     : 'Static base asset only';
   return {
     title: `${String(index + 1).padStart(2, '0')}/${String(total).padStart(2, '0')} · ${asset.name}`,
-    description: `Buyer group: **${asset.buyer_group}**. Select **${String(index + 1).padStart(2, '0')}** in the feedback form if this addition needs revision.`,
+    description: `Buyer group: **${asset.buyer_group}**. Select **${String(index + 1).padStart(2, '0')}** in the feedback form if this ${replacement ? 'replacement base and animation upgrade' : enhancement ? 'animation upgrade' : 'addition'} needs revision.`,
     color: COLOR,
     fields: [
       { name: 'Asset ID', value: `\`${asset.asset_id}\``, inline: false },
@@ -139,6 +168,7 @@ export async function postAssetExpansionReview(options) {
     || manifest.expansion_id !== options.expansionId) {
     throw new Error('Expansion review pointer does not match its immutable manifest.');
   }
+  assertReleasePlanMatchesManifest(pointer.release_plan, manifest);
   const packState = await readJson(resolve(productRoot, 'review', 'discord.json'));
   if (!packState.channel_id) throw new Error('The existing product review channel is unavailable.');
   const statePath = resolveInside(
@@ -149,6 +179,10 @@ export async function postAssetExpansionReview(options) {
   let state;
   try { state = await readJson(statePath); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
   if (state?.manifest_hash === manifest.manifest_hash && state?.completed_at) {
+    if (!state.release_plan) {
+      state.release_plan = pointer.release_plan;
+      await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+    }
     return { ...state, reused: true, statePath };
   }
   const revisionChanged = Boolean(state?.manifest_hash && state.manifest_hash !== manifest.manifest_hash);
@@ -157,6 +191,7 @@ export async function postAssetExpansionReview(options) {
     product_id: manifest.product_id,
     product_slug: manifest.product_slug,
     expansion_id: manifest.expansion_id,
+    category_name: packState.category_name || 'DIGITAL ASSETS',
     channel_id: packState.channel_id,
     overview_message_id: null,
     thread_id: null,
@@ -165,8 +200,10 @@ export async function postAssetExpansionReview(options) {
     created_at: options.now || new Date().toISOString(),
   };
   state.review_revision += revisionChanged ? 1 : 0;
+  state.category_name = state.category_name || packState.category_name || 'DIGITAL ASSETS';
   state.manifest_hash = manifest.manifest_hash;
   state.target_version = manifest.target_version;
+  state.release_plan = pointer.release_plan;
   state.package_root = relative(productRoot, candidateRoot).replaceAll('\\', '/');
   state.completed_at = null;
   if (revisionChanged) state.last_decision = null;
@@ -176,6 +213,7 @@ export async function postAssetExpansionReview(options) {
     productSlug: manifest.product_slug,
     expansionId: manifest.expansion_id,
     manifestHash: manifest.manifest_hash,
+    reviewMode: manifestReviewMode(manifest),
     manifestUrl: state.overview_message_id ? manifestUrl(guildId, state) : 'https://discord.com',
   };
   const payload = { embeds: [overviewEmbed(manifest, state.review_revision)] };
@@ -212,7 +250,7 @@ export async function postAssetExpansionReview(options) {
     const thread = await discordRequest(
       token,
       `/channels/${state.channel_id}/messages/${state.overview_message_id}/threads`,
-      { method: 'POST', body: { name: `expansion-${manifest.target_version}-review`, auto_archive_duration: 1440 }, fetchImpl: options.fetchImpl },
+      { method: 'POST', body: { name: `${context.reviewMode === 'upgrade' ? 'asset-upgrade' : context.reviewMode === 'enhancement' ? 'animation-upgrade' : 'expansion'}-${manifest.target_version}-review`, auto_archive_duration: 1440 }, fetchImpl: options.fetchImpl },
     );
     state.thread_id = thread.id;
     await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
@@ -384,10 +422,14 @@ export async function recordAssetExpansionReviewDecision(options) {
   if (unknown.length) throw new Error(`Unknown expansion assets selected: ${unknown.join(', ')}.`);
   const affected = new Set(decision.affectedAssetIds);
   const reviewer = options.interaction?.member?.user || options.interaction?.user || {};
+  const baseReleaseId = String(context.manifest.base_release_id || '').trim();
+  if (!baseReleaseId) {
+    throw new Error('The immutable expansion manifest has no base release ID. Regenerate the review candidate before deciding.');
+  }
   const row = {
     product_id: context.manifest.product_id,
     expansion_id: context.manifest.expansion_id,
-    base_release_id: context.manifest.base_release_id,
+    base_release_id: baseReleaseId,
     target_version: context.manifest.target_version,
     manifest_hash: context.manifest.manifest_hash,
     decision: decision.decision,
@@ -438,6 +480,7 @@ export async function recordAssetExpansionReviewDecision(options) {
     productSlug: context.manifest.product_slug,
     expansionId: context.manifest.expansion_id,
     manifestHash: context.manifest.manifest_hash,
+    reviewMode: manifestReviewMode(context.manifest),
     manifestUrl: manifestUrl(config.guildId, context.state),
   };
   return {
@@ -447,6 +490,7 @@ export async function recordAssetExpansionReviewDecision(options) {
     channelId: context.state.channel_id,
     messageId: context.state.overview_message_id,
     threadId: context.state.thread_id,
+    statePath: context.statePath,
     messagePatch: { components: buildAssetExpansionReviewComponents(linkContext, true) },
     assetMessagePatches: row.asset_decisions.map((assetDecision) => ({
       ...assetDecision,

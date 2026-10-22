@@ -18,6 +18,10 @@ const projectRoot = resolve(testDirectory, '../../..');
 test('asset kinds resolve to bounded recipes without invoking product fixtures', () => {
   assert.equal(resolveAssetRecipe('pistol').recipe_id, 'weapon');
   assert.equal(resolveAssetRecipe('book').recipe_id, 'tome');
+  assert.equal(resolveAssetRecipe('relic').recipe_id, 'rune_stone');
+  assert.equal(resolveAssetRecipe('alchemy-tool').recipe_id, 'flask');
+  assert.equal(resolveAssetRecipe('ritual-object').recipe_id, 'candle');
+  assert.equal(resolveAssetRecipe('focus').recipe_id, 'wand');
   assert.equal(resolveAssetRecipe('plasma shield').recipe_id, 'plasma_shield');
   assert.equal(resolveAssetRecipe('home decor plant').recipe_id, 'generic_static');
   assert.equal(resolveAssetRecipe('home decor plant').matched_by, 'fallback');
@@ -50,7 +54,8 @@ test('research-selected kinds persist their production recipe in the product spe
   const validation = validateOpportunity(input, config, { now: '2026-10-12T12:00:00.000Z' });
   const product = createProductSpecification(validation, config);
   assert.equal(product.assets[0].production_recipe.recipe_id, 'potion');
-  assert.equal(product.assets[0].production_recipe.executor.status, 'planned');
+  assert.equal(product.assets[0].production_recipe.executor.status, 'available');
+  assert.equal(product.assets[0].production_recipe.executor.id, 'interactive_items_v1');
   assert.equal(product.assets[1].production_recipe.recipe_id, 'generic_static');
   assert.equal(product.assets[1].production_recipe.executor.orchestration, 'automatic');
 });

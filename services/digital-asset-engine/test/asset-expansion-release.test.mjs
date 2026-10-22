@@ -210,6 +210,186 @@ test('builds an immutable 0.3.0 package from the exact approved expansion review
   assert.equal(reused.manifest.manifest_hash, result.manifest.manifest_hash);
 });
 
+test('builds a generic animated update from an initial public release without duplicating existing assets', async () => {
+  const outputRoot = await mkdtemp(resolve(tmpdir(), 'orion-generic-upgrade-'));
+  const productRoot = resolve(outputRoot, 'arcane-relics-potions');
+  const baseRoot = resolve(productRoot, 'exports', 'itch-preview');
+  const reviewRoot = resolve(productRoot, 'extensions', 'arcane-animation-v1', 'review');
+  const reviewCandidate = resolve(reviewRoot, 'candidates', 'review-candidate');
+  const basePng = await sharp({
+    create: { width: 96, height: 96, channels: 4, background: { r: 128, g: 80, b: 180, alpha: 1 } },
+  }).png().toBuffer();
+  const replacementPng = await sharp({
+    create: { width: 96, height: 96, channels: 4, background: { r: 68, g: 198, b: 191, alpha: 1 } },
+  }).png().toBuffer();
+  const arcane = product();
+  arcane.slug = 'arcane-relics-potions';
+  arcane.title = 'Arcane Relics & Potions';
+  arcane.theme = 'Arcane fantasy and alchemy';
+  arcane.style = { ...arcane.style, width: 96, height: 96, perspective: 'centered inventory icon' };
+  arcane.assets = [{
+    ...arcane.assets[0],
+    asset_id: 'asset-spell-tome',
+    asset_key: 'spell-tome',
+    name: 'Spell Tome',
+    kind: 'book',
+    final_path: 'assets/items/spell-tome.png',
+  }];
+  await write(resolve(productRoot, 'product.json'), JSON.stringify(arcane));
+  const baseListing = {
+    schema_version: '1.0',
+    title: arcane.title,
+    short_description: 'Arcane pixel-art assets.',
+    description: 'Original arcane relics.',
+    price: { amount: 4.99, currency: 'USD' },
+    visibility: 'draft',
+    cover_path: 'cover.png',
+    screenshot_paths: ['cover.png', 'marketplace-preview.png'],
+    technical_information: ['Transparent PNG'],
+  };
+  baseListing.listing_hash = sha256(Buffer.from(JSON.stringify(baseListing)));
+  const baseFiles = {
+    'download/assets/individual/spell-tome.png': basePng,
+    'download/assets/arcane-relics-potions-sprite-sheet.png': basePng,
+    'download/LICENSE-DRAFT.md': Buffer.from('Draft only\n'),
+    'download/README.md': Buffer.from('Old readme\n'),
+    'cover.png': basePng,
+    'marketplace-preview.png': basePng,
+  };
+  for (const [path, value] of Object.entries(baseFiles)) await write(resolve(baseRoot, path), value);
+  await write(resolve(baseRoot, 'itch-listing-preview.json'), `${JSON.stringify(baseListing)}\n`);
+  const baseManifestHash = 'd'.repeat(64);
+  await write(resolve(baseRoot, 'manifest.json'), JSON.stringify({
+    release_state: 'internal_preview',
+    distribution_ready: false,
+    product_version: '0.1.0',
+    manifest_hash: baseManifestHash,
+    listing_hash: baseListing.listing_hash,
+    files: Object.entries(baseFiles).map(([path, value]) => ({
+      path, size_bytes: value.length, content_sha256: sha256(value),
+    })),
+  }));
+  await write(resolve(productRoot, 'review', 'distribution.json'), JSON.stringify({
+    status: 'published',
+    target_version: '0.1.0',
+    manifest_hash: baseManifestHash,
+    publication_job: { status: 'completed' },
+  }));
+  const animationJson = Buffer.from('{"root_motion":{"x":0,"y":0}}\n');
+  const reviewFiles = {
+    'assets/spell-tome.png': replacementPng,
+    'animations/spell-tome/frames/awakening/00.png': replacementPng,
+    'animations/spell-tome/overlays/awakening/00.png': replacementPng,
+    'animations/spell-tome/sheets/awakening.png': replacementPng,
+    'animations/spell-tome/states/awakened.png': replacementPng,
+    'animations/spell-tome/metadata/awakening/animation.json': animationJson,
+    'overview.png': replacementPng,
+  };
+  for (const [path, value] of Object.entries(reviewFiles)) await write(resolve(reviewCandidate, path), value);
+  const reviewInventory = Object.entries(reviewFiles).map(([path, value]) => ({
+    path, size_bytes: value.length, content_sha256: sha256(value),
+  }));
+  const reviewHash = 'e'.repeat(64);
+  await write(resolve(reviewCandidate, 'manifest.json'), JSON.stringify({
+    expansion_id: 'arcane-animation-v1',
+    product_id: arcane.product_id,
+    product_slug: arcane.slug,
+    base_version: '0.1.0',
+    target_version: '0.2.0',
+    base_manifest_hash: baseManifestHash,
+    manifest_hash: reviewHash,
+    asset_count: 1,
+    animation_count: 1,
+    state_count: 1,
+    assets: [{
+      asset_id: 'asset-spell-tome',
+      asset_key: 'spell-tome',
+      operation: 'replace_existing',
+      name: 'Spell Tome',
+      kind: 'book',
+      description: 'An awakened spell tome.',
+      buyer_group: 'items',
+      path: 'assets/spell-tome.png',
+      content_sha256: sha256(replacementPng),
+      review_hash: 'f'.repeat(64),
+      animation: {
+        bundle_hash: 'f'.repeat(64),
+        files: reviewInventory.filter((file) => file.path.startsWith('animations/spell-tome/')),
+        states: [{ state_key: 'awakened', path: 'animations/spell-tome/states/awakened.png' }],
+        animations: [{ animation_key: 'awakening', metadata_path: 'animations/spell-tome/metadata/awakening/animation.json' }],
+      },
+    }],
+    files: reviewInventory,
+  }));
+  await write(resolve(reviewRoot, 'latest-review.json'), JSON.stringify({
+    expansion_id: 'arcane-animation-v1',
+    target_version: '0.2.0',
+    candidate_path: 'extensions/arcane-animation-v1/review/candidates/review-candidate',
+    manifest_hash: reviewHash,
+  }));
+  await write(resolve(reviewRoot, 'discord.json'), JSON.stringify({
+    manifest_hash: reviewHash,
+    target_version: '0.2.0',
+    last_decision: { decision: 'approve', affected_asset_ids: [], decided_at: '2026-10-22T14:42:36.728Z' },
+  }));
+  const plan = {
+    schema_version: '1.0',
+    expansion_id: 'arcane-animation-v1',
+    product_slug: arcane.slug,
+    title: 'Arcane Animation Upgrade',
+    base_version: '0.1.0',
+    target_version: '0.2.0',
+    base_manifest_hash: baseManifestHash,
+    assets: [{
+      operation: 'replace_existing',
+      source_product_slug: arcane.slug,
+      source_asset_key: 'spell-tome',
+      target_asset_key: 'spell-tome',
+      target_name: 'Spell Tome',
+      buyer_group: 'items',
+      interactive_proof: { batch_id: 'arcane-animation-batch-v1', asset_key: 'spell-tome' },
+    }],
+  };
+  const result = await prepareApprovedAssetExpansionRelease({
+    outputRoot,
+    plan,
+    marketingBuilder: async ({ candidateRoot, inheritedScreenshotPaths }) => {
+      await write(resolve(candidateRoot, 'cover.gif'), Buffer.from('GIF89a-cover'));
+      await write(resolve(candidateRoot, 'cover-still.png'), replacementPng);
+      await write(resolve(candidateRoot, 'asset-upgrade-overview.png'), replacementPng);
+      await write(resolve(candidateRoot, 'animated-asset-montage.gif'), Buffer.from('GIF89a-montage'));
+      return {
+        cover_path: 'cover.gif',
+        cover_fallback_path: 'cover-still.png',
+        screenshot_paths: [
+          ...inheritedScreenshotPaths,
+          'asset-upgrade-overview.png',
+          'animated-asset-montage.gif',
+        ],
+        motion: { rapid_flashing: false },
+      };
+    },
+  });
+  assert.equal(result.manifest.asset_count, 1);
+  assert.equal(result.manifest.replaced_asset_count, 1);
+  assert.equal(result.manifest.added_asset_count, 0);
+  assert.equal(result.manifest.expansion_assets[0].buyer_path, 'assets/individual/spell-tome.png');
+  assert.deepEqual(
+    await readFile(resolve(result.candidateRoot, 'download/assets/individual/spell-tome.png')),
+    replacementPng,
+  );
+  await assert.rejects(readFile(resolve(result.candidateRoot, 'download/assets/expansion/items/spell-tome.png')));
+  await assert.rejects(readFile(resolve(result.candidateRoot, 'download/LICENSE-DRAFT.md')));
+  assert.match(await readFile(resolve(result.candidateRoot, 'download/LICENSE.md'), 'utf8'), /VBJServices Digital Asset License 1\.0/u);
+  assert.equal(result.manifest.buyer_license.license_id, 'vbjservices-digital-asset-license');
+  assert.deepEqual(result.listing.screenshot_paths, [
+    'previous-release-media/cover.png',
+    'previous-release-media/marketplace-preview.png',
+    'asset-upgrade-overview.png',
+    'animated-asset-montage.gif',
+  ]);
+});
+
 test('shield marketing preview depletes monotonically before its terminal scatter and empty frames', () => {
   const asset = {
     asset_key: 'plasma-shield',

@@ -12,6 +12,16 @@ function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function expansionBaseReleaseId(manifest) {
+  const explicitReleaseId = String(manifest?.release_id || '').trim();
+  if (explicitReleaseId) return explicitReleaseId;
+  const manifestHash = String(manifest?.manifest_hash || '').trim();
+  if (!/^[a-f0-9]{64}$/u.test(manifestHash)) {
+    throw new Error('Expansion base manifest needs a release ID or a valid manifest hash.');
+  }
+  return `asset-release-${manifestHash.slice(0, 24)}`;
+}
+
 function normalizePath(value) {
   return value.replaceAll('\\', '/');
 }
@@ -30,6 +40,26 @@ async function readJson(path) {
 
 async function exists(path) {
   try { await stat(path); return true; } catch (error) { if (error?.code === 'ENOENT') return false; throw error; }
+}
+
+async function resolveExpansionBase(productRoot, product, plan) {
+  try {
+    return await resolvePackagedRelease({ productRoot, releaseVersion: plan.base_version });
+  } catch (error) {
+    if (error?.code !== 'ENOENT' || product.version !== plan.base_version) throw error;
+  }
+  const base = await resolvePackagedRelease({ productRoot });
+  if (base.manifest.product_version !== plan.base_version) {
+    throw new Error('Canonical preview does not match the requested expansion base version.');
+  }
+  const distribution = await readJson(resolveInside(productRoot, 'review/distribution.json', 'Published distribution receipt'));
+  if (distribution.status !== 'published'
+    || distribution.target_version !== plan.base_version
+    || distribution.manifest_hash !== base.manifest.manifest_hash
+    || distribution.publication_job?.status !== 'completed') {
+    throw new Error('The initial packaged release is not the exact verified public expansion base.');
+  }
+  return base;
 }
 
 function escapeXml(value) {
@@ -91,7 +121,7 @@ async function buildOverview(title, assets) {
     '<rect width="100%" height="100%" fill="#0c1019"/>',
     '<rect x="20" y="20" width="920" height="500" rx="22" fill="#111827" stroke="#35d9ff" stroke-width="2"/>',
     `<text x="480" y="66" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="${titleSize}" font-weight="700">${escapeXml(title.toUpperCase())}</text>`,
-    `<text x="480" y="99" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${assets.length} PROPOSED ASSETS · ${assets.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0)} ANIMATIONS</text>`,
+    `<text x="480" y="99" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${assets.length} REVIEW ITEMS · ${assets.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0)} ANIMATIONS</text>`,
     ...cells,
     '<text x="480" y="501" text-anchor="middle" fill="#8998b8" font-family="Arial, sans-serif" font-size="14">Internal expansion review · public package unchanged</text>',
     '</svg>',
@@ -115,6 +145,19 @@ async function verifyBundle(candidateRoot, manifest) {
       throw new Error(`Immutable expansion review file changed: ${file.path}.`);
     }
   }
+}
+
+async function writeLatestReviewPointer({ productRoot, reviewRoot, candidateRoot, manifest, plan, now }) {
+  await mkdir(reviewRoot, { recursive: true });
+  await writeFile(resolve(reviewRoot, 'latest-review.json'), `${JSON.stringify({
+    schema_version: '1.0',
+    expansion_id: plan.expansion_id,
+    candidate_path: normalizePath(relative(productRoot, candidateRoot)),
+    manifest_hash: manifest.manifest_hash,
+    target_version: plan.target_version,
+    release_plan: plan,
+    updated_at: now || new Date().toISOString(),
+  }, null, 2)}\n`, 'utf8');
 }
 
 function animationReviewFile(path) {
@@ -149,14 +192,15 @@ async function loadAnimationProof(productRoot, request, expectedBaseHash) {
   if (!itemReference) throw new Error(`Animation proof item is missing: ${proof.asset_key}.`);
   const itemRoot = resolveInside(batchRoot, proof.asset_key, 'Interactive animation item');
   const itemManifest = await readJson(resolveInside(itemRoot, 'manifest.json', 'Animation item manifest'));
+  const expectsReplacement = request.operation === 'replace_existing';
   if (itemManifest.manifest_hash !== itemReference.manifest_hash
     || itemManifest.item?.target_asset_key !== request.target_asset_key
     || itemManifest.status !== 'awaiting_animation_review'
-    || itemManifest.base_regenerated !== false) {
+    || itemManifest.base_regenerated !== expectsReplacement) {
     throw new Error(`Animation proof no longer matches ${request.target_asset_key}.`);
   }
   const baseFile = itemManifest.files?.find((file) => file.path === 'base.png');
-  if (!baseFile || baseFile.sha256 !== expectedBaseHash) {
+  if (!baseFile || (!expectsReplacement && baseFile.sha256 !== expectedBaseHash)) {
     throw new Error(`Animation proof base changed for ${request.target_asset_key}.`);
   }
   const files = [];
@@ -202,6 +246,7 @@ async function loadAnimationProof(productRoot, request, expectedBaseHash) {
     ...identity,
     bundle_hash: sha256(JSON.stringify(identity)),
     runtime_files: files,
+    base_buffer: files.find((file) => file.path === 'base.png')?.buffer,
   };
 }
 
@@ -210,22 +255,27 @@ export async function prepareAssetExpansionReview(options) {
   const store = options.store || new CanonicalProductStore(options.outputRoot);
   const product = await store.loadProduct(plan.product_slug);
   const productRoot = store.productRoot(product);
-  const base = await resolvePackagedRelease({ productRoot, releaseVersion: plan.base_version });
+  const base = await resolveExpansionBase(productRoot, product, plan);
   if (base.manifest.manifest_hash !== plan.base_manifest_hash) {
     throw new Error('Expansion plan targets a different immutable base release.');
   }
-  const existingKeys = new Set(product.assets.map((asset) => asset.asset_key));
+  const baseReleaseId = expansionBaseReleaseId(base.manifest);
   const selected = [];
   for (const request of plan.assets) {
-    if (existingKeys.has(request.target_asset_key)) {
+    const existingAsset = product.assets.find((asset) => asset.asset_key === request.target_asset_key);
+    if (request.operation === 'add_asset' && existingAsset) {
       throw new Error(`Expansion asset key already exists in the base product: ${request.target_asset_key}.`);
     }
-    const sourceRoot = resolveInside(
-      productRoot,
-      `experiments/${request.source_product_slug}`,
-      'Expansion source product',
-    );
-    const sourceProduct = ProductSpecificationSchema.parse(await readJson(resolve(sourceRoot, 'product.json')));
+    if (['enhance_existing', 'replace_existing'].includes(request.operation) && !existingAsset) {
+      throw new Error(`Enhancement or replacement target does not exist in the base product: ${request.target_asset_key}.`);
+    }
+    const canonicalSource = request.source_product_slug === product.slug;
+    const sourceRoot = canonicalSource
+      ? productRoot
+      : resolveInside(productRoot, `experiments/${request.source_product_slug}`, 'Expansion source product');
+    const sourceProduct = canonicalSource
+      ? product
+      : ProductSpecificationSchema.parse(await readJson(resolve(sourceRoot, 'product.json')));
     if (sourceProduct.slug !== request.source_product_slug) {
       throw new Error(`Expansion source slug changed: ${request.source_product_slug}.`);
     }
@@ -241,10 +291,22 @@ export async function prepareAssetExpansionReview(options) {
     if (validation.status !== 'passed' || validation.metrics?.content_sha256 !== contentHash) {
       throw new Error(`Expansion source asset is not a verified candidate: ${request.source_asset_key}.`);
     }
+    if (['enhance_existing', 'replace_existing'].includes(request.operation)
+      && (sourceAsset.asset_key !== existingAsset.asset_key || sourceAsset.asset_id !== existingAsset.asset_id)) {
+      throw new Error(`Enhancement or replacement proof must preserve the existing asset identity: ${request.target_asset_key}.`);
+    }
     const animation = await loadAnimationProof(productRoot, request, contentHash);
+    const selectedBuffer = request.operation === 'replace_existing' ? animation?.base_buffer : buffer;
+    if (!selectedBuffer) throw new Error(`Replacement proof has no reviewed base: ${request.target_asset_key}.`);
+    const selectedMetadata = await sharp(selectedBuffer).metadata();
+    const selectedHash = sha256(selectedBuffer);
+    if (animation) delete animation.base_buffer;
     selected.push({
-      asset_id: `asset-expansion-${sha256(`${plan.expansion_id}:${request.target_asset_key}`).slice(0, 16)}`,
+      asset_id: ['enhance_existing', 'replace_existing'].includes(request.operation)
+        ? existingAsset.asset_id
+        : `asset-expansion-${sha256(`${plan.expansion_id}:${request.target_asset_key}`).slice(0, 16)}`,
       asset_key: request.target_asset_key,
+      operation: request.operation,
       name: request.target_name,
       kind: sourceAsset.kind,
       description: sourceAsset.description,
@@ -253,18 +315,23 @@ export async function prepareAssetExpansionReview(options) {
       source_product_slug: request.source_product_slug,
       source_asset_key: request.source_asset_key,
       source_asset_id: sourceAsset.asset_id,
-      content_sha256: contentHash,
-      size_bytes: buffer.length,
-      validation_metrics: validation.metrics,
+      content_sha256: selectedHash,
+      size_bytes: selectedBuffer.length,
+      validation_metrics: {
+        ...validation.metrics,
+        width: selectedMetadata.width,
+        height: selectedMetadata.height,
+        content_sha256: selectedHash,
+      },
       animation,
-      buffer,
+      buffer: selectedBuffer,
     });
   }
 
   const inputHash = sha256(Buffer.from(JSON.stringify({
     plan,
     product_id: product.product_id,
-    base_release_id: base.manifest.release_id,
+    base_release_id: baseReleaseId,
     assets: selected.map(({ buffer, animation, ...asset }) => ({
       ...asset,
       animation: animation ? {
@@ -281,6 +348,9 @@ export async function prepareAssetExpansionReview(options) {
     const manifest = await readJson(manifestPath);
     if (manifest.input_hash !== inputHash) throw new Error('Immutable expansion review input changed.');
     await verifyBundle(candidateRoot, manifest);
+    await writeLatestReviewPointer({
+      productRoot, reviewRoot, candidateRoot, manifest, plan, now: options.now,
+    });
     return { plan, product, candidateRoot, manifestPath, manifest, reused: true };
   }
 
@@ -317,11 +387,14 @@ export async function prepareAssetExpansionReview(options) {
     title: plan.title,
     base_version: plan.base_version,
     target_version: plan.target_version,
-    base_release_id: base.manifest.release_id,
+    base_release_id: baseReleaseId,
     base_manifest_hash: base.manifest.manifest_hash,
     input_hash: inputHash,
     expansion_review_version: EXPANSION_REVIEW_VERSION,
     asset_count: selected.length,
+    new_asset_count: selected.filter((asset) => asset.operation === 'add_asset').length,
+    enhanced_asset_count: selected.filter((asset) => asset.operation === 'enhance_existing').length,
+    replaced_asset_count: selected.filter((asset) => asset.operation === 'replace_existing').length,
     animation_count: selected.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0),
     state_count: selected.reduce((total, asset) => total + (asset.animation?.states.length || 0), 0),
     assets: selected.map(({ buffer, animation, ...asset }) => ({
@@ -348,14 +421,8 @@ export async function prepareAssetExpansionReview(options) {
     manifest_hash: sha256(Buffer.from(JSON.stringify({ ...identity, created_at: undefined }))),
   };
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-  await mkdir(reviewRoot, { recursive: true });
-  await writeFile(resolve(reviewRoot, 'latest-review.json'), `${JSON.stringify({
-    schema_version: '1.0',
-    expansion_id: plan.expansion_id,
-    candidate_path: normalizePath(relative(productRoot, candidateRoot)),
-    manifest_hash: manifest.manifest_hash,
-    target_version: plan.target_version,
-    updated_at: options.now || new Date().toISOString(),
-  }, null, 2)}\n`, 'utf8');
+  await writeLatestReviewPointer({
+    productRoot, reviewRoot, candidateRoot, manifest, plan, now: options.now,
+  });
   return { plan, product, candidateRoot, manifestPath, manifest, reused: false };
 }

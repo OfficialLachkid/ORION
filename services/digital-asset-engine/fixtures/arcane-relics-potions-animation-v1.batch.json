@@ -1,0 +1,111 @@
+{
+  "schema_version": "1.0",
+  "batch_id": "arcane-relics-potions-animation-v1",
+  "product_slug": "arcane-relics-potions",
+  "title": "Arcane Relics & Potions — Animation Upgrade",
+  "items": [
+    {
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "mana-potion",
+      "target_asset_key": "mana-potion",
+      "name": "Mana Potion",
+      "recipe": "potion",
+      "seed": 14900,
+      "break_description": "A compact violet-and-cyan potion shatter: small glass fragments, magical liquid splash, and a restrained energy release centered on the bottle."
+    },
+    {
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "healing-elixir",
+      "target_asset_key": "healing-elixir",
+      "name": "Healing Elixir",
+      "recipe": "potion",
+      "seed": 14901,
+      "break_description": "A compact warm-gold healing elixir shatter: small glass fragments, glowing liquid droplets, and a restrained restorative burst centered on the bottle."
+    },
+    {
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "arcane-crystal",
+      "target_asset_key": "arcane-crystal",
+      "name": "Arcane Crystal",
+      "recipe": "crystal",
+      "seed": 14902,
+      "orbit_description": "A thin broken ring of tiny violet and cyan magical particles orbiting a central crystal-shaped empty space, with generous transparency between particles."
+    },
+    {
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "rune-stone",
+      "target_asset_key": "rune-stone",
+      "name": "Rune Stone",
+      "recipe": "rune_stone",
+      "seed": 14903
+    },
+    {
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "spell-tome",
+      "target_asset_key": "spell-tome",
+      "name": "Spell Tome",
+      "recipe": "tome",
+      "seed": 14904,
+      "open_description": "The covers are open around the original spine and reveal two parchment pages with the same violet clasp, cyan rune light, and dark-purple binding details."
+    },
+    {
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "alchemist-flask",
+      "target_asset_key": "alchemist-flask",
+      "name": "Alchemist Flask",
+      "recipe": "flask",
+      "seed": 14905,
+      "reaction_description": "A few tiny cyan, violet, and warm-gold alchemical bubbles and sparks concentrated tightly around the liquid region, suitable for an unstable reaction loop."
+    },
+    {
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "ritual-candle",
+      "target_asset_key": "ritual-candle",
+      "name": "Ritual Candle",
+      "recipe": "candle",
+      "seed": 14906,
+      "smoke_description": "A small delicate curl of pale violet-gray pixel smoke rising from a candle wick, sparse and narrow with generous transparent space."
+    },
+    {
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "enchanted-wand",
+      "target_asset_key": "enchanted-wand",
+      "name": "Enchanted Wand",
+      "recipe": "wand",
+      "seed": 14907,
+      "release_description": "A compact cyan-and-violet magical spark burst emitted from the wand tip, with a bright core, short rays, and a few tiny particles."
+    }
+  ],
+  "style": {
+    "medium": "pixel_art",
+    "palette": [
+      "#171329",
+      "#2c204f",
+      "#513b79",
+      "#8157a6",
+      "#b481d1",
+      "#ead7ff",
+      "#193f58",
+      "#1f7d8d",
+      "#44c6bf",
+      "#b9fff1",
+      "#7a3d2b",
+      "#cf7048",
+      "#f4b96b",
+      "#fff0b8"
+    ],
+    "energy_colors": [
+      "#b481d1",
+      "#ead7ff",
+      "#44c6bf",
+      "#b9fff1",
+      "#f4b96b",
+      "#fff0b8"
+    ],
+    "energy_color_tolerance": 54,
+    "max_palette_colors": 24,
+    "chroma_key": "#ff00ff",
+    "source_width": 1024,
+    "source_height": 1024
+  }
+}
