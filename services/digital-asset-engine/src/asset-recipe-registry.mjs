@@ -180,12 +180,12 @@ export const ASSET_RECIPE_REGISTRY = Object.freeze({
   }),
   tome: recipe({
     label: 'Book or tome',
-    states: ['closed', 'open'],
+    states: ['sealed', 'awakened'],
     animations: [
-      animation('opening', ['open', 'activate'], 'once', { anchor: 'spine' }),
-      animation('open-energy-loop', ['hover', 'energy_flow', 'glow_pulse']),
+      animation('awakening', ['activate', 'energy_flow', 'glow_pulse'], 'once'),
+      animation('rune-glow-loop', ['energy_flow', 'glow_pulse']),
     ],
-    anchors: ['spine', 'page_region'],
+    anchors: ['rune_region'],
     deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
     executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },
   }),
@@ -210,7 +210,10 @@ export const ASSET_RECIPE_REGISTRY = Object.freeze({
   }),
   wand: recipe({
     label: 'Wand',
-    animations: [animation('charge-release', ['charge', 'release', 'spark_burst'], 'once', { anchor: 'tip' })],
+    animations: [
+      animation('wand-charge', ['charge', 'glow_pulse'], 'once', { anchor: 'tip' }),
+      animation('spell-burst', ['release', 'spark_burst', 'dissolve'], 'once', { anchor: 'tip', composition: 'independent_effect' }),
+    ],
     anchors: ['tip'],
     deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
     executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },

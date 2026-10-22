@@ -15,7 +15,7 @@
       "target_name": "Mana Potion",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "arcane-relics-potions-animation-v1",
+        "batch_id": "arcane-relics-potions-animation-v2",
         "asset_key": "mana-potion"
       }
     },
@@ -27,7 +27,7 @@
       "target_name": "Healing Elixir",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "arcane-relics-potions-animation-v1",
+        "batch_id": "arcane-relics-potions-animation-v2",
         "asset_key": "healing-elixir"
       }
     },
@@ -39,7 +39,7 @@
       "target_name": "Arcane Crystal",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "arcane-relics-potions-animation-v1",
+        "batch_id": "arcane-relics-potions-animation-v2",
         "asset_key": "arcane-crystal"
       }
     },
@@ -51,7 +51,7 @@
       "target_name": "Rune Stone",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "arcane-relics-potions-animation-v1",
+        "batch_id": "arcane-relics-potions-animation-v2",
         "asset_key": "rune-stone"
       }
     },
@@ -63,7 +63,7 @@
       "target_name": "Spell Tome",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "arcane-relics-potions-animation-v1",
+        "batch_id": "arcane-relics-potions-animation-v2",
         "asset_key": "spell-tome"
       }
     },
@@ -75,7 +75,7 @@
       "target_name": "Alchemist Flask",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "arcane-relics-potions-animation-v1",
+        "batch_id": "arcane-relics-potions-animation-v2",
         "asset_key": "alchemist-flask"
       }
     },
@@ -87,7 +87,7 @@
       "target_name": "Ritual Candle",
       "buyer_group": "props",
       "interactive_proof": {
-        "batch_id": "arcane-relics-potions-animation-v1",
+        "batch_id": "arcane-relics-potions-animation-v2",
         "asset_key": "ritual-candle"
       }
     },
@@ -99,7 +99,7 @@
       "target_name": "Enchanted Wand",
       "buyer_group": "items",
       "interactive_proof": {
-        "batch_id": "arcane-relics-potions-animation-v1",
+        "batch_id": "arcane-relics-potions-animation-v2",
         "asset_key": "enchanted-wand"
       }
     }

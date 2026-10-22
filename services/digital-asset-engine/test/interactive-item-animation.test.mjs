@@ -596,9 +596,16 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   ]);
   assert.equal(shieldManifest.generation_calls, 2);
   const wandManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'enchanted-wand/manifest.json'), 'utf8'));
-  assert.deepEqual(wandManifest.animations, ['charge-release']);
+  assert.deepEqual(wandManifest.animations, ['wand-charge', 'spell-burst']);
   assert.equal(wandManifest.generation_calls, 1);
   assert.equal(wandManifest.base_regenerated, false);
+  const spellMetadata = JSON.parse(await readFile(
+    resolve(result.batchRoot, 'enchanted-wand/metadata/spell-burst/animation.json'),
+    'utf8',
+  ));
+  assert.equal(spellMetadata.base_sprite, null);
+  assert.equal(spellMetadata.composition_role, 'independent_effect');
+  assert.equal(spellMetadata.frames.every((frame) => frame.overlay_path.endsWith('.png')), true);
   const potionManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'mana-potion/manifest.json'), 'utf8'));
   assert.deepEqual(potionManifest.states, ['sealed', 'broken', 'consumed']);
   assert.deepEqual(potionManifest.animations, ['idle-loop', 'consume-break']);
