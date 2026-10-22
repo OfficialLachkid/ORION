@@ -326,6 +326,72 @@ test('approves a published update against the verified current public release in
   assert.equal(result.releaseVersion, '0.3.0');
 });
 
+test('approves an explicitly reviewed replacement asset hash in a published update', async () => {
+  const packageRoot = 'releases/0.2.0/candidates/0123456789abcdef';
+  const currentManifestHash = 'e'.repeat(64);
+  const archiveRoot = await createArchiveFixture({
+    packageRoot,
+    targetVersion: '0.2.0',
+    baseManifestHash: currentManifestHash,
+    marketplaceReviewMode: 'published_update',
+    currentMarketplaceVersion: '0.1.0',
+    publishedState: {
+      status: 'verified_public',
+      product_id: 'asset-product-e7bd21e31c69c03a',
+      target_version: '0.1.0',
+      manifest_hash: currentManifestHash,
+      listing_hash: 'f'.repeat(64),
+      public_url: context.itchUrl,
+    },
+  });
+  const productRoot = resolve(archiveRoot, context.productSlug);
+  const manifestPath = resolve(productRoot, packageRoot, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  const replacementHash = '9'.repeat(64);
+  manifest.files[1].content_sha256 = replacementHash;
+  manifest.expansion_manifest_hash = '8'.repeat(64);
+  manifest.gates = { expansion_review_approved: true };
+  manifest.expansion_assets = [{
+    asset_id: 'asset-arc-launcher',
+    asset_key: 'arc-launcher',
+    name: 'Arc Launcher',
+    operation: 'replace_existing',
+    buyer_path: 'assets/individual/arc-launcher.png',
+    content_sha256: replacementHash,
+  }];
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const inserted = [];
+  const result = await recordDigitalAssetReviewDecision({
+    interaction: packInteraction(),
+    archiveRoot,
+    config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+    store: { async insert(row) { inserted.push(row); } },
+  });
+  assert.equal(inserted.length, 1);
+  assert.equal(result.row.asset_decisions[1].asset_hash, replacementHash);
+});
+
+test('rejects a changed canonical asset hash without approved replacement provenance', async () => {
+  const packageRoot = 'releases/0.2.0/candidates/0123456789abcdef';
+  const archiveRoot = await createArchiveFixture({
+    packageRoot,
+    targetVersion: '0.2.0',
+  });
+  const manifestPath = resolve(archiveRoot, context.productSlug, packageRoot, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.files[1].content_sha256 = '9'.repeat(64);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(
+    recordDigitalAssetReviewDecision({
+      interaction: packInteraction(),
+      archiveRoot,
+      config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+      store: { async insert() { throw new Error('must not be called'); } },
+    }),
+    /canonical hash.*does not match/iu,
+  );
+});
+
 test('rejects a published update when its verified current release receipt changed', async () => {
   const archiveRoot = await createArchiveFixture({
     packageRoot: 'releases/0.3.0/candidates/0123456789abcdef',

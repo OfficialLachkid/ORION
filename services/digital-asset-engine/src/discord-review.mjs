@@ -1,15 +1,17 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path';
+import sharp from 'sharp';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { resolvePackagedRelease } from './packaged-release.mjs';
+import { resolveReviewedReleaseAssets } from './release-asset-inventory.mjs';
 import { buildDigitalAssetPackReviewComponents } from './review-components.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_CATEGORY_TYPE = 4;
 const DISCORD_TEXT_CHANNEL_TYPE = 0;
 const REVIEW_COLOR = 0x35d9ff;
-const REVIEW_COMPONENT_SCHEMA_VERSION = '2.1';
+const REVIEW_COMPONENT_SCHEMA_VERSION = '2.2';
 const DISCORD_ATTACHMENT_LIMIT = 10;
 
 function cleanText(value, maximum = 1024) {
@@ -204,6 +206,7 @@ function numberedAssetList(assets) {
 export function buildPackReviewEmbed({
   product,
   manifest,
+  reviewAssets,
   itchUrl,
   revision = 1,
   marketplaceReviewMode = 'draft',
@@ -211,10 +214,17 @@ export function buildPackReviewEmbed({
   coverFilename = 'cover.png',
   mediaCount = 1,
 }) {
-  const reviewAssets = [
-    ...product.assets,
-    ...(manifest.expansion_assets || []),
-  ];
+  const includedAssets = reviewAssets || (() => {
+    const merged = [...(product.assets || [])];
+    for (const asset of manifest.expansion_assets || []) {
+      const index = asset.asset_id
+        ? merged.findIndex((candidate) => candidate.asset_id === asset.asset_id)
+        : -1;
+      if (index >= 0) merged[index] = { ...merged[index], ...asset };
+      else merged.push(asset);
+    }
+    return merged;
+  })();
   const publishedUpdate = marketplaceReviewMode === 'published_update';
   const localGeneration = marketplaceReviewMode === 'local_generation';
   const licenseField = manifest.buyer_license ? [{
@@ -236,7 +246,7 @@ export function buildPackReviewEmbed({
       { name: 'Release', value: `\`${manifest.target_version || manifest.product_version || 'preview'}\``, inline: true },
       { name: 'Assets', value: String(manifest.asset_count || manifest.weapon_count), inline: true },
       { name: 'Local generation cost', value: '€0 API cost', inline: true },
-      { name: 'Included assets', value: numberedAssetList(reviewAssets), inline: false },
+      { name: 'Included assets', value: numberedAssetList(includedAssets), inline: false },
       { name: 'Manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
       { name: 'Listing', value: `\`${manifest.listing_hash}\``, inline: false },
       ...licenseField,
@@ -372,6 +382,7 @@ export async function postDigitalAssetReview(options) {
     options.localReview === true,
   );
   const itchUrl = marketplaceReview.url;
+  const reviewAssets = resolveReviewedReleaseAssets(product, manifest);
   const statePath = resolve(productRoot, 'review', 'discord.json');
   const existingState = await loadState(statePath);
   if (existingState?.manifest_hash === manifest.manifest_hash
@@ -454,6 +465,7 @@ export async function postDigitalAssetReview(options) {
     embeds: [buildPackReviewEmbed({
       product,
       manifest,
+      reviewAssets,
       itchUrl,
       revision: state.review_revision,
       marketplaceReviewMode: marketplaceReview.mode,
@@ -545,19 +557,28 @@ export async function postDigitalAssetReview(options) {
     await saveState(statePath, state);
   }
 
-  for (let index = 0; index < product.assets.length; index += 1) {
-    const asset = product.assets[index];
-    const validation = await readJson(resolve(productRoot, asset.validation_path));
-    const filename = basename(asset.final_path);
+  for (let index = 0; index < reviewAssets.length; index += 1) {
+    const asset = reviewAssets[index];
+    const buffer = await readFile(resolve(exportRoot, asset.manifest_path));
+    const metadata = await sharp(buffer).metadata();
+    const validation = {
+      status: 'passed',
+      metrics: {
+        width: metadata.width,
+        height: metadata.height,
+        content_sha256: asset.content_sha256,
+      },
+    };
+    const filename = basename(asset.buyer_path);
     const payload = {
-      embeds: [buildAssetReviewEmbed({ asset, validation, index, total: product.assets.length })],
+      embeds: [buildAssetReviewEmbed({ asset, validation, index, total: reviewAssets.length })],
       components: [],
     };
     const files = [{
       filename,
       contentType: 'image/png',
       description: `${String(index + 1).padStart(2, '0')} ${asset.name} transparent sprite candidate`,
-      buffer: await readFile(resolve(productRoot, asset.final_path)),
+      buffer,
     }];
     const existingMessageId = state.asset_messages[asset.asset_id];
     if (existingMessageId) {

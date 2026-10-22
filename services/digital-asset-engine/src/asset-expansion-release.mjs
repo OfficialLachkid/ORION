@@ -9,8 +9,9 @@ import {
 } from './expansion-release-marketing.mjs';
 import { resolvePackagedRelease } from './packaged-release.mjs';
 import { AssetExpansionReviewPlanSchema } from './schemas.mjs';
+import { buildReleaseAssetInventory } from './release-asset-inventory.mjs';
 
-const EXPANSION_RELEASE_VERSION = '1.1.0';
+const EXPANSION_RELEASE_VERSION = '1.1.1';
 const RUNTIME_PREFIXES = Object.freeze(['frames/', 'overlays/', 'sheets/', 'states/', 'metadata/']);
 const BUYER_LICENSE = Object.freeze({
   license_id: 'vbjservices-digital-asset-license',
@@ -476,6 +477,13 @@ export async function prepareApprovedAssetExpansionRelease(options) {
     };
   }
   const files = await Promise.all((await filesBelow(candidateRoot)).map((path) => hashedFile(path, candidateRoot)));
+  const assetInventory = buildReleaseAssetInventory({
+    product,
+    baseManifest: base.manifest,
+    expansionAssets,
+    expansionManifestHash: approved.manifest.manifest_hash,
+    files,
+  });
   const expansionAnimationCount = expansionAssets.reduce((total, asset) => total + asset.animations.length, 0);
   const expansionStateCount = expansionAssets.reduce((total, asset) => total + asset.states.length, 0);
   const addedAssetCount = expansionAssets.filter((asset) => asset.operation === 'add_asset').length;
@@ -508,9 +516,10 @@ export async function prepareApprovedAssetExpansionRelease(options) {
     expansion_manifest_hash: approved.manifest.manifest_hash,
     expansion_approved_at: approved.decision.decided_at,
     input_hash: inputHash,
-    base_asset_count: product.assets.length,
+    base_asset_count: Number(base.manifest.asset_count || product.assets.length),
     weapon_count: product.assets.filter((asset) => asset.kind === 'weapon').length,
-    asset_count: product.assets.length + addedAssetCount,
+    asset_count: assetInventory.length,
+    asset_inventory: assetInventory,
     expansion_asset_count: expansionAssets.length,
     added_asset_count: addedAssetCount,
     enhanced_asset_count: enhancedAssetCount,

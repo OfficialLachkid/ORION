@@ -73,6 +73,10 @@ async function createReviewFixture() {
     asset_count: 1,
     manifest_hash: 'a'.repeat(64),
     listing_hash: 'c'.repeat(64),
+    files: [{
+      path: 'assets/individual/plasma-rifle.png',
+      content_sha256: validation.metrics.content_sha256,
+    }],
   };
   const itchState = {
     status: 'verified',
@@ -83,6 +87,7 @@ async function createReviewFixture() {
   };
   await Promise.all([
     writeFile(resolve(productRoot, asset.final_path), sprite),
+    writeFile(resolve(exportRoot, 'assets', 'individual', 'plasma-rifle.png'), sprite),
     writeFile(resolve(productRoot, asset.validation_path), `${JSON.stringify(validation)}\n`, 'utf8'),
     writeFile(resolve(exportRoot, 'cover.png'), sprite),
     writeFile(resolve(exportRoot, 'inventory.png'), sprite),
@@ -112,18 +117,26 @@ async function addReviewReleaseCandidate(fixture) {
     quality_holds: [],
     gates: { quality_holds_resolved: true },
     asset_count: fixture.product.assets.length,
+    files: [{
+      path: 'download/assets/individual/plasma-rifle.png',
+      content_sha256: fixture.validation.metrics.content_sha256,
+    }],
     buyer_license: {
       license_id: 'vbjservices-digital-asset-license',
       version: '1.0',
       content_sha256: createHash('sha256').update(license).digest('hex'),
     },
   };
-  await mkdir(resolve(candidateRoot, 'download'), { recursive: true });
+  await mkdir(resolve(candidateRoot, 'download', 'assets', 'individual'), { recursive: true });
   await Promise.all([
     writeFile(resolve(candidateRoot, 'cover.png'), await readFile(resolve(fixture.exportRoot, 'cover.png'))),
     writeFile(resolve(candidateRoot, 'manifest.json'), `${JSON.stringify(manifest)}\n`, 'utf8'),
     writeFile(resolve(candidateRoot, 'itch-listing.json'), `${JSON.stringify(listing)}\n`, 'utf8'),
     writeFile(resolve(candidateRoot, 'download', 'LICENSE.md'), license),
+    writeFile(
+      resolve(candidateRoot, 'download', 'assets', 'individual', 'plasma-rifle.png'),
+      await readFile(resolve(fixture.productRoot, fixture.product.assets[0].final_path)),
+    ),
     writeFile(resolve(fixture.productRoot, 'releases', '0.2.0', 'latest-candidate.json'), `${JSON.stringify({
       target_version: '0.2.0',
       candidate_path: candidatePath,
