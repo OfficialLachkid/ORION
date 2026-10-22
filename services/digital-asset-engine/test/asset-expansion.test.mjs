@@ -103,9 +103,9 @@ async function fixture() {
   return { outputRoot, productRoot, plan, hash, png };
 }
 
-async function addAnimationProof(setup) {
-  const batchId = 'interactive-items-v1';
-  const assetKey = 'power-cell';
+async function addAnimationProof(setup, options = {}) {
+  const batchId = options.batchId || 'interactive-items-v1';
+  const assetKey = options.assetKey || 'power-cell';
   const itemRoot = resolve(setup.productRoot, 'experiments', batchId, assetKey);
   const runtime = {
     'base.png': setup.png,
@@ -156,7 +156,7 @@ async function addAnimationProof(setup) {
     gates: { all_items_valid: true, package_modified: false },
   }));
   setup.plan.title = 'Interactive Expansion';
-  setup.plan.assets[0].animation_proof = { batch_id: batchId, asset_key: assetKey };
+  setup.plan.assets[0].interactive_proof = { batch_id: batchId, asset_key: assetKey };
 }
 
 test('builds an immutable static expansion review without changing the base release', async () => {
@@ -176,6 +176,63 @@ test('builds an immutable static expansion review without changing the base rele
   const reused = await prepareAssetExpansionReview({ outputRoot: setup.outputRoot, plan: setup.plan });
   assert.equal(reused.reused, true);
   assert.equal(reused.manifest.manifest_hash, result.manifest.manifest_hash);
+});
+
+test('reviews animations as enhancements of existing asset identities on an initial public release', async () => {
+  const setup = await fixture();
+  const canonical = product();
+  await write(resolve(setup.productRoot, 'product.json'), JSON.stringify(canonical));
+  await write(resolve(setup.productRoot, canonical.assets[0].final_path), setup.png);
+  await write(resolve(setup.productRoot, canonical.assets[0].validation_path), JSON.stringify({
+    status: 'passed', metrics: { width: 128, height: 128, content_sha256: setup.hash },
+  }));
+  await write(resolve(setup.productRoot, 'exports/itch-preview/manifest.json'), JSON.stringify({
+    release_state: 'internal_preview', distribution_ready: false, product_version: '0.1.0',
+    release_id: 'asset-release-initial', manifest_hash: setup.plan.base_manifest_hash,
+    listing_hash: 'e'.repeat(64), files: [],
+  }));
+  await write(resolve(setup.productRoot, 'exports/itch-preview/itch-listing-preview.json'), JSON.stringify({
+    listing_hash: 'e'.repeat(64),
+  }));
+  await write(resolve(setup.productRoot, 'review/distribution.json'), JSON.stringify({
+    status: 'published', target_version: '0.1.0', manifest_hash: setup.plan.base_manifest_hash,
+    publication_job: { status: 'completed' },
+  }));
+  setup.plan.expansion_id = 'animation-upgrade-v1';
+  setup.plan.title = 'Animation Upgrade';
+  setup.plan.base_version = '0.1.0';
+  setup.plan.target_version = '0.2.0';
+  setup.plan.assets = [{
+    operation: 'enhance_existing',
+    source_product_slug: canonical.slug,
+    source_asset_key: canonical.assets[0].asset_key,
+    target_asset_key: canonical.assets[0].asset_key,
+    target_name: canonical.assets[0].name,
+    buyer_group: 'items',
+  }];
+  await addAnimationProof(setup, {
+    batchId: 'canonical-animation-v1',
+    assetKey: canonical.assets[0].asset_key,
+  });
+
+  const prepared = await prepareAssetExpansionReview({
+    outputRoot: setup.outputRoot,
+    plan: setup.plan,
+    now: '2026-10-22T10:00:00.000Z',
+  });
+  assert.equal(prepared.manifest.new_asset_count, 0);
+  assert.equal(prepared.manifest.enhanced_asset_count, 1);
+  assert.equal(prepared.manifest.assets[0].operation, 'enhance_existing');
+  assert.equal(prepared.manifest.assets[0].asset_id, canonical.assets[0].asset_id);
+  assert.equal(prepared.manifest.assets[0].animation.animations.length, 2);
+  const components = buildAssetExpansionReviewComponents({
+    productSlug: canonical.slug,
+    expansionId: setup.plan.expansion_id,
+    manifestHash: prepared.manifest.manifest_hash,
+    manifestUrl: 'https://discord.com/channels/guild/channel/message',
+    reviewMode: 'enhancement',
+  });
+  assert.equal(components[0].components[0].label, 'Approve Animation Upgrade');
 });
 
 test('renamed expansion assets reuse their existing Discord review message', async () => {

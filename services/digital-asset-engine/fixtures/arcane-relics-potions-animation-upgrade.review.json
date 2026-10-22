@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "expansion_id": "arcane-animation-upgrade-v1",
+  "product_slug": "arcane-relics-potions",
+  "title": "Arcane Relics & Potions — Animated Edition",
+  "base_version": "0.1.0",
+  "target_version": "0.2.0",
+  "base_manifest_hash": "f3b6d098f4e9765b9048760d5fedeebd2434477c7f69a3631fb236898d7d5d8d",
+  "assets": [
+    {
+      "operation": "enhance_existing",
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "mana-potion",
+      "target_asset_key": "mana-potion",
+      "target_name": "Mana Potion",
+      "buyer_group": "items",
+      "interactive_proof": {
+        "batch_id": "arcane-relics-potions-animation-v1",
+        "asset_key": "mana-potion"
+      }
+    },
+    {
+      "operation": "enhance_existing",
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "healing-elixir",
+      "target_asset_key": "healing-elixir",
+      "target_name": "Healing Elixir",
+      "buyer_group": "items",
+      "interactive_proof": {
+        "batch_id": "arcane-relics-potions-animation-v1",
+        "asset_key": "healing-elixir"
+      }
+    },
+    {
+      "operation": "enhance_existing",
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "arcane-crystal",
+      "target_asset_key": "arcane-crystal",
+      "target_name": "Arcane Crystal",
+      "buyer_group": "items",
+      "interactive_proof": {
+        "batch_id": "arcane-relics-potions-animation-v1",
+        "asset_key": "arcane-crystal"
+      }
+    },
+    {
+      "operation": "enhance_existing",
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "rune-stone",
+      "target_asset_key": "rune-stone",
+      "target_name": "Rune Stone",
+      "buyer_group": "items",
+      "interactive_proof": {
+        "batch_id": "arcane-relics-potions-animation-v1",
+        "asset_key": "rune-stone"
+      }
+    },
+    {
+      "operation": "enhance_existing",
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "spell-tome",
+      "target_asset_key": "spell-tome",
+      "target_name": "Spell Tome",
+      "buyer_group": "items",
+      "interactive_proof": {
+        "batch_id": "arcane-relics-potions-animation-v1",
+        "asset_key": "spell-tome"
+      }
+    },
+    {
+      "operation": "enhance_existing",
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "alchemist-flask",
+      "target_asset_key": "alchemist-flask",
+      "target_name": "Alchemist Flask",
+      "buyer_group": "items",
+      "interactive_proof": {
+        "batch_id": "arcane-relics-potions-animation-v1",
+        "asset_key": "alchemist-flask"
+      }
+    },
+    {
+      "operation": "enhance_existing",
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "ritual-candle",
+      "target_asset_key": "ritual-candle",
+      "target_name": "Ritual Candle",
+      "buyer_group": "props",
+      "interactive_proof": {
+        "batch_id": "arcane-relics-potions-animation-v1",
+        "asset_key": "ritual-candle"
+      }
+    },
+    {
+      "operation": "enhance_existing",
+      "source_product_slug": "arcane-relics-potions",
+      "source_asset_key": "enchanted-wand",
+      "target_asset_key": "enchanted-wand",
+      "target_name": "Enchanted Wand",
+      "buyer_group": "items",
+      "interactive_proof": {
+        "batch_id": "arcane-relics-potions-animation-v1",
+        "asset_key": "enchanted-wand"
+      }
+    }
+  ]
+}

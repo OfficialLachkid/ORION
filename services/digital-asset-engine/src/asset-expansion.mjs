@@ -32,6 +32,26 @@ async function exists(path) {
   try { await stat(path); return true; } catch (error) { if (error?.code === 'ENOENT') return false; throw error; }
 }
 
+async function resolveExpansionBase(productRoot, product, plan) {
+  try {
+    return await resolvePackagedRelease({ productRoot, releaseVersion: plan.base_version });
+  } catch (error) {
+    if (error?.code !== 'ENOENT' || product.version !== plan.base_version) throw error;
+  }
+  const base = await resolvePackagedRelease({ productRoot });
+  if (base.manifest.product_version !== plan.base_version) {
+    throw new Error('Canonical preview does not match the requested expansion base version.');
+  }
+  const distribution = await readJson(resolveInside(productRoot, 'review/distribution.json', 'Published distribution receipt'));
+  if (distribution.status !== 'published'
+    || distribution.target_version !== plan.base_version
+    || distribution.manifest_hash !== base.manifest.manifest_hash
+    || distribution.publication_job?.status !== 'completed') {
+    throw new Error('The initial packaged release is not the exact verified public expansion base.');
+  }
+  return base;
+}
+
 function escapeXml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -91,7 +111,7 @@ async function buildOverview(title, assets) {
     '<rect width="100%" height="100%" fill="#0c1019"/>',
     '<rect x="20" y="20" width="920" height="500" rx="22" fill="#111827" stroke="#35d9ff" stroke-width="2"/>',
     `<text x="480" y="66" text-anchor="middle" fill="#f4f7ff" font-family="Arial, sans-serif" font-size="${titleSize}" font-weight="700">${escapeXml(title.toUpperCase())}</text>`,
-    `<text x="480" y="99" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${assets.length} PROPOSED ASSETS · ${assets.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0)} ANIMATIONS</text>`,
+    `<text x="480" y="99" text-anchor="middle" fill="#35d9ff" font-family="Arial, sans-serif" font-size="18">${assets.length} REVIEW ITEMS · ${assets.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0)} ANIMATIONS</text>`,
     ...cells,
     '<text x="480" y="501" text-anchor="middle" fill="#8998b8" font-family="Arial, sans-serif" font-size="14">Internal expansion review · public package unchanged</text>',
     '</svg>',
@@ -210,22 +230,26 @@ export async function prepareAssetExpansionReview(options) {
   const store = options.store || new CanonicalProductStore(options.outputRoot);
   const product = await store.loadProduct(plan.product_slug);
   const productRoot = store.productRoot(product);
-  const base = await resolvePackagedRelease({ productRoot, releaseVersion: plan.base_version });
+  const base = await resolveExpansionBase(productRoot, product, plan);
   if (base.manifest.manifest_hash !== plan.base_manifest_hash) {
     throw new Error('Expansion plan targets a different immutable base release.');
   }
-  const existingKeys = new Set(product.assets.map((asset) => asset.asset_key));
   const selected = [];
   for (const request of plan.assets) {
-    if (existingKeys.has(request.target_asset_key)) {
+    const existingAsset = product.assets.find((asset) => asset.asset_key === request.target_asset_key);
+    if (request.operation === 'add_asset' && existingAsset) {
       throw new Error(`Expansion asset key already exists in the base product: ${request.target_asset_key}.`);
     }
-    const sourceRoot = resolveInside(
-      productRoot,
-      `experiments/${request.source_product_slug}`,
-      'Expansion source product',
-    );
-    const sourceProduct = ProductSpecificationSchema.parse(await readJson(resolve(sourceRoot, 'product.json')));
+    if (request.operation === 'enhance_existing' && !existingAsset) {
+      throw new Error(`Enhancement target does not exist in the base product: ${request.target_asset_key}.`);
+    }
+    const canonicalSource = request.source_product_slug === product.slug;
+    const sourceRoot = canonicalSource
+      ? productRoot
+      : resolveInside(productRoot, `experiments/${request.source_product_slug}`, 'Expansion source product');
+    const sourceProduct = canonicalSource
+      ? product
+      : ProductSpecificationSchema.parse(await readJson(resolve(sourceRoot, 'product.json')));
     if (sourceProduct.slug !== request.source_product_slug) {
       throw new Error(`Expansion source slug changed: ${request.source_product_slug}.`);
     }
@@ -241,10 +265,17 @@ export async function prepareAssetExpansionReview(options) {
     if (validation.status !== 'passed' || validation.metrics?.content_sha256 !== contentHash) {
       throw new Error(`Expansion source asset is not a verified candidate: ${request.source_asset_key}.`);
     }
+    if (request.operation === 'enhance_existing'
+      && (sourceAsset.asset_key !== existingAsset.asset_key || sourceAsset.asset_id !== existingAsset.asset_id)) {
+      throw new Error(`Enhancement proof must preserve the existing asset identity: ${request.target_asset_key}.`);
+    }
     const animation = await loadAnimationProof(productRoot, request, contentHash);
     selected.push({
-      asset_id: `asset-expansion-${sha256(`${plan.expansion_id}:${request.target_asset_key}`).slice(0, 16)}`,
+      asset_id: request.operation === 'enhance_existing'
+        ? existingAsset.asset_id
+        : `asset-expansion-${sha256(`${plan.expansion_id}:${request.target_asset_key}`).slice(0, 16)}`,
       asset_key: request.target_asset_key,
+      operation: request.operation,
       name: request.target_name,
       kind: sourceAsset.kind,
       description: sourceAsset.description,
@@ -322,6 +353,8 @@ export async function prepareAssetExpansionReview(options) {
     input_hash: inputHash,
     expansion_review_version: EXPANSION_REVIEW_VERSION,
     asset_count: selected.length,
+    new_asset_count: selected.filter((asset) => asset.operation === 'add_asset').length,
+    enhanced_asset_count: selected.filter((asset) => asset.operation === 'enhance_existing').length,
     animation_count: selected.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0),
     state_count: selected.reduce((total, asset) => total + (asset.animation?.states.length || 0), 0),
     assets: selected.map(({ buffer, animation, ...asset }) => ({

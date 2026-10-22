@@ -542,6 +542,7 @@ export const AssetExpansionReviewPlanSchema = z.object({
   target_version: SemanticVersionSchema,
   base_manifest_hash: Sha256Schema,
   assets: z.array(z.object({
+    operation: z.enum(['add_asset', 'enhance_existing']).default('add_asset'),
     source_product_slug: IdentifierSchema,
     source_asset_key: IdentifierSchema,
     target_asset_key: IdentifierSchema,
@@ -572,6 +573,13 @@ export const AssetExpansionReviewPlanSchema = z.object({
         code: z.ZodIssueCode.custom,
         message: 'Use interactive_proof instead of defining both proof fields.',
         path: ['assets', index],
+      });
+    }
+    if (asset.operation === 'enhance_existing' && !asset.interactive_proof) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Existing-asset enhancements require an interactive proof.',
+        path: ['assets', index, 'interactive_proof'],
       });
     }
   }
