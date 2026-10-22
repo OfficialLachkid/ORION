@@ -418,6 +418,13 @@ export async function recordDigitalAssetReviewDecision(options) {
       ? 'Open Current itch.io Page'
       : 'Open itch.io Draft',
   };
+  const nextAction = row.decision !== 'approve'
+    ? null
+    : context.marketplaceReview.mode === 'local_generation'
+      ? 'marketplace_setup'
+      : context.marketplaceReview.mode === 'published_update'
+        ? 'distribution_review'
+        : null;
   return {
     row,
     productSlug: context.product.slug,
@@ -426,9 +433,8 @@ export async function recordDigitalAssetReviewDecision(options) {
     channelId: context.reviewState.channel_id,
     messageId: context.reviewState.overview_message_id,
     threadId: context.reviewState.thread_id,
-    nextAction: context.marketplaceReview.mode === 'local_generation' && row.decision === 'approve'
-      ? 'marketplace_setup'
-      : null,
+    nextAction,
+    releaseVersion: context.reviewState.target_version || null,
     messagePatch: { components: buildResolvedDigitalAssetReviewComponents(linkContext) },
     assetMessagePatches: assetDecisions.map((assetDecision) => ({
       ...assetDecision,

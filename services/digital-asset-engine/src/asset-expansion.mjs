@@ -147,6 +147,19 @@ async function verifyBundle(candidateRoot, manifest) {
   }
 }
 
+async function writeLatestReviewPointer({ productRoot, reviewRoot, candidateRoot, manifest, plan, now }) {
+  await mkdir(reviewRoot, { recursive: true });
+  await writeFile(resolve(reviewRoot, 'latest-review.json'), `${JSON.stringify({
+    schema_version: '1.0',
+    expansion_id: plan.expansion_id,
+    candidate_path: normalizePath(relative(productRoot, candidateRoot)),
+    manifest_hash: manifest.manifest_hash,
+    target_version: plan.target_version,
+    release_plan: plan,
+    updated_at: now || new Date().toISOString(),
+  }, null, 2)}\n`, 'utf8');
+}
+
 function animationReviewFile(path) {
   return path === 'base.png'
     || path === 'validation.json'
@@ -335,6 +348,9 @@ export async function prepareAssetExpansionReview(options) {
     const manifest = await readJson(manifestPath);
     if (manifest.input_hash !== inputHash) throw new Error('Immutable expansion review input changed.');
     await verifyBundle(candidateRoot, manifest);
+    await writeLatestReviewPointer({
+      productRoot, reviewRoot, candidateRoot, manifest, plan, now: options.now,
+    });
     return { plan, product, candidateRoot, manifestPath, manifest, reused: true };
   }
 
@@ -405,14 +421,8 @@ export async function prepareAssetExpansionReview(options) {
     manifest_hash: sha256(Buffer.from(JSON.stringify({ ...identity, created_at: undefined }))),
   };
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-  await mkdir(reviewRoot, { recursive: true });
-  await writeFile(resolve(reviewRoot, 'latest-review.json'), `${JSON.stringify({
-    schema_version: '1.0',
-    expansion_id: plan.expansion_id,
-    candidate_path: normalizePath(relative(productRoot, candidateRoot)),
-    manifest_hash: manifest.manifest_hash,
-    target_version: plan.target_version,
-    updated_at: options.now || new Date().toISOString(),
-  }, null, 2)}\n`, 'utf8');
+  await writeLatestReviewPointer({
+    productRoot, reviewRoot, candidateRoot, manifest, plan, now: options.now,
+  });
   return { plan, product, candidateRoot, manifestPath, manifest, reused: false };
 }

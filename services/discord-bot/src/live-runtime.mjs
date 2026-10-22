@@ -77,8 +77,14 @@ import {
   recordAssetExpansionReviewDecision,
 } from '../../digital-asset-engine/src/asset-expansion-review.mjs';
 import {
+  buildAssetExpansionReleaseJobEmbeds,
+  queueApprovedAssetExpansionRelease,
+  recoverAssetExpansionReleaseJobs,
+} from '../../digital-asset-engine/src/asset-expansion-job.mjs';
+import {
   buildDistributionReviewEmbeds,
   isDigitalAssetDistributionInteraction,
+  postDigitalAssetDistributionReview,
   recordDigitalAssetDistributionDecision,
 } from '../../digital-asset-engine/src/distribution-review.mjs';
 import {
@@ -364,6 +370,27 @@ export function scheduleMarketplaceSetupWorker(statePath, options = {}) {
     return true;
   } catch (error) {
     process.stderr.write(`Could not start marketplace setup worker: ${error.message}\n`);
+    return false;
+  }
+}
+
+export function scheduleAssetExpansionReleaseWorker(statePath, options = {}) {
+  if (!statePath) return false;
+  try {
+    const spawnImpl = options.spawnImpl || spawn;
+    const child = spawnImpl(
+      process.execPath,
+      [`${projectRoot}/services/digital-asset-engine/asset-expansion-release-worker.mjs`, '--state', statePath],
+      {
+        cwd: projectRoot,
+        detached: true,
+        stdio: 'ignore',
+      },
+    );
+    child.unref();
+    return true;
+  } catch (error) {
+    process.stderr.write(`Could not start asset expansion release worker: ${error.message}\n`);
     return false;
   }
 }
@@ -1639,10 +1666,22 @@ export async function runLiveDiscordBot(config) {
               },
               failurePrefix: 'Expansion decision was not recorded',
               successContent: (decision) => decision.row.decision === 'approve'
-                  ? 'Expansion approved for an immutable candidate build. The public package is unchanged.'
+                  ? 'Expansion approved. The versioned buyer package and storefront-media review are being queued; the public package is unchanged.'
                   : `Recorded ${decision.row.decision.toUpperCase()} for this expansion proposal.`,
             });
             if (error) return;
+            let continuation = null;
+            let workerScheduled = true;
+            if (recorded.row.decision === 'approve') {
+              try {
+                continuation = await queueApprovedAssetExpansionRelease({ statePath: recorded.statePath });
+                workerScheduled = continuation.reused === true
+                  || scheduleAssetExpansionReleaseWorker(continuation.statePath);
+              } catch (queueError) {
+                workerScheduled = false;
+                process.stderr.write(`Could not queue asset expansion release: ${queueError.message}\n`);
+              }
+            }
             try {
               const currentMessage = await sendDiscordApiRequest(
                 token,
@@ -1655,11 +1694,20 @@ export async function runLiveDiscordBot(config) {
                 `/channels/${recorded.channelId}/messages/${recorded.messageId}`,
                 {
                   ...recorded.messagePatch,
-                  embeds: buildResolvedAssetExpansionReviewEmbeds(
-                    currentMessage?.embeds,
-                    recorded.decision,
-                    recorded.actor,
-                  ),
+                  embeds: continuation
+                    ? buildAssetExpansionReleaseJobEmbeds(buildResolvedAssetExpansionReviewEmbeds(
+                      currentMessage?.embeds,
+                      recorded.decision,
+                      recorded.actor,
+                    ), continuation.state)
+                    : buildResolvedAssetExpansionReviewEmbeds(
+                      currentMessage?.embeds,
+                      recorded.decision,
+                      recorded.actor,
+                    ),
+                  ...(!workerScheduled ? {
+                    content: 'The approval is durable, but the package worker could not start. Startup recovery will retry it after the next bot restart.',
+                  } : {}),
                   attachments: currentMessage.attachments,
                 },
                 'PATCH',
@@ -1706,6 +1754,8 @@ export async function runLiveDiscordBot(config) {
               failurePrefix: 'Digital asset decision was not recorded',
               successContent: (decision) => decision.nextAction === 'marketplace_setup'
                 ? `Package revision ${decision.row.review_revision} approved creatively. It is ready for a separate marketplace setup step; nothing was published.`
+                : decision.nextAction === 'distribution_review'
+                  ? `Package revision ${decision.row.review_revision} approved. The separate publication gate is being prepared; the current public release is unchanged.`
                 : `Recorded ${decision.row.decision.toUpperCase()} for package revision ${decision.row.review_revision}.`,
             });
             if (error) return;
@@ -1756,6 +1806,13 @@ export async function runLiveDiscordBot(config) {
                   runtimeConfig: config,
                   outputRoot: config.env.DIGITAL_ASSET_ARCHIVE_ROOT,
                   slug: recorded.productSlug,
+                });
+              } else if (recorded.nextAction === 'distribution_review') {
+                await postDigitalAssetDistributionReview({
+                  runtimeConfig: config,
+                  outputRoot: config.env.DIGITAL_ASSET_ARCHIVE_ROOT,
+                  slug: recorded.productSlug,
+                  releaseVersion: recorded.releaseVersion,
                 });
               }
             } catch (error) {
@@ -2952,6 +3009,20 @@ export async function runLiveDiscordBot(config) {
     }
   } catch (error) {
     process.stderr.write(`Research generation recovery check failed: ${error.message}\n`);
+  }
+
+  try {
+    const recovery = await recoverAssetExpansionReleaseJobs({
+      archiveRoot: String(config?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim(),
+      scheduleJob: (statePath) => scheduleAssetExpansionReleaseWorker(statePath),
+    });
+    if (recovery.recovered.length > 0 || recovery.active.length > 0) {
+      process.stdout.write(
+        `Asset expansion release recovery: ${recovery.recovered.length} resumed, ${recovery.active.length} already active.\n`,
+      );
+    }
+  } catch (error) {
+    process.stderr.write(`Asset expansion release recovery check failed: ${error.message}\n`);
   }
 
   try {

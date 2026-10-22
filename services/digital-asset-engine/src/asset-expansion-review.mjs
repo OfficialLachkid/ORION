@@ -82,6 +82,18 @@ function manifestReviewMode(manifest) {
   return 'expansion';
 }
 
+function assertReleasePlanMatchesManifest(plan, manifest) {
+  if (!plan
+    || plan.product_slug !== manifest.product_slug
+    || plan.expansion_id !== manifest.expansion_id
+    || plan.base_version !== manifest.base_version
+    || plan.target_version !== manifest.target_version
+    || plan.base_manifest_hash !== manifest.base_manifest_hash
+    || plan.title !== manifest.title) {
+    throw new Error('Expansion release plan does not match its immutable review manifest.');
+  }
+}
+
 function overviewEmbed(manifest, revision) {
   const upgradeOnly = (manifest.enhanced_asset_count + (manifest.replaced_asset_count || 0)) > 0
     && manifest.new_asset_count === 0;
@@ -156,6 +168,7 @@ export async function postAssetExpansionReview(options) {
     || manifest.expansion_id !== options.expansionId) {
     throw new Error('Expansion review pointer does not match its immutable manifest.');
   }
+  assertReleasePlanMatchesManifest(pointer.release_plan, manifest);
   const packState = await readJson(resolve(productRoot, 'review', 'discord.json'));
   if (!packState.channel_id) throw new Error('The existing product review channel is unavailable.');
   const statePath = resolveInside(
@@ -166,6 +179,10 @@ export async function postAssetExpansionReview(options) {
   let state;
   try { state = await readJson(statePath); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
   if (state?.manifest_hash === manifest.manifest_hash && state?.completed_at) {
+    if (!state.release_plan) {
+      state.release_plan = pointer.release_plan;
+      await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+    }
     return { ...state, reused: true, statePath };
   }
   const revisionChanged = Boolean(state?.manifest_hash && state.manifest_hash !== manifest.manifest_hash);
@@ -174,6 +191,7 @@ export async function postAssetExpansionReview(options) {
     product_id: manifest.product_id,
     product_slug: manifest.product_slug,
     expansion_id: manifest.expansion_id,
+    category_name: packState.category_name || 'DIGITAL ASSETS',
     channel_id: packState.channel_id,
     overview_message_id: null,
     thread_id: null,
@@ -182,8 +200,10 @@ export async function postAssetExpansionReview(options) {
     created_at: options.now || new Date().toISOString(),
   };
   state.review_revision += revisionChanged ? 1 : 0;
+  state.category_name = state.category_name || packState.category_name || 'DIGITAL ASSETS';
   state.manifest_hash = manifest.manifest_hash;
   state.target_version = manifest.target_version;
+  state.release_plan = pointer.release_plan;
   state.package_root = relative(productRoot, candidateRoot).replaceAll('\\', '/');
   state.completed_at = null;
   if (revisionChanged) state.last_decision = null;
@@ -470,6 +490,7 @@ export async function recordAssetExpansionReviewDecision(options) {
     channelId: context.state.channel_id,
     messageId: context.state.overview_message_id,
     threadId: context.state.thread_id,
+    statePath: context.statePath,
     messagePatch: { components: buildAssetExpansionReviewComponents(linkContext, true) },
     assetMessagePatches: row.asset_decisions.map((assetDecision) => ({
       ...assetDecision,
