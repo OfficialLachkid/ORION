@@ -6,6 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import sharp from 'sharp';
 import {
   alignEffectCoreToAnchor,
+  boundedEffectPadding,
   createEnergyPulseFrame,
   createRadialEnergyPulseFrame,
   detectDynamicEnergyRegion,
@@ -273,6 +274,15 @@ test('effect alignment moves an asymmetric energy core onto the detected item an
   assert.deepEqual(aligned.report.aligned_origin, { x: 55, y: 61 });
   assert.deepEqual(aligned.report.translation, { x: -23, y: 13 });
   assert.equal(aligned.report.clipped_pixels, 0);
+});
+
+test('edge-anchored recipe effects retain a drawable preprocessing area', async () => {
+  const canvas = { width: 96, height: 96 };
+  const target = { x: 92, y: 48 };
+  const padding = boundedEffectPadding(canvas, target);
+  assert.equal(padding, 47);
+  assert.equal((canvas.width - (padding * 2)) > 0, true);
+  assert.equal((canvas.height - (padding * 2)) > 0, true);
 });
 
 test('composited item frames retain the configured pixel-art palette cap', async () => {
