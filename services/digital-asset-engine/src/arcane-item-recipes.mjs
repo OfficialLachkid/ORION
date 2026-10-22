@@ -117,7 +117,10 @@ async function generatePotion(context, services) {
     options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
     states,
     animations: [idle, consumeBreak],
-    validationBuffers: [...pulses.map((frame) => frame.compositeBuffer), ...breakFrames],
+    // The terminal consumed frame is intentionally transparent. Validate every
+    // visible runtime frame while representing that empty terminal state in
+    // metadata and the emitted animation sequence.
+    validationBuffers: [...pulses.map((frame) => frame.compositeBuffer), ...breakFrames.slice(0, -1)],
     validationDetails: {
       energy_region: detection.report,
       pulse_isolation: isolation,

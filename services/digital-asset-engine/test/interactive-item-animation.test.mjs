@@ -350,6 +350,7 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     'source-cell': resolve(targetRoot, 'experiments/source-cell'),
     'source-shield': resolve(targetRoot, 'experiments/source-shield'),
     'source-wand': resolve(targetRoot, 'experiments/source-wand'),
+    'source-potion': resolve(targetRoot, 'experiments/source-potion'),
     'target-product': targetRoot,
   };
   const products = {
@@ -421,18 +422,33 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       final_path: 'assets/items/wand-source.png',
       validation_path: 'validation/wand-source.json',
     }]),
+    'source-potion': canonicalProduct('source-potion', [{
+      asset_id: 'asset-potion-source',
+      asset_key: 'potion-source',
+      name: 'Potion',
+      kind: 'potion',
+      description: 'A magic potion.',
+      generation_prompt: 'Generate a magic potion.',
+      seed: 6,
+      status: 'generated',
+      source_path: 'assets/source/potion-source.png',
+      final_path: 'assets/items/potion-source.png',
+      validation_path: 'validation/potion-source.json',
+    }]),
   };
   const grenade = await itemSprite({ energyX: 54, energyY: 58 });
   const mine = await itemSprite({ energyX: 70, energyY: 74 });
   const cell = await itemSprite({ energyX: 62, energyY: 58 });
   const shield = await itemSprite({ energyX: 58, energyY: 54 });
   const wand = await itemSprite({ energyX: 74, energyY: 54 });
+  const potion = await itemSprite({ energyX: 58, energyY: 66 });
   const sourcePaths = [
     [resolve(sourceRoots['source-grenade'], 'assets/items/grenade-source.png'), grenade],
     [resolve(sourceRoots['source-mine'], 'assets/items/mine-source.png'), mine],
     [resolve(sourceRoots['source-cell'], 'assets/items/cell-source.png'), cell],
     [resolve(sourceRoots['source-shield'], 'assets/items/shield-source.png'), shield],
     [resolve(sourceRoots['source-wand'], 'assets/items/wand-source.png'), wand],
+    [resolve(sourceRoots['source-potion'], 'assets/items/potion-source.png'), potion],
   ];
   for (const [path, buffer] of sourcePaths) {
     await mkdir(dirname(path), { recursive: true });
@@ -487,6 +503,15 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       seed: 46,
       release_description: 'Compact cyan and violet spark burst from the wand tip.',
     },
+    {
+      source_product_slug: 'source-potion',
+      source_asset_key: 'potion-source',
+      target_asset_key: 'mana-potion',
+      name: 'Mana Potion',
+      recipe: 'potion',
+      seed: 47,
+      break_description: 'Compact magical glass and liquid release.',
+    },
   ]);
   let generationCalls = 0;
   const result = await generateInteractiveItemAnimationBatch({
@@ -530,8 +555,8 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     },
   });
 
-  assert.equal(generationCalls, 5);
-  assert.equal(result.manifest.generation_calls, 5);
+  assert.equal(generationCalls, 6);
+  assert.equal(result.manifest.generation_calls, 6);
   assert.equal(result.manifest.gates.all_items_valid, true);
   assert.equal(result.manifest.gates.package_modified, false);
   assert.equal(result.results.every((item) => item.manifest.base_regenerated === false), true);
@@ -564,4 +589,8 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   assert.deepEqual(wandManifest.animations, ['charge-release']);
   assert.equal(wandManifest.generation_calls, 1);
   assert.equal(wandManifest.base_regenerated, false);
+  const potionManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'mana-potion/manifest.json'), 'utf8'));
+  assert.deepEqual(potionManifest.states, ['sealed', 'broken', 'consumed']);
+  assert.deepEqual(potionManifest.animations, ['idle-loop', 'consume-break']);
+  assert.equal(potionManifest.generation_calls, 1);
 });
