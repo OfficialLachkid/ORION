@@ -12,13 +12,16 @@ import {
   transparentFrame,
 } from './interactive-item-states.mjs';
 import {
+  createArcaneAuraFrame,
   createExtinguishedCandleFrame,
   createEnergyScatterFrame,
+  createFacetedCrystalTurnFrame,
+  createFlameDanceFrame,
   createFracturedObjectFrame,
   createLiquidSwirlFrame,
   createRestorativeReleaseFrame,
   createTwinkleFrame,
-  createYAxisSpinFrame,
+  orientSmokeAboveWick,
 } from './arcane-frame-effects.mjs';
 
 const ARCANE_RECIPES = new Set(['potion', 'crystal', 'rune_stone', 'tome', 'flask', 'candle', 'wand']);
@@ -168,19 +171,19 @@ async function generateCrystal(context, services) {
   const {
     options, plan, item, itemRoot, baseBuffer, canvas, detection, source,
   } = context;
-  const scales = [1, 0.72, 0.34, 0.12, -0.34, -0.72, -1, -0.72, -0.34, 0.12, 0.34, 0.72];
-  const intensities = [0.12, 0.28, 0.46, 0.62, 0.46, 0.28, 0.12, 0.28, 0.46, 0.62, 0.46, 0.28];
+  const phases = Array.from({ length: 8 }, (_, index) => (index / 8) * Math.PI * 2);
+  const intensities = [0.18, 0.3, 0.44, 0.3, 0.18, 0.3, 0.44, 0.3];
   const { frames: pulses, isolation } = await pulseFrames(baseBuffer, detection, intensities);
-  const frames = await Promise.all(pulses.map((pulse, index) => createYAxisSpinFrame(
+  const frames = await Promise.all(pulses.map((pulse, index) => createFacetedCrystalTurnFrame(
     pulse.compositeBuffer,
-    scales[index],
+    phases[index],
     { maxPaletteColors: plan.style.max_palette_colors },
   )));
   const empty = await transparentFrame(canvas);
   const idle = await services.writeAnimation(itemRoot, item, 'spin-loop', {
     name: 'Arcane Crystal Spin Loop', playback: 'loop', canvas,
-    phases: scales.map((scale) => (scale < 0 ? 'back-face' : 'front-face')),
-    durations: scales.map(() => 90),
+    phases: ['front', 'quarter-right', 'side-right', 'back-quarter-right', 'back', 'back-quarter-left', 'side-left', 'quarter-left'],
+    durations: phases.map(() => 115),
   }, frames, frames.map(() => empty), options);
   return services.finalizeRecipeItem({
     options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
@@ -190,7 +193,7 @@ async function generateCrystal(context, services) {
     validationDetails: {
       energy_region: detection.report,
       pulse_isolation: isolation,
-      rotation: { strategy: 'fixed_anchor_y_axis_nearest_neighbor', scales },
+      rotation: { strategy: 'fixed_anchor_faceted_turn_with_minimum_readable_width', phases },
     },
     generationCalls: 0,
   });
@@ -228,31 +231,45 @@ async function generateTome(context, services) {
   } = context;
   const { frames: pulses, isolation } = await pulseFrames(baseBuffer, detection, [0, 0.28, 0.64, 0.88, 0.42]);
   const empty = await transparentFrame(canvas);
+  const auraIntensities = [0, 0.48, 0.72, 1, 0.58];
+  const auras = await Promise.all(auraIntensities.map((intensity, index) => createArcaneAuraFrame(
+    baseBuffer,
+    detection,
+    intensity,
+    index,
+    { maxPaletteColors: plan.style.max_palette_colors },
+  )));
+  const awakenedFrames = await Promise.all(pulses.map((pulse, index) => compositeItemFrame(
+    pulse.compositeBuffer,
+    [auras[index].overlayBuffer],
+    { maxPaletteColors: plan.style.max_palette_colors },
+  )));
   const states = await services.writeStates(itemRoot, item, [
     { key: 'sealed', name: 'Sealed', buffer: baseBuffer },
-    { key: 'awakened', name: 'Awakened', buffer: pulses[3].compositeBuffer },
+    { key: 'awakened', name: 'Awakened', buffer: awakenedFrames[3] },
   ], canvas);
   const awakening = await services.writeAnimation(itemRoot, item, 'awakening', {
     name: 'Tome Awakening', playback: 'once', canvas,
     phases: ['sealed', 'rune-wake', 'energy-rise', 'awakened', 'settle'],
     durations: [170, 120, 100, 120, 170],
-  }, pulses.map((frame) => frame.compositeBuffer), [
-    empty, ...pulses.slice(1).map((frame) => frame.overlayBuffer),
+  }, awakenedFrames, [
+    empty, ...auras.slice(1).map((frame) => frame.overlayBuffer),
   ], options);
-  const loopFrames = [pulses[2], pulses[3], pulses[4], pulses[3]];
+  const loopFrameIndexes = [2, 3, 4, 3];
   const loop = await services.writeAnimation(itemRoot, item, 'rune-glow-loop', {
-    name: 'Tome Rune Glow Loop', playback: 'loop', canvas,
-    phases: ['rest', 'energy-rise', 'energy-peak', 'energy-fall'],
+    name: 'Tome Awakened Aura Loop', playback: 'loop', canvas,
+    phases: ['aura-rest', 'aura-rise', 'aura-shift', 'aura-fall'],
     durations: [170, 120, 100, 120],
-  }, loopFrames.map((frame) => frame.compositeBuffer), loopFrames.map((frame) => frame.overlayBuffer), options);
+  }, loopFrameIndexes.map((index) => awakenedFrames[index]), loopFrameIndexes.map((index) => auras[index].overlayBuffer), options);
   return services.finalizeRecipeItem({
     options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
     states,
     animations: [awakening, loop],
-    validationBuffers: pulses.map((frame) => frame.compositeBuffer),
+    validationBuffers: awakenedFrames,
     validationDetails: {
       energy_region: detection.report,
       pulse_isolation: isolation,
+      awakened_aura: auras.map((frame) => frame.report),
       identity_preservation: item.replacement_base_description
         ? 'local_model_replacement_base_bound_to_human_review'
         : 'approved_base_only_no_model_redraw',
@@ -311,7 +328,13 @@ async function generateCandle(context, services) {
   const {
     options, plan, item, itemRoot, baseBuffer, canvas, detection, source,
   } = context;
-  const { frames: flame, isolation } = await pulseFrames(baseBuffer, detection, [0.08, 0.42, 0.76, 0.28, 0.64, 0.22]);
+  const dancePhases = [0, 0.9, 1.8, 2.7, 3.6, 4.5];
+  const flame = await Promise.all(dancePhases.map((phase) => createFlameDanceFrame(
+    baseBuffer,
+    detection,
+    phase,
+    { amplitude: 3, maxPaletteColors: plan.style.max_palette_colors },
+  )));
   const extinguished = await createExtinguishedCandleFrame(baseBuffer, detection, {
     maxPaletteColors: plan.style.max_palette_colors,
   });
@@ -328,11 +351,14 @@ async function generateCandle(context, services) {
       'candle', 'flame', 'character', 'hand', 'floor', 'scenery', 'large smoke cloud',
     ]),
   });
-  const smokeFrames = await effectSeries(smoke.buffer, wick, item.seed + 71, plan.style.max_palette_colors);
+  const risingSmoke = await orientSmokeAboveWick(smoke.buffer, wick, {
+    maxPaletteColors: plan.style.max_palette_colors,
+  });
+  const smokeFrames = await effectSeries(risingSmoke.buffer, wick, item.seed + 71, plan.style.max_palette_colors);
   const loop = await services.writeAnimation(itemRoot, item, 'flame-loop', {
-    name: 'Ritual Flame Loop', playback: 'loop', canvas,
-    phases: ['rest', 'flicker-high', 'flare', 'flicker-low', 'warm-rise', 'settle'],
-    durations: [120, 80, 90, 80, 100, 110],
+    name: 'Dancing Ritual Flame Loop', playback: 'loop', canvas,
+    phases: ['upright', 'bend-right', 'stretch-right', 'upright-return', 'bend-left', 'stretch-left'],
+    durations: [105, 90, 85, 105, 90, 85],
   }, flame.map((frame) => frame.compositeBuffer), flame.map((frame) => frame.overlayBuffer), options);
   const extinguishFrames = [
     baseBuffer,
@@ -361,9 +387,10 @@ async function generateCandle(context, services) {
     validationBuffers: [...flame.map((frame) => frame.compositeBuffer), ...extinguishFrames],
     validationDetails: {
       energy_region: detection.report,
-      pulse_isolation: isolation,
+      flame_motion: flame.map((frame) => frame.report),
       extinguish_mask: extinguished.report,
       effect_alignment: smoke.alignment,
+      smoke_direction: risingSmoke.report,
     },
     generationCalls: 1,
   });

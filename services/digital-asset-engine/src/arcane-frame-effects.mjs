@@ -63,7 +63,7 @@ export async function createExtinguishedCandleFrame(assetBuffer, detection, opti
   };
 }
 
-export async function createYAxisSpinFrame(assetBuffer, scale, options = {}) {
+export async function createFacetedCrystalTurnFrame(assetBuffer, phase, options = {}) {
   const decoded = await sharp(assetBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const opaque = [];
   for (let y = 0; y < decoded.info.height; y += 1) {
@@ -78,22 +78,145 @@ export async function createYAxisSpinFrame(assetBuffer, scale, options = {}) {
   const minY = Math.min(...opaque.map((pixel) => pixel.y));
   const maxY = Math.max(...opaque.map((pixel) => pixel.y));
   const width = maxX - minX + 1;
-  const targetWidth = Math.max(1, Math.round(width * Math.max(0.12, Math.abs(scale))));
+  const height = maxY - minY + 1;
+  const facing = Math.cos(phase);
+  const widthScale = 0.56 + (Math.abs(facing) * 0.44);
+  const targetWidth = Math.max(2, Math.round(width * widthScale));
   const left = Math.round(((minX + maxX) / 2) - ((targetWidth - 1) / 2));
   const output = Buffer.alloc(decoded.data.length);
   for (let y = minY; y <= maxY; y += 1) {
     for (let targetOffsetX = 0; targetOffsetX < targetWidth; targetOffsetX += 1) {
       const normalized = targetWidth === 1 ? 0.5 : targetOffsetX / (targetWidth - 1);
-      const sourceNormalized = scale < 0 ? 1 - normalized : normalized;
+      const sourceNormalized = facing < 0 ? 1 - normalized : normalized;
       const sourceX = minX + Math.min(width - 1, Math.round(sourceNormalized * (width - 1)));
-      const targetX = left + targetOffsetX;
+      const normalizedY = (y - minY) / Math.max(1, height - 1);
+      const shear = Math.round(Math.sin(phase) * (0.5 - normalizedY) * 4);
+      const targetX = left + targetOffsetX + shear;
       if (targetX < 0 || targetX >= decoded.info.width) continue;
       const sourceOffset = ((y * decoded.info.width) + sourceX) * 4;
       const targetOffset = ((y * decoded.info.width) + targetX) * 4;
       decoded.data.copy(output, targetOffset, sourceOffset, sourceOffset + 4);
+      const highlightCenter = 0.5 + (Math.sin(phase) * 0.28);
+      const highlight = Math.max(0, 1 - (Math.abs(normalized - highlightCenter) / 0.2));
+      if (highlight > 0 && output[targetOffset + 3] > 0) {
+        const highlightColor = [185, 255, 241];
+        for (let channel = 0; channel < 3; channel += 1) {
+          output[targetOffset + channel] = Math.round(
+            output[targetOffset + channel]
+              + ((highlightColor[channel] - output[targetOffset + channel]) * highlight * 0.42),
+          );
+        }
+      }
     }
   }
   return encode(output, decoded.info, options.maxPaletteColors);
+}
+
+export async function createFlameDanceFrame(assetBuffer, detection, phase, options = {}) {
+  const flame = primaryComponent(detection);
+  const output = Buffer.from(detection.decoded.data);
+  const overlay = Buffer.alloc(output.length);
+  const bottom = flame.bounds.y + flame.bounds.height - 1;
+  const amplitude = options.amplitude ?? 3;
+  const stretch = 1 + (Math.sin(phase + 0.6) * 0.09);
+  for (let y = Math.max(0, flame.bounds.y - 1); y <= Math.min(detection.decoded.info.height - 1, bottom); y += 1) {
+    for (let x = Math.max(0, flame.bounds.x - 1); x < Math.min(detection.decoded.info.width, flame.bounds.x + flame.bounds.width + 1); x += 1) {
+      const offset = ((y * detection.decoded.info.width) + x) * 4;
+      if (output[offset + 3] > 0) output.fill(0, offset, offset + 4);
+    }
+  }
+  for (let y = flame.bounds.y; y <= bottom; y += 1) {
+    const distanceFromWick = bottom - y;
+    const normalizedHeight = distanceFromWick / Math.max(1, flame.bounds.height - 1);
+    for (let x = flame.bounds.x; x < flame.bounds.x + flame.bounds.width; x += 1) {
+      const sourceOffset = ((y * detection.decoded.info.width) + x) * 4;
+      if (detection.decoded.data[sourceOffset + 3] === 0) continue;
+      const sway = Math.round(
+        Math.sin(phase + (normalizedHeight * 1.7)) * amplitude * normalizedHeight,
+      );
+      const targetX = x + sway;
+      const targetY = bottom - Math.round(distanceFromWick * stretch);
+      if (targetX < 0 || targetX >= detection.decoded.info.width || targetY < 0 || targetY >= detection.decoded.info.height) continue;
+      const targetOffset = ((targetY * detection.decoded.info.width) + targetX) * 4;
+      detection.decoded.data.copy(output, targetOffset, sourceOffset, sourceOffset + 4);
+      detection.decoded.data.copy(overlay, targetOffset, sourceOffset, sourceOffset + 4);
+    }
+  }
+  return {
+    compositeBuffer: await encode(output, detection.decoded.info, options.maxPaletteColors),
+    overlayBuffer: await encode(overlay, detection.decoded.info, options.maxPaletteColors),
+    report: { strategy: 'wick_anchored_flame_sway_and_stretch', phase, amplitude, stretch },
+  };
+}
+
+export async function orientSmokeAboveWick(effectBuffer, wick, options = {}) {
+  const decoded = await sharp(effectBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  let above = 0;
+  let below = 0;
+  for (let y = 0; y < decoded.info.height; y += 1) {
+    for (let x = 0; x < decoded.info.width; x += 1) {
+      const offset = ((y * decoded.info.width) + x) * 4;
+      if (decoded.data[offset + 3] === 0) continue;
+      if (y <= wick.y) above += 1;
+      else below += 1;
+    }
+  }
+  const flipVertically = below > above;
+  const output = Buffer.alloc(decoded.data.length);
+  for (let y = 0; y < decoded.info.height; y += 1) {
+    for (let x = 0; x < decoded.info.width; x += 1) {
+      const sourceOffset = ((y * decoded.info.width) + x) * 4;
+      if (decoded.data[sourceOffset + 3] === 0) continue;
+      const targetY = flipVertically ? wick.y - Math.abs(y - wick.y) : y;
+      if (targetY < 0 || targetY > wick.y) continue;
+      const targetOffset = ((targetY * decoded.info.width) + x) * 4;
+      decoded.data.copy(output, targetOffset, sourceOffset, sourceOffset + 4);
+    }
+  }
+  return {
+    buffer: await encode(output, decoded.info, options.maxPaletteColors),
+    report: { strategy: 'wick_anchored_upward_smoke', flipped_vertically: flipVertically, above_pixels: above, below_pixels: below },
+  };
+}
+
+export async function createArcaneAuraFrame(baseBuffer, detection, intensity, phase, options = {}) {
+  const output = Buffer.from(detection.decoded.data);
+  const overlay = Buffer.alloc(output.length);
+  const center = primaryComponent(detection).centroid;
+  if (intensity <= 0) {
+    return {
+      compositeBuffer: await encode(output, detection.decoded.info, options.maxPaletteColors),
+      overlayBuffer: await encode(overlay, detection.decoded.info, options.maxPaletteColors),
+      report: { strategy: 'broken_arcane_aura_ring', intensity, phase, center },
+    };
+  }
+  const radiusX = Math.max(10, Math.round((options.radiusX ?? 18) * intensity));
+  const radiusY = Math.max(8, Math.round((options.radiusY ?? 14) * intensity));
+  const colors = [[68, 198, 191, 255], [185, 255, 241, 255], [180, 129, 209, 255]];
+  const points = Math.max(8, Math.round(18 * intensity));
+  for (let index = 0; index < points; index += 1) {
+    if ((index + phase) % 4 === 3) continue;
+    const angle = ((Math.PI * 2 * index) / points) + (phase * 0.32);
+    const x = Math.round(center.x + (Math.cos(angle) * radiusX));
+    const y = Math.round(center.y + (Math.sin(angle) * radiusY));
+    if (x < 0 || y < 0 || x >= detection.decoded.info.width || y >= detection.decoded.info.height) continue;
+    const color = colors[index % colors.length];
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1]]) {
+      const targetX = x + dx;
+      const targetY = y + dy;
+      if (targetX >= detection.decoded.info.width || targetY >= detection.decoded.info.height) continue;
+      const targetOffset = ((targetY * detection.decoded.info.width) + targetX) * 4;
+      for (let channel = 0; channel < 4; channel += 1) {
+        output[targetOffset + channel] = color[channel];
+        overlay[targetOffset + channel] = color[channel];
+      }
+    }
+  }
+  return {
+    compositeBuffer: await encode(output, detection.decoded.info, options.maxPaletteColors),
+    overlayBuffer: await encode(overlay, detection.decoded.info, options.maxPaletteColors),
+    report: { strategy: 'broken_arcane_aura_ring', intensity, phase, center },
+  };
 }
 
 export async function createRestorativeReleaseFrame(assetBuffer, detection, progress, options = {}) {
