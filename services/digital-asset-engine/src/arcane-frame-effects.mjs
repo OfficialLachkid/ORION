@@ -125,18 +125,24 @@ export async function createFlameDanceFrame(assetBuffer, detection, phase, optio
       if (output[offset + 3] > 0) output.fill(0, offset, offset + 4);
     }
   }
-  for (let y = flame.bounds.y; y <= bottom; y += 1) {
-    const distanceFromWick = bottom - y;
-    const normalizedHeight = distanceFromWick / Math.max(1, flame.bounds.height - 1);
-    for (let x = flame.bounds.x; x < flame.bounds.x + flame.bounds.width; x += 1) {
-      const sourceOffset = ((y * detection.decoded.info.width) + x) * 4;
+  const targetTop = Math.max(0, bottom - Math.round((bottom - flame.bounds.y) * stretch));
+  for (let targetY = targetTop; targetY <= bottom; targetY += 1) {
+    const targetDistance = bottom - targetY;
+    const sourceDistance = Math.min(
+      flame.bounds.height - 1,
+      Math.round(targetDistance / stretch),
+    );
+    const sourceY = bottom - sourceDistance;
+    const normalizedHeight = sourceDistance / Math.max(1, flame.bounds.height - 1);
+    const sway = Math.round(
+      Math.sin(phase + (normalizedHeight * 1.7)) * amplitude * normalizedHeight,
+    );
+    for (let targetX = flame.bounds.x - amplitude; targetX < flame.bounds.x + flame.bounds.width + amplitude; targetX += 1) {
+      const sourceX = targetX - sway;
+      if (sourceX < flame.bounds.x || sourceX >= flame.bounds.x + flame.bounds.width) continue;
+      if (targetX < 0 || targetX >= detection.decoded.info.width) continue;
+      const sourceOffset = ((sourceY * detection.decoded.info.width) + sourceX) * 4;
       if (detection.decoded.data[sourceOffset + 3] === 0) continue;
-      const sway = Math.round(
-        Math.sin(phase + (normalizedHeight * 1.7)) * amplitude * normalizedHeight,
-      );
-      const targetX = x + sway;
-      const targetY = bottom - Math.round(distanceFromWick * stretch);
-      if (targetX < 0 || targetX >= detection.decoded.info.width || targetY < 0 || targetY >= detection.decoded.info.height) continue;
       const targetOffset = ((targetY * detection.decoded.info.width) + targetX) * 4;
       detection.decoded.data.copy(output, targetOffset, sourceOffset, sourceOffset + 4);
       detection.decoded.data.copy(overlay, targetOffset, sourceOffset, sourceOffset + 4);

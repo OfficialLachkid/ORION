@@ -20,7 +20,32 @@ import {
   createShieldIntegrityFrame,
 } from '../src/interactive-item-states.mjs';
 import { processPixelArtAsset } from '../src/image-processor.mjs';
+import { createFlameDanceFrame } from '../src/arcane-frame-effects.mjs';
 import { InteractiveItemAnimationBatchSchema } from '../src/schemas.mjs';
+
+test('flame stretching uses inverse sampling without transparent stripe rows', async () => {
+  const base = await sharp({
+    create: { width: 32, height: 32, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite([
+    { input: Buffer.from('<svg width="8" height="12"><rect width="8" height="12" fill="#f4b96b"/></svg>'), left: 12, top: 3 },
+    { input: Buffer.from('<svg width="16" height="12"><rect width="16" height="12" fill="#2c204f"/></svg>'), left: 8, top: 16 },
+  ]).png({ palette: true, colours: 8, dither: 0 }).toBuffer();
+  const detection = await detectDynamicEnergyRegion(base, { colors: ['#f4b96b'], tolerance: 8 });
+  const danced = await createFlameDanceFrame(base, detection, 1, { maxPaletteColors: 8 });
+  const decoded = await sharp(danced.compositeBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const warmRows = [];
+  for (let y = 0; y < 16; y += 1) {
+    let warmPixels = 0;
+    for (let x = 0; x < decoded.info.width; x += 1) {
+      const offset = ((y * decoded.info.width) + x) * 4;
+      if (decoded.data[offset + 3] > 0 && decoded.data[offset] > 150 && decoded.data[offset + 1] > 80) warmPixels += 1;
+    }
+    if (warmPixels) warmRows.push(y);
+  }
+  const first = Math.min(...warmRows);
+  const last = Math.max(...warmRows);
+  assert.deepEqual(warmRows, Array.from({ length: last - first + 1 }, (_, index) => first + index));
+});
 
 async function itemSprite({ energyX, energyY }) {
   return sharp({
