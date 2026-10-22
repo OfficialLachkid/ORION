@@ -349,6 +349,7 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     'source-mine': resolve(targetRoot, 'experiments/source-mine'),
     'source-cell': resolve(targetRoot, 'experiments/source-cell'),
     'source-shield': resolve(targetRoot, 'experiments/source-shield'),
+    'source-wand': resolve(targetRoot, 'experiments/source-wand'),
     'target-product': targetRoot,
   };
   const products = {
@@ -407,16 +408,31 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       final_path: 'assets/items/shield-source.png',
       validation_path: 'validation/shield-source.json',
     }]),
+    'source-wand': canonicalProduct('source-wand', [{
+      asset_id: 'asset-wand-source',
+      asset_key: 'wand-source',
+      name: 'Wand',
+      kind: 'focus',
+      description: 'An enchanted wand.',
+      generation_prompt: 'Generate an enchanted wand.',
+      seed: 5,
+      status: 'generated',
+      source_path: 'assets/source/wand-source.png',
+      final_path: 'assets/items/wand-source.png',
+      validation_path: 'validation/wand-source.json',
+    }]),
   };
   const grenade = await itemSprite({ energyX: 54, energyY: 58 });
   const mine = await itemSprite({ energyX: 70, energyY: 74 });
   const cell = await itemSprite({ energyX: 62, energyY: 58 });
   const shield = await itemSprite({ energyX: 58, energyY: 54 });
+  const wand = await itemSprite({ energyX: 74, energyY: 54 });
   const sourcePaths = [
     [resolve(sourceRoots['source-grenade'], 'assets/items/grenade-source.png'), grenade],
     [resolve(sourceRoots['source-mine'], 'assets/items/mine-source.png'), mine],
     [resolve(sourceRoots['source-cell'], 'assets/items/cell-source.png'), cell],
     [resolve(sourceRoots['source-shield'], 'assets/items/shield-source.png'), shield],
+    [resolve(sourceRoots['source-wand'], 'assets/items/wand-source.png'), wand],
   ];
   for (const [path, buffer] of sourcePaths) {
     await mkdir(dirname(path), { recursive: true });
@@ -462,6 +478,15 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       impact_description: 'Cracked shield surface.',
       break_description: 'Scattering shield fragments.',
     },
+    {
+      source_product_slug: 'source-wand',
+      source_asset_key: 'wand-source',
+      target_asset_key: 'enchanted-wand',
+      name: 'Enchanted Wand',
+      recipe: 'wand',
+      seed: 46,
+      release_description: 'Compact cyan and violet spark burst from the wand tip.',
+    },
   ]);
   let generationCalls = 0;
   const result = await generateInteractiveItemAnimationBatch({
@@ -505,8 +530,8 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     },
   });
 
-  assert.equal(generationCalls, 4);
-  assert.equal(result.manifest.generation_calls, 4);
+  assert.equal(generationCalls, 5);
+  assert.equal(result.manifest.generation_calls, 5);
   assert.equal(result.manifest.gates.all_items_valid, true);
   assert.equal(result.manifest.gates.package_modified, false);
   assert.equal(result.results.every((item) => item.manifest.base_regenerated === false), true);
@@ -535,4 +560,8 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     'power-up', 'active-loop', 'shield-hit', 'integrity-decay', 'shield-break', 'power-down',
   ]);
   assert.equal(shieldManifest.generation_calls, 2);
+  const wandManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'enchanted-wand/manifest.json'), 'utf8'));
+  assert.deepEqual(wandManifest.animations, ['charge-release']);
+  assert.equal(wandManifest.generation_calls, 1);
+  assert.equal(wandManifest.base_regenerated, false);
 });

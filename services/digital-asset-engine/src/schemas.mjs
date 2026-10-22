@@ -397,6 +397,33 @@ const InteractiveItemRecipeSchema = z.discriminatedUnion('recipe', [
   InteractiveItemSourceSchema.extend({
     recipe: z.literal('workbench'),
   }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('potion'),
+    break_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('crystal'),
+    orbit_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('rune_stone'),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('tome'),
+    open_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('flask'),
+    reaction_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('candle'),
+    smoke_description: z.string().min(1),
+  }),
+  InteractiveItemSourceSchema.extend({
+    recipe: z.literal('wand'),
+    release_description: z.string().min(1),
+  }),
 ]);
 
 export const InteractiveItemAnimationBatchSchema = z.object({

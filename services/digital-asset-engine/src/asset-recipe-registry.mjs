@@ -161,18 +161,22 @@ export const ASSET_RECIPE_REGISTRY = Object.freeze({
     ],
     anchors: ['liquid_region', 'object_center'],
     deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
+    executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },
   }),
   crystal: recipe({
     label: 'Magic crystal',
     animations: [animation('idle-loop', ['hover', 'glow_pulse', 'particle_orbit'])],
     anchors: ['object_center'],
     deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
+    executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },
   }),
   rune_stone: recipe({
     label: 'Rune stone',
     states: ['inactive', 'active'],
     animations: [animation('activation', ['activate', 'energy_flow', 'glow_pulse'], 'once')],
     anchors: ['rune_region'],
+    deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
+    executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },
   }),
   tome: recipe({
     label: 'Book or tome',
@@ -183,12 +187,15 @@ export const ASSET_RECIPE_REGISTRY = Object.freeze({
     ],
     anchors: ['spine', 'page_region'],
     deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
+    executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },
   }),
   flask: recipe({
     label: 'Alchemy flask',
     states: ['stable', 'unstable'],
     animations: [animation('liquid-reaction-loop', ['liquid_motion', 'bubbles', 'flicker'])],
     anchors: ['liquid_region'],
+    deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
+    executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },
   }),
   candle: recipe({
     label: 'Candle',
@@ -198,11 +205,15 @@ export const ASSET_RECIPE_REGISTRY = Object.freeze({
       animation('extinguish', ['deactivate', 'smoke_emit'], 'once'),
     ],
     anchors: ['wick'],
+    deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
+    executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },
   }),
   wand: recipe({
     label: 'Wand',
     animations: [animation('charge-release', ['charge', 'release', 'spark_burst'], 'once', { anchor: 'tip' })],
     anchors: ['tip'],
+    deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
+    executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },
   }),
   chair: recipe({
     label: 'Chair',
@@ -217,7 +228,11 @@ const KIND_ALIASES = Object.freeze({
   battery: 'power_cell', 'power-cell': 'power_cell',
   pickup: 'energy_pickup', 'energy-pickup': 'energy_pickup',
   crate: 'supply_crate', 'supply-crate': 'supply_crate',
-  'rune-stone': 'rune_stone', rune: 'rune_stone', book: 'tome', spellbook: 'tome',
+  'rune-stone': 'rune_stone', rune: 'rune_stone', relic: 'rune_stone',
+  book: 'tome', spellbook: 'tome',
+  'alchemy-tool': 'flask', alchemy_tool: 'flask',
+  'ritual-object': 'candle', ritual_object: 'candle',
+  focus: 'wand',
 });
 
 function normalizedKind(value) {

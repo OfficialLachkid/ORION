@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import sharp from 'sharp';
 import { validateGeneratedAsset } from './asset-validator.mjs';
+import { generateArcaneItemRecipe, isArcaneItemRecipe } from './arcane-item-recipes.mjs';
 import { resolveAssetRecipe } from './asset-recipe-registry.mjs';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { assembleEffectSpriteSheet, writeAnimatedGifPreview } from './effect-pilot.mjs';
@@ -938,8 +939,17 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
     canvas,
     detection,
     source,
+    sourceAsset,
     adapter,
   };
+  if (isArcaneItemRecipe(item.recipe)) {
+    return generateArcaneItemRecipe(recipeContext, {
+      finalizeRecipeItem,
+      generateIsolatedEffect,
+      writeAnimation,
+      writeStates,
+    });
+  }
   if (item.recipe === 'power_cell' || item.recipe === 'workbench') {
     return generateEnergyStatesRecipe(recipeContext);
   }
