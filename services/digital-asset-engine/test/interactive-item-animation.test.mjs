@@ -565,8 +565,8 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
     },
   });
 
-  assert.equal(generationCalls, 6);
-  assert.equal(result.manifest.generation_calls, 6);
+  assert.equal(generationCalls, 5);
+  assert.equal(result.manifest.generation_calls, 5);
   assert.equal(result.manifest.gates.all_items_valid, true);
   assert.equal(result.manifest.gates.package_modified, false);
   assert.equal(result.results.every((item) => item.manifest.base_regenerated === false), true);
@@ -605,9 +605,13 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   ));
   assert.equal(spellMetadata.base_sprite, null);
   assert.equal(spellMetadata.composition_role, 'independent_effect');
+  assert.deepEqual(spellMetadata.effect_origin, {
+    x: Math.floor(spellMetadata.canvas.width / 2),
+    y: Math.floor(spellMetadata.canvas.height / 2),
+  });
   assert.equal(spellMetadata.frames.every((frame) => frame.overlay_path.endsWith('.png')), true);
   const potionManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'mana-potion/manifest.json'), 'utf8'));
   assert.deepEqual(potionManifest.states, ['sealed', 'broken', 'consumed']);
   assert.deepEqual(potionManifest.animations, ['idle-loop', 'consume-break']);
-  assert.equal(potionManifest.generation_calls, 1);
+  assert.equal(potionManifest.generation_calls, 0);
 });

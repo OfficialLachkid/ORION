@@ -14,6 +14,7 @@ import {
 } from './interactive-item-states.mjs';
 import {
   createExtinguishedCandleFrame,
+  createEnergyScatterFrame,
   createFracturedObjectFrame,
   createLiquidSwirlFrame,
   createTwinkleFrame,
@@ -98,20 +99,6 @@ async function generatePotion(context, services) {
   }, idleFrames, idleOverlays, options);
 
   const objectAnchor = await detectOpaqueObjectAnchor(baseBuffer);
-  const effect = await services.generateIsolatedEffect({
-    adapter: context.adapter,
-    config: options.config,
-    item,
-    plan,
-    canvas,
-    targetOrigin: objectAnchor.anchor,
-    seedOffset: 31,
-    prompt: effectPrompt(plan, `${item.break_description} Show only a wide, low liquid splash and separated angular glass shards; leave the center visibly empty.`, [
-      'intact potion bottle', 'miniature bottle', 'container silhouette', 'round orb', 'central blob',
-      'character', 'hand', 'floor', 'scenery', 'duplicate effect',
-    ]),
-  });
-  const effects = await effectSeries(effect.buffer, objectAnchor.anchor, item.seed + 31, plan.style.max_palette_colors);
   const fractures = await Promise.all([0.28, 0.62, 1].map((progress, index) => (
     createFracturedObjectFrame(baseBuffer, objectAnchor.anchor, progress, {
       distance: 7,
@@ -119,12 +106,19 @@ async function generatePotion(context, services) {
       maxPaletteColors: plan.style.max_palette_colors,
     })
   )));
+  const liquidScatter = await Promise.all([0.24, 0.58, 0.92].map((progress, index) => (
+    createEnergyScatterFrame(detection, objectAnchor.anchor, progress, {
+      distance: 11,
+      salt: item.seed + 31 + index,
+      maxPaletteColors: plan.style.max_palette_colors,
+    })
+  )));
   const breakFrames = [
     baseBuffer,
     pulses[2].compositeBuffer,
-    await compositeItemFrame(fractures[0], [effects[1]], { maxPaletteColors: plan.style.max_palette_colors }),
-    await compositeItemFrame(fractures[1], [effects[2]], { maxPaletteColors: plan.style.max_palette_colors }),
-    await compositeItemFrame(fractures[2], [effects[3]], { maxPaletteColors: plan.style.max_palette_colors }),
+    await compositeItemFrame(fractures[0], [liquidScatter[0]], { maxPaletteColors: plan.style.max_palette_colors }),
+    await compositeItemFrame(fractures[1], [liquidScatter[1]], { maxPaletteColors: plan.style.max_palette_colors }),
+    await compositeItemFrame(fractures[2], [liquidScatter[2]], { maxPaletteColors: plan.style.max_palette_colors }),
     empty,
   ];
   const consumeBreak = await services.writeAnimation(itemRoot, item, 'consume-break', {
@@ -132,7 +126,6 @@ async function generatePotion(context, services) {
     phases: ['sealed', 'charged', 'fracture', 'release', 'dissipate', 'consumed'],
     durations: [140, 90, 80, 90, 130, 180],
   }, breakFrames, [empty, pulses[2].overlayBuffer, breakFrames[2], breakFrames[3], breakFrames[4], empty], options);
-  await writeSource(resolve(itemRoot, `source/break-peak.${effect.generated.format}`), effect.generated.buffer);
   const states = await services.writeStates(itemRoot, item, [
     { key: 'sealed', name: 'Sealed', buffer: baseBuffer },
     { key: 'broken', name: 'Broken / Released', buffer: breakFrames[4] },
@@ -150,9 +143,9 @@ async function generatePotion(context, services) {
       energy_region: detection.report,
       pulse_isolation: isolation,
       twinkle_motion: twinkles.map((frame) => frame.report),
-      effect_alignment: effect.alignment,
+      fracture_strategy: 'approved_base_radial_fragments_with_detected_liquid_scatter',
     },
-    generationCalls: 1,
+    generationCalls: 0,
   });
 }
 
@@ -381,19 +374,29 @@ async function generateWand(context, services) {
   } = context;
   const { frames: charge, isolation } = await pulseFrames(baseBuffer, detection, [0, 0.28, 0.58, 0.88]);
   const tip = detection.report.components[0]?.centroid || detection.report.centroid;
+  const spellOrigin = { x: Math.floor(canvas.width / 2), y: Math.floor(canvas.height / 2) };
   const release = await services.generateIsolatedEffect({
     adapter: context.adapter,
     config: options.config,
     item,
     plan,
     canvas,
-    targetOrigin: tip,
+    targetOrigin: spellOrigin,
     seedOffset: 81,
     prompt: effectPrompt(plan, item.release_description, [
       'wand', 'weapon', 'character', 'hand', 'floor', 'scenery', 'duplicate effect',
     ]),
   });
-  const burst = await effectSeries(release.buffer, tip, item.seed + 81, plan.style.max_palette_colors);
+  const spellTransforms = [
+    { scale: 0.62, opacity: 0.72, density: 0.72 },
+    { scale: 0.86, opacity: 0.9, density: 0.9 },
+    { scale: 1.12, opacity: 1, density: 1 },
+    { scale: 1.3, opacity: 0.58, density: 0.6 },
+  ];
+  const burst = await Promise.all(spellTransforms.map((transform, index) => derivePixelArtEffectFrame(
+    release.buffer,
+    { ...transform, origin: spellOrigin, salt: item.seed + 81 + index, maxPaletteColors: plan.style.max_palette_colors },
+  )));
   const chargeFrames = [
     baseBuffer,
     charge[1].compositeBuffer,
@@ -413,6 +416,7 @@ async function generateWand(context, services) {
     phases: ['spark', 'form', 'release', 'dissipate', 'clear'],
     durations: [70, 70, 90, 130, 160],
     effectOnly: true,
+    origin: spellOrigin,
   }, spellFrames, spellFrames, options);
   await writeSource(resolve(itemRoot, `source/release-peak.${release.generated.format}`), release.generated.buffer);
   return services.finalizeRecipeItem({
@@ -424,6 +428,8 @@ async function generateWand(context, services) {
       energy_region: detection.report,
       pulse_isolation: isolation,
       effect_alignment: release.alignment,
+      wand_tip_anchor: tip,
+      spell_origin: spellOrigin,
       separation: 'wand_charge_and_spell_vfx_are_independent_runtime_assets',
     },
     generationCalls: 1,

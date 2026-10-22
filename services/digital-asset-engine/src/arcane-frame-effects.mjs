@@ -27,10 +27,7 @@ function primaryComponent(detection) {
 }
 
 export async function createExtinguishedCandleFrame(assetBuffer, detection, options = {}) {
-  const components = detection.report.components.filter((component) => component.pixels >= 3);
-  const flame = [...components].sort((left, right) => (
-    left.bounds.y - right.bounds.y || right.pixels - left.pixels
-  ))[0] || primaryComponent(detection);
+  const flame = primaryComponent(detection);
   const output = Buffer.from(detection.decoded.data);
   const overlay = Buffer.alloc(output.length);
   const bottom = flame.bounds.y + flame.bounds.height - 1;
@@ -51,6 +48,27 @@ export async function createExtinguishedCandleFrame(assetBuffer, detection, opti
     },
     report: { strategy: 'topmost_energy_component_clear', flame_component: flame },
   };
+}
+
+export async function createEnergyScatterFrame(detection, anchor, progress, options = {}) {
+  const output = Buffer.alloc(detection.decoded.data.length);
+  const distance = Math.max(1, Math.round((options.distance ?? 9) * progress));
+  const salt = options.salt ?? 0;
+  for (let pixel = 0; pixel < detection.mask.length; pixel += 1) {
+    if (!detection.mask[pixel]) continue;
+    const x = pixel % detection.decoded.info.width;
+    const y = Math.floor(pixel / detection.decoded.info.width);
+    const sourceOffset = pixel * 4;
+    const hash = hashPixel(x, y, salt);
+    if (hash % 100 < Math.round(progress * 58)) continue;
+    const angle = Math.atan2(y - anchor.y, x - anchor.x) + (((hash % 9) - 4) * 0.1);
+    const targetX = x + Math.round(Math.cos(angle) * distance);
+    const targetY = y + Math.round(Math.sin(angle) * distance);
+    if (targetX < 0 || targetX >= detection.decoded.info.width || targetY < 0 || targetY >= detection.decoded.info.height) continue;
+    const targetOffset = ((targetY * detection.decoded.info.width) + targetX) * 4;
+    detection.decoded.data.copy(output, targetOffset, sourceOffset, sourceOffset + 4);
+  }
+  return encode(output, detection.decoded.info, options.maxPaletteColors);
 }
 
 export async function createTwinkleFrame(assetBuffer, detection, phase, options = {}) {

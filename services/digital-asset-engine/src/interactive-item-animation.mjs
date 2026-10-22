@@ -202,6 +202,7 @@ async function writeAnimation(root, item, key, definition, frames, overlays, opt
     root_motion: { x: 0, y: 0 },
     base_sprite: definition.effectOnly ? null : '../../base.png',
     composition_role: definition.effectOnly ? 'independent_effect' : 'fixed_root_asset_animation',
+    ...(definition.origin ? { effect_origin: definition.origin } : {}),
     canvas: definition.canvas,
     sprite_sheet: {
       path: `../../sheets/${key}.png`,
