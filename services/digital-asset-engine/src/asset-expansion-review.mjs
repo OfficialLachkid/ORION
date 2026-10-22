@@ -57,9 +57,9 @@ function parseReference(value, expectedPrefix) {
 }
 
 export function buildAssetExpansionReviewComponents(context, resolved = false) {
-  const enhancementOnly = context.reviewMode === 'enhancement';
+  const enhancementOnly = ['enhancement', 'upgrade'].includes(context.reviewMode);
   const buttons = resolved ? [] : [
-    { type: 2, style: 3, label: enhancementOnly ? 'Approve Animation Upgrade' : 'Approve Expansion', custom_id: buildReference(BUTTON_PREFIX, 'approve', context) },
+    { type: 2, style: 3, label: context.reviewMode === 'upgrade' ? 'Approve Asset Upgrade' : enhancementOnly ? 'Approve Animation Upgrade' : 'Approve Expansion', custom_id: buildReference(BUTTON_PREFIX, 'approve', context) },
     { type: 2, style: 2, label: 'Request Changes', custom_id: buildReference(BUTTON_PREFIX, 'request_changes', context) },
     { type: 2, style: 4, label: 'Reject Expansion', custom_id: buildReference(BUTTON_PREFIX, 'reject', context) },
   ];
@@ -76,34 +76,46 @@ function manifestUrl(guildId, state) {
   return `https://discord.com/channels/${guildId}/${state.channel_id}/${state.overview_message_id}`;
 }
 
+function manifestReviewMode(manifest) {
+  if (manifest.new_asset_count === 0 && (manifest.replaced_asset_count || 0) > 0) return 'upgrade';
+  if (manifest.enhanced_asset_count > 0 && manifest.new_asset_count === 0) return 'enhancement';
+  return 'expansion';
+}
+
 function overviewEmbed(manifest, revision) {
-  const enhancementOnly = manifest.enhanced_asset_count > 0 && manifest.new_asset_count === 0;
+  const upgradeOnly = (manifest.enhanced_asset_count + (manifest.replaced_asset_count || 0)) > 0
+    && manifest.new_asset_count === 0;
+  const hasReplacement = (manifest.replaced_asset_count || 0) > 0;
   const assets = manifest.assets.map((asset, index) => (
     `**${String(index + 1).padStart(2, '0')}** — ${asset.name} · ${asset.buyer_group}${asset.animation ? ` · ${(asset.animation.states || []).length} states · ${asset.animation.animations.length} animations` : ''}`
   )).join('\n');
   return {
-    title: `${manifest.title} · ${enhancementOnly ? 'Animation Upgrade' : 'Expansion'} Review · Revision ${revision}`,
-    description: enhancementOnly
-      ? 'Review these animations and states for the existing assets before ORION builds a new product version. The asset identities and approved base sprites remain unchanged. Runtime frames, overlays, sheets, metadata, and review GIFs are bound to this manifest. The current public release remains unchanged.'
+    title: `${manifest.title} · ${upgradeOnly ? 'Asset Upgrade' : 'Expansion'} Review · Revision ${revision}`,
+    description: upgradeOnly
+      ? hasReplacement
+        ? 'Review these animations, states, and the explicitly replaced Spell Tome base before ORION builds a new product version. Existing asset IDs remain stable; the reviewed tome artwork replaces its prior base only in the future candidate. Runtime files and review GIFs are bound to this manifest. The current public release remains unchanged.'
+        : 'Review these animations and states for the existing assets before ORION builds a new product version. The asset identities and approved base sprites remain unchanged. Runtime frames, overlays, sheets, metadata, and review GIFs are bound to this manifest. The current public release remains unchanged.'
       : 'Review these complete additions before ORION builds a new version of the existing product. Animated items include their exact runtime frames, overlays, sheets, metadata, and review GIFs. The current public release remains unchanged.',
     color: COLOR,
     fields: [
       { name: 'Target release', value: `\`${manifest.base_version}\` → \`${manifest.target_version}\``, inline: true },
-      { name: enhancementOnly ? 'Enhanced assets' : 'Assets', value: String(manifest.asset_count), inline: true },
+      { name: upgradeOnly ? 'Upgraded assets' : 'Assets', value: String(manifest.asset_count), inline: true },
+      ...(hasReplacement ? [{ name: 'Replaced bases', value: String(manifest.replaced_asset_count), inline: true }] : []),
       { name: 'Animations', value: String(manifest.animation_count || 0), inline: true },
       { name: 'States', value: String(manifest.state_count || 0), inline: true },
       { name: 'Generation cost', value: '€0 API cost', inline: true },
-      { name: enhancementOnly ? 'Animation scope' : 'Proposed additions', value: assets, inline: false },
-      { name: enhancementOnly ? 'Upgrade manifest' : 'Expansion manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
+      { name: upgradeOnly ? 'Upgrade scope' : 'Proposed additions', value: assets, inline: false },
+      { name: upgradeOnly ? 'Upgrade manifest' : 'Expansion manifest', value: `\`${manifest.manifest_hash}\``, inline: false },
       { name: 'Safety', value: 'Approval authorizes a versioned candidate build only. It does not update itch.io or publish anything.', inline: false },
     ],
     image: { url: 'attachment://expansion-overview.png' },
-    footer: { text: `ORION Digital Asset Engine · immutable ${enhancementOnly ? 'animation upgrade' : 'expansion'} proposal` },
+    footer: { text: `ORION Digital Asset Engine · immutable ${upgradeOnly ? 'asset upgrade' : 'expansion'} proposal` },
   };
 }
 
 function assetEmbed(asset, index, total) {
   const enhancement = asset.operation === 'enhance_existing';
+  const replacement = asset.operation === 'replace_existing';
   const interactiveSummary = asset.animation
     ? [
       ...(asset.animation.states || []).map((state) => `- State: ${state.state_key}`),
@@ -112,7 +124,7 @@ function assetEmbed(asset, index, total) {
     : 'Static base asset only';
   return {
     title: `${String(index + 1).padStart(2, '0')}/${String(total).padStart(2, '0')} · ${asset.name}`,
-    description: `Buyer group: **${asset.buyer_group}**. Select **${String(index + 1).padStart(2, '0')}** in the feedback form if this ${enhancement ? 'animation upgrade' : 'addition'} needs revision.`,
+    description: `Buyer group: **${asset.buyer_group}**. Select **${String(index + 1).padStart(2, '0')}** in the feedback form if this ${replacement ? 'replacement base and animation upgrade' : enhancement ? 'animation upgrade' : 'addition'} needs revision.`,
     color: COLOR,
     fields: [
       { name: 'Asset ID', value: `\`${asset.asset_id}\``, inline: false },
@@ -181,7 +193,7 @@ export async function postAssetExpansionReview(options) {
     productSlug: manifest.product_slug,
     expansionId: manifest.expansion_id,
     manifestHash: manifest.manifest_hash,
-    reviewMode: manifest.enhanced_asset_count > 0 && manifest.new_asset_count === 0 ? 'enhancement' : 'expansion',
+    reviewMode: manifestReviewMode(manifest),
     manifestUrl: state.overview_message_id ? manifestUrl(guildId, state) : 'https://discord.com',
   };
   const payload = { embeds: [overviewEmbed(manifest, state.review_revision)] };
@@ -218,7 +230,7 @@ export async function postAssetExpansionReview(options) {
     const thread = await discordRequest(
       token,
       `/channels/${state.channel_id}/messages/${state.overview_message_id}/threads`,
-      { method: 'POST', body: { name: `${context.reviewMode === 'enhancement' ? 'animation-upgrade' : 'expansion'}-${manifest.target_version}-review`, auto_archive_duration: 1440 }, fetchImpl: options.fetchImpl },
+      { method: 'POST', body: { name: `${context.reviewMode === 'upgrade' ? 'asset-upgrade' : context.reviewMode === 'enhancement' ? 'animation-upgrade' : 'expansion'}-${manifest.target_version}-review`, auto_archive_duration: 1440 }, fetchImpl: options.fetchImpl },
     );
     state.thread_id = thread.id;
     await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
@@ -444,7 +456,7 @@ export async function recordAssetExpansionReviewDecision(options) {
     productSlug: context.manifest.product_slug,
     expansionId: context.manifest.expansion_id,
     manifestHash: context.manifest.manifest_hash,
-    reviewMode: context.manifest.enhanced_asset_count > 0 && context.manifest.new_asset_count === 0 ? 'enhancement' : 'expansion',
+    reviewMode: manifestReviewMode(context.manifest),
     manifestUrl: manifestUrl(config.guildId, context.state),
   };
   return {

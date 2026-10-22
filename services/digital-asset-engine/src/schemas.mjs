@@ -400,6 +400,7 @@ const InteractiveItemRecipeSchema = z.discriminatedUnion('recipe', [
   InteractiveItemSourceSchema.extend({
     recipe: z.literal('potion'),
     break_description: z.string().min(1),
+    break_style: z.enum(['fracture_scatter', 'restorative_release']).default('fracture_scatter'),
   }),
   InteractiveItemSourceSchema.extend({
     recipe: z.literal('crystal'),
@@ -411,6 +412,7 @@ const InteractiveItemRecipeSchema = z.discriminatedUnion('recipe', [
   InteractiveItemSourceSchema.extend({
     recipe: z.literal('tome'),
     open_description: z.string().min(1),
+    replacement_base_description: z.string().min(1).optional(),
   }),
   InteractiveItemSourceSchema.extend({
     recipe: z.literal('flask'),
@@ -542,7 +544,7 @@ export const AssetExpansionReviewPlanSchema = z.object({
   target_version: SemanticVersionSchema,
   base_manifest_hash: Sha256Schema,
   assets: z.array(z.object({
-    operation: z.enum(['add_asset', 'enhance_existing']).default('add_asset'),
+    operation: z.enum(['add_asset', 'enhance_existing', 'replace_existing']).default('add_asset'),
     source_product_slug: IdentifierSchema,
     source_asset_key: IdentifierSchema,
     target_asset_key: IdentifierSchema,
@@ -575,10 +577,10 @@ export const AssetExpansionReviewPlanSchema = z.object({
         path: ['assets', index],
       });
     }
-    if (asset.operation === 'enhance_existing' && !asset.interactive_proof) {
+    if (['enhance_existing', 'replace_existing'].includes(asset.operation) && !asset.interactive_proof) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Existing-asset enhancements require an interactive proof.',
+        message: 'Existing-asset enhancements and replacements require an interactive proof.',
         path: ['assets', index, 'interactive_proof'],
       });
     }

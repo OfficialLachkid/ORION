@@ -106,21 +106,22 @@ async function fixture() {
 async function addAnimationProof(setup, options = {}) {
   const batchId = options.batchId || 'interactive-items-v1';
   const assetKey = options.assetKey || 'power-cell';
+  const proofBase = options.baseBuffer || setup.png;
   const itemRoot = resolve(setup.productRoot, 'experiments', batchId, assetKey);
   const runtime = {
-    'base.png': setup.png,
-    'states/full.png': setup.png,
-    'states/empty.png': setup.png,
+    'base.png': proofBase,
+    'states/full.png': proofBase,
+    'states/empty.png': proofBase,
     'metadata/states.json': Buffer.from('{"states":["empty","full"]}\n'),
-    'previews/states.png': setup.png,
-    'frames/active-loop/00.png': setup.png,
-    'overlays/active-loop/00.png': setup.png,
-    'sheets/active-loop.png': setup.png,
+    'previews/states.png': proofBase,
+    'frames/active-loop/00.png': proofBase,
+    'overlays/active-loop/00.png': proofBase,
+    'sheets/active-loop.png': proofBase,
     'metadata/active-loop/animation.json': Buffer.from('{"root_motion":{"x":0,"y":0}}\n'),
     'previews/active-loop.gif': Buffer.from('GIF89a-active'),
-    'frames/detonation/00.png': setup.png,
-    'overlays/detonation/00.png': setup.png,
-    'sheets/detonation.png': setup.png,
+    'frames/detonation/00.png': proofBase,
+    'overlays/detonation/00.png': proofBase,
+    'sheets/detonation.png': proofBase,
     'metadata/detonation/animation.json': Buffer.from('{"root_motion":{"x":0,"y":0}}\n'),
     'previews/detonation.gif': Buffer.from('GIF89a-detonation'),
     'validation.json': Buffer.from('{"status":"passed"}\n'),
@@ -136,7 +137,7 @@ async function addAnimationProof(setup, options = {}) {
     schema_version: '1.0',
     item: { target_asset_key: assetKey },
     status: 'awaiting_animation_review',
-    base_regenerated: false,
+    base_regenerated: options.baseRegenerated || false,
     generation_calls: 1,
     incurred_cost: 0,
     buyer_runtime_formats: ['transparent_png_frames', 'animation_json'],
@@ -233,6 +234,65 @@ test('reviews animations as enhancements of existing asset identities on an init
     reviewMode: 'enhancement',
   });
   assert.equal(components[0].components[0].label, 'Approve Animation Upgrade');
+});
+
+test('reviews a replacement base without mutating the existing asset identity or public release', async () => {
+  const setup = await fixture();
+  const canonical = product();
+  await write(resolve(setup.productRoot, 'product.json'), JSON.stringify(canonical));
+  await write(resolve(setup.productRoot, canonical.assets[0].final_path), setup.png);
+  await write(resolve(setup.productRoot, canonical.assets[0].validation_path), JSON.stringify({
+    status: 'passed', metrics: { width: 128, height: 128, content_sha256: setup.hash },
+  }));
+  await write(resolve(setup.productRoot, 'exports/itch-preview/manifest.json'), JSON.stringify({
+    release_state: 'internal_preview', distribution_ready: false, product_version: '0.1.0',
+    release_id: 'asset-release-initial', manifest_hash: setup.plan.base_manifest_hash,
+    listing_hash: 'e'.repeat(64), files: [],
+  }));
+  await write(resolve(setup.productRoot, 'exports/itch-preview/itch-listing-preview.json'), JSON.stringify({
+    listing_hash: 'e'.repeat(64),
+  }));
+  await write(resolve(setup.productRoot, 'review/distribution.json'), JSON.stringify({
+    status: 'published', target_version: '0.1.0', manifest_hash: setup.plan.base_manifest_hash,
+    publication_job: { status: 'completed' },
+  }));
+  const replacement = await sharp({
+    create: { width: 128, height: 128, channels: 4, background: { r: 44, g: 198, b: 191, alpha: 255 } },
+  }).png().toBuffer();
+  setup.plan.expansion_id = 'replacement-upgrade-v1';
+  setup.plan.title = 'Replacement Upgrade';
+  setup.plan.base_version = '0.1.0';
+  setup.plan.target_version = '0.2.0';
+  setup.plan.assets = [{
+    operation: 'replace_existing',
+    source_product_slug: canonical.slug,
+    source_asset_key: canonical.assets[0].asset_key,
+    target_asset_key: canonical.assets[0].asset_key,
+    target_name: canonical.assets[0].name,
+    buyer_group: 'items',
+  }];
+  await addAnimationProof(setup, {
+    batchId: 'canonical-replacement-v1',
+    assetKey: canonical.assets[0].asset_key,
+    baseBuffer: replacement,
+    baseRegenerated: true,
+  });
+
+  const prepared = await prepareAssetExpansionReview({ outputRoot: setup.outputRoot, plan: setup.plan });
+  assert.equal(prepared.manifest.replaced_asset_count, 1);
+  assert.equal(prepared.manifest.assets[0].operation, 'replace_existing');
+  assert.equal(prepared.manifest.assets[0].asset_id, canonical.assets[0].asset_id);
+  assert.equal(prepared.manifest.assets[0].content_sha256, sha256(replacement));
+  assert.notEqual(prepared.manifest.assets[0].content_sha256, setup.hash);
+  assert.equal(sha256(await readFile(resolve(setup.productRoot, canonical.assets[0].final_path))), setup.hash);
+  const components = buildAssetExpansionReviewComponents({
+    productSlug: canonical.slug,
+    expansionId: setup.plan.expansion_id,
+    manifestHash: prepared.manifest.manifest_hash,
+    manifestUrl: 'https://discord.com/channels/guild/channel/message',
+    reviewMode: 'upgrade',
+  });
+  assert.equal(components[0].components[0].label, 'Approve Asset Upgrade');
 });
 
 test('renamed expansion assets reuse their existing Discord review message', async () => {

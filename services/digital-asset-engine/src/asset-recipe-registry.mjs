@@ -165,7 +165,7 @@ export const ASSET_RECIPE_REGISTRY = Object.freeze({
   }),
   crystal: recipe({
     label: 'Magic crystal',
-    animations: [animation('idle-loop', ['hover', 'glow_pulse', 'particle_orbit'])],
+    animations: [animation('spin-loop', ['rotate', 'glow_pulse'])],
     anchors: ['object_center'],
     deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
     executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },
@@ -192,7 +192,7 @@ export const ASSET_RECIPE_REGISTRY = Object.freeze({
   flask: recipe({
     label: 'Alchemy flask',
     states: ['stable', 'unstable'],
-    animations: [animation('liquid-reaction-loop', ['liquid_motion', 'bubbles', 'flicker'])],
+    animations: [animation('liquid-swirl-loop', ['liquid_motion', 'bubbles', 'flicker'])],
     anchors: ['liquid_region'],
     deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],
     executor: { status: 'available', id: 'interactive_items_v1', orchestration: 'manual' },

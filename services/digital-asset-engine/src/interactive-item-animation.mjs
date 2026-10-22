@@ -384,8 +384,11 @@ async function finalizeRecipeItem({
   validationBuffers,
   validationDetails = {},
   generationCalls = 0,
+  baseRegenerated = false,
   qualityHolds = [],
 }) {
+  const resolvedBaseRegenerated = baseRegenerated || Boolean(item.replacement_base_description);
+  const totalGenerationCalls = generationCalls + (resolvedBaseRegenerated ? 1 : 0);
   const reports = await validateRuntimeBuffers(validationBuffers, { ...options, plan }, {
     width: (await sharp(baseBuffer).metadata()).width,
     height: (await sharp(baseBuffer).metadata()).height,
@@ -394,7 +397,7 @@ async function finalizeRecipeItem({
     status: reports.every((report) => report.status === 'passed') ? 'passed' : 'failed',
     root_motion: { x: 0, y: 0, passed: true },
     base_sha256: sha256(baseBuffer),
-    base_regenerated: false,
+    base_regenerated: resolvedBaseRegenerated,
     quality_holds: qualityHolds,
     frame_reports: reports,
     ...validationDetails,
@@ -412,8 +415,8 @@ async function finalizeRecipeItem({
       source_layout: sourceLayout,
     },
     status: 'awaiting_animation_review',
-    base_regenerated: false,
-    generation_calls: generationCalls,
+    base_regenerated: resolvedBaseRegenerated,
+    generation_calls: totalGenerationCalls,
     incurred_cost: 0,
     quality_holds: qualityHolds,
     buyer_runtime_formats: [
@@ -924,12 +927,44 @@ async function generateItem(options, plan, item, batchRoot, adapter, targetProdu
   }
   const sourceRoot = source.root;
   const sourceBaseBuffer = await readFile(resolveInside(sourceRoot, sourceAsset.final_path, 'Interactive item base'));
-  const baseBuffer = item.recipe === 'plasma_shield'
+  const sourceMetadata = await sharp(sourceBaseBuffer).metadata();
+  const sourceCanvas = { width: sourceMetadata.width, height: sourceMetadata.height };
+  const itemRoot = resolveInside(batchRoot, item.target_asset_key, 'Interactive item root');
+  let baseBuffer = item.recipe === 'plasma_shield'
     ? await clearDenseShieldInterior(sourceBaseBuffer)
     : sourceBaseBuffer;
+  if (item.replacement_base_description) {
+    const generated = await adapter.generateAsset({
+      asset: {
+        seed: item.seed,
+        generation_prompt: [
+          item.replacement_base_description,
+          `Use only this palette: ${plan.style.palette.join(', ')}.`,
+          'Create one unmistakable complete spell book in crisp low-resolution pixel art with deliberate square pixel clusters and no antialiasing.',
+          'The silhouette must clearly show a thick rectangular leather cover, a visible pale page block, a spine, metal corner guards, and a centered arcane clasp or rune.',
+          'Show the closed book in a slight three-quarter inventory-icon view with generous empty padding.',
+          `Use a perfectly flat ${plan.style.chroma_key} background touching every border pixel.`,
+          'No chest, box, pedestal, altar, stone slab, tablet, scenery, floor, cast shadow, character, hand, text, logo, or duplicate object.',
+        ].join(' '),
+      },
+      sourceWidth: plan.style.source_width,
+      sourceHeight: plan.style.source_height,
+    });
+    const processed = await processPixelArtAsset(generated.buffer, {
+      width: sourceCanvas.width,
+      height: sourceCanvas.height,
+      maxPaletteColors: plan.style.max_palette_colors,
+      chromaKey: plan.style.chroma_key,
+      chromaTolerance: options.config.generation.chroma_tolerance,
+    });
+    baseBuffer = processed.buffer;
+    await writeBuffer(
+      resolveInside(itemRoot, `source/replacement-base.${generated.format}`, 'Replacement base source'),
+      generated.buffer,
+    );
+  }
   const metadata = await sharp(baseBuffer).metadata();
   const canvas = { width: metadata.width, height: metadata.height };
-  const itemRoot = resolveInside(batchRoot, item.target_asset_key, 'Interactive item root');
   await writeBuffer(resolveInside(itemRoot, 'base.png', 'Base sprite'), baseBuffer);
   await writeBuffer(
     resolveInside(itemRoot, 'previews/base-transparency.png', 'Base transparency preview'),

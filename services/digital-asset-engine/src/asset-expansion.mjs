@@ -169,14 +169,15 @@ async function loadAnimationProof(productRoot, request, expectedBaseHash) {
   if (!itemReference) throw new Error(`Animation proof item is missing: ${proof.asset_key}.`);
   const itemRoot = resolveInside(batchRoot, proof.asset_key, 'Interactive animation item');
   const itemManifest = await readJson(resolveInside(itemRoot, 'manifest.json', 'Animation item manifest'));
+  const expectsReplacement = request.operation === 'replace_existing';
   if (itemManifest.manifest_hash !== itemReference.manifest_hash
     || itemManifest.item?.target_asset_key !== request.target_asset_key
     || itemManifest.status !== 'awaiting_animation_review'
-    || itemManifest.base_regenerated !== false) {
+    || itemManifest.base_regenerated !== expectsReplacement) {
     throw new Error(`Animation proof no longer matches ${request.target_asset_key}.`);
   }
   const baseFile = itemManifest.files?.find((file) => file.path === 'base.png');
-  if (!baseFile || baseFile.sha256 !== expectedBaseHash) {
+  if (!baseFile || (!expectsReplacement && baseFile.sha256 !== expectedBaseHash)) {
     throw new Error(`Animation proof base changed for ${request.target_asset_key}.`);
   }
   const files = [];
@@ -222,6 +223,7 @@ async function loadAnimationProof(productRoot, request, expectedBaseHash) {
     ...identity,
     bundle_hash: sha256(JSON.stringify(identity)),
     runtime_files: files,
+    base_buffer: files.find((file) => file.path === 'base.png')?.buffer,
   };
 }
 
@@ -240,8 +242,8 @@ export async function prepareAssetExpansionReview(options) {
     if (request.operation === 'add_asset' && existingAsset) {
       throw new Error(`Expansion asset key already exists in the base product: ${request.target_asset_key}.`);
     }
-    if (request.operation === 'enhance_existing' && !existingAsset) {
-      throw new Error(`Enhancement target does not exist in the base product: ${request.target_asset_key}.`);
+    if (['enhance_existing', 'replace_existing'].includes(request.operation) && !existingAsset) {
+      throw new Error(`Enhancement or replacement target does not exist in the base product: ${request.target_asset_key}.`);
     }
     const canonicalSource = request.source_product_slug === product.slug;
     const sourceRoot = canonicalSource
@@ -265,13 +267,18 @@ export async function prepareAssetExpansionReview(options) {
     if (validation.status !== 'passed' || validation.metrics?.content_sha256 !== contentHash) {
       throw new Error(`Expansion source asset is not a verified candidate: ${request.source_asset_key}.`);
     }
-    if (request.operation === 'enhance_existing'
+    if (['enhance_existing', 'replace_existing'].includes(request.operation)
       && (sourceAsset.asset_key !== existingAsset.asset_key || sourceAsset.asset_id !== existingAsset.asset_id)) {
-      throw new Error(`Enhancement proof must preserve the existing asset identity: ${request.target_asset_key}.`);
+      throw new Error(`Enhancement or replacement proof must preserve the existing asset identity: ${request.target_asset_key}.`);
     }
     const animation = await loadAnimationProof(productRoot, request, contentHash);
+    const selectedBuffer = request.operation === 'replace_existing' ? animation?.base_buffer : buffer;
+    if (!selectedBuffer) throw new Error(`Replacement proof has no reviewed base: ${request.target_asset_key}.`);
+    const selectedMetadata = await sharp(selectedBuffer).metadata();
+    const selectedHash = sha256(selectedBuffer);
+    if (animation) delete animation.base_buffer;
     selected.push({
-      asset_id: request.operation === 'enhance_existing'
+      asset_id: ['enhance_existing', 'replace_existing'].includes(request.operation)
         ? existingAsset.asset_id
         : `asset-expansion-${sha256(`${plan.expansion_id}:${request.target_asset_key}`).slice(0, 16)}`,
       asset_key: request.target_asset_key,
@@ -284,11 +291,16 @@ export async function prepareAssetExpansionReview(options) {
       source_product_slug: request.source_product_slug,
       source_asset_key: request.source_asset_key,
       source_asset_id: sourceAsset.asset_id,
-      content_sha256: contentHash,
-      size_bytes: buffer.length,
-      validation_metrics: validation.metrics,
+      content_sha256: selectedHash,
+      size_bytes: selectedBuffer.length,
+      validation_metrics: {
+        ...validation.metrics,
+        width: selectedMetadata.width,
+        height: selectedMetadata.height,
+        content_sha256: selectedHash,
+      },
       animation,
-      buffer,
+      buffer: selectedBuffer,
     });
   }
 
@@ -355,6 +367,7 @@ export async function prepareAssetExpansionReview(options) {
     asset_count: selected.length,
     new_asset_count: selected.filter((asset) => asset.operation === 'add_asset').length,
     enhanced_asset_count: selected.filter((asset) => asset.operation === 'enhance_existing').length,
+    replaced_asset_count: selected.filter((asset) => asset.operation === 'replace_existing').length,
     animation_count: selected.reduce((total, asset) => total + (asset.animation?.animations.length || 0), 0),
     state_count: selected.reduce((total, asset) => total + (asset.animation?.states.length || 0), 0),
     assets: selected.map(({ buffer, animation, ...asset }) => ({

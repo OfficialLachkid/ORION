@@ -3,7 +3,6 @@ import { dirname, resolve } from 'node:path';
 import { derivePixelArtEffectFrame } from './image-processor.mjs';
 import {
   createEnergyPulseFrame,
-  createRadialEnergyPulseFrame,
   detectOpaqueObjectAnchor,
   inspectPulseIsolation,
 } from './interactive-item-image.mjs';
@@ -17,7 +16,9 @@ import {
   createEnergyScatterFrame,
   createFracturedObjectFrame,
   createLiquidSwirlFrame,
+  createRestorativeReleaseFrame,
   createTwinkleFrame,
+  createYAxisSpinFrame,
 } from './arcane-frame-effects.mjs';
 
 const ARCANE_RECIPES = new Set(['potion', 'crystal', 'rune_stone', 'tome', 'flask', 'candle', 'wand']);
@@ -98,29 +99,43 @@ async function generatePotion(context, services) {
     durations: [180, 130, 110, 130],
   }, idleFrames, idleOverlays, options);
 
-  const objectAnchor = await detectOpaqueObjectAnchor(baseBuffer);
-  const fractures = await Promise.all([0.28, 0.62, 1].map((progress, index) => (
-    createFracturedObjectFrame(baseBuffer, objectAnchor.anchor, progress, {
-      distance: 7,
-      salt: item.seed + index,
-      maxPaletteColors: plan.style.max_palette_colors,
-    })
-  )));
-  const liquidScatter = await Promise.all([0.24, 0.58, 0.92].map((progress, index) => (
-    createEnergyScatterFrame(detection, objectAnchor.anchor, progress, {
-      distance: 11,
-      salt: item.seed + 31 + index,
-      maxPaletteColors: plan.style.max_palette_colors,
-    })
-  )));
-  const breakFrames = [
-    baseBuffer,
-    pulses[2].compositeBuffer,
-    await compositeItemFrame(fractures[0], [liquidScatter[0]], { maxPaletteColors: plan.style.max_palette_colors }),
-    await compositeItemFrame(fractures[1], [liquidScatter[1]], { maxPaletteColors: plan.style.max_palette_colors }),
-    await compositeItemFrame(fractures[2], [liquidScatter[2]], { maxPaletteColors: plan.style.max_palette_colors }),
-    empty,
-  ];
+  let breakFrames;
+  let breakStrategy;
+  if (item.break_style === 'restorative_release') {
+    const restorative = await Promise.all([0.18, 0.46, 0.74].map((progress, index) => (
+      createRestorativeReleaseFrame(baseBuffer, detection, progress, {
+        salt: item.seed + 51 + index,
+        maxPaletteColors: plan.style.max_palette_colors,
+      })
+    )));
+    breakFrames = [baseBuffer, pulses[2].compositeBuffer, ...restorative, empty];
+    breakStrategy = 'upward_restorative_energy_release_and_dissolve';
+  } else {
+    const objectAnchor = await detectOpaqueObjectAnchor(baseBuffer);
+    const fractures = await Promise.all([0.28, 0.62, 1].map((progress, index) => (
+      createFracturedObjectFrame(baseBuffer, objectAnchor.anchor, progress, {
+        distance: 7,
+        salt: item.seed + index,
+        maxPaletteColors: plan.style.max_palette_colors,
+      })
+    )));
+    const liquidScatter = await Promise.all([0.24, 0.58, 0.92].map((progress, index) => (
+      createEnergyScatterFrame(detection, objectAnchor.anchor, progress, {
+        distance: 11,
+        salt: item.seed + 31 + index,
+        maxPaletteColors: plan.style.max_palette_colors,
+      })
+    )));
+    breakFrames = [
+      baseBuffer,
+      pulses[2].compositeBuffer,
+      await compositeItemFrame(fractures[0], [liquidScatter[0]], { maxPaletteColors: plan.style.max_palette_colors }),
+      await compositeItemFrame(fractures[1], [liquidScatter[1]], { maxPaletteColors: plan.style.max_palette_colors }),
+      await compositeItemFrame(fractures[2], [liquidScatter[2]], { maxPaletteColors: plan.style.max_palette_colors }),
+      empty,
+    ];
+    breakStrategy = 'approved_base_radial_fragments_with_detected_liquid_scatter';
+  }
   const consumeBreak = await services.writeAnimation(itemRoot, item, 'consume-break', {
     name: 'Consume or Break Sequence', playback: 'once', canvas,
     phases: ['sealed', 'charged', 'fracture', 'release', 'dissipate', 'consumed'],
@@ -143,7 +158,7 @@ async function generatePotion(context, services) {
       energy_region: detection.report,
       pulse_isolation: isolation,
       twinkle_motion: twinkles.map((frame) => frame.report),
-      fracture_strategy: 'approved_base_radial_fragments_with_detected_liquid_scatter',
+      fracture_strategy: breakStrategy,
     },
     generationCalls: 0,
   });
@@ -153,35 +168,20 @@ async function generateCrystal(context, services) {
   const {
     options, plan, item, itemRoot, baseBuffer, canvas, detection, source,
   } = context;
-  const { frames: pulses, isolation } = await pulseFrames(baseBuffer, detection, [0.08, 0.34, 0.7, 0.34]);
-  const objectAnchor = await detectOpaqueObjectAnchor(baseBuffer);
-  const effect = await services.generateIsolatedEffect({
-    adapter: context.adapter,
-    config: options.config,
-    item,
-    plan,
-    canvas,
-    targetOrigin: objectAnchor.anchor,
-    seedOffset: 41,
-    prompt: effectPrompt(plan, item.orbit_description, [
-      'crystal', 'character', 'hand', 'floor', 'scenery', 'solid orb',
-    ]),
-  });
-  const orbit = await effectSeries(effect.buffer, objectAnchor.anchor, item.seed + 41, plan.style.max_palette_colors);
-  const radial = await Promise.all([0.15, 0.42, 0.72, 0.96].map((phase, index) => (
-    createRadialEnergyPulseFrame(baseBuffer, detection, phase, [0.45, 0.64, 0.88, 0.56][index])
-  )));
-  const frames = await Promise.all(pulses.map((pulse, index) => compositeItemFrame(
+  const scales = [1, 0.72, 0.34, 0.12, -0.34, -0.72, -1, -0.72, -0.34, 0.12, 0.34, 0.72];
+  const intensities = [0.12, 0.28, 0.46, 0.62, 0.46, 0.28, 0.12, 0.28, 0.46, 0.62, 0.46, 0.28];
+  const { frames: pulses, isolation } = await pulseFrames(baseBuffer, detection, intensities);
+  const frames = await Promise.all(pulses.map((pulse, index) => createYAxisSpinFrame(
     pulse.compositeBuffer,
-    [radial[index].overlayBuffer, orbit[index]],
+    scales[index],
     { maxPaletteColors: plan.style.max_palette_colors },
   )));
-  const idle = await services.writeAnimation(itemRoot, item, 'idle-loop', {
-    name: 'Arcane Crystal Energy Loop', playback: 'loop', canvas,
-    phases: ['rest', 'orbit-rise', 'glow-peak', 'orbit-fall'],
-    durations: [170, 130, 110, 130],
-  }, frames, orbit, options);
-  await writeSource(resolve(itemRoot, `source/orbit-peak.${effect.generated.format}`), effect.generated.buffer);
+  const empty = await transparentFrame(canvas);
+  const idle = await services.writeAnimation(itemRoot, item, 'spin-loop', {
+    name: 'Arcane Crystal Spin Loop', playback: 'loop', canvas,
+    phases: scales.map((scale) => (scale < 0 ? 'back-face' : 'front-face')),
+    durations: scales.map(() => 90),
+  }, frames, frames.map(() => empty), options);
   return services.finalizeRecipeItem({
     options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
     states: null,
@@ -190,10 +190,9 @@ async function generateCrystal(context, services) {
     validationDetails: {
       energy_region: detection.report,
       pulse_isolation: isolation,
-      internal_energy_wave: { strategy: 'radial_palette_wave', phases: [0.15, 0.42, 0.72, 0.96] },
-      effect_alignment: effect.alignment,
+      rotation: { strategy: 'fixed_anchor_y_axis_nearest_neighbor', scales },
     },
-    generationCalls: 1,
+    generationCalls: 0,
   });
 }
 
@@ -254,7 +253,9 @@ async function generateTome(context, services) {
     validationDetails: {
       energy_region: detection.report,
       pulse_isolation: isolation,
-      identity_preservation: 'approved_base_only_no_model_redraw',
+      identity_preservation: item.replacement_base_description
+        ? 'local_model_replacement_base_bound_to_human_review'
+        : 'approved_base_only_no_model_redraw',
     },
     generationCalls: 0,
   });
@@ -264,13 +265,13 @@ async function generateFlask(context, services) {
   const {
     options, plan, item, itemRoot, baseBuffer, canvas, detection, source,
   } = context;
-  const intensities = [0.08, 0.32, 0.68, 0.92, 0.48, 0.22];
+  const intensities = [0.08, 0.28, 0.52, 0.78, 0.92, 0.68, 0.4, 0.18];
   const { frames: pulses, isolation } = await pulseFrames(baseBuffer, detection, intensities);
   const swirls = await Promise.all(intensities.map((_, index) => createLiquidSwirlFrame(
     baseBuffer,
     detection,
     (index / intensities.length) * Math.PI * 2,
-    { amplitude: 2, maxPaletteColors: plan.style.max_palette_colors },
+    { amplitude: 5, maxPaletteColors: plan.style.max_palette_colors },
   )));
   const frames = await Promise.all(swirls.map((swirl, index) => compositeItemFrame(
     swirl.compositeBuffer,
@@ -283,10 +284,10 @@ async function generateFlask(context, services) {
     [swirl.overlayBuffer, pulses[index].overlayBuffer],
     { maxPaletteColors: plan.style.max_palette_colors },
   )));
-  const animation = await services.writeAnimation(itemRoot, item, 'liquid-reaction-loop', {
-    name: 'Liquid Swirl and Bubble Loop', playback: 'loop', canvas,
-    phases: ['stable', 'bubble-rise', 'swirl', 'reaction-peak', 'settle', 'stable-return'],
-    durations: [170, 120, 100, 90, 120, 150],
+  const animation = await services.writeAnimation(itemRoot, item, 'liquid-swirl-loop', {
+    name: 'Visible Liquid Swirl Loop', playback: 'loop', canvas,
+    phases: ['stable', 'clockwise-1', 'clockwise-2', 'clockwise-3', 'reaction-peak', 'clockwise-4', 'clockwise-5', 'stable-return'],
+    durations: [140, 90, 90, 90, 100, 90, 90, 140],
   }, frames, overlays, options);
   const states = await services.writeStates(itemRoot, item, [
     { key: 'stable', name: 'Stable', buffer: baseBuffer },
