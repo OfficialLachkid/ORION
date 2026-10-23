@@ -58,7 +58,11 @@ export function buildResearchEmbed(report, recommendation = null) {
       color: 0x5865f2,
       description: report.reason,
       fields: [
-        { name: 'Snapshots', value: `**${report.snapshot_count}** / **${report.minimum_snapshots}** required`, inline: true },
+        {
+          name: 'Comparable snapshots (rolling window)',
+          value: `**${report.snapshot_count}** retained · **${report.minimum_snapshots}** minimum`,
+          inline: true,
+        },
         {
           name: 'Decision gate',
           value: baseline

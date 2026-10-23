@@ -13,6 +13,7 @@ test('labels a quality-gated result as evidence monitoring without approval', ()
     reason: 'No recommendation passed.',
   });
   assert.equal(embed.title, 'Digital Asset Research · EVIDENCE MONITORING');
+  assert.equal(embed.fields[0].value, '**2** retained · **2** minimum');
   assert.match(embed.fields[1].value, /evidence-quality gates/iu);
 });
 
