@@ -10,7 +10,7 @@ import {
   PLIST_LABEL,
 } from '../install-weekly-analytics-review-schedule.mjs';
 
-const { buildDataPack, buildAnalystPrompt, summarizeChannel, templateSlugFromMetadata } = __testables;
+const { buildDataPack, buildAnalystPrompt, summarizeChannel, templateSlugFromMetadata, buildPerPlatformPerformance } = __testables;
 
 test('templateSlugFromMetadata strips pokemon prefix and v-suffix', () => {
   assert.equal(templateSlugFromMetadata({ template_id: 'pokemon.cry-match.v1' }), 'cry-match');
@@ -210,15 +210,73 @@ test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bo
   assert.ok(withoutPrior.includes('Audience mix'), 'prompt must include the geo + traffic section');
   assert.ok(withoutPrior.includes('viewer_geography'), 'prompt must reference the viewer_geography field');
   assert.ok(withoutPrior.includes('traffic_sources_split'), 'prompt must reference the traffic_sources_split field');
-  // Section 0: cross-platform activity (2026-10-18 operator ask)
-  assert.ok(withoutPrior.includes('Cross-platform posting activity'), 'prompt must include a cross-platform activity section');
+  // Section 0: cross-platform activity + per-platform performance (2026-10-19 operator ask)
+  assert.ok(/Cross-platform posting activity.*per-platform performance/iu.test(withoutPrior), 'prompt must include the combined cross-platform + per-platform-performance section');
   assert.ok(withoutPrior.includes('cross_platform_activity'), 'prompt must reference the cross_platform_activity data field');
-  assert.ok(/YouTube Shorts is the only platform with analytics capture today/u.test(withoutPrior), 'prompt must explicitly tell the analyst analytics is YouTube-only today');
-  assert.ok(/do NOT try to compare performance across platforms yet|do not recommend changes based on cross-platform data/iu.test(withoutPrior), 'prompt must forbid cross-platform performance comparisons until adapters land');
+  assert.ok(withoutPrior.includes('per_platform_performance'), 'prompt must reference the per_platform_performance data field');
+  assert.ok(/videos_sparse_scope_missing|insights:read scope/u.test(withoutPrior), 'prompt must tell the analyst how to describe the sparse-TikTok case so the Buffer scope requirement surfaces');
+  assert.ok(/MAY now make cautious cross-platform observations|avg_watch_sec_median/u.test(withoutPrior), 'prompt must explicitly re-enable cross-platform comparisons (previously forbidden) now that per-platform data flows');
 
   const withPrior = buildAnalystPrompt(pack, 'Last week I said X and Y happened.');
   assert.ok(withPrior.includes('Previous week\'s summary'));
   assert.ok(withPrior.includes('Last week I said X and Y happened.'));
+});
+
+test('buildPerPlatformPerformance: rolls up per-platform totals/averages, handling missing analytics + sparse TikTok rows', () => {
+  // YouTube: 2 pubs, both with real metrics
+  // Instagram: 2 pubs, both with metrics (one of which includes avg_watch_sec)
+  // TikTok: 3 pubs — 1 with real metrics, 2 sparse (buffer_insights_scope_missing)
+  const perPlatformPerformance = buildPerPlatformPerformance({
+    platforms: {
+      youtube_shorts: {
+        publications: [{ id: 'yt1' }, { id: 'yt2' }],
+        analyticsByPub: new Map([
+          ['yt1', { metrics: { views: 1000, likes: 20 } }],
+          ['yt2', { metrics: { views: 2000, likes: 50 } }],
+        ]),
+      },
+      instagram_reels: {
+        publications: [{ id: 'ig1' }, { id: 'ig2' }],
+        analyticsByPub: new Map([
+          ['ig1', { metrics: { views: 3000, likes: 100, avg_view_duration_sec: 12.5 } }],
+          ['ig2', { metrics: { views: 500, likes: 10, avg_view_duration_sec: 9.0 } }],
+        ]),
+      },
+      tiktok_video: {
+        publications: [{ id: 'tt1' }, { id: 'tt2' }, { id: 'tt3' }],
+        analyticsByPub: new Map([
+          ['tt1', { metrics: { views: 5000, likes: 200 } }],
+          ['tt2', { metrics: { views: null, likes: null, buffer_insights_scope_missing: true } }],
+          ['tt3', { metrics: { views: null, likes: null, buffer_insights_scope_missing: true } }],
+        ]),
+      },
+    },
+  });
+  // YouTube — straight aggregation
+  assert.equal(perPlatformPerformance.youtube_shorts.publications, 2);
+  assert.equal(perPlatformPerformance.youtube_shorts.videos_with_metrics, 2);
+  assert.equal(perPlatformPerformance.youtube_shorts.videos_sparse_scope_missing, 0);
+  assert.equal(perPlatformPerformance.youtube_shorts.total_views, 3000);
+  assert.equal(perPlatformPerformance.youtube_shorts.views_per_video, 1500);
+  assert.strictEqual(perPlatformPerformance.youtube_shorts.avg_watch_sec_median, null, 'YouTube has no retention signal via Data API');
+  // Instagram — includes avg_watch_sec_median (the one platform with retention)
+  assert.equal(perPlatformPerformance.instagram_reels.total_views, 3500);
+  // Median via Math.floor(length/2) index — matches summarizeChannel's convention
+  // (consistent with YouTube path), not a true even-length mean.
+  assert.equal(perPlatformPerformance.instagram_reels.avg_watch_sec_median, 12.5);
+  // TikTok — scope-missing rows counted separately, don't dilute averages
+  assert.equal(perPlatformPerformance.tiktok_video.publications, 3);
+  assert.equal(perPlatformPerformance.tiktok_video.videos_with_metrics, 1);
+  assert.equal(perPlatformPerformance.tiktok_video.videos_sparse_scope_missing, 2);
+  assert.equal(perPlatformPerformance.tiktok_video.total_views, 5000, 'sparse rows must NOT be summed into total');
+  assert.equal(perPlatformPerformance.tiktok_video.views_per_video, 5000, 'avg computed on with-metrics rows only');
+});
+
+test('buildPerPlatformPerformance: refuses on empty / missing input (returns null for null, empty object for empty)', () => {
+  assert.strictEqual(buildPerPlatformPerformance(), null);
+  assert.strictEqual(buildPerPlatformPerformance({ platforms: null }), null);
+  const empty = buildPerPlatformPerformance({ platforms: {} });
+  assert.deepEqual(empty, {});
 });
 
 test('buildDataPack: cross_platform_activity flows through from the fetch helper and defaults to null when not provided', () => {
@@ -240,6 +298,12 @@ test('buildDataPack: cross_platform_activity flows through from the fetch helper
   };
   const packWithActivity = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y', crossPlatformActivity: activity });
   assert.deepEqual(packWithActivity.cross_platform_activity, activity, 'passed-through activity reaches the data pack verbatim');
+
+  // Same shape for per_platform_performance (Phase 3 data flow)
+  const perPlat = { youtube_shorts: { publications: 10, videos_with_metrics: 10, total_views: 5000 } };
+  const packWithPerPlat = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y', perPlatformPerformance: perPlat });
+  assert.deepEqual(packWithPerPlat.per_platform_performance, perPlat, 'passed-through per_platform_performance reaches the data pack');
+  assert.strictEqual(packNoActivity.per_platform_performance, null, 'defaults to null when not provided');
 });
 
 test('install-schedule plist uses the Monday post-sweep schedule and exposes Homebrew tools', () => {

@@ -28,6 +28,23 @@ const POKE_CHANNELS = new Set([
   'proffmon-youtube',
 ]);
 
+// Pokemon channel account_keys per non-YouTube platform. Kept
+// explicit (not derived from publication-channels config) so a stray
+// new account on another brand doesn't accidentally join the review.
+// Dexguess + proffmon aren't on TikTok (operator confirmed 2026-10-19).
+const POKE_CHANNELS_INSTAGRAM = new Set([
+  'poke-quizzz-instagram',
+  'poke-guess-instagram',
+  'dexguess-instagram',
+  'trivamon-instagram',
+  'proffmon-instagram',
+]);
+const POKE_CHANNELS_TIKTOK = new Set([
+  'poke-quizz-tiktok',
+  'poke-guess-tiktok',
+  'trivamon-tiktok',
+]);
+
 // Cap on what we feed Claude. Well under the token budget of a single
 // claude -p call, but enough to give it real signal per template and per
 // channel.
@@ -62,6 +79,18 @@ async function fetchPokemonPublications(config, sinceIso) {
     `video_publications?platform=eq.youtube_shorts&status=eq.published&external_id=not.is.null&select=id,account_key,external_id,title,published_at,hashtags,metadata&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at.asc&limit=2000`,
   );
   return (Array.isArray(rows) ? rows : []).filter((row) => POKE_CHANNELS.has(row.account_key));
+}
+
+// Fetch non-YouTube pokemon publications in the window. Separate from
+// fetchPokemonPublications because the main YouTube deep-dive drives
+// most of the review (per-channel/template/slot analysis), while
+// Instagram + TikTok feed only the per-platform summary block.
+async function fetchPokemonPublicationsForPlatform(config, sinceIso, platform, allowlist) {
+  const rows = await supabaseFetch(
+    config,
+    `video_publications?platform=eq.${encodeURIComponent(platform)}&status=eq.published&external_id=not.is.null&select=id,account_key,external_id,title,published_at,metadata&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at.asc&limit=2000`,
+  );
+  return (Array.isArray(rows) ? rows : []).filter((row) => allowlist.has(row.account_key));
 }
 
 // Platform allowlist for the cross-platform activity rollup. The
@@ -203,7 +232,60 @@ function pickHashtags(metrics, pub) {
   return [];
 }
 
-function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, crossPlatformActivity = null }) {
+// Build a per-platform engagement summary. For each platform the
+// operator cares about, roll up the publications + their analytics
+// into totals / per-video / like-rate. Rows with no analytics
+// snapshot (and TikTok rows with buffer_insights_scope_missing)
+// count as "with_metrics=false" so we don't dilute averages with
+// zeros. Returns null if nothing is passed in (keeps buildDataPack
+// backward compatible with older test harnesses).
+function buildPerPlatformPerformance({ platforms } = {}) {
+  if (!platforms || typeof platforms !== 'object') return null;
+  const out = {};
+  for (const [platform, { publications = [], analyticsByPub = new Map() } = {}] of Object.entries(platforms)) {
+    let totalViews = 0;
+    let totalLikes = 0;
+    let totalComments = 0;
+    let withMetrics = 0;
+    let scopeMissing = 0;
+    const viewsList = [];
+    const watchSecList = [];
+    for (const pub of publications) {
+      const snapshot = analyticsByPub.get(pub.id);
+      const metrics = snapshot?.metrics || null;
+      if (!metrics) continue;
+      // TikTok sparse rows have null views when Buffer insights:read
+      // isn't granted. Don't count them as "with metrics".
+      if (metrics.buffer_insights_scope_missing) { scopeMissing += 1; continue; }
+      const views = Number.isFinite(Number(metrics.views)) ? Number(metrics.views) : null;
+      if (views === null) continue;
+      withMetrics += 1;
+      totalViews += views;
+      totalLikes += Number(metrics.likes || 0);
+      totalComments += Number(metrics.comments || 0);
+      viewsList.push(views);
+      if (Number.isFinite(Number(metrics.avg_view_duration_sec))) watchSecList.push(Number(metrics.avg_view_duration_sec));
+    }
+    viewsList.sort((a, b) => a - b);
+    out[platform] = {
+      publications: publications.length,
+      videos_with_metrics: withMetrics,
+      videos_sparse_scope_missing: scopeMissing,
+      total_views: totalViews,
+      total_likes: totalLikes,
+      total_comments: totalComments,
+      views_per_video: withMetrics ? Math.round(totalViews / withMetrics) : 0,
+      median_views: viewsList.length ? viewsList[Math.floor(viewsList.length / 2)] : 0,
+      like_rate_pct: totalViews ? Number(((totalLikes / totalViews) * 100).toFixed(2)) : 0,
+      avg_watch_sec_median: watchSecList.length
+        ? Number(watchSecList.sort((a, b) => a - b)[Math.floor(watchSecList.length / 2)].toFixed(2))
+        : null,
+    };
+  }
+  return out;
+}
+
+function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, crossPlatformActivity = null, perPlatformPerformance = null }) {
   const byChannel = new Map();
   const byTemplate = new Map();
   const scoredVideos = [];
@@ -318,6 +400,7 @@ function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, cross
     },
     instrumentation_gaps: instrumentationGaps,
     cross_platform_activity: crossPlatformActivity || null,
+    per_platform_performance: perPlatformPerformance || null,
     top_videos: topVideos,
     bottom_videos: bottomVideos,
   };
@@ -386,8 +469,8 @@ function buildAnalystPrompt(dataPack, priorSummary = '') {
     'FORMATTING: every concrete number you cite (view count, like count, v/vid, like-rate %, median, delta, hour, etc.) MUST be wrapped in bold with double-asterisks so it stands out at a glance in Discord. Example: "poke-quizz-youtube pulled **2070 v/vid** on **90 videos** (like-rate **1.33%**)." This is non-negotiable — plain numbers get lost in the wall of text.',
     '',
     'Structure your response as:',
-    '0. **Cross-platform posting activity** — read `cross_platform_activity`. In one tight paragraph, report the total posts across platforms this week, split by platform (YouTube Shorts, TikTok via Buffer, Instagram Reels), and which channels are posting on each. Bold every count. State explicitly in one line that **YouTube Shorts is the only platform with analytics capture today**; TikTok (via Buffer) and Instagram Reels are publishing successfully but views/likes/engagement capture is pending adapter work. This section exists so the operator sees the full posting footprint — do NOT try to compare performance across platforms yet, and do NOT recommend changes based on cross-platform data because we have no cross-platform metrics. If `cross_platform_activity` is null or missing (older runs), skip this section silently rather than fabricate.',
-    '1. **This week in numbers** — 2-3 sentences on totals + which channel/template stood out. Bold every number. Scope: YouTube Shorts only (the only platform with analytics capture).',
+    '0. **Cross-platform posting activity + per-platform performance** — read `cross_platform_activity` AND `per_platform_performance`. In the FIRST paragraph: total posts across platforms this week, split by platform (YouTube Shorts, TikTok via Buffer, Instagram Reels) with channel counts. Bold every count. In the SECOND paragraph: a per-platform performance comparison from `per_platform_performance` — total views, v/vid, median, like-rate for each platform where `videos_with_metrics > 0`. Call out which platform is pulling the most engagement per video, and if a platform is sparse-only (`videos_sparse_scope_missing > 0 and videos_with_metrics == 0`) say so and name the fix (e.g. for TikTok: "Buffer insights:read scope not yet granted — once granted, next sweep rolls in metrics"). Instagram Reels DOES carry an avg-watch-time signal (`avg_watch_sec_median`) that YouTube Shorts does not — call it out when present. You MAY now make cautious cross-platform observations ("pixelated-reveal pulls 2x the views per video on Instagram vs YouTube this week — worth a template-mix tilt test"), but still prefix any strong recommendation with the sample sizes so the operator can judge confidence. If both blocks are null/missing, skip this section silently.',
+    '1. **This week in numbers (YouTube Shorts deep-dive)** — 2-3 sentences on YouTube totals + which channel/template stood out. Bold every number. This is the deepest-signal platform (full analytics capture); the other sections cover cross-platform at a lighter grain.',
     '2. **What is working** — 2-4 bullets identifying the templates or channels moving up, with the specific v/vid or like-rate numbers as evidence.',
     '3. **What is not working** — 2-4 bullets on underperformers or drops relative to peers. Do NOT recommend killing a channel or template with fewer than 20 videos in the window (undersampled).',
     '4. **Scheduling signal** — the network runs these per-channel CEST slots: poke-quizz 08:00/11:00/12:00 (3/day), trivamon 08:00/12:00/18:00/22:00 (4/day), proffmon 08:00/12:00/14:00 (3/day), poke-guess 08:00/12:00/18:00 (3/day), dexguess 08:00/12:00/18:00 (3/day). Three concurrent experiments this week: (i) poke-quizz is testing winner-adjacency — moving its 14:00 slot to 11:00 CEST, a tight 1h gap to the proven 12:00 CEST winner, to answer "is 12:00 a magic hour or a noon-audience-window effect"; (ii) trivamon, poke-guess, and dexguess run an 18:00 CEST slot against proffmon on 14:00 as the control; (iii) trivamon is additionally testing a 4/day cadence bump with a new 22:00 CEST slot (= 20 UTC = 16:00 EDT, US workday afternoon) — the strongest, most US-skewed channel is the one place where "more at-bats" is most likely to print, if the per-video floor holds. Read the `publish_hour_rollup` block. Answer: (a) does one UTC hour slot pull materially more views than the others network-wide, (b) does the picture differ per channel, (c) for the three experiments above, is each one working — specifically (i) does poke-quizz at 11 UTC perform near its 10 UTC winner, (ii) does 18:00 hold up on trivamon the way it did on poke-guess last week, (iii) does trivamon\'s 4th slot (20 UTC) deliver incremental views without dropping the per-video floor more than ~25%. Cross-reference with `viewer_geography` — if most viewers are in one timezone the "best hour" may differ from a naive views-per-UTC read. If the per-slot sample is small (< 5 videos) say so rather than over-fit. Treat all per-channel slot differences as intentional, not drift. Flag any remaining `instrumentation_gaps`.',
@@ -517,10 +600,8 @@ export async function runWeeklyAnalyticsReview({ config = loadRuntimeConfig(), n
   process.stdout.write(`[weekly-analytics-review] analytics coverage ${analyticsByPub.size}/${publications.length}\n`);
 
   // Cross-platform activity rollup (TikTok via Buffer + Instagram Reels
-  // alongside YouTube Shorts). Analytics capture is YouTube-only today;
-  // this section exists so the review surfaces that we're actually
-  // publishing on the other platforms. Best-effort — a Supabase blip
-  // here must not block the main YouTube review.
+  // alongside YouTube Shorts). Best-effort — a Supabase blip here must
+  // not block the main YouTube review.
   let crossPlatformActivity = null;
   try {
     crossPlatformActivity = await fetchCrossPlatformActivity(config, sinceIso, untilIso);
@@ -529,7 +610,39 @@ export async function runWeeklyAnalyticsReview({ config = loadRuntimeConfig(), n
     process.stderr.write(`[weekly-analytics-review] cross-platform activity fetch failed (non-fatal): ${error.message}\n`);
   }
 
-  const dataPack = buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, crossPlatformActivity });
+  // Per-platform performance summary. Fetches Instagram + TikTok pubs
+  // and their analytics snapshots, then rolls up into per-platform
+  // engagement totals/averages. Also best-effort — if either fails we
+  // still ship the YouTube review.
+  let perPlatformPerformance = null;
+  try {
+    const [instagramPubs, tiktokPubs] = await Promise.all([
+      fetchPokemonPublicationsForPlatform(config, sinceIso, 'instagram_reels', POKE_CHANNELS_INSTAGRAM).catch(() => []),
+      fetchPokemonPublicationsForPlatform(config, sinceIso, 'tiktok_video', POKE_CHANNELS_TIKTOK).catch(() => []),
+    ]);
+    const [instagramAnalytics, tiktokAnalytics] = await Promise.all([
+      fetchLatestAnalyticsByPub(config, instagramPubs.map((p) => p.id)).catch(() => new Map()),
+      fetchLatestAnalyticsByPub(config, tiktokPubs.map((p) => p.id)).catch(() => new Map()),
+    ]);
+    perPlatformPerformance = buildPerPlatformPerformance({
+      platforms: {
+        youtube_shorts: { publications, analyticsByPub },
+        instagram_reels: { publications: instagramPubs, analyticsByPub: instagramAnalytics },
+        tiktok_video: { publications: tiktokPubs, analyticsByPub: tiktokAnalytics },
+      },
+    });
+    const summaryLine = Object.entries(perPlatformPerformance || {})
+      .map(([p, s]) => `${p}:${s.publications}pub/${s.videos_with_metrics}metrics`)
+      .join(' ');
+    process.stdout.write(`[weekly-analytics-review] per-platform performance: ${summaryLine}\n`);
+  } catch (error) {
+    process.stderr.write(`[weekly-analytics-review] per-platform performance fetch failed (non-fatal): ${error.message}\n`);
+  }
+
+  const dataPack = buildDataPack({
+    publications, analyticsByPub, sinceIso, untilIso,
+    crossPlatformActivity, perPlatformPerformance,
+  });
 
   const state = await loadState();
   const prompt = buildAnalystPrompt(dataPack, state.last_summary || '');
@@ -582,6 +695,7 @@ export const __testables = {
   buildAnalystPrompt,
   summarizeChannel,
   templateSlugFromMetadata,
+  buildPerPlatformPerformance,
 };
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
