@@ -6,6 +6,7 @@ import {
   getDigitalAssetReviewModalRequest,
   parseDigitalAssetReviewDecision,
 } from './review-components.mjs';
+import { resolvePackagedRelease } from './packaged-release.mjs';
 import { resolveReviewedReleaseAssets } from './release-asset-inventory.mjs';
 
 const DECISION_TABLE = 'digital_asset_release_reviews';
@@ -226,6 +227,21 @@ async function loadReviewContext({ archiveRoot, reference, interaction }) {
     itchState,
     publishedState,
   });
+  let publishedBaseAssets = null;
+  if (marketplaceReview.mode === 'published_update') {
+    const base = await resolvePackagedRelease({
+      productRoot,
+      releaseVersion: publishedState.target_version,
+    });
+    if (base.manifest.manifest_hash !== publishedState.manifest_hash
+      || base.manifest.manifest_hash !== manifest.base_manifest_hash) {
+      throw new Error('The immutable base release no longer matches this package update review.');
+    }
+    publishedBaseAssets = new Map(
+      resolveReviewedReleaseAssets(product, base.manifest)
+        .map((asset) => [asset.asset_id, asset]),
+    );
+  }
   if (String(reviewState.channel_id) !== String(interaction.channel_id || '')) {
     throw new Error('This package decision came from an unexpected Discord channel.');
   }
@@ -242,8 +258,18 @@ async function loadReviewContext({ archiveRoot, reference, interaction }) {
     if (canonicalAsset && !/^[a-f0-9]{64}$/u.test(canonicalHash)) {
       throw new Error(`The canonical hash for ${asset.asset_id} is invalid.`);
     }
-    if (asset.content_origin === 'canonical' && canonicalHash !== asset.content_sha256) {
-      throw new Error(`The canonical hash for ${asset.asset_id} does not match the reviewed export.`);
+    if (asset.content_origin === 'canonical') {
+      if (marketplaceReview.mode === 'published_update') {
+        const baseAsset = publishedBaseAssets.get(asset.asset_id);
+        const originManifestHash = String(asset.origin_manifest_hash || '');
+        if (!baseAsset
+          || baseAsset.content_sha256 !== asset.content_sha256
+          || (originManifestHash && originManifestHash !== publishedState.manifest_hash)) {
+          throw new Error(`The inherited base-release hash for ${asset.asset_id} does not match the reviewed export.`);
+        }
+      } else if (canonicalHash !== asset.content_sha256) {
+        throw new Error(`The canonical hash for ${asset.asset_id} does not match the reviewed export.`);
+      }
     }
     if (asset.content_origin === 'replacement') {
       const replacement = (manifest.expansion_assets || []).find((entry) => (
