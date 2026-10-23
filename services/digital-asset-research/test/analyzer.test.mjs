@@ -29,6 +29,7 @@ test('exposes transparent rank movement after two snapshots', () => {
     row('run-1', '2026-10-15T10:00:00.000Z', 5),
   ], 2);
   assert.equal(report.status, 'eligible_for_local_analysis');
+  assert.equal(report.minimum_snapshots, 2);
   assert.equal(report.evidence[0].rank_change, 3);
   assert.match(report.limitations[0], /proxy/u);
 });

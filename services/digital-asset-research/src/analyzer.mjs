@@ -46,6 +46,7 @@ export function buildEvidenceReport(observations, minimumSnapshots = 2) {
   return {
     status: 'eligible_for_local_analysis',
     snapshot_count: runs.length,
+    minimum_snapshots: minimumSnapshots,
     compared_runs: [current[0].run_id, previous[0].run_id],
     limitations: [
       'Marketplace rank is a demand proxy, not a sales or download count.',
