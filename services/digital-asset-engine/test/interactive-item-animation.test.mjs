@@ -20,7 +20,10 @@ import {
   createShieldIntegrityFrame,
 } from '../src/interactive-item-states.mjs';
 import { processPixelArtAsset } from '../src/image-processor.mjs';
-import { createFlameDanceFrame } from '../src/arcane-frame-effects.mjs';
+import {
+  createBottleFillLevelFrame,
+  createFlameDanceFrame,
+} from '../src/arcane-frame-effects.mjs';
 import { InteractiveItemAnimationBatchSchema } from '../src/schemas.mjs';
 
 test('flame stretching uses inverse sampling without transparent stripe rows', async () => {
@@ -45,6 +48,32 @@ test('flame stretching uses inverse sampling without transparent stripe rows', a
   const first = Math.min(...warmRows);
   const last = Math.max(...warmRows);
   assert.deepEqual(warmRows, Array.from({ length: last - first + 1 }, (_, index) => first + index));
+});
+
+test('bottle fill levels preserve the silhouette while exposing empty, half, and full states', async () => {
+  const bottle = await sharp({
+    create: { width: 48, height: 64, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite([
+    { input: Buffer.from('<svg width="18" height="44"><rect width="18" height="44" rx="4" fill="#2c204f"/><rect x="3" y="9" width="12" height="31" fill="#44c6bf"/></svg>'), left: 15, top: 14 },
+  ]).png({ palette: true, colours: 8, dither: 0 }).toBuffer();
+  const [empty, half, full] = await Promise.all([
+    createBottleFillLevelFrame(bottle, 0, { maxPaletteColors: 8 }),
+    createBottleFillLevelFrame(bottle, 0.5, { maxPaletteColors: 8 }),
+    createBottleFillLevelFrame(bottle, 1, { maxPaletteColors: 8 }),
+  ]);
+  const decoded = await Promise.all([bottle, empty.compositeBuffer, half.compositeBuffer, full.compositeBuffer]
+    .map((buffer) => sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true })));
+  const pixel = (image, x, y) => image.data.subarray(((y * image.info.width) + x) * 4, (((y * image.info.width) + x) * 4) + 4);
+  const closePixel = (left, right, tolerance = 5) => [...left].every((value, index) => Math.abs(value - right[index]) <= tolerance);
+  assert.equal(closePixel(pixel(decoded[1], 15, 30), pixel(decoded[0], 15, 30)), true);
+  assert.equal(pixel(decoded[1], 24, 30)[3], 0);
+  assert.equal(pixel(decoded[2], 24, 30)[3], 0);
+  assert.equal(closePixel(pixel(decoded[2], 24, 48), pixel(decoded[0], 24, 48)), true);
+  assert.equal(closePixel(pixel(decoded[3], 24, 30), pixel(decoded[0], 24, 30)), true);
+  assert.equal(empty.report.filled_pixels, 0);
+  assert.equal(half.report.filled_pixels > 0, true);
+  assert.equal(full.report.emptied_pixels, 0);
+  assert.equal(empty.report.strategy, 'largest_opaque_component_transparent_glass_fill_level');
 });
 
 async function itemSprite({ energyX, energyY }) {
@@ -545,7 +574,7 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
       name: 'Mana Potion',
       recipe: 'potion',
       seed: 47,
-      break_description: 'Compact magical glass and liquid release.',
+      animation_mode: 'fill_levels',
     },
   ]);
   let generationCalls = 0;
@@ -636,7 +665,20 @@ test('batch emits complete fixed-anchor buyer runtime files without regenerating
   });
   assert.equal(spellMetadata.frames.every((frame) => frame.overlay_path.endsWith('.png')), true);
   const potionManifest = JSON.parse(await readFile(resolve(result.batchRoot, 'mana-potion/manifest.json'), 'utf8'));
-  assert.deepEqual(potionManifest.states, ['sealed', 'broken', 'consumed']);
-  assert.deepEqual(potionManifest.animations, ['idle-loop', 'consume-break']);
+  assert.deepEqual(potionManifest.states, ['empty', 'half-filled', 'full']);
+  assert.deepEqual(potionManifest.animations, ['idle-loop', 'fill', 'deplete']);
   assert.equal(potionManifest.generation_calls, 0);
+});
+
+test('potion consume/break mode still requires a break description', () => {
+  const parsed = InteractiveItemAnimationBatchSchema.safeParse(plan([{
+    source_product_slug: 'source-potion',
+    source_asset_key: 'potion-source',
+    target_asset_key: 'mana-potion',
+    name: 'Mana Potion',
+    recipe: 'potion',
+    seed: 47,
+  }]));
+  assert.equal(parsed.success, false);
+  assert.match(parsed.error.issues[0].message, /break_description/u);
 });

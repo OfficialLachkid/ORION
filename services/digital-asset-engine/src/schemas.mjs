@@ -399,7 +399,8 @@ const InteractiveItemRecipeSchema = z.discriminatedUnion('recipe', [
   }),
   InteractiveItemSourceSchema.extend({
     recipe: z.literal('potion'),
-    break_description: z.string().min(1),
+    animation_mode: z.enum(['consume_break', 'fill_levels']).default('consume_break'),
+    break_description: z.string().min(1).optional(),
     break_style: z.enum(['fracture_scatter', 'restorative_release']).default('fracture_scatter'),
   }),
   InteractiveItemSourceSchema.extend({
@@ -446,7 +447,7 @@ export const InteractiveItemAnimationBatchSchema = z.object({
   }),
 }).superRefine((plan, context) => {
   const targetKeys = new Set();
-  for (const item of plan.items) {
+  for (const [index, item] of plan.items.entries()) {
     if (targetKeys.has(item.target_asset_key)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
@@ -455,6 +456,15 @@ export const InteractiveItemAnimationBatchSchema = z.object({
       });
     }
     targetKeys.add(item.target_asset_key);
+    if (item.recipe === 'potion'
+      && item.animation_mode === 'consume_break'
+      && !item.break_description) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Potion consume/break animations require break_description.',
+        path: ['items', index, 'break_description'],
+      });
+    }
   }
 });
 
