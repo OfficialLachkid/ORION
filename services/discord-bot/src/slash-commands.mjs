@@ -14,6 +14,12 @@ import {
   serializeVideoAnalyticsCommand,
 } from '../../task-router/src/video-analytics-command-parser.mjs';
 import { serializeDeveloperTaskCommand } from '../../developer-agent/src/command-parser.mjs';
+import {
+  MANUAL_IMAGE_ASPECT_RATIOS,
+  MANUAL_IMAGE_COMMAND_NAME,
+  MANUAL_IMAGE_MAX_COUNT,
+  MANUAL_IMAGE_MAX_PROMPT_LENGTH,
+} from '../../manual-image-generation/src/request.mjs';
 
 const DISCORD_INTERACTION_TYPE_APPLICATION_COMMAND = 2;
 const DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING = 3;
@@ -29,6 +35,7 @@ const LEAD_QUALIFICATION_COMMAND_NAMES = new Set(['lead-qualification']);
 const DEVELOPER_TASK_COMMAND_NAMES = new Set(['create-developer-issue']);
 const PRODUCT_VIDEO_COMMAND_NAMES = new Set(['generate-video']);
 const VIDEO_ANALYTICS_COMMAND_NAMES = new Set(['analytics']);
+const MANUAL_IMAGE_COMMAND_NAMES = new Set([MANUAL_IMAGE_COMMAND_NAME]);
 
 const HEALTH_TARGETS = [
   {
@@ -258,6 +265,38 @@ export function buildGuildSlashCommands() {
       ],
     },
     {
+      name: MANUAL_IMAGE_COMMAND_NAME,
+      description: 'Generate one or more images locally with Flux and return them here.',
+      type: 1,
+      options: [
+        {
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING,
+          name: 'prompt',
+          description: 'Describe the image, separate assets, or ordered stages to generate.',
+          required: true,
+          max_length: MANUAL_IMAGE_MAX_PROMPT_LENGTH,
+        },
+        {
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_INTEGER,
+          name: 'count',
+          description: 'Exact image count; omit to let local Ollama infer the useful count.',
+          required: false,
+          min_value: 1,
+          max_value: MANUAL_IMAGE_MAX_COUNT,
+        },
+        {
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING,
+          name: 'aspect_ratio',
+          description: 'Canvas shape (defaults to square).',
+          required: false,
+          choices: Object.entries(MANUAL_IMAGE_ASPECT_RATIOS).map(([value, option]) => ({
+            name: option.label,
+            value,
+          })),
+        },
+      ],
+    },
+    {
       name: 'analytics',
       description: 'Post an on-demand YouTube analytics digest for one channel or all channels.',
       type: 1,
@@ -383,6 +422,7 @@ export function isSupportedSlashCommandInteraction(interaction) {
       || DEVELOPER_TASK_COMMAND_NAMES.has(commandName)
       || PRODUCT_VIDEO_COMMAND_NAMES.has(commandName)
       || VIDEO_ANALYTICS_COMMAND_NAMES.has(commandName)
+      || MANUAL_IMAGE_COMMAND_NAMES.has(commandName)
     );
 }
 
