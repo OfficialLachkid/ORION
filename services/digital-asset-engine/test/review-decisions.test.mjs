@@ -122,6 +122,42 @@ async function createArchiveFixture(options = {}) {
       JSON.stringify({ metrics: { content_sha256: hashes[index] } }),
     )),
   ]);
+  if (options.marketplaceReviewMode === 'published_update') {
+    const baseVersion = options.currentMarketplaceVersion || '0.1.0';
+    const baseManifestHash = options.publishedState?.manifest_hash
+      || options.baseManifestHash
+      || 'e'.repeat(64);
+    const baseListingHash = options.publishedState?.listing_hash || 'f'.repeat(64);
+    const baseCandidateKey = 'fedcba9876543210';
+    const baseCandidatePath = `releases/${baseVersion}/candidates/${baseCandidateKey}`;
+    const baseVersionRoot = resolve(productRoot, 'releases', baseVersion);
+    const baseCandidateRoot = resolve(productRoot, baseCandidatePath);
+    const baseManifest = {
+      manifest_hash: baseManifestHash,
+      listing_hash: baseListingHash,
+      target_version: baseVersion,
+      release_state: 'awaiting_extension_review',
+      distribution_ready: false,
+      quality_holds: [],
+      gates: { quality_holds_resolved: true },
+      files: productAssets.map((asset, index) => ({
+        path: `download/assets/individual/${asset.final_path.split('/').at(-1)}`,
+        content_sha256: hashes[index],
+      })),
+    };
+    await mkdir(baseCandidateRoot, { recursive: true });
+    await Promise.all([
+      writeFile(resolve(baseVersionRoot, 'latest-candidate.json'), JSON.stringify({
+        target_version: baseVersion,
+        candidate_path: baseCandidatePath,
+        manifest_hash: baseManifestHash,
+      })),
+      writeFile(resolve(baseCandidateRoot, 'manifest.json'), JSON.stringify(baseManifest)),
+      writeFile(resolve(baseCandidateRoot, 'itch-listing.json'), JSON.stringify({
+        listing_hash: baseListingHash,
+      })),
+    ]);
+  }
   return archiveRoot;
 }
 
@@ -324,6 +360,72 @@ test('approves a published update against the verified current public release in
   assert.equal(result.messagePatch.components[0].components[0].label, 'Open Current itch.io Page');
   assert.equal(result.nextAction, 'distribution_review');
   assert.equal(result.releaseVersion, '0.3.0');
+});
+
+test('published update inherits an unchanged asset from the verified base after the canonical workspace changes', async () => {
+  const packageRoot = 'releases/0.3.0/candidates/0123456789abcdef';
+  const currentManifestHash = 'e'.repeat(64);
+  const archiveRoot = await createArchiveFixture({
+    packageRoot,
+    targetVersion: '0.3.0',
+    baseManifestHash: currentManifestHash,
+    marketplaceReviewMode: 'published_update',
+    currentMarketplaceVersion: '0.2.0',
+    publishedState: {
+      status: 'verified_public',
+      product_id: 'asset-product-e7bd21e31c69c03a',
+      target_version: '0.2.0',
+      manifest_hash: currentManifestHash,
+      listing_hash: 'f'.repeat(64),
+      public_url: context.itchUrl,
+    },
+  });
+  await writeFile(
+    resolve(archiveRoot, context.productSlug, 'validation', 'arc-launcher.json'),
+    JSON.stringify({ metrics: { content_sha256: '9'.repeat(64) } }),
+  );
+  const inserted = [];
+  const result = await recordDigitalAssetReviewDecision({
+    interaction: packInteraction(),
+    archiveRoot,
+    config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+    store: { async insert(row) { inserted.push(row); } },
+  });
+  assert.equal(inserted.length, 1);
+  assert.equal(result.row.asset_decisions[1].asset_hash, 'd'.repeat(64));
+});
+
+test('published update rejects an inherited asset that differs from the verified base release', async () => {
+  const packageRoot = 'releases/0.3.0/candidates/0123456789abcdef';
+  const currentManifestHash = 'e'.repeat(64);
+  const archiveRoot = await createArchiveFixture({
+    packageRoot,
+    targetVersion: '0.3.0',
+    baseManifestHash: currentManifestHash,
+    marketplaceReviewMode: 'published_update',
+    currentMarketplaceVersion: '0.2.0',
+    publishedState: {
+      status: 'verified_public',
+      product_id: 'asset-product-e7bd21e31c69c03a',
+      target_version: '0.2.0',
+      manifest_hash: currentManifestHash,
+      listing_hash: 'f'.repeat(64),
+      public_url: context.itchUrl,
+    },
+  });
+  const manifestPath = resolve(archiveRoot, context.productSlug, packageRoot, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.files[1].content_sha256 = '9'.repeat(64);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(
+    recordDigitalAssetReviewDecision({
+      interaction: packInteraction(),
+      archiveRoot,
+      config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+      store: { async insert() { throw new Error('must not be called'); } },
+    }),
+    /inherited base-release hash.*does not match/iu,
+  );
 });
 
 test('approves an explicitly reviewed replacement asset hash in a published update', async () => {
