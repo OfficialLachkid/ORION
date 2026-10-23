@@ -10,7 +10,7 @@ import {
 test('buildGuildSlashCommands returns the supported slash commands', () => {
   const commands = buildGuildSlashCommands();
 
-  assert.equal(commands.length, 13);
+  assert.equal(commands.length, 14);
   assert.deepEqual(commands.map((command) => command.name), [
     'commands',
     'help',
@@ -19,6 +19,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'sync',
     'ops',
     'generate-video',
+    'generate-image',
     'analytics',
     'leadgen',
     'leadgen-sweep',
@@ -64,6 +65,13 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'proffmon-youtube',
     'trivamon-youtube',
   ]);
+  const generateImageCommand = commands.find((command) => command.name === 'generate-image');
+  assert.equal(generateImageCommand.options.find((option) => option.name === 'prompt').required, true);
+  assert.equal(generateImageCommand.options.find((option) => option.name === 'count').max_value, 8);
+  assert.deepEqual(
+    generateImageCommand.options.find((option) => option.name === 'aspect_ratio').choices.map((choice) => choice.value),
+    ['1:1', '16:9', '9:16', '3:2', '2:3'],
+  );
   const analyticsCommand = commands.find((command) => command.name === 'analytics');
   const analyticsChannelChoiceValues = (analyticsCommand?.options?.find((option) => option.name === 'channel')?.choices || [])
     .map((choice) => choice.value)
@@ -125,6 +133,11 @@ test('isSupportedSlashCommandInteraction accepts supported slash commands', () =
   assert.equal(isSupportedSlashCommandInteraction({
     type: 2,
     data: { name: 'generate-video' },
+  }), true);
+
+  assert.equal(isSupportedSlashCommandInteraction({
+    type: 2,
+    data: { name: 'generate-image' },
   }), true);
 
   assert.equal(isSupportedSlashCommandInteraction({

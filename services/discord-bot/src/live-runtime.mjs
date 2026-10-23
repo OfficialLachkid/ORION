@@ -114,6 +114,22 @@ import {
   recordResearchReviewDecision,
 } from '../../digital-asset-research/src/discord-review.mjs';
 import { recoverResearchGenerationJobs } from '../../digital-asset-research/src/generation-recovery.mjs';
+import { resolveManualImageGenerationConfig } from '../../manual-image-generation/src/config.mjs';
+import {
+  ensureManualImageGenerationChannel,
+  postManualImageQueuedStatus,
+} from '../../manual-image-generation/src/discord.mjs';
+import {
+  bindManualImageStatusMessage,
+  cleanupAbandonedManualImageJobs,
+  enqueueManualImageGenerationJob,
+  recoverManualImageGenerationJobs,
+} from '../../manual-image-generation/src/jobs.mjs';
+import {
+  assertManualImageOperator,
+  isManualImageGenerationInteraction,
+  parseManualImageGenerationRequest,
+} from '../../manual-image-generation/src/request.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DISCORD_GATEWAY_URL = 'wss://gateway.discord.gg/';
@@ -352,6 +368,27 @@ export function scheduleResearchGenerationWorker(jobPath, options = {}) {
     return true;
   } catch (error) {
     process.stderr.write(`Could not start research generation worker: ${error.message}\n`);
+    return false;
+  }
+}
+
+export function scheduleManualImageGenerationWorker(archiveRoot, options = {}) {
+  if (!archiveRoot) return false;
+  try {
+    const spawnImpl = options.spawnImpl || spawn;
+    const child = spawnImpl(
+      process.execPath,
+      [`${projectRoot}/services/manual-image-generation/manual-image-worker.mjs`, '--archive-root', archiveRoot],
+      {
+        cwd: projectRoot,
+        detached: true,
+        stdio: 'ignore',
+      },
+    );
+    child.unref();
+    return true;
+  } catch (error) {
+    process.stderr.write(`Could not start manual image generation worker: ${error.message}\n`);
     return false;
   }
 }
@@ -1416,6 +1453,44 @@ export async function runLiveDiscordBot(config) {
         }
 
         if (payload.t === 'INTERACTION_CREATE') {
+          if (isManualImageGenerationInteraction(payload.d)) {
+            await sendDiscordInteractionCallback(payload.d.id, payload.d.token, {
+              type: DISCORD_INTERACTION_CALLBACK_DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE,
+              data: { flags: DISCORD_MESSAGE_FLAG_EPHEMERAL },
+            });
+            try {
+              assertManualImageOperator(payload.d, config);
+              const manualConfig = resolveManualImageGenerationConfig(config);
+              const request = parseManualImageGenerationRequest(payload.d);
+              const queued = await enqueueManualImageGenerationJob({
+                config: manualConfig,
+                request,
+              });
+              let job = queued.job;
+              if (!job.status_message_id) {
+                const statusMessage = await postManualImageQueuedStatus({
+                  runtimeConfig: config,
+                  job,
+                });
+                job = await bindManualImageStatusMessage(queued.path, {
+                  channelId: request.channel_id,
+                  messageId: statusMessage.id,
+                });
+              }
+              const workerScheduled = scheduleManualImageGenerationWorker(manualConfig.archiveRoot);
+              await editDiscordInteractionResponse(payload.d.application_id, payload.d.token, {
+                content: workerScheduled
+                  ? `Queued local image job \`${job.job_id}\`. Progress and results will update in <#${request.channel_id}>.`
+                  : `Job \`${job.job_id}\` is durably queued, but its worker could not start. Startup recovery will retry it.`,
+              });
+            } catch (error) {
+              await editDiscordInteractionResponse(payload.d.application_id, payload.d.token, {
+                content: truncateMessage(`Manual image generation was not queued: ${error.message}`),
+              });
+            }
+            return;
+          }
+
           const slashCommandMessage = normalizeSupportedSlashCommandInteraction(payload.d);
           if (slashCommandMessage) {
             const result = processDiscordEvent(slashCommandMessage, config);
@@ -3022,6 +3097,33 @@ export async function runLiveDiscordBot(config) {
 
     ensureExecutionDrain();
   };
+
+  try {
+    const manualConfig = resolveManualImageGenerationConfig(config);
+    const channel = await ensureManualImageGenerationChannel({
+      runtimeConfig: config,
+      config: manualConfig,
+    });
+    config.channelIds.manualImageGeneration = channel.channel.id;
+    const cleanup = await cleanupAbandonedManualImageJobs({ config: manualConfig });
+    const recovery = await recoverManualImageGenerationJobs({ config: manualConfig });
+    if (recovery.runnable.length > 0) {
+      scheduleManualImageGenerationWorker(manualConfig.archiveRoot);
+    }
+    if (channel.created || cleanup.cleaned.length > 0 || recovery.recovered.length > 0) {
+      process.stdout.write(
+        `Manual image startup: channel ${channel.created ? 'created' : 'ready'}, ${cleanup.cleaned.length} cleaned, ${recovery.recovered.length} recovered, ${recovery.runnable.length} runnable.\n`,
+      );
+    }
+    const cleanupTimer = setInterval(() => {
+      void cleanupAbandonedManualImageJobs({ config: manualConfig }).catch((error) => {
+        process.stderr.write(`Manual image cleanup failed: ${error.message}\n`);
+      });
+    }, manualConfig.cleanupIntervalHours * 60 * 60 * 1000);
+    cleanupTimer.unref?.();
+  } catch (error) {
+    process.stderr.write(`Manual image generation startup check failed: ${error.message}\n`);
+  }
 
   try {
     const recovery = await recoverResearchGenerationJobs({

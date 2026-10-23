@@ -41,7 +41,7 @@ export function buildCommandHelpDescriptor(config = {}) {
         name: 'How To Ask',
         value: [
           `- Send one request or multiple requests on separate lines in ${commandsChannel}.`,
-          '- Or use the slash picker with `/commands`, `/health`, `/status`, `/sync`, `/generate-video`, `/leadgen`, `/leadgen-sweep`, or `/lead-qualification`.',
+          '- Or use the slash picker with `/commands`, `/health`, `/status`, `/sync`, `/generate-video`, `/generate-image`, `/leadgen`, `/leadgen-sweep`, or `/lead-qualification`.',
           `- Current parser is still keyword-based, so if something fails, use one of the example phrasings below.`,
           `- Parsed tasks appear in ${parsedTasksChannel} and queue state appears in ${taskQueueChannel}.`,
         ].join('\n'),
@@ -136,6 +136,17 @@ export function buildCommandHelpDescriptor(config = {}) {
           '`/generate-video template:Type Combination channel:DexGuess`',
           '`/generate-video template:Cry Match channel:Poke Quizz`',
           '- The selected channel decides which review-videos thread receives the preview card.',
+        ].join('\n'),
+        inline: false,
+      },
+      {
+        name: 'Manual Local Image Generation',
+        value: [
+          '`/generate-image prompt:A luminous fantasy potion on a transparent background`',
+          '`/generate-image prompt:Create a bomb and separate explosion stages aspect_ratio:1:1`',
+          '`/generate-image prompt:Three matching landscape concepts count:3 aspect_ratio:16:9`',
+          '- Omit `count` to let local Ollama infer a bounded structured image plan.',
+          '- Flux runs locally at €0 API cost; output is temporary on the T7 and removed after confirmed Discord delivery.',
         ].join('\n'),
         inline: false,
       },

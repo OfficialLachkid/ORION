@@ -32,6 +32,7 @@ import {
   scheduleItchPublicationWorker,
   scheduleItchThemeRevisionWorker,
   scheduleMarketplaceSetupWorker,
+  scheduleManualImageGenerationWorker,
   scheduleResearchGenerationWorker,
   shouldScheduleDeferredDiscordBotRestart,
 } from '../src/live-runtime.mjs';
@@ -337,6 +338,26 @@ test('research generation worker is detached from the Discord interaction lifecy
   assert.match(calls[0].args[0], /generation-worker\.mjs$/u);
   assert.deepEqual(calls[0].args.slice(1), ['--job', '/tmp/research/job.json']);
   assert.equal(calls[0].options.detached, true);
+  assert.deepEqual(calls[1], { unref: true });
+});
+
+test('manual image worker is detached from the Discord interaction lifecycle', () => {
+  const calls = [];
+  const scheduled = scheduleManualImageGenerationWorker('/Volumes/T7/O.R.I.O.N. Manual Image Jobs', {
+    spawnImpl(command, args, options) {
+      calls.push({ command, args, options });
+      return { unref() { calls.push({ unref: true }); } };
+    },
+  });
+  assert.equal(scheduled, true);
+  assert.equal(calls[0].command, process.execPath);
+  assert.match(calls[0].args[0], /manual-image-worker\.mjs$/u);
+  assert.deepEqual(calls[0].args.slice(1), [
+    '--archive-root',
+    '/Volumes/T7/O.R.I.O.N. Manual Image Jobs',
+  ]);
+  assert.equal(calls[0].options.detached, true);
+  assert.equal(calls[0].options.stdio, 'ignore');
   assert.deepEqual(calls[1], { unref: true });
 });
 
