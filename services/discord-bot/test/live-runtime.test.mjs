@@ -28,6 +28,7 @@ import {
   searchApprovalMessageInThreads,
   sendDiscordApiRequest,
   scheduleAssetExpansionReleaseWorker,
+  scheduleDigitalAssetDistributionPreparationWorker,
   scheduleItchPublicationWorker,
   scheduleItchThemeRevisionWorker,
   scheduleMarketplaceSetupWorker,
@@ -413,6 +414,29 @@ test('itch publication worker is detached from the Discord interaction lifecycle
     '/tmp/products/pack/review/distribution.json',
   ]);
   assert.equal(calls[0].options.detached, true);
+  assert.deepEqual(calls[1], { unref: true });
+});
+
+test('distribution preparation worker is detached from the Discord interaction lifecycle', () => {
+  const calls = [];
+  const scheduled = scheduleDigitalAssetDistributionPreparationWorker(
+    '/tmp/products/pack/review/distribution-preparation.json',
+    {
+      spawnImpl(command, args, options) {
+        calls.push({ command, args, options });
+        return { unref() { calls.push({ unref: true }); } };
+      },
+    },
+  );
+  assert.equal(scheduled, true);
+  assert.equal(calls[0].command, process.execPath);
+  assert.match(calls[0].args[0], /distribution-preparation-worker\.mjs$/u);
+  assert.deepEqual(calls[0].args.slice(1), [
+    '--state',
+    '/tmp/products/pack/review/distribution-preparation.json',
+  ]);
+  assert.equal(calls[0].options.detached, true);
+  assert.equal(calls[0].options.stdio, 'ignore');
   assert.deepEqual(calls[1], { unref: true });
 });
 
