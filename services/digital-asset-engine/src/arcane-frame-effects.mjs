@@ -26,6 +26,147 @@ function primaryComponent(detection) {
   };
 }
 
+function largestOpaqueComponent(decoded, alphaThreshold = 128) {
+  const { width, height } = decoded.info;
+  const opaque = new Uint8Array(width * height);
+  for (let pixel = 0; pixel < opaque.length; pixel += 1) {
+    opaque[pixel] = decoded.data[(pixel * 4) + 3] >= alphaThreshold ? 1 : 0;
+  }
+  const visited = new Uint8Array(opaque.length);
+  let largest = [];
+  for (let start = 0; start < opaque.length; start += 1) {
+    if (!opaque[start] || visited[start]) continue;
+    const queue = [start];
+    visited[start] = 1;
+    for (let cursor = 0; cursor < queue.length; cursor += 1) {
+      const pixel = queue[cursor];
+      const x = pixel % width;
+      const y = Math.floor(pixel / width);
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const nextX = x + dx;
+        const nextY = y + dy;
+        if (nextX < 0 || nextX >= width || nextY < 0 || nextY >= height) continue;
+        const next = (nextY * width) + nextX;
+        if (!opaque[next] || visited[next]) continue;
+        visited[next] = 1;
+        queue.push(next);
+      }
+    }
+    if (queue.length > largest.length) largest = queue;
+  }
+  if (!largest.length) throw new Error('Cannot derive potion fill levels from an empty sprite.');
+  const mask = new Uint8Array(opaque.length);
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+  for (const pixel of largest) {
+    mask[pixel] = 1;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    left = Math.min(left, x);
+    top = Math.min(top, y);
+    right = Math.max(right, x);
+    bottom = Math.max(bottom, y);
+  }
+  return { mask, bounds: { x: left, y: top, width: right - left + 1, height: bottom - top + 1 } };
+}
+
+export async function createBottleFillLevelFrame(assetBuffer, level, options = {}) {
+  if (!Number.isFinite(level) || level < 0 || level > 1) {
+    throw new Error('Bottle fill level must be between zero and one.');
+  }
+  const decoded = await sharp(assetBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { width, height } = decoded.info;
+  const component = largestOpaqueComponent(decoded, options.alphaThreshold ?? 128);
+  const bodyTop = component.bounds.y + Math.max(2, Math.floor(component.bounds.height * 0.28));
+  const bodyBottom = component.bounds.y + component.bounds.height - 1
+    - Math.max(1, Math.floor(component.bounds.height * 0.04));
+  const liquidCandidates = [];
+  const chamberPixels = [];
+  const shellThickness = options.shellThickness ?? 2;
+  for (let y = bodyTop; y <= bodyBottom; y += 1) {
+    for (let x = component.bounds.x + shellThickness; x < component.bounds.x + component.bounds.width - shellThickness; x += 1) {
+      const pixel = (y * width) + x;
+      if (!component.mask[pixel]) continue;
+      let insideChamber = true;
+      for (let distance = 1; distance <= shellThickness; distance += 1) {
+        const neighbors = [pixel - distance, pixel + distance, pixel - (width * distance), pixel + (width * distance)];
+        if (!neighbors.every((neighbor) => neighbor >= 0 && neighbor < component.mask.length && component.mask[neighbor])) {
+          insideChamber = false;
+          break;
+        }
+      }
+      if (!insideChamber) continue;
+      const offset = pixel * 4;
+      const red = decoded.data[offset];
+      const green = decoded.data[offset + 1];
+      const blue = decoded.data[offset + 2];
+      const maximum = Math.max(red, green, blue);
+      const minimum = Math.min(red, green, blue);
+      const saturation = maximum === 0 ? 0 : (maximum - minimum) / maximum;
+      const luminance = (red * 0.2126) + (green * 0.7152) + (blue * 0.0722);
+      const protectedDetail = luminance < (options.protectedDetailLuminance ?? 24);
+      if (!protectedDetail) chamberPixels.push(pixel);
+      if (!protectedDetail && !(saturation < 0.16 && luminance < 96)) liquidCandidates.push(pixel);
+    }
+  }
+  if (liquidCandidates.length < (options.minimumLiquidPixels ?? 12)) {
+    throw new Error(`Potion liquid-region detection found only ${liquidCandidates.length} interior pixels.`);
+  }
+  const liquidTop = Math.min(...liquidCandidates.map((pixel) => Math.floor(pixel / width)));
+  const liquidBottom = Math.max(...liquidCandidates.map((pixel) => Math.floor(pixel / width)));
+  const liquidHeight = liquidBottom - liquidTop + 1;
+  const fillTop = level <= 0
+    ? liquidBottom + 1
+    : liquidBottom - Math.max(0, Math.round((liquidHeight - 1) * level));
+  const output = Buffer.from(decoded.data);
+  const overlay = Buffer.alloc(output.length);
+  let emptiedPixels = 0;
+  let filledPixels = 0;
+  let meniscusPixels = 0;
+  for (const pixel of chamberPixels) {
+    const y = Math.floor(pixel / width);
+    const offset = pixel * 4;
+    if (y < fillTop) {
+      output.fill(0, offset, offset + 4);
+      emptiedPixels += 1;
+      continue;
+    }
+    decoded.data.copy(overlay, offset, offset, offset + 4);
+    filledPixels += 1;
+    if (level > 0 && level < 1 && y === fillTop) {
+      for (let channel = 0; channel < 3; channel += 1) {
+        output[offset + channel] = Math.round(output[offset + channel] + ((255 - output[offset + channel]) * 0.24));
+        overlay[offset + channel] = output[offset + channel];
+      }
+      meniscusPixels += 1;
+    }
+  }
+  return {
+    compositeBuffer: await encode(output, decoded.info, options.maxPaletteColors),
+    overlayBuffer: await encode(overlay, decoded.info, options.maxPaletteColors),
+    report: {
+      strategy: 'largest_opaque_component_transparent_glass_fill_level',
+      level,
+      object_bounds: component.bounds,
+      liquid_bounds: {
+        x: component.bounds.x,
+        y: liquidTop,
+        width: component.bounds.width,
+        height: liquidHeight,
+      },
+      fill_top: fillTop,
+      liquid_candidate_pixels: liquidCandidates.length,
+      chamber_pixels: chamberPixels.length,
+      preserved_shell_thickness: shellThickness,
+      emptied_pixels: emptiedPixels,
+      filled_pixels: filledPixels,
+      meniscus_pixels: meniscusPixels,
+    },
+  };
+}
+
 export async function createExtinguishedCandleFrame(assetBuffer, detection, options = {}) {
   const flame = primaryComponent(detection);
   const output = Buffer.from(detection.decoded.data);

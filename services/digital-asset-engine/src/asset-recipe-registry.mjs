@@ -154,10 +154,12 @@ export const ASSET_RECIPE_REGISTRY = Object.freeze({
   }),
   potion: recipe({
     label: 'Potion',
-    states: ['sealed', 'consumed', 'broken'],
+    states: ['sealed', 'consumed', 'broken', 'empty', 'half-filled', 'full'],
     animations: [
       animation('idle-loop', ['bubbles', 'liquid_motion', 'glow_pulse']),
       animation('consume-break', ['release', 'break', 'scatter', 'dissolve'], 'once'),
+      animation('fill', ['fill'], 'once'),
+      animation('deplete', ['deplete'], 'once'),
     ],
     anchors: ['liquid_region', 'object_center'],
     deliverables: ['transparent_png', 'frames', 'sprite_sheet', 'animation_json', 'gif_preview'],

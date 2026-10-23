@@ -13,6 +13,7 @@ import {
 } from './interactive-item-states.mjs';
 import {
   createArcaneAuraFrame,
+  createBottleFillLevelFrame,
   createExtinguishedCandleFrame,
   createEnergyScatterFrame,
   createFacetedCrystalTurnFrame,
@@ -101,6 +102,47 @@ async function generatePotion(context, services) {
     phases: ['settled', 'bubble-rise', 'glow-peak', 'bubble-fall'],
     durations: [180, 130, 110, 130],
   }, idleFrames, idleOverlays, options);
+
+  if (item.animation_mode === 'fill_levels') {
+    const levels = [0, 0.25, 0.5, 0.75, 1];
+    const levelFrames = await Promise.all(levels.map((level) => createBottleFillLevelFrame(
+      baseBuffer,
+      level,
+      { maxPaletteColors: plan.style.max_palette_colors },
+    )));
+    const states = await services.writeStates(itemRoot, item, [
+      { key: 'empty', name: 'Empty', buffer: levelFrames[0].compositeBuffer },
+      { key: 'half-filled', name: 'Half Filled', buffer: levelFrames[2].compositeBuffer },
+      { key: 'full', name: 'Full', buffer: levelFrames[4].compositeBuffer },
+    ], canvas);
+    const fill = await services.writeAnimation(itemRoot, item, 'fill', {
+      name: 'Bottle Fill', playback: 'once', canvas,
+      phases: ['empty', 'quarter', 'half', 'three-quarter', 'full'],
+      durations: [160, 110, 110, 110, 180],
+    }, levelFrames.map((frame) => frame.compositeBuffer), levelFrames.map((frame) => frame.overlayBuffer), options);
+    const reversed = [...levelFrames].reverse();
+    const deplete = await services.writeAnimation(itemRoot, item, 'deplete', {
+      name: 'Bottle Deplete', playback: 'once', canvas,
+      phases: ['full', 'three-quarter', 'half', 'quarter', 'empty'],
+      durations: [160, 110, 110, 110, 180],
+    }, reversed.map((frame) => frame.compositeBuffer), reversed.map((frame) => frame.overlayBuffer), options);
+    return services.finalizeRecipeItem({
+      options, plan, item, itemRoot, baseBuffer, sourceLayout: source.layout,
+      states,
+      animations: [idle, fill, deplete],
+      validationBuffers: [
+        ...idleFrames,
+        ...levelFrames.map((frame) => frame.compositeBuffer),
+      ],
+      validationDetails: {
+        energy_region: detection.report,
+        pulse_isolation: isolation,
+        twinkle_motion: twinkles.map((frame) => frame.report),
+        fill_levels: levelFrames.map((frame) => frame.report),
+      },
+      generationCalls: 0,
+    });
+  }
 
   let breakFrames;
   let breakStrategy;
