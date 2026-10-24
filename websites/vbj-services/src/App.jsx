@@ -126,7 +126,7 @@ function CommandNav() {
               <Zap size={16} strokeWidth={2.6} />
             </span>
             <span className="font-display text-white text-[15px] font-semibold tracking-tightest">
-              VBJ <span className="text-primary">·</span> Services
+              <span data-builder-field="navigation.brandPrimary">VBJ</span> <span className="text-primary">·</span> <span data-builder-field="navigation.brandSecondary">Services</span>
             </span>
           </a>
           <div className="hidden md:flex items-center gap-1">
@@ -142,7 +142,7 @@ function CommandNav() {
           </div>
           <div className="hidden md:flex items-center gap-3">
             <a href="#contact" className="btn-primary text-[13px] py-2.5 px-4">
-              Book a call <ArrowRight size={14} />
+              <span data-builder-field="navigation.cta">Book a call</span> <ArrowRight size={14} />
             </a>
           </div>
           <button
@@ -188,7 +188,7 @@ function CommandNav() {
             onClick={() => setOpen(false)}
             className="btn-primary mt-8 justify-center"
           >
-            Book a call <ArrowRight size={14} />
+            <span data-builder-field="navigation.cta">Book a call</span> <ArrowRight size={14} />
           </a>
         </div>
       </div>
@@ -466,6 +466,7 @@ function SceneHero() {
     >
       <div className="absolute inset-0">
         <img
+          data-builder-field="hero.imageUrl"
           src={HERO_IMG}
           alt=""
           className="w-full h-full object-cover opacity-20"
@@ -481,28 +482,28 @@ function SceneHero() {
         <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-16 items-start">
           <div className="lg:col-span-7 hero-stagger">
             <div className="flex items-center gap-3 mb-6">
-              <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-primary">
+              <span data-builder-field="hero.eyebrow" className="font-mono text-[11px] tracking-[0.22em] uppercase text-primary">
                 ╱ {BRAND.vault}
               </span>
               <span className="hidden md:block w-8 h-px bg-white/20" />
-              <span className="hidden md:block font-mono text-[11px] tracking-[0.22em] uppercase text-white/50">
+              <span data-builder-field="hero.byline" className="hidden md:block font-mono text-[11px] tracking-[0.22em] uppercase text-white/50">
                 {BRAND.byline}
               </span>
             </div>
 
             <h1 className="font-display display-xl text-white text-[64px] md:text-[92px] lg:text-[108px] leading-[0.94] font-semibold tracking-tightest mb-8">
-              Digital tools that{" "}
-              <span className="font-serif italic font-normal text-primary">
+              <span data-builder-field="hero.titlePrimary">Digital tools that</span>{" "}
+              <span data-builder-field="hero.titleAccent" className="font-serif italic font-normal text-primary">
                 keep working
               </span>
               <br />
-              when you{" "}
-              <span className="font-serif italic font-normal text-white/70">
+              <span data-builder-field="hero.titleSecondary">when you</span>{" "}
+              <span data-builder-field="hero.titleEnding" className="font-serif italic font-normal text-white/70">
                 aren't looking.
               </span>
             </h1>
 
-            <p className="text-white/70 text-lg md:text-xl leading-relaxed max-w-xl mb-10 font-body">
+            <p data-builder-field="hero.description" className="text-white/70 text-lg md:text-xl leading-relaxed max-w-xl mb-10 font-body">
               We build websites, chatbots, voice agents and workflow
               automation — then wire them into an AI operating system that
               actually stays useful.
@@ -525,9 +526,9 @@ function SceneHero() {
 
             <div className="flex flex-wrap items-center gap-4">
               <a href="#contact" className="btn-primary">
-                Start a project <ArrowRight size={16} />
+                <span data-builder-field="hero.primaryCta">Start a project</span> <ArrowRight size={16} />
               </a>
-              <a href="#products" className="btn-ghost">
+              <a data-builder-field="hero.secondaryCta" href="#products" className="btn-ghost">
                 See what we ship
               </a>
             </div>
@@ -641,7 +642,7 @@ function Manifesto() {
     >
       <div className="absolute inset-0 grid-lines-light opacity-70" />
       <div className="relative max-w-[1200px] mx-auto text-center">
-        <span className={`eyebrow fade-up ${inView ? "is-in" : ""}`}>
+        <span data-builder-field="manifesto.eyebrow" className={`eyebrow fade-up ${inView ? "is-in" : ""}`}>
           ╱ 01 · Manifesto
         </span>
         <p
@@ -650,16 +651,16 @@ function Manifesto() {
           }`}
           style={{ transitionDelay: "120ms" }}
         >
-          We don't ship demos. We ship{" "}
+          <span data-builder-field="manifesto.opening">We don't ship demos. We ship </span>
           <span
             className={`underline-draw not-italic font-display font-semibold text-ink ${
               inView ? "is-in" : ""
             }`}
             style={{ transitionDelay: "600ms" }}
           >
-            coworkers
-          </span>{" "}
-          — small, specific pieces of software that keep doing the work 24/7.
+            <span data-builder-field="manifesto.accent">coworkers</span>
+          </span>
+          <span data-builder-field="manifesto.ending"> — small, specific pieces of software that keep doing the work 24/7.</span>
         </p>
         <div
           className={`mt-10 fade-up ${inView ? "is-in" : ""}`}
@@ -746,10 +747,10 @@ function ProductStack() {
             }`}
             style={{ transitionDelay: "80ms" }}
           >
-            What
+            <span data-builder-field="products.titlePrimary">What</span>
             <br />
             <span className="font-serif italic font-normal text-muted">
-              we offer.
+              <span data-builder-field="products.titleAccent">we offer.</span>
             </span>
           </h2>
           <div
@@ -758,7 +759,7 @@ function ProductStack() {
             }`}
             style={{ transitionDelay: "180ms" }}
           >
-            <p>
+            <p data-builder-field="products.description">
               Each product stands alone — but they compound. A chatbot leads
               to workflow automation. Automation leads to voice. Voice leads
               to a full agent infrastructure. Same runtime underneath.
@@ -825,10 +826,10 @@ function ProductStack() {
                           <Icon size={22} strokeWidth={2.2} />
                         </span>
                       </div>
-                      <h3 className="font-display text-4xl md:text-5xl font-semibold text-white leading-tight mb-6 tracking-tightest">
+                      <h3 data-builder-field={`products.items.${i}.title`} className="font-display text-4xl md:text-5xl font-semibold text-white leading-tight mb-6 tracking-tightest">
                         {p.title}
                       </h3>
-                      <p className="text-white/70 text-lg leading-relaxed max-w-md">
+                      <p data-builder-field={`products.items.${i}.description`} className="text-white/70 text-lg leading-relaxed max-w-md">
                         {p.copy}
                       </p>
                     </div>
@@ -917,14 +918,14 @@ function ShowcaseFrames() {
           }`}
         >
           <div>
-            <span className="font-mono text-[11px] tracking-[0.22em] uppercase text-muted">
+            <span data-builder-field="showcase.eyebrow" className="font-mono text-[11px] tracking-[0.22em] uppercase text-muted">
               ╱ 03 · Work in the wild
             </span>
             <h2 className="font-display text-5xl md:text-6xl mt-6 tracking-tightest leading-[0.98]">
-              Three shipped,
+              <span data-builder-field="showcase.titlePrimary">Three shipped,</span>
               <br />
               <span className="font-serif italic font-normal text-muted">
-                one still running.
+                <span data-builder-field="showcase.titleAccent">one still running.</span>
               </span>
             </h2>
           </div>
@@ -932,7 +933,7 @@ function ShowcaseFrames() {
             href="#contact"
             className="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.22em] uppercase text-ink border-b border-primary pb-1 hover:gap-3 transition-all self-start md:self-end"
           >
-            Case studies on request <ArrowUpRight size={14} />
+            <span data-builder-field="showcase.cta">Case studies on request</span> <ArrowUpRight size={14} />
           </a>
         </div>
 
@@ -961,12 +962,12 @@ function ShowcaseFrames() {
                   <div className="absolute inset-0 bg-gradient-to-t from-deep via-deep/40 to-transparent" />
                   <div className="absolute bottom-4 left-4 right-4 text-white">
                     <div className="font-display text-2xl md:text-[26px] font-semibold leading-tight mb-2">
-                      {it.title}
+                      <span data-builder-field={`showcase.items.${i}.title`}>{it.title}</span>
                     </div>
                   </div>
                 </div>
                 <div className="p-6 text-white/80">
-                  <p className="text-sm leading-relaxed mb-6">{it.summary}</p>
+                  <p data-builder-field={`showcase.items.${i}.description`} className="text-sm leading-relaxed mb-6">{it.summary}</p>
                   <div className="flex items-end justify-between pt-4 border-t border-white/10">
                     <div>
                       <div className="font-display text-primary text-3xl font-semibold">
@@ -1035,16 +1036,16 @@ function ServicesIndex() {
     >
       <div className="max-w-[1200px] mx-auto">
         <div className={`fade-up ${inView ? "is-in" : ""} mb-14 max-w-2xl`}>
-          <span className="eyebrow">╱ 04 · Index of services</span>
+          <span data-builder-field="services.eyebrow" className="eyebrow">╱ 04 · Index of services</span>
           <h2 className="font-display text-5xl md:text-6xl lg:text-7xl mt-6 mb-4 tracking-tightest leading-[0.98]">
-            An
+            <span data-builder-field="services.titlePrimary">An</span>
             <br />
             <span className="font-serif italic font-normal text-muted">
-              opinionated
+              <span data-builder-field="services.titleAccent">opinionated</span>
             </span>{" "}
-            list.
+            <span data-builder-field="services.titleEnding">list.</span>
           </h2>
-          <p className="text-muted text-lg">
+          <p data-builder-field="services.description" className="text-muted text-lg">
             If your problem is in this list, we have a shape for it. If it's
             not — bring it anyway; new shapes are how the list grows.
           </p>
@@ -1062,11 +1063,11 @@ function ServicesIndex() {
             </span>
             <span>
               <span className="idx-title font-display text-2xl md:text-3xl font-semibold tracking-tightest">
-                {r.title}
+                <span data-builder-field={`services.items.${i}.title`}>{r.title}</span>
               </span>
               <br />
               <span className="font-serif italic text-muted text-lg mt-1 inline-block">
-                {r.sub}
+                <span data-builder-field={`services.items.${i}.description`}>{r.sub}</span>
               </span>
             </span>
             <span className="font-mono text-[10px] tracking-[0.22em] uppercase text-muted whitespace-nowrap">
@@ -1220,15 +1221,15 @@ function ProcessTimeline() {
     >
       <div className="max-w-[1400px] mx-auto">
         <div className={`fade-up ${inView ? "is-in" : ""} max-w-2xl mb-16`}>
-          <span className="eyebrow">╱ 06 · Engagement</span>
+          <span data-builder-field="process.eyebrow" className="eyebrow">╱ 06 · Engagement</span>
           <h2 className="font-display text-5xl md:text-6xl mt-6 mb-4 tracking-tightest leading-[0.98]">
-            Four steps,
+            <span data-builder-field="process.titlePrimary">Four steps,</span>
             <br />
             <span className="font-serif italic font-normal text-muted">
-              nothing hidden.
+              <span data-builder-field="process.titleAccent">nothing hidden.</span>
             </span>
           </h2>
-          <p className="text-muted text-lg">
+          <p data-builder-field="process.description" className="text-muted text-lg">
             From the first call to a working system. No surprises, no vendor
             traps.
           </p>
@@ -1272,9 +1273,9 @@ function ProcessTimeline() {
                   Step {s.no}
                 </div>
                 <div className="font-display text-2xl md:text-[26px] font-semibold text-ink mb-3 leading-tight tracking-tightest">
-                  {s.title}
+                  <span data-builder-field={`process.steps.${i}.title`}>{s.title}</span>
                 </div>
-                <p className="text-muted text-sm leading-relaxed">{s.copy}</p>
+                <p data-builder-field={`process.steps.${i}.description`} className="text-muted text-sm leading-relaxed">{s.copy}</p>
               </div>
             ))}
           </div>
@@ -1341,13 +1342,13 @@ function ContactDock() {
             ╱ 07 · Get in touch
           </span>
           <h2 className="font-display text-5xl md:text-7xl mt-6 mb-8 tracking-tightest leading-[0.94]">
-            Bring us a
+            <span data-builder-field="contact.titlePrimary">Bring us a</span>
             <br />
-            <span className="font-serif italic font-normal text-white/60">
+            <span data-builder-field="contact.titleAccent" className="font-serif italic font-normal text-white/60">
               problem worth solving.
             </span>
           </h2>
-          <p className="text-white/70 text-lg max-w-xl mb-10">
+          <p data-builder-field="contact.description" className="text-white/70 text-lg max-w-xl mb-10">
             Every engagement starts with a free discovery call. Tell us where
             you're stuck and we'll tell you honestly whether we're the right
             fit.
@@ -1355,13 +1356,14 @@ function ContactDock() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-lg mb-10">
             <a
+              data-builder-link="contact.email"
               href={`mailto:${BRAND.email}`}
               className="btn-primary justify-center"
             >
-              <Mail size={16} /> Email us
+              <Mail size={16} /> <span data-builder-field="contact.email">{BRAND.email}</span>
             </a>
             <a href="#products" className="btn-ghost justify-center">
-              <Sparkles size={16} /> See products
+              <Sparkles size={16} /> <span data-builder-field="contact.secondaryCta">See products</span>
             </a>
           </div>
 
@@ -1386,20 +1388,20 @@ function ContactDock() {
 
         <div className="lg:col-span-5">
           <div className="panel-dark p-8 md:p-10">
-            <h3 className="font-display text-2xl font-semibold text-white mb-6">
+            <h3 data-builder-field="contact.panelHeading" className="font-display text-2xl font-semibold text-white mb-6">
               How to reach us
             </h3>
             <div className="space-y-5">
               <ContactRow Icon={Mail} label="Email">
-                <a href={`mailto:${BRAND.email}`} className="break-all">
+                <a data-builder-field="contact.email" data-builder-link="contact.email" href={`mailto:${BRAND.email}`} className="break-all">
                   {BRAND.email}
                 </a>
               </ContactRow>
               <ContactRow Icon={MapPin} label="Based">
-                {BRAND.city}, NL · Working remotely across NL / EU
+                <span data-builder-field="contact.city">{BRAND.city}, NL · Working remotely across NL / EU</span>
               </ContactRow>
               <ContactRow Icon={Radio} label="Ops surface">
-                Discord ops channel — invite on request
+                <span data-builder-field="contact.opsSurface">Discord ops channel — invite on request</span>
               </ContactRow>
             </div>
 
@@ -1449,7 +1451,7 @@ function ContactRow({ Icon, label, children }) {
 
 function ColophonFooter() {
   return (
-    <footer className="bg-deeper text-white/60 py-16 px-6 md:px-10 border-t border-white/5">
+    <footer id="footer" className="bg-deeper text-white/60 py-16 px-6 md:px-10 border-t border-white/5">
       <div className="max-w-[1400px] mx-auto">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-14">
           <div className="col-span-2 md:col-span-1">
@@ -1457,11 +1459,11 @@ function ColophonFooter() {
               <span className="w-8 h-8 rounded-lg bg-primary text-ink flex items-center justify-center">
                 <Zap size={16} strokeWidth={2.6} />
               </span>
-              <span className="font-display text-white font-semibold">
+              <span data-builder-field="footer.brand" className="font-display text-white font-semibold">
                 VBJ Services
               </span>
             </div>
-            <p className="text-sm max-w-xs leading-relaxed">
+            <p data-builder-field="footer.description" className="text-sm max-w-xs leading-relaxed">
               {BRAND.byline}. Built from a Mac mini in {BRAND.city}.
             </p>
           </div>

@@ -145,8 +145,10 @@ test('summarizeOpsEvents aggregates workflow, transcription, approval, and execu
   assert.equal(summary.approvalsApproved, 1);
   assert.equal(summary.approvalsRejected, 0);
   assert.equal(summary.automationApprovalsResolved, 1);
-  assert.equal(summary.avgApprovalWaitMs, 120000);
-  assert.equal(summary.p95ApprovalWaitMs, 120000);
+  assert.equal(summary.avgApprovalWaitMs, 1860000);
+  assert.equal(summary.p95ApprovalWaitMs, 3600000);
+  assert.equal(summary.avgHumanApprovalWaitMs, 120000);
+  assert.equal(summary.avgAutomationApprovalWaitMs, 3600000);
   assert.equal(summary.executionsCompleted, 2);
   assert.equal(summary.executionsFailed, 0);
   assert.equal(summary.githubCiObserved, 2);
@@ -200,7 +202,7 @@ test('summarizeOpsEvents separates workflow events from health-monitor per-check
   ];
   const summary = summarizeOpsEvents(noisyEvents, { now, windowHours: 24 });
   assert.equal(summary.totalEvents, 7);
-  assert.equal(summary.workflowEvents, 4);
+  assert.equal(summary.workflowEvents, 3);
   assert.equal(summary.healthMonitorRuns, 1);
   assert.equal(summary.healthMonitorCheckEvents, 3);
   assert.equal(summary.opsToolEvents, 3);
@@ -252,6 +254,45 @@ test('summarizeOpsEvents ignores stale queued and running tasks from before the 
   assert.equal(summary.oldestRunningMs, 0);
 });
 
+test('summarizeOpsEvents recovers scheduled sync approval latency from persisted task state', () => {
+  const now = '2026-07-17T13:00:00.000Z';
+  const events = [
+    {
+      timestamp: '2026-07-17T12:00:03.818Z',
+      type: 'mac_sync_watch_request_created',
+      payload: { taskId: 'TASK-SYNC' },
+    },
+    {
+      timestamp: '2026-07-17T12:18:48.000Z',
+      type: 'approval_decision_received',
+      payload: { taskId: 'TASK-SYNC', decision: 'approve', approvalWaitMs: 0 },
+    },
+    {
+      timestamp: '2026-07-17T12:18:49.000Z',
+      type: 'task_state_changed',
+      payload: {
+        taskId: 'TASK-SYNC',
+        status: 'approved',
+        approvalWaitMs: 1126329,
+        sourceType: 'scheduled_sync_watch',
+      },
+    },
+    {
+      timestamp: '2026-07-17T12:18:50.000Z',
+      type: 'task_state_changed',
+      payload: { taskId: 'TASK-SYNC', status: 'running', queueDwellMs: 1127236 },
+    },
+  ];
+
+  const summary = summarizeOpsEvents(events, { now, windowHours: 24 });
+
+  assert.equal(summary.automationApprovalsResolved, 1);
+  assert.equal(summary.avgApprovalWaitMs, 1126329);
+  assert.equal(summary.avgHumanApprovalWaitMs, 0);
+  assert.equal(summary.avgAutomationApprovalWaitMs, 1126329);
+  assert.equal(summary.avgPostApprovalQueueWaitMs, 1000);
+});
+
 test('formatDailySummary renders a human-readable digest', () => {
   const content = formatDailySummary({
     windowHours: 24,
@@ -276,11 +317,14 @@ test('formatDailySummary renders a human-readable digest', () => {
     avgTranscriptionConfidence: 0.88,
     avgApprovalWaitMs: 125000,
     p95ApprovalWaitMs: 240000,
+    avgHumanApprovalWaitMs: 90000,
+    avgAutomationApprovalWaitMs: 180000,
     oldestAwaitingApprovalMs: 240000,
     staleInterruptedTasks: 1,
     oldestQueuedMs: 180000,
     oldestRunningMs: 60000,
     avgQueueDwellMs: 45000,
+    avgPostApprovalQueueWaitMs: 3000,
     executionsCompleted: 2,
     executionsFailed: 1,
     rejectedEvents: 1,
@@ -317,12 +361,15 @@ test('formatDailySummary renders a human-readable digest', () => {
   assert.match(content, /Approvals resolved: 2 \(1 approved, 1 rejected\)/u);
   assert.match(content, /Automation approvals resolved: 1/u);
   assert.match(content, /Awaiting approval now: 1/u);
-  assert.match(content, /Avg approval wait: 2m/u);
+  assert.match(content, /Avg approval wait \(all\): 2m/u);
+  assert.match(content, /Avg human-task approval wait: 2m/u);
+  assert.match(content, /Avg automation approval wait: 3m/u);
   assert.match(content, /Oldest awaiting approval: 4m/u);
   assert.match(content, /Stale interrupted executable tasks: 1/u);
-  assert.match(content, /Avg queue dwell: 45s/u);
+  assert.match(content, /Avg intake-to-execution delay: 45s/u);
+  assert.match(content, /Avg post-approval queue delay: 3s/u);
   assert.match(content, /Avg Mac sync execution: 12s/u);
-  assert.match(content, /Avg approval-to-sync completion: 3m/u);
+  assert.match(content, /Avg sync request-to-completion: 3m/u);
   assert.match(content, /Estimated intake tokens: 240/u);
   assert.match(content, /Avg confidence: 88%/u);
   assert.match(content, /GitHub CI results observed: 4/u);

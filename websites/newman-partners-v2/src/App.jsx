@@ -156,7 +156,7 @@ function MastheadNav() {
             <span className="inline-flex h-7 w-7 items-center justify-center border border-ink">
               <span className="font-serif text-sm leading-none text-ink">N</span>
             </span>
-            <span className="font-serif text-lg leading-none tracking-tight2 text-ink">
+            <span data-builder-field="navigation.brand" className="font-serif text-lg leading-none tracking-tight2 text-ink">
               Newman &amp; Partners
             </span>
           </a>
@@ -174,7 +174,7 @@ function MastheadNav() {
           </nav>
 
           <a href="#contact" className="hidden lg:inline-flex items-center gap-1.5 group">
-            <span className="font-serif italic text-ink">Start a conversation</span>
+             <span data-builder-field="navigation.cta" className="font-serif italic text-ink">Start a conversation</span>
             <ArrowUpRight
               className="h-4 w-4 text-ink transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
               strokeWidth={1.6}
@@ -198,7 +198,7 @@ function MastheadNav() {
       >
         <div className="px-6 pt-6 pb-12 h-full flex flex-col">
           <div className="flex items-center justify-between">
-            <span className="font-serif text-lg">Newman &amp; Partners</span>
+            <span data-builder-field="navigation.brand" className="font-serif text-lg">Newman &amp; Partners</span>
             <button onClick={() => setOpen(false)} className="text-ink">
               <X className="h-5 w-5" />
             </button>
@@ -220,7 +220,7 @@ function MastheadNav() {
             onClick={() => setOpen(false)}
             className="mt-8 inline-flex items-center gap-2 border border-ink text-ink px-6 py-3 self-start"
           >
-            <span className="font-serif italic">Start a conversation</span>
+            <span data-builder-field="navigation.cta" className="font-serif italic">Start a conversation</span>
             <ArrowUpRight className="h-4 w-4" strokeWidth={1.6} />
           </a>
         </div>
@@ -252,13 +252,13 @@ function EditorialHero() {
     <section id="top" ref={ref} className="relative pt-32 pb-0 min-h-[100dvh] flex flex-col">
       <div className="flex-1 max-w-editorial w-full mx-auto px-6 sm:px-12 lg:px-24 grid grid-cols-12 gap-6 lg:gap-10 items-center">
         <div className="col-span-12 lg:col-span-7">
-          <span className="hero-r eyebrow">╱ Amsterdam · Established MMXIII</span>
+          <span data-builder-field="hero.eyebrow" className="hero-r eyebrow">╱ Amsterdam · Established MMXIII</span>
           <h1 className="hero-r mt-6 font-serif font-medium text-[clamp(48px,7.5vw,120px)] leading-[0.98] tracking-tight2 text-ink">
-            <span className="block">Recruitment</span>
-            <span className="block">is all about</span>
-            <span className="block italic">your future.</span>
+            <span data-builder-field="hero.titleLine1" className="block">Recruitment</span>
+            <span data-builder-field="hero.titleLine2" className="block">is all about</span>
+            <span data-builder-field="hero.titleLine3" className="block italic">your future.</span>
           </h1>
-          <p className="hero-r mt-10 font-serif italic text-[clamp(18px,1.4vw,22px)] leading-[1.5] text-muted max-w-md">
+          <p data-builder-field="hero.description" className="hero-r mt-10 font-serif italic text-[clamp(18px,1.4vw,22px)] leading-[1.5] text-muted max-w-md">
             An Amsterdam-based executive-search practice for finance, audit, tax and legal professionals. Human to human, always.
           </p>
         </div>
@@ -266,12 +266,13 @@ function EditorialHero() {
         <div className="col-span-12 lg:col-span-5">
           <div className="hero-r aspect-[3/4] overflow-hidden bg-rule/40">
             <img
+              data-builder-field="hero.imageUrl"
               src="https://images.unsplash.com/photo-1573497019418-b400bb3ab074?auto=format&fit=crop&w=1200&q=80"
               alt=""
               className="w-full h-full object-cover"
             />
           </div>
-          <p className="hero-r caption mt-3 max-w-xs">
+          <p data-builder-field="hero.imageCaption" className="hero-r caption mt-3 max-w-xs">
             Fig. 01 — On the office floor, IJsbaanpad, Amsterdam · Photograph
           </p>
         </div>
@@ -341,11 +342,11 @@ function Manifesto() {
       className={`py-32 sm:py-48 ${active ? 'underline-active' : ''}`}
     >
       <div className="max-w-editorial mx-auto px-6 sm:px-12 lg:px-24">
-        <span className="eyebrow">╱ Manifesto</span>
+        <span data-builder-field="manifesto.eyebrow" className="eyebrow">╱ Manifesto</span>
         <h2 className="mt-8 font-serif italic text-[clamp(40px,6vw,88px)] leading-[1.06] tracking-tight2 text-balance max-w-5xl">
-          We treat every candidate as a colleague. Every brief as a{' '}
+          <span data-builder-field="manifesto.opening">We treat every candidate as a colleague. Every brief as a </span>
           <span className="relative inline-block">
-            conversation
+            <span data-builder-field="manifesto.accent">conversation</span>
             <svg
               className="absolute left-0 -bottom-2 w-full h-2.5"
               viewBox="0 0 200 8"
@@ -361,7 +362,7 @@ function Manifesto() {
               />
             </svg>
           </span>
-          {' '}— not a transaction.
+          <span data-builder-field="manifesto.ending"> — not a transaction.</span>
         </h2>
       </div>
     </section>
@@ -403,7 +404,7 @@ function FeatureSplits() {
             <div className="max-w-editorial mx-auto px-6 sm:px-12 lg:px-24 grid grid-cols-12 gap-6 lg:gap-10 items-center">
               <div className={`split-img col-span-12 lg:col-span-6 ${flipped ? 'lg:col-start-7 lg:order-2' : ''}`}>
                 <div className="aspect-[4/5] overflow-hidden bg-rule/40">
-                  <img src={f.image} alt={f.caption} loading="lazy" className="w-full h-full object-cover" />
+                  <img data-builder-field={`features.items.${i}.imageUrl`} src={f.image} alt={f.caption} loading="lazy" className="w-full h-full object-cover" />
                 </div>
                 <p className="caption mt-3">
                   Fig. {String(i + 2).padStart(2, '0')} — {f.caption}
@@ -417,12 +418,12 @@ function FeatureSplits() {
               >
                 <span className="eyebrow">Feature {String(i + 1).padStart(2, '0')}</span>
                 <h3 className="mt-4 font-serif font-medium text-[clamp(28px,3.5vw,48px)] leading-[1.05] tracking-tight2 text-ink">
-                  {f.heading}
+                    <span data-builder-field={`features.items.${i}.title`}>{f.heading}</span>
                 </h3>
                 <p className="mt-3 font-serif italic text-[clamp(20px,1.8vw,26px)] text-muted">
-                  {f.sub}
+                    <span data-builder-field={`features.items.${i}.subtitle`}>{f.sub}</span>
                 </p>
-                <p className="mt-8 font-serif text-[17px] leading-[1.6] max-w-md text-ink/85">
+                  <p data-builder-field={`features.items.${i}.description`} className="mt-8 font-serif text-[17px] leading-[1.6] max-w-md text-ink/85">
                   {f.body}
                 </p>
                 <p className="mt-10 eyebrow">{f.meta}</p>
@@ -444,12 +445,12 @@ function IndexList() {
       <div className="max-w-editorial mx-auto px-6 sm:px-12 lg:px-24">
         <div className="flex items-end justify-between gap-8">
           <div>
-            <span className="eyebrow">╱ Index</span>
-            <h2 className="mt-6 font-serif font-medium text-[clamp(40px,5vw,72px)] leading-[1.02] tracking-tight2 text-ink">
+            <span data-builder-field="services.eyebrow" className="eyebrow">╱ Index</span>
+            <h2 data-builder-field="services.heading" className="mt-6 font-serif font-medium text-[clamp(40px,5vw,72px)] leading-[1.02] tracking-tight2 text-ink">
               Practice areas
             </h2>
           </div>
-          <p className="hidden sm:block font-serif italic text-lg text-muted max-w-xs text-right">
+          <p data-builder-field="services.description" className="hidden sm:block font-serif italic text-lg text-muted max-w-xs text-right">
             Six focused verticals — every consultant works one deeply.
           </p>
         </div>
@@ -466,7 +467,7 @@ function IndexList() {
                 </span>
                 <div>
                   <div className="relative inline-block">
-                    <span className="font-serif text-2xl sm:text-[32px] text-ink">
+                    <span data-builder-field={`services.items.${i}.title`} className="font-serif text-2xl sm:text-[32px] text-ink">
                       {s.title}
                     </span>
                     <svg
@@ -484,7 +485,7 @@ function IndexList() {
                       />
                     </svg>
                   </div>
-                  <p className="mt-1 font-serif italic text-base sm:text-lg text-muted max-w-lg">
+                  <p data-builder-field={`services.items.${i}.description`} className="mt-1 font-serif italic text-base sm:text-lg text-muted max-w-lg">
                     {s.sub}
                   </p>
                 </div>
@@ -505,21 +506,21 @@ function IndexList() {
 ---------------------------------------------------------------- */
 function Testimonial() {
   return (
-    <section className="py-32 sm:py-48">
+    <section id="testimonial" className="py-32 sm:py-48">
       <div className="max-w-4xl mx-auto px-6 sm:px-12 lg:px-24">
-        <span className="eyebrow block text-center">╱ Testimonial</span>
+        <span data-builder-field="testimonial.eyebrow" className="eyebrow block text-center">╱ Testimonial</span>
         <div className="mt-10 text-center">
           <span className="font-serif italic text-[7rem] sm:text-[10rem] text-muted leading-none block">
             &ldquo;
           </span>
-          <p className="mt-0 font-serif italic text-[clamp(24px,3vw,40px)] leading-[1.35] text-balance text-ink">
+          <p data-builder-field="testimonial.quote" className="mt-0 font-serif italic text-[clamp(24px,3vw,40px)] leading-[1.35] text-balance text-ink">
             What distinguished Newman &amp; Partners from others was their personalised
             approach — they truly grasped my needs and dedicated themselves to helping me
             uncover the perfect fit.
           </p>
           <div className="mt-12 flex items-center justify-center gap-3">
             <span className="h-2 w-2 rounded-full bg-[color:var(--accent)]" />
-            <p className="font-mono text-[11px] uppercase tracking-wide28 text-muted">
+            <p data-builder-field="testimonial.author" className="font-mono text-[11px] uppercase tracking-wide28 text-muted">
               Rik Kramer RA · Audit Partner
             </p>
           </div>
@@ -539,6 +540,7 @@ function CTABanner() {
       className="relative min-h-[70vh] flex items-center justify-center overflow-hidden py-24"
     >
       <img
+        data-builder-field="contact.imageUrl"
         src="https://images.unsplash.com/photo-1512470876302-972faa2aa9a4?auto=format&fit=crop&w=2000&q=80"
         alt=""
         className="absolute inset-0 w-full h-full object-cover"
@@ -546,20 +548,23 @@ function CTABanner() {
       />
       <div className="absolute inset-0 bg-ink/15" />
       <div className="relative bg-paper py-14 sm:py-16 px-8 sm:px-14 max-w-[720px] w-[90%] mx-auto border-t-2 border-b-2 border-[color:var(--accent)] text-center">
-        <span className="eyebrow">╱ Begin</span>
-        <p className="mt-6 font-serif italic text-[clamp(26px,3.5vw,44px)] leading-[1.18] text-balance text-ink">
+        <span data-builder-field="contact.eyebrow" className="eyebrow">╱ Begin</span>
+        <p data-builder-field="contact.heading" className="mt-6 font-serif italic text-[clamp(26px,3.5vw,44px)] leading-[1.18] text-balance text-ink">
           Whether you&rsquo;re hiring or exploring your next move&nbsp;—<br className="hidden sm:inline" />
           come and talk to us.
         </p>
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <a
+            data-builder-link="contact.email"
             href="mailto:jasper@newmanpartners.nl"
             className="inline-flex items-center gap-2 border border-ink text-ink px-6 py-3 hover:bg-ink hover:text-paper transition-colors duration-500"
           >
-            <span className="font-serif italic">Write to us</span>
+            <span data-builder-field="contact.email" className="font-serif italic">jasper@newmanpartners.nl</span>
             <ArrowUpRight className="h-4 w-4" strokeWidth={1.6} />
           </a>
           <a
+            data-builder-field="contact.phone"
+            data-builder-link="contact.phone"
             href="tel:+31627518019"
             className="font-mono text-[11px] uppercase tracking-wide28 text-muted hover:text-ink"
           >
@@ -576,7 +581,7 @@ function CTABanner() {
 ---------------------------------------------------------------- */
 function ColophonFooter() {
   return (
-    <footer className="border-t border-rule pt-20 sm:pt-24 pb-12 bg-paper">
+    <footer id="footer" className="border-t border-rule pt-20 sm:pt-24 pb-12 bg-paper">
       <div className="max-w-editorial mx-auto px-6 sm:px-12 lg:px-24">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           <div className="lg:col-span-5">
@@ -584,12 +589,12 @@ function ColophonFooter() {
               <span className="inline-flex h-7 w-7 items-center justify-center border border-ink">
                 <span className="font-serif text-sm leading-none text-ink">N</span>
               </span>
-              <span className="font-serif text-lg leading-none">Newman &amp; Partners</span>
+              <span data-builder-field="footer.brand" className="font-serif text-lg leading-none">Newman &amp; Partners</span>
             </div>
-            <p className="font-serif italic text-xl text-muted mt-3 max-w-sm">
+            <p data-builder-field="footer.tagline" className="font-serif italic text-xl text-muted mt-3 max-w-sm">
               Recruitment is all about your future.
             </p>
-            <p className="mt-6 font-serif text-[15px] leading-[1.6] max-w-sm text-ink/80">
+            <p data-builder-field="footer.description" className="mt-6 font-serif text-[15px] leading-[1.6] max-w-sm text-ink/80">
               An Amsterdam-based executive-search practice for finance, audit, tax and legal
               professionals. Established 2013 · Founded and run by Jasper Newman.
             </p>
@@ -603,6 +608,8 @@ function ColophonFooter() {
             <ul className="mt-5 space-y-3 text-[15px]">
               <li>
                 <a
+                  data-builder-field="contact.phone"
+                  data-builder-link="contact.phone"
                   href="tel:+31627518019"
                   className="font-mono text-ink hover:text-[color:var(--accent)] transition-colors"
                 >
@@ -611,13 +618,15 @@ function ColophonFooter() {
               </li>
               <li>
                 <a
+                  data-builder-field="contact.email"
+                  data-builder-link="contact.email"
                   href="mailto:jasper@newmanpartners.nl"
                   className="font-mono text-ink hover:text-[color:var(--accent)] transition-colors break-all"
                 >
                   jasper@newmanpartners.nl
                 </a>
               </li>
-              <li className="font-serif text-ink/80 leading-[1.5]">
+              <li data-builder-field="contact.address" className="font-serif text-ink/80 leading-[1.5]">
                 IJsbaanpad 2<br />1076 CV Amsterdam
               </li>
             </ul>

@@ -30,6 +30,15 @@
 
   body.website-builder-editor-mode .main-stage {
     height: auto;
+    overflow: visible;
+  }
+
+  body.website-builder-editor-mode #preview-stage {
+    overflow: visible;
+  }
+
+  body.website-builder-editor-mode #preview-frame {
+    height: auto;
   }
 
   body.website-builder-editor-mode #editor-panel {
