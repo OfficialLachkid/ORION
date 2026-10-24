@@ -53,6 +53,26 @@ export const BENCHMARK_FIXTURES = Object.freeze([
   },
 ]);
 
+export const PHOTOREALISTIC_BENCHMARK_FIXTURES = Object.freeze([
+  {
+    id: 'photorealistic-field-engineer',
+    label: 'Photorealistic field engineer and exploration rover',
+    seed: 22301,
+    prompt: [
+      'Ultra-photorealistic cinematic editorial photograph of an adult field engineer beside a weathered futuristic exploration rover in a misty Icelandic volcanic valley at sunrise.',
+      'The engineer is naturally posed while adjusting a brushed-metal scientific instrument with both hands fully visible; preserve realistic human anatomy, facial proportions, skin pores, individual hair strands, and detailed fabric weave.',
+      'Render physically plausible warm sunrise light, cool atmospheric haze, wet basalt, fine water droplets, subtle lens depth, natural color grading, and convincing metal, glass, rubber, and textile materials.',
+      'Shot on a full-frame camera with a 50mm lens at f/2.8, documentary composition, crisp focal subject, realistic depth of field, extremely detailed but not oversharpened.',
+      'No illustration, painting, anime, pixel art, stylized game art, obvious CGI, plastic skin, extra fingers, malformed hands, duplicate people, text, logo, border, or watermark.',
+    ].join(' '),
+  },
+]);
+
+export const BENCHMARK_PROFILES = Object.freeze({
+  assets: BENCHMARK_FIXTURES,
+  photorealistic: PHOTOREALISTIC_BENCHMARK_FIXTURES,
+});
+
 function parseModels(argv) {
   const optionIndex = argv.indexOf('--models');
   const supplied = optionIndex >= 0 ? String(argv[optionIndex + 1] || '') : '';
@@ -63,6 +83,15 @@ function parseModels(argv) {
     throw new Error('The benchmark requires exactly two distinct comma-separated models.');
   }
   return models;
+}
+
+export function parseBenchmarkProfile(argv) {
+  const optionIndex = argv.indexOf('--profile');
+  const profile = optionIndex >= 0 ? String(argv[optionIndex + 1] || '') : 'assets';
+  if (!Object.hasOwn(BENCHMARK_PROFILES, profile)) {
+    throw new Error(`Unknown benchmark profile ${profile || '(empty)'}. Expected one of: ${Object.keys(BENCHMARK_PROFILES).join(', ')}.`);
+  }
+  return profile;
 }
 
 export function buildCounterbalancedBenchmarkCases(models, fixtures = BENCHMARK_FIXTURES) {
@@ -129,14 +158,14 @@ function progressContent({ cases, completed, current }) {
   ].filter(Boolean).join('\n');
 }
 
-function finalContent(report) {
+function finalContent(report, fixtures) {
   const lines = [
     '**Local image model benchmark complete**',
     `**Benchmark:** \`${report.benchmark_id}\``,
     '**API cost:** **EUR 0** (local execution)',
     '',
   ];
-  for (const fixture of BENCHMARK_FIXTURES) {
+  for (const fixture of fixtures) {
     lines.push(`**${fixture.label}**`);
     for (const result of report.results.filter((entry) => entry.fixture_id === fixture.id)) {
       lines.push(
@@ -160,7 +189,8 @@ export async function runManualImageModelBenchmark(options = {}) {
     projectRoot,
   );
   const models = options.models || DEFAULT_BENCHMARK_MODELS;
-  const cases = buildCounterbalancedBenchmarkCases(models, options.fixtures || BENCHMARK_FIXTURES);
+  const fixtures = options.fixtures || BENCHMARK_FIXTURES;
+  const cases = buildCounterbalancedBenchmarkCases(models, fixtures);
   await ensureManualImageStorage(manualConfig);
   const channel = await ensureManualImageGenerationChannel({
     runtimeConfig,
@@ -190,6 +220,7 @@ export async function runManualImageModelBenchmark(options = {}) {
     channel_id: channel.channel.id,
     discord_message_id: status.id,
     models,
+    profile: options.profile || 'assets',
     controls: {
       width: 1024,
       height: 1024,
@@ -312,7 +343,7 @@ export async function runManualImageModelBenchmark(options = {}) {
   await sendMessageWithFiles(
     runtimeConfig.env.DISCORD_BOT_TOKEN,
     channel.channel.id,
-    { content: finalContent(report) },
+    { content: finalContent(report, fixtures) },
     files,
     { messageId: status.id, fetchImpl: options.fetchImpl },
   );
@@ -321,7 +352,13 @@ export async function runManualImageModelBenchmark(options = {}) {
 
 const isDirectInvocation = import.meta.url === `file://${process.argv[1]}`;
 if (isDirectInvocation) {
-  runManualImageModelBenchmark({ models: parseModels(process.argv.slice(2)) })
+  const argv = process.argv.slice(2);
+  const profile = parseBenchmarkProfile(argv);
+  runManualImageModelBenchmark({
+    models: parseModels(argv),
+    profile,
+    fixtures: BENCHMARK_PROFILES[profile],
+  })
     .then((report) => process.stdout.write(`${JSON.stringify(report, null, 2)}\n`))
     .catch((error) => {
       process.stderr.write(`${error.stack || error.message || error}\n`);

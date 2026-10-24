@@ -86,6 +86,13 @@ Compare two installed local image models under the same production controls:
 npm run manual-images:benchmark
 ```
 
+Use the controlled photorealistic profile to compare the same camera scene, seed,
+resolution, steps, and negative prompt across both configured models:
+
+```bash
+npm run manual-images:benchmark -- --profile photorealistic
+```
+
 The default comparison is `x/flux2-klein:4b` against `x/flux2-klein:4b-fp8`. Two difficult fixtures are generated with identical per-fixture prompts, seeds, dimensions, steps, and negative prompt. Model order is counterbalanced across the fixtures. The shared generation lock prevents overlap with another ORION generation job.
 
-Raw images, processed output, timings, hashes, and transparency diagnostics are retained under the T7 manual-image benchmark directory. The existing message in `#manual-image-generation` is updated with all four labeled outputs and timing results.
+Raw images, processed output, timings, hashes, and transparency diagnostics are retained under the T7 manual-image benchmark directory. The existing message in `#manual-image-generation` is updated with every labeled output and its timing results.
