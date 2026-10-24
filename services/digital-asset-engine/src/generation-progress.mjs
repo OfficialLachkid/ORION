@@ -43,6 +43,8 @@ export function buildGenerationProgressEmbed(product, progress, now = new Date()
     ? `**${Math.min(total, completed + 1)}/${total}** - ${progress.current_asset_name}`
     : progress.state === 'packaging'
       ? 'Packaging previews and review receipts'
+      : progress.state === 'waiting_for_resources'
+        ? `Waiting for the shared local image slot; automatic retry **${progress.resource_wait_count || 1}** is queued`
       : progress.state === 'failed'
         ? 'Generation stopped safely'
         : completed >= total
@@ -50,7 +52,9 @@ export function buildGenerationProgressEmbed(product, progress, now = new Date()
           : 'Preparing local generation';
   return {
     title: `${product.title} - Generation Progress`,
-    description: 'ORION is generating this pack locally. Completed assets appear in the attached thread as soon as they pass validation.',
+    description: progress.state === 'waiting_for_resources'
+      ? 'This approved job is safely queued behind another local generation. It will resume automatically and keep the same package channel, thread, and manifest-bound job.'
+      : 'ORION is generating this pack locally. Completed assets appear in the attached thread as soon as they pass validation.',
     color: progress.state === 'failed' ? 0xed4245 : PROGRESS_COLOR,
     fields: [
       { name: 'State', value: `\`${progress.state || 'generating'}\``, inline: true },
@@ -227,6 +231,12 @@ export async function updateDigitalAssetGenerationProgress(options) {
     state.asset_messages[asset.asset_id] = existingMessageId || message.id;
   } else if (event.type === 'packaging_started' || event.type === 'assets_completed') {
     nextProgress.state = 'packaging';
+    nextProgress.current_asset_id = null;
+    nextProgress.current_asset_name = '';
+  } else if (event.type === 'waiting_for_resources') {
+    nextProgress.state = 'waiting_for_resources';
+    nextProgress.resource_wait_count = Number(event.waitCount || 1);
+    nextProgress.next_retry_at = event.retryAt || null;
     nextProgress.current_asset_id = null;
     nextProgress.current_asset_name = '';
   } else if (event.type === 'failed') {

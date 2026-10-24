@@ -115,3 +115,20 @@ test('generation progress displays a dynamic completed over total count', () => 
   assert.equal(embed.fields.find((field) => field.name === 'Elapsed').value, '**2m 5s**');
   assert.match(embed.fields.find((field) => field.name === 'Current step').value, /4\/13/u);
 });
+
+test('generation overview explains automatic resource waiting without showing failure', () => {
+  const embed = buildGenerationProgressEmbed(
+    { title: 'Space Station Essentials', assets: Array.from({ length: 16 }, (_, index) => ({ asset_id: `asset-${index}` })) },
+    {
+      state: 'waiting_for_resources',
+      started_at: '2026-10-24T16:00:00.000Z',
+      completed_asset_ids: [],
+      total_count: 16,
+      resource_wait_count: 2,
+    },
+    new Date('2026-10-24T16:01:00.000Z'),
+  );
+  assert.match(embed.description, /resume automatically/iu);
+  assert.match(embed.fields.find((field) => field.name === 'Current step').value, /retry \*\*2\*\*/u);
+  assert.equal(embed.fields.find((field) => field.name === 'State').value, '`waiting_for_resources`');
+});

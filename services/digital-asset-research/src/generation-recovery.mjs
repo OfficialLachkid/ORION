@@ -17,6 +17,12 @@ function defaultProcessAlive(pid) {
   }
 }
 
+function wasResourceBusy(job) {
+  const detail = `${job?.wait_reason || ''}\n${job?.error || ''}`;
+  return /Another digital-asset generation job holds/iu.test(detail)
+    || /RUNTIME_RESOURCE_BUSY/iu.test(detail);
+}
+
 export async function recoverResearchGenerationJobs(options) {
   const archiveRoot = String(options.archiveRoot || '').trim();
   if (!archiveRoot) return { scanned: 0, recovered: [], active: [], skipped: [] };
@@ -34,15 +40,16 @@ export async function recoverResearchGenerationJobs(options) {
   for (const filename of filenames) {
     const path = resolve(jobsRoot, filename);
     const job = JSON.parse(await readFile(path, 'utf8'));
-    if (job.status === 'completed' || job.status === 'failed') {
+    if (job.status === 'completed' || (job.status === 'failed' && !wasResourceBusy(job))) {
       report.skipped.push({ job_id: job.job_id, status: job.status });
       continue;
     }
-    if (job.status === 'running' && processAlive(Number(job.worker_pid))) {
+    if (['running', 'waiting_for_resources'].includes(job.status)
+      && processAlive(Number(job.worker_pid))) {
       report.active.push({ job_id: job.job_id, worker_pid: Number(job.worker_pid) });
       continue;
     }
-    if (job.status !== 'queued' && job.status !== 'running') {
+    if (!['queued', 'running', 'waiting_for_resources', 'failed'].includes(job.status)) {
       report.skipped.push({ job_id: job.job_id, status: job.status || 'unknown' });
       continue;
     }
@@ -53,6 +60,14 @@ export async function recoverResearchGenerationJobs(options) {
       worker_pid: null,
       recovery_count: Number(job.recovery_count || 0) + 1,
       recovered_at: recoveredAt,
+      completed_at: null,
+      error: null,
+      next_retry_at: null,
+      ...(wasResourceBusy(job) ? {
+        resource_wait_started_at: job.resource_wait_started_at || job.started_at || recoveredAt,
+        resource_wait_count: Math.max(1, Number(job.resource_wait_count || 0)),
+        last_resource_wait_error: String(job.wait_reason || job.error || '').slice(0, 8000),
+      } : {}),
       ...(job.status === 'running' ? { interrupted_at: recoveredAt } : {}),
     };
     await writeJsonAtomic(path, recoveredJob);

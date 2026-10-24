@@ -56,6 +56,8 @@ The worker runs this bounded chain:
 
 Each job stores its worker PID and per-asset product state on the T7. When the Discord runtime starts, it scans queued and interrupted research-generation jobs. A live worker is left alone; a queued job or a `running` job whose worker no longer exists is requeued and resumed. Previously validated assets are hash-checked and reused instead of being regenerated.
 
+The image model and generation lock are shared with manual image requests. If that slot is occupied, an approved research job moves to `waiting_for_resources` instead of failing. Its existing Discord overview shows the wait, the detached worker retries every 30 seconds, and generation resumes with the same approved job as soon as the slot is free. A Mac restart requeues an interrupted wait. Legacy jobs that failed only because of the old untyped lock-contention error are recovered once by the same startup scan; unrelated failures remain terminal.
+
 Creative approval marks the exact manifest as ready for a separate marketplace-setup step. It never doubles as distribution approval.
 
 For an explicit end-to-end test using the existing evidence store, post the labelled magic-pack simulation:
