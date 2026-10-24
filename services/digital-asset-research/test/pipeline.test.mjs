@@ -6,7 +6,9 @@ import { resolve } from 'node:path';
 import {
   analyzeResearchHistory,
   createMagicWorkflowSimulation,
+  createWorkflowSimulation,
   loadExistingProductCatalog,
+  loadWorkflowSimulationFixture,
   runResearchCollection,
 } from '../src/pipeline.mjs';
 import { ResearchRecommendationQualityError } from '../src/ollama-recommendation-adapter.mjs';
@@ -165,6 +167,55 @@ test('magic workflow simulation is clearly labelled and uses stored evidence wit
   assert.deepEqual(updated[0].patch, {
     discord_channel_id: 'channel-1',
     discord_message_id: 'message-1',
+  });
+});
+
+test('fixture-driven workflow simulation preserves the complete pack and enters normal review', async () => {
+  const config = JSON.parse(await readFile(resolve(
+    process.cwd(),
+    'services/digital-asset-research/config.example.json',
+  ), 'utf8'));
+  const fixture = await loadWorkflowSimulationFixture('space-station');
+  const observations = [
+    {
+      run_id: 'run-2', observation_id: '31111111-1111-4111-8111-111111111111',
+      source_id: config.source.id, view_id: 'top-sellers-pixel-art', signal: 'marketplace_rank_proxy',
+      listing_url: 'https://maker.itch.io/sci-fi-props', title: 'Sci-Fi Pixel Props', creator: 'Maker',
+      price_text: '$6.99', summary: 'Space station objects', tags: ['space'], observed_at: '2026-10-23T23:30:00.000Z', rank: 4,
+      evidence_hash: 'c'.repeat(64),
+    },
+    {
+      run_id: 'run-1', observation_id: '41111111-1111-4111-8111-111111111111',
+      source_id: config.source.id, view_id: 'top-sellers-pixel-art', signal: 'marketplace_rank_proxy',
+      listing_url: 'https://maker.itch.io/pixel-objects', title: 'Pixel Objects', creator: 'Maker',
+      price_text: '$4.99', summary: 'Game props', tags: ['prop'], observed_at: '2026-10-22T23:30:00.000Z', rank: 7,
+      evidence_hash: 'd'.repeat(64),
+    },
+  ];
+  const inserted = [];
+  const updated = [];
+  const result = await createWorkflowSimulation({
+    config,
+    fixture,
+    runtimeConfig: {},
+    now: '2026-10-24T16:30:00.000Z',
+    store: {
+      async listRecentObservations() { return observations; },
+      async insertRecommendation(row) { inserted.push(row); },
+      async updateRecommendation(id, patch) { updated.push({ id, patch }); },
+    },
+    postReview: async () => ({ channelId: 'channel-space', messageId: 'message-space' }),
+  });
+
+  assert.equal(result.recommendation.simulation, true);
+  assert.equal(result.recommendation.title, 'Orbital Station Essentials');
+  assert.equal(result.recommendation.opportunity.generation.assets.length, 16);
+  assert.equal(result.recommendation.opportunity.generation.assets[0].asset_key, 'holographic-navigation-table');
+  assert.equal(result.recommendation.opportunity.generation.assets[15].asset_key, 'teleportation-pad');
+  assert.equal(inserted[0].status, 'awaiting_review');
+  assert.deepEqual(updated[0].patch, {
+    discord_channel_id: 'channel-space',
+    discord_message_id: 'message-space',
   });
 });
 

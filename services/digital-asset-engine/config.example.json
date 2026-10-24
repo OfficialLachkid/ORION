@@ -11,7 +11,7 @@
   "generation": {
     "provider": "ollama",
     "endpoint": "http://127.0.0.1:11434",
-    "model": "x/flux2-klein:4b",
+    "model": "x/flux2-klein:4b-fp8",
     "timeout_ms": 1200000,
     "keep_alive": 0,
     "steps": 4,

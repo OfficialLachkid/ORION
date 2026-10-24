@@ -34,7 +34,7 @@ export function resolveManualImageGenerationConfig(runtimeConfig, options = {}) 
     },
     generation: {
       endpoint: env.OLLAMA_URL || 'http://127.0.0.1:11434',
-      model: env.MANUAL_IMAGE_MODEL || env.DIGITAL_ASSET_IMAGE_MODEL || 'x/flux2-klein:4b',
+      model: env.MANUAL_IMAGE_MODEL || env.DIGITAL_ASSET_IMAGE_MODEL || 'x/flux2-klein:4b-fp8',
       timeoutMs: positiveInteger(env.MANUAL_IMAGE_GENERATION_TIMEOUT_MS, 1_200_000, 60 * 60 * 1000),
       negativePrompt: env.MANUAL_IMAGE_NEGATIVE_PROMPT
         || 'low quality, blurry, duplicate subject, accidental text, watermark, logo, cropped subject',

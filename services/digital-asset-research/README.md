@@ -68,6 +68,17 @@ npm run digital-assets:research:simulate-magic -- \
 
 The simulation is visibly labelled in Discord and must not be interpreted as a market conclusion. It proposes eight static assets in **Arcane Relics & Potions** because the static base-asset recipe is production-tested. Generalized spell animation recipes remain a separate future capability.
 
+Reusable operator-requested workflow simulations are fixture-driven. A tracked fixture contains the proposed product and asset contract, while runtime code supplies fresh identifiers, stored evidence references, expiry, Supabase persistence, and the same Discord approval gate used by real research:
+
+```bash
+npm run digital-assets:research:simulate-pack -- \
+  --fixture space-station \
+  --archive-root "/Volumes/T7/O.R.I.O.N. Digital Assets/research" \
+  --runtime-env "/Users/Agent/Workspace/ORION/config/discord/.env"
+```
+
+The command only posts an `awaiting_review` recommendation. It cannot enqueue generation itself. An operator must click **Approve & Queue Generation**, after which the ordinary resumable generation worker owns the job. The bundled `space-station` fixture contains sixteen static base props and is explicitly labelled as a workflow simulation rather than marketplace research.
+
 The primary night shift starts at 01:30 and runs this service first, before qualification, video maintenance, and the final detached lead-generation sweep. There is no separate research LaunchAgent. The phase has a ten-minute ceiling, requires the T7, observes a 23-hour minimum snapshot interval, and defers if image generation, rendering, deployment/sync maintenance, another Ollama job, or another night shift is active. A resource-busy start gets one sequential retry after the awaited maintenance phases and immediately before lead generation; non-resource deferrals are not retried. The 07:00 fallback does not repeat research.
 
 For a guarded manual diagnostic using the same cadence and resource checks:

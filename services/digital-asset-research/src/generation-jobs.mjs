@@ -149,10 +149,20 @@ export async function runResearchGenerationJob(options) {
 
   try {
     const archiveRoot = String(options.runtimeConfig?.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim();
+    const runtimeEndpoint = String(options.runtimeConfig?.env?.OLLAMA_URL || '').trim();
+    const runtimeModel = String(options.runtimeConfig?.env?.DIGITAL_ASSET_IMAGE_MODEL || '').trim();
     const config = await loadEngineConfig(
       options.engineConfigPath || ENGINE_CONFIG,
       projectRoot,
-      archiveRoot ? { output_root: archiveRoot } : {},
+      {
+        ...(archiveRoot ? { output_root: archiveRoot } : {}),
+        ...((runtimeEndpoint || runtimeModel) ? {
+          generation: {
+            ...(runtimeEndpoint ? { endpoint: runtimeEndpoint } : {}),
+            ...(runtimeModel ? { model: runtimeModel } : {}),
+          },
+        } : {}),
+      },
     );
     const outputRoot = resolveOutputRoot(config, projectRoot);
     const generation = await (options.generateProduct || generateDigitalAssetProduct)({

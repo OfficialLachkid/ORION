@@ -122,6 +122,7 @@
     "digital-assets:research": "node services/digital-asset-research/index.mjs collect",
     "digital-assets:research:analyze": "node services/digital-asset-research/index.mjs analyze",
     "digital-assets:research:simulate-magic": "node services/digital-asset-research/index.mjs simulate-magic --workflow-simulation --post-to-discord",
+    "digital-assets:research:simulate-pack": "node services/digital-asset-research/index.mjs simulate-pack --workflow-simulation --post-to-discord",
     "digital-assets:research:run-job": "node services/digital-asset-research/generation-worker.mjs",
     "digital-assets:research:night-shift": "node scripts/run-digital-asset-research-schedule.mjs --max-runtime-minutes 10",
     "digital-assets:research:test": "node --test services/digital-asset-research/test/*.test.mjs scripts/test/digital-asset-research-schedule.test.mjs",
