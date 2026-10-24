@@ -14,7 +14,7 @@ Supported aspect ratios are `1:1`, `16:9`, `9:16`, `3:2`, and `2:3`.
 
 - With an explicit `count`, that number is authoritative. Local planning may decompose the request, but a deterministic same-prompt fallback remains available if the text model is unavailable.
 - Without `count`, local `llama3.1:8b` must infer the smallest useful set. It may return a clarification instead of spending a Flux call.
-- Prompts that request transparency are rendered against a flat chroma background and converted to transparent PNG with broad border-connected cleanup plus strict enclosed-chroma cleanup. This clears negative spaces such as trigger guards and gaps between limbs while retaining subject colors that are meaningfully different from the detected key.
+- Prompts that request transparency are rendered against a flat chroma background and converted to transparent PNG with border-connected spill cleanup plus bounded global chroma cleanup. This matches the production asset processor and clears key-colored negative spaces such as trigger guards and gaps between limbs while retaining subject colors outside the configured key tolerance.
 
 The bot finds or creates `#manual-image-generation` under `DIGITAL ASSETS`. The command can still be invoked from another channel; progress and results stay in that originating channel and mention the requesting operator.
 

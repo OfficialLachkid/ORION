@@ -28,7 +28,7 @@ test('transparent processing removes border chroma and enclosed strong chroma wh
   rgba[accentOffset + 1] = 40;
   rgba[accentOffset + 2] = 170;
   const input = await sharp(rgba, { raw: { width, height, channels: 4 } }).png().toBuffer();
-  const result = await removeConnectedChromaBackground(input, { tolerance: 30 });
+  const result = await removeConnectedChromaBackground(input, { tolerance: 105 });
   const output = await sharp(result.buffer).ensureAlpha().raw().toBuffer();
 
   assert.equal(output[3], 0, 'border chroma becomes transparent');

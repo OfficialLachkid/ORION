@@ -34,7 +34,7 @@ export async function removeConnectedChromaBackground(inputBuffer, options = {})
   };
   const tolerance = Number(options.tolerance ?? 105);
   const threshold = tolerance ** 2;
-  const interiorTolerance = Number(options.interiorTolerance ?? Math.min(tolerance, 48));
+  const interiorTolerance = Number(options.interiorTolerance ?? Math.min(tolerance, 105));
   const interiorThreshold = interiorTolerance ** 2;
   const flatMatches = borders.filter((offset) => distanceSquared(rgba, offset, background) <= threshold).length;
   const flatRatio = flatMatches / Math.max(1, borders.length);
@@ -69,9 +69,9 @@ export async function removeConnectedChromaBackground(inputBuffer, options = {})
   // Border flood-fill deliberately uses a broad tolerance so antialiased spill at
   // the subject edge is removed. Enclosed negative spaces cannot be reached by
   // that flood (trigger guards, chair backs, gaps between legs, and similar
-  // holes), so clear only strong chroma matches globally with a much stricter
-  // threshold. This removes flat key-color islands without erasing ordinary
-  // violet or magenta details that merely resemble the background.
+  // holes), so clear chroma matches globally with a bounded threshold. This
+  // mirrors the production asset processor: colors outside the configured key
+  // tolerance remain artwork, while key-colored islands are always background.
   let removedInteriorPixels = 0;
   for (let pixel = 0; pixel < width * height; pixel += 1) {
     const offset = pixel * 4;
