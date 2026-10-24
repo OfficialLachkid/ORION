@@ -34,6 +34,8 @@ export async function removeConnectedChromaBackground(inputBuffer, options = {})
   };
   const tolerance = Number(options.tolerance ?? 105);
   const threshold = tolerance ** 2;
+  const interiorTolerance = Number(options.interiorTolerance ?? Math.min(tolerance, 105));
+  const interiorThreshold = interiorTolerance ** 2;
   const flatMatches = borders.filter((offset) => distanceSquared(rgba, offset, background) <= threshold).length;
   const flatRatio = flatMatches / Math.max(1, borders.length);
   if (flatRatio < 0.75) {
@@ -44,7 +46,7 @@ export async function removeConnectedChromaBackground(inputBuffer, options = {})
   const queue = [];
   for (const offset of borders) queue.push(offset / 4);
   let cursor = 0;
-  let removedPixels = 0;
+  let removedConnectedPixels = 0;
   while (cursor < queue.length) {
     const pixel = queue[cursor++];
     if (visited[pixel]) continue;
@@ -55,7 +57,7 @@ export async function removeConnectedChromaBackground(inputBuffer, options = {})
     rgba[offset + 1] = 0;
     rgba[offset + 2] = 0;
     rgba[offset + 3] = 0;
-    removedPixels += 1;
+    removedConnectedPixels += 1;
     const x = pixel % width;
     const y = Math.floor(pixel / width);
     if (x > 0) queue.push(pixel - 1);
@@ -63,15 +65,37 @@ export async function removeConnectedChromaBackground(inputBuffer, options = {})
     if (y > 0) queue.push(pixel - width);
     if (y + 1 < height) queue.push(pixel + width);
   }
-  if (removedPixels === 0) throw new Error('Transparent output requested, but no connected background could be removed.');
+
+  // Border flood-fill deliberately uses a broad tolerance so antialiased spill at
+  // the subject edge is removed. Enclosed negative spaces cannot be reached by
+  // that flood (trigger guards, chair backs, gaps between legs, and similar
+  // holes), so clear chroma matches globally with a bounded threshold. This
+  // mirrors the production asset processor: colors outside the configured key
+  // tolerance remain artwork, while key-colored islands are always background.
+  let removedInteriorPixels = 0;
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    const offset = pixel * 4;
+    if (rgba[offset + 3] === 0) continue;
+    if (distanceSquared(rgba, offset, background) > interiorThreshold) continue;
+    rgba[offset] = 0;
+    rgba[offset + 1] = 0;
+    rgba[offset + 2] = 0;
+    rgba[offset + 3] = 0;
+    removedInteriorPixels += 1;
+  }
+  const removedPixels = removedConnectedPixels + removedInteriorPixels;
+  if (removedConnectedPixels === 0) throw new Error('Transparent output requested, but no connected background could be removed.');
   return {
     buffer: await sharp(rgba, { raw: { width, height, channels: 4 } })
       .png({ compressionLevel: 9 })
       .toBuffer(),
     removedPixels,
+    removedConnectedPixels,
+    removedInteriorPixels,
     width,
     height,
     background,
     borderMatchRatio: Number(flatRatio.toFixed(4)),
+    interiorTolerance,
   };
 }

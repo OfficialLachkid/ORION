@@ -14,7 +14,7 @@ Supported aspect ratios are `1:1`, `16:9`, `9:16`, `3:2`, and `2:3`.
 
 - With an explicit `count`, that number is authoritative. Local planning may decompose the request, but a deterministic same-prompt fallback remains available if the text model is unavailable.
 - Without `count`, local `llama3.1:8b` must infer the smallest useful set. It may return a clarification instead of spending a Flux call.
-- Prompts that request transparency are rendered against a flat chroma background and converted to transparent PNG with border-connected removal. This avoids deleting enclosed matching colors inside the subject.
+- Prompts that request transparency are rendered against a flat chroma background and converted to transparent PNG with border-connected spill cleanup plus bounded global chroma cleanup. This matches the production asset processor and clears key-colored negative spaces such as trigger guards and gaps between limbs while retaining subject colors outside the configured key tolerance.
 
 The bot finds or creates `#manual-image-generation` under `DIGITAL ASSETS`. The command can still be invoked from another channel; progress and results stay in that originating channel and mention the requesting operator.
 
@@ -86,6 +86,15 @@ Compare two installed local image models under the same production controls:
 npm run manual-images:benchmark
 ```
 
+Use the controlled photorealistic profile to compare the same camera scene, seed,
+resolution, steps, and realism-specific negative prompt across both configured
+models. This profile retains its complete photographic environment and does not
+run chroma-key transparency processing:
+
+```bash
+npm run manual-images:benchmark -- --profile photorealistic
+```
+
 The default comparison is `x/flux2-klein:4b` against `x/flux2-klein:4b-fp8`. Two difficult fixtures are generated with identical per-fixture prompts, seeds, dimensions, steps, and negative prompt. Model order is counterbalanced across the fixtures. The shared generation lock prevents overlap with another ORION generation job.
 
-Raw images, processed output, timings, hashes, and transparency diagnostics are retained under the T7 manual-image benchmark directory. The existing message in `#manual-image-generation` is updated with all four labeled outputs and timing results.
+Raw images, processed output, timings, hashes, and transparency diagnostics are retained under the T7 manual-image benchmark directory. The existing message in `#manual-image-generation` is updated with every labeled output and its timing results.
