@@ -37,3 +37,39 @@ test('transparent processing removes border chroma and enclosed strong chroma wh
   assert.equal(output[accentOffset + 3], 255, 'distinct magenta subject detail remains opaque');
   assert.equal(result.removedInteriorPixels, 1);
 });
+
+test('transparent processing removes reserved chroma inside holes when the inferred border shade drifted', async () => {
+  const width = 5;
+  const height = 5;
+  const rgba = Buffer.alloc(width * height * 4);
+  for (let pixel = 0; pixel < width * height; pixel += 1) {
+    const offset = pixel * 4;
+    rgba[offset] = 205;
+    rgba[offset + 1] = 100;
+    rgba[offset + 2] = 240;
+    rgba[offset + 3] = 255;
+  }
+  for (let y = 1; y <= 3; y += 1) {
+    for (let x = 1; x <= 3; x += 1) {
+      const offset = ((y * width) + x) * 4;
+      rgba[offset] = 20;
+      rgba[offset + 1] = 100;
+      rgba[offset + 2] = 130;
+    }
+  }
+  const holeOffset = ((2 * width) + 2) * 4;
+  rgba[holeOffset] = 255;
+  rgba[holeOffset + 1] = 0;
+  rgba[holeOffset + 2] = 255;
+  const input = await sharp(rgba, { raw: { width, height, channels: 4 } }).png().toBuffer();
+  const result = await removeConnectedChromaBackground(input, {
+    tolerance: 60,
+    interiorTolerance: 60,
+    chromaKey: '#ff00ff',
+    chromaKeyTolerance: 60,
+  });
+  const output = await sharp(result.buffer).ensureAlpha().raw().toBuffer();
+
+  assert.equal(output[holeOffset + 3], 0, 'reserved chroma becomes transparent despite border hue drift');
+  assert.equal(result.removedReservedChromaPixels, 1);
+});

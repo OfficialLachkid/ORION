@@ -82,7 +82,7 @@ test('Ollama adapter accepts the image field from a non-streaming response', asy
   const body = JSON.parse(requests[1].options.body);
   assert.equal(generated.format, 'png');
   assert.equal(generated.estimated_cost, 0);
-  assert.equal(body.model, 'x/flux2-klein:4b');
+  assert.equal(body.model, 'x/flux2-klein:4b-fp8');
   assert.equal(body.width, 1024);
   assert.equal(body.keep_alive, 0);
 });

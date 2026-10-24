@@ -80,6 +80,32 @@ export const ResearchRecommendationSchema = z.object({
   }
 });
 
+export const WorkflowSimulationFixtureSchema = z.object({
+  schema_version: z.literal('1.0'),
+  simulation_id: Identifier.max(24),
+  preferred_evidence_terms: z.array(z.string().trim().min(1).max(80)).max(8).default([]),
+  action: z.enum(['new_product', 'extend_existing_product']),
+  existing_product_slug: Identifier.nullable().default(null),
+  title: z.string().min(1).max(120),
+  summary: z.string().min(1).max(1000),
+  rationale: z.array(z.string().min(1)).min(1).max(8),
+  confidence: z.number().min(0).max(100),
+  opportunity: ProductOpportunitySchema.omit({
+    opportunity_id: true,
+    status: true,
+    observed_at: true,
+    expires_at: true,
+    evidence: true,
+  }),
+}).superRefine((value, context) => {
+  if (value.action === 'new_product' && value.existing_product_slug !== null) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['existing_product_slug'], message: 'New products cannot name an existing product.' });
+  }
+  if (value.action === 'extend_existing_product' && !value.existing_product_slug) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['existing_product_slug'], message: 'Extensions must name the existing product.' });
+  }
+});
+
 export const ResearchReviewDecisionSchema = z.object({
   recommendation_id: Identifier,
   evidence_hash: Sha256,

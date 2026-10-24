@@ -13,7 +13,10 @@ import {
   ResearchConfigSchema,
   ResearchObservationSchema,
   ResearchRecommendationSchema,
+  WorkflowSimulationFixtureSchema,
 } from './schemas.mjs';
+
+const WORKFLOW_SIMULATION_FIXTURE_ROOT = 'services/digital-asset-research/fixtures';
 
 function wait(milliseconds) {
   return new Promise((resolveWait) => setTimeout(resolveWait, milliseconds));
@@ -26,6 +29,20 @@ export async function loadResearchConfig(path, projectRoot = process.cwd(), over
     ...parsed,
     archive_root: isAbsolute(configuredRoot) ? resolve(configuredRoot) : resolve(projectRoot, configuredRoot),
   };
+}
+
+export async function loadWorkflowSimulationFixture(fixtureId, projectRoot = process.cwd()) {
+  const normalizedId = String(fixtureId || '').trim().toLowerCase();
+  if (!/^[a-z0-9][a-z0-9-]{0,23}$/u.test(normalizedId)) {
+    throw new Error('Workflow simulation fixture id must be a lowercase identifier of at most 24 characters.');
+  }
+  const fixtureRoot = resolve(projectRoot, WORKFLOW_SIMULATION_FIXTURE_ROOT);
+  const fixturePath = resolve(fixtureRoot, `${normalizedId}.json`);
+  const fixture = WorkflowSimulationFixtureSchema.parse(JSON.parse(await readFile(fixturePath, 'utf8')));
+  if (fixture.simulation_id !== normalizedId) {
+    throw new Error(`Workflow simulation fixture id mismatch: expected ${normalizedId}, received ${fixture.simulation_id}.`);
+  }
+  return fixture;
 }
 
 function runArchivePath(config, observedAt, runId) {
@@ -125,6 +142,96 @@ export async function analyzeResearchHistory(options) {
     }
   }
   return { report, recommendation, evidenceHash, discord, analysisIssue };
+}
+
+function selectSimulationEvidence(observations, fixture) {
+  const selected = [];
+  const terms = fixture.preferred_evidence_terms.map((term) => term.toLowerCase());
+  for (const term of terms) {
+    const match = observations.find((row) => {
+      const text = [row.title, row.summary, ...(row.tags || [])].join(' ').toLowerCase();
+      return text.includes(term) && !selected.some((item) => item.observation_id === row.observation_id);
+    });
+    if (match) selected.push(match);
+  }
+  for (const row of observations) {
+    if (selected.length >= 2) break;
+    if (!selected.some((item) => item.observation_id === row.observation_id)) selected.push(row);
+  }
+  if (selected.length < 2) {
+    throw new Error(`The ${fixture.simulation_id} workflow simulation requires at least two stored observations.`);
+  }
+  return selected.slice(0, Math.max(2, Math.min(8, terms.length || 2)));
+}
+
+export function buildWorkflowSimulationRecommendation(fixtureInput, observations, observedAt) {
+  const fixture = WorkflowSimulationFixtureSchema.parse(fixtureInput);
+  const evidence = selectSimulationEvidence(observations, fixture);
+  const expiresAt = new Date(new Date(observedAt).getTime() + (90 * 24 * 60 * 60 * 1000)).toISOString();
+  const stamp = observedAt.replace(/[-:.Z]/gu, '').slice(0, 14).toLowerCase();
+  return ResearchRecommendationSchema.parse({
+    schema_version: '1.0',
+    recommendation_id: `sim-${fixture.simulation_id}-${stamp}`,
+    simulation: true,
+    action: fixture.action,
+    existing_product_slug: fixture.existing_product_slug,
+    title: fixture.title,
+    summary: fixture.summary,
+    rationale: fixture.rationale,
+    confidence: fixture.confidence,
+    evidence_ids: evidence.map((row) => row.observation_id),
+    opportunity: {
+      ...fixture.opportunity,
+      opportunity_id: `simulation-${fixture.simulation_id}-${stamp}`,
+      status: 'validated',
+      observed_at: observedAt,
+      expires_at: expiresAt,
+      evidence: evidence.map((row) => ({
+        label: row.title,
+        source: row.listing_url,
+        observed_at: row.observed_at,
+      })),
+    },
+  });
+}
+
+export async function createWorkflowSimulation(options) {
+  const config = ResearchConfigSchema.parse(options.config);
+  const observedAt = options.now || new Date().toISOString();
+  const fixture = options.fixture || await loadWorkflowSimulationFixture(
+    options.fixtureId,
+    options.projectRoot || process.cwd(),
+  );
+  const store = createStore(options);
+  const recent = await store.listRecentObservations(config.source.id);
+  const report = buildEvidenceReport(recent, config.minimum_snapshots);
+  if (report.snapshot_count < config.minimum_snapshots) {
+    throw new Error(`The workflow simulation requires ${config.minimum_snapshots} completed research snapshots.`);
+  }
+  const recommendation = buildWorkflowSimulationRecommendation(fixture, recent, observedAt);
+  const evidenceHash = researchEvidenceHash(report, recommendation);
+  await store.insertRecommendation({
+    recommendation_id: recommendation.recommendation_id,
+    source_id: config.source.id,
+    evidence_hash: evidenceHash,
+    status: 'awaiting_review',
+    recommendation,
+    evidence_observation_ids: recommendation.evidence_ids,
+    created_at: observedAt,
+  });
+  const discord = await (options.postReview || postResearchReview)({
+    runtimeConfig: options.runtimeConfig,
+    config,
+    report,
+    recommendation,
+    evidenceHash,
+    fetchImpl: options.fetchImpl,
+  });
+  await store.updateRecommendation(recommendation.recommendation_id, {
+    discord_channel_id: discord.channelId,
+    discord_message_id: discord.messageId,
+  });
+  return { report, recommendation, evidenceHash, discord };
 }
 
 function magicSimulationRecommendation(observations, observedAt) {

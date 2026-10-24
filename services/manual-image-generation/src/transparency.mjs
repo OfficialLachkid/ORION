@@ -11,6 +11,16 @@ function distanceSquared(data, offset, color) {
     + ((data[offset + 2] - color.b) ** 2);
 }
 
+function parseHexColor(value) {
+  const match = /^#?([a-f0-9]{2})([a-f0-9]{2})([a-f0-9]{2})$/iu.exec(String(value || ''));
+  if (!match) throw new Error(`Invalid chroma key: ${value}.`);
+  return {
+    r: Number.parseInt(match[1], 16),
+    g: Number.parseInt(match[2], 16),
+    b: Number.parseInt(match[3], 16),
+  };
+}
+
 function borderOffsets(width, height) {
   const offsets = [];
   for (let x = 0; x < width; x += 1) {
@@ -36,6 +46,9 @@ export async function removeConnectedChromaBackground(inputBuffer, options = {})
   const threshold = tolerance ** 2;
   const interiorTolerance = Number(options.interiorTolerance ?? Math.min(tolerance, 105));
   const interiorThreshold = interiorTolerance ** 2;
+  const chromaKey = parseHexColor(options.chromaKey || '#ff00ff');
+  const chromaKeyTolerance = Number(options.chromaKeyTolerance ?? interiorTolerance);
+  const chromaKeyThreshold = chromaKeyTolerance ** 2;
   const flatMatches = borders.filter((offset) => distanceSquared(rgba, offset, background) <= threshold).length;
   const flatRatio = flatMatches / Math.max(1, borders.length);
   if (flatRatio < 0.75) {
@@ -73,15 +86,19 @@ export async function removeConnectedChromaBackground(inputBuffer, options = {})
   // mirrors the production asset processor: colors outside the configured key
   // tolerance remain artwork, while key-colored islands are always background.
   let removedInteriorPixels = 0;
+  let removedReservedChromaPixels = 0;
   for (let pixel = 0; pixel < width * height; pixel += 1) {
     const offset = pixel * 4;
     if (rgba[offset + 3] === 0) continue;
-    if (distanceSquared(rgba, offset, background) > interiorThreshold) continue;
+    const matchesInferredBackground = distanceSquared(rgba, offset, background) <= interiorThreshold;
+    const matchesReservedChroma = distanceSquared(rgba, offset, chromaKey) <= chromaKeyThreshold;
+    if (!matchesInferredBackground && !matchesReservedChroma) continue;
     rgba[offset] = 0;
     rgba[offset + 1] = 0;
     rgba[offset + 2] = 0;
     rgba[offset + 3] = 0;
     removedInteriorPixels += 1;
+    if (matchesReservedChroma) removedReservedChromaPixels += 1;
   }
   const removedPixels = removedConnectedPixels + removedInteriorPixels;
   if (removedConnectedPixels === 0) throw new Error('Transparent output requested, but no connected background could be removed.');
@@ -97,5 +114,8 @@ export async function removeConnectedChromaBackground(inputBuffer, options = {})
     background,
     borderMatchRatio: Number(flatRatio.toFixed(4)),
     interiorTolerance,
+    chromaKey: options.chromaKey || '#ff00ff',
+    chromaKeyTolerance,
+    removedReservedChromaPixels,
   };
 }

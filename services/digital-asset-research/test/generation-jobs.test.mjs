@@ -52,13 +52,17 @@ test('generation worker advances a queued job through package review without mar
   const calls = [];
   const result = await runResearchGenerationJob({
     jobPath: queued.path,
-    runtimeConfig: { env: { DIGITAL_ASSET_ARCHIVE_ROOT: outputRoot } },
+    runtimeConfig: { env: {
+      DIGITAL_ASSET_ARCHIVE_ROOT: outputRoot,
+      DIGITAL_ASSET_IMAGE_MODEL: 'x/flux2-klein:4b-fp8',
+    } },
     projectRoot: process.cwd(),
     now: '2026-10-20T12:01:00.000Z',
     heartbeatIntervalMs: 0,
     updateProgress: async () => null,
-    generateProduct: async () => {
+    generateProduct: async ({ config }) => {
       calls.push('generate');
+      assert.equal(config.generation.model, 'x/flux2-klein:4b-fp8');
       return { product: { product_id: 'product-1', slug: 'test-pack' }, gates: { all_assets_valid: true } };
     },
     packageProduct: async () => {

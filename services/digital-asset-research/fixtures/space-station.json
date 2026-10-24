@@ -1,0 +1,253 @@
+{
+  "schema_version": "1.0",
+  "simulation_id": "space-station",
+  "preferred_evidence_terms": ["space", "sci-fi", "pixel", "prop"],
+  "action": "new_product",
+  "existing_product_slug": null,
+  "title": "Orbital Station Essentials",
+  "summary": "Workflow simulation: create a cohesive pack of sixteen static space-station props, then exercise ORION's normal approval, generation, live Discord progress, packaging, creative review, and marketplace-setup handoff.",
+  "rationale": [
+    "This is an operator-requested workflow test, not an autonomous market conclusion.",
+    "Sixteen visually distinct station props test whether ORION can sustain a coherent palette, perspective, scale language, and transparent export contract across a larger pack.",
+    "The first candidate intentionally validates static base-sprite production; animation and interactive-state upgrades remain a separately reviewed versioned enhancement."
+  ],
+  "confidence": 78,
+  "opportunity": {
+    "schema_version": "1.0",
+    "title": "Orbital Station Essentials",
+    "category": "2D game assets",
+    "product_type": "pixel-art science-fiction space-station prop pack",
+    "theme": "functional near-future orbital station interiors",
+    "target_audience": [
+      "2D science-fiction game developers",
+      "space-station simulation developers",
+      "indie RPG and management-game developers"
+    ],
+    "signals": {
+      "trend_direction": "stable",
+      "demand": "medium",
+      "competition": "medium",
+      "cross_marketplace_evidence": "weak",
+      "confidence": 78
+    },
+    "generation": {
+      "seed": 22200,
+      "medium": "pixel_art",
+      "perspective": "consistent slightly elevated three-quarter game-prop view with readable front faces",
+      "width": 128,
+      "height": 128,
+      "source_width": 1024,
+      "source_height": 1024,
+      "max_palette_colors": 32,
+      "palette": [
+        "#0a1220",
+        "#111d2f",
+        "#1d2d42",
+        "#30455c",
+        "#4d6579",
+        "#71899a",
+        "#9db0bb",
+        "#d8e3e8",
+        "#f4f8f8",
+        "#073f55",
+        "#08748b",
+        "#10b7c9",
+        "#43e5e6",
+        "#b6ffff",
+        "#163f35",
+        "#23856e",
+        "#56d4a7",
+        "#f0b640",
+        "#ffdc6a",
+        "#b74832",
+        "#f27350"
+      ],
+      "outline": "Use a crisp one-to-two-pixel dark navy outline with clean, readable industrial silhouettes",
+      "lighting": "Soft upper-left neutral station lighting with restrained cyan, teal, amber, or warning-red emissive indicators",
+      "background": "transparent",
+      "chroma_key": "#ff00ff",
+      "assets": [
+        {
+          "asset_key": "holographic-navigation-table",
+          "name": "Holographic Navigation Table",
+          "kind": "navigation-console",
+          "description": "A futuristic circular command table projecting a compact glowing three-dimensional star map",
+          "prompt_notes": ["Show one sturdy round table and one contained holographic star-map projection", "No crew, chairs, room, readable text, or loose interface panels"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "alien-specimen-containment-tank",
+          "name": "Alien Specimen Containment Tank",
+          "kind": "laboratory-containment",
+          "description": "A reinforced glass cylinder filled with luminous teal liquid and one original small alien organism",
+          "prompt_notes": ["Keep the organism abstract and non-humanoid with no franchise resemblance", "Show readable glass, metal braces, base controls, and contained bubbles"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "anti-gravity-cargo-platform",
+          "name": "Anti-Gravity Cargo Platform",
+          "kind": "cargo-platform",
+          "description": "A low hovering industrial platform for moving heavy station equipment",
+          "prompt_notes": ["Show one empty platform with lift emitters and subtle downward glow", "No cargo, operator, floor, or cast shadow"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "quantum-communication-terminal",
+          "name": "Quantum Communication Terminal",
+          "kind": "communication-terminal",
+          "description": "A tall secured communication console with several integrated floating holographic screens",
+          "prompt_notes": ["Keep holograms attached visually to the one terminal", "Use abstract diagrams only with no readable text or logos"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "futuristic-vending-machine",
+          "name": "Futuristic Vending Machine",
+          "kind": "vending-machine",
+          "description": "A compact automated station vending machine dispensing sealed space snacks and drinks",
+          "prompt_notes": ["Show small product silhouettes behind glass and a simple illuminated control area", "No brands, readable labels, person, or scenery"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "emergency-spacesuit-locker",
+          "name": "Emergency Spacesuit Locker",
+          "kind": "equipment-locker",
+          "description": "A freestanding emergency locker with its front open enough to reveal one astronaut suit and helmet",
+          "prompt_notes": ["The suit remains stored inside the cabinet and is not a character", "Use an original utilitarian suit design with no agency or franchise marks"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "plasma-battery-unit",
+          "name": "Plasma Battery Unit",
+          "kind": "energy-cell",
+          "description": "A portable armored energy container built around a bright cyan plasma cell",
+          "prompt_notes": ["Readable carry handles, protected core, and charge indicators", "Exactly one battery with no weapon, cable, or scenery"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "space-station-coffee-machine",
+          "name": "Space Station Coffee Machine",
+          "kind": "food-appliance",
+          "description": "A compact automated coffee dispenser designed for a crew galley in microgravity",
+          "prompt_notes": ["Include a secured cup cradle, dispensing nozzle, and illuminated buttons", "No loose liquid, brand, readable text, counter, or room"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "holographic-security-scanner",
+          "name": "Holographic Security Scanner",
+          "kind": "security-scanner",
+          "description": "A walk-through station security arch projecting contained horizontal scanning beams",
+          "prompt_notes": ["Show one empty scanner arch with a readable pass-through opening", "No person, floor, wall, text, or detached equipment"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "robotic-cleaning-station",
+          "name": "Robotic Cleaning Station",
+          "kind": "robot-dock",
+          "description": "A compact docking station housing one small autonomous floor-cleaning robot",
+          "prompt_notes": ["The dock and robot form one coherent asset with the robot visibly seated", "Friendly functional design without a face, logo, floor, or scenery"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "zero-gravity-sleeping-bunk",
+          "name": "Zero-Gravity Sleeping Bunk",
+          "kind": "crew-bunk",
+          "description": "A compact enclosed crew sleeping bunk with safety restraints and integrated personal storage",
+          "prompt_notes": ["Show the bunk as one modular station furniture unit", "No person, bedding clutter, wall, room, readable text, or logo"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "futuristic-weapon-rack",
+          "name": "Futuristic Weapon Rack",
+          "kind": "secured-equipment-rack",
+          "description": "A secured metallic station rack holding several compact original science-fiction laser tools",
+          "prompt_notes": ["Keep every item visibly locked into one rack", "No copied weapon designs, loose weapons, person, wall, readable text, or scenery"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "space-station-aquarium",
+          "name": "Space Station Aquarium",
+          "kind": "aquarium",
+          "description": "A reinforced transparent habitat tank containing small bioluminescent alien aquatic life",
+          "prompt_notes": ["Show one self-contained tank with a sturdy base and restrained internal plants", "Use original abstract aquatic creatures with no room, stand, or readable labels"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "asteroid-sample-analyzer",
+          "name": "Asteroid Sample Analyzer",
+          "kind": "laboratory-analyzer",
+          "description": "A laboratory analysis machine suspending one mineral sample beneath a compact holographic scan",
+          "prompt_notes": ["Keep the sample, scanner, and hologram within one machine silhouette", "Abstract graphs only with no readable text, scientist, desk, or scenery"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "atmospheric-control-unit",
+          "name": "Atmospheric Control Unit",
+          "kind": "life-support-machine",
+          "description": "A vertical station life-support machine with vents, exposed service pipes, and air-quality indicators",
+          "prompt_notes": ["Present as a self-contained equipment module rather than part of a wall", "No readable metrics, room, floor, logo, smoke, or character"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        },
+        {
+          "asset_key": "teleportation-pad",
+          "name": "Teleportation Pad",
+          "kind": "teleport-platform",
+          "description": "A circular station teleportation platform with integrated control panels and contained concentric energy rings",
+          "prompt_notes": ["Show one empty pad and restrained active energy above it", "No person, portal destination, room, floor, text, or extra machinery"],
+          "alpha_mode": "chroma",
+          "alpha_palette": [],
+          "alpha_tolerance": 48
+        }
+      ]
+    },
+    "commercial": {
+      "base_price": {
+        "amount": 6.99,
+        "currency": "USD"
+      },
+      "marketplace_candidates": ["itch.io"]
+    },
+    "risk": {
+      "ip_risk": "low",
+      "prohibited_references": [
+        "existing science-fiction franchises",
+        "recognizable copyrighted equipment or uniforms",
+        "real-world agency and manufacturer logos",
+        "artist signatures"
+      ],
+      "notes": [
+        "Workflow simulation; human creative approval is required before marketplace setup.",
+        "Initial generation produces static base sprites. Interactive states and animations require a later separately reviewed versioned enhancement."
+      ]
+    }
+  }
+}
