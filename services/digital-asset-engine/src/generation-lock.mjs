@@ -10,7 +10,11 @@ async function acquireLock(lockPath) {
     if (error.code !== 'EEXIST') throw error;
     const details = await stat(lockPath);
     if (Date.now() - details.mtimeMs <= STALE_LOCK_MS) {
-      throw new Error(`Another digital-asset generation job holds ${lockPath}.`);
+      const busy = new Error(`Another digital-asset generation job holds ${lockPath}.`);
+      busy.code = 'RUNTIME_RESOURCE_BUSY';
+      busy.resource = 'digital_asset_generation_lock';
+      busy.lockPath = lockPath;
+      throw busy;
     }
     await rm(lockPath, { force: true });
     return open(lockPath, 'wx');

@@ -50,3 +50,56 @@ test('restart recovery does not duplicate a live generation worker', async () =>
   assert.deepEqual(report.active, [{ job_id: 'active-job', worker_pid: 777 }]);
   assert.equal(report.recovered.length, 0);
 });
+
+test('restart recovery resumes resource waits and legacy lock failures only', async () => {
+  const root = await mkdtemp(resolve(tmpdir(), 'orion-generation-resource-recovery-'));
+  const waitingPath = await writeJob(root, 'waiting-job', {
+    job_id: 'waiting-job',
+    status: 'waiting_for_resources',
+    worker_pid: 888,
+    wait_reason: '[RUNTIME_RESOURCE_BUSY] image model occupied',
+    resource_wait_count: 2,
+  });
+  const legacyPath = await writeJob(root, 'legacy-job', {
+    job_id: 'legacy-job',
+    status: 'failed',
+    worker_pid: null,
+    started_at: '2026-10-20T19:00:00.000Z',
+    completed_at: '2026-10-20T19:01:00.000Z',
+    error: 'Error: Another digital-asset generation job holds /tmp/.generation.lock.',
+  });
+  await writeJob(root, 'real-failure', {
+    job_id: 'real-failure',
+    status: 'failed',
+    error: 'Asset validation failed.',
+  });
+  const scheduled = [];
+  const report = await recoverResearchGenerationJobs({
+    archiveRoot: root,
+    now: '2026-10-20T20:00:00.000Z',
+    processAlive: () => false,
+    scheduleJob(path) { scheduled.push(path); return true; },
+  });
+  assert.deepEqual(scheduled.sort(), [legacyPath, waitingPath].sort());
+  assert.equal(report.recovered.length, 2);
+  assert.deepEqual(report.skipped, [{ job_id: 'real-failure', status: 'failed' }]);
+  const legacy = JSON.parse(await readFile(legacyPath, 'utf8'));
+  assert.equal(legacy.status, 'queued');
+  assert.equal(legacy.completed_at, null);
+  assert.equal(legacy.error, null);
+  assert.match(legacy.last_resource_wait_error, /generation job holds/iu);
+});
+
+test('restart recovery leaves a live resource-wait worker alone', async () => {
+  const root = await mkdtemp(resolve(tmpdir(), 'orion-generation-live-wait-'));
+  await writeJob(root, 'waiting-job', {
+    job_id: 'waiting-job', status: 'waiting_for_resources', worker_pid: 999,
+  });
+  const report = await recoverResearchGenerationJobs({
+    archiveRoot: root,
+    processAlive: (pid) => pid === 999,
+    scheduleJob() { throw new Error('must not schedule'); },
+  });
+  assert.deepEqual(report.active, [{ job_id: 'waiting-job', worker_pid: 999 }]);
+  assert.equal(report.recovered.length, 0);
+});

@@ -91,6 +91,21 @@ async function updateResearchMessage(runtimeConfig, job, content, fetchImpl) {
   });
 }
 
+export function isResearchGenerationResourceBusy(error) {
+  return error?.code === 'RUNTIME_RESOURCE_BUSY'
+    || error?.code === 'RESEARCH_GENERATION_RESOURCE_BUSY'
+    || /Another digital-asset generation job holds/iu.test(String(error?.message || error || ''))
+    || /\[RUNTIME_RESOURCE_BUSY\]/iu.test(String(error?.message || error || ''));
+}
+
+function resourceRetryDelayMs(options) {
+  if (options.resourceRetryDelayMs !== undefined) {
+    return Math.max(0, Number(options.resourceRetryDelayMs) || 0);
+  }
+  const seconds = Number(options.runtimeConfig?.env?.DIGITAL_ASSET_GENERATION_RESOURCE_RETRY_SECONDS || 30);
+  return Math.min(300, Math.max(5, Number.isFinite(seconds) ? seconds : 30)) * 1_000;
+}
+
 export async function runResearchGenerationJob(options) {
   const jobPath = resolve(options.jobPath);
   let job = JSON.parse(await readFile(jobPath, 'utf8'));
@@ -98,7 +113,7 @@ export async function runResearchGenerationJob(options) {
     throw new Error('Generation job input hash does not match its approved opportunity.');
   }
   if (job.status === 'completed') return { ...job.result, reused: true };
-  if (!['queued', 'failed'].includes(job.status)) {
+  if (!['queued', 'failed', 'waiting_for_resources'].includes(job.status)) {
     throw new Error(`Generation job is not runnable from status ${job.status}.`);
   }
   const projectRoot = resolve(options.projectRoot || process.cwd());
@@ -107,9 +122,11 @@ export async function runResearchGenerationJob(options) {
     ...job,
     status: 'running',
     attempt: Number(job.attempt || 0) + 1,
-    started_at: now,
+    started_at: job.started_at || now,
     completed_at: null,
     error: null,
+    wait_reason: null,
+    next_retry_at: null,
     worker_pid: process.pid,
   };
   await writeJsonAtomic(jobPath, job);
@@ -224,6 +241,42 @@ export async function runResearchGenerationJob(options) {
     return { ...result, reused: false };
   } catch (error) {
     if (heartbeatTimer) clearInterval(heartbeatTimer);
+    if (isResearchGenerationResourceBusy(error)) {
+      await progressQueue.catch(() => null);
+      const retryDelayMs = resourceRetryDelayMs(options);
+      const deferredAt = new Date().toISOString();
+      job = {
+        ...job,
+        status: 'waiting_for_resources',
+        completed_at: null,
+        error: null,
+        worker_pid: process.pid,
+        resource_wait_started_at: job.resource_wait_started_at || deferredAt,
+        resource_wait_count: Number(job.resource_wait_count || 0) + 1,
+        wait_reason: String(error?.message || error).slice(0, 2000),
+        deferred_at: deferredAt,
+        next_retry_at: new Date(Date.parse(deferredAt) + retryDelayMs).toISOString(),
+      };
+      await writeJsonAtomic(jobPath, job);
+      await enqueueProgress({
+        type: 'waiting_for_resources',
+        retryAt: job.next_retry_at,
+        waitCount: job.resource_wait_count,
+        at: deferredAt,
+      }, { required: false });
+      await progressQueue.catch(() => null);
+      await updateResearchMessage(
+        options.runtimeConfig,
+        job,
+        `Generation is safely waiting for the shared local image slot. ORION will retry automatically in **${Math.ceil(retryDelayMs / 1000)} seconds**; no new approval is needed. No marketplace action occurred.`,
+        options.fetchImpl,
+      ).catch(() => {});
+      const deferred = new Error(String(error?.message || error));
+      deferred.code = 'RESEARCH_GENERATION_RESOURCE_BUSY';
+      deferred.retryAfterMs = retryDelayMs;
+      deferred.jobPath = jobPath;
+      throw deferred;
+    }
     await enqueueProgress({
       type: 'failed',
       error: String(error?.message || error),

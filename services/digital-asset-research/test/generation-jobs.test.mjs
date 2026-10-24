@@ -104,3 +104,49 @@ test('generation worker rejects a job whose approved opportunity was changed on 
     /input hash does not match/iu,
   );
 });
+
+test('generation worker defers resource contention without failing the approved job', async () => {
+  const archiveRoot = await mkdtemp(resolve(tmpdir(), 'orion-generation-wait-'));
+  const outputRoot = await mkdtemp(resolve(tmpdir(), 'orion-generation-wait-products-'));
+  const opportunity = JSON.parse(await readFile(
+    resolve(process.cwd(), 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json'),
+    'utf8',
+  ));
+  const queued = await enqueueResearchGenerationJob({
+    archiveRoot,
+    recommendation: { recommendation_id: 'resource-wait-job', simulation: true, opportunity },
+    evidenceHash: 'f'.repeat(64),
+    queuedAt: '2026-10-20T12:00:00.000Z',
+    queuedByDiscordId: 'operator-1',
+    researchChannelId: 'channel-1',
+    researchMessageId: 'message-1',
+  });
+  const progressEvents = [];
+  await assert.rejects(
+    runResearchGenerationJob({
+      jobPath: queued.path,
+      runtimeConfig: { env: { DIGITAL_ASSET_ARCHIVE_ROOT: outputRoot } },
+      projectRoot: process.cwd(),
+      heartbeatIntervalMs: 0,
+      resourceRetryDelayMs: 1250,
+      updateProgress: async ({ event }) => { progressEvents.push(event.type); },
+      generateProduct: async ({ onProgress }) => {
+        await onProgress({
+          type: 'generation_started',
+          product: { product_id: 'product-wait', slug: 'wait-pack', title: 'Wait Pack', assets: [] },
+        });
+        const error = new Error('Another digital-asset generation job holds /tmp/.generation.lock.');
+        error.code = 'RUNTIME_RESOURCE_BUSY';
+        throw error;
+      },
+    }),
+    (error) => error.code === 'RESEARCH_GENERATION_RESOURCE_BUSY' && error.retryAfterMs === 1250,
+  );
+  const waiting = JSON.parse(await readFile(queued.path, 'utf8'));
+  assert.equal(waiting.status, 'waiting_for_resources');
+  assert.equal(waiting.completed_at, null);
+  assert.equal(waiting.error, null);
+  assert.equal(waiting.resource_wait_count, 1);
+  assert.ok(waiting.next_retry_at);
+  assert.deepEqual(progressEvents, ['generation_started', 'waiting_for_resources']);
+});

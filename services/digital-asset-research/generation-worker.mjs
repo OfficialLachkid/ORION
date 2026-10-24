@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../lib/runtime-config.mjs';
-import { runResearchGenerationJob } from './src/generation-jobs.mjs';
+import { runResearchGenerationWorker } from './src/generation-worker-loop.mjs';
 
 function parseArguments(argv) {
   const args = {};
@@ -16,7 +16,7 @@ function parseArguments(argv) {
 }
 
 const args = parseArguments(process.argv);
-runResearchGenerationJob({
+runResearchGenerationWorker({
   jobPath: args.jobPath,
   runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
   projectRoot,
