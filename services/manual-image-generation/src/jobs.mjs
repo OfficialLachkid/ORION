@@ -13,7 +13,11 @@ import { withGenerationLock } from '../../digital-asset-engine/src/generation-lo
 import { OllamaImageAdapter } from '../../digital-asset-engine/src/ollama-image-adapter.mjs';
 import { assertGenerationResourcesAvailable } from '../../digital-asset-engine/src/resource-preflight.mjs';
 import { createManualImagePlan, ManualImagePlanSchema } from './planner.mjs';
-import { deliverManualImages, updateManualImageStatus } from './discord.mjs';
+import {
+  deliverManualImages,
+  formatManualImagePrompt,
+  updateManualImageStatus,
+} from './discord.mjs';
 import { ensureManualImageStorage } from './config.mjs';
 import { ManualImageRequestSchema } from './request.mjs';
 import { removeConnectedChromaBackground } from './transparency.mjs';
@@ -317,7 +321,7 @@ export async function runManualImageGenerationJob(options) {
       await (options.updateStatus || updateManualImageStatus)({
         runtimeConfig,
         job,
-        content: `<@${job.request.requested_by_discord_id}> ORION needs clarification before generating anything:\n\n${plan.clarification_message}\n\nNo image model call was made.`,
+        content: `<@${job.request.requested_by_discord_id}> ORION needs clarification before generating anything:\n**Prompt:** ${formatManualImagePrompt(job.request.prompt, 500)}\n\n${plan.clarification_message}\n\nNo image model call was made.`,
         fetchImpl: options.fetchImpl,
       });
       return { job, plan, clarificationRequired: true };
@@ -395,8 +399,9 @@ export async function runManualImageGenerationJob(options) {
       job,
       content: [
         `<@${job.request.requested_by_discord_id}> image job \`${job.job_id}\` stopped safely.`,
+        `**Prompt:** ${formatManualImagePrompt(job.request.prompt, 400)}`,
         `**Phase:** ${deliveryFailure ? 'Discord delivery' : 'local generation'}`,
-        `**Error:** ${String(error?.message || error).slice(0, 1200)}`,
+        `**Error:** ${String(error?.message || error).slice(0, 800)}`,
         deliveryFailure
           ? 'The generated files remain on the T7 for retry.'
           : 'Any completed temporary output remains on the T7 for diagnosis.',

@@ -13,6 +13,39 @@ const PlanImageSchema = z.object({
   seed: z.number().int().nonnegative(),
 });
 
+const PRODUCTION_QUALITY_CONSTRAINTS = Object.freeze([
+  'Create a production-ready image with crisp, deliberate shapes, coherent construction, and clearly readable details.',
+  'Preserve every requested subject, state, and spatial relationship; do not silently omit or replace requested features.',
+  'Keep the complete requested subject comfortably inside the canvas with no cropping, duplicate subject, accidental text, logo, or watermark.',
+]);
+
+const MULTI_OUTPUT_INTENT = /\b(?:separate|multiple|several|different|matching)\s+(?:[\p{L}\p{N}_-]+\s+){0,2}(?:images?|assets?|variants?|versions?|states?|stages?|angles?|frames?|concepts?|options?)\b|\b(?:sequence|series|sprite\s*sheet|turnaround)\b|\b(?:two|three|four|five|six|seven|eight|[2-8])\s+(?:images?|assets?|variants?|versions?|states?|stages?|angles?|frames?|concepts?|options?)\b/iu;
+
+export function promptRequestsMultipleOutputs(prompt) {
+  return MULTI_OUTPUT_INTENT.test(String(prompt || ''));
+}
+
+function normalizedConstraints(rawConstraints, request, inferredCount) {
+  const constraints = [...PRODUCTION_QUALITY_CONSTRAINTS];
+  if (inferredCount > 1) {
+    constraints.push('Keep subject identity, visual style, palette, lighting, and canvas treatment consistent across every image.');
+  }
+  if (request.transparent_background) {
+    constraints.push('Render one isolated subject on a perfectly flat #ff00ff chroma background with no shadows or scenery.');
+  }
+  for (const constraint of Array.isArray(rawConstraints) ? rawConstraints : []) {
+    const value = String(constraint || '').trim();
+    if (value) constraints.push(value);
+  }
+  return [...new Set(constraints)].slice(0, 12);
+}
+
+function normalizedImageLabel(image, index, count) {
+  const supplied = String(image?.label || '').trim();
+  if (supplied) return supplied.slice(0, 100);
+  return count === 1 ? 'Generated image' : `Generated image ${index + 1}`;
+}
+
 export const ManualImagePlanSchema = z.object({
   schema_version: z.literal('1.0'),
   status: z.enum(['ready', 'clarification_required']),
@@ -101,7 +134,8 @@ function finalizePlan(rawPlan, request, options) {
   const dimensions = dimensionsForAspectRatio(request.aspect_ratio);
   const maximumCount = options.maximumCount || MANUAL_IMAGE_MAX_COUNT;
   const explicitCount = request.count;
-  const inferredCount = explicitCount ?? Number(rawPlan.inferred_count || 0);
+  const implicitSingle = explicitCount === null && !promptRequestsMultipleOutputs(request.prompt);
+  const inferredCount = explicitCount ?? (implicitSingle ? 1 : Number(rawPlan.inferred_count || 0));
   if (rawPlan.status === 'clarification_required') {
     return ManualImagePlanSchema.parse({
       schema_version: '1.0',
@@ -110,7 +144,7 @@ function finalizePlan(rawPlan, request, options) {
       aspect_ratio: request.aspect_ratio,
       ...dimensions,
       shared_style_context: rawPlan.shared_style_context || '',
-      consistency_constraints: rawPlan.consistency_constraints || [],
+      consistency_constraints: normalizedConstraints(rawPlan.consistency_constraints, request, 0),
       transparent_background: request.transparent_background,
       clarification_message: rawPlan.clarification_message || '',
       images: [],
@@ -128,10 +162,13 @@ function finalizePlan(rawPlan, request, options) {
   if (explicitCount !== null && Number(rawPlan.inferred_count) !== explicitCount) {
     throw new Error(`The local planner changed the explicit image count from ${explicitCount}.`);
   }
-  const images = (rawPlan.images || []).map((image, index) => ({
+  const rawImages = implicitSingle
+    ? [{ label: 'Generated image', prompt: request.prompt }]
+    : (Array.isArray(rawPlan.images) ? rawPlan.images : []).slice(0, inferredCount);
+  const images = rawImages.map((image, index) => ({
     index: index + 1,
-    label: image.label,
-    prompt: image.prompt,
+    label: normalizedImageLabel(image, index, inferredCount),
+    prompt: String(image?.prompt || request.prompt).trim(),
     seed: stableSeed(options.jobId, index + 1),
   }));
   return ManualImagePlanSchema.parse({
@@ -141,7 +178,7 @@ function finalizePlan(rawPlan, request, options) {
     aspect_ratio: request.aspect_ratio,
     ...dimensions,
     shared_style_context: rawPlan.shared_style_context || '',
-    consistency_constraints: rawPlan.consistency_constraints || [],
+    consistency_constraints: normalizedConstraints(rawPlan.consistency_constraints, request, inferredCount),
     transparent_background: request.transparent_background,
     clarification_message: rawPlan.clarification_message || '',
     images,
@@ -160,12 +197,7 @@ export function buildDeterministicManualImagePlan(requestInput, options) {
     throw new Error('A deterministic plan requires an explicit image count.');
   }
   const dimensions = dimensionsForAspectRatio(request.aspect_ratio);
-  const consistency = request.count > 1
-    ? ['Keep subject identity, visual style, palette, lighting, and canvas treatment consistent across every image.']
-    : [];
-  if (request.transparent_background) {
-    consistency.push('Render one isolated subject on a perfectly flat #ff00ff chroma background with no shadows or scenery.');
-  }
+  const consistency = normalizedConstraints([], request, request.count);
   const context = request.count > 1 ? 'Coherent image set requested by the operator.' : 'Single operator-requested image.';
   return ManualImagePlanSchema.parse({
     schema_version: '1.0',
@@ -180,7 +212,7 @@ export function buildDeterministicManualImagePlan(requestInput, options) {
     images: Array.from({ length: request.count }, (_, index) => ({
       index: index + 1,
       label: request.count === 1 ? 'Generated image' : `Image ${index + 1}`,
-      prompt: [request.prompt, context, ...consistency, request.count > 1 ? `This is image ${index + 1} of ${request.count}.` : '']
+      prompt: [request.prompt, request.count > 1 ? `This is image ${index + 1} of ${request.count}.` : '']
         .filter(Boolean)
         .join(' '),
       seed: stableSeed(options.jobId, index + 1),
@@ -210,6 +242,8 @@ export async function createManualImagePlan(requestInput, options) {
         explicitInstruction,
         'Decompose separate assets, variants, or ordered stages into one self-contained prompt per output image.',
         'Do not turn one requested scene into multiple images unless the request clearly asks for separate outputs.',
+        'Every image object must include a concise non-empty label and a complete self-contained prompt.',
+        ...PRODUCTION_QUALITY_CONSTRAINTS,
         'Keep shared style, palette, subject identity, canvas treatment, and viewpoint consistent where relevant.',
         request.transparent_background
           ? 'Every image must request one isolated subject on a perfectly flat #ff00ff chroma background, with no scenery, floor, border, text, or shadow.'
