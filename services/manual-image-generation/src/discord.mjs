@@ -13,6 +13,25 @@ function elapsedLabel(startedAt, now = Date.now()) {
   return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
+export function formatManualImagePrompt(prompt, maximumLength = 900) {
+  const normalized = String(prompt || '').replace(/\s+/gu, ' ').trim();
+  if (normalized.length <= maximumLength) return normalized;
+  return `${normalized.slice(0, Math.max(1, maximumLength - 1)).trimEnd()}…`;
+}
+
+export function buildManualImageDeliveryContent(job, plan, fileCount) {
+  const models = [...new Set((job.outputs || []).map((output) => String(output.model || '').trim()).filter(Boolean))];
+  return [
+    `<@${job.request.requested_by_discord_id}> your **${fileCount}** local image${fileCount === 1 ? '' : 's'} ${fileCount === 1 ? 'is' : 'are'} ready.`,
+    `**Prompt:** ${formatManualImagePrompt(job.request.prompt)}`,
+    `**Model:** ${models.length ? models.map((model) => `\`${model}\``).join(', ') : 'local image model'}`,
+    `**Job:** \`${job.job_id}\``,
+    `**Aspect ratio:** ${plan.aspect_ratio}`,
+    '**Generation:** local Flux · **€0 API cost**',
+    plan.transparent_background ? '**Background:** transparent alpha processed from the isolated chroma render' : '',
+  ].filter(Boolean).join('\n');
+}
+
 export async function ensureManualImageGenerationChannel(options) {
   const token = options.runtimeConfig?.env?.DISCORD_BOT_TOKEN;
   const guildId = options.runtimeConfig?.guildId;
@@ -38,6 +57,7 @@ export async function postManualImageQueuedStatus(options) {
       body: {
         content: [
           `<@${request.requested_by_discord_id}> your local image request is queued.`,
+          `**Prompt:** ${formatManualImagePrompt(request.prompt)}`,
           `**Job:** \`${options.job.job_id}\``,
           `**Progress:** **0/${request.count ?? '?'}**`,
           `**Aspect ratio:** ${request.aspect_ratio}`,
@@ -99,13 +119,7 @@ export async function deliverManualImages(options) {
     throw new Error(`Delivery expected ${plan.inferred_count} images but found ${files.length}.`);
   }
   const payload = {
-    content: [
-      `<@${job.request.requested_by_discord_id}> your **${files.length}** local image${files.length === 1 ? '' : 's'} ${files.length === 1 ? 'is' : 'are'} ready.`,
-      `**Job:** \`${job.job_id}\``,
-      `**Aspect ratio:** ${plan.aspect_ratio}`,
-      `**Generation:** local Flux · **€0 API cost**`,
-      plan.transparent_background ? '**Background:** transparent alpha processed from the isolated chroma render' : '',
-    ].filter(Boolean).join('\n'),
+    content: buildManualImageDeliveryContent(job, plan, files.length),
     allowed_mentions: { parse: [], users: [job.request.requested_by_discord_id] },
   };
   return sendMessageWithFiles(

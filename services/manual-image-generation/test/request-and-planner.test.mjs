@@ -7,7 +7,12 @@ import {
 import {
   buildDeterministicManualImagePlan,
   createManualImagePlan,
+  promptRequestsMultipleOutputs,
 } from '../src/planner.mjs';
+import {
+  buildManualImageDeliveryContent,
+  formatManualImagePrompt,
+} from '../src/discord.mjs';
 import { resolveManualImageGenerationConfig } from '../src/config.mjs';
 
 function interaction(overrides = {}) {
@@ -102,6 +107,91 @@ test('local planner decomposes an implicit multi-image request into a bounded pl
   assert.equal(new Set(plan.images.map((image) => image.seed)).size, 3);
 });
 
+test('implicit single-scene requests ignore accidental planner decomposition and normalize missing labels', async () => {
+  const singleScene = interaction({
+    data: {
+      name: 'generate-image',
+      options: [
+        { name: 'prompt', value: 'hologram character projected from a small disk underneath it' },
+        { name: 'aspect_ratio', value: '1:1' },
+      ],
+    },
+  });
+  const request = parseManualImageGenerationRequest(singleScene, { now: '2026-10-24T08:00:00.000Z' });
+  const plan = await createManualImagePlan(request, {
+    jobId: 'manual-image-hologram',
+    endpoint: 'http://127.0.0.1:11434',
+    model: 'llama3.1:8b',
+    maximumCount: 8,
+    fetchImpl: async () => ({
+      ok: true,
+      async text() {
+        return JSON.stringify({
+          message: {
+            content: JSON.stringify({
+              status: 'ready',
+              inferred_count: 2,
+              shared_style_context: 'Matching hologram scene.',
+              consistency_constraints: [],
+              clarification_message: '',
+              images: [
+                { index: 1, prompt: 'A hologram character.' },
+                { index: 2, prompt: 'A projector disk.' },
+              ],
+            }),
+          },
+        });
+      },
+    }),
+  });
+  assert.equal(promptRequestsMultipleOutputs(request.prompt), false);
+  assert.equal(plan.inferred_count, 1);
+  assert.equal(plan.images[0].label, 'Generated image');
+  assert.equal(plan.images[0].prompt, request.prompt);
+  assert.match(plan.consistency_constraints.join(' '), /production-ready/iu);
+});
+
+test('planner supplies deterministic labels when a requested multi-output plan omits them', async () => {
+  const multiScene = interaction({
+    data: {
+      name: 'generate-image',
+      options: [
+        { name: 'prompt', value: 'two separate hologram variants' },
+        { name: 'count', value: 2 },
+        { name: 'aspect_ratio', value: '1:1' },
+      ],
+    },
+  });
+  const request = parseManualImageGenerationRequest(multiScene, { now: '2026-10-24T08:00:00.000Z' });
+  const plan = await createManualImagePlan(request, {
+    jobId: 'manual-image-hologram-variants',
+    endpoint: 'http://127.0.0.1:11434',
+    model: 'llama3.1:8b',
+    maximumCount: 8,
+    fetchImpl: async () => ({
+      ok: true,
+      async text() {
+        return JSON.stringify({
+          message: {
+            content: JSON.stringify({
+              status: 'ready',
+              inferred_count: 2,
+              shared_style_context: 'Matching hologram variants.',
+              consistency_constraints: [],
+              clarification_message: '',
+              images: [
+                { index: 1, prompt: 'First hologram variant.' },
+                { index: 2, prompt: 'Second hologram variant.' },
+              ],
+            }),
+          },
+        });
+      },
+    }),
+  });
+  assert.deepEqual(plan.images.map((image) => image.label), ['Generated image 1', 'Generated image 2']);
+});
+
 test('explicit count has a deterministic fallback when text planning is unavailable', async () => {
   const request = parseManualImageGenerationRequest(interaction({
     data: {
@@ -155,4 +245,20 @@ test('uncertain automatic planning returns a clarification without image prompts
   assert.equal(plan.status, 'clarification_required');
   assert.equal(plan.inferred_count, 0);
   assert.deepEqual(plan.images, []);
+});
+
+test('manual-image Discord delivery identifies the original prompt and exact image model', () => {
+  const prompt = 'A luminous potion with transparent glass';
+  const content = buildManualImageDeliveryContent({
+    job_id: 'manual-image-1',
+    request: { requested_by_discord_id: 'operator-1', prompt },
+    outputs: [{ model: 'x/flux2-klein:4b' }],
+  }, {
+    aspect_ratio: '1:1',
+    transparent_background: true,
+  }, 1);
+  assert.match(content, new RegExp(prompt, 'u'));
+  assert.match(content, /x\/flux2-klein:4b/u);
+  assert.match(content, /€0 API cost/u);
+  assert.equal(formatManualImagePrompt('  one\n  two  '), 'one two');
 });
