@@ -126,6 +126,7 @@
     "digital-assets:research:night-shift": "node scripts/run-digital-asset-research-schedule.mjs --max-runtime-minutes 10",
     "digital-assets:research:test": "node --test services/digital-asset-research/test/*.test.mjs scripts/test/digital-asset-research-schedule.test.mjs",
     "manual-images:worker": "node services/manual-image-generation/manual-image-worker.mjs",
+    "manual-images:benchmark": "node services/manual-image-generation/benchmark-models.mjs",
     "manual-images:test": "node --test services/manual-image-generation/test/*.test.mjs",
     "product-video:dry-run": "node services/product-video-agent/index.mjs",
     "product-video:doctor": "node services/product-video-agent/index.mjs --doctor",

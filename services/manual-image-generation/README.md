@@ -77,3 +77,15 @@ Run focused tests with:
 npm run manual-images:test
 npm run test:discord-spine
 ```
+
+## Local model benchmark
+
+Compare two installed local image models under the same production controls:
+
+```bash
+npm run manual-images:benchmark
+```
+
+The default comparison is `x/flux2-klein:4b` against `x/flux2-klein:4b-fp8`. Two difficult fixtures are generated with identical per-fixture prompts, seeds, dimensions, steps, and negative prompt. Model order is counterbalanced across the fixtures. The shared generation lock prevents overlap with another ORION generation job.
+
+Raw images, processed output, timings, hashes, and transparency diagnostics are retained under the T7 manual-image benchmark directory. The existing message in `#manual-image-generation` is updated with all four labeled outputs and timing results.
