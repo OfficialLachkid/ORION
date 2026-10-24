@@ -45,5 +45,8 @@ test('photorealistic benchmark profile uses one identical controlled scene per m
   assert.equal(cases[0].prompt, cases[1].prompt);
   assert.equal(cases[0].seed, cases[1].seed);
   assert.match(cases[0].prompt, /Ultra-photorealistic/u);
+  assert.equal(cases[0].transparent_background, false);
+  assert.doesNotMatch(cases[0].negative_prompt, /\bphotorealistic\b/u);
+  assert.match(cases[0].negative_prompt, /obvious CGI/u);
   assert.throws(() => parseBenchmarkProfile(['--profile', 'unknown']), /Unknown benchmark profile/u);
 });

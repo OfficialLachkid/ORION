@@ -31,6 +31,7 @@ export const BENCHMARK_FIXTURES = Object.freeze([
     id: 'plasma-rifle',
     label: 'Side-view plasma rifle',
     seed: 22201,
+    transparent_background: true,
     prompt: [
       'Production-ready 2D pixel-art game asset of one original sci-fi plasma rifle.',
       'Strict right-facing side view, crisp mechanical silhouette, readable stock, grip, trigger opening, barrel, and muzzle exit.',
@@ -43,6 +44,7 @@ export const BENCHMARK_FIXTURES = Object.freeze([
     id: 'half-filled-potion',
     label: 'Half-filled glass potion',
     seed: 22202,
+    transparent_background: true,
     prompt: [
       'Production-ready 2D pixel-art game asset of one original arcane glass potion bottle.',
       'The bottle is exactly half filled with luminous teal liquid: show a clear horizontal liquid surface and visibly empty transparent glass above it.',
@@ -58,6 +60,12 @@ export const PHOTOREALISTIC_BENCHMARK_FIXTURES = Object.freeze([
     id: 'photorealistic-field-engineer',
     label: 'Photorealistic field engineer and exploration rover',
     seed: 22301,
+    transparent_background: false,
+    negative_prompt: [
+      'illustration, painting, drawing, anime, pixel art, cartoon, stylized game art, obvious CGI, 3D render, plastic skin, waxy skin',
+      'malformed anatomy, malformed hands, extra fingers, fused fingers, missing fingers, duplicate person, duplicate limbs',
+      'oversharpened, low resolution, blurry subject, flat lighting, text, logo, border, frame, watermark',
+    ].join(', '),
     prompt: [
       'Ultra-photorealistic cinematic editorial photograph of an adult field engineer beside a weathered futuristic exploration rover in a misty Icelandic volcanic valley at sunrise.',
       'The engineer is naturally posed while adjusting a brushed-metal scientific instrument with both hands fully visible; preserve realistic human anatomy, facial proportions, skin pores, individual hair strands, and detailed fabric weave.',
@@ -191,6 +199,9 @@ export async function runManualImageModelBenchmark(options = {}) {
   const models = options.models || DEFAULT_BENCHMARK_MODELS;
   const fixtures = options.fixtures || BENCHMARK_FIXTURES;
   const cases = buildCounterbalancedBenchmarkCases(models, fixtures);
+  const negativePrompts = [...new Set(cases.map((benchmarkCase) => (
+    benchmarkCase.negative_prompt || engineConfig.generation.negative_prompt
+  )))];
   await ensureManualImageStorage(manualConfig);
   const channel = await ensureManualImageGenerationChannel({
     runtimeConfig,
@@ -225,7 +236,7 @@ export async function runManualImageModelBenchmark(options = {}) {
       width: 1024,
       height: 1024,
       steps: engineConfig.generation.steps,
-      negative_prompt: engineConfig.generation.negative_prompt,
+      negative_prompt: negativePrompts.length === 1 ? negativePrompts[0] : 'Per fixture; see result records.',
       keep_alive: 0,
       execution: 'local',
       estimated_cost_eur: 0,
@@ -252,6 +263,7 @@ export async function runManualImageModelBenchmark(options = {}) {
         const adapter = new OllamaImageAdapter({
           ...engineConfig.generation,
           model: benchmarkCase.model,
+          negative_prompt: benchmarkCase.negative_prompt || engineConfig.generation.negative_prompt,
           keep_alive: 0,
           require_local_endpoint: true,
         }, { fetchImpl: options.fetchImpl });
@@ -273,14 +285,16 @@ export async function runManualImageModelBenchmark(options = {}) {
         let outputExtension = rawExtension;
         let transparency = null;
         let transparencyError = '';
-        try {
-          transparency = await removeConnectedChromaBackground(generated.buffer, {
-            tolerance: engineConfig.generation.chroma_tolerance,
-          });
-          outputBuffer = transparency.buffer;
-          outputExtension = 'png';
-        } catch (error) {
-          transparencyError = String(error?.message || error);
+        if (benchmarkCase.transparent_background !== false) {
+          try {
+            transparency = await removeConnectedChromaBackground(generated.buffer, {
+              tolerance: engineConfig.generation.chroma_tolerance,
+            });
+            outputBuffer = transparency.buffer;
+            outputExtension = 'png';
+          } catch (error) {
+            transparencyError = String(error?.message || error);
+          }
         }
         const processingMs = performance.now() - processingStarted;
         const outputPath = resolve(outputRoot, `${stem}.${outputExtension}`);
@@ -291,6 +305,8 @@ export async function runManualImageModelBenchmark(options = {}) {
           model: benchmarkCase.model,
           seed: benchmarkCase.seed,
           prompt: benchmarkCase.prompt,
+          negative_prompt: benchmarkCase.negative_prompt || engineConfig.generation.negative_prompt,
+          transparent_background: benchmarkCase.transparent_background !== false,
           generation_ms: Math.round(generationMs),
           processing_ms: Math.round(processingMs),
           raw_path: rawPath,

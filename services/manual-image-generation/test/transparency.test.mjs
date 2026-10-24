@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import sharp from 'sharp';
 import { removeConnectedChromaBackground } from '../src/transparency.mjs';
 
-test('transparent processing removes only border-connected chroma pixels', async () => {
+test('transparent processing removes border chroma and enclosed strong chroma while preserving subject color', async () => {
   const width = 5;
   const height = 5;
   const rgba = Buffer.alloc(width * height * 4);
@@ -23,11 +23,17 @@ test('transparent processing removes only border-connected chroma pixels', async
       rgba[offset + 2] = 255;
     }
   }
+  const accentOffset = ((2 * width) + 1) * 4;
+  rgba[accentOffset] = 180;
+  rgba[accentOffset + 1] = 40;
+  rgba[accentOffset + 2] = 170;
   const input = await sharp(rgba, { raw: { width, height, channels: 4 } }).png().toBuffer();
   const result = await removeConnectedChromaBackground(input, { tolerance: 30 });
   const output = await sharp(result.buffer).ensureAlpha().raw().toBuffer();
 
   assert.equal(output[3], 0, 'border chroma becomes transparent');
-  assert.equal(output[(((2 * width) + 2) * 4) + 3], 255, 'enclosed chroma remains opaque');
+  assert.equal(output[(((2 * width) + 2) * 4) + 3], 0, 'enclosed flat chroma becomes transparent');
   assert.equal(output[(((1 * width) + 1) * 4) + 3], 255, 'subject remains opaque');
+  assert.equal(output[accentOffset + 3], 255, 'distinct magenta subject detail remains opaque');
+  assert.equal(result.removedInteriorPixels, 1);
 });
