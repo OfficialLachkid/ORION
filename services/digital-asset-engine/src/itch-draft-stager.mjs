@@ -743,7 +743,17 @@ async (page) => {
       || editUrl,
     );
     if (createProject && !editUrl.includes('itch.io/game/edit/')) {
-      throw new Error(`itch.io did not return a canonical editor URL after save: ${diagnostic(submitted)}`);
+      const rediscovered = runBrowserCode('created project rediscovery', buildItchProjectDiscoveryRunCode({
+        slug: product.slug,
+      }), 3);
+      if (rediscovered.details.status === 'existing_project'
+        && String(rediscovered.details.editUrl || '').includes('itch.io/game/edit/')) {
+        publicUrl = normalizeItchUrl(publicUrl || rediscovered.details.publicUrl).toString();
+        editUrl = String(rediscovered.details.editUrl);
+        createProject = false;
+      } else {
+        throw new Error(`itch.io did not expose the created project editor after save: ${diagnostic(rediscovered)}`);
+      }
     }
 
     const target = butlerTargetFromUrl(publicUrl);

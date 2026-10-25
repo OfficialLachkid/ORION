@@ -319,6 +319,7 @@ test('stages package with Butler, populates itch.io, verifies it, and reuses exa
 test('creates a missing itch.io project before Butler upload and verifies the draft', async () => {
   const fixture = await createFixture();
   const calls = [];
+  let discoveryCalls = 0;
   const publicUrl = 'https://vbjservices.itch.io/neon-plasma-armory';
   const editUrl = 'https://itch.io/game/edit/12345';
   const cliRunner = (executable, args) => {
@@ -327,11 +328,13 @@ test('creates a missing itch.io project before Butler upload and verifies the dr
     if (!code) return { ok: true, stdout: '', stderr: '' };
     const status = browserStatus(code);
     const details = status === 'discovery'
-      ? { status: 'new_project_form', publicUrl, editUrl: 'https://itch.io/game/new' }
+      ? discoveryCalls++ === 0
+        ? { status: 'new_project_form', publicUrl, editUrl: 'https://itch.io/game/new' }
+        : { status: 'existing_project', publicUrl, editUrl }
       : status === 'media_ready'
         ? { status, coverId: 'cover-1', screenshotCount: 2, url: 'https://itch.io/game/new' }
         : status === 'submitted'
-          ? { status, publicUrl: `${publicUrl}?secret=review`, editUrl, url: `${publicUrl}?secret=review` }
+          ? { status, publicUrl: `${publicUrl}?secret=review`, editUrl: '', url: 'https://itch.io/game/new' }
           : { status, url: status === 'verified' ? editUrl : 'https://itch.io/game/new' };
     return {
       ok: true,
@@ -349,6 +352,7 @@ test('creates a missing itch.io project before Butler upload and verifies the dr
   assert.equal(staged.public_url, `${publicUrl}?secret=review`);
   assert.equal(staged.edit_url, editUrl);
   assert.equal(staged.butler_target, 'vbjservices/neon-plasma-armory:assets');
+  assert.equal(discoveryCalls, 2);
   const discoveryIndex = calls.findIndex((call) => browserStatus(call.code) === 'discovery');
   const butlerIndex = calls.findIndex((call) => call.args[0] === 'push');
   assert.ok(discoveryIndex >= 0);
