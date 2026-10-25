@@ -213,26 +213,38 @@ async (page) => {
 }`.trim();
 }
 
-export function buildThemePrepareCode({ design, url }) {
+export function buildThemePrepareCode({ design, url, navigate = true }) {
   return `
 async (page) => {
-  const input = ${JSON.stringify({ design, url })};
+  const input = ${JSON.stringify({ design, url, navigate })};
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
-  await page.waitForFunction(() => [...document.querySelectorAll('button')]
-    .some((button) => /edit theme/i.test(button.textContent || '')), null, { timeout: 30000 }).catch(() => {});
-  const edit = page.getByRole('button', { name: /edit theme/i }).first();
-  if (!(await edit.count().catch(() => 0)) || !(await edit.isVisible().catch(() => false))) {
-    return {
-      status: 'theme_editor_unavailable',
-      url: page.url(),
-      title: await page.title().catch(() => ''),
-      buttons: await page.locator('button').allTextContents().catch(() => []),
-    };
+  if (input.navigate) {
+    await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    await page.waitForFunction(() => [...document.querySelectorAll('button')]
+      .some((button) => /edit theme/i.test(button.textContent || '')), null, { timeout: 30000 }).catch(() => {});
+    const edit = page.getByRole('button', { name: /edit theme/i }).first();
+    if (!(await edit.count().catch(() => 0)) || !(await edit.isVisible().catch(() => false))) {
+      return {
+        status: 'theme_editor_unavailable',
+        url: page.url(),
+        title: await page.title().catch(() => ''),
+        buttons: await page.locator('button').allTextContents().catch(() => []),
+      };
+    }
+    await edit.click({ timeout: 5000 });
+    await page.waitForTimeout(500);
+  } else {
+    const save = page.getByRole('button', { name: /^save$/i }).first();
+    if (!(await save.count().catch(() => 0)) || !(await save.isVisible().catch(() => false))) {
+      return {
+        status: 'theme_editor_unavailable',
+        url: page.url(),
+        title: await page.title().catch(() => ''),
+        buttons: await page.locator('button').allTextContents().catch(() => []),
+      };
+    }
   }
-  await edit.click({ timeout: 5000 });
-  await page.waitForTimeout(500);
   const more = page.getByRole('button', { name: /more options/i });
   const count = await more.count().catch(() => 0);
   for (let index = 0; index < count; index += 1) {
@@ -681,7 +693,11 @@ export async function applyApprovedItchTheme(options) {
       const restored = runBrowserCode({
         executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
         filename: 'restore-after-uploads.js',
-        code: buildThemePrepareCode({ design: themeState.design, url: cleanPublicUrl(storefront.public_url) }),
+        code: buildThemePrepareCode({
+          design: themeState.design,
+          url: cleanPublicUrl(storefront.public_url),
+          navigate: false,
+        }),
       });
       if (restored.status !== 'prepared') {
         throw new Error(`Theme controls could not be restored after image uploads: ${JSON.stringify(restored)}`);

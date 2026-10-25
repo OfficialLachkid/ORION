@@ -343,6 +343,19 @@ test('theme editor preparation restores a desktop viewport before checking respo
   assert.match(code, /dispatchEvent\(new Event\('change', \{ bubbles: true \}\)\)/u);
 });
 
+test('theme editor restoration preserves pending image uploads by avoiding navigation', () => {
+  const code = buildThemePrepareCode({
+    design,
+    url: 'https://creator.itch.io/example',
+    navigate: false,
+  });
+  assert.doesNotThrow(() => new Function(`return (${code});`));
+  assert.match(code, /"navigate":false/u);
+  assert.match(code, /if \(input\.navigate\)/u);
+  assert.match(code, /button.*name: \/\^save\$\/i/su);
+  assert.match(code, /setViewportSize\(\{ width: 1440, height: 1000 \}\)/u);
+});
+
 test('theme candidate renders deterministic media and creates desktop/mobile previews without saving', async () => {
   const fixture = await createFixture();
   const commands = [];
