@@ -330,3 +330,75 @@ test('startup recovery resumes an approved theme that was not yet applied', asyn
   assert.equal(state.status, 'queued');
   assert.equal(state.phase, 'apply_theme');
 });
+
+test('revised theme approval replaces the pending candidate hash for the same release', async () => {
+  const fixture = await createFixture();
+  const path = resolve(fixture.productRoot, 'review', 'marketplace-setup.json');
+  const originalThemeHash = 'c'.repeat(64);
+  const revisedThemeHash = 'd'.repeat(64);
+  await writeFile(path, JSON.stringify({
+    status: 'awaiting_theme_approval',
+    phase: 'theme_review',
+    product_slug: fixture.product.slug,
+    manifest_hash: manifestHash,
+    listing_hash: listingHash,
+    theme_hash: originalThemeHash,
+  }));
+
+  const continuation = await queueMarketplaceSetupAfterThemeApproval({
+    archiveRoot: fixture.outputRoot,
+    themeDecision: {
+      row: { decision: 'approve', decided_at: '2026-10-21T08:21:00.000Z' },
+      state: {
+        status: 'approved',
+        product_slug: fixture.product.slug,
+        manifest_hash: manifestHash,
+        listing_hash: listingHash,
+        theme_hash: revisedThemeHash,
+      },
+    },
+    now: '2026-10-21T08:21:00.000Z',
+  });
+
+  assert.equal(continuation.state.status, 'queued');
+  assert.equal(continuation.state.phase, 'apply_theme');
+  assert.equal(continuation.state.theme_hash, revisedThemeHash);
+});
+
+test('startup recovery adopts an approved revised theme for the same release', async () => {
+  const fixture = await createFixture();
+  const path = resolve(fixture.productRoot, 'review', 'marketplace-setup.json');
+  const originalThemeHash = 'c'.repeat(64);
+  const revisedThemeHash = 'd'.repeat(64);
+  await Promise.all([
+    writeFile(path, JSON.stringify({
+      status: 'awaiting_theme_approval',
+      phase: 'theme_review',
+      product_slug: fixture.product.slug,
+      manifest_hash: manifestHash,
+      listing_hash: listingHash,
+      theme_hash: originalThemeHash,
+    })),
+    writeFile(resolve(fixture.productRoot, 'review', 'itch-theme.json'), JSON.stringify({
+      status: 'approved',
+      product_slug: fixture.product.slug,
+      manifest_hash: manifestHash,
+      listing_hash: listingHash,
+      theme_hash: revisedThemeHash,
+    })),
+  ]);
+  const scheduled = [];
+
+  const report = await recoverMarketplaceSetupJobs({
+    archiveRoot: fixture.outputRoot,
+    scheduleJob(statePath) { scheduled.push(statePath); return true; },
+    now: '2026-10-21T08:22:00.000Z',
+  });
+
+  assert.equal(report.recovered.length, 1);
+  assert.deepEqual(scheduled, [path]);
+  const state = JSON.parse(await readFile(path, 'utf8'));
+  assert.equal(state.status, 'queued');
+  assert.equal(state.phase, 'apply_theme');
+  assert.equal(state.theme_hash, revisedThemeHash);
+});
