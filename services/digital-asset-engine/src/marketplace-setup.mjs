@@ -476,8 +476,7 @@ export async function queueMarketplaceSetupAfterThemeApproval(options) {
   if (state.status !== 'awaiting_theme_approval'
     || state.phase !== 'theme_review'
     || state.manifest_hash !== themeDecision.state.manifest_hash
-    || state.listing_hash !== themeDecision.state.listing_hash
-    || state.theme_hash !== themeDecision.state.theme_hash) {
+    || state.listing_hash !== themeDecision.state.listing_hash) {
     throw new Error('The approved theme no longer matches the pending marketplace workflow.');
   }
   const queuedAt = options.now || new Date().toISOString();
@@ -485,6 +484,7 @@ export async function queueMarketplaceSetupAfterThemeApproval(options) {
     ...state,
     status: 'queued',
     phase: 'apply_theme',
+    theme_hash: themeDecision.state.theme_hash,
     worker_pid: null,
     updated_at: queuedAt,
     theme_approved_at: themeDecision.row.decided_at,
@@ -534,13 +534,13 @@ export async function recoverMarketplaceSetupJobs(options) {
       const theme = await readOptionalJson(resolve(dirname(statePath), 'itch-theme.json'));
       if (theme?.status === 'approved'
         && theme.manifest_hash === state.manifest_hash
-        && theme.listing_hash === state.listing_hash
-        && theme.theme_hash === state.theme_hash) {
+        && theme.listing_hash === state.listing_hash) {
         const recoveredAt = options.now || new Date().toISOString();
         const recovered = {
           ...state,
           status: 'queued',
           phase: 'apply_theme',
+          theme_hash: theme.theme_hash,
           worker_pid: null,
           recovery_count: Number(state.recovery_count || 0) + 1,
           recovered_at: recoveredAt,
