@@ -11,6 +11,7 @@ import {
   buildThemePrepareCode,
   buildThemePreviewCode,
   buildThemeSaveAndVerifyCode,
+  isThemeMediaOnlyRecovery,
   prepareItchThemeCandidate,
 } from '../src/itch-theme.mjs';
 import { buildItchSlugMigrationCode, migrateItchProjectSlug } from '../src/itch-slug-migrator.mjs';
@@ -354,6 +355,61 @@ test('theme editor restoration preserves pending image uploads by avoiding navig
   assert.match(code, /if \(input\.navigate\)/u);
   assert.match(code, /button.*name: \/\^save\$\/i/su);
   assert.match(code, /setViewportSize\(\{ width: 1440, height: 1000 \}\)/u);
+});
+
+test('theme editor preparation can skip controls for a verified media-only recovery', async () => {
+  const code = buildThemePrepareCode({
+    design,
+    url: 'https://creator.itch.io/example',
+    applyControls: false,
+  });
+  const prepare = new Function(`return (${code});`)();
+  let textboxRequested = false;
+  const control = {
+    first() { return this; },
+    async count() { return 1; },
+    async isVisible() { return true; },
+    async click() {},
+  };
+  const result = await prepare({
+    async setViewportSize() {},
+    async goto() {},
+    async waitForLoadState() {},
+    async waitForFunction() {},
+    async waitForTimeout() {},
+    getByRole(role, options) {
+      if (role === 'textbox') textboxRequested = true;
+      if (role === 'button' && String(options?.name) === String(/more options/i)) {
+        return { async count() { return 0; } };
+      }
+      return control;
+    },
+    locator() { return { async allTextContents() { return []; } }; },
+    url() { return 'https://creator.itch.io/example'; },
+    async title() { return 'Example'; },
+  });
+  assert.deepEqual(result, {
+    status: 'prepared',
+    controlsSkipped: true,
+    url: 'https://creator.itch.io/example',
+  });
+  assert.equal(textboxRequested, false);
+});
+
+test('media-only recovery requires every non-media theme check to remain verified', () => {
+  const checks = {
+    background: true,
+    background_image: false,
+    panel: true,
+    panel_alpha: true,
+    text: true,
+    header: true,
+    button: true,
+    banner: false,
+  };
+  assert.equal(isThemeMediaOnlyRecovery(checks), true);
+  assert.equal(isThemeMediaOnlyRecovery({ ...checks, header: false }), false);
+  assert.equal(isThemeMediaOnlyRecovery({ ...checks, background_image: true, banner: true }), false);
 });
 
 test('theme candidate renders deterministic media and creates desktop/mobile previews without saving', async () => {

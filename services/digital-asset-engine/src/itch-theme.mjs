@@ -213,10 +213,10 @@ async (page) => {
 }`.trim();
 }
 
-export function buildThemePrepareCode({ design, url, navigate = true }) {
+export function buildThemePrepareCode({ design, url, navigate = true, applyControls = true }) {
   return `
 async (page) => {
-  const input = ${JSON.stringify({ design, url, navigate })};
+  const input = ${JSON.stringify({ design, url, navigate, applyControls })};
   await page.setViewportSize({ width: 1440, height: 1000 });
   if (input.navigate) {
     await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -244,6 +244,9 @@ async (page) => {
         buttons: await page.locator('button').allTextContents().catch(() => []),
       };
     }
+  }
+  if (!input.applyControls) {
+    return { status: 'prepared', controlsSkipped: true, url: page.url() };
   }
   const more = page.getByRole('button', { name: /more options/i });
   const count = await more.count().catch(() => 0);
@@ -438,6 +441,13 @@ async (page) => {
 
 function buildThemeVerifyCode(input) {
   return buildThemeSaveAndVerifyCode({ ...input, skipSave: true });
+}
+
+export function isThemeMediaOnlyRecovery(checks) {
+  return Boolean(checks)
+    && ['background', 'panel', 'panel_alpha', 'text', 'header', 'button']
+      .every((key) => checks[key] === true)
+    && (checks.background_image === false || checks.banner === false);
 }
 
 function openBrowser({ executable, sessionName, profileDir, url, headed, cliRunner, cwd, env }) {
@@ -658,10 +668,15 @@ export async function applyApprovedItchTheme(options) {
     });
     const recoveredExistingTheme = details.status === 'verified_applied';
     if (!recoveredExistingTheme) {
+      const mediaOnlyRecovery = isThemeMediaOnlyRecovery(details.checks);
       const prepared = runBrowserCode({
         executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
         filename: 'prepare.js',
-        code: buildThemePrepareCode({ design: themeState.design, url: cleanPublicUrl(storefront.public_url) }),
+        code: buildThemePrepareCode({
+          design: themeState.design,
+          url: cleanPublicUrl(storefront.public_url),
+          applyControls: !mediaOnlyRecovery,
+        }),
       });
       if (prepared.status !== 'prepared') {
         throw new Error(`Theme editor preparation failed: ${JSON.stringify({ verification: details, preparation: prepared })}`);
@@ -690,17 +705,19 @@ export async function applyApprovedItchTheme(options) {
         });
         if (ready.status !== 'image_ready') throw new Error(`Theme ${kind} upload did not settle: ${JSON.stringify(ready)}`);
       }
-      const restored = runBrowserCode({
-        executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
-        filename: 'restore-after-uploads.js',
-        code: buildThemePrepareCode({
-          design: themeState.design,
-          url: cleanPublicUrl(storefront.public_url),
-          navigate: false,
-        }),
-      });
-      if (restored.status !== 'prepared') {
-        throw new Error(`Theme controls could not be restored after image uploads: ${JSON.stringify(restored)}`);
+      if (!mediaOnlyRecovery) {
+        const restored = runBrowserCode({
+          executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
+          filename: 'restore-after-uploads.js',
+          code: buildThemePrepareCode({
+            design: themeState.design,
+            url: cleanPublicUrl(storefront.public_url),
+            navigate: false,
+          }),
+        });
+        if (restored.status !== 'prepared') {
+          throw new Error(`Theme controls could not be restored after image uploads: ${JSON.stringify(restored)}`);
+        }
       }
       details = runBrowserCode({
         executable, sessionName, cliRunner, cwd: options.cwd, env, codeRoot,
