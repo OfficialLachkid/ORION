@@ -197,6 +197,31 @@ test('primary night shift still runs Pokemon maintenance and leadgen after syste
   assert.equal(calls.includes('postLeadNightShiftDigest'), false);
 });
 
+test('systemic Claude auth failure forwards its recovery command to the alert', async (t) => {
+  const root = makeTempRoot(t);
+  let failureOptions = null;
+  const { deps } = makeDeps(root, {
+    runQualification: () => ({
+      outcomes: [{ lead: 'Example', error: 'OAuth session expired and could not be refreshed' }],
+      systemicFailure: true,
+      rateLimited: false,
+      authenticationBlocked: true,
+      recoveryCommand: 'claude auth login --claudeai',
+      exitCode: 1,
+      stderr: 'Failed to authenticate: OAuth session expired and could not be refreshed',
+    }),
+    postNightShiftFailure: async (_config, options) => {
+      failureOptions = options;
+    },
+  });
+
+  await runNightShift(['node', 'scripts/run-night-shift.mjs', '--limit', '1'], deps);
+
+  assert.equal(failureOptions.authenticationBlocked, true);
+  assert.equal(failureOptions.recoveryCommand, 'claude auth login --claudeai');
+  assert.match(failureOptions.diagnostic, /OAuth session expired/iu);
+});
+
 test('night shift runs Claude-quota phases in priority order: redraft -> follow-ups -> qualification', async (t) => {
   const root = makeTempRoot(t);
   const { calls, deps } = makeDeps(root);

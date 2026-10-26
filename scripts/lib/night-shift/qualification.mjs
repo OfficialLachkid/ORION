@@ -5,6 +5,13 @@ import {
   runProjectNodeScript,
 } from './process-utils.mjs';
 
+export const CLAUDE_AUTH_RECOVERY_COMMAND = 'claude auth login --claudeai';
+
+export function isClaudeAuthenticationError(errorMessage) {
+  const text = String(errorMessage || '').toLowerCase();
+  return /failed to authenticate|oauth session expired|could not be refreshed|not logged in|please run \/login|authentication_error/u.test(text);
+}
+
 // Matches the shapes Claude's `claude -p` subprocess surfaces when it can't
 // serve a request due to usage-quota / rate-limit exhaustion. Kept generous
 // on purpose — false positives just cause a benign 07:00 fallback re-run,
@@ -57,11 +64,15 @@ function runQualificationScript(args, timeoutMs) {
   // can report the recoverable path without flagging it as an outage.
   const rateLimited = hasClaudeUsageLimitOutcome(outcomes)
     || isClaudeUsageLimitError(childStderr);
+  const authenticationBlocked = outcomeErrors.some(isClaudeAuthenticationError)
+    || isClaudeAuthenticationError(childStderr);
 
   return {
     outcomes,
     systemicFailure,
     rateLimited,
+    authenticationBlocked,
+    recoveryCommand: authenticationBlocked ? CLAUDE_AUTH_RECOVERY_COMMAND : '',
     exitCode: result.status ?? -1,
     stderr: diagnostic,
   };

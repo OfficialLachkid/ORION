@@ -117,6 +117,7 @@ test('keeps mature evidence in monitoring when the local model fails quality gat
 
   assert.equal(result.recommendation, null);
   assert.equal(result.report.status, 'monitoring');
+  assert.match(result.report.analysis_issue, /No coherent evidence/iu);
   assert.match(result.analysisIssue, /No coherent evidence/iu);
   assert.equal(posted.recommendation, null);
 });

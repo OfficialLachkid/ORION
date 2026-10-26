@@ -3,11 +3,13 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { basename, relative, resolve } from 'node:path';
 import sharp from 'sharp';
 import { CanonicalProductStore } from './canonical-store.mjs';
+import { cropVisibleAlpha } from './expansion-release-marketing.mjs';
 
 const COVER_WIDTH = 630;
 const COVER_HEIGHT = 500;
 const MARKETPLACE_PREVIEW_WIDTH = 960;
 const MARKETPLACE_PREVIEW_HEIGHT = 540;
+const MAX_ASSETS_PER_MARKETING_IMAGE = 8;
 const SHEET_COLUMNS = 4;
 const SHEET_PADDING = 16;
 
@@ -70,30 +72,39 @@ function previewTheme(product) {
   const identity = `${product.theme} ${product.category} ${product.product_type}`.toLowerCase();
   if (/arcane|fantasy|magic|alchemy/iu.test(identity)) {
     return {
-      background: '#151020',
-      panel: '#21172f',
-      card: '#291d3b',
-      accent: '#b979ff',
-      border: '#6e4b91',
-      title: '#fff8e9',
-      label: '#e8d8ff',
-      muted: '#aa96bd',
+      background: '#c9b9d8',
+      panel: '#eee6f4',
+      card: '#f8f3fb',
+      accent: '#7b3eaa',
+      border: '#8c73a1',
+      title: '#251832',
+      label: '#2d1f3b',
+      muted: '#554462',
     };
   }
   return {
-    background: '#10131d',
-    panel: '#161c2a',
-    card: '#151c2a',
-    accent: '#35d9ff',
-    border: '#2f4160',
-    title: '#f4f7ff',
-    label: '#d8e2f7',
-    muted: '#8998b8',
+    background: '#9fb7cc',
+    panel: '#dce7f0',
+    card: '#eef4f8',
+    accent: '#007f9d',
+    border: '#63829b',
+    title: '#102033',
+    label: '#172538',
+    muted: '#344b61',
   };
 }
 
+export function selectRepresentativeCandidates(candidates, limit = MAX_ASSETS_PER_MARKETING_IMAGE) {
+  if (candidates.length <= limit) return [...candidates];
+  if (limit <= 1) return [candidates[0]];
+  return Array.from({ length: limit }, (_, index) => (
+    candidates[Math.round((index * (candidates.length - 1)) / (limit - 1))]
+  ));
+}
+
 export async function resizePreviewAsset(buffer, width, height) {
-  return sharp(buffer)
+  const visible = await cropVisibleAlpha(buffer);
+  return sharp(visible)
     .resize(width, height, {
       fit: 'contain',
       kernel: sharp.kernel.nearest,
@@ -144,10 +155,12 @@ async function createSpriteSheet(candidates, product) {
 }
 
 async function createCover(candidates, product) {
-  const collection = describeAssetCollection(product, candidates);
+  const allCandidates = candidates;
+  const shownCandidates = selectRepresentativeCandidates(candidates);
+  const collection = describeAssetCollection(product, allCandidates);
   const theme = previewTheme(product);
   const cellWidth = 142;
-  const rows = Math.ceil(candidates.length / 4);
+  const rows = Math.ceil(shownCandidates.length / 4);
   const cellHeight = collection.weaponsOnly && rows <= 2
     ? 142
     : Math.floor(324 / rows);
@@ -156,10 +169,10 @@ async function createCover(candidates, product) {
   const assetWidth = collection.weaponsOnly ? 128 : 112;
   const assetHeight = collection.weaponsOnly ? 64 : Math.min(112, cellHeight - 30);
   const composites = [];
-  for (let index = 0; index < candidates.length; index += 1) {
+  for (let index = 0; index < shownCandidates.length; index += 1) {
     const column = index % 4;
     const row = Math.floor(index / 4);
-    const scaled = await resizePreviewAsset(candidates[index].buffer, assetWidth, assetHeight);
+    const scaled = await resizePreviewAsset(shownCandidates[index].buffer, assetWidth, assetHeight);
     composites.push({
       input: scaled,
       left: gridLeft + (column * cellWidth) + Math.floor((cellWidth - assetWidth) / 2),
@@ -167,26 +180,29 @@ async function createCover(candidates, product) {
     });
   }
 
-  const labels = candidates.map(({ asset }, index) => {
+  const labels = shownCandidates.map(({ asset }, index) => {
     const column = index % 4;
     const row = Math.floor(index / 4);
     const x = gridLeft + (column * cellWidth) + (cellWidth / 2);
     const y = gridTop + (row * cellHeight) + cellHeight - 8;
     const fontSize = previewLabelFontSize(asset.name);
-    return `<text x="${x}" y="${y}" text-anchor="middle" fill="#c8d4ec" font-family="Arial, sans-serif" font-size="${fontSize}">${escapeXml(asset.name)}</text>`;
+    return `<text x="${x}" y="${y}" text-anchor="middle" fill="${theme.label}" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="700">${escapeXml(asset.name)}</text>`;
   }).join('');
+  const coverLabel = shownCandidates.length === allCandidates.length
+    ? collection.coverLabel
+    : `${allCandidates.length} ASSETS · ${shownCandidates.length} FEATURED`;
   const titleFontSize = Math.max(22, Math.min(38, Math.floor(600 / Math.max(1, product.title.length * 0.6))));
   const overlay = Buffer.from([
     `<svg width="${COVER_WIDTH}" height="${COVER_HEIGHT}" xmlns="http://www.w3.org/2000/svg">`,
     `<rect width="630" height="500" fill="${theme.background}"/>`,
     `<rect x="18" y="18" width="594" height="464" rx="18" fill="${theme.panel}" stroke="${theme.accent}" stroke-width="3"/>`,
     `<text x="315" y="66" text-anchor="middle" fill="${theme.title}" font-family="Arial, sans-serif" font-size="${titleFontSize}" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
-    `<text x="315" y="96" text-anchor="middle" fill="${theme.accent}" font-family="Arial, sans-serif" font-size="18">${escapeXml(collection.coverLabel)}</text>`,
+    `<text x="315" y="96" text-anchor="middle" fill="${theme.accent}" font-family="Arial, sans-serif" font-size="18" font-weight="800">${escapeXml(coverLabel)}</text>`,
     labels,
     `<text x="315" y="456" text-anchor="middle" fill="${theme.muted}" font-family="Arial, sans-serif" font-size="14">Protected preview · clean transparent PNG files in download · ${product.style.width} × ${product.style.height} px</text>`,
     '</svg>',
   ].join(''));
-  const protectionMarks = candidates.map((_, index) => {
+  const protectionMarks = shownCandidates.map((_, index) => {
     const column = index % 4;
     const row = Math.floor(index / 4);
     const centerX = gridLeft + (column * cellWidth) + (cellWidth / 2);
@@ -207,8 +223,9 @@ async function createCover(candidates, product) {
     .toBuffer();
 }
 
-async function createMarketplacePreview(candidates, product) {
-  const collection = describeAssetCollection(product, candidates);
+async function createMarketplacePreview(candidates, product, options = {}) {
+  const allCandidates = options.allCandidates || candidates;
+  const collection = describeAssetCollection(product, allCandidates);
   const theme = previewTheme(product);
   const columns = Math.min(4, candidates.length);
   const rows = Math.ceil(candidates.length / columns);
@@ -250,7 +267,7 @@ async function createMarketplacePreview(candidates, product) {
     `<rect width="100%" height="100%" fill="${theme.background}"/>`,
     `<rect x="20" y="20" width="920" height="500" rx="22" fill="${theme.panel}" stroke="${theme.accent}" stroke-width="2"/>`,
     `<text x="480" y="65" text-anchor="middle" fill="${theme.title}" font-family="Arial, sans-serif" font-size="34" font-weight="700">${escapeXml(product.title.toUpperCase())}</text>`,
-    `<text x="480" y="99" text-anchor="middle" fill="${theme.accent}" font-family="Arial, sans-serif" font-size="18">${escapeXml(collection.marketplaceLabel)}</text>`,
+    `<text x="480" y="99" text-anchor="middle" fill="${theme.accent}" font-family="Arial, sans-serif" font-size="18" font-weight="800">${escapeXml(options.pageCount > 1 ? `${collection.marketplaceLabel} · PAGE ${options.pageIndex + 1}/${options.pageCount}` : collection.marketplaceLabel)}</text>`,
     cells,
     `<text x="480" y="501" text-anchor="middle" fill="${theme.muted}" font-family="Arial, sans-serif" font-size="14">Protected marketplace preview · clean transparent PNG files are included in the paid download</text>`,
     '</svg>',
@@ -303,7 +320,7 @@ function packReadme(product, candidates) {
   ].join('\n');
 }
 
-function buildItchListing(product, candidates) {
+function buildItchListing(product, candidates, screenshotPaths = ['marketplace-preview.png']) {
   const collection = describeAssetCollection(product, candidates);
   const assetNames = candidates.map(({ asset }, index) => (
     `${String(index + 1).padStart(2, '0')}. ${asset.name}`
@@ -335,7 +352,7 @@ function buildItchListing(product, candidates) {
     visibility: 'draft',
     cover_path: 'cover.png',
     // Marketplace media must never reference clean buyer deliverables under download/.
-    screenshot_paths: ['cover.png', 'marketplace-preview.png'],
+    screenshot_paths: ['cover.png', ...screenshotPaths],
     technical_information: technicalInformation,
     ai_disclosure: 'AI Assisted, Graphics',
   };
@@ -362,22 +379,34 @@ export async function packageDigitalAssetPreview(options) {
     knownFiles.push(destination);
   }
 
-  const [cover, marketplacePreview, spriteSheet] = await Promise.all([
+  const previewPages = [];
+  for (let offset = 0; offset < candidates.length; offset += MAX_ASSETS_PER_MARKETING_IMAGE) {
+    previewPages.push(candidates.slice(offset, offset + MAX_ASSETS_PER_MARKETING_IMAGE));
+  }
+  const marketplacePreviewNames = previewPages.length === 1
+    ? ['marketplace-preview.png']
+    : previewPages.map((_, index) => `marketplace-preview-${index + 1}.png`);
+  const [cover, marketplacePreviews, spriteSheet] = await Promise.all([
     createCover(candidates, product),
-    createMarketplacePreview(candidates, product),
+    Promise.all(previewPages.map((page, index) => createMarketplacePreview(page, product, {
+      allCandidates: candidates,
+      pageIndex: index,
+      pageCount: previewPages.length,
+    }))),
     createSpriteSheet(candidates, product),
   ]);
   const coverPath = resolve(exportRoot, 'cover.png');
-  const marketplacePreviewPath = resolve(exportRoot, 'marketplace-preview.png');
+  const marketplacePreviewPaths = marketplacePreviewNames.map((name) => resolve(exportRoot, name));
+  const marketplacePreviewPath = marketplacePreviewPaths[0];
   const sheetPath = resolve(downloadRoot, 'assets', `${product.slug}-sprite-sheet.png`);
   const readmePath = resolve(downloadRoot, 'README.md');
   const licensePath = resolve(downloadRoot, 'LICENSE-DRAFT.md');
   const listingPath = resolve(exportRoot, 'itch-listing-preview.json');
   await mkdir(resolve(downloadRoot, 'assets'), { recursive: true });
-  const listing = buildItchListing(product, candidates);
+  const listing = buildItchListing(product, candidates, marketplacePreviewNames);
   await Promise.all([
     writeFile(coverPath, cover),
-    writeFile(marketplacePreviewPath, marketplacePreview),
+    ...marketplacePreviewPaths.map((path, index) => writeFile(path, marketplacePreviews[index])),
     writeFile(sheetPath, spriteSheet),
     writeFile(readmePath, packReadme(product, candidates), 'utf8'),
     writeFile(licensePath, '# Draft License\n\nInternal connection test only. Not approved for public distribution or resale.\n', 'utf8'),
@@ -385,7 +414,7 @@ export async function packageDigitalAssetPreview(options) {
   ]);
   knownFiles.push(
     coverPath,
-    marketplacePreviewPath,
+    ...marketplacePreviewPaths,
     sheetPath,
     readmePath,
     licensePath,
@@ -426,6 +455,7 @@ export async function packageDigitalAssetPreview(options) {
     manifest,
     coverPath,
     marketplacePreviewPath,
+    marketplacePreviewPaths,
     sheetPath,
   };
 }

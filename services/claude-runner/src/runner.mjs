@@ -231,7 +231,10 @@ function classifyClaudeRunnerBlock(text) {
   if (
     normalized.includes('not logged in')
     || normalized.includes('please run /login')
-    || normalized.includes('please run /login')
+    || normalized.includes('failed to authenticate')
+    || normalized.includes('oauth session expired')
+    || normalized.includes('could not be refreshed')
+    || normalized.includes('authentication_error')
   ) {
     return {
       summary: 'Claude CLI is installed but not logged in for the Agent runtime user.',

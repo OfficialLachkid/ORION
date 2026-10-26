@@ -273,11 +273,30 @@ export function buildPokemonNightShiftDigest({
   return lines.join('\n');
 }
 
-export async function postNightShiftFailure(config, { label, isFallback }) {
-  await postDiscord(config, getLeadDigestChannelId(config), buildNoticeDiscordPayload({
+export async function postNightShiftFailure(config, {
+  label,
+  isFallback,
+  diagnostic = '',
+  authenticationBlocked = false,
+  recoveryCommand = '',
+}) {
+  const retry = isFallback ? 'tomorrow at 01:30' : 'today at 07:00';
+  const description = authenticationBlocked
+    ? `Qualification could not authenticate the Claude CLI. No affected leads were changed. Re-authorize Claude on the Mac, then the next scheduled qualification can continue.`
+    : `Qualification failed systemically (likely a usage/rate limit or startup error). No leads were processed. This will retry automatically ${retry}; nothing is lost.`;
+  await postDiscord(config, config.channelIds.alerts || getLeadDigestChannelId(config), buildNoticeDiscordPayload({
     title: `${label} - Failed`,
-    description: `Qualification failed systemically (likely a usage/rate limit or startup error). No leads were processed. This will retry automatically at the next scheduled slot${isFallback ? ' (tomorrow 01:30)' : ' (07:00 today)'} - nothing is lost.`,
+    description,
     color: 0xED4245,
+    fields: [
+      diagnostic ? { name: 'Reason', value: String(diagnostic).slice(0, 900), inline: false } : null,
+      recoveryCommand ? {
+        name: 'Run in Terminal on the Mac',
+        value: `\`${recoveryCommand}\``,
+        inline: false,
+      } : null,
+      { name: 'Automatic retry', value: retry, inline: true },
+    ],
     footerText: 'ORION night shift',
   }));
 }

@@ -70,6 +70,11 @@ export function buildResearchEmbed(report, recommendation = null) {
             : 'No approval is available because no recommendation passed the evidence-quality gates.',
           inline: false,
         },
+        ...(!baseline && report.analysis_issue ? [{
+          name: 'Latest analysis result',
+          value: clean(report.analysis_issue, 900),
+          inline: false,
+        }] : []),
       ],
     };
   }

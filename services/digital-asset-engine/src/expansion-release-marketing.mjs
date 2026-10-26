@@ -13,23 +13,29 @@ const COLORS = Object.freeze({
   backgroundLight: '#b7c5d4',
   panel: '#172538',
   panelSoft: '#263a52',
+  card: '#e8f0f6',
+  cardText: '#172538',
+  cardBorder: '#5f7b95',
   text: '#f8fbff',
   ink: '#111b29',
   cyan: '#20d8f4',
   violet: '#7d6cf2',
 });
 const ARCANE_COLORS = Object.freeze({
-  background: '#21172f',
-  backgroundLight: '#3b2752',
-  panel: '#151020',
-  panelSoft: '#291d3b',
+  background: '#c9b9d8',
+  backgroundLight: '#e2d7eb',
+  panel: '#2a1c3b',
+  panelSoft: '#5d4672',
+  card: '#f4eef8',
+  cardText: '#2a1c3b',
+  cardBorder: '#8a70a0',
   text: '#fff8e9',
   ink: '#120c1b',
   cyan: '#b979ff',
   violet: '#44c6bf',
 });
 
-export const EXPANSION_RELEASE_MARKETING_VERSION = '1.5.0';
+export const EXPANSION_RELEASE_MARKETING_VERSION = '1.6.0';
 
 const WEAPON_COVER_FRAME_COUNT = 8;
 const EXPANSION_COVER_FRAME_COUNT = 12;
@@ -372,8 +378,8 @@ async function gridImage({ width, height, title, subtitle, entries, columns, top
       top: y + 5,
     });
     cards.push(
-      `<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" rx="11" fill="${colors.panel}" stroke="${colors.panelSoft}" stroke-width="2"/>`,
-      `<text x="${x + (cellWidth / 2)}" y="${y + cellHeight - 10}" text-anchor="middle" fill="${colors.text}" font-family="Arial, sans-serif" font-size="${Math.min(14, Math.max(10, Math.floor(175 / entry.name.length)))}" font-weight="700">${escapeXml(entry.name)}</text>`,
+      `<rect x="${x}" y="${y}" width="${cellWidth}" height="${cellHeight}" rx="11" fill="${colors.card}" stroke="${colors.cardBorder}" stroke-width="2"/>`,
+      `<text x="${x + (cellWidth / 2)}" y="${y + cellHeight - 10}" text-anchor="middle" fill="${colors.cardText}" font-family="Arial, sans-serif" font-size="${Math.min(14, Math.max(10, Math.floor(175 / entry.name.length)))}" font-weight="700">${escapeXml(entry.name)}</text>`,
     );
     watermarks.push(protectionText(x + (cellWidth / 2), y + (cellHeight / 2), Math.min(22, cellWidth / 7)));
   }

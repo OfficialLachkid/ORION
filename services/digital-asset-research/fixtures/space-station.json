@@ -231,7 +231,7 @@
     },
     "commercial": {
       "base_price": {
-        "amount": 6.99,
+        "amount": 4.99,
         "currency": "USD"
       },
       "marketplace_candidates": ["itch.io"]

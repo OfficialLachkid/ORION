@@ -154,3 +154,42 @@ test('executeClaudeTask classifies auth-blocked Claude runs clearly', async () =
   assert.equal(result.report.recoveryCommand, 'claude auth login --claudeai');
   assert.equal(result.report.nextSteps.some((entry) => /claude auth login/u.test(entry)), true);
 });
+
+test('executeClaudeTask classifies an expired OAuth refresh as auth-blocked', async () => {
+  const config = loadRuntimeConfig();
+  const tempRoot = mkdtempSync(join(tmpdir(), 'ruflo-claude-runner-expired-auth-'));
+  const result = await executeClaudeTask({
+    task_id: 'TASK-AUTH-EXPIRED',
+    summary: 'Probe expired auth state.',
+    full_text: 'Probe expired auth state.',
+    domain: 'general',
+    priority: 'normal',
+    target_agent: 'orchestrator',
+    source_type: 'discord_text_command',
+    source_channel: 'commands',
+    submitted_at: '2026-10-26T10:00:00.000Z',
+    submitted_by: 'Codex',
+    approval_required: false,
+    approval_state: 'not_required',
+    image_attachments: [],
+  }, {
+    ...config,
+    env: {
+      ...config.env,
+      CLAUDE_RUNNER_ENABLED: 'true',
+      CLAUDE_CHECKPOINTS_PATH: join(tempRoot, 'checkpoints'),
+    },
+    runtimePaths: { ...config.runtimePaths, tmpDir: join(tempRoot, 'tmp') },
+    claude: { ...config.claude, enabled: true, workingDirectory: tempRoot },
+  }, {
+    commandRunner: async () => ({
+      code: 1,
+      stdout: '',
+      stderr: 'Failed to authenticate: OAuth session expired and could not be refreshed',
+    }),
+  });
+
+  assert.equal(result.report.state, 'blocked');
+  assert.match(result.report.summary, /not logged in/u);
+  assert.equal(result.report.recoveryCommand, 'claude auth login --claudeai');
+});

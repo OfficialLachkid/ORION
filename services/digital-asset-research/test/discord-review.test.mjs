@@ -11,10 +11,12 @@ test('labels a quality-gated result as evidence monitoring without approval', ()
     snapshot_count: 2,
     minimum_snapshots: 2,
     reason: 'No recommendation passed.',
+    analysis_issue: 'At least two cited listing titles must support one concrete concept.',
   });
   assert.equal(embed.title, 'Digital Asset Research · EVIDENCE MONITORING');
   assert.equal(embed.fields[0].value, '**2** retained · **2** minimum');
   assert.match(embed.fields[1].value, /evidence-quality gates/iu);
+  assert.match(embed.fields[2].value, /two cited listing titles/iu);
 });
 
 test('research approval writes an exact handoff and durable generation job', async () => {

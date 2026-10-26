@@ -202,7 +202,15 @@ export async function runNightShift(argv = process.argv, deps = {}) {
     runtime.stderr.write(`Follow-up step failed (non-fatal): ${error.message}\n`);
   }
 
-  const { outcomes, systemicFailure, rateLimited, exitCode, stderr } = runtime.runQualification(limit);
+  const {
+    outcomes,
+    systemicFailure,
+    rateLimited,
+    authenticationBlocked,
+    recoveryCommand,
+    exitCode,
+    stderr,
+  } = runtime.runQualification(limit);
 
   runtime.recordOpsMetric(config, 'night_shift_run', {
     fallback: isFallback,
@@ -216,7 +224,13 @@ export async function runNightShift(argv = process.argv, deps = {}) {
   if (systemicFailure) {
     runtime.stderr.write(`Night shift qualification failed systemically (exit ${exitCode}). No full marker written; video maintenance and primary leadgen will still run.\nstderr: ${stderr.slice(0, 500)}\n`);
     try {
-      await runtime.postNightShiftFailure(config, { label, isFallback });
+      await runtime.postNightShiftFailure(config, {
+        label,
+        isFallback,
+        diagnostic: stderr,
+        authenticationBlocked,
+        recoveryCommand,
+      });
     } catch (error) {
       runtime.stderr.write(`Night-shift failure notice failed (non-fatal): ${error.message}\n`);
     }
