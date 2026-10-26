@@ -18,7 +18,6 @@ import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.m
 import { sendDiscordChannelMessage } from './lib/discord-post.mjs';
 import {
   POKE_CHANNELS_INSTAGRAM,
-  POKE_CHANNELS_TIKTOK,
   CROSS_PLATFORM_ALLOWLIST,
   fetchPokemonPublicationsForPlatform,
   fetchCrossPlatformActivity,
@@ -342,7 +341,7 @@ function buildAnalystPrompt(dataPack, priorSummary = '') {
     'FORMATTING: every concrete number you cite (view count, like count, v/vid, like-rate %, median, delta, hour, etc.) MUST be wrapped in bold with double-asterisks so it stands out at a glance in Discord. Example: "poke-quizz-youtube pulled **2070 v/vid** on **90 videos** (like-rate **1.33%**)." This is non-negotiable — plain numbers get lost in the wall of text.',
     '',
     'Structure your response as:',
-    '0. **Cross-platform posting activity + per-platform performance** — read `cross_platform_activity` AND `per_platform_performance`. In the FIRST paragraph: total posts across platforms this week, split by platform (YouTube Shorts, TikTok via Buffer, Instagram Reels) with channel counts. Bold every count. In the SECOND paragraph: a per-platform performance comparison from `per_platform_performance` — total views, v/vid, median, like-rate for each platform where `videos_with_metrics > 0`. Call out which platform is pulling the most engagement per video, and if a platform is sparse-only (`videos_sparse_scope_missing > 0 and videos_with_metrics == 0`) say so and name the fix (e.g. for TikTok: "Buffer insights:read scope not yet granted — once granted, next sweep rolls in metrics"). Instagram Reels DOES carry an avg-watch-time signal (`avg_watch_sec_median`) that YouTube Shorts does not — call it out when present. You MAY now make cautious cross-platform observations ("pixelated-reveal pulls 2x the views per video on Instagram vs YouTube this week — worth a template-mix tilt test"), but still prefix any strong recommendation with the sample sizes so the operator can judge confidence. If both blocks are null/missing, skip this section silently.',
+    '0. **Cross-platform posting activity + per-platform performance** — read `cross_platform_activity` AND `per_platform_performance`. In the FIRST paragraph: total posts across platforms this week, split by platform (YouTube Shorts, TikTok via Buffer, Instagram Reels) with channel counts. Bold every count. In the SECOND paragraph: a per-platform performance comparison from `per_platform_performance` — total views, v/vid, median, like-rate for each platform where `videos_with_metrics > 0`. Call out which platform is pulling the most engagement per video. Instagram Reels carries an avg-watch-time signal (`avg_watch_sec_median`) that YouTube Shorts does not — call it out when present. TikTok engagement is intentionally absent from `per_platform_performance` because Buffer\'s free tier does not expose it; TikTok cadence still appears in `cross_platform_activity` and that is the only TikTok signal available — do NOT flag the missing engagement as a bug or a backlog item, and do NOT suggest granting a Buffer scope. You MAY make cautious cross-platform observations between YouTube and Instagram ("pixelated-reveal pulls 2x the views per video on Instagram vs YouTube this week — worth a template-mix tilt test"), but prefix any strong recommendation with the sample sizes so the operator can judge confidence. If both blocks are null/missing, skip this section silently.',
     '1. **This week in numbers (YouTube Shorts deep-dive)** — 2-3 sentences on YouTube totals + which channel/template stood out. Bold every number. This is the deepest-signal platform (full analytics capture); the other sections cover cross-platform at a lighter grain.',
     '2. **What is working** — 2-4 bullets identifying the templates or channels moving up, with the specific v/vid or like-rate numbers as evidence.',
     '3. **What is not working** — 2-4 bullets on underperformers or drops relative to peers. Do NOT recommend killing a channel or template with fewer than 20 videos in the window (undersampled).',
@@ -484,25 +483,24 @@ export async function runWeeklyAnalyticsReview({ config = loadRuntimeConfig(), n
     process.stderr.write(`[weekly-analytics-review] cross-platform activity fetch failed (non-fatal): ${error.message}\n`);
   }
 
-  // Per-platform performance summary. Fetches Instagram + TikTok pubs
-  // and their analytics snapshots, then rolls up into per-platform
-  // engagement totals/averages. Also best-effort — if either fails we
-  // still ship the YouTube review.
+  // Per-platform engagement summary. Fetches Instagram pubs and
+  // their analytics snapshots, then rolls up alongside the YouTube
+  // numbers already in hand. TikTok engagement is intentionally
+  // omitted — Buffer's free tier gates `insights:read` behind a
+  // paid plan, so there's no engagement source for us to read.
+  // TikTok still shows up in the cross-platform *cadence* rollup
+  // above via `video_publications` directly. Best-effort — a
+  // Supabase blip here must not block the main YouTube review.
   let perPlatformPerformance = null;
   try {
-    const [instagramPubs, tiktokPubs] = await Promise.all([
-      fetchPokemonPublicationsForPlatform(supabaseFetchBound, sinceIso, 'instagram_reels', POKE_CHANNELS_INSTAGRAM).catch(() => []),
-      fetchPokemonPublicationsForPlatform(supabaseFetchBound, sinceIso, 'tiktok_video', POKE_CHANNELS_TIKTOK).catch(() => []),
-    ]);
-    const [instagramAnalytics, tiktokAnalytics] = await Promise.all([
-      fetchLatestAnalyticsByPub(config, instagramPubs.map((p) => p.id)).catch(() => new Map()),
-      fetchLatestAnalyticsByPub(config, tiktokPubs.map((p) => p.id)).catch(() => new Map()),
-    ]);
+    const instagramPubs = await fetchPokemonPublicationsForPlatform(
+      supabaseFetchBound, sinceIso, 'instagram_reels', POKE_CHANNELS_INSTAGRAM,
+    ).catch(() => []);
+    const instagramAnalytics = await fetchLatestAnalyticsByPub(config, instagramPubs.map((p) => p.id)).catch(() => new Map());
     perPlatformPerformance = buildPerPlatformPerformance({
       platforms: {
         youtube_shorts: { publications, analyticsByPub },
         instagram_reels: { publications: instagramPubs, analyticsByPub: instagramAnalytics },
-        tiktok_video: { publications: tiktokPubs, analyticsByPub: tiktokAnalytics },
       },
     });
     const summaryLine = Object.entries(perPlatformPerformance || {})
