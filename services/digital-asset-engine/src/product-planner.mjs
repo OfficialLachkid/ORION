@@ -1,5 +1,6 @@
 import { createStableId } from './ids.mjs';
 import { resolveAssetRecipe } from './asset-recipe-registry.mjs';
+import { applyInitialReleasePricingPolicy } from './pricing-policy.mjs';
 import { ProductSpecificationSchema } from './schemas.mjs';
 
 export function slugify(value) {
@@ -82,7 +83,10 @@ export function createProductSpecification(validation, config, options = {}) {
       validation_path: null,
     })),
     pricing: {
-      base_price: opportunity.commercial.base_price,
+      base_price: applyInitialReleasePricingPolicy(
+        opportunity.commercial.base_price,
+        opportunity.generation.assets.length,
+      ),
       marketplace_prices: {},
       human_approval_required: true,
     },

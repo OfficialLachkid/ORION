@@ -10,6 +10,7 @@ import {
   describeAssetCollection,
   packageDigitalAssetPreview,
   resizePreviewAsset,
+  selectRepresentativeCandidates,
 } from '../src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from '../src/pipeline.mjs';
 
@@ -108,6 +109,18 @@ test('preview resizing keeps contain padding transparent', async () => {
   assert.equal(data[3], 0);
   const centerOffset = (((48 * info.width) + 48) * 4) + 3;
   assert.equal(data[centerOffset], 255);
+});
+
+test('large packs use a stable representative cover selection', () => {
+  const candidates = Array.from({ length: 16 }, (_, index) => ({
+    asset: { asset_key: `asset-${index + 1}` },
+  }));
+  const selected = selectRepresentativeCandidates(candidates);
+  assert.equal(selected.length, 8);
+  assert.deepEqual(selected.map(({ asset }) => asset.asset_key), [
+    'asset-1', 'asset-3', 'asset-5', 'asset-7',
+    'asset-10', 'asset-12', 'asset-14', 'asset-16',
+  ]);
 });
 
 test('pipeline produces a transparent, validated candidate while blocking distribution', async () => {

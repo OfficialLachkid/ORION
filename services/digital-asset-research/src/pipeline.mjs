@@ -122,6 +122,7 @@ export async function analyzeResearchHistory(options) {
         ...report,
         status: 'monitoring',
         reason: 'Two snapshots were compared, but no recommendation passed ORION evidence-quality gates. Research remains in monitoring and no generation was started.',
+        analysis_issue: String(error.message || error).slice(0, 900),
       };
     }
   }

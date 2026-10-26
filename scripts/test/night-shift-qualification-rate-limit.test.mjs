@@ -1,9 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  CLAUDE_AUTH_RECOVERY_COMMAND,
   hasClaudeUsageLimitOutcome,
+  isClaudeAuthenticationError,
   isClaudeUsageLimitError,
 } from '../lib/night-shift/qualification.mjs';
+
+test('recognizes an expired Claude OAuth session and exposes the recovery command', () => {
+  assert.equal(isClaudeAuthenticationError(
+    'Failed to authenticate: OAuth session expired and could not be refreshed',
+  ), true);
+  assert.equal(isClaudeAuthenticationError('WebFetch failed: ECONNREFUSED'), false);
+  assert.equal(CLAUDE_AUTH_RECOVERY_COMMAND, 'claude auth login --claudeai');
+});
 
 test('isClaudeUsageLimitError matches the shapes claude -p surfaces on quota exhaustion', () => {
   // Verbatim / near-verbatim strings observed in the wild (2026-08-06 + 2026-08-09).
