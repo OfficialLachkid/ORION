@@ -53,6 +53,7 @@ function parseArguments(argv) {
     else if (token === '--post-to-discord') args.postToDiscord = true;
     else if (token === '--stage-itch-draft') args.stageItchDraft = true;
     else if (token === '--publish-itch') args.publishItch = true;
+    else if (token === '--reconcile-published') args.reconcilePublished = true;
     else if (token === '--migrate-itch-slug') args.migrateItchSlug = true;
     else if (token === '--apply-itch-theme') args.applyItchTheme = true;
     else if (token === '--update-itch-description') args.updateItchDescription = true;
@@ -140,6 +141,7 @@ function printHelp() {
     '  --post-to-discord     Required for live Discord posting.',
     '  --stage-itch-draft    Required for live itch.io draft changes.',
     '  --publish-itch        Required for the approved live itch.io visibility change.',
+    '  --reconcile-published Reapply an already-approved initial release when itch is public but its verified receipt is missing.',
     '  --migrate-itch-slug   Required for the live project URL migration.',
     '  --apply-itch-theme    Required for the approved live Theme editor save.',
     '  --update-itch-description  Required for the verified public description presentation update.',
@@ -301,6 +303,7 @@ async function main() {
       releaseVersion: args.releaseVersion,
       profileDir: args.playwrightProfile,
       headed: args.headed,
+      reconcilePublished: args.reconcilePublished,
       now: args.now,
     });
     process.stdout.write(`${JSON.stringify({ command: args.command, ...result }, null, 2)}\n`);

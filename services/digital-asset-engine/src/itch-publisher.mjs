@@ -233,6 +233,8 @@ export async function publishApprovedItchRelease(options) {
   }
 
   const marketplaceReviewMode = String(distributionState.marketplace_review_mode || 'draft');
+  const reconcilePublishedInitial = marketplaceReviewMode === 'draft'
+    && options.reconcilePublished === true;
   let marketplaceState;
   if (marketplaceReviewMode === 'draft') {
     if (itchState?.status !== 'verified'
@@ -302,7 +304,7 @@ export async function publishApprovedItchRelease(options) {
     let publicationAction = 'published';
     let butlerReceipt = null;
 
-    if (marketplaceReviewMode === 'published_update') {
+    if (marketplaceReviewMode === 'published_update' || reconcilePublishedInitial) {
       const downloadRoot = resolve(packaged.root, 'download');
       const coverPath = resolve(packaged.root, packaged.listing.cover_path);
       const screenshotPaths = (packaged.listing.screenshot_paths || [])
@@ -325,12 +327,15 @@ export async function publishApprovedItchRelease(options) {
       const butlerExecutable = options.butlerExecutable
         || env.ITCH_BUTLER_EXECUTABLE
         || (existsSync(homeButler) ? homeButler : 'butler');
+      const releaseVersion = packaged.manifest.target_version
+        || packaged.manifest.product_version
+        || product.version;
       const butler = cliRunner(butlerExecutable, [
         'push',
         downloadRoot,
         marketplaceState.butler_target,
         '--userversion',
-        `${packaged.manifest.target_version}-${manifestHash.slice(0, 12)}`,
+        `${releaseVersion}-${manifestHash.slice(0, 12)}`,
         '--if-changed',
       ], { cwd: options.cwd, env, timeoutMs: 15 * 60_000 });
       if (!butler.ok) {
@@ -338,7 +343,7 @@ export async function publishApprovedItchRelease(options) {
       }
       butlerReceipt = {
         target: marketplaceState.butler_target,
-        user_version: `${packaged.manifest.target_version}-${manifestHash.slice(0, 12)}`,
+        user_version: `${releaseVersion}-${manifestHash.slice(0, 12)}`,
         output: String(butler.stdout || '').slice(-2000),
       };
 
@@ -397,7 +402,7 @@ export async function publishApprovedItchRelease(options) {
       if (editorVerified.status !== 'verified') {
         throw new Error(`itch.io update editor verification failed: ${JSON.stringify(editorVerified.checks || {})}`);
       }
-      publicationAction = 'updated';
+      publicationAction = reconcilePublishedInitial ? 'reconciled' : 'updated';
     } else {
       const published = runCode('publish.js', buildItchPublishCode({
         listing: packaged.listing,

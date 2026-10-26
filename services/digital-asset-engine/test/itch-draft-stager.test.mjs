@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import {
+  buildDraftEligibilityRunCode,
   buildItchDraftRunCode,
   buildItchProjectDiscoveryRunCode,
   buildVerifyRunCode,
@@ -23,6 +24,8 @@ function browserStatus(code) {
     ? 'discovery'
     : code.includes("status: 'ready'")
     ? 'ready'
+    : code.includes("published ? 'already_public'")
+      ? 'draft'
     : code.includes('Object.values(checks)')
       ? 'verified'
       : code.includes("status: 'media_ready'")
@@ -406,6 +409,35 @@ test('published projects reject update draft staging before Butler or browser mu
     },
   }), /marketplace-update publisher/iu);
   assert.equal(calls.length, 0);
+});
+
+test('browser eligibility rejects a public project before upload or listing mutation when receipt is missing', async () => {
+  const fixture = await createFixture();
+  const calls = [];
+  await assert.rejects(stageItchDraft({
+    outputRoot: fixture.outputRoot,
+    slug: fixture.product.slug,
+    store: fixture.store,
+    itchUrl: 'https://vbjservices.itch.io/neon-plasma-armory',
+    profileDir: fixture.outputRoot,
+    cliRunner(executable, args) {
+      const code = args.includes('run-code') ? suppliedBrowserCode(args) : '';
+      calls.push({ executable, args, code });
+      if (!code) return { ok: true, stdout: '', stderr: '' };
+      const details = code.includes("published ? 'already_public'")
+        ? { status: 'already_public', draft: false, published: true }
+        : { status: browserStatus(code), url: 'https://itch.io/game/edit/12345' };
+      return {
+        ok: true,
+        stdout: JSON.stringify({ result: JSON.stringify(details) }),
+        stderr: '',
+      };
+    },
+  }), /already public/iu);
+  assert.ok(buildDraftEligibilityRunCode().includes("status: published ? 'already_public'"));
+  assert.equal(calls.some((call) => call.args[0] === 'push'), false);
+  assert.equal(calls.some((call) => call.args.includes('upload')), false);
+  assert.equal(calls.some((call) => call.code.includes('inputData.save')), false);
 });
 
 test('stages a quality-cleared immutable release candidate instead of the base preview', async () => {

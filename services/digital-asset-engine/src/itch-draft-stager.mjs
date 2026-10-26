@@ -419,6 +419,22 @@ async (page) => {
 }`.trim();
 }
 
+export function buildDraftEligibilityRunCode() {
+  return `
+async (page) => {
+  const draft = await page.locator('input[name="game[published]"][value="draft"]')
+    .isChecked().catch(() => false);
+  const published = await page.locator('input[name="game[published]"][value="published"]')
+    .isChecked().catch(() => false);
+  return {
+    status: published ? 'already_public' : draft ? 'draft' : 'unknown',
+    draft,
+    published,
+    url: page.url(),
+  };
+}`.trim();
+}
+
 export function buildDeleteScreenshotRunCode() {
   return `
 async (page) => {
@@ -676,6 +692,20 @@ async (page) => {
       publicUrl = normalizeItchUrl(discovery.details.publicUrl).toString();
       editUrl = String(discovery.details.editUrl || '');
       createProject = discovery.details.status === 'new_project_form';
+    }
+
+    if (!createProject) {
+      const eligibility = runBrowserCode('draft eligibility', buildDraftEligibilityRunCode(), 3);
+      if (eligibility.details.status === 'already_public') {
+        const error = new Error(
+          'The itch.io project is already public. Draft staging stopped before changing listing fields, media, or buyer files.',
+        );
+        error.code = 'ITCH_PROJECT_ALREADY_PUBLIC';
+        throw error;
+      }
+      if (eligibility.details.status !== 'draft') {
+        throw new Error(`itch.io draft eligibility could not be verified: ${diagnostic(eligibility)}`);
+      }
     }
 
     const prepareDraft = (save = false) => {

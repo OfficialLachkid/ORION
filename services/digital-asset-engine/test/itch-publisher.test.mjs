@@ -35,6 +35,7 @@ async function createFixture() {
     title: product.title,
     short_description: '8 side-view sci-fi weapons with 24 matching effect animations.',
     suggested_price: { amount: 4.99, currency: 'USD' },
+    cover_path: 'cover.png',
     screenshot_paths: ['screenshots/inventory.png', 'screenshots/effects.png', 'screenshots/cycles.gif'],
   };
   const manifest = {
@@ -198,6 +199,84 @@ test('approved release publishes once, verifies public page, and writes an idemp
     cliRunner() { throw new Error('browser must not reopen'); },
   });
   assert.equal(reused.reused, true);
+});
+
+test('explicit reconciliation restores and verifies an already-public approved initial release with a missing receipt', async () => {
+  const fixture = await createFixture();
+  const candidateRoot = resolve(fixture.productRoot, 'releases', '0.2.0', 'candidates', '0123456789abcdef');
+  await Promise.all([
+    mkdir(resolve(candidateRoot, 'download'), { recursive: true }),
+    mkdir(resolve(candidateRoot, 'screenshots'), { recursive: true }),
+  ]);
+  await Promise.all([
+    writeFile(resolve(candidateRoot, 'cover.png'), 'cover'),
+    writeFile(resolve(candidateRoot, 'screenshots', 'inventory.png'), 'inventory'),
+    writeFile(resolve(candidateRoot, 'screenshots', 'effects.png'), 'effects'),
+    writeFile(resolve(candidateRoot, 'screenshots', 'cycles.gif'), 'cycles'),
+    writeFile(resolve(candidateRoot, 'download', 'neon-plasma-armory-assets.zip'), 'buyer package'),
+  ]);
+
+  const calls = [];
+  let screenshotCount = 0;
+  const cliRunner = (executable, args) => {
+    calls.push({ executable, args });
+    if (args[0] === 'push') return { ok: true, stdout: 'Pushed approved build', stderr: '' };
+    const command = args[2];
+    if (['open', 'close', 'dialog-dismiss', 'dialog-accept', 'upload'].includes(command)) {
+      return { ok: true, stdout: '{}', stderr: '' };
+    }
+    if (command !== 'run-code') return { ok: false, stderr: `unexpected ${command}` };
+    const code = suppliedBrowserCode(args);
+    let details;
+    if (code.includes('expectedTitle')) details = { status: 'ready', checks: { editor: true, title: true, published: true } };
+    else if (code.includes("status: 'screenshots_counted'")) details = { status: 'screenshots_counted', count: screenshotCount };
+    else if (code.includes("status: 'screenshot_delete_requested'")) details = { status: 'screenshot_delete_requested' };
+    else if (code.includes("status: 'chooser_opened'")) details = { status: 'chooser_opened' };
+    else if (code.includes("status: 'media_ready'")) details = { status: 'media_ready', coverId: 'approved-cover', screenshotCount: 3 };
+    else if (code.includes('"save":true')) details = { status: 'submitted' };
+    else if (code.includes('expectedVisibility')) details = { status: 'verified', checks: { visibility: true } };
+    else if (code.includes('buy_action')) details = {
+      status: 'verified_public',
+      checks: {
+        public_url: true,
+        title: true,
+        buy_action: true,
+        price: true,
+        included_file: true,
+        payment_options: true,
+        not_draft_error: true,
+      },
+    };
+    else details = { status: 'unknown' };
+    return { ok: true, stdout: JSON.stringify({ result: JSON.stringify(details) }), stderr: '' };
+  };
+
+  const result = await publishApprovedItchRelease({
+    ...fixture,
+    slug: fixture.product.slug,
+    releaseVersion: '0.2.0',
+    reconcilePublished: true,
+    cliRunner,
+    headed: false,
+    butlerExecutable: 'butler',
+    publicFetchImpl: async () => ({
+      ok: true,
+      async text() { return '<html><title>Neon Plasma Armory</title></html>'; },
+    }),
+    now: '2026-10-20T13:00:00.000Z',
+  });
+
+  assert.equal(result.status, 'verified_public');
+  assert.equal(result.publication_mode, 'draft');
+  assert.equal(result.publication_action, 'reconciled');
+  assert.ok(calls.some((call) => call.args[0] === 'push'));
+  assert.equal(calls.filter((call) => call.args[2] === 'upload').length, 4);
+  const receipt = JSON.parse(await readFile(
+    resolve(fixture.productRoot, 'review', 'itch-release.json'),
+    'utf8',
+  ));
+  assert.equal(receipt.manifest_hash, manifestHash);
+  assert.equal(receipt.publication_action, 'reconciled');
 });
 
 test('publishing fails before browser mutation when distribution approval is absent', async () => {
