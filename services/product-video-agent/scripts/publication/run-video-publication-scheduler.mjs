@@ -21,6 +21,27 @@ import {
   buildYoutubeScheduleUpdatePlan,
 } from '../../src/youtube-publication.mjs';
 
+const QUEUE_PUBLICATION_SELECT = [
+  'id',
+  'video_id',
+  'platform',
+  'account_key',
+  'status',
+  'title',
+  'description',
+  'hashtags',
+  'preview_url',
+  'external_id',
+  'scheduled_for',
+  'uploaded_at',
+  'published_at',
+  'created_at',
+  'updated_at',
+  'workflow_state:metadata->>workflow_state',
+].join(',');
+
+const TERMINAL_PUBLICATION_STATUSES = 'published,withdrawn,deleted,failed,blocked';
+
 export async function loadQueuedPublications(runtimeEnv, options = {}) {
   const fetchJsonImpl = options.fetchJson || fetchJson;
   const supabaseUrl = runtimeEnv.SUPABASE_URL || '';
@@ -30,7 +51,8 @@ export async function loadQueuedPublications(runtimeEnv, options = {}) {
   }
 
   const url = new URL('/rest/v1/video_publications', supabaseUrl);
-  url.searchParams.set('select', '*');
+  url.searchParams.set('select', QUEUE_PUBLICATION_SELECT);
+  url.searchParams.set('status', `not.in.(${TERMINAL_PUBLICATION_STATUSES})`);
   url.searchParams.set('order', 'created_at.asc');
   return fetchJsonImpl(url.toString(), {
     method: 'GET',

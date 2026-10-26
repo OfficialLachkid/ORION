@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { runVideoPublicationScheduler } from '../scripts/run-video-publication-scheduler.mjs';
+import {
+  loadQueuedPublications,
+  runVideoPublicationScheduler,
+} from '../scripts/run-video-publication-scheduler.mjs';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
 
 const activeChannelProfile = normalizePublicationChannelProfile({
@@ -75,6 +78,26 @@ const previewApproved = {
   },
   created_at: '2026-07-31T08:10:00.000Z',
 };
+
+test('loadQueuedPublications excludes terminal rows and only selects queue fields', async () => {
+  let requestedUrl = '';
+  const rows = await loadQueuedPublications({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_SECRET_KEY: 'service-key',
+  }, {
+    fetchJson: async (url) => {
+      requestedUrl = String(url);
+      return [];
+    },
+  });
+
+  const url = new URL(requestedUrl);
+  assert.deepEqual(rows, []);
+  assert.equal(url.searchParams.get('status'), 'not.in.(published,withdrawn,deleted,failed,blocked)');
+  assert.match(url.searchParams.get('select'), /workflow_state:metadata->>workflow_state/u);
+  assert.match(url.searchParams.get('select'), /description/u);
+  assert.equal(url.searchParams.get('select').includes('*'), false);
+});
 
 test('runVideoPublicationScheduler executes preview uploads and schedule updates for active channels', async () => {
   const executionCalls = [];

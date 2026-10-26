@@ -25,6 +25,9 @@ function resolveScheduleWindowEnd(asOf = new Date(), maxScheduledDays = 0) {
 }
 
 function workflowState(publication = {}) {
+  if (publication.workflow_state) {
+    return String(publication.workflow_state).trim();
+  }
   if (publication.metadata?.workflow_state) {
     return String(publication.metadata.workflow_state).trim();
   }

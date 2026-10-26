@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import test from 'node:test';
 
-import { runVideoAnalyticsSweep } from '../scripts/run-video-analytics-sweep.mjs';
+import {
+  resolveAnalyticsSnapshotQueryPlan,
+  runVideoAnalyticsSweep,
+} from '../scripts/run-video-analytics-sweep.mjs';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
 
 const analyticsChannelProfile = normalizePublicationChannelProfile({
@@ -32,12 +35,17 @@ const analyticsChannelProfile = normalizePublicationChannelProfile({
 
 test('runVideoAnalyticsSweep captures due snapshots and posts only the shared overview digest by default', async () => {
   const statePath = resolve(tmpdir(), `orion-video-analytics-state-${Date.now()}.json`);
+  const snapshotCachePath = resolve(tmpdir(), `orion-video-analytics-cache-${Date.now()}.json`);
   const sendCalls = [];
   const upserts = [];
+  const publicationQueryOptions = [];
+  const videoQueryOptions = [];
+  const snapshotQueryOptions = [];
   let messageCounter = 0;
 
   const store = {
-    async fetchPublishedPublicationsByChannel() {
+    async fetchPublishedPublicationsByChannel(options) {
+      publicationQueryOptions.push(options);
       return [
         {
           id: 'pub-123',
@@ -48,27 +56,25 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
           external_id: 'yt-123',
           title: 'Electric Grass #shorts',
           published_at: '2026-08-09T12:00:00.000Z',
-          metadata: {
-            type_pair: ['electric', 'grass'],
-            background_path: '/tmp/type-quiz-backgrounds/checkers.gif',
-            template_id: 'pokemon.type-quiz.v1',
-            render_path: '/tmp/electric-grass.mp4',
-          },
+          type_pair: ['electric', 'grass'],
+          background_path: '/tmp/type-quiz-backgrounds/checkers.gif',
+          template_id: 'pokemon.type-quiz.v1',
+          render_path: '/tmp/electric-grass.mp4',
         },
       ];
     },
-    async fetchVideosByIds() {
+    async fetchVideosByIds(_videoIds, options) {
+      videoQueryOptions.push(options);
       return [
         {
           id: 'video-123',
-          selected_script: {
-            hook: 'Can you guess the typing?',
-          },
+          hook: 'Can you guess the typing?',
         },
       ];
     },
-    async fetchLatestAnalyticsSnapshot() {
-      return null;
+    async fetchAnalyticsSnapshotsByPublicationIds(_publicationIds, options) {
+      snapshotQueryOptions.push(options);
+      return [];
     },
     async upsertVideoAnalyticsSnapshot(row) {
       upserts.push(row);
@@ -87,6 +93,7 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
       'post-discord': true,
       'force-digest': true,
       'state-path': statePath,
+      'snapshot-cache-path': snapshotCachePath,
     }, {
       runtimeConfig: {
         env: {
@@ -156,6 +163,7 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     });
 
     const state = JSON.parse(await readFile(statePath, 'utf8'));
+    const snapshotCache = JSON.parse(await readFile(snapshotCachePath, 'utf8'));
 
     assert.equal(result.digest_posted, true);
     assert.equal(result.digest_complete, true);
@@ -182,6 +190,17 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     ]);
     assert.equal(result.results.length, 1);
     assert.equal(result.results[0].action, 'captured');
+    assert.equal(result.snapshot_cache_path, snapshotCachePath);
+    assert.equal(snapshotCache.channels[analyticsChannelProfile.id].synced_through, '2026-08-10T09:00:00.000Z');
+    assert.equal(snapshotCache.channels[analyticsChannelProfile.id].snapshots.length, 1);
+    assert.deepEqual(
+      Object.keys(snapshotCache.channels[analyticsChannelProfile.id].snapshots[0]).sort(),
+      ['captured_at', 'metrics', 'publication_id'],
+    );
+    assert.match(publicationQueryOptions[0].select, /template_id:metadata->>template_id/u);
+    assert.match(videoQueryOptions[0].select, /hook:selected_script->>hook/u);
+    assert.equal(snapshotQueryOptions[0].capturedAfter, '2026-07-26T09:00:00.000Z');
+    assert.equal(snapshotQueryOptions[0].select, 'publication_id,captured_at,metrics');
     assert.equal(sendCalls.length, 3);
     assert.equal(sendCalls[0].channelId, '1528783542195323061');
     assert.equal(sendCalls[0].payload.embeds[0].title, 'Weekly YouTube Analytics Digest (7d) | 2026-08-10');
@@ -217,11 +236,13 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     });
   } finally {
     await rm(statePath, { force: true });
+    await rm(snapshotCachePath, { force: true });
   }
 });
 
 test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the corresponding analytics thread', async () => {
   const statePath = resolve(tmpdir(), `orion-video-analytics-state-${Date.now()}-ondemand.json`);
+  const snapshotCachePath = resolve(tmpdir(), `orion-video-analytics-cache-${Date.now()}-ondemand.json`);
   const sendCalls = [];
   let messageCounter = 0;
 
@@ -278,6 +299,7 @@ test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the c
       'post-target': 'corresponding',
       'digest-window-days': 3,
       'state-path': statePath,
+      'snapshot-cache-path': snapshotCachePath,
     }, {
       runtimeConfig: {
         env: {
@@ -383,11 +405,13 @@ test('runVideoAnalyticsSweep posts an on-demand single-channel digest into the c
     });
   } finally {
     await rm(statePath, { force: true });
+    await rm(snapshotCachePath, { force: true });
   }
 });
 
 test('runVideoAnalyticsSweep posts healthy channels and leaves weekly retry pending when one channel fails', async () => {
   const statePath = resolve(tmpdir(), `orion-video-analytics-state-${Date.now()}-degraded.json`);
+  const snapshotCachePath = resolve(tmpdir(), `orion-video-analytics-cache-${Date.now()}-degraded.json`);
   const healthyProfile = normalizePublicationChannelProfile({
     ...analyticsChannelProfile,
     id: 'video-channel-trivamon-youtube',
@@ -438,6 +462,7 @@ test('runVideoAnalyticsSweep posts healthy channels and leaves weekly retry pend
       'request-attempts': 2,
       'retry-base-delay-ms': 1,
       'state-path': statePath,
+      'snapshot-cache-path': snapshotCachePath,
     }, {
       runtimeConfig: {
         env: {
@@ -480,5 +505,28 @@ test('runVideoAnalyticsSweep posts healthy channels and leaves weekly retry pend
     assert.equal(state.last_weekly_digest_at, '');
   } finally {
     await rm(statePath, { force: true });
+    await rm(snapshotCachePath, { force: true });
   }
+});
+
+test('resolveAnalyticsSnapshotQueryPlan incrementally refreshes known publications and backfills new ones', () => {
+  const plan = resolveAnalyticsSnapshotQueryPlan({
+    publications: [{ id: 'known' }, { id: 'new' }],
+    cachedChannel: {
+      retained_after: '2026-07-01T00:00:00.000Z',
+      synced_through: '2026-07-20T12:00:00.000Z',
+      publication_ids: ['known'],
+      snapshots: [{
+        publication_id: 'known',
+        captured_at: '2026-07-20T08:00:00.000Z',
+        metrics: { views: 10 },
+      }],
+    },
+    retainedAfter: '2026-07-05T00:00:00.000Z',
+  });
+
+  assert.deepEqual(plan.incrementalPublications, [{ id: 'known' }]);
+  assert.deepEqual(plan.fullPublications, [{ id: 'new' }]);
+  assert.equal(plan.incrementalCapturedAfter, '2026-07-20T11:50:00.000Z');
+  assert.equal(plan.cachedSnapshots.length, 1);
 });
