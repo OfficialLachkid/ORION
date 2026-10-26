@@ -7,12 +7,14 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-// Daily Instagram Reels analytics sweep, fired 15 minutes before the
-// Monday weekly review so Monday's run reads fresh snapshots instead
-// of whatever happened to be in Supabase from the last manual pull.
-// Running daily (not weekly) catches each reel's metrics as they
-// stabilise over the first 48–72h after publish.
-export const DEFAULT_HOUR = 9;
+// Weekly Instagram Reels analytics sweep, fired Sunday night so
+// Monday morning's weekly review reads fresh snapshots. Weekly is
+// enough for the current review (which only reads the latest
+// snapshot per reel). If a retention-curve use case shows up later,
+// bump the cadence by overriding --weekday / --hour / --minute,
+// or drop the Weekday key from the plist builder to run daily.
+export const DEFAULT_WEEKDAY = 0; // 0 = Sunday under macOS launchd (same as JS Date)
+export const DEFAULT_HOUR = 23;
 export const DEFAULT_MINUTE = 0;
 export const DEFAULT_LAUNCH_AGENT_PATH = [
   '/opt/homebrew/bin',
@@ -58,12 +60,11 @@ export function buildInstagramAnalyticsSweepPlistContent({
   workingDirectory,
   stdoutPath,
   stderrPath,
+  weekday,
   hour,
   minute,
   executablePath = DEFAULT_LAUNCH_AGENT_PATH,
 }) {
-  // No <Weekday> key — launchd reads a Hour+Minute-only
-  // StartCalendarInterval as "every day at that time."
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -84,6 +85,8 @@ export function buildInstagramAnalyticsSweepPlistContent({
   </dict>
   <key>StartCalendarInterval</key>
   <dict>
+    <key>Weekday</key>
+    <integer>${weekday}</integer>
     <key>Hour</key>
     <integer>${hour}</integer>
     <key>Minute</key>
@@ -124,16 +127,18 @@ function uninstallLaunchAgent(plistPath) {
 function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-instagram-analytics-sweep-schedule.mjs [--hour 9] [--minute 0] [--no-load]',
+      'Usage: node scripts/install-instagram-analytics-sweep-schedule.mjs [--weekday 0] [--hour 23] [--minute 0] [--no-load]',
       '       node scripts/install-instagram-analytics-sweep-schedule.mjs --uninstall',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.instagram-analytics-sweep.plist and loads it by default.',
       'Each run calls run-instagram-analytics-sweep.mjs over the last 14 days (its default window) and',
-      'upserts the resulting per-reel snapshots into Supabase video_analytics so the Monday weekly',
+      'upserts the resulting per-reel snapshots into Supabase video_analytics so the Monday 09:15 weekly',
       'review reads fresh engagement data.',
       '',
-      '--hour + --minute pick the launchd fire time (macOS local time). Defaults: 09:00 — 15 min before',
-      'the weekly review on Mondays. Any Hour+Minute without --weekday fires DAILY.',
+      '--weekday N picks the launchd weekday (0 = Sunday, 6 = Saturday). Default: 0 (Sunday).',
+      '--hour + --minute pick the launchd fire time (macOS local time). Default: 23:00 — ~10h before',
+      'the Monday 09:15 weekly review, close enough that Monday reads fresh snapshots but not so close',
+      'that a slow Graph API call could overlap the review.',
       '',
       '--uninstall unloads and removes the plist.',
     ].join('\n'));
@@ -153,6 +158,7 @@ function main() {
   }
 
   const config = loadRuntimeConfig();
+  const weekday = getNumberArgValue('--weekday', DEFAULT_WEEKDAY, 6);
   const hour = getNumberArgValue('--hour', DEFAULT_HOUR, 23);
   const minute = getNumberArgValue('--minute', DEFAULT_MINUTE, 59);
   const shouldLoad = !hasFlag('--no-load');
@@ -174,16 +180,17 @@ function main() {
     workingDirectory: projectRoot,
     stdoutPath,
     stderrPath,
+    weekday,
     hour,
     minute,
   });
 
   writeFileSync(plistPath, plistContent, 'utf8');
-  process.stdout.write(`Wrote ${plistPath} (daily at hour=${hour} minute=${String(minute).padStart(2, '0')}).\n`);
+  process.stdout.write(`Wrote ${plistPath} (weekday=${weekday} hour=${hour} minute=${String(minute).padStart(2, '0')}).\n`);
 
   if (shouldLoad) {
     loadLaunchAgent(plistPath);
-    process.stdout.write('Loaded LaunchAgent. First fire is at the next matching hour+minute.\n');
+    process.stdout.write('Loaded LaunchAgent. First fire is at the next matching weekday+hour+minute.\n');
   } else {
     process.stdout.write('Skipped loading (--no-load). Run `launchctl load -w <plistPath>` manually to activate.\n');
   }
