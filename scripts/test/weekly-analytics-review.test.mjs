@@ -214,18 +214,17 @@ test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bo
   assert.ok(/Cross-platform posting activity.*per-platform performance/iu.test(withoutPrior), 'prompt must include the combined cross-platform + per-platform-performance section');
   assert.ok(withoutPrior.includes('cross_platform_activity'), 'prompt must reference the cross_platform_activity data field');
   assert.ok(withoutPrior.includes('per_platform_performance'), 'prompt must reference the per_platform_performance data field');
-  assert.ok(/videos_sparse_scope_missing|insights:read scope/u.test(withoutPrior), 'prompt must tell the analyst how to describe the sparse-TikTok case so the Buffer scope requirement surfaces');
-  assert.ok(/MAY now make cautious cross-platform observations|avg_watch_sec_median/u.test(withoutPrior), 'prompt must explicitly re-enable cross-platform comparisons (previously forbidden) now that per-platform data flows');
+  assert.ok(/Buffer.{0,40}free tier|do NOT.{0,40}Buffer scope/iu.test(withoutPrior), 'prompt must tell the analyst that TikTok engagement is intentionally absent (Buffer free tier) and must NOT be flagged as a bug');
+  assert.ok(/MAY make cautious cross-platform observations|avg_watch_sec_median/u.test(withoutPrior), 'prompt must explicitly allow cross-platform comparisons between YouTube and Instagram');
 
   const withPrior = buildAnalystPrompt(pack, 'Last week I said X and Y happened.');
   assert.ok(withPrior.includes('Previous week\'s summary'));
   assert.ok(withPrior.includes('Last week I said X and Y happened.'));
 });
 
-test('buildPerPlatformPerformance: rolls up per-platform totals/averages, handling missing analytics + sparse TikTok rows', () => {
+test('buildPerPlatformPerformance: rolls up per-platform totals/averages and skips rows without usable metrics', () => {
   // YouTube: 2 pubs, both with real metrics
-  // Instagram: 2 pubs, both with metrics (one of which includes avg_watch_sec)
-  // TikTok: 3 pubs — 1 with real metrics, 2 sparse (buffer_insights_scope_missing)
+  // Instagram: 3 pubs — 2 with metrics (one with avg_watch_sec), 1 with no analytics snapshot
   const perPlatformPerformance = buildPerPlatformPerformance({
     platforms: {
       youtube_shorts: {
@@ -236,18 +235,11 @@ test('buildPerPlatformPerformance: rolls up per-platform totals/averages, handli
         ]),
       },
       instagram_reels: {
-        publications: [{ id: 'ig1' }, { id: 'ig2' }],
+        publications: [{ id: 'ig1' }, { id: 'ig2' }, { id: 'ig3' }],
         analyticsByPub: new Map([
           ['ig1', { metrics: { views: 3000, likes: 100, avg_view_duration_sec: 12.5 } }],
           ['ig2', { metrics: { views: 500, likes: 10, avg_view_duration_sec: 9.0 } }],
-        ]),
-      },
-      tiktok_video: {
-        publications: [{ id: 'tt1' }, { id: 'tt2' }, { id: 'tt3' }],
-        analyticsByPub: new Map([
-          ['tt1', { metrics: { views: 5000, likes: 200 } }],
-          ['tt2', { metrics: { views: null, likes: null, buffer_insights_scope_missing: true } }],
-          ['tt3', { metrics: { views: null, likes: null, buffer_insights_scope_missing: true } }],
+          // ig3 has no snapshot — must count toward publications, not toward averages
         ]),
       },
     },
@@ -255,21 +247,18 @@ test('buildPerPlatformPerformance: rolls up per-platform totals/averages, handli
   // YouTube — straight aggregation
   assert.equal(perPlatformPerformance.youtube_shorts.publications, 2);
   assert.equal(perPlatformPerformance.youtube_shorts.videos_with_metrics, 2);
-  assert.equal(perPlatformPerformance.youtube_shorts.videos_sparse_scope_missing, 0);
   assert.equal(perPlatformPerformance.youtube_shorts.total_views, 3000);
   assert.equal(perPlatformPerformance.youtube_shorts.views_per_video, 1500);
   assert.strictEqual(perPlatformPerformance.youtube_shorts.avg_watch_sec_median, null, 'YouTube has no retention signal via Data API');
-  // Instagram — includes avg_watch_sec_median (the one platform with retention)
+  // Instagram — includes avg_watch_sec_median (the one platform with retention),
+  // and the metric-less row (ig3) must not dilute averages.
+  assert.equal(perPlatformPerformance.instagram_reels.publications, 3);
+  assert.equal(perPlatformPerformance.instagram_reels.videos_with_metrics, 2);
   assert.equal(perPlatformPerformance.instagram_reels.total_views, 3500);
+  assert.equal(perPlatformPerformance.instagram_reels.views_per_video, 1750, 'avg computed on with-metrics rows only');
   // Median via Math.floor(length/2) index — matches summarizeChannel's convention
   // (consistent with YouTube path), not a true even-length mean.
   assert.equal(perPlatformPerformance.instagram_reels.avg_watch_sec_median, 12.5);
-  // TikTok — scope-missing rows counted separately, don't dilute averages
-  assert.equal(perPlatformPerformance.tiktok_video.publications, 3);
-  assert.equal(perPlatformPerformance.tiktok_video.videos_with_metrics, 1);
-  assert.equal(perPlatformPerformance.tiktok_video.videos_sparse_scope_missing, 2);
-  assert.equal(perPlatformPerformance.tiktok_video.total_views, 5000, 'sparse rows must NOT be summed into total');
-  assert.equal(perPlatformPerformance.tiktok_video.views_per_video, 5000, 'avg computed on with-metrics rows only');
 });
 
 test('buildPerPlatformPerformance: refuses on empty / missing input (returns null for null, empty object for empty)', () => {
