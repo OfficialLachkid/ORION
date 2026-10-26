@@ -186,7 +186,7 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     assert.equal(result.results[0].action, 'captured');
     assert.match(publicationQueryOptions[0].select, /template_id:metadata->>template_id/u);
     assert.match(videoQueryOptions[0].select, /hook:selected_script->>hook/u);
-    assert.equal(snapshotQueryOptions[0].capturedAfter, '2026-08-02T09:00:00.000Z');
+    assert.equal(snapshotQueryOptions[0].capturedAfter, '2026-07-26T09:00:00.000Z');
     assert.equal(snapshotQueryOptions[0].select, 'publication_id,captured_at,metrics');
     assert.equal(sendCalls.length, 3);
     assert.equal(sendCalls[0].channelId, '1528783542195323061');

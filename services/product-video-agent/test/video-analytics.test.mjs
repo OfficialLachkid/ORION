@@ -216,3 +216,31 @@ test('buildChannelVideoAnalyticsDigest counts crossings inside the window even f
   assert.equal(digest.median_avg_view_duration_sec, null);
   assert.equal(digest.median_avg_view_percentage, null);
 });
+
+test('buildChannelVideoAnalyticsDigest does not invent a recent crossing from truncated old history', () => {
+  const publication = {
+    id: 'pub-already-above-threshold',
+    video_id: 'video-already-above-threshold',
+    status: 'published',
+    external_id: 'yt-already-above-threshold',
+    title: 'Established video',
+    published_at: '2026-07-01T06:00:00.000Z',
+  };
+  const firstAvailableSnapshot = {
+    publication_id: publication.id,
+    captured_at: '2026-09-09T15:00:00.000Z',
+    metrics: { views: 17000 },
+  };
+
+  const digest = buildChannelVideoAnalyticsDigest({
+    channelProfile,
+    publications: [publication],
+    latestSnapshotsByPublicationId: new Map([[publication.id, firstAvailableSnapshot]]),
+    analyticsSnapshotsByPublicationId: new Map([[publication.id, [firstAvailableSnapshot]]]),
+    asOf: '2026-09-14T07:00:00.000Z',
+    windowDays: 7,
+  });
+
+  assert.equal(digest.crossed_10k_views_count, 0);
+  assert.equal(digest.all_time_views, 17000);
+});

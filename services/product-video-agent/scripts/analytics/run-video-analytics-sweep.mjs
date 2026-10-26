@@ -48,7 +48,8 @@ const DEFAULT_DIGEST_MODE = 'weekly';
 const DEFAULT_POST_TARGET = 'shared';
 const DEFAULT_REQUEST_MAX_ATTEMPTS = 4;
 const DEFAULT_RETRY_BASE_DELAY_MS = 1500;
-const ANALYTICS_HISTORY_LOOKBACK_DAYS = 8;
+const ANALYTICS_MAX_CAPTURE_CADENCE_DAYS = 7;
+const ANALYTICS_HISTORY_BASELINE_BUFFER_DAYS = 1;
 const THREAD_AUTO_ARCHIVE_DURATION_MINUTES = 10080;
 
 const ANALYTICS_PUBLICATION_SELECT = [
@@ -760,9 +761,15 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
     digestMode === 'weekly' || postTarget === 'corresponding',
   );
   const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
+  const analyticsHistoryLookbackDays = Math.max(
+    ANALYTICS_MAX_CAPTURE_CADENCE_DAYS + ANALYTICS_HISTORY_BASELINE_BUFFER_DAYS,
+    Math.ceil(Math.max(0, windowDays))
+      + ANALYTICS_MAX_CAPTURE_CADENCE_DAYS
+      + ANALYTICS_HISTORY_BASELINE_BUFFER_DAYS,
+  );
   const analyticsHistoryCapturedAfter = new Date(
     (toDateOrNull(asOf) || new Date()).valueOf()
-      - (ANALYTICS_HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000),
+      - (analyticsHistoryLookbackDays * 24 * 60 * 60 * 1000),
   ).toISOString();
   const profiles = normalizeChannelProfiles(
     await loadProfiles(channelsPath, { projectRoot }),

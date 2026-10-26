@@ -423,7 +423,11 @@ function buildPublicationEntry(publication = {}, snapshot = null, videoRow = nul
   };
 }
 
-function resolveFirstThresholdCrossing(snapshots = [], threshold = TEN_THOUSAND_VIEWS) {
+function resolveFirstThresholdCrossing(
+  snapshots = [],
+  threshold = TEN_THOUSAND_VIEWS,
+  options = {},
+) {
   const orderedSnapshots = toArray(snapshots)
     .map((snapshot) => ({
       snapshot,
@@ -435,7 +439,9 @@ function resolveFirstThresholdCrossing(snapshots = [], threshold = TEN_THOUSAND_
 
   let previousViews = null;
   for (const entry of orderedSnapshots) {
-    if (entry.views >= threshold && (previousViews === null || previousViews < threshold)) {
+    const initialCrossingAllowed = previousViews === null && options.allowInitialCrossing === true;
+    const crossedFromKnownBaseline = previousViews !== null && previousViews < threshold;
+    if (entry.views >= threshold && (initialCrossingAllowed || crossedFromKnownBaseline)) {
       return entry;
     }
     previousViews = entry.views;
@@ -562,8 +568,15 @@ export function buildChannelVideoAnalyticsDigest({
   const thresholdCrossings = publishedPublications
     .map((publication) => {
       const publicationId = String(publication?.id || '').trim();
+      const publicationDate = publication?.published_at
+        || publication?.uploaded_at
+        || publication?.created_at;
       const crossing = resolveFirstThresholdCrossing(
         analyticsSnapshotsByPublicationId.get(publicationId) || [],
+        TEN_THOUSAND_VIEWS,
+        {
+          allowInitialCrossing: isWithinWindow(publicationDate, windowStart, endDate),
+        },
       );
       if (!crossing || !isWithinWindow(crossing.capturedAt, windowStart, endDate)) {
         return null;
