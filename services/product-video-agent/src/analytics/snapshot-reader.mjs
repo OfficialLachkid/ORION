@@ -87,6 +87,49 @@ function indexSnapshotHistory(snapshots) {
   return snapshotsByPublicationId;
 }
 
+function toTimestamp(value) {
+  const parsed = new Date(String(value || ''));
+  return Number.isNaN(parsed.valueOf()) ? null : parsed.valueOf();
+}
+
+export function mergeAnalyticsSnapshotRows({
+  cachedSnapshots = [],
+  fetchedSnapshots = [],
+  publicationIds = [],
+  retainedAfter = null,
+} = {}) {
+  const allowedPublicationIds = new Set(
+    (Array.isArray(publicationIds) ? publicationIds : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  );
+  const retainedAfterTimestamp = toTimestamp(retainedAfter);
+  const snapshotsByKey = new Map();
+
+  for (const snapshot of [...cachedSnapshots, ...fetchedSnapshots]) {
+    const publicationId = String(snapshot?.publication_id || '').trim();
+    const capturedAt = String(snapshot?.captured_at || '').trim();
+    const capturedAtTimestamp = toTimestamp(capturedAt);
+    if (!publicationId || !capturedAt || capturedAtTimestamp === null) continue;
+    if (allowedPublicationIds.size > 0 && !allowedPublicationIds.has(publicationId)) continue;
+    if (retainedAfterTimestamp !== null && capturedAtTimestamp < retainedAfterTimestamp) continue;
+    snapshotsByKey.set(`${publicationId}:${capturedAt}`, snapshot);
+  }
+
+  return [...snapshotsByKey.values()].sort((left, right) => (
+    (toTimestamp(right?.captured_at) || 0) - (toTimestamp(left?.captured_at) || 0)
+  ));
+}
+
+export function buildAnalyticsSnapshotHistory(snapshots = []) {
+  const normalizedSnapshots = Array.isArray(snapshots) ? snapshots : [];
+  return {
+    snapshots: normalizedSnapshots,
+    snapshotsByPublicationId: indexSnapshotHistory(normalizedSnapshots),
+    latestByPublicationId: indexLatestAnalyticsSnapshotsByPublicationId(normalizedSnapshots),
+  };
+}
+
 export async function fetchAnalyticsSnapshotHistory({
   store,
   publications = [],
@@ -130,11 +173,7 @@ export async function fetchAnalyticsSnapshotHistory({
     }
   }
 
-  return {
-    snapshots,
-    snapshotsByPublicationId: indexSnapshotHistory(snapshots),
-    latestByPublicationId: indexLatestAnalyticsSnapshotsByPublicationId(snapshots),
-  };
+  return buildAnalyticsSnapshotHistory(snapshots);
 }
 
 export function appendAnalyticsSnapshot(snapshotsByPublicationId, snapshot) {

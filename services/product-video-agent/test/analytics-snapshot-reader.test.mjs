@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   fetchAnalyticsSnapshotHistory,
+  mergeAnalyticsSnapshotRows,
   retryAnalyticsOperation,
 } from '../src/analytics/snapshot-reader.mjs';
 import { SupabasePublicationStore } from '../src/publication-store.mjs';
@@ -94,4 +95,25 @@ test('SupabasePublicationStore applies the analytics lookback filter and compact
   const url = new URL(requestUrl);
   assert.equal(url.searchParams.get('select'), 'publication_id,captured_at,metrics');
   assert.equal(url.searchParams.get('captured_at'), 'gte.2026-09-06T07:00:00.000Z');
+});
+
+test('mergeAnalyticsSnapshotRows deduplicates overlap and prunes stale or unrelated cache rows', () => {
+  const rows = mergeAnalyticsSnapshotRows({
+    cachedSnapshots: [
+      { publication_id: 'publication-1', captured_at: '2026-09-05T07:00:00.000Z', metrics: { views: 5 } },
+      { publication_id: 'publication-1', captured_at: '2026-09-10T07:00:00.000Z', metrics: { views: 10 } },
+      { publication_id: 'removed-publication', captured_at: '2026-09-10T07:00:00.000Z', metrics: { views: 20 } },
+    ],
+    fetchedSnapshots: [
+      { publication_id: 'publication-1', captured_at: '2026-09-10T07:00:00.000Z', metrics: { views: 11 } },
+      { publication_id: 'publication-2', captured_at: '2026-09-11T07:00:00.000Z', metrics: { views: 30 } },
+    ],
+    publicationIds: ['publication-1', 'publication-2'],
+    retainedAfter: '2026-09-06T07:00:00.000Z',
+  });
+
+  assert.deepEqual(rows.map((row) => [row.publication_id, row.metrics.views]), [
+    ['publication-2', 30],
+    ['publication-1', 11],
+  ]);
 });

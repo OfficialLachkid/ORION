@@ -19,7 +19,9 @@ import {
 } from '../../src/video-analytics.mjs';
 import {
   appendAnalyticsSnapshot,
+  buildAnalyticsSnapshotHistory,
   fetchAnalyticsSnapshotHistory,
+  mergeAnalyticsSnapshotRows,
   retryAnalyticsOperation,
 } from '../../src/analytics/snapshot-reader.mjs';
 import {
@@ -40,6 +42,7 @@ import {
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 const DEFAULT_STATE_PATH = 'data/runtime/product-video-agent/video-analytics-discord-state.json';
+const DEFAULT_SNAPSHOT_CACHE_PATH = 'data/runtime/product-video-agent/video-analytics-snapshot-cache.json';
 const DEFAULT_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 const DEFAULT_DIGEST_WINDOW_DAYS = 7;
 const DEFAULT_DIGEST_WEEKDAY = 1;
@@ -50,6 +53,7 @@ const DEFAULT_REQUEST_MAX_ATTEMPTS = 4;
 const DEFAULT_RETRY_BASE_DELAY_MS = 1500;
 const ANALYTICS_MAX_CAPTURE_CADENCE_DAYS = 7;
 const ANALYTICS_HISTORY_BASELINE_BUFFER_DAYS = 1;
+const ANALYTICS_CACHE_QUERY_OVERLAP_MINUTES = 10;
 const THREAD_AUTO_ARCHIVE_DURATION_MINUTES = 10080;
 
 const ANALYTICS_PUBLICATION_SELECT = [
@@ -546,6 +550,73 @@ async function saveState(statePath, state) {
   await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 }
 
+async function loadAnalyticsSnapshotCache(cachePath) {
+  try {
+    const parsed = JSON.parse(await readFile(cachePath, 'utf8'));
+    if (parsed?.schema_version !== '1.0' || !parsed.channels || typeof parsed.channels !== 'object') {
+      return { schema_version: '1.0', channels: {} };
+    }
+    return parsed;
+  } catch {
+    return { schema_version: '1.0', channels: {} };
+  }
+}
+
+async function saveAnalyticsSnapshotCache(cachePath, cache) {
+  await mkdir(dirname(cachePath), { recursive: true });
+  await writeFile(cachePath, `${JSON.stringify(cache)}\n`, 'utf8');
+}
+
+function toTimestamp(value) {
+  const parsed = new Date(String(value || ''));
+  return Number.isNaN(parsed.valueOf()) ? null : parsed.valueOf();
+}
+
+export function resolveAnalyticsSnapshotQueryPlan({
+  publications = [],
+  cachedChannel = null,
+  retainedAfter,
+} = {}) {
+  const normalizedPublications = Array.isArray(publications) ? publications : [];
+  const retainedAfterTimestamp = toTimestamp(retainedAfter);
+  const cachedRetainedAfterTimestamp = toTimestamp(cachedChannel?.retained_after);
+  const syncedThroughTimestamp = toTimestamp(cachedChannel?.synced_through);
+  const cacheCoversWindow = retainedAfterTimestamp !== null
+    && cachedRetainedAfterTimestamp !== null
+    && cachedRetainedAfterTimestamp <= retainedAfterTimestamp
+    && syncedThroughTimestamp !== null;
+
+  if (!cacheCoversWindow) {
+    return {
+      cachedSnapshots: [],
+      fullPublications: normalizedPublications,
+      incrementalPublications: [],
+      incrementalCapturedAfter: retainedAfter,
+    };
+  }
+
+  const cachedPublicationIds = new Set(
+    (Array.isArray(cachedChannel?.publication_ids) ? cachedChannel.publication_ids : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  );
+  const fullPublications = normalizedPublications.filter((publication) => (
+    !cachedPublicationIds.has(String(publication?.id || '').trim())
+  ));
+  const incrementalPublications = normalizedPublications.filter((publication) => (
+    cachedPublicationIds.has(String(publication?.id || '').trim())
+  ));
+  const overlapTimestamp = syncedThroughTimestamp - (ANALYTICS_CACHE_QUERY_OVERLAP_MINUTES * 60 * 1000);
+  const incrementalTimestamp = Math.max(retainedAfterTimestamp, overlapTimestamp);
+
+  return {
+    cachedSnapshots: Array.isArray(cachedChannel?.snapshots) ? cachedChannel.snapshots : [],
+    fullPublications,
+    incrementalPublications,
+    incrementalCapturedAfter: new Date(incrementalTimestamp).toISOString(),
+  };
+}
+
 async function createDiscordThreadFromMessage({
   runtimeConfig,
   analyticsChannelId,
@@ -744,6 +815,10 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
   const channelSelector = getStringOption(options, 'channel', '');
   const asOf = getStringOption(options, 'as-of', new Date().toISOString());
   const statePath = resolve(projectRoot, getStringOption(options, 'state-path', DEFAULT_STATE_PATH));
+  const snapshotCachePath = resolve(
+    projectRoot,
+    getStringOption(options, 'snapshot-cache-path', DEFAULT_SNAPSHOT_CACHE_PATH),
+  );
   const analyticsChannelId = getStringOption(options, 'analytics-channel-id', '')
     || String(runtimeConfig?.channelIds?.orionAnalytics || '').trim();
   const windowDays = getNumberOption(options, 'digest-window-days', DEFAULT_DIGEST_WINDOW_DAYS);
@@ -783,6 +858,13 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
   });
 
   const state = await loadState(statePath);
+  const loadSnapshotCache = dependencies.loadAnalyticsSnapshotCache || loadAnalyticsSnapshotCache;
+  const saveSnapshotCache = dependencies.saveAnalyticsSnapshotCache || saveAnalyticsSnapshotCache;
+  const snapshotCache = await loadSnapshotCache(snapshotCachePath);
+  snapshotCache.channels = snapshotCache.channels && typeof snapshotCache.channels === 'object'
+    ? snapshotCache.channels
+    : {};
+  let snapshotCacheDirty = false;
   state.analytics_threads = state.analytics_threads || {};
   const sweepResults = [];
   const publicationsByChannelId = new Map();
@@ -842,25 +924,68 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
         ),
       );
 
-      const snapshotHistory = await fetchAnalyticsSnapshotHistory({
-        store,
-        publications: publications || [],
-        maxAttempts: requestMaxAttempts,
-        baseDelayMs: retryBaseDelayMs,
-        sleep: sleepImpl,
-        capturedAfter: analyticsHistoryCapturedAfter,
-        onRetry: ({ attempt, delayMs, error }) => {
-          printWarn(
-            `Retrying analytics snapshot batch for ${channelProfile.account_key} after attempt ${attempt} in ${delayMs}ms: ${error.message}`,
-          );
-        },
+      const normalizedPublications = publications || [];
+      const publicationIds = normalizedPublications
+        .map((publication) => String(publication?.id || '').trim())
+        .filter(Boolean);
+      const queryPlan = resolveAnalyticsSnapshotQueryPlan({
+        publications: normalizedPublications,
+        cachedChannel: snapshotCache.channels[channelProfile.id] || null,
+        retainedAfter: analyticsHistoryCapturedAfter,
       });
+      const fetchedSnapshots = [];
+      const fetchSnapshotRows = async (queryPublications, capturedAfter) => {
+        if (queryPublications.length === 0) return;
+        const history = await fetchAnalyticsSnapshotHistory({
+          store,
+          publications: queryPublications,
+          maxAttempts: requestMaxAttempts,
+          baseDelayMs: retryBaseDelayMs,
+          sleep: sleepImpl,
+          capturedAfter,
+          onRetry: ({ attempt, delayMs, error }) => {
+            printWarn(
+              `Retrying analytics snapshot batch for ${channelProfile.account_key} after attempt ${attempt} in ${delayMs}ms: ${error.message}`,
+            );
+          },
+        });
+        fetchedSnapshots.push(...history.snapshots);
+      };
+      await fetchSnapshotRows(queryPlan.incrementalPublications, queryPlan.incrementalCapturedAfter);
+      await fetchSnapshotRows(queryPlan.fullPublications, analyticsHistoryCapturedAfter);
+
+      const snapshotHistory = buildAnalyticsSnapshotHistory(mergeAnalyticsSnapshotRows({
+        cachedSnapshots: queryPlan.cachedSnapshots,
+        fetchedSnapshots,
+        publicationIds,
+        retainedAfter: analyticsHistoryCapturedAfter,
+      }));
       for (const [publicationId, snapshot] of snapshotHistory.latestByPublicationId.entries()) {
         latestSnapshotsByPublicationId.set(publicationId, snapshot);
       }
       for (const [publicationId, snapshots] of snapshotHistory.snapshotsByPublicationId.entries()) {
         analyticsSnapshotsByPublicationId.set(publicationId, snapshots.slice());
       }
+      const updateChannelSnapshotCache = () => {
+        const channelSnapshots = publicationIds.flatMap((publicationId) => (
+          analyticsSnapshotsByPublicationId.get(publicationId) || []
+        ));
+        snapshotCache.channels[channelProfile.id] = {
+          retained_after: analyticsHistoryCapturedAfter,
+          synced_through: asOf,
+          publication_ids: publicationIds,
+          snapshots: mergeAnalyticsSnapshotRows({
+            fetchedSnapshots: channelSnapshots.map((snapshot) => ({
+              publication_id: snapshot.publication_id,
+              captured_at: snapshot.captured_at,
+              metrics: snapshot.metrics || {},
+            })),
+            publicationIds,
+            retainedAfter: analyticsHistoryCapturedAfter,
+          }),
+        };
+        snapshotCacheDirty = true;
+      };
 
       const capturePlan = resolveVideoAnalyticsCapturePlan({
         publications,
@@ -878,6 +1003,7 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
           action: 'no_due_publications',
           publication_count: publications.length,
         });
+        updateChannelSnapshotCache();
         completedChannelIds.add(channelProfile.id);
         continue;
       }
@@ -956,6 +1082,7 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
           error: `${captureFailureCount} publication capture(s) failed; last-known snapshots were used.`,
         });
       }
+      updateChannelSnapshotCache();
       completedChannelIds.add(channelProfile.id);
     } catch (error) {
       printWarn(`Analytics collection failed for ${channelProfile.account_key}: ${error.message}`);
@@ -970,6 +1097,14 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
         action: 'channel_failed',
         error: error.message,
       });
+    }
+  }
+
+  if (snapshotCacheDirty) {
+    try {
+      await saveSnapshotCache(snapshotCachePath, snapshotCache);
+    } catch (error) {
+      printWarn(`Could not save the rebuildable analytics snapshot cache: ${error.message}`);
     }
   }
 
@@ -1039,6 +1174,7 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
     post_target: postTarget,
     collection_warnings: collectionWarnings,
     state_path: statePath,
+    snapshot_cache_path: snapshotCachePath,
     results: sweepResults,
   };
 }
@@ -1065,6 +1201,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       `  --post-target <target>       Digest post target: shared or corresponding. Default: ${DEFAULT_POST_TARGET}`,
       '  --analytics-channel-id <id>  Override the Discord analytics channel id.',
       `  --state-path <path>          Digest thread/state file. Default: ${DEFAULT_STATE_PATH}`,
+      `  --snapshot-cache-path <path> Rebuildable analytics snapshot cache. Default: ${DEFAULT_SNAPSHOT_CACHE_PATH}`,
     ]);
     process.exit(0);
   }
