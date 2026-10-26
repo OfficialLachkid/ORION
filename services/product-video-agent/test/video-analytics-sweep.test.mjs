@@ -34,10 +34,14 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
   const statePath = resolve(tmpdir(), `orion-video-analytics-state-${Date.now()}.json`);
   const sendCalls = [];
   const upserts = [];
+  const publicationQueryOptions = [];
+  const videoQueryOptions = [];
+  const snapshotQueryOptions = [];
   let messageCounter = 0;
 
   const store = {
-    async fetchPublishedPublicationsByChannel() {
+    async fetchPublishedPublicationsByChannel(options) {
+      publicationQueryOptions.push(options);
       return [
         {
           id: 'pub-123',
@@ -48,27 +52,25 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
           external_id: 'yt-123',
           title: 'Electric Grass #shorts',
           published_at: '2026-08-09T12:00:00.000Z',
-          metadata: {
-            type_pair: ['electric', 'grass'],
-            background_path: '/tmp/type-quiz-backgrounds/checkers.gif',
-            template_id: 'pokemon.type-quiz.v1',
-            render_path: '/tmp/electric-grass.mp4',
-          },
+          type_pair: ['electric', 'grass'],
+          background_path: '/tmp/type-quiz-backgrounds/checkers.gif',
+          template_id: 'pokemon.type-quiz.v1',
+          render_path: '/tmp/electric-grass.mp4',
         },
       ];
     },
-    async fetchVideosByIds() {
+    async fetchVideosByIds(_videoIds, options) {
+      videoQueryOptions.push(options);
       return [
         {
           id: 'video-123',
-          selected_script: {
-            hook: 'Can you guess the typing?',
-          },
+          hook: 'Can you guess the typing?',
         },
       ];
     },
-    async fetchLatestAnalyticsSnapshot() {
-      return null;
+    async fetchAnalyticsSnapshotsByPublicationIds(_publicationIds, options) {
+      snapshotQueryOptions.push(options);
+      return [];
     },
     async upsertVideoAnalyticsSnapshot(row) {
       upserts.push(row);
@@ -182,6 +184,10 @@ test('runVideoAnalyticsSweep captures due snapshots and posts only the shared ov
     ]);
     assert.equal(result.results.length, 1);
     assert.equal(result.results[0].action, 'captured');
+    assert.match(publicationQueryOptions[0].select, /template_id:metadata->>template_id/u);
+    assert.match(videoQueryOptions[0].select, /hook:selected_script->>hook/u);
+    assert.equal(snapshotQueryOptions[0].capturedAfter, '2026-08-02T09:00:00.000Z');
+    assert.equal(snapshotQueryOptions[0].select, 'publication_id,captured_at,metrics');
     assert.equal(sendCalls.length, 3);
     assert.equal(sendCalls[0].channelId, '1528783542195323061');
     assert.equal(sendCalls[0].payload.embeds[0].title, 'Weekly YouTube Analytics Digest (7d) | 2026-08-10');

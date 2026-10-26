@@ -48,7 +48,37 @@ const DEFAULT_DIGEST_MODE = 'weekly';
 const DEFAULT_POST_TARGET = 'shared';
 const DEFAULT_REQUEST_MAX_ATTEMPTS = 4;
 const DEFAULT_RETRY_BASE_DELAY_MS = 1500;
+const ANALYTICS_HISTORY_LOOKBACK_DAYS = 8;
 const THREAD_AUTO_ARCHIVE_DURATION_MINUTES = 10080;
+
+const ANALYTICS_PUBLICATION_SELECT = [
+  'id',
+  'video_id',
+  'status',
+  'title',
+  'external_id',
+  'published_at',
+  'uploaded_at',
+  'created_at',
+  'template_id:metadata->>template_id',
+  'type_pair:metadata->type_pair',
+  'background_path:metadata->>background_path',
+  'render_path:metadata->>render_path',
+  'hook:metadata->>hook',
+  'selected_subject_count:metadata->>selected_subject_count',
+].join(',');
+
+const ANALYTICS_VIDEO_SELECT = [
+  'id',
+  'template_key',
+  'template_id:render->>template_id',
+  'type_pair:render->type_pair',
+  'source_type_pair:source_data->type_pair',
+  'background_path:source_data->>background_path',
+  'hook:selected_script->>hook',
+  'selected_subject_count:score->>selected_subject_count',
+  'render_output_path:render->>output_path',
+].join(',');
 
 function getNumberOption(options, key, fallbackValue) {
   const rawValue = getStringOption(options, key, '');
@@ -598,7 +628,9 @@ async function fetchVideoRowsById(store, publications = []) {
 
   let videoRows = [];
   if (typeof store.fetchVideosByIds === 'function') {
-    videoRows = await store.fetchVideosByIds(videoIds);
+    videoRows = await store.fetchVideosByIds(videoIds, {
+      select: ANALYTICS_VIDEO_SELECT,
+    });
   } else if (typeof store.fetchVideoById === 'function') {
     videoRows = await Promise.all(videoIds.map(async (videoId) => {
       try {
@@ -728,6 +760,10 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
     digestMode === 'weekly' || postTarget === 'corresponding',
   );
   const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
+  const analyticsHistoryCapturedAfter = new Date(
+    (toDateOrNull(asOf) || new Date()).valueOf()
+      - (ANALYTICS_HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000),
+  ).toISOString();
   const profiles = normalizeChannelProfiles(
     await loadProfiles(channelsPath, { projectRoot }),
     channelSelector,
@@ -784,6 +820,7 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
         () => store.fetchPublishedPublicationsByChannel({
           platform: channelProfile.platform,
           accountKey: channelProfile.account_key,
+          select: ANALYTICS_PUBLICATION_SELECT,
         }),
         'published-publication lookup',
         channelProfile,
@@ -804,6 +841,7 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
         maxAttempts: requestMaxAttempts,
         baseDelayMs: retryBaseDelayMs,
         sleep: sleepImpl,
+        capturedAfter: analyticsHistoryCapturedAfter,
         onRetry: ({ attempt, delayMs, error }) => {
           printWarn(
             `Retrying analytics snapshot batch for ${channelProfile.account_key} after attempt ${attempt} in ${delayMs}ms: ${error.message}`,

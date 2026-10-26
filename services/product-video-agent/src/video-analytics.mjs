@@ -134,8 +134,10 @@ function normalizeTemplateId(value) {
 
 function resolveTemplateId(publication = {}, videoRow = null) {
   return normalizeTemplateId(
-    publication?.metadata?.template_id
+    publication?.template_id
+      || publication?.metadata?.template_id
       || publication?.template_key
+      || videoRow?.template_id
       || videoRow?.render?.template_id
       || videoRow?.template_key
       || ''
@@ -172,7 +174,10 @@ function resolveTemplateLabelFromId(templateId) {
 
 function resolvePublicationTypePair(publication = {}, videoRow = null) {
   return normalizeTypePair(
-    publication?.metadata?.type_pair
+    publication?.type_pair
+      || publication?.metadata?.type_pair
+      || videoRow?.type_pair
+      || videoRow?.source_type_pair
       || videoRow?.render?.type_pair
       || videoRow?.source_data?.type_pair
       || []
@@ -185,8 +190,11 @@ function normalizePath(value) {
 
 function resolveBackgroundPath(publication = {}, videoRow = null) {
   return normalizePath(
-    publication?.metadata?.background_path
+    publication?.background_path
+      || publication?.metadata?.background_path
+      || videoRow?.background_path
       || videoRow?.source_data?.background_path
+      || publication?.render_path
       || publication?.metadata?.render_path
       || ''
   );
@@ -219,7 +227,9 @@ function resolveBackgroundAssetLabel(backgroundPath = '') {
 
 function resolveHookText(publication = {}, videoRow = null) {
   return normalizeWhitespace(
-    videoRow?.selected_script?.hook
+    videoRow?.hook
+      || videoRow?.selected_script?.hook
+      || publication?.hook
       || publication?.metadata?.hook
       || ''
   );
@@ -227,7 +237,9 @@ function resolveHookText(publication = {}, videoRow = null) {
 
 function resolveSelectedSubjectCount(publication = {}, videoRow = null) {
   return Number(
-    publication?.metadata?.selected_subject_count
+    publication?.selected_subject_count
+      || publication?.metadata?.selected_subject_count
+      || videoRow?.selected_subject_count
       || videoRow?.score?.selected_subject_count
       || 0
   ) || 0;
@@ -392,7 +404,13 @@ function buildPublicationEntry(publication = {}, snapshot = null, videoRow = nul
     hook_preview: truncateText(hook, DEFAULT_HOOK_PREVIEW_LENGTH),
     selected_subject_count: resolveSelectedSubjectCount(publication, videoRow),
     published_at: publication?.published_at || publication?.uploaded_at || publication?.created_at || null,
-    render_path: normalizePath(publication?.metadata?.render_path || videoRow?.render?.output_path || ''),
+    render_path: normalizePath(
+      publication?.render_path
+        || publication?.metadata?.render_path
+        || videoRow?.render_output_path
+        || videoRow?.render?.output_path
+        || '',
+    ),
     views: pickMetric(metrics, ['views']),
     avg_view_duration_sec: pickMetric(metrics, ['avg_view_duration_sec', 'average_view_duration_seconds']),
     avg_view_percentage: pickMetric(metrics, ['avg_view_percentage', 'average_view_percentage']),

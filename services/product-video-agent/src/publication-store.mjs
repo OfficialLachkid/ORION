@@ -85,7 +85,7 @@ export class SupabasePublicationStore {
     return rows?.[0] || null;
   }
 
-  async fetchVideosByIds(ids = []) {
+  async fetchVideosByIds(ids = [], options = {}) {
     const normalizedIds = [...new Set(
       (Array.isArray(ids) ? ids : [])
         .map((value) => String(value || '').trim())
@@ -97,7 +97,7 @@ export class SupabasePublicationStore {
 
     return this.request('videos', {
       params: {
-        select: '*',
+        select: options.select || '*',
         id: `in.(${normalizedIds.map((value) => `"${value}"`).join(',')})`,
       },
     });
@@ -178,10 +178,11 @@ export class SupabasePublicationStore {
     accountKey,
     order = 'published_at.desc',
     limit = null,
+    select = '*',
   }) {
     return this.request('video_publications', {
       params: {
-        select: '*',
+        select,
         platform: `eq.${platform}`,
         account_key: `eq.${accountKey}`,
         status: 'eq.published',
@@ -229,6 +230,7 @@ export class SupabasePublicationStore {
       params: {
         select: options.select || '*',
         publication_id: `in.(${ids.map((value) => `"${value}"`).join(',')})`,
+        captured_at: options.capturedAfter ? `gte.${options.capturedAfter}` : null,
         order: options.order || 'captured_at.desc',
         limit: options.limit || null,
       },
