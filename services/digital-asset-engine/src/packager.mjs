@@ -154,7 +154,7 @@ async function createSpriteSheet(candidates, product) {
   }))).png({ compressionLevel: 9 }).toBuffer();
 }
 
-async function createCover(candidates, product) {
+export async function createCover(candidates, product) {
   const allCandidates = candidates;
   const shownCandidates = selectRepresentativeCandidates(candidates);
   const collection = describeAssetCollection(product, allCandidates);
@@ -223,7 +223,7 @@ async function createCover(candidates, product) {
     .toBuffer();
 }
 
-async function createMarketplacePreview(candidates, product, options = {}) {
+export async function createMarketplacePreview(candidates, product, options = {}) {
   const allCandidates = options.allCandidates || candidates;
   const collection = describeAssetCollection(product, allCandidates);
   const theme = previewTheme(product);

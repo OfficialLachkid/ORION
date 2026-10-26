@@ -25,6 +25,7 @@ import { prepareAssetExpansionReview } from './src/asset-expansion.mjs';
 import { prepareApprovedAssetExpansionRelease } from './src/asset-expansion-release.mjs';
 import { postAssetExpansionReview } from './src/asset-expansion-review.mjs';
 import { generateInteractiveItemAnimationBatch } from './src/interactive-item-animation.mjs';
+import { prepareStorefrontRevision } from './src/storefront-revision.mjs';
 
 const DEFAULT_CONFIG = 'services/digital-asset-engine/config.example.json';
 const DEFAULT_OPPORTUNITY = 'services/digital-asset-engine/fixtures/sci-fi-plasma-rifle.opportunity.json';
@@ -66,6 +67,11 @@ function parseArguments(argv) {
     else if (token === '--expansion-plan') args.expansionPlan = argv[++index];
     else if (token === '--item-animation-plan') args.itemAnimationPlan = argv[++index];
     else if (token === '--release-version') args.releaseVersion = argv[++index];
+    else if (token === '--base-version') args.baseVersion = argv[++index];
+    else if (token === '--target-version') args.targetVersion = argv[++index];
+    else if (token === '--base-manifest-hash') args.baseManifestHash = argv[++index];
+    else if (token === '--suggested-price') args.suggestedPrice = argv[++index];
+    else if (token === '--currency') args.currency = argv[++index];
     else if (token === '--slug') args.slug = argv[++index];
     else if (token === '--output-root') args.outputRoot = argv[++index];
     else if (token === '--now') args.now = argv[++index];
@@ -106,6 +112,7 @@ function printHelp() {
     '  prepare-extension  Assemble an immutable, versioned package-extension candidate.',
     '  prepare-expansion-review  Assemble an immutable static-asset expansion review bundle.',
     '  prepare-expansion-release  Build a full immutable release from an approved expansion review.',
+    '  prepare-storefront-revision  Build an immutable price/media-only revision from a verified release or draft.',
     '  expansion-review  Post or update the expansion proposal in the existing product channel.',
     '  interactive-items  Generate fixed-anchor item states, overlays, sheets, metadata, and review GIFs.',
     '',
@@ -120,6 +127,11 @@ function printHelp() {
     `  --expansion-plan <path> Default: ${DEFAULT_EXPANSION_REVIEW}`,
     `  --item-animation-plan <path> Default: ${DEFAULT_ITEM_ANIMATION_BATCH}`,
     '  --release-version <semver>  Stage/review the latest immutable candidate for this version.',
+    '  --base-version <semver>  Verified version inherited by a storefront revision.',
+    '  --target-version <semver>  New immutable storefront revision version.',
+    '  --base-manifest-hash <sha256>  Exact verified storefront base manifest.',
+    '  --suggested-price <amount>  Proposed marketplace price for storefront review.',
+    '  --currency <code>  Price currency. Default: USD.',
     '  --slug <product-slug>  Canonical product slug for marketplace setup reconciliation.',
     '  --output-root <path>  Override canonical product storage.',
     '  --now <ISO datetime>  Deterministic validation/testing time.',
@@ -149,11 +161,11 @@ async function main() {
     printHelp();
     return;
   }
-  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'marketplace-setup-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension', 'prepare-expansion-review', 'prepare-expansion-release', 'expansion-review', 'interactive-items'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
+  if (!['plan', 'generate', 'package', 'itch-draft', 'discord-review', 'seller-preflight', 'distribution-review', 'marketplace-setup-review', 'itch-publish', 'itch-slug', 'itch-theme-review', 'itch-theme-apply', 'itch-description', 'effects-pilot', 'effects-batch', 'revise-effects', 'effects-review', 'prepare-extension', 'prepare-expansion-review', 'prepare-expansion-release', 'prepare-storefront-revision', 'expansion-review', 'interactive-items'].includes(args.command)) throw new Error(`Unknown command: ${args.command}`);
   if (['generate', 'effects-pilot', 'effects-batch', 'revise-effects', 'interactive-items'].includes(args.command) && !args.execute) {
     throw new Error('Image generation requires --execute. Planning remains the safe default.');
   }
-  if (['package', 'prepare-extension', 'prepare-expansion-review', 'prepare-expansion-release'].includes(args.command) && !args.internalPreview) {
+  if (['package', 'prepare-extension', 'prepare-expansion-review', 'prepare-expansion-release', 'prepare-storefront-revision'].includes(args.command) && !args.internalPreview) {
     throw new Error('Packaging unapproved candidates requires --internal-preview.');
   }
   if (['discord-review', 'distribution-review', 'marketplace-setup-review', 'effects-review', 'itch-theme-review', 'expansion-review'].includes(args.command) && !args.postToDiscord) {
@@ -183,6 +195,34 @@ async function main() {
 
   let config = await loadEngineConfig(args.config || DEFAULT_CONFIG);
   if (args.outputRoot) config = { ...config, output_root: args.outputRoot };
+  if (args.command === 'prepare-storefront-revision') {
+    const result = await prepareStorefrontRevision({
+      outputRoot: resolveOutputRoot(config),
+      slug: args.slug,
+      baseVersion: args.baseVersion,
+      targetVersion: args.targetVersion,
+      baseManifestHash: args.baseManifestHash,
+      suggestedPrice: args.suggestedPrice,
+      currency: args.currency,
+      now: args.now,
+    });
+    process.stdout.write(`${JSON.stringify({
+      command: args.command,
+      product_id: result.product.product_id,
+      product_slug: result.product.slug,
+      base_version: result.plan.base_version,
+      target_version: result.plan.target_version,
+      candidate_root: result.candidateRoot,
+      manifest_hash: result.manifest.manifest_hash,
+      listing_hash: result.manifest.listing_hash,
+      suggested_price: result.manifest.storefront_revision.suggested_price,
+      media: result.manifest.storefront_revision.media,
+      buyer_payload_changed: result.manifest.storefront_revision.buyer_payload_changed,
+      reused: result.reused,
+      gates: result.gates,
+    }, null, 2)}\n`);
+    return;
+  }
   if (args.command === 'itch-slug') {
     const opportunity = JSON.parse(await readFile(args.opportunity || DEFAULT_OPPORTUNITY, 'utf8'));
     const result = await migrateItchProjectSlug({

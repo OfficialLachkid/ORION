@@ -105,6 +105,7 @@
     "digital-assets:prepare-extension": "node services/digital-asset-engine/index.mjs prepare-extension",
     "digital-assets:prepare-expansion-review": "node services/digital-asset-engine/index.mjs prepare-expansion-review",
     "digital-assets:prepare-expansion-release": "node services/digital-asset-engine/index.mjs prepare-expansion-release",
+    "digital-assets:prepare-storefront-revision": "node services/digital-asset-engine/index.mjs prepare-storefront-revision",
     "digital-assets:expansion-review": "node services/digital-asset-engine/index.mjs expansion-review",
     "digital-assets:interactive-items": "node services/digital-asset-engine/index.mjs interactive-items",
     "digital-assets:package": "node services/digital-asset-engine/index.mjs package",
