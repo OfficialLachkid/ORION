@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { loadEngineConfig } from '../src/config.mjs';
@@ -13,6 +13,7 @@ import {
   selectRepresentativeCandidates,
 } from '../src/packager.mjs';
 import { generateDigitalAssetProduct, planDigitalAssetProduct } from '../src/pipeline.mjs';
+import { prepareStorefrontRevision } from '../src/storefront-revision.mjs';
 
 const testDirectory = resolve(fileURLToPath(new URL('.', import.meta.url)));
 const projectRoot = resolve(testDirectory, '../../..');
@@ -234,4 +235,31 @@ test('pipeline produces a transparent, validated candidate while blocking distri
   assert.ok(storedManifest.files.some((file) => file.path === 'marketplace-preview.png'));
   assert.ok(storedManifest.files.some((file) => file.path.startsWith('download/assets/individual/')));
   assert.equal(storedManifest.files.some((file) => file.path.startsWith('assets/source/')), false);
+
+  await mkdir(resolve(result.persistence.root, 'review'), { recursive: true });
+  await writeFile(resolve(result.persistence.root, 'review', 'itch.json'), `${JSON.stringify({
+    status: 'verified',
+    target_version: '0.1.0',
+    manifest_hash: storedManifest.manifest_hash,
+  }, null, 2)}\n`, 'utf8');
+  const storefront = await prepareStorefrontRevision({
+    outputRoot,
+    slug: result.product.slug,
+    baseVersion: '0.1.0',
+    targetVersion: '0.1.1',
+    baseManifestHash: storedManifest.manifest_hash,
+    suggestedPrice: 4.99,
+    now: '2026-10-12T12:15:00.000Z',
+  });
+  const revisedListing = JSON.parse(await readFile(resolve(storefront.candidateRoot, 'itch-listing.json'), 'utf8'));
+  const buyerAssetName = basename(result.product.assets[0].final_path);
+  const originalBuyerAsset = await readFile(resolve(packaged.exportRoot, 'download', 'assets', 'individual', buyerAssetName));
+  const revisedBuyerAsset = await readFile(resolve(storefront.candidateRoot, 'download', 'assets', 'individual', buyerAssetName));
+  assert.equal(storefront.manifest.target_version, '0.1.1');
+  assert.equal(storefront.manifest.base_manifest_hash, storedManifest.manifest_hash);
+  assert.equal(storefront.manifest.release_state, 'awaiting_extension_review');
+  assert.equal(storefront.manifest.storefront_revision.buyer_payload_changed, false);
+  assert.equal(revisedListing.suggested_price.amount, 4.99);
+  assert.deepEqual(revisedListing.screenshot_paths, ['cover.png', 'marketplace-preview.png']);
+  assert.deepEqual(revisedBuyerAsset, originalBuyerAsset);
 });
