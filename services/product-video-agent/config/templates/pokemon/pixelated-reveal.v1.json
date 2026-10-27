@@ -9,7 +9,7 @@
     "answer",
     "transition"
   ],
-  "version": "1.0.0",
+  "version": "1.1.0",
   "canvas": {
     "width": 1080,
     "height": 1920,
@@ -138,13 +138,15 @@
         "id": "hard",
         "label": "HARD",
         "color": "0xFF5A52",
-        "answer_clarity_progress": 0.15
+        "answer_clarity_progress": 0.15,
+        "reveal_duration_extension_seconds": 1
       },
       {
         "id": "impossible",
         "label": "IMPOSSIBLE",
         "color": "0xB76CFF",
-        "answer_clarity_progress": 0.1
+        "answer_clarity_progress": 0.1,
+        "reveal_duration_extension_seconds": 1
       }
     ],
     "method_config": {

@@ -32,3 +32,7 @@ Move the current Pokemon short generator from a channel-owned implementation to 
 1. Lift more copy/layout metadata from Poke Quizz-specific code into the style pack where it belongs.
 2. Normalize naming so `poke-quizz-*` service files become channel facades over generic Pokemon template flows.
 3. Add a second template only after the current dual-type flow is fully stable under the new ownership model.
+
+## Pixelated Reveal Timing
+
+`pokemon.pixelated-reveal.v1` keeps the same 37 configured pixel-resolution stages and the same per-round answer clarity. Hard and Impossible each add one second to their reveal duration, so those unchanged stages remain visible longer without exposing a clearer Pokemon silhouette. Easy and Medium retain their original timing.

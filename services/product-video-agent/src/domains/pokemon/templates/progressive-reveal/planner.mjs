@@ -278,10 +278,12 @@ function resolveRoundDifficulty(template, roundIndex, fallbackDifficulty) {
       label: '',
       color: '',
       answerClarityProgress: null,
+      revealDurationExtensionSeconds: 0,
     };
   }
   const id = String(configured.id || fallbackDifficulty).trim().toLowerCase() || fallbackDifficulty;
   const configuredClarity = Number(configured.answer_clarity_progress);
+  const configuredDurationExtension = Number(configured.reveal_duration_extension_seconds);
   return {
     id,
     label: String(configured.label || id).trim().toUpperCase(),
@@ -289,6 +291,9 @@ function resolveRoundDifficulty(template, roundIndex, fallbackDifficulty) {
     answerClarityProgress: Number.isFinite(configuredClarity) && configuredClarity > 0
       ? clamp(configuredClarity, 0.05, 1)
       : null,
+    revealDurationExtensionSeconds: Number.isFinite(configuredDurationExtension)
+      ? Math.max(0, configuredDurationExtension)
+      : 0,
   };
 }
 
@@ -538,10 +543,10 @@ export async function planPokemonProgressiveRevealChallenge({
       });
     }
     const baseRevealDurationSeconds = fullRevealDurationSeconds * targetOpaqueFraction;
-    const revealDurationSeconds = Number((method === 'pixelated'
+    const revealDurationSeconds = Number(((method === 'pixelated'
       ? baseRevealDurationSeconds * (pixelAnswerClarity / pixelProgressSpeed)
       : baseRevealDurationSeconds
-    ).toFixed(3));
+    ) + roundDifficulty.revealDurationExtensionSeconds).toFixed(3));
     return {
       round_number: index + 1,
       round_label: `${index + 1}/${roundCount}`,
@@ -568,6 +573,7 @@ export async function planPokemonProgressiveRevealChallenge({
       difficulty_id: roundDifficulty.id,
       difficulty_label: roundDifficulty.label,
       difficulty_color: roundDifficulty.color,
+      reveal_duration_extension_seconds: roundDifficulty.revealDurationExtensionSeconds,
       reveal_config: {
         ...revealConfig,
         progress_scale: coverage.progressScale,
@@ -608,6 +614,7 @@ export async function planPokemonProgressiveRevealChallenge({
         id: round.difficulty_id,
         label: round.difficulty_label,
         answer_clarity_progress: round.reveal_completion_progress,
+        reveal_duration_extension_seconds: round.reveal_duration_extension_seconds,
       })),
       round_count: roundCount,
       type_pair: [],

@@ -198,7 +198,11 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
   );
   assert.deepEqual(
     plan.rounds.map((round) => round.reveal_duration_seconds),
-    [7.65, 6.375, 3.825, 2.55],
+    [7.65, 6.375, 4.825, 3.55],
+  );
+  assert.deepEqual(
+    plan.rounds.map((round) => round.reveal_duration_extension_seconds),
+    [0, 0, 1, 1],
   );
   assert.equal(plan.rounds.every((round) => round.reveal_config.resolution_steps_px.length === 37), true);
   assert.equal(plan.rounds.every((round) => round.reveal_config.resolution_steps_px[0] === 4), true);
@@ -227,8 +231,8 @@ test('pixelated reveal progresses from easy to impossible across four GIF rounds
   assert.doesNotMatch(visualFilter.script, /ALOLAN(?:\\+n|n)EXEGGUTOR FORM/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.3\)/u);
   assert.match(visualFilter.script, /\/25\.5,0,0\.25\)/u);
-  assert.match(visualFilter.script, /\/25\.5,0,0\.15\)/u);
-  assert.match(visualFilter.script, /\/25\.5,0,0\.1\)/u);
+  assert.match(visualFilter.script, /\/32\.167,0,0\.15\)/u);
+  assert.match(visualFilter.script, /\/35\.5,0,0\.1\)/u);
 
   const metadata = buildPokeQuizzFallbackPublicationMetadata(plan, { name: 'Poke Quizz' });
   assert.match(metadata.description, /Easy to Impossible/u);
