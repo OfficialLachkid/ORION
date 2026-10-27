@@ -127,6 +127,38 @@ test('InstagramGraphClient resolves the authenticated professional account ident
   });
 });
 
+test('InstagramGraphClient creates and reads top-level media comments', async () => {
+  const requests = [];
+  const client = new InstagramGraphClient({
+    accessToken: 'secret-token',
+    apiVersion: 'v25.0',
+    fetchImpl: async (url, options) => {
+      requests.push({ url: String(url), options });
+      if (options.method === 'POST') return graphResponse({ id: 'comment-1' });
+      return graphResponse({
+        data: [{
+          id: 'comment-1',
+          text: 'How many did you get right?',
+          timestamp: '2026-10-27T13:00:00+0000',
+          username: 'PokeQuizzz',
+        }],
+      });
+    },
+  });
+
+  const posted = await client.createTopLevelComment({
+    mediaId: 'media-1',
+    message: 'How many did you get right?',
+  });
+  const comments = await client.fetchMediaComments('media-1');
+
+  assert.equal(posted.commentId, 'comment-1');
+  assert.equal(new URLSearchParams(requests[0].options.body).get('message'), 'How many did you get right?');
+  assert.match(requests[1].url, /media-1\/comments\?/u);
+  assert.equal(comments[0].username, 'pokequizzz');
+  assert.equal(comments[0].commentId, 'comment-1');
+});
+
 test('prepareInstagramReelPublication binds delivery to exact approved file and account', async () => {
   const result = await prepareInstagramReelPublication({
     publication,

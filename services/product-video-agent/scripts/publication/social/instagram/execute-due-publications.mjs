@@ -19,6 +19,10 @@ import {
 } from '../../../../src/instagram-publication-executor.mjs';
 import { InstagramPublicationValidationError } from '../../../../src/instagram-publication.mjs';
 import {
+  isInstagramAutoCommentDue,
+  syncInstagramAutoCommentState,
+} from '../../../../src/instagram-auto-comments.mjs';
+import {
   deliverPublicationFailureAlerts,
   deliverSocialPublicationLifecycleAlerts,
   persistAndDeliverPublicationFailureAlert,
@@ -87,6 +91,9 @@ function resolveStoredTarget(publication = {}) {
 export function resolveInstagramDueAction(publication = {}, asOf = new Date().toISOString()) {
   if (normalizeText(publication.platform) !== INSTAGRAM_REEL_PLATFORM) return '';
   const state = normalizeWorkflowState(publication);
+  if (state === 'published' && isInstagramAutoCommentDue(publication)) {
+    return 'comment';
+  }
   if (state === 'publishing' && normalizeText(publication.external_id)) {
     return isDueAt(publication.metadata?.next_status_poll_at, asOf) ? 'status' : '';
   }
@@ -179,10 +186,27 @@ export async function executeDueInstagramPublications(options = {}, dependencies
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
   const store = dependencies.publicationStore || createPublicationStore(runtimeConfig);
   const publishImpl = dependencies.publishInstagramReel || publishInstagramReel;
+  const syncAutoComment = dependencies.syncInstagramAutoCommentState
+    || syncInstagramAutoCommentState;
   const deliverAlerts = dependencies.deliverSocialPublicationLifecycleAlerts
     || deliverSocialPublicationLifecycleAlerts;
   const deliverFailureAlerts = dependencies.deliverPublicationFailureAlerts
     || deliverPublicationFailureAlerts;
+  const commentingEnabled = normalizeBoolean(runtimeConfig.env?.INSTAGRAM_COMMENTING_ENABLED);
+  const channelsPath = getStringOption(
+    options,
+    'channels',
+    'services/product-video-agent/publication-channels.example.json',
+  );
+  const sourceProfiles = commentingEnabled
+    ? await (dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles)(
+      channelsPath,
+      { projectRoot },
+    )
+    : [];
+  const sourceProfilesByAccountKey = new Map(
+    sourceProfiles.map((profile) => [normalizeText(profile.account_key), profile]),
+  );
   const fetched = accountKey
     ? await store.fetchPublicationsByChannel({
       platform: INSTAGRAM_REEL_PLATFORM,
@@ -233,17 +257,95 @@ export async function executeDueInstagramPublications(options = {}, dependencies
   );
   const results = [...lifecycle.results, ...failureAlerts.results, ...alerts.results];
 
+  const runAutoComment = async (publication) => {
+    if (!commentingEnabled) {
+      return {
+        publication,
+        results: [],
+      };
+    }
+    const sourceAccountKey = normalizeText(publication.metadata?.source_account_key);
+    const sourceProfile = sourceProfilesByAccountKey.get(sourceAccountKey);
+    const sourcePublicationId = normalizeText(publication.metadata?.source_publication_id);
+    const sourcePublication = sourcePublicationId && store.fetchPublicationById
+      ? await store.fetchPublicationById(sourcePublicationId)
+      : null;
+    const target = resolveStoredTarget(publication);
+    const commentResult = await syncAutoComment({
+      store,
+      publication,
+      sourcePublication,
+      sourceChannelProfile: sourceProfile,
+      target,
+      runtimeEnv: runtimeConfig.env || {},
+      asOf,
+    });
+    let updatedPublication = commentResult.publication || publication;
+    const commentResults = [{
+      publication_id: publication.id,
+      platform: INSTAGRAM_REEL_PLATFORM,
+      account_key: publication.account_key,
+      action: `instagram_comment_${commentResult.action || 'skipped'}`,
+      status: commentResult.status || '',
+      reason: commentResult.reason || '',
+      comment_id: commentResult.commentId || commentResult.record?.comment_id || '',
+      variant_id: commentResult.variantId || commentResult.record?.variant_id || '',
+      error: commentResult.error || '',
+    }];
+    if (['failed', 'uncertain'].includes(normalizeText(commentResult.status).toLowerCase())) {
+      const failureAlert = await persistAndDeliverPublicationFailureAlert({
+        store,
+        publication: updatedPublication,
+        patch: { metadata: updatedPublication.metadata || {} },
+        failure: {
+          action: 'instagram_auto_comment_failed',
+          workflowState: 'published',
+          reason: commentResult.reason || 'instagram_auto_comment_failed',
+          error: commentResult.error || commentResult.record?.last_error || commentResult.reason,
+        },
+        runtimeConfig,
+        asOf,
+        dryRun,
+        ...(dependencies.sendDiscordMessage
+          ? { sendDiscordMessage: dependencies.sendDiscordMessage }
+          : {}),
+      });
+      updatedPublication = failureAlert.publication || updatedPublication;
+      commentResults.push(...failureAlert.results);
+    }
+    return { publication: updatedPublication, results: commentResults };
+  };
+
   for (const { publication, dueAction } of due) {
     if (dryRun) {
       results.push({
         publication_id: publication.id,
         platform: INSTAGRAM_REEL_PLATFORM,
         account_key: publication.account_key,
-        action: dueAction === 'status' ? 'instagram_status_due' : 'instagram_publish_due',
+        action: dueAction === 'status'
+          ? 'instagram_status_due'
+          : dueAction === 'comment'
+            ? 'instagram_comment_due'
+            : 'instagram_publish_due',
         workflow_state: normalizeWorkflowState(publication),
         scheduled_for: publication.scheduled_for || '',
         external_id: publication.external_id || '',
       });
+      continue;
+    }
+    if (dueAction === 'comment') {
+      if (!commentingEnabled) {
+        results.push({
+          publication_id: publication.id,
+          platform: INSTAGRAM_REEL_PLATFORM,
+          account_key: publication.account_key,
+          action: 'instagram_comment_blocked',
+          reason: 'instagram_commenting_disabled',
+        });
+        continue;
+      }
+      const commentRun = await runAutoComment(publication);
+      results.push(...commentRun.results);
       continue;
     }
     const deliveryEnabled = normalizeBoolean(runtimeConfig.env?.INSTAGRAM_DELIVERY_ENABLED)
@@ -369,6 +471,11 @@ export async function executeDueInstagramPublications(options = {}, dependencies
         external_id: activePublication.external_id || '',
         public_url: activePublication.public_url || '',
       });
+      if (published) {
+        const commentRun = await runAutoComment(activePublication);
+        activePublication = commentRun.publication || activePublication;
+        results.push(...commentRun.results);
+      }
     } catch (error) {
       const uncertain = error instanceof InstagramPublicationUncertainError;
       const validation = error instanceof InstagramPublicationValidationError;

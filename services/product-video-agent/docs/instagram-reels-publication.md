@@ -1,6 +1,6 @@
 # Instagram Reels publication
 
-Last updated: 2026-10-16
+Last updated: 2026-10-27
 
 ## Decision
 
@@ -13,6 +13,22 @@ older Facebook Login setup, its `graph.facebook.com` host, or its older permissi
 The initial scope is creator-owned Instagram professional accounts that are explicitly connected to the ORION Meta app. One Discord **Publish** approval remains the authorization for all configured destinations. Instagram receives no preview upload. Its child publication row inherits the source channel's assigned schedule and holds the exact approved MP4 identity until that time.
 
 ## Current implementation status
+
+Prepared for rollout on 2026-10-27:
+
+- top-level comments use Meta's `POST /{ig_media_id}/comments` endpoint after the Reel is public;
+- the source channel owns one reusable `automatic_comments` policy shared by YouTube and Instagram;
+- Instagram targets inherit that policy through `source_account_key`, so adding an account does not add a hardcoded comment path;
+- comment ids, selected variants, attempts, and outcomes are persisted under `metadata.instagram_auto_comment`;
+- interrupted or ambiguous requests are reconciled against the Reel's existing comments before ORION considers another write;
+- uncertain outcomes fail closed to prevent duplicate comments, while explicit rate limits can retry within the configured attempt limit;
+- comment failures alert `#alerts` without changing the successfully published Reel state;
+- live comment writes remain separately gated by `INSTAGRAM_COMMENTING_ENABLED`.
+
+The Poke Quizzz permission/token capability was validated with one supervised top-level comment on
+publication `publication-target-98b49ba1fb396ca6`; Meta returned comment id
+`17921817321444886`. Automatic rollout starts only after the feature PR is merged, deployed, and
+the separate runtime gate is enabled.
 
 Implemented and merged in PR #163:
 
@@ -174,7 +190,8 @@ Dashboard labels change periodically. Use the option whose description says it p
 7. Request only:
    - `instagram_business_basic`
    - `instagram_business_content_publish`
-   Do not add Meta's bundled messaging/comment permissions for publication-only use.
+   Add `instagram_business_manage_comments` only when automatic comment management is enabled.
+   Do not add the messaging permission unless ORION implements inbox features.
 8. Keep the app in Development mode during the first controlled integration.
 9. Add the ORION operator/developer account under **App roles** and add the Poke Quiz Instagram account as an Instagram tester when the dashboard requests one.
 10. Accept the tester invitation while logged into that Instagram account.
@@ -195,6 +212,7 @@ INSTAGRAM_APP_SECRET=<APP_SECRET>
 INSTAGRAM_OAUTH_REDIRECT_URI=<EXACT_CALLBACK_URI>
 INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN=<ACCOUNT_ACCESS_TOKEN>
 INSTAGRAM_DELIVERY_ENABLED=false
+INSTAGRAM_COMMENTING_ENABLED=false
 ```
 
 ## Delivery sequence
@@ -209,6 +227,10 @@ INSTAGRAM_DELIVERY_ENABLED=false
 8. When Meta reports `FINISHED`, ORION calls `media_publish`.
 9. The media id is persisted before the temporary MP4 is deleted.
 10. ORION stores the Reel permalink and marks the child row published.
+11. When commenting is enabled, ORION selects a non-recent variant from the source channel's
+    `automatic_comments` policy and posts one top-level comment.
+12. ORION stores the remote comment id. An interrupted attempt is reconciled by exact text and
+    account identity before any further write.
 
 If the network drops during `media_publish`, ORION does not blindly repeat the request. It records an uncertain outcome for operator reconciliation, preventing duplicate Reels.
 
@@ -242,7 +264,18 @@ If the network drops during `media_publish`, ORION does not blindly repeat the r
 
 ### Phase 5: access review, if needed
 
-Development-mode users with app roles/tester access are used for the first owned-account integration. If Meta requires Advanced Access or App Review for unattended use or additional accounts, submit only the two permissions actually used and provide an end-to-end screencast. Do not request comments, messages, insights, ads, or unrelated permissions until ORION implements and needs them.
+Development-mode users with app roles/tester access are used for the first owned-account integration. If Meta requires Advanced Access or App Review for unattended use or additional accounts, submit only the three permissions actually used (`instagram_business_basic`, `instagram_business_content_publish`, and `instagram_business_manage_comments`) and provide an end-to-end screencast. Do not request messages, insights, ads, or unrelated permissions until ORION implements and needs them.
+
+### Phase 6: automatic top-level comments
+
+- [x] add `instagram_business_manage_comments` to the Meta app and refresh the owned-account token;
+- [x] validate one supervised top-level comment on a published Poke Quizzz Reel;
+- [x] reuse the source channel's automatic-comment variants and recent-history rotation;
+- [x] persist comment state and reconcile uncertain writes before retrying;
+- [x] alert `#alerts` without marking a successfully delivered Reel as failed;
+- [ ] merge and deploy the commenting feature;
+- [ ] enable `INSTAGRAM_COMMENTING_ENABLED=true` on the Mac after deployment;
+- [ ] observe the first unattended comment and confirm its stored comment id.
 
 ## Meta API requirements used by the adapter
 
@@ -252,6 +285,8 @@ Meta's official collection documents the Reels flow as:
 - poll `GET /{container_id}?fields=status_code,status` until `FINISHED`;
 - `POST /{ig_user_id}/media_publish` with the container id;
 - retrieve the resulting media and permalink.
+- create a top-level comment with `POST /{ig_media_id}/comments` and `message` after publication;
+- read the Reel's comments for idempotent recovery of an interrupted comment write.
 
 The adapter keeps the Graph API version explicit in runtime configuration so a future Meta version migration is deliberate rather than silently changing behavior.
 

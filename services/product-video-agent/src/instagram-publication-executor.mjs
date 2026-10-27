@@ -174,6 +174,44 @@ export class InstagramGraphClient {
     };
   }
 
+  async fetchMediaComments(mediaId, options = {}) {
+    const payload = await this.request(`${mediaId}/comments`, {
+      query: {
+        fields: 'id,text,timestamp,username',
+        limit: Number(options.limit || 50),
+      },
+    });
+    return (Array.isArray(payload?.data) ? payload.data : []).map((comment) => ({
+      commentId: normalizeText(comment?.id),
+      text: normalizeText(comment?.text),
+      timestamp: normalizeText(comment?.timestamp),
+      username: normalizeText(comment?.username).replace(/^@/u, '').toLowerCase(),
+      payload: comment,
+    }));
+  }
+
+  async createTopLevelComment({ mediaId, message }) {
+    const normalizedMessage = normalizeText(message);
+    if (!normalizedMessage) {
+      throw new InstagramPublicationValidationError(
+        'Instagram comment text cannot be empty.',
+        { code: 'instagram_comment_text_required' },
+      );
+    }
+    const payload = await this.request(`${mediaId}/comments`, {
+      method: 'POST',
+      body: { message: normalizedMessage },
+    });
+    const commentId = normalizeText(payload?.id);
+    if (!commentId) {
+      throw new InstagramGraphApiError('Instagram did not return a comment id.', {
+        code: 'instagram_comment_id_missing',
+        payload,
+      });
+    }
+    return { commentId, payload };
+  }
+
   async fetchAuthenticatedProfile() {
     const payload = await this.request('me', {
       query: { fields: 'id,user_id,username,account_type' },

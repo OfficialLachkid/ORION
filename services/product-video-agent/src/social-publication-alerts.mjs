@@ -81,6 +81,8 @@ export function buildPublicationFailureAlertPayload(publication = {}) {
   const metadata = lifecycleMetadata(publication);
   const platform = platformLabel(publication.platform);
   const publicUrl = normalizeText(publication.public_url);
+  const commentFailure = normalizeText(metadata.publication_failure_alert_action)
+    === 'instagram_auto_comment_failed';
   const fields = [
     { name: 'Platform', value: platform, inline: true },
     { name: 'Account', value: publicationAccount(publication), inline: true },
@@ -118,8 +120,12 @@ export function buildPublicationFailureAlertPayload(publication = {}) {
       : []),
   ];
   return buildNoticeDiscordPayload({
-    title: `${platform} publication needs attention`,
-    description: 'ORION could not complete one approved destination. Other platform deliveries continue independently.',
+    title: commentFailure
+      ? `${platform} automatic comment needs attention`
+      : `${platform} publication needs attention`,
+    description: commentFailure
+      ? 'The Reel remains published, but ORION could not safely complete its automatic top-level comment.'
+      : 'ORION could not complete one approved destination. Other platform deliveries continue independently.',
     color: EMBED_COLORS.alert,
     fields,
     footerText: 'O.R.I.O.N. multi-platform publication alert',
