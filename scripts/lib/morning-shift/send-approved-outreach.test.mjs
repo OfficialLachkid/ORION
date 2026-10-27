@@ -157,7 +157,13 @@ test('sendApprovedOutreach short-circuits with picked=0 when the store is empty'
 
 test('sendApprovedOutreach caps picks at DEFAULT_OUTREACH_DAILY_SEND_CAP and reports matched vs picked', async () => {
   const stdout = silentStdout();
-  const tasks = Array.from({ length: 12 }, (_, i) => makeTask({ task_id: `TASK-${String(i).padStart(3, '0')}` }));
+  // Each task gets a unique domain so the in-batch dedup gate doesn't
+  // short-circuit the cap check we're validating here.
+  const tasks = Array.from({ length: 12 }, (_, i) => makeTask({
+    task_id: `TASK-${String(i).padStart(3, '0')}`,
+    to: `info@lead-${i}.nl`,
+    lead_domain: `lead-${i}.nl`,
+  }));
   const summary = await sendApprovedOutreach({
     config: makeConfig(),
     executeTask: async () => ({ outcome: 'completed' }),
@@ -200,9 +206,71 @@ test('sendApprovedOutreach counts a pre-send rejection as skipped (not failed), 
   assert.deepEqual(removed, ['TASK-OK'], 'skipped task must stay in the store');
 });
 
+test('sendApprovedOutreach dedupes in-batch domains — only the first send per domain goes through, rest marked skipped', async () => {
+  // Regression guard for the 2026-10-27 live run: 4 cold emails went to
+  // info@nextloodgieters.com in one batch because the Supabase cap only
+  // looked at last_contacted_at, which is null on queued drafts. Now
+  // every sibling in the same picks list to the same domain gets
+  // short-circuited.
+  const stdout = silentStdout();
+  const removed = [];
+  const sentTo = [];
+  const summary = await sendApprovedOutreach({
+    config: makeConfig(),
+    executeTask: async (t) => { sentTo.push(t.email_request?.to); return { outcome: 'completed' }; },
+    loadPersistedPendingTasks: () => [
+      makeTask({ task_id: 'TASK-001', to: 'info@dup.nl', lead_domain: 'dup.nl' }),
+      makeTask({ task_id: 'TASK-002', to: 'info@dup.nl', lead_domain: 'dup.nl' }),
+      makeTask({ task_id: 'TASK-003', to: 'info@dup.nl', lead_domain: 'dup.nl' }),
+      makeTask({ task_id: 'TASK-004', to: 'info@other.nl', lead_domain: 'other.nl' }),
+    ],
+    removePersistedPendingTask: (_c, id) => removed.push(id),
+    searchApprovalMessageInThreads: async () => null,
+    discordApi: async () => null,
+    deleteApprovalCard: async () => ({ deleted: true }),
+    supabaseFetch: async () => [],
+    sleep: async () => {},
+    cap: 10, // high cap so dedup, not cap, is what short-circuits
+    stdout,
+  });
+  assert.equal(summary.picked, 4);
+  assert.equal(summary.sent, 2, 'exactly two sends: dup.nl once + other.nl once');
+  assert.equal(summary.skipped, 2, 'the two sibling dup.nl tasks must be skipped as in-batch duplicates');
+  assert.equal(summary.failed, 0);
+  assert.deepEqual(sentTo, ['info@dup.nl', 'info@other.nl']);
+  assert.deepEqual(removed, ['TASK-001', 'TASK-004'], 'only the actually-sent tasks leave the pending store');
+  const skipLines = stdout.writes.filter((w) => w.includes('in_batch_domain_duplicate'));
+  assert.equal(skipLines.length, 2, 'the two dedup rejections must be logged');
+});
+
+test('sendApprovedOutreach derives domain from the "to" address when lead_domain is missing (dedup still works)', async () => {
+  const stdout = silentStdout();
+  const summary = await sendApprovedOutreach({
+    config: makeConfig(),
+    executeTask: async () => ({ outcome: 'completed' }),
+    loadPersistedPendingTasks: () => [
+      makeTask({ task_id: 'TASK-001', to: 'a@fallback.com', lead_domain: '' }),
+      makeTask({ task_id: 'TASK-002', to: 'b@fallback.com', lead_domain: '' }),
+    ],
+    removePersistedPendingTask: () => {},
+    searchApprovalMessageInThreads: async () => null,
+    discordApi: async () => null,
+    deleteApprovalCard: async () => ({ deleted: true }),
+    supabaseFetch: async () => [],
+    sleep: async () => {},
+    stdout,
+  });
+  assert.equal(summary.sent, 1);
+  assert.equal(summary.skipped, 1);
+});
+
 test('sendApprovedOutreach honors a custom cap override from the caller', async () => {
   const stdout = silentStdout();
-  const tasks = Array.from({ length: 10 }, (_, i) => makeTask({ task_id: `TASK-${String(i).padStart(3, '0')}` }));
+  const tasks = Array.from({ length: 10 }, (_, i) => makeTask({
+    task_id: `TASK-${String(i).padStart(3, '0')}`,
+    to: `info@lead-${i}.nl`,
+    lead_domain: `lead-${i}.nl`,
+  }));
   const summary = await sendApprovedOutreach({
     config: makeConfig(),
     executeTask: async () => ({ outcome: 'completed' }),

@@ -135,9 +135,33 @@ export async function sendApprovedOutreach(options) {
   let cardsDeleted = 0;
   const failures = [];
   const outcomes = [];
+  // In-batch domain dedup (added 2026-10-27 after the first live
+  // morning run blasted 4 cold emails to the same recipient).
+  // Supabase's per-domain cap check only looks at the leads table,
+  // where fresh drafts have `last_contacted_at = null`, so a backlog
+  // with multiple drafts to the same domain slipped past the gate.
+  // We now also track every domain that already got a sent email in
+  // THIS run and short-circuit the rest.
+  const sentDomains = new Set();
+  function domainOf(task) {
+    const explicit = String(task?.lead_domain || '').trim().toLowerCase();
+    if (explicit) return explicit;
+    const addr = String(task?.email_request?.to || '').trim();
+    const at = addr.lastIndexOf('@');
+    return at === -1 ? '' : addr.slice(at + 1).toLowerCase();
+  }
 
   for (const [i, task] of picks.entries()) {
     const marker = `[${i + 1}/${picks.length}] ${task.task_id} → ${task.email_request?.to || '(no-to)'}`;
+    const taskDomain = domainOf(task);
+    if (taskDomain && sentDomains.has(taskDomain)) {
+      skipped += 1;
+      const outcome = { ok: false, skipped: true, taskId: task.task_id, to: task.email_request?.to, reason: `in_batch_domain_duplicate:${taskDomain}` };
+      outcomes.push(outcome);
+      stdout.write(`[morning-shift:outreach] SKIPPED ${marker}: ${outcome.reason}\n`);
+      if (i < picks.length - 1) await sleep(sleepMs);
+      continue;
+    }
     try {
       const outcome = await sendOneOutreachDraft(task, {
         config,
@@ -155,6 +179,7 @@ export async function sendApprovedOutreach(options) {
       if (outcome.ok) {
         sent += 1;
         if (outcome.cardDeleted) cardsDeleted += 1;
+        if (taskDomain) sentDomains.add(taskDomain);
         stdout.write(`[morning-shift:outreach] sent ${marker}${outcome.cardDeleted ? ' (card deleted)' : ''}\n`);
       } else if (outcome.skipped) {
         skipped += 1;

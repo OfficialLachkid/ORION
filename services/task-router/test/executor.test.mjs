@@ -600,9 +600,42 @@ test('executeTask names the lead as a clickable link in the send-approval summar
   );
 });
 
+// Build a Gmail drafts.get response that `getGmailDraft` can parse into
+// a full {to, subject, bodyText, fromEmail, ...} draft envelope. The
+// opt-out footer guard (2026-10-27 fail-closed) now re-encodes this
+// envelope before send; test mocks that only returned `{id, threadId}`
+// used to work because the guard swallowed errors — now they'd throw.
+function buildGmailDraftReadResponse({ draftId, threadId, to, bodyText }) {
+  const payloadBody = Buffer.from(bodyText, 'utf8').toString('base64')
+    .replace(/\+/gu, '-').replace(/\//gu, '_').replace(/=+$/gu, '');
+  return {
+    id: draftId,
+    message: {
+      id: `message-${draftId}`,
+      threadId,
+      payload: {
+        mimeType: 'text/plain',
+        headers: [
+          { name: 'To', value: `<${to}>` },
+          { name: 'From', value: '"VBJ Services" <vbjtechservices@gmail.com>' },
+          { name: 'Subject', value: 'Smoke test' },
+        ],
+        body: { data: payloadBody },
+      },
+    },
+  };
+}
+
 test('executeTask sends an approved Gmail draft', async () => {
   const config = loadRuntimeConfig();
-  const fetchImpl = async (url) => {
+  const draftRead = buildGmailDraftReadResponse({
+    draftId: 'draft-123',
+    threadId: 'thread-123',
+    to: 'vbjtechservices@gmail.com',
+    // Body already carries the opt-out footer, so the guard skips the patch.
+    bodyText: `Hello from O.R.I.O.N.${PS_OPT_OUT_FOOTER}`,
+  });
+  const fetchImpl = async (url, init = {}) => {
     if (String(url).includes('oauth2.googleapis.com/token')) {
       return {
         ok: true,
@@ -612,6 +645,10 @@ test('executeTask sends an approved Gmail draft', async () => {
           token_type: 'Bearer',
         }),
       };
+    }
+
+    if ((init.method || 'GET') === 'GET' && /\/drafts\/[^/]+(\?|$)/u.test(String(url))) {
+      return { ok: true, json: async () => draftRead };
     }
 
     return {
@@ -654,18 +691,97 @@ test('executeTask sends an approved Gmail draft', async () => {
   assert.equal(result.outboundEvents[1].metadata.emailBody, 'Hello from O.R.I.O.N.');
 });
 
+test('executeTask fails CLOSED when the opt-out footer guard cannot patch the draft (regression for 2026-10-27)', async () => {
+  // Prior behaviour was best-effort: a failing update() wrote a stderr
+  // line and the send call still fired, which caused 5 cold emails to
+  // slip past the opt-out footer when Gmail returned 400 Invalid To
+  // header. Now the executor must throw / fail before send so the task
+  // stays in the pending-approval store and retries next morning.
+  const config = loadRuntimeConfig();
+  const draftRead = buildGmailDraftReadResponse({
+    draftId: 'draft-FAILCLOSED',
+    threadId: 'thread-FAILCLOSED',
+    to: 'lead@example.nl',
+    // No footer in the body — the guard WILL try to patch, and the
+    // mock will fail that patch.
+    bodyText: 'Beste operator, this body has NO opt-out footer appended.',
+  });
+  let sendCalled = false;
+  const fetchImpl = async (url, init = {}) => {
+    const str = String(url);
+    if (str.includes('oauth2.googleapis.com/token')) {
+      return { ok: true, json: async () => ({ access_token: 't', expires_in: 3600, token_type: 'Bearer' }) };
+    }
+    const method = (init.method || 'GET').toUpperCase();
+    if (method === 'GET' && /\/drafts\/[^/]+(\?|$)/u.test(str)) {
+      return { ok: true, json: async () => draftRead };
+    }
+    if (method === 'PUT' && /\/drafts\/[^/]+(\?|$)/u.test(str)) {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => JSON.stringify({ error: { code: 400, message: 'Invalid To header' } }),
+        json: async () => ({ error: { code: 400, message: 'Invalid To header' } }),
+      };
+    }
+    if (str.endsWith('/send')) {
+      sendCalled = true;
+      return { ok: true, json: async () => ({ id: 'should-not-happen', threadId: 'nope', labelIds: ['SENT'] }) };
+    }
+    return { ok: true, json: async () => ({}) };
+  };
+
+  const result = await executeTask({
+    task_id: 'TASK-FAILCLOSED',
+    runtime_action: 'gmail_send_draft',
+    gmail_draft: {
+      draftId: 'draft-FAILCLOSED',
+      to: 'lead@example.nl',
+      subject: 'Hello',
+      bodyText: 'Beste operator, ...',
+      bodyPreview: 'Beste operator, ...',
+    },
+  }, {
+    ...config,
+    env: {
+      ...config.env,
+      GMAIL_CLIENT_ID: 'client-id',
+      GMAIL_CLIENT_SECRET: 'client-secret',
+      GMAIL_REFRESH_TOKEN: 'refresh-token',
+      GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com',
+    },
+  }, { fetchImpl });
+
+  assert.notEqual(result.outcome, 'completed', 'the task must NOT complete when the opt-out guard fails');
+  assert.match(
+    String(result.error?.message || ''),
+    /Opt-out footer guard.*update failed/u,
+    'the error must name the opt-out guard so the operator sees the actual blocker',
+  );
+  assert.equal(sendCalled, false, 'drafts.send must NOT fire when the guard refuses the draft');
+});
+
 test('executeTask routes lead-outreach send results to the outreachSent thread', async () => {
   // Regression guard for the 2026-08-25 change: lead-outreach sends must
   // land in #sent-outreach so #waiting-approval + #outreach-followups stay
   // pending-only. Signalled by the presence of task.lead_id — any Gmail
   // send that carries a lead_id belongs to the outreach flow.
   const config = loadRuntimeConfig();
-  const fetchImpl = async (url) => {
+  const draftRead = buildGmailDraftReadResponse({
+    draftId: 'draft-456',
+    threadId: 'thread-456',
+    to: 'lead@example.nl',
+    bodyText: `Beste Loodgieter Jansen, ...${PS_OPT_OUT_FOOTER}`,
+  });
+  const fetchImpl = async (url, init = {}) => {
     if (String(url).includes('oauth2.googleapis.com/token')) {
       return {
         ok: true,
         json: async () => ({ access_token: 'token-123', expires_in: 3600, token_type: 'Bearer' }),
       };
+    }
+    if ((init.method || 'GET') === 'GET' && /\/drafts\/[^/]+(\?|$)/u.test(String(url))) {
+      return { ok: true, json: async () => draftRead };
     }
     return {
       ok: true,
