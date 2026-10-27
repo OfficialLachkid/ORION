@@ -825,6 +825,12 @@ test('executeTask routes lead-outreach send results to the outreachSent thread',
       GMAIL_CLIENT_SECRET: 'client-secret',
       GMAIL_REFRESH_TOKEN: 'refresh-token',
       GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com',
+      // CI runs without .env, so stampLeadLastContactedAt would skip
+      // without these explicit test creds. Any non-empty values work —
+      // the fetchImpl above intercepts the PATCH before it hits the
+      // wire.
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_SECRET_KEY: 'test-service-key',
     },
   }, { fetchImpl });
 
@@ -915,7 +921,15 @@ test('executeTask completes the send even when stamp last_contacted_at fails (em
     gmail_draft: { draftId: 'draft-STAMP-FAIL', to: 'lead@example.nl', subject: 'x', bodyText: 'y', bodyPreview: 'y' },
   }, {
     ...config,
-    env: { ...config.env, GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'sec', GMAIL_REFRESH_TOKEN: 'tok', GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com' },
+    env: {
+      ...config.env,
+      GMAIL_CLIENT_ID: 'id',
+      GMAIL_CLIENT_SECRET: 'sec',
+      GMAIL_REFRESH_TOKEN: 'tok',
+      GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com',
+      SUPABASE_URL: 'https://test.supabase.co',
+      SUPABASE_SECRET_KEY: 'test-service-key',
+    },
   }, { fetchImpl });
 
   assert.equal(result.outcome, 'completed', 'send completed despite the stamp failure');
