@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
+import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 
 export const DEFAULT_PUBLICATION_STAGING_BUCKET = 'orion-publication-staging';
 export const DEFAULT_PUBLICATION_STAGING_MAX_BYTES = 50_000_000;
@@ -77,11 +78,7 @@ export class SupabasePublicationStaging {
   }
 
   authHeaders(extra = {}) {
-    return {
-      apikey: this.apiKey,
-      Authorization: `Bearer ${this.apiKey}`,
-      ...extra,
-    };
+    return createSupabaseApiHeaders(this.apiKey, extra);
   }
 
   async request(pathname, options = {}) {

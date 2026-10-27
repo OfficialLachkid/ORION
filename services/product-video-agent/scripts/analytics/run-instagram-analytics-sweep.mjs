@@ -25,6 +25,7 @@
 //   node .../run-instagram-analytics-sweep.mjs --account-key poke-quizzz-instagram
 
 import { loadRuntimeConfig, projectRoot } from '../../../lib/runtime-config.mjs';
+import { createSupabaseApiHeaders } from '../../../lib/supabase-api-headers.mjs';
 import { loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import {
@@ -54,7 +55,7 @@ async function supabaseFetch(config, path) {
   const url = String(config.env.SUPABASE_URL || '').replace(/\/$/, '');
   const key = config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY;
   const response = await fetch(`${url}/rest/v1/${path}`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}` },
+    headers: createSupabaseApiHeaders(key),
   });
   if (!response.ok) throw new Error(`Supabase ${path} → ${response.status}: ${(await response.text()).slice(0, 400)}`);
   return response.json();

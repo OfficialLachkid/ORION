@@ -21,6 +21,7 @@
 
 import { buildDiscordApi, deleteApprovalCard } from './send-approved-followups.mjs';
 import { runPresendChecks } from './outreach-presend-checks.mjs';
+import { createSupabaseApiHeaders } from '../../../services/lib/supabase-api-headers.mjs';
 
 // ─── Daily send cap ─────────────────────────────────────────────────
 // Edit this value to change how many outreach drafts auto-send per
@@ -80,11 +81,9 @@ export function buildSupabaseFetch(config) {
   if (!url || !apiKey) return null;
   return async (path) => {
     const response = await globalThis.fetch(new URL(`/rest/v1/${path}`, url), {
-      headers: {
-        apikey: apiKey,
-        Authorization: `Bearer ${apiKey}`,
+      headers: createSupabaseApiHeaders(apiKey, {
         'Content-Type': 'application/json',
-      },
+      }),
     });
     if (!response.ok) throw new Error(`Supabase ${path} → ${response.status}`);
     return response.json();

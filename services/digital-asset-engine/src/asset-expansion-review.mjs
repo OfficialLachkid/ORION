@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, relative, resolve } from 'node:path';
+import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 import {
   buildDigitalAssetReviewModal,
 } from './review-components.mjs';
@@ -403,12 +404,10 @@ function parseDecision(interaction) {
 }
 
 function headers(apiKey) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
+  return createSupabaseApiHeaders(apiKey, {
     'Content-Type': 'application/json',
     Prefer: 'resolution=ignore-duplicates,return=representation',
-  };
+  });
 }
 
 export async function recordAssetExpansionReviewDecision(options) {

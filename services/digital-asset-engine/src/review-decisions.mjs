@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute, relative, resolve } from 'node:path';
+import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 import {
   buildDigitalAssetReviewModal,
   buildResolvedDigitalAssetReviewComponents,
@@ -52,12 +53,10 @@ function assertAuthorized(interaction, config) {
 }
 
 function createHeaders(apiKey) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
+  return createSupabaseApiHeaders(apiKey, {
     'Content-Type': 'application/json',
     Prefer: 'resolution=ignore-duplicates,return=representation',
-  };
+  });
 }
 
 export class DigitalAssetReviewDecisionStore {

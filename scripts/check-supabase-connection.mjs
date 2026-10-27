@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
+import { createSupabaseApiHeaders } from '../services/lib/supabase-api-headers.mjs';
 
 const SUPABASE_ENV_PATH = resolve(projectRoot, 'config', 'supabase', '.env');
 
@@ -16,13 +17,6 @@ function maskValue(value) {
   }
 
   return `${text.slice(0, 4)}...${text.slice(-4)}`;
-}
-
-function createHeaders(apiKey) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
-  };
 }
 
 async function probe(url, options = {}) {
@@ -77,12 +71,12 @@ async function main() {
   const restRootUrl = new URL('/rest/v1/', supabaseUrl).toString();
 
   const authHealth = await probe(authHealthUrl, {
-    headers: createHeaders(apiKey),
+    headers: createSupabaseApiHeaders(apiKey),
   });
   printResult('auth health', authHealth);
 
   const restRoot = await probe(restRootUrl, {
-    headers: createHeaders(apiKey),
+    headers: createSupabaseApiHeaders(apiKey),
   });
   printResult('rest root', restRoot);
 

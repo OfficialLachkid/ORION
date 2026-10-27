@@ -1,5 +1,6 @@
 import { createGmailDraft, getGmailDraft, sendGmailDraft, updateGmailDraft } from '../../gmail/src/send.mjs';
 import { ensureOptOutFooter, hasOptOutFooter } from '../../gmail/src/opt-out-footer.mjs';
+import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 
 // Stamps leads.last_contacted_at = now so the morning-shift's
 // cross-run per-domain cap (outreach-presend-checks.mjs) can see
@@ -27,12 +28,10 @@ async function stampLeadLastContactedAt(task, config, options) {
   try {
     const response = await fetchImpl(url.toString(), {
       method: 'PATCH',
-      headers: {
-        apikey: apiKey,
-        Authorization: `Bearer ${apiKey}`,
+      headers: createSupabaseApiHeaders(apiKey, {
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
-      },
+      }),
       body: JSON.stringify({ last_contacted_at: new Date().toISOString() }),
     });
     if (!response.ok) {
