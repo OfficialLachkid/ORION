@@ -21,7 +21,7 @@ export function pickApprovedFollowUpSends(tasks) {
     .sort((a, b) => String(a.task_id).localeCompare(String(b.task_id)));
 }
 
-function buildDiscordApi(token, fetchImpl, sleep, apiBase = DEFAULT_DISCORD_API) {
+export function buildDiscordApi(token, fetchImpl, sleep, apiBase = DEFAULT_DISCORD_API) {
   return async function discordApi(path, method = 'GET') {
     const response = await fetchImpl(`${apiBase}${path}`, {
       method,
