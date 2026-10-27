@@ -45,6 +45,41 @@ test('checkEmailShape catches malformed addresses', () => {
   assert.match(checkEmailShape(makeTask({ to: 'two@at@signs.com' })).reason, /^invalid_to_address:/u);
 });
 
+// Regression for 2026-10-27 live run: `flags@2x.webp` passed the plain
+// shape regex and burned a Gmail send on nothing. The TLD-extension
+// blocklist rejects known file extensions.
+test('checkEmailShape rejects scraped-asset addresses whose TLD is a known file extension', () => {
+  const assetAddrs = [
+    'flags@2x.webp',    // the one we actually saw in production
+    'logo@sprite.png',
+    'icon@menu.svg',
+    'bundle@app.js',
+    'style@theme.css',
+    'brochure@assets.pdf',
+    'font@body.woff2',
+  ];
+  for (const to of assetAddrs) {
+    const result = checkEmailShape(makeTask({ to }));
+    assert.equal(result.ok, false, `${to} must be rejected`);
+    assert.match(result.reason, /^invalid_to_address_asset_tld:/u, `${to} must flag the asset-TLD reason`);
+  }
+});
+
+test('checkEmailShape still accepts legitimate TLDs (regression guard — do not over-reject)', () => {
+  const okAddrs = [
+    'info@example.nl',
+    'contact@firstlast.co.uk',
+    'hello@my-business.com',
+    'user@gmail.com',
+    'ops@orion.io',
+    'team@startup.ai',
+    'kontakt@foo.de',
+  ];
+  for (const to of okAddrs) {
+    assert.ok(checkEmailShape(makeTask({ to })).ok, `${to} must pass`);
+  }
+});
+
 test('checkBodyLength refuses bodies shorter than the min or longer than the max', () => {
   assert.ok(checkBodyLength(makeTask()).ok);
   const tooShort = makeTask({ body: 'Hi' });
