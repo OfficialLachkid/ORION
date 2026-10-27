@@ -139,70 +139,20 @@ const CONTACT_FALLBACK_PATHS = ['/contact', '/contactgegevens', '/contact-ons', 
 const CONTACT_FETCH_TIMEOUT_MS = 8000;
 const CONTACT_FETCH_MAX_BYTES = 200_000;
 const CONTACT_FETCH_USER_AGENT = 'ORION-leadgen/1.0 (+contact-fallback)';
-const EMAIL_REGEX = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 const DUTCH_PHONE_REGEX = /(?:\+31|0031|0)(?:[\s-]?\d){9}/;
 
-// Email TLDs we accept. The old `.[a-z]{2,}` tail accepted anything —
-// which pulled `flags@2x.webp` out of a `<img src="…">` attribute,
-// `contact@verhuisbedrijfhaarlem.commaandag` where the scraper
-// swallowed the following Dutch word, and `info@website.com` from
-// template placeholder text. All three bounced on send 2026-10-20
-// and polluted the outreach queue.
-//
-// Allowlist is curated for the Netherlands + EU + common international
-// business ccTLDs/gTLDs. Unknown-but-genuine TLDs can be added here;
-// the scraper falls back to a null email rather than guessing.
-const EMAIL_TLD_ALLOWLIST = new Set([
-  // EU + NL-adjacent ccTLDs
-  'nl', 'be', 'de', 'fr', 'uk', 'es', 'it', 'pt', 'pl', 'se', 'no', 'dk',
-  'fi', 'at', 'ch', 'lu', 'ie', 'cz', 'gr', 'ro', 'hu', 'bg', 'hr', 'si',
-  'sk', 'lt', 'lv', 'ee', 'mt', 'cy', 'is', 'li', 'mc', 'tr', 'ru', 'ua',
-  'rs', 'ba', 'mk', 'me', 'al', 'md', 'by', 'ge', 'am', 'az', 'kz',
-  // Rest of world common
-  'us', 'ca', 'mx', 'br', 'ar', 'cl', 'co', 'pe',
-  'au', 'nz', 'jp', 'kr', 'cn', 'in', 'hk', 'sg', 'tw', 'th', 'my', 'id',
-  'ph', 'vn', 'pk', 'bd', 'il', 'ae', 'sa', 'za', 'ng', 'ke', 'eg', 'ma', 'tn',
-  // Country codes also commonly used as "generic"
-  'io', 'tv', 'cc', 'ws', 'ai', 'so', 'gg', 'fm', 'eu',
-  // Core gTLDs
-  'com', 'net', 'org', 'info', 'biz', 'pro', 'name', 'mobi', 'asia',
-  'travel', 'jobs', 'tel', 'mail', 'email',
-  // Modern business gTLDs commonly seen in Dutch SME contact pages
-  'app', 'dev', 'cloud', 'tech', 'store', 'shop', 'online', 'site',
-  'website', 'agency', 'studio', 'design', 'media', 'group', 'services',
-  'solutions', 'consulting', 'systems', 'software', 'digital', 'marketing',
-  'business', 'company', 'academy', 'foundation', 'world', 'today', 'works',
-  'club', 'zone', 'center', 'team', 'support', 'press', 'blog', 'news',
-  'gallery', 'photography', 'video', 'film', 'music', 'cafe', 'pizza',
-  'bar', 'restaurant', 'pub', 'build', 'builders', 'contractors',
-  'plumbing', 'electrician', 'law', 'legal', 'finance', 'bank', 'insurance',
-  'health', 'clinic', 'dental', 'doctor', 'care', 'fit', 'fitness',
-  'wellness', 'spa', 'yoga', 'life', 'family', 'school', 'university',
-  'education', 'training', 'institute', 'house', 'home', 'properties',
-  'realty', 'estate', 'rentals', 'apartments', 'holiday', 'hotel', 'tours',
-  'vacation', 'flights', 'auto', 'cars', 'bike', 'motorcycle', 'green',
-  'eco', 'organic', 'farm', 'garden', 'network', 'guru', 'ninja', 'rocks',
-  'xyz', 'top', 'vip', 'link', 'page', 'space', 'international',
-]);
-
-export function hasValidEmailTld(email) {
-  const dot = String(email || '').lastIndexOf('.');
-  if (dot < 0) return false;
-  const tld = email.slice(dot + 1).toLowerCase();
-  return EMAIL_TLD_ALLOWLIST.has(tld);
-}
-
-// Scan `text` for the first email whose TLD is in the allowlist.
-// Returns null when nothing matches. Case-insensitive; result is
-// lowercased by the caller (extractContactFromHtml).
-export function pickFirstValidEmail(text) {
-  if (!text) return null;
-  for (const match of String(text).matchAll(EMAIL_REGEX)) {
-    const candidate = match[0];
-    if (hasValidEmailTld(candidate)) return candidate;
-  }
-  return null;
-}
+// Email TLD allowlist + helpers moved to the shared module on
+// 2026-10-27 so the qualifier's local-LLM contact_email discovery
+// path (run-lead-qualification.mjs) can gate on the exact same set.
+// Previously the scraper gate had been added (2026-10-20) but the
+// qualifier was still accepting any `foo@bar.ANYTHING` from the LLM,
+// which let `flags@2x.webp` through again on 2026-10-27.
+import {
+  EMAIL_TLD_ALLOWLIST,
+  hasValidEmailTld,
+  pickFirstValidEmail,
+} from '../../../scripts/lib/email-tld-allowlist.mjs';
+export { EMAIL_TLD_ALLOWLIST, hasValidEmailTld, pickFirstValidEmail };
 
 async function fetchWithTimeout(url) {
   const controller = new AbortController();

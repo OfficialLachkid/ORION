@@ -11,6 +11,7 @@ import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
 import { fetchLeads, fetchSuppressedDomains, updateLead } from './lib/leadgen-supabase.mjs';
+import { hasValidEmailTld } from './lib/email-tld-allowlist.mjs';
 import { measurePageSpeed, qualifyLead } from '../services/leadgen-qualifier/src/qualifier.mjs';
 import { executeTask } from '../services/task-router/src/executor.mjs';
 import { upsertPersistedPendingTask } from '../services/discord-bot/src/pending-task-store.mjs';
@@ -308,7 +309,15 @@ async function main() {
     qualification.page_speed = pageSpeed;
 
     const discoveredEmail = String(qualification.contact_email || '').trim().toLowerCase();
-    const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/u.test(discoveredEmail);
+    // Shape check + TLD allowlist (shared with the scraper, 2026-10-27).
+    // The local LLM occasionally returns an asset path or placeholder
+    // string that passes the shape regex but has a bogus TLD (`.webp`,
+    // `.css`, `.pdf`, …). Allowlist here keeps those out of
+    // leads.contact_email so neither the drafter nor the morning-shift
+    // ever picks them up.
+    const emailLooksValid =
+      /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/u.test(discoveredEmail)
+      && hasValidEmailTld(discoveredEmail);
     if (!lead.contact_email && emailLooksValid) {
       lead.contact_email = discoveredEmail;
       qualification.contact_email_recovered = true;
