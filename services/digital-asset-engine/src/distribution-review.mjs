@@ -435,6 +435,16 @@ export async function recordDigitalAssetDistributionDecision(options) {
     decided_at: decidedAt,
     discord_interaction_id: row.discord_interaction_id,
   };
+  if (reference.decision === 'approve_publish') {
+    state.publication_job = {
+      ...(state.publication_job || {}),
+      status: 'queued',
+      worker_pid: null,
+      queued_at: decidedAt,
+      updated_at: decidedAt,
+      error: null,
+    };
+  }
   const statePath = resolve(productRoot, 'review', 'distribution.json');
   await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
   return {
