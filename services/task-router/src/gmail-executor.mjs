@@ -1,6 +1,53 @@
 import { createGmailDraft, getGmailDraft, sendGmailDraft, updateGmailDraft } from '../../gmail/src/send.mjs';
 import { ensureOptOutFooter, hasOptOutFooter } from '../../gmail/src/opt-out-footer.mjs';
 
+// Stamps leads.last_contacted_at = now so the morning-shift's
+// cross-run per-domain cap (outreach-presend-checks.mjs) can see
+// prior sends. Best-effort — the email is already out by the time
+// this runs, so a Supabase hiccup must NOT fail the task. A failure
+// just means tomorrow's sends might duplicate; worst case stays
+// bounded by the in-batch dedup + cap.
+async function stampLeadLastContactedAt(task, config, options) {
+  const leadId = String(task?.lead_id || '').trim();
+  if (!leadId) return; // non-outreach gmail send, nothing to stamp
+  const supabaseUrl = config?.env?.SUPABASE_URL || '';
+  const apiKey = config?.env?.SUPABASE_SECRET_KEY || config?.env?.SUPABASE_PUBLISHABLE_KEY || '';
+  if (!supabaseUrl || !apiKey) {
+    process.stderr.write(
+      `[gmail-executor] stamp last_contacted_at skipped for lead ${leadId}: Supabase config missing\n`,
+    );
+    return;
+  }
+  const leadsTable = config?.env?.LEADGEN_LEADS_TABLE || 'leads';
+  const fetchImpl = options?.fetch || options?.fetchImpl || fetch;
+  const url = new URL(
+    `/rest/v1/${leadsTable}?id=eq.${encodeURIComponent(leadId)}`,
+    supabaseUrl,
+  );
+  try {
+    const response = await fetchImpl(url.toString(), {
+      method: 'PATCH',
+      headers: {
+        apikey: apiKey,
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=minimal',
+      },
+      body: JSON.stringify({ last_contacted_at: new Date().toISOString() }),
+    });
+    if (!response.ok) {
+      const bodyText = typeof response.text === 'function' ? await response.text().catch(() => '') : '';
+      process.stderr.write(
+        `[gmail-executor] stamp last_contacted_at failed for lead ${leadId}: HTTP ${response.status}${bodyText ? ` — ${bodyText.slice(0, 200)}` : ''}\n`,
+      );
+    }
+  } catch (error) {
+    process.stderr.write(
+      `[gmail-executor] stamp last_contacted_at threw for lead ${leadId}: ${error?.message || error}\n`,
+    );
+  }
+}
+
 function normalizeWhitespace(value) {
   return String(value || '').replace(/\s+/gu, ' ').trim();
 }
@@ -171,6 +218,10 @@ async function executeGmailSendDraftAction(task, config, options = {}) {
     result = await sendGmailDraft(config.env, draftId, options);
   } catch (error) {
     if (isDraftAlreadyGoneError(error)) {
+      // The draft was already sent (likely the operator fired it from the
+      // Gmail UI). Still stamp last_contacted_at — the outreach happened,
+      // and the per-domain cap check needs to see it tomorrow.
+      await stampLeadLastContactedAt(task, config, options);
       return {
         rawStdout: '',
         report: {
@@ -188,6 +239,8 @@ async function executeGmailSendDraftAction(task, config, options = {}) {
     }
     throw error;
   }
+
+  await stampLeadLastContactedAt(task, config, options);
 
   return {
     rawStdout: '',

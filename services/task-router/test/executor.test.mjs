@@ -773,15 +773,24 @@ test('executeTask routes lead-outreach send results to the outreachSent thread',
     to: 'lead@example.nl',
     bodyText: `Beste Loodgieter Jansen, ...${PS_OPT_OUT_FOOTER}`,
   });
+  // Capture the stamp-last-contacted-at PATCH so the lead-outreach
+  // regression also pins the 2026-10-27 fix (cross-run per-domain cap
+  // depends on this write happening on every successful send).
+  const stampCalls = [];
   const fetchImpl = async (url, init = {}) => {
-    if (String(url).includes('oauth2.googleapis.com/token')) {
+    const str = String(url);
+    if (str.includes('oauth2.googleapis.com/token')) {
       return {
         ok: true,
         json: async () => ({ access_token: 'token-123', expires_in: 3600, token_type: 'Bearer' }),
       };
     }
-    if ((init.method || 'GET') === 'GET' && /\/drafts\/[^/]+(\?|$)/u.test(String(url))) {
+    if ((init.method || 'GET') === 'GET' && /\/drafts\/[^/]+(\?|$)/u.test(str)) {
       return { ok: true, json: async () => draftRead };
+    }
+    if ((init.method || '').toUpperCase() === 'PATCH' && /\/rest\/v1\/leads\?id=eq\./u.test(str)) {
+      stampCalls.push({ url: str, body: init.body });
+      return { ok: true, status: 204, text: async () => '', json: async () => ({}) };
     }
     return {
       ok: true,
@@ -824,6 +833,93 @@ test('executeTask routes lead-outreach send results to the outreachSent thread',
   assert.equal(result.outboundEvents[1].metadata.leadId, 'lead-abc-123');
   assert.equal(result.outboundEvents[1].metadata.leadBusinessName, 'Loodgieter Jansen');
   assert.equal(result.outboundEvents[1].metadata.leadDomain, 'loodgieterjansen.nl');
+  assert.equal(stampCalls.length, 1, 'the executor must PATCH leads.last_contacted_at after a successful outreach send');
+  assert.match(stampCalls[0].url, /\/rest\/v1\/leads\?id=eq\.lead-abc-123$/u);
+  const stampBody = JSON.parse(stampCalls[0].body);
+  assert.ok(stampBody.last_contacted_at, 'the stamp body must include last_contacted_at');
+  assert.ok(!Number.isNaN(Date.parse(stampBody.last_contacted_at)), 'last_contacted_at must be an ISO timestamp');
+});
+
+test('executeTask does NOT stamp last_contacted_at for a non-lead gmail send (preserves the smoke-test path)', async () => {
+  // Ensures the first send-draft test (which has no lead_id) still skips
+  // the stamp cleanly — the stamp is a Supabase write and must not fire
+  // for non-outreach sends (API smoke tests, operator one-offs).
+  const config = loadRuntimeConfig();
+  const draftRead = buildGmailDraftReadResponse({
+    draftId: 'draft-NOLEAD',
+    threadId: 'thread-NOLEAD',
+    to: 'vbjtechservices@gmail.com',
+    bodyText: `Hello${PS_OPT_OUT_FOOTER}`,
+  });
+  const patchCalls = [];
+  const fetchImpl = async (url, init = {}) => {
+    const str = String(url);
+    if (str.includes('oauth2.googleapis.com/token')) {
+      return { ok: true, json: async () => ({ access_token: 't', expires_in: 3600, token_type: 'Bearer' }) };
+    }
+    if ((init.method || 'GET') === 'GET' && /\/drafts\/[^/]+(\?|$)/u.test(str)) {
+      return { ok: true, json: async () => draftRead };
+    }
+    if ((init.method || '').toUpperCase() === 'PATCH') {
+      patchCalls.push(str);
+      return { ok: true, status: 204, text: async () => '', json: async () => ({}) };
+    }
+    return { ok: true, json: async () => ({ id: 'sent-NOLEAD', threadId: 'thread-NOLEAD', labelIds: ['SENT'] }) };
+  };
+
+  const result = await executeTask({
+    task_id: 'TASK-SMOKE',
+    runtime_action: 'gmail_send_draft',
+    gmail_draft: { draftId: 'draft-NOLEAD', to: 'vbjtechservices@gmail.com', subject: 'x', bodyText: 'y', bodyPreview: 'y' },
+  }, {
+    ...config,
+    env: { ...config.env, GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'sec', GMAIL_REFRESH_TOKEN: 'tok', GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com' },
+  }, { fetchImpl });
+
+  assert.equal(result.outcome, 'completed');
+  assert.equal(patchCalls.length, 0, 'no lead_id → no stamp PATCH');
+});
+
+test('executeTask completes the send even when stamp last_contacted_at fails (email is already out)', async () => {
+  // Stamp is best-effort: an executor-level Supabase failure must NOT
+  // undo a successful send. The failure line hits stderr; the task's
+  // outcome stays "completed."
+  const config = loadRuntimeConfig();
+  const draftRead = buildGmailDraftReadResponse({
+    draftId: 'draft-STAMP-FAIL',
+    threadId: 'thread-STAMP-FAIL',
+    to: 'lead@example.nl',
+    bodyText: `Beste operator${PS_OPT_OUT_FOOTER}`,
+  });
+  let stampAttempted = false;
+  const fetchImpl = async (url, init = {}) => {
+    const str = String(url);
+    if (str.includes('oauth2.googleapis.com/token')) {
+      return { ok: true, json: async () => ({ access_token: 't', expires_in: 3600, token_type: 'Bearer' }) };
+    }
+    if ((init.method || 'GET') === 'GET' && /\/drafts\/[^/]+(\?|$)/u.test(str)) {
+      return { ok: true, json: async () => draftRead };
+    }
+    if ((init.method || '').toUpperCase() === 'PATCH' && /\/rest\/v1\/leads/u.test(str)) {
+      stampAttempted = true;
+      return { ok: false, status: 503, text: async () => '{"message":"Supabase unavailable"}', json: async () => ({}) };
+    }
+    return { ok: true, json: async () => ({ id: 'sent-STAMP-FAIL', threadId: 'thread-STAMP-FAIL', labelIds: ['SENT'] }) };
+  };
+
+  const result = await executeTask({
+    task_id: 'TASK-STAMP-FAIL',
+    runtime_action: 'gmail_send_draft',
+    lead_id: 'lead-stamp-fail-1',
+    lead_domain: 'example.nl',
+    gmail_draft: { draftId: 'draft-STAMP-FAIL', to: 'lead@example.nl', subject: 'x', bodyText: 'y', bodyPreview: 'y' },
+  }, {
+    ...config,
+    env: { ...config.env, GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'sec', GMAIL_REFRESH_TOKEN: 'tok', GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com' },
+  }, { fetchImpl });
+
+  assert.equal(result.outcome, 'completed', 'send completed despite the stamp failure');
+  assert.ok(stampAttempted, 'the stamp PATCH was attempted');
 });
 
 test('buildExecutionPlan recognizes explicit developer-agent workflows', () => {
