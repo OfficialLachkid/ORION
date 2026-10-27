@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import {
@@ -393,6 +393,116 @@ test('published update inherits an unchanged asset from the verified base after 
   });
   assert.equal(inserted.length, 1);
   assert.equal(result.row.asset_decisions[1].asset_hash, 'd'.repeat(64));
+});
+
+test('published update resolves a verified legacy initial release without a version pointer', async () => {
+  const packageRoot = 'releases/0.3.0/candidates/0123456789abcdef';
+  const currentManifestHash = 'e'.repeat(64);
+  const archiveRoot = await createArchiveFixture({
+    packageRoot,
+    targetVersion: '0.3.0',
+    baseManifestHash: currentManifestHash,
+    marketplaceReviewMode: 'published_update',
+    currentMarketplaceVersion: '0.2.0',
+    publishedState: {
+      status: 'verified_public',
+      product_id: 'asset-product-e7bd21e31c69c03a',
+      target_version: '0.2.0',
+      manifest_hash: currentManifestHash,
+      listing_hash: 'f'.repeat(64),
+      public_url: context.itchUrl,
+    },
+  });
+  const productRoot = resolve(archiveRoot, context.productSlug);
+  const versionRoot = resolve(productRoot, 'releases', '0.2.0');
+  const baseCandidateRoot = resolve(versionRoot, 'candidates', 'fedcba9876543210');
+  const baseManifest = JSON.parse(await readFile(resolve(baseCandidateRoot, 'manifest.json'), 'utf8'));
+  const product = JSON.parse(await readFile(resolve(productRoot, 'product.json'), 'utf8'));
+  const previewRoot = resolve(productRoot, 'exports', 'itch-preview');
+  const { target_version: _targetVersion, ...legacyManifestFields } = baseManifest;
+  await mkdir(previewRoot, { recursive: true });
+  await Promise.all([
+    writeFile(resolve(productRoot, 'product.json'), JSON.stringify({ ...product, version: '0.2.0' })),
+    writeFile(resolve(previewRoot, 'manifest.json'), JSON.stringify({
+      ...legacyManifestFields,
+      product_version: '0.2.0',
+      release_state: 'internal_preview',
+      distribution_ready: false,
+    })),
+    writeFile(resolve(previewRoot, 'itch-listing-preview.json'), JSON.stringify({
+      listing_hash: 'f'.repeat(64),
+    })),
+  ]);
+  await rm(versionRoot, { recursive: true, force: true });
+
+  const inserted = [];
+  const result = await recordDigitalAssetReviewDecision({
+    interaction: packInteraction(),
+    archiveRoot,
+    config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+    store: { async insert(row) { inserted.push(row); } },
+  });
+  assert.equal(inserted.length, 1);
+  assert.equal(result.row.manifest_hash, manifestHash);
+});
+
+test('published update preserves transitive canonical provenance from its immediate verified base', async () => {
+  const packageRoot = 'releases/0.3.0/candidates/0123456789abcdef';
+  const currentManifestHash = 'e'.repeat(64);
+  const priorOriginHash = '7'.repeat(64);
+  const archiveRoot = await createArchiveFixture({
+    packageRoot,
+    targetVersion: '0.3.0',
+    baseManifestHash: currentManifestHash,
+    marketplaceReviewMode: 'published_update',
+    currentMarketplaceVersion: '0.2.0',
+    publishedState: {
+      status: 'verified_public',
+      product_id: 'asset-product-e7bd21e31c69c03a',
+      target_version: '0.2.0',
+      manifest_hash: currentManifestHash,
+      listing_hash: 'f'.repeat(64),
+      public_url: context.itchUrl,
+    },
+  });
+  const productRoot = resolve(archiveRoot, context.productSlug);
+  const baseManifestPath = resolve(
+    productRoot,
+    'releases',
+    '0.2.0',
+    'candidates',
+    'fedcba9876543210',
+    'manifest.json',
+  );
+  const updateManifestPath = resolve(productRoot, packageRoot, 'manifest.json');
+  const [baseManifest, updateManifest] = await Promise.all([
+    readFile(baseManifestPath, 'utf8').then(JSON.parse),
+    readFile(updateManifestPath, 'utf8').then(JSON.parse),
+  ]);
+  const inventory = assets.map((asset, index) => ({
+    ...asset,
+    asset_key: index === 0 ? 'rail-rifle' : 'arc-launcher',
+    kind: 'weapon',
+    buyer_path: `assets/individual/${index === 0 ? 'rail-rifle' : 'arc-launcher'}.png`,
+    content_origin: 'canonical',
+    origin_manifest_hash: priorOriginHash,
+    latest_operation: 'canonical',
+    content_sha256: index === 0 ? 'b'.repeat(64) : 'd'.repeat(64),
+  }));
+  await Promise.all([
+    writeFile(baseManifestPath, JSON.stringify({ ...baseManifest, asset_inventory: inventory })),
+    writeFile(updateManifestPath, JSON.stringify({ ...updateManifest, asset_inventory: inventory })),
+  ]);
+
+  const inserted = [];
+  const result = await recordDigitalAssetReviewDecision({
+    interaction: packInteraction(),
+    archiveRoot,
+    config: { guildId: 'guild-1', operatorRoleId: 'operator-role', operatorUserIds: [], env: {} },
+    store: { async insert(row) { inserted.push(row); } },
+  });
+  assert.equal(inserted.length, 1);
+  assert.equal(result.row.asset_decisions[0].asset_hash, 'b'.repeat(64));
 });
 
 test('published update rejects an inherited asset that differs from the verified base release', async () => {

@@ -152,6 +152,29 @@ function normalizedItchUrl(value, label) {
   return parsed.toString();
 }
 
+async function resolveVerifiedPublishedBaseRelease({ productRoot, product, publishedState }) {
+  const releaseVersion = String(publishedState?.target_version || '').trim();
+  const versionPointer = await readOptionalJson(resolve(
+    productRoot,
+    'releases',
+    releaseVersion,
+    'latest-candidate.json',
+  ));
+  if (versionPointer) {
+    return resolvePackagedRelease({ productRoot, releaseVersion });
+  }
+  if (product.version !== releaseVersion) {
+    throw new Error('The verified public base release is missing its immutable package pointer.');
+  }
+  const legacyBase = await resolvePackagedRelease({ productRoot });
+  if (legacyBase.manifest.product_version !== releaseVersion
+    || legacyBase.manifest.manifest_hash !== publishedState.manifest_hash
+    || legacyBase.manifest.listing_hash !== publishedState.listing_hash) {
+    throw new Error('The legacy public base release no longer matches its verified publication receipt.');
+  }
+  return legacyBase;
+}
+
 function validateMarketplaceReviewState({ product, reviewState, manifest, itchState, publishedState }) {
   const mode = String(reviewState.marketplace_review_mode || 'draft');
   if (mode === 'local_generation') {
@@ -229,9 +252,10 @@ async function loadReviewContext({ archiveRoot, reference, interaction }) {
   });
   let publishedBaseAssets = null;
   if (marketplaceReview.mode === 'published_update') {
-    const base = await resolvePackagedRelease({
+    const base = await resolveVerifiedPublishedBaseRelease({
       productRoot,
-      releaseVersion: publishedState.target_version,
+      product,
+      publishedState,
     });
     if (base.manifest.manifest_hash !== publishedState.manifest_hash
       || base.manifest.manifest_hash !== manifest.base_manifest_hash) {
@@ -262,9 +286,12 @@ async function loadReviewContext({ archiveRoot, reference, interaction }) {
       if (marketplaceReview.mode === 'published_update') {
         const baseAsset = publishedBaseAssets.get(asset.asset_id);
         const originManifestHash = String(asset.origin_manifest_hash || '');
+        const expectedOriginManifestHash = String(
+          baseAsset?.origin_manifest_hash || publishedState.manifest_hash || '',
+        );
         if (!baseAsset
           || baseAsset.content_sha256 !== asset.content_sha256
-          || (originManifestHash && originManifestHash !== publishedState.manifest_hash)) {
+          || (originManifestHash && originManifestHash !== expectedOriginManifestHash)) {
           throw new Error(`The inherited base-release hash for ${asset.asset_id} does not match the reviewed export.`);
         }
       } else if (canonicalHash !== asset.content_sha256) {
