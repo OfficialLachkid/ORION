@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import process from 'node:process';
-import { loadRuntimeConfig } from '../lib/runtime-config.mjs';
+import { loadRuntimeConfig, projectRoot } from '../lib/runtime-config.mjs';
+import { withItchBrowserLock } from './src/itch-browser-lock.mjs';
 import { runItchPublicationJob } from './src/itch-publication-job.mjs';
 
 function parseArguments(argv) {
@@ -16,10 +17,14 @@ function parseArguments(argv) {
 }
 
 const args = parseArguments(process.argv);
-runItchPublicationJob({
+const runtimeConfig = loadRuntimeConfig({ envFilePath: args.runtimeEnv });
+withItchBrowserLock({
+  projectRoot,
+  onWait: () => process.stdout.write('[queue] Waiting for the authenticated itch.io browser resource.\n'),
+}, () => runItchPublicationJob({
   statePath: args.statePath,
-  runtimeConfig: loadRuntimeConfig({ envFilePath: args.runtimeEnv }),
-}).then((result) => {
+  runtimeConfig,
+})).then((result) => {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }).catch((error) => {
   process.stderr.write(`${error.stack || error.message || error}\n`);

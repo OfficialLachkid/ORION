@@ -9,6 +9,7 @@ import {
   DigitalAssetDistributionDecisionStore,
   parseDigitalAssetDistributionCustomId,
   postDigitalAssetDistributionReview,
+  recordDigitalAssetDistributionDecision,
   resolveDistributionMarketplaceState,
 } from '../src/distribution-review.mjs';
 import {
@@ -38,6 +39,61 @@ test('ready distribution gate is separate and bound to the exact manifest', () =
     productSlug: context.productSlug,
     manifestHashPrefix: 'a'.repeat(16),
   });
+});
+
+test('publication approval persists a durable queued job before the worker starts', async () => {
+  const archiveRoot = await mkdtemp(resolve(tmpdir(), 'orion-distribution-queue-'));
+  const productRoot = resolve(archiveRoot, context.productSlug);
+  await mkdir(resolve(productRoot, 'review'), { recursive: true });
+  await Promise.all([
+    writeFile(resolve(productRoot, 'product.json'), JSON.stringify({
+      product_id: 'product-1',
+      slug: context.productSlug,
+    })),
+    writeFile(resolve(productRoot, 'review', 'distribution.json'), JSON.stringify({
+      status: context.status,
+      seller_ready: true,
+      product_slug: context.productSlug,
+      manifest_hash: context.manifestHash,
+      listing_hash: 'b'.repeat(64),
+      marketplace: 'itch.io',
+      channel_id: 'channel-1',
+      discord_message_id: 'message-1',
+      package_review_message_id: 'package-message-1',
+      public_url: context.itchUrl,
+    })),
+  ]);
+  const customId = buildDigitalAssetDistributionComponents(context)[0].components[0].custom_id;
+  const decision = await recordDigitalAssetDistributionDecision({
+    archiveRoot,
+    now: '2026-10-27T10:35:20.000Z',
+    config: {
+      guildId: 'guild-1',
+      operatorRoleId: 'operator-role',
+    },
+    interaction: {
+      id: 'interaction-1',
+      guild_id: 'guild-1',
+      channel_id: 'channel-1',
+      data: { custom_id: customId },
+      message: { id: 'message-1' },
+      member: {
+        roles: ['operator-role'],
+        user: { id: 'operator-1', username: 'Operator' },
+      },
+    },
+    store: { async insert() {} },
+  });
+  assert.equal(decision.state.status, 'distribution_approved');
+  assert.deepEqual(decision.state.publication_job, {
+    status: 'queued',
+    worker_pid: null,
+    queued_at: '2026-10-27T10:35:20.000Z',
+    updated_at: '2026-10-27T10:35:20.000Z',
+    error: null,
+  });
+  const persisted = JSON.parse(await readFile(resolve(productRoot, 'review', 'distribution.json'), 'utf8'));
+  assert.equal(persisted.publication_job.status, 'queued');
 });
 
 test('blocked seller setup exposes remediation but no publish action', () => {
