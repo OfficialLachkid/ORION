@@ -70,3 +70,51 @@ test('qualifier prompt forbids long dashes in generated email copy', () => {
   const prompt = buildQualificationPrompt(baseLead());
   assert.match(prompt, /Do NOT use em dashes or en dashes in generated draft_subject or draft_body/u);
 });
+
+// Regressions for the 2026-10-27 contact_email tightening. The
+// morning-shift pre-send check (outreach-presend-checks.mjs) and the
+// scraper + qualifier gates (email-tld-allowlist.mjs) already catch
+// these at later stages, but the earliest + cheapest place to kill
+// them is the local LLM itself. Pin the specific guidance so a
+// prompt refactor can't silently drop it.
+
+test('qualifier prompt rejects asset-TLD addresses from the contact_email candidates', () => {
+  const prompt = buildQualificationPrompt(baseLead());
+  assert.match(prompt, /File-extension TLDs/u, 'prompt must name the asset-TLD rejection rule');
+  assert.match(prompt, /\.webp/u, 'prompt must mention the production case (.webp)');
+  assert.match(prompt, /flags@2x\.webp/u, 'prompt must reference the actual 2026-10-27 production failure so the LLM has a concrete example to pattern-match against');
+});
+
+test('qualifier prompt rejects glued-word TLDs (scraper swallowed the next word)', () => {
+  const prompt = buildQualificationPrompt(baseLead());
+  assert.match(prompt, /Glued-word TLDs/u);
+  assert.match(prompt, /\.commaandag/u, 'prompt must mention the .commaandag production case');
+  assert.match(prompt, /\.comtelefoonnummer/u, 'prompt must mention the .comtelefoonnummer production case');
+});
+
+test('qualifier prompt tells the LLM to strip punctuation / markdown cruft before returning', () => {
+  const prompt = buildQualificationPrompt(baseLead());
+  assert.match(prompt, /Punctuation-glued addresses/u);
+  assert.match(prompt, /\[info@foo\.nl\]\(mailto:info@foo\.nl\)/u, 'prompt must call out the markdown-wrapper form');
+});
+
+test('qualifier prompt rejects placeholder strings as contact_email', () => {
+  const prompt = buildQualificationPrompt(baseLead());
+  assert.match(prompt, /Placeholder/u);
+  assert.match(prompt, /Contact via website/u);
+  assert.match(prompt, /\*protected email\*/u);
+});
+
+test('qualifier prompt tells the LLM to decode HTML entities before returning (or return null)', () => {
+  const prompt = buildQualificationPrompt(baseLead());
+  assert.match(prompt, /HTML-entity/u, 'prompt must call out the HTML-entity-encoded case');
+  assert.match(prompt, /decode the entities/u, 'prompt must tell the LLM to decode, not pass through');
+});
+
+test('contact_email JSON-schema line references the rejection rules so the LLM re-reads them before writing', () => {
+  const prompt = buildQualificationPrompt(baseLead());
+  // The JSON output block's inline description of contact_email now
+  // points back at step 3's rejection rules. Prevents a tired prompt
+  // reader from relying only on the schema line.
+  assert.match(prompt, /"contact_email":[^\n]*rejection rules/u);
+});
