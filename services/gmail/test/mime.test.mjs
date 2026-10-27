@@ -57,6 +57,24 @@ test('buildRfc822Message rejects invalid recipient', () => {
   }), /Invalid recipient/u);
 });
 
+// Round-trip regression: getGmailDraft reads the saved "To" header verbatim
+// (which we wrote as `<info@example.com>`). The opt-out footer guard feeds
+// that value straight back into buildRfc822Message. Without stripping the
+// `<...>` wrapper we re-emit `To: <<info@example.com>>`, which Gmail rejects
+// with 400 "Invalid To header" — observed in production 2026-10-27 against
+// a 5-draft morning-shift batch, all 5 sends slipped past the opt-out guard
+// as a result.
+test('buildRfc822Message strips a pre-wrapped <email> on the "to" field', () => {
+  const raw = buildRfc822Message({
+    to: '<info@nextloodgieters.com>',
+    fromEmail: 's@example.com',
+    subject: 'x',
+    bodyText: 'y',
+  });
+  assert.ok(raw.includes('To: <info@nextloodgieters.com>'));
+  assert.ok(!raw.includes('<<'), 'must not emit double angle brackets');
+});
+
 test('toBase64Url produces url-safe output without padding', () => {
   const encoded = toBase64Url('hello?world/');
   assert.ok(!encoded.includes('+'));

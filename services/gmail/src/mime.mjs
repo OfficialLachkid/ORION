@@ -44,7 +44,12 @@ function toBcc(bccList) {
 }
 
 export function buildRfc822Message(draft) {
-  const to = String(draft.to || '').trim();
+  // Strip any `<...>` wrapper the caller may have handed us — e.g. the
+  // opt-out footer guard reads the current Gmail draft's To header
+  // (which gets stored as `<info@example.com>`) and feeds it straight
+  // back here. Without this normalisation we'd emit `To: <<info@...>>`,
+  // and Gmail rejects that with HTTP 400 "Invalid To header."
+  const to = String(draft.to || '').replace(/^<|>$/gu, '').trim();
   assertRecipient(to);
   const from = draft.fromEmail
     ? formatAddress(draft.fromEmail, draft.fromName || '')

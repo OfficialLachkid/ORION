@@ -127,33 +127,43 @@ async function executeGmailSendDraftAction(task, config, options = {}) {
   // patch the draft with an appended PS line before firing drafts.send.
   // Covers the ~400 drafts that were composed BEFORE the qualifier
   // prompt started emitting the PS line, plus any operator hand-edit
-  // that accidentally stripped it. Read failures are non-fatal — we
-  // still proceed with the send so a transient Gmail hiccup doesn't
-  // block outreach; the send call's own error handling stays intact.
-  try {
-    const current = await getGmailDraft(config.env, draftId, options);
-    if (current && !hasOptOutFooter(current.bodyText)) {
-      const patched = ensureOptOutFooter(current.bodyText);
-      await updateGmailDraft(config.env, draftId, {
-        to: current.to,
-        subject: current.subject,
-        bodyText: patched,
-        fromEmail: current.fromEmail,
-        fromName: current.fromName,
-        replyTo: current.replyTo,
-        inReplyTo: current.inReplyTo,
-        references: current.references,
-        threadId: current.threadId,
-      }, options);
-    }
-  } catch (guardError) {
-    // Best-effort guard. If the read/update fails (transient, permission,
-    // 404 already-gone), fall through to the send call — the existing
-    // already-sent detection still handles the 404 case, and a stale
-    // network blip shouldn't block a legitimate approval.
-    process.stderr.write(
-      `[gmail-executor] Opt-out footer guard skipped for draft ${draftId}: ${guardError?.message || guardError}\n`,
+  // that accidentally stripped it.
+  //
+  // Fails CLOSED (2026-10-27 operator decision): if the read or update
+  // fails for any reason other than a 404 (draft already gone — the
+  // send-side already-sent detection owns that path), we refuse to
+  // send. Previously this was a best-effort try/catch that printed a
+  // warning and sent anyway, which caused 5 cold emails to go out
+  // without the opt-out footer on 2026-10-27 after a round-trip
+  // "Invalid To header" bug in buildRfc822Message. Compliance >
+  // throughput: if the guard can't confirm the footer is in place,
+  // the operator sees the error and the task retries the next
+  // morning.
+  const current = await getGmailDraft(config.env, draftId, options).catch((readError) => {
+    // Draft genuinely gone → let the send call surface the standard
+    // already-sent / 404 path. Any other read failure fails the task.
+    if (isDraftAlreadyGoneError(readError)) return null;
+    throw new Error(
+      `Opt-out footer guard: Gmail draft read failed for ${draftId}: ${readError?.message || readError}`,
     );
+  });
+  if (current && !hasOptOutFooter(current.bodyText)) {
+    const patched = ensureOptOutFooter(current.bodyText);
+    await updateGmailDraft(config.env, draftId, {
+      to: current.to,
+      subject: current.subject,
+      bodyText: patched,
+      fromEmail: current.fromEmail,
+      fromName: current.fromName,
+      replyTo: current.replyTo,
+      inReplyTo: current.inReplyTo,
+      references: current.references,
+      threadId: current.threadId,
+    }, options).catch((updateError) => {
+      throw new Error(
+        `Opt-out footer guard: Gmail draft update failed for ${draftId}: ${updateError?.message || updateError}`,
+      );
+    });
   }
 
   let result;
