@@ -1,15 +1,14 @@
 import { getStringOption } from './ruflo-wrapper-utils.mjs';
+import { createSupabaseApiHeaders } from '../../services/lib/supabase-api-headers.mjs';
 
 export const DEFAULT_MEMORY_TABLE = 'orion_memory_records';
 export const DEFAULT_SYNC_RUNS_TABLE = 'orion_memory_sync_runs';
 
 export function createHeaders(apiKey, extraHeaders = {}) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
+  return createSupabaseApiHeaders(apiKey, {
     'Content-Type': 'application/json',
     ...extraHeaders,
-  };
+  });
 }
 
 export function getRuntimeApiKey(env) {

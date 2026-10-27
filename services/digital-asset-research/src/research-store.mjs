@@ -1,10 +1,10 @@
+import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
+
 function headers(apiKey, prefer = 'return=representation') {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
+  return createSupabaseApiHeaders(apiKey, {
     'Content-Type': 'application/json',
     Prefer: prefer,
-  };
+  });
 }
 
 export class DigitalAssetResearchStore {

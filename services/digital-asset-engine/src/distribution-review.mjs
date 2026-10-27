@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { discordRequest } from './discord-review.mjs';
 import { resolvePackagedRelease } from './packaged-release.mjs';
@@ -237,12 +238,10 @@ function actorFromInteraction(interaction) {
 }
 
 function supabaseHeaders(apiKey) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
+  return createSupabaseApiHeaders(apiKey, {
     'Content-Type': 'application/json',
     Prefer: 'resolution=ignore-duplicates,return=representation',
-  };
+  });
 }
 
 export class DigitalAssetDistributionDecisionStore {

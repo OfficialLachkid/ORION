@@ -15,6 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
+import { createSupabaseApiHeaders } from '../services/lib/supabase-api-headers.mjs';
 import { sendDiscordChannelMessage } from './lib/discord-post.mjs';
 import {
   POKE_CHANNELS_INSTAGRAM,
@@ -50,11 +51,9 @@ function supabaseFetch(config, path) {
     throw new Error('Weekly analytics review requires SUPABASE_URL and a Supabase API key.');
   }
   return fetch(url, {
-    headers: {
-      apikey: apiKey,
-      Authorization: `Bearer ${apiKey}`,
+    headers: createSupabaseApiHeaders(apiKey, {
       'Content-Type': 'application/json',
-    },
+    }),
   }).then(async (response) => {
     if (!response.ok) {
       throw new Error(`Supabase ${path} failed (${response.status}): ${await response.text()}`);

@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 import { CanonicalProductStore } from './canonical-store.mjs';
 import { discordRequest, sendMessageWithFiles } from './discord-review.mjs';
 
@@ -217,12 +218,10 @@ function actorFromInteraction(interaction) {
 }
 
 function supabaseHeaders(apiKey) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
+  return createSupabaseApiHeaders(apiKey, {
     'Content-Type': 'application/json',
     Prefer: 'resolution=ignore-duplicates,return=representation',
-  };
+  });
 }
 
 export async function recordItchThemeDecision(options) {

@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 import { resolveInsideRoot } from './paths.mjs';
 import { OutputManifestSchema } from './schemas.mjs';
 
@@ -64,12 +65,10 @@ export class SupabaseProductVideoStateStore extends ProductVideoStateStore {
   }
 
   createHeaders(prefer = '') {
-    return {
-      apikey: this.apiKey,
-      Authorization: `Bearer ${this.apiKey}`,
+    return createSupabaseApiHeaders(this.apiKey, {
       'Content-Type': 'application/json',
       ...(prefer ? { Prefer: prefer } : {}),
-    };
+    });
   }
 
   createTableUrl(table, query = '') {

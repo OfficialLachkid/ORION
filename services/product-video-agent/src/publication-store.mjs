@@ -1,4 +1,5 @@
 import { toVideoChannelRow } from './publication-channels.mjs';
+import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 
 export class SupabasePublicationStore {
   constructor(options = {}) {
@@ -17,12 +18,10 @@ export class SupabasePublicationStore {
   }
 
   createHeaders(prefer = '') {
-    return {
-      apikey: this.apiKey,
-      Authorization: `Bearer ${this.apiKey}`,
+    return createSupabaseApiHeaders(this.apiKey, {
       'Content-Type': 'application/json',
       ...(prefer ? { Prefer: prefer } : {}),
-    };
+    });
   }
 
   createUrl(table, params = {}) {
