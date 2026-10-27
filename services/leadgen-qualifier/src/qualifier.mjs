@@ -215,6 +215,13 @@ ${screenshotStep}3. FIND A PUBLIC CONTACT EMAIL AND PHONE. Small businesses hide
 
    Return both:
    - "contact_email"${lead.contact_email ? ` (we already have "${lead.contact_email}", only correct it if the site clearly shows a better/more official one, otherwise return it unchanged)` : ''}: an address ACTUALLY shown on THEIR site (never invent one, never guess "info@<domain>" without seeing it); prefer a general business address (info@/contact@) over a personal one; only return null if you genuinely couldn't find one after all four checks above.
+
+     REJECT and return null — do NOT return these as "contact_email":
+     • File-extension TLDs: ".webp .png .jpg .svg .gif .css .js .pdf .woff2" etc. These are asset paths from <img>/<script>/<link>/<style> tags, not inboxes. Seen in production: "flags@2x.webp" from an image srcset.
+     • Glued-word TLDs: an allowlisted TLD with 3+ extra letters stuck on it (".commaandag", ".netmaandag", ".comtelefoonnummer", ".netwij"). This means you swallowed the next word on the page. Isolate the real "foo@bar.com" or "foo@bar.nl" and return THAT; if the clean form is ambiguous, return null.
+     • Punctuation-glued addresses: "info@foo.nl\\", "info@foo.nl)", "info@foo.nl/contact/", "[info@foo.nl](mailto:info@foo.nl)". Strip the stray char or markdown wrapper and return the clean "info@foo.nl". Never return the raw cruft.
+     • Placeholder / description strings: "Contact via website", "*protected email*", "geen email adres", "see contact form", "Not available on this page.". These aren't emails — return null.
+     • HTML-entity-encoded addresses ("i&#x6e;f&#x6f;&#64;foo.nl") — decode the entities first; if you cannot, return null, don't pass the raw encoded form through.
    - "contact_phone"${lead.contact_phone ? ` (we already have "${lead.contact_phone}", only correct it if the site shows a different official one, otherwise return it unchanged)` : ''}: a phone number ACTUALLY shown on their site (Dutch numbers preferred in international format like "+31 20 123 4567" or "+31612345678"); null only if genuinely none is displayed.
 
    Why this matters: a qualified lead with no email is dropped from EMAIL outreach entirely and only surfaces in the phone-only #qualified-call-leads thread, so missing an email that's actually there costs us the highest-value outreach channel for that lead.
@@ -230,7 +237,7 @@ Respond with ONLY a JSON object, no markdown fences, no commentary:
   "secondary_flags": ["website_chatbot" | "n8n_automation" | "website_builder", ...] or [],
   "reasoning": "2-4 sentences: why this decision, referencing what you saw on the site",
   "personalization_hook": "the concrete observed detail the draft is built around, or null",
-  "contact_email": "a public email actually shown on their site, or null if genuinely none is displayed",
+  "contact_email": "a public email actually shown on their site in a sendable form (NOT an asset path, glued-word TLD, placeholder string, or HTML-entity-encoded cruft — see rejection rules in task step 3); null if genuinely none is displayed or cannot be cleanly isolated",
   "contact_phone": "a public phone actually shown on their site (Dutch preferred in international format), or null if genuinely none is displayed",
   "ai_site_signals": "short note on AI-generated/template-slop tells you observed (2+ corroborating), or null if none/not applicable",
   "draft_subject": "Dutch subject line, or null",
