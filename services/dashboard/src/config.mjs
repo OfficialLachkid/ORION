@@ -101,7 +101,7 @@ export function loadDashboardConfig(options = {}) {
       8 * 60 * 60,
       24 * 60 * 60,
     ),
-    cacheTtlSeconds: parsePositiveInteger(env.ORION_DASHBOARD_CACHE_TTL_SECONDS, 30, 300),
+    cacheTtlSeconds: parsePositiveInteger(env.ORION_DASHBOARD_CACHE_TTL_SECONDS, 120, 600),
     loginWindowSeconds: parsePositiveInteger(env.ORION_DASHBOARD_LOGIN_WINDOW_SECONDS, 15 * 60, 3600),
     loginMaxAttempts: parsePositiveInteger(env.ORION_DASHBOARD_LOGIN_MAX_ATTEMPTS, 5, 20),
     appRoot: resolve(projectRoot, 'apps', 'orion-dashboard'),

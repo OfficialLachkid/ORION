@@ -1,9 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { loadOpsEvents, summarizeOpsEvents } from '../../discord-bot/src/daily-summary.mjs';
 import { loadPersistedPendingTasks } from '../../discord-bot/src/pending-task-store.mjs';
 import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 
-const SOURCE_LIMIT = 5_000;
+const PUBLICATION_LIMIT = 100;
+const DIGITAL_ASSET_PRODUCT_LIMIT = 100;
 
 function safeJsonFile(filePath, fallback) {
   if (!filePath || !existsSync(filePath)) return fallback;
@@ -73,6 +75,91 @@ function sanitizeEvent(event) {
   };
 }
 
+function sanitizePublicUrl(value) {
+  try {
+    const url = new URL(String(value || ''));
+    if (!['http:', 'https:'].includes(url.protocol)) return null;
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function loadDigitalAssetsOverview(runtimeConfig) {
+  const archiveRoot = String(runtimeConfig.env?.DIGITAL_ASSET_ARCHIVE_ROOT || '').trim();
+  if (!archiveRoot || !existsSync(archiveRoot)) {
+    return {
+      available: false,
+      reason: 'The digital-asset archive is not mounted on this runtime.',
+      totalProducts: 0,
+      totalAssets: 0,
+      generatedAssets: 0,
+      byStatus: {},
+      products: [],
+    };
+  }
+
+  let entries;
+  try {
+    entries = readdirSync(archiveRoot, { withFileTypes: true });
+  } catch {
+    return {
+      available: false,
+      reason: 'The digital-asset archive could not be read.',
+      totalProducts: 0,
+      totalAssets: 0,
+      generatedAssets: 0,
+      byStatus: {},
+      products: [],
+    };
+  }
+
+  const products = entries
+    .filter((entry) => entry.isDirectory())
+    .slice(0, DIGITAL_ASSET_PRODUCT_LIMIT)
+    .map((entry) => {
+      const productRoot = resolve(archiveRoot, entry.name);
+      const product = safeJsonFile(resolve(productRoot, 'product.json'), null);
+      if (!product || typeof product !== 'object') return null;
+      const assets = Array.isArray(product.assets) ? product.assets : [];
+      const release = safeJsonFile(resolve(productRoot, 'review', 'itch-release.json'), null);
+      const releasePublic = release?.status === 'verified_public';
+      return {
+        id: String(product.product_id || entry.name),
+        slug: String(product.slug || entry.name),
+        title: String(product.title || entry.name),
+        version: String(product.version || ''),
+        status: String(product.status || 'unknown'),
+        category: String(product.category || ''),
+        assetCount: assets.length,
+        generatedCount: assets.filter((asset) => asset?.status === 'generated').length,
+        failedCount: assets.filter((asset) => asset?.status === 'failed').length,
+        marketplaces: Array.isArray(product.distribution?.marketplaces)
+          ? product.distribution.marketplaces.map(String)
+          : [],
+        releaseStatus: releasePublic ? 'verified_public' : 'not_public',
+        publicUrl: releasePublic
+          ? sanitizePublicUrl(release.public_url || release.url || release.itch_url)
+          : null,
+        updatedAt: safeDate(product.updated_at),
+      };
+    })
+    .filter(Boolean)
+    .sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')));
+
+  return {
+    available: true,
+    reason: '',
+    totalProducts: products.length,
+    totalAssets: products.reduce((total, product) => total + product.assetCount, 0),
+    generatedAssets: products.reduce((total, product) => total + product.generatedCount, 0),
+    byStatus: countBy(products, 'status'),
+    products,
+  };
+}
+
 function summarizeOperations(events, now) {
   const summary = summarizeOpsEvents(events, { now, windowHours: 24 });
   return {
@@ -92,11 +179,11 @@ function buildModules(sources) {
   return [
     { id: 'overview', label: 'Overview', status: 'available' },
     { id: 'social', label: 'Social Media', status: sources.supabase.available ? 'read_only' : 'unavailable' },
-    { id: 'leads', label: 'Lead Operations', status: sources.supabase.available ? 'read_only' : 'unavailable' },
+    { id: 'digital-assets', label: 'Digital Assets', status: sources.digitalAssets.available ? 'read_only' : 'unavailable' },
+    { id: 'leads', label: 'Lead Operations', status: 'planned' },
     { id: 'jobs', label: 'Jobs & Scheduling', status: 'planned' },
     { id: 'infrastructure', label: 'Agents & Infrastructure', status: 'planned' },
-    { id: 'approvals', label: 'Approvals & Activity', status: 'read_only' },
-    { id: 'digital-assets', label: 'Digital Assets', status: 'planned' },
+    { id: 'approvals', label: 'Approvals & Activity', status: 'planned' },
     { id: 'commerce', label: 'E-commerce', status: 'planned' },
     { id: 'settings', label: 'Settings & Security', status: 'planned' },
   ];
@@ -109,13 +196,42 @@ async function fetchSupabaseRows(config, table, params, fetchImpl) {
       url.searchParams.set(key, String(value));
     }
   }
+  config.usage.requests += 1;
   const response = await fetchImpl(url, {
     headers: createSupabaseApiHeaders(config.apiKey),
   });
   if (!response.ok) {
     throw new Error(`Supabase ${table} request failed with status ${response.status}.`);
   }
-  return response.json();
+  const text = await response.text();
+  config.usage.responseBytes += Buffer.byteLength(text, 'utf8');
+  const rows = text ? JSON.parse(text) : [];
+  config.usage.rowsLoaded += Array.isArray(rows) ? rows.length : 0;
+  return rows;
+}
+
+async function fetchSupabaseCount(config, table, params, fetchImpl) {
+  const url = new URL(`/rest/v1/${table}`, config.url);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  config.usage.requests += 1;
+  const response = await fetchImpl(url, {
+    headers: {
+      ...createSupabaseApiHeaders(config.apiKey),
+      Prefer: 'count=exact',
+      Range: '0-0',
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Supabase ${table} count failed with status ${response.status}.`);
+  }
+  const text = await response.text();
+  config.usage.responseBytes += Buffer.byteLength(text, 'utf8');
+  const match = String(response.headers.get('content-range') || '').match(/\/(\d+)$/u);
+  return match ? Number(match[1]) : 0;
 }
 
 function summarizeChannels(rows) {
@@ -157,7 +273,7 @@ function summarizePublications(rows, now) {
 
   return {
     totalLoaded: rows.length,
-    truncated: rows.length >= SOURCE_LIMIT,
+    truncated: rows.length >= PUBLICATION_LIMIT,
     byStatus: countBy(rows, 'status'),
     byPlatform: countBy(rows, 'platform'),
     upcoming,
@@ -169,6 +285,7 @@ async function loadSupabaseOverview(runtimeConfig, fetchImpl, now) {
   const config = {
     url: String(env.SUPABASE_URL || ''),
     apiKey: String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || ''),
+    usage: { requests: 0, rowsLoaded: 0, responseBytes: 0 },
   };
   if (!config.url || !config.apiKey) {
     return {
@@ -177,10 +294,11 @@ async function loadSupabaseOverview(runtimeConfig, fetchImpl, now) {
       channels: [],
       publications: { totalLoaded: 0, truncated: false, byStatus: {}, byPlatform: {}, upcoming: [] },
       leads: { totalLoaded: 0, truncated: false, byStatus: {} },
+      usage: config.usage,
     };
   }
 
-  const [channels, publications, leads] = await Promise.all([
+  const [channels, publications, failedPublications] = await Promise.all([
     fetchSupabaseRows(config, 'video_channels', {
       select: 'id,name,niche,platform,account_key,status,settings,updated_at',
       order: 'name.asc',
@@ -188,25 +306,34 @@ async function loadSupabaseOverview(runtimeConfig, fetchImpl, now) {
     }, fetchImpl),
     fetchSupabaseRows(config, 'video_publications', {
       select: 'id,video_id,platform,account_key,status,title,scheduled_for,published_at,updated_at',
-      order: 'updated_at.desc',
-      limit: SOURCE_LIMIT,
+      status: 'in.(queued,scheduled)',
+      scheduled_for: `gte.${now}`,
+      order: 'scheduled_for.asc',
+      limit: PUBLICATION_LIMIT,
     }, fetchImpl),
-    fetchSupabaseRows(config, 'leads', {
-      select: 'id,status,created_at,qualified_at',
-      order: 'created_at.desc',
-      limit: SOURCE_LIMIT,
+    fetchSupabaseCount(config, 'video_publications', {
+      select: 'id',
+      status: 'eq.failed',
     }, fetchImpl),
   ]);
+
+  const publicationSummary = summarizePublications(
+    Array.isArray(publications) ? publications : [],
+    now,
+  );
+  publicationSummary.byStatus.failed = failedPublications;
 
   return {
     available: true,
     channels: summarizeChannels(Array.isArray(channels) ? channels : []),
-    publications: summarizePublications(Array.isArray(publications) ? publications : [], now),
+    publications: publicationSummary,
     leads: {
-      totalLoaded: Array.isArray(leads) ? leads.length : 0,
-      truncated: Array.isArray(leads) && leads.length >= SOURCE_LIMIT,
-      byStatus: countBy(Array.isArray(leads) ? leads : [], 'status'),
+      totalLoaded: 0,
+      truncated: false,
+      byStatus: {},
+      deferred: true,
     },
+    usage: config.usage,
   };
 }
 
@@ -233,6 +360,7 @@ export async function buildDashboardOverview(options) {
 
   const healthState = safeJsonFile(runtimeConfig.runtimePaths.healthMonitorStateFile, null);
   const health = sanitizeHealth(healthState);
+  const digitalAssets = loadDigitalAssetsOverview(runtimeConfig);
 
   let supabase;
   try {
@@ -244,6 +372,7 @@ export async function buildDashboardOverview(options) {
       channels: [],
       publications: { totalLoaded: 0, truncated: false, byStatus: {}, byPlatform: {}, upcoming: [] },
       leads: { totalLoaded: 0, truncated: false, byStatus: {} },
+      usage: { requests: 0, rowsLoaded: 0, responseBytes: 0 },
     };
   }
 
@@ -252,6 +381,7 @@ export async function buildDashboardOverview(options) {
     operations: { available: opsAvailable, reason: opsAvailable ? '' : 'Operational events are unavailable.' },
     approvals: { available: approvalsAvailable, reason: approvalsAvailable ? '' : 'Approval state is unavailable.' },
     health: { available: Boolean(healthState), reason: healthState ? '' : 'No health snapshot has been recorded yet.' },
+    digitalAssets: { available: digitalAssets.available, reason: digitalAssets.reason || '' },
   };
 
   return {
@@ -272,6 +402,11 @@ export async function buildDashboardOverview(options) {
       publications: supabase.publications,
     },
     leads: supabase.leads,
+    digitalAssets,
+    resourceUsage: {
+      supabase: supabase.usage,
+      policy: 'bounded_cached_snapshot',
+    },
     recentActivity: events.slice(-20).reverse().map(sanitizeEvent),
   };
 }
