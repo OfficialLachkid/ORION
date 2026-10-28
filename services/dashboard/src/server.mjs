@@ -2,6 +2,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, isAbsolute, relative, resolve } from 'node:path';
 import { LoginRateLimiter, createSessionManager, parseCookies, verifyPassword } from './auth.mjs';
+import { LEAD_STATUS_FILTERS, normalizeLeadQuery } from './data-source.mjs';
 
 const CONTENT_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -198,6 +199,35 @@ export function createDashboardServer(options) {
         force: new URL(request.url, config.publicOrigin).searchParams.get('refresh') === '1',
       });
       sendJson(response, 200, overview, config);
+      return;
+    }
+
+    if (pathname === '/api/leads' && request.method === 'GET') {
+      if (!authenticate(request)) {
+        sendJson(response, 401, { error: 'Authentication required.' }, config);
+        return;
+      }
+      const url = new URL(request.url, config.publicOrigin);
+      const rawStatus = String(url.searchParams.get('status') || 'all').trim().toLowerCase();
+      const rawPage = String(url.searchParams.get('page') || '1');
+      const rawPageSize = String(url.searchParams.get('pageSize') || '25');
+      if (
+        !['all', ...LEAD_STATUS_FILTERS].includes(rawStatus)
+        || !/^\d+$/u.test(rawPage)
+        || !/^\d+$/u.test(rawPageSize)
+      ) {
+        sendJson(response, 400, { error: 'Invalid lead query.' }, config);
+        return;
+      }
+      const query = normalizeLeadQuery({
+        status: rawStatus,
+        page: rawPage,
+        pageSize: rawPageSize,
+      });
+      const result = await dataSource.getLeadOperations(query, {
+        force: url.searchParams.get('refresh') === '1',
+      });
+      sendJson(response, 200, result, config);
       return;
     }
 

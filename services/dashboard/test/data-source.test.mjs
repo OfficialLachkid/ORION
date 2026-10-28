@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { buildDashboardOverview, DashboardDataSource } from '../src/data-source.mjs';
+import { buildDashboardOverview, buildLeadOperations, DashboardDataSource } from '../src/data-source.mjs';
 
 test('overview reuses shared sources and does not expose channel secrets', async () => {
   const root = mkdtempSync(join(tmpdir(), 'orion-dashboard-'));
@@ -127,7 +127,8 @@ test('overview reuses shared sources and does not expose channel secrets', async
       'settings',
     ],
   );
-  assert.equal(overview.modules.filter((module) => module.status === 'planned').length, 6);
+  assert.equal(overview.modules.find((module) => module.id === 'leads').status, 'read_only');
+  assert.equal(overview.modules.filter((module) => module.status === 'planned').length, 5);
   assert.equal(overview.digitalAssets.totalProducts, 1);
   assert.equal(overview.digitalAssets.totalAssets, 2);
   assert.equal(overview.digitalAssets.products[0].publicUrl, 'https://vbjservices.itch.io/neon-pack');
@@ -171,4 +172,75 @@ test('dashboard snapshots share a bounded Supabase cache across widgets', async 
   nowMs += 121_000;
   await source.getOverview();
   assert.equal(requests, 6);
+});
+
+test('lead operations lazily returns a sanitized bounded page and cached Discord-equivalent totals', async () => {
+  let nowMs = new Date('2026-10-28T12:00:00.000Z').getTime();
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    calls.push({
+      method: options.method || 'GET',
+      url: parsed,
+      range: options.headers?.Range,
+    });
+    if ((options.method || 'GET') === 'HEAD') {
+      const isNew = parsed.searchParams.get('status') === 'eq.new';
+      return new Response(null, {
+        status: 200,
+        headers: { 'Content-Range': isNew ? '*/17' : '*/42' },
+      });
+    }
+    return new Response(JSON.stringify([
+      {
+        id: 'lead-1',
+        business_name: 'Example Studio',
+        business_type: 'Design agency',
+        source_url: 'https://example.test/about?tracking=secret#contact',
+        niche: 'web design',
+        location: 'Rotterdam',
+        status: 'new',
+        created_at: '2026-10-28T08:00:00.000Z',
+        contact_email: 'not-returned@example.test',
+        qualification: { reasoning: 'must not leave the server' },
+      },
+    ]), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', 'Content-Range': '0-0/42' },
+    });
+  };
+  const runtimeConfig = {
+    env: {
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_SECRET_KEY: 'sb_secret_example',
+    },
+  };
+
+  const direct = await buildLeadOperations({ runtimeConfig, fetchImpl, now: nowMs });
+  assert.equal(direct.summary.total, 42);
+  assert.equal(direct.summary.new, 17);
+  assert.equal(direct.leads.length, 1);
+  assert.equal(direct.leads[0].sourceUrl, 'https://example.test/about');
+  assert.equal(JSON.stringify(direct).includes('not-returned@example.test'), false);
+  assert.equal(JSON.stringify(direct).includes('must not leave the server'), false);
+  assert.equal(direct.resourceUsage.supabase.requests, 2);
+  assert.equal(direct.resourceUsage.supabase.rowsLoaded, 1);
+  assert.equal(calls[0].range, '0-24');
+  assert.equal(calls[0].url.searchParams.get('select'), 'id,business_name,business_type,source_url,niche,location,status,created_at');
+
+  calls.length = 0;
+  const source = new DashboardDataSource({
+    runtimeConfig,
+    fetchImpl,
+    cacheTtlSeconds: 120,
+    now: () => nowMs,
+  });
+  const first = await source.getLeadOperations({ page: 1, status: 'all' });
+  const cached = await source.getLeadOperations({ page: 1, status: 'all' });
+  assert.equal(cached, first);
+  assert.equal(calls.length, 2);
+
+  nowMs += 121_000;
+  await source.getLeadOperations({ page: 1, status: 'all' });
+  assert.equal(calls.length, 4);
 });

@@ -22,7 +22,10 @@ test('server protects private data with one admin session and CSRF logout', asyn
   };
   const server = createDashboardServer({
     config,
-    dataSource: { getOverview: async () => ({ mode: 'read_only' }) },
+    dataSource: {
+      getOverview: async () => ({ mode: 'read_only' }),
+      getLeadOperations: async (query) => ({ mode: 'read_only', query }),
+    },
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -31,6 +34,8 @@ test('server protects private data with one admin session and CSRF logout', asyn
 
   const anonymous = await fetch(`${base}/api/overview`);
   assert.equal(anonymous.status, 401);
+  const anonymousLeads = await fetch(`${base}/api/leads`);
+  assert.equal(anonymousLeads.status, 401);
 
   const wrongOrigin = await fetch(`${base}/api/auth/login`, {
     method: 'POST',
@@ -53,6 +58,20 @@ test('server protects private data with one admin session and CSRF logout', asyn
   const overview = await fetch(`${base}/api/overview`, { headers: { Cookie: cookie } });
   assert.equal(overview.status, 200);
   assert.deepEqual(await overview.json(), { mode: 'read_only' });
+
+  const leads = await fetch(`${base}/api/leads?page=2&pageSize=25&status=new`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal(leads.status, 200);
+  assert.deepEqual(await leads.json(), {
+    mode: 'read_only',
+    query: { page: 2, pageSize: 25, status: 'new' },
+  });
+
+  const invalidLeadQuery = await fetch(`${base}/api/leads?status=not-a-real-status`, {
+    headers: { Cookie: cookie },
+  });
+  assert.equal(invalidLeadQuery.status, 400);
 
   const badLogout = await fetch(`${base}/api/auth/logout`, {
     method: 'POST',

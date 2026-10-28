@@ -160,6 +160,54 @@
             <div id="digital-asset-list" class="product-grid"></div>
           </section>
 
+          <section class="panel leads-panel" data-modules="leads">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Shared leadgen state</p>
+                <h2>Gathered leads</h2>
+              </div>
+              <div class="panel-actions">
+                <label class="compact-field">
+                  <span>Status</span>
+                  <select id="lead-status-filter">
+                    <option value="all">All statuses</option>
+                    <option value="new">New</option>
+                    <option value="qualified">Qualified</option>
+                    <option value="qualified_no_email">Qualified, no email</option>
+                    <option value="rejected_fit">Rejected fit</option>
+                    <option value="draft_rejected">Draft rejected</option>
+                    <option value="sent">Sent</option>
+                    <option value="responded">Responded</option>
+                    <option value="bounced">Bounced</option>
+                    <option value="unsubscribed">Unsubscribed</option>
+                    <option value="extraction_error">Extraction error</option>
+                  </select>
+                </label>
+                <span id="lead-count" class="panel-count"></span>
+              </div>
+            </div>
+            <p id="lead-feedback" class="module-feedback">Open Lead Operations to load its first bounded page.</p>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Business</th>
+                    <th>Niche</th>
+                    <th>Location</th>
+                    <th>Status</th>
+                    <th>Gathered</th>
+                  </tr>
+                </thead>
+                <tbody id="lead-table"></tbody>
+              </table>
+            </div>
+            <div class="pagination-bar">
+              <button id="lead-previous" class="secondary-button" type="button">Previous</button>
+              <span id="lead-page" class="panel-count">Page 1</span>
+              <button id="lead-next" class="secondary-button" type="button">Next</button>
+            </div>
+          </section>
+
           <section class="panel activity-panel" data-modules="overview social digital-assets">
             <div class="panel-heading">
               <div>

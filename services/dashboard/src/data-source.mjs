@@ -6,6 +6,35 @@ import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
 
 const PUBLICATION_LIMIT = 100;
 const DIGITAL_ASSET_PRODUCT_LIMIT = 100;
+const LEAD_PAGE_SIZE = 25;
+const LEAD_PAGE_SIZE_MAX = 50;
+const LEAD_CACHE_ENTRY_LIMIT = 20;
+
+export const LEAD_STATUS_FILTERS = Object.freeze([
+  'new',
+  'qualified',
+  'qualified_no_email',
+  'rejected_fit',
+  'draft_rejected',
+  'sent',
+  'responded',
+  'bounced',
+  'unsubscribed',
+  'extraction_error',
+]);
+
+export function normalizeLeadQuery(query = {}) {
+  const page = Number.parseInt(query.page, 10);
+  const pageSize = Number.parseInt(query.pageSize, 10);
+  const status = String(query.status || 'all').trim().toLowerCase();
+  return {
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+    pageSize: Number.isFinite(pageSize)
+      ? Math.min(Math.max(pageSize, 1), LEAD_PAGE_SIZE_MAX)
+      : LEAD_PAGE_SIZE,
+    status: LEAD_STATUS_FILTERS.includes(status) ? status : 'all',
+  };
+}
 
 function safeJsonFile(filePath, fallback) {
   if (!filePath || !existsSync(filePath)) return fallback;
@@ -180,7 +209,7 @@ function buildModules(sources) {
     { id: 'overview', label: 'Overview', status: 'available' },
     { id: 'social', label: 'Social Media', status: sources.supabase.available ? 'read_only' : 'unavailable' },
     { id: 'digital-assets', label: 'Digital Assets', status: sources.digitalAssets.available ? 'read_only' : 'unavailable' },
-    { id: 'leads', label: 'Lead Operations', status: 'planned' },
+    { id: 'leads', label: 'Lead Operations', status: sources.supabase.available ? 'read_only' : 'unavailable' },
     { id: 'jobs', label: 'Jobs & Scheduling', status: 'planned' },
     { id: 'infrastructure', label: 'Agents & Infrastructure', status: 'planned' },
     { id: 'approvals', label: 'Approvals & Activity', status: 'planned' },
@@ -219,6 +248,7 @@ async function fetchSupabaseCount(config, table, params, fetchImpl) {
   }
   config.usage.requests += 1;
   const response = await fetchImpl(url, {
+    method: 'HEAD',
     headers: {
       ...createSupabaseApiHeaders(config.apiKey),
       Prefer: 'count=exact',
@@ -228,10 +258,112 @@ async function fetchSupabaseCount(config, table, params, fetchImpl) {
   if (!response.ok) {
     throw new Error(`Supabase ${table} count failed with status ${response.status}.`);
   }
-  const text = await response.text();
-  config.usage.responseBytes += Buffer.byteLength(text, 'utf8');
   const match = String(response.headers.get('content-range') || '').match(/\/(\d+)$/u);
   return match ? Number(match[1]) : 0;
+}
+
+async function fetchSupabasePage(config, table, params, offset, limit, fetchImpl) {
+  const url = new URL(`/rest/v1/${table}`, config.url);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== '') {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  config.usage.requests += 1;
+  const response = await fetchImpl(url, {
+    headers: {
+      ...createSupabaseApiHeaders(config.apiKey),
+      Prefer: 'count=exact',
+      Range: `${offset}-${offset + limit - 1}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Supabase ${table} page failed with status ${response.status}.`);
+  }
+  const text = await response.text();
+  config.usage.responseBytes += Buffer.byteLength(text, 'utf8');
+  const rows = text ? JSON.parse(text) : [];
+  config.usage.rowsLoaded += Array.isArray(rows) ? rows.length : 0;
+  const match = String(response.headers.get('content-range') || '').match(/\/(\d+)$/u);
+  return {
+    rows: Array.isArray(rows) ? rows : [],
+    total: match ? Number(match[1]) : offset + (Array.isArray(rows) ? rows.length : 0),
+  };
+}
+
+function sanitizeLead(row) {
+  return {
+    id: String(row?.id || ''),
+    businessName: String(row?.business_name || 'Unnamed lead'),
+    businessType: String(row?.business_type || ''),
+    sourceUrl: sanitizePublicUrl(row?.source_url),
+    niche: String(row?.niche || ''),
+    location: String(row?.location || ''),
+    status: String(row?.status || 'unknown'),
+    createdAt: safeDate(row?.created_at),
+  };
+}
+
+export async function buildLeadOperations(options) {
+  const runtimeConfig = options.runtimeConfig;
+  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const query = normalizeLeadQuery(options.query);
+  const env = runtimeConfig.env || {};
+  const config = {
+    url: String(env.SUPABASE_URL || ''),
+    apiKey: String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || ''),
+    usage: { requests: 0, rowsLoaded: 0, responseBytes: 0 },
+  };
+  if (!config.url || !config.apiKey) {
+    return {
+      generatedAt: new Date(options.now || Date.now()).toISOString(),
+      mode: 'read_only',
+      available: false,
+      reason: 'Server-side Supabase configuration is unavailable.',
+      summary: { total: 0, new: 0, filtered: 0 },
+      pagination: { ...query, totalPages: 0 },
+      leads: [],
+      resourceUsage: { supabase: config.usage, policy: 'lazy_bounded_page' },
+    };
+  }
+
+  const offset = (query.page - 1) * query.pageSize;
+  const pagePromise = fetchSupabasePage(config, 'leads', {
+    select: 'id,business_name,business_type,source_url,niche,location,status,created_at',
+    order: 'created_at.desc',
+    limit: query.pageSize,
+    status: query.status === 'all' ? '' : `eq.${query.status}`,
+  }, offset, query.pageSize, fetchImpl);
+  const newCountPromise = fetchSupabaseCount(config, 'leads', {
+    select: 'id',
+    status: 'eq.new',
+  }, fetchImpl);
+  const totalCountPromise = query.status === 'all'
+    ? null
+    : fetchSupabaseCount(config, 'leads', { select: 'id' }, fetchImpl);
+
+  const [pageResult, newCount, separateTotal] = await Promise.all([
+    pagePromise,
+    newCountPromise,
+    totalCountPromise,
+  ]);
+  const total = query.status === 'all' ? pageResult.total : separateTotal;
+  const totalPages = Math.max(1, Math.ceil(pageResult.total / query.pageSize));
+
+  return {
+    generatedAt: new Date(options.now || Date.now()).toISOString(),
+    mode: 'read_only',
+    available: true,
+    reason: '',
+    summary: {
+      total,
+      new: newCount,
+      filtered: pageResult.total,
+    },
+    pagination: { ...query, totalPages },
+    leads: pageResult.rows.map(sanitizeLead),
+    resourceUsage: { supabase: config.usage, policy: 'lazy_bounded_page' },
+  };
 }
 
 function summarizeChannels(rows) {
@@ -418,6 +550,7 @@ export class DashboardDataSource {
     this.cacheTtlMs = Number(options.cacheTtlSeconds || 30) * 1000;
     this.now = options.now || (() => Date.now());
     this.cached = null;
+    this.leadCache = new Map();
   }
 
   async getOverview(options = {}) {
@@ -431,6 +564,28 @@ export class DashboardDataSource {
       now: new Date(nowMs).toISOString(),
     });
     this.cached = { value, expiresAt: nowMs + this.cacheTtlMs };
+    return value;
+  }
+
+  async getLeadOperations(query = {}, options = {}) {
+    const normalized = normalizeLeadQuery(query);
+    const cacheKey = `${normalized.status}:${normalized.page}:${normalized.pageSize}`;
+    const nowMs = this.now();
+    const cached = this.leadCache.get(cacheKey);
+    if (!options.force && cached && cached.expiresAt > nowMs) {
+      return cached.value;
+    }
+    const value = await buildLeadOperations({
+      runtimeConfig: this.runtimeConfig,
+      fetchImpl: this.fetchImpl,
+      query: normalized,
+      now: nowMs,
+    });
+    this.leadCache.delete(cacheKey);
+    this.leadCache.set(cacheKey, { value, expiresAt: nowMs + this.cacheTtlMs });
+    if (this.leadCache.size > LEAD_CACHE_ENTRY_LIMIT) {
+      this.leadCache.delete(this.leadCache.keys().next().value);
+    }
     return value;
   }
 }

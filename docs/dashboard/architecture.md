@@ -30,7 +30,8 @@ The first increment is intentionally read-only. It provides:
 - task and execution metrics from the existing operations event log;
 - pending approvals from the same pending-task store used by Discord;
 - connected channels, publication state, schedules, and leads from existing Supabase tables;
-- functional Overview, Social Media, and Digital Assets module navigation;
+- functional Overview, Social Media, Digital Assets, and Lead Operations module navigation;
+- lazy, paginated lead totals and gathered-lead rows matching the state reported by Discord leadgen;
 - canonical digital-asset product and verified-public-release summaries from the existing T7 archive;
 - visible disabled roadmap modules so planned dashboard scope remains clear;
 - explicit source-availability indicators instead of mock data;
@@ -44,7 +45,7 @@ The dashboard does not approve, reject, retry, reschedule, execute shell command
 | --- | --- | --- |
 | Social channels | `video_channels` in Supabase | Read-only, secrets and raw settings excluded |
 | Video workflow | `videos` and `video_publications` in Supabase | Read-only status and future publication view |
-| Leads and qualification | `leads` in Supabase | Deferred; the disabled module makes no query |
+| Leads and qualification | `leads` in Supabase | Lazy read-only totals plus a 25-row page; raw extraction, qualification detail, and contact data excluded |
 | Pending Discord approvals | Existing pending-task store | Read through the same repository module |
 | Runtime activity | Existing `ops-events.jsonl` metrics stream | Read through the same summary module used by Discord |
 | Runtime health | Existing health-monitor snapshot | Sanitized health state only |
@@ -61,6 +62,8 @@ Dashboard modules do not own independent polling loops. All enabled modules shar
 - The server caches a snapshot for two minutes by default and deduplicates all widgets onto that result.
 - Manual refresh is the only deliberate cache bypass.
 - Social Media loads at most 100 future publication rows, a bounded channel list, and one header-only failed-publication count.
+- Lead Operations makes no request until opened. Its normal unfiltered view uses one 25-row query with an exact total plus one header-only `new` count. A status-filtered view adds one header-only overall-total count.
+- Lead pages share the server's two-minute cache and are capped at 50 rows even if a client requests more.
 - Digital Assets reads the mounted T7 archive locally and causes no Supabase request.
 - Disabled roadmap modules make no database request.
 - Every snapshot reports its Supabase request count, loaded row count, and response bytes so growth remains visible.
@@ -114,7 +117,7 @@ GitHub Pages is not suitable because this dashboard handles privileged private d
 
 ### Phase 1: secure read-only foundation
 
-- Current increment: authentication plus functional Overview, Social Media, and Digital Assets views.
+- Current increment: authentication plus functional Overview, Social Media, Digital Assets, and Lead Operations views.
 - Add a launch agent and Tailscale Serve configuration only after supervised local validation.
 
 ### Phase 2: shared approvals and social review
@@ -130,9 +133,9 @@ GitHub Pages is not suitable because this dashboard handles privileged private d
 - Generate setup guidance from real provider adapters.
 - Verify new connections before showing them as active.
 
-### Phase 4: leads, jobs, and infrastructure
+### Phase 4: deeper lead workflow, jobs, and infrastructure
 
-- Add detailed lead and qualification views.
+- Add detailed qualification and outreach views after the bounded read-only lead overview is proven useful.
 - Build a shared job registry over existing schedules and receipts.
 - Add safe pause, resume, and retry commands with idempotent claims.
 
