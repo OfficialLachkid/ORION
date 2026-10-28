@@ -66,8 +66,9 @@
       <main class="dashboard-main">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Operational overview</p>
-            <h1>Good overview. One source of truth.</h1>
+            <p id="page-eyebrow" class="eyebrow">Operational overview</p>
+            <h1 id="page-title">One source of truth.</h1>
+            <p id="page-description" class="page-description">A live view across ORION without creating a second control plane.</p>
             <p id="last-updated" class="muted">Loading current ORION state…</p>
           </div>
           <button id="refresh-button" class="secondary-button" type="button">Refresh data</button>
@@ -78,7 +79,7 @@
         <section id="kpi-grid" class="kpi-grid" aria-label="ORION key status"></section>
 
         <div class="content-grid">
-          <section class="panel health-panel">
+          <section class="panel health-panel" data-modules="overview">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">Runtime</p>
@@ -89,7 +90,7 @@
             <div id="health-list" class="stack-list"></div>
           </section>
 
-          <section class="panel approvals-panel">
+          <section class="panel approvals-panel" data-modules="overview social digital-assets">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">Shared with Discord</p>
@@ -100,13 +101,21 @@
             <div id="approval-list" class="stack-list"></div>
           </section>
 
-          <section class="panel wide-panel">
+          <section class="panel wide-panel" data-modules="overview social">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">Multi-platform publishing</p>
                 <h2>Upcoming content</h2>
               </div>
-              <span id="publication-count" class="panel-count"></span>
+              <div class="panel-actions">
+                <label class="compact-field">
+                  <span>Platform</span>
+                  <select id="publication-platform-filter">
+                    <option value="all">All platforms</option>
+                  </select>
+                </label>
+                <span id="publication-count" class="panel-count"></span>
+              </div>
             </div>
             <div class="table-wrap">
               <table>
@@ -123,18 +132,35 @@
             </div>
           </section>
 
-          <section class="panel channels-panel">
+          <section class="panel channels-panel" data-modules="overview social">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">Connected destinations</p>
                 <h2>Channels</h2>
               </div>
-              <span id="channel-count" class="panel-count"></span>
+              <div class="panel-actions">
+                <label class="compact-field search-field">
+                  <span>Find channel</span>
+                  <input id="channel-search" type="search" placeholder="Name, account, platform" />
+                </label>
+                <span id="channel-count" class="panel-count"></span>
+              </div>
             </div>
             <div id="channel-list" class="stack-list"></div>
           </section>
 
-          <section class="panel activity-panel">
+          <section class="panel digital-assets-panel" data-modules="digital-assets">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Canonical product archive</p>
+                <h2>Digital asset products</h2>
+              </div>
+              <span id="digital-asset-count" class="panel-count"></span>
+            </div>
+            <div id="digital-asset-list" class="product-grid"></div>
+          </section>
+
+          <section class="panel activity-panel" data-modules="overview social digital-assets">
             <div class="panel-heading">
               <div>
                 <p class="eyebrow">Operational events</p>
@@ -146,7 +172,7 @@
           </section>
         </div>
 
-        <section class="source-strip" aria-label="Dashboard data sources">
+        <section class="source-strip" data-modules="overview" aria-label="Dashboard data sources">
           <div>
             <p class="eyebrow">Integration contract</p>
             <h2>Dashboard observes. ORION executes.</h2>

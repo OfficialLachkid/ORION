@@ -20,7 +20,7 @@ Discord remains the primary communication and notification layer. The dashboard 
       +-------------+                     +--------------+
 ```
 
-## First increment
+## Current read-only increment
 
 The first increment is intentionally read-only. It provides:
 
@@ -30,6 +30,9 @@ The first increment is intentionally read-only. It provides:
 - task and execution metrics from the existing operations event log;
 - pending approvals from the same pending-task store used by Discord;
 - connected channels, publication state, schedules, and leads from existing Supabase tables;
+- functional Overview, Social Media, and Digital Assets module navigation;
+- canonical digital-asset product and verified-public-release summaries from the existing T7 archive;
+- visible disabled roadmap modules so planned dashboard scope remains clear;
 - explicit source-availability indicators instead of mock data;
 - bounded, server-side caching to limit database requests.
 
@@ -41,13 +44,28 @@ The dashboard does not approve, reject, retry, reschedule, execute shell command
 | --- | --- | --- |
 | Social channels | `video_channels` in Supabase | Read-only, secrets and raw settings excluded |
 | Video workflow | `videos` and `video_publications` in Supabase | Read-only status and future publication view |
-| Leads and qualification | `leads` in Supabase | Read-only aggregate counts |
+| Leads and qualification | `leads` in Supabase | Deferred; the disabled module makes no query |
 | Pending Discord approvals | Existing pending-task store | Read through the same repository module |
 | Runtime activity | Existing `ops-events.jsonl` metrics stream | Read through the same summary module used by Discord |
 | Runtime health | Existing health-monitor snapshot | Sanitized health state only |
 | Publication schedules | Channel configuration plus scheduled publication rows | Observed only; no second scheduler |
+| Digital asset products | Canonical T7 product archive and release receipts | Read-only summaries; draft URLs and secret query values excluded |
 
 The Supabase secret key remains server-side. Raw channel settings, environment variables, tokens, cookies, full task text, and recovery commands are not returned to the browser.
+
+## Resource and egress budget
+
+Dashboard modules do not own independent polling loops. All enabled modules share one bounded server-side snapshot.
+
+- The browser refreshes at most every five minutes while the authenticated page remains open.
+- The server caches a snapshot for two minutes by default and deduplicates all widgets onto that result.
+- Manual refresh is the only deliberate cache bypass.
+- Social Media loads at most 100 future publication rows, a bounded channel list, and one header-only failed-publication count.
+- Digital Assets reads the mounted T7 archive locally and causes no Supabase request.
+- Disabled roadmap modules make no database request.
+- Every snapshot reports its Supabase request count, loaded row count, and response bytes so growth remains visible.
+
+Any new module must document its authoritative source, selected fields, row limit, cache behavior, refresh cadence, and expected egress before it becomes clickable.
 
 ## Synchronization boundary
 
@@ -96,7 +114,7 @@ GitHub Pages is not suitable because this dashboard handles privileged private d
 
 ### Phase 1: secure read-only foundation
 
-- Current increment: authentication, overview, health, approvals, social queue, channels, leads, and activity.
+- Current increment: authentication plus functional Overview, Social Media, and Digital Assets views.
 - Add a launch agent and Tailscale Serve configuration only after supervised local validation.
 
 ### Phase 2: shared approvals and social review
@@ -121,7 +139,7 @@ GitHub Pages is not suitable because this dashboard handles privileged private d
 ### Phase 5: external business modules
 
 - Integrate the separate e-commerce repository through a versioned read API or synchronization contract.
-- Add digital-asset and marketplace views from their existing review and release records.
+- Add the external e-commerce module through a versioned read API or synchronization contract.
 
 ## Recovery
 
