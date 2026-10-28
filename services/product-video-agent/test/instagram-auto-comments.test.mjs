@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   isInstagramAutoCommentDue,
+  resolveInstagramAutoCommentActivationEligibility,
   resolveInstagramAutoCommentConfig,
   syncInstagramAutoCommentState,
 } from '../src/instagram-auto-comments.mjs';
@@ -28,6 +29,9 @@ const target = {
     access_token_env: 'INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN',
   },
 };
+const runtimeEnv = {
+  INSTAGRAM_COMMENTING_ENABLED_SINCE: '2026-10-27T00:00:00.000Z',
+};
 
 function publication(overrides = {}) {
   return {
@@ -35,6 +39,7 @@ function publication(overrides = {}) {
     platform: 'instagram_reels',
     account_key: 'poke-quizzz-instagram',
     status: 'published',
+    scheduled_for: '2026-10-27T12:00:00.000Z',
     external_id: 'media-1',
     public_url: 'https://www.instagram.com/reel/example/',
     ...overrides,
@@ -73,6 +78,46 @@ test('Instagram comments inherit the reusable channel policy', () => {
   ]);
 });
 
+test('Instagram comments fail closed before or without the activation cutoff', () => {
+  const current = publication({ scheduled_for: '2026-10-27T13:00:00.000Z' });
+  assert.deepEqual(
+    resolveInstagramAutoCommentActivationEligibility(current, {}),
+    { eligible: false, reason: 'activation_cutoff_missing' },
+  );
+  assert.deepEqual(
+    resolveInstagramAutoCommentActivationEligibility(current, {
+      INSTAGRAM_COMMENTING_ENABLED_SINCE: '2026-10-28T00:00:00.000Z',
+    }),
+    { eligible: false, reason: 'before_activation_cutoff' },
+  );
+  assert.deepEqual(
+    resolveInstagramAutoCommentActivationEligibility(current, runtimeEnv),
+    { eligible: true, reason: 'eligible' },
+  );
+});
+
+test('syncInstagramAutoCommentState never writes a comment for a pre-activation Reel', async () => {
+  const oldPublication = publication({
+    scheduled_for: '2026-10-26T12:00:00.000Z',
+  });
+  const store = memoryStore(oldPublication);
+  const result = await syncInstagramAutoCommentState({
+    store,
+    publication: oldPublication,
+    sourceChannelProfile: sourceProfile,
+    target,
+    runtimeEnv,
+    graphClient: {
+      async createTopLevelComment() { throw new Error('must not post'); },
+    },
+  });
+
+  assert.equal(result.action, 'disabled');
+  assert.equal(result.reason, 'before_activation_cutoff');
+  assert.equal(result.updated, false);
+  assert.equal(store.current().metadata.instagram_auto_comment, undefined);
+});
+
 test('syncInstagramAutoCommentState posts once and stores the remote comment id', async () => {
   const store = memoryStore(publication());
   const calls = [];
@@ -82,6 +127,7 @@ test('syncInstagramAutoCommentState posts once and stores the remote comment id'
     sourcePublication: { metadata: { publication_policy: { auto_comment_enabled: true } } },
     sourceChannelProfile: sourceProfile,
     target,
+    runtimeEnv,
     asOf: '2026-10-27T13:00:00.000Z',
     random: () => 0,
     graphClient: {
@@ -102,6 +148,7 @@ test('syncInstagramAutoCommentState posts once and stores the remote comment id'
     publication: store.current(),
     sourceChannelProfile: sourceProfile,
     target,
+    runtimeEnv,
     graphClient: { async createTopLevelComment() { throw new Error('must not run'); } },
   });
   assert.equal(repeated.action, 'already_posted');
@@ -114,6 +161,7 @@ test('rate limiting leaves the same selected comment pending for a safe retry', 
     publication: store.current(),
     sourceChannelProfile: sourceProfile,
     target,
+    runtimeEnv,
     random: () => 0,
     graphClient: {
       async createTopLevelComment() {
@@ -146,6 +194,7 @@ test('an interrupted attempt reconciles an existing matching Instagram comment w
     publication: store.current(),
     sourceChannelProfile: sourceProfile,
     target,
+    runtimeEnv,
     graphClient: {
       async fetchMediaComments() {
         return [{
@@ -171,6 +220,7 @@ test('an ambiguous Instagram failure is fail-closed to prevent duplicate comment
     publication: store.current(),
     sourceChannelProfile: sourceProfile,
     target,
+    runtimeEnv,
     graphClient: {
       async createTopLevelComment() { throw new TypeError('network dropped'); },
     },
