@@ -10,7 +10,6 @@ const PASSWORD_PREFIX = 'scrypt';
 function encode(value) {
   return Buffer.from(value).toString('base64url');
 }
-
 function decode(value) {
   return Buffer.from(String(value || ''), 'base64url');
 }
@@ -175,4 +174,3 @@ export class LoginRateLimiter {
     this.attempts.delete(key);
   }
 }
-

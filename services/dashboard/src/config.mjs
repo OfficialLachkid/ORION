@@ -16,7 +16,6 @@ function parseEnvFile(filePath) {
   }
   return values;
 }
-
 function parseBoolean(value, fallback) {
   if (value === undefined || value === '') return fallback;
   return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
@@ -109,4 +108,3 @@ export function loadDashboardConfig(options = {}) {
     brandAssetPath: resolve(projectRoot, 'docs', 'assets', 'orion-logo.png'),
   };
 }
-

@@ -13,7 +13,6 @@ function safeJsonFile(filePath, fallback) {
     return fallback;
   }
 }
-
 function countBy(rows, field) {
   const counts = {};
   for (const row of rows) {
@@ -300,4 +299,3 @@ export class DashboardDataSource {
     return value;
   }
 }
-

@@ -19,7 +19,6 @@
   background: var(--bg);
   color: var(--text);
 }
-
 * {
   box-sizing: border-box;
 }
@@ -792,4 +791,3 @@ td strong,
     grid-column: 2;
   }
 }
-

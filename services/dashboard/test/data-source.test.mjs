@@ -93,4 +93,3 @@ test('overview reuses shared sources and does not expose channel secrets', async
   assert.equal(overview.social.publications.upcoming.length, 1);
   assert.equal(overview.leads.byStatus.qualified, 1);
 });
-

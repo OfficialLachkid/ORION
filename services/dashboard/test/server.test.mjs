@@ -73,4 +73,3 @@ test('server protects private data with one admin session and CSRF logout', asyn
   const afterLogout = await fetch(`${base}/api/overview`, { headers: { Cookie: cookie } });
   assert.equal(afterLogout.status, 401);
 });
-

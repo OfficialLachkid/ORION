@@ -17,11 +17,9 @@ const server = createDashboardServer({
   dataSource,
   recordEvent: (type, payload) => recordOpsMetric(runtimeConfig, type, payload),
 });
-
 server.listen(dashboardConfig.port, dashboardConfig.host, () => {
   process.stdout.write(
     `ORION dashboard listening on ${dashboardConfig.host}:${dashboardConfig.port}. `
     + `Public origin: ${dashboardConfig.publicOrigin}\n`,
   );
 });
-

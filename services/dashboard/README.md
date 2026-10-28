@@ -40,4 +40,3 @@ npm run dashboard:test
 ```
 
 See [the architecture decision](../../docs/dashboard/architecture.md) before adding any write action.
-

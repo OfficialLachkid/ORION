@@ -79,4 +79,3 @@ try {
 
 process.stdout.write(`Dashboard administrator configured at ${envPath}.\n`);
 process.stdout.write('The plaintext password was not written to disk or printed.\n');
-

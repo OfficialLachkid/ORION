@@ -37,7 +37,6 @@ function applySecurityHeaders(response, config) {
     response.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
 }
-
 function sendJson(response, statusCode, body, config, extraHeaders = {}) {
   applySecurityHeaders(response, config);
   for (const [key, value] of Object.entries(extraHeaders)) response.setHeader(key, value);
@@ -233,4 +232,3 @@ export function createDashboardServer(options) {
 
   return server;
 }
-

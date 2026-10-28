@@ -130,4 +130,3 @@ GitHub Pages is not suitable because this dashboard handles privileged private d
 - The dashboard stores no workflow records of its own in phase 1.
 - If a source is unavailable, its section reports unavailable while other sources continue rendering.
 - Database requests are bounded and cached; the single administrator can force one refresh when needed.
-

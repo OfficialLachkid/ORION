@@ -16,7 +16,6 @@ test('password hashes verify without retaining the plaintext password', () => {
   assert.equal(verifyPassword(password, hash), true);
   assert.equal(verifyPassword('incorrect password', hash), false);
 });
-
 test('sessions reject tampering, expiry, and explicit revocation', () => {
   const sessions = createSessionManager({
     secret: 'a'.repeat(48),
@@ -42,4 +41,3 @@ test('login rate limiter blocks repeated failures for one client', () => {
   assert.equal(limiter.check('other', 1_200).allowed, true);
   assert.equal(limiter.check('client', 62_000).allowed, true);
 });
-
