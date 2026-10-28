@@ -17,4 +17,3 @@ test('dashboard LaunchAgent stays loopback-backed and escapes filesystem paths',
   assert.match(plist, /<key>KeepAlive<\/key>\s*<true\/>/u);
   assert.doesNotMatch(plist, /--host/u);
 });
-
