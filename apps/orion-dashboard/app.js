@@ -5,6 +5,11 @@ const state = {
   activeModule: 'overview',
   publicationPlatform: 'all',
   channelQuery: '',
+  leadStatus: 'all',
+  leadPage: 1,
+  leadOperations: null,
+  leadLoading: false,
+  leadError: '',
 };
 
 const MODULE_COPY = {
@@ -23,6 +28,11 @@ const MODULE_COPY = {
     title: 'Digital Assets',
     description: 'Canonical T7 products, generation progress, review gates, and verified marketplace releases.',
   },
+  leads: {
+    eyebrow: 'Lead generation operations',
+    title: 'Lead Operations',
+    description: 'A read-only view of the same gathered leads, qualification state, and totals reported by the VBJ bot in Discord.',
+  },
 };
 
 const elements = Object.fromEntries([
@@ -33,6 +43,8 @@ const elements = Object.fromEntries([
   'health-list', 'approval-list', 'publication-count', 'publication-table',
   'publication-platform-filter', 'channel-search', 'channel-count', 'channel-list',
   'digital-asset-count', 'digital-asset-list', 'activity-list', 'source-list',
+  'lead-status-filter', 'lead-count', 'lead-feedback', 'lead-table',
+  'lead-previous', 'lead-page', 'lead-next',
 ].map((id) => [id, document.getElementById(id)]));
 
 function show(element) {
@@ -143,6 +155,22 @@ function renderKpis(overview) {
       kpiCard('Assets', assets.totalAssets, `${assets.generatedAssets} generated`),
       kpiCard('Awaiting review', assets.byStatus.awaiting_asset_review || 0, 'Same review gates used by Discord'),
       kpiCard('Approved', assets.byStatus.approved || 0, 'Canonical product state'),
+    );
+    return;
+  }
+
+  if (state.activeModule === 'leads') {
+    const leads = state.leadOperations;
+    const available = Boolean(leads?.available);
+    elements['kpi-grid'].append(
+      kpiCard('Total leads', available ? leads.summary.total : '—', 'All gathered lead records'),
+      kpiCard('New', available ? leads.summary.new : '—', 'Waiting for qualification'),
+      kpiCard('Current view', available ? leads.summary.filtered : '—', state.leadStatus === 'all' ? 'All statuses' : friendly(state.leadStatus)),
+      kpiCard(
+        'Lead egress',
+        available ? formatBytes(leads.resourceUsage.supabase.responseBytes) : '—',
+        available ? `${leads.resourceUsage.supabase.requests} requests · ${leads.resourceUsage.supabase.rowsLoaded} rows` : 'Loads only when opened',
+      ),
     );
     return;
   }
@@ -319,6 +347,80 @@ function renderDigitalAssets(digitalAssets) {
   }
 }
 
+function renderLeadOperations(result) {
+  clear(elements['lead-table']);
+  elements['lead-status-filter'].value = state.leadStatus;
+  elements['lead-status-filter'].disabled = state.leadLoading;
+  elements['lead-previous'].disabled = state.leadLoading || state.leadPage <= 1;
+  elements['lead-next'].disabled = state.leadLoading
+    || !result?.available
+    || state.leadPage >= result.pagination.totalPages;
+
+  if (state.leadLoading) {
+    elements['lead-feedback'].textContent = 'Loading one bounded page from the shared lead store…';
+    elements['lead-feedback'].classList.remove('error');
+    elements['lead-count'].textContent = '';
+    elements['lead-page'].textContent = `Page ${state.leadPage}`;
+    const row = document.createElement('tr');
+    const cell = node('td', 'table-empty', 'Loading gathered leads…');
+    cell.colSpan = 5;
+    row.append(cell);
+    elements['lead-table'].append(row);
+    return;
+  }
+
+  if (state.leadError) {
+    elements['lead-feedback'].textContent = state.leadError;
+    elements['lead-feedback'].classList.add('error');
+    elements['lead-count'].textContent = '';
+    elements['lead-page'].textContent = `Page ${state.leadPage}`;
+    return;
+  }
+
+  if (!result?.available) {
+    elements['lead-feedback'].textContent = result?.reason || 'Lead Operations has not been loaded yet.';
+    elements['lead-count'].textContent = '';
+    elements['lead-page'].textContent = `Page ${state.leadPage}`;
+    return;
+  }
+
+  elements['lead-feedback'].classList.remove('error');
+  elements['lead-feedback'].textContent = 'Read-only Supabase view. Discord leadgen and qualification continue unchanged.';
+  elements['lead-count'].textContent = `${result.leads.length} shown · ${result.summary.filtered} matching`;
+  elements['lead-page'].textContent = `Page ${result.pagination.page} of ${result.pagination.totalPages}`;
+  if (!result.leads.length) {
+    const row = document.createElement('tr');
+    const cell = node('td', 'table-empty', 'No gathered leads match this status.');
+    cell.colSpan = 5;
+    row.append(cell);
+    elements['lead-table'].append(row);
+    return;
+  }
+
+  for (const lead of result.leads) {
+    const row = document.createElement('tr');
+    const business = node('td');
+    if (lead.sourceUrl) {
+      const link = node('a', 'table-link', lead.businessName);
+      link.href = lead.sourceUrl;
+      link.target = '_blank';
+      link.rel = 'noreferrer';
+      business.append(link);
+    } else {
+      business.append(node('strong', '', lead.businessName));
+    }
+    if (lead.businessType) business.append(node('span', 'cell-subtitle', lead.businessType));
+    row.append(
+      business,
+      node('td', '', lead.niche || '—'),
+      node('td', '', lead.location || '—'),
+      node('td', '', friendly(lead.status)),
+      node('td', '', formatDate(lead.createdAt)),
+    );
+    elements['lead-table'].append(row);
+  }
+}
+
 function renderActivity(events) {
   clear(elements['activity-list']);
   const domainTerms = state.activeModule === 'social'
@@ -378,6 +480,7 @@ function renderActiveModule() {
   renderPublications(state.overview.social.publications);
   renderChannels(state.overview.social.channels);
   renderDigitalAssets(state.overview.digitalAssets);
+  renderLeadOperations(state.leadOperations);
   renderActivity(state.overview.recentActivity);
   applyModuleView();
 }
@@ -390,6 +493,9 @@ function setActiveModule(moduleId, options = {}) {
     history.replaceState(null, '', `#${state.activeModule}`);
   }
   renderActiveModule();
+  if (state.activeModule === 'leads' && !state.leadOperations) {
+    void loadLeadOperations();
+  }
 }
 
 function renderOverview(overview) {
@@ -415,6 +521,35 @@ async function loadOverview(force = false) {
     show(elements['dashboard-error']);
   } finally {
     elements['refresh-button'].disabled = false;
+  }
+}
+
+async function loadLeadOperations(force = false) {
+  if (state.leadLoading) return;
+  state.leadLoading = true;
+  state.leadError = '';
+  renderLeadOperations(state.leadOperations);
+  hide(elements['dashboard-error']);
+  try {
+    const params = new URLSearchParams({
+      page: String(state.leadPage),
+      pageSize: '25',
+      status: state.leadStatus,
+    });
+    if (force) params.set('refresh', '1');
+    state.leadOperations = await api(`/api/leads?${params}`);
+  } catch (error) {
+    if (error.status === 401) {
+      showLogin();
+      return;
+    }
+    state.leadError = error.message;
+  } finally {
+    state.leadLoading = false;
+    if (state.overview) {
+      renderKpis(state.overview);
+      renderLeadOperations(state.leadOperations);
+    }
   }
 }
 
@@ -470,7 +605,10 @@ elements['logout-button'].addEventListener('click', async () => {
   }
 });
 
-elements['refresh-button'].addEventListener('click', () => void loadOverview(true));
+elements['refresh-button'].addEventListener('click', () => {
+  void loadOverview(true);
+  if (state.activeModule === 'leads') void loadLeadOperations(true);
+});
 elements['publication-platform-filter'].addEventListener('change', (event) => {
   state.publicationPlatform = event.target.value;
   if (state.overview) renderPublications(state.overview.social.publications);
@@ -478,6 +616,22 @@ elements['publication-platform-filter'].addEventListener('change', (event) => {
 elements['channel-search'].addEventListener('input', (event) => {
   state.channelQuery = event.target.value;
   if (state.overview) renderChannels(state.overview.social.channels);
+});
+elements['lead-status-filter'].addEventListener('change', (event) => {
+  state.leadStatus = event.target.value;
+  state.leadPage = 1;
+  void loadLeadOperations();
+});
+elements['lead-previous'].addEventListener('click', () => {
+  if (state.leadPage <= 1) return;
+  state.leadPage -= 1;
+  void loadLeadOperations();
+});
+elements['lead-next'].addEventListener('click', () => {
+  const totalPages = state.leadOperations?.pagination?.totalPages || 1;
+  if (state.leadPage >= totalPages) return;
+  state.leadPage += 1;
+  void loadLeadOperations();
 });
 window.addEventListener('hashchange', () => {
   setActiveModule(location.hash.slice(1) || 'overview', { updateHash: false });

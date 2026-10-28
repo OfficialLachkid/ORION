@@ -26,13 +26,15 @@ For later private remote access, keep the server on loopback and use an authenti
 
 ## Data sources
 
-- Supabase: connected channels and a bounded upcoming-publication window.
+- Supabase: connected channels, a bounded upcoming-publication window, and lazy paginated lead summaries.
 - Discord pending-task store: the same unresolved approvals the live Discord runtime uses.
 - ORION operations events: the same event stream used by the Discord daily summary.
 - ORION health snapshot: the same health-monitor output used for alerts.
 - T7 digital-asset archive: canonical products and sanitized verified-public-release state.
 
-Lead queries remain disabled until the Lead Operations module is implemented. The browser refreshes every five minutes, the server shares a cached snapshot for at least two minutes, and manual refresh is the only cache-bypass path. The overview response reports the request, row, and response-byte cost of its latest Supabase snapshot.
+Lead Operations stays dormant until its tab is opened. The first unfiltered page performs one bounded 25-row request with an exact total and one header-only `new` count; other dashboard tabs add no lead traffic. Lead pages use the same server cache and expose their own request, row, and response-byte cost. Contact details, raw extraction, and qualification reasoning are deliberately excluded from this first view.
+
+The browser refreshes the shared overview every five minutes, the server caches it for at least two minutes, and manual refresh is the only cache-bypass path. The overview response reports the request, row, and response-byte cost of its latest Supabase snapshot.
 
 Only server-side code receives the Supabase secret key. The browser receives a sanitized overview contract.
 
