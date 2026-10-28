@@ -1,8 +1,11 @@
 import { postYoutubeTopLevelComment } from './youtube-publication-executor.mjs';
+import {
+  collectAutomaticCommentVariants,
+  resolveAutomaticCommentConfig,
+  selectAutomaticCommentVariant,
+} from './automatic-comment-policy.mjs';
 
 const DEFAULT_MAX_ATTEMPTS = 3;
-const DEFAULT_RECENT_HISTORY_LIMIT = 3;
-const DEFAULT_VARIANT_LOOKBACK_LIMIT = 20;
 
 function normalizeText(value) {
   return String(value || '').trim();
@@ -39,85 +42,6 @@ function isPublicationScheduled(publication = {}, liveStatus = null) {
   return Boolean(normalizeText(liveStatus?.publishAt || publication?.scheduled_for));
 }
 
-function createVariantId(templateId, id, index) {
-  const normalizedTemplateId = normalizeText(templateId).replace(/[^a-z0-9]+/giu, '-').replace(/^-+|-+$/gu, '');
-  const normalizedId = normalizeText(id).replace(/[^a-z0-9]+/giu, '-').replace(/^-+|-+$/gu, '');
-  if (normalizedId) {
-    return normalizedTemplateId ? `${normalizedTemplateId}-${normalizedId}` : normalizedId;
-  }
-  if (normalizedTemplateId) {
-    return `${normalizedTemplateId}-variant-${index + 1}`;
-  }
-  return `variant-${index + 1}`;
-}
-
-function normalizeVariantList(entries = [], templateId = '') {
-  const items = Array.isArray(entries) ? entries : [];
-  return items
-    .map((entry, index) => {
-      if (typeof entry === 'string') {
-        const text = normalizeText(entry);
-        if (!text) {
-          return null;
-        }
-        return {
-          id: createVariantId(templateId, '', index),
-          text,
-        };
-      }
-
-      if (!entry || typeof entry !== 'object') {
-        return null;
-      }
-
-      const text = normalizeText(entry.text || entry.body || entry.comment);
-      if (!text) {
-        return null;
-      }
-
-      return {
-        id: createVariantId(templateId, entry.id, index),
-        text,
-      };
-    })
-    .filter(Boolean);
-}
-
-function dedupeVariants(variants = []) {
-  const deduped = [];
-  const seen = new Set();
-  for (const variant of variants) {
-    const key = `${normalizeText(variant?.id).toLowerCase()}::${normalizeText(variant?.text).toLowerCase()}`;
-    if (!key || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    deduped.push(variant);
-  }
-  return deduped;
-}
-
-function normalizeTemplateVariantMap(entries = {}) {
-  if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
-    return {};
-  }
-
-  return Object.fromEntries(
-    Object.entries(entries)
-      .map(([templateId, variants]) => {
-        const normalizedTemplateId = normalizeText(templateId);
-        if (!normalizedTemplateId) {
-          return null;
-        }
-        const normalizedVariants = dedupeVariants(
-          normalizeVariantList(variants, normalizedTemplateId),
-        );
-        return [normalizedTemplateId, normalizedVariants];
-      })
-      .filter((entry) => Array.isArray(entry?.[1]) && entry[1].length > 0),
-  );
-}
-
 function normalizeYoutubeAutoCommentRecord(publication = {}) {
   const record = publication?.metadata?.youtube_auto_comment;
   if (!record || typeof record !== 'object' || Array.isArray(record)) {
@@ -146,35 +70,18 @@ function normalizeYoutubeAutoCommentRecord(publication = {}) {
 }
 
 export function resolveYoutubeAutoCommentConfig(channelProfile = {}) {
-  const source = channelProfile?.metadata?.youtube_auto_comment
-    || channelProfile?.metadata?.automatic_comments
-    || {};
-  const defaults = source.default_variants || source.defaults || source.variants || [];
-  const templateVariants = source.template_variants || source.templates || {};
-
-  return {
-    enabled: source.enabled === true,
-    maxAttempts: normalizeInteger(source.max_attempts, DEFAULT_MAX_ATTEMPTS),
-    recentHistoryLimit: normalizeInteger(source.recent_history_limit, DEFAULT_RECENT_HISTORY_LIMIT),
-    lookbackLimit: normalizeInteger(source.lookback_limit, DEFAULT_VARIANT_LOOKBACK_LIMIT),
-    defaultVariants: dedupeVariants(normalizeVariantList(defaults, 'default')),
-    templateVariants: normalizeTemplateVariantMap(templateVariants),
-  };
+  return resolveAutomaticCommentConfig(channelProfile, { platform: 'youtube' });
 }
 
 export function collectYoutubeAutoCommentVariants({
   publication,
   channelProfile,
 } = {}) {
-  const config = resolveYoutubeAutoCommentConfig(channelProfile);
-  const templateId = normalizeText(publication?.metadata?.template_id);
-  const templateVariants = templateId
-    ? (config.templateVariants[templateId] || [])
-    : [];
-  return dedupeVariants([
-    ...templateVariants,
-    ...config.defaultVariants,
-  ]);
+  return collectAutomaticCommentVariants({
+    publication,
+    channelProfile,
+    platform: 'youtube',
+  });
 }
 
 export function selectYoutubeAutoCommentVariant({
@@ -183,29 +90,14 @@ export function selectYoutubeAutoCommentVariant({
   recentPublications = [],
   random = Math.random,
 } = {}) {
-  const variants = collectYoutubeAutoCommentVariants({ publication, channelProfile });
-  if (variants.length === 0) {
-    return null;
-  }
-
-  const config = resolveYoutubeAutoCommentConfig(channelProfile);
-  const recentLimit = normalizeInteger(config.recentHistoryLimit, DEFAULT_RECENT_HISTORY_LIMIT);
-  const recentVariantIds = new Set(
-    (Array.isArray(recentPublications) ? recentPublications : [])
-      .filter((candidate) => candidate?.id !== publication?.id)
-      .slice(0, recentLimit)
-      .map((candidate) => normalizeText(candidate?.metadata?.youtube_auto_comment?.variant_id))
-      .filter(Boolean),
-  );
-
-  const eligible = variants.filter((variant) => !recentVariantIds.has(variant.id));
-  const pool = eligible.length > 0 ? eligible : variants;
-  const numericRandom = typeof random === 'function' ? Number(random()) : Number(random);
-  const boundedRandom = Number.isFinite(numericRandom)
-    ? Math.min(Math.max(numericRandom, 0), 0.999999)
-    : 0;
-  const selectedIndex = Math.floor(boundedRandom * pool.length);
-  return pool[selectedIndex] || pool[0] || null;
+  return selectAutomaticCommentVariant({
+    publication,
+    channelProfile,
+    platform: 'youtube',
+    recordKey: 'youtube_auto_comment',
+    recentPublications,
+    random,
+  });
 }
 
 function mergePublicationPatch(publication, patch) {

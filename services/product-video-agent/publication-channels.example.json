@@ -43,7 +43,7 @@
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
         "queue_status_message_id": "1533577706518745141",
-        "youtube_auto_comment": {
+        "automatic_comments": {
           "enabled": true,
           "max_attempts": 3,
           "recent_history_limit": 3,
@@ -257,7 +257,7 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
-        "youtube_auto_comment": {
+        "automatic_comments": {
           "enabled": true,
           "max_attempts": 3,
           "recent_history_limit": 3,
@@ -469,7 +469,7 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
-        "youtube_auto_comment": {
+        "automatic_comments": {
           "enabled": true,
           "max_attempts": 3,
           "recent_history_limit": 3,
@@ -681,7 +681,7 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
-        "youtube_auto_comment": {
+        "automatic_comments": {
           "enabled": true,
           "max_attempts": 3,
           "recent_history_limit": 3,
@@ -874,7 +874,7 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
-        "youtube_auto_comment": {
+        "automatic_comments": {
           "enabled": true,
           "max_attempts": 3,
           "recent_history_limit": 3,
@@ -1066,7 +1066,7 @@
         "description_generation_model": "local_ollama",
         "review_channel": "orion-review",
         "render_channel": "orion-renders",
-        "youtube_auto_comment": {
+        "automatic_comments": {
           "enabled": false,
           "max_attempts": 3,
           "recent_history_limit": 3,

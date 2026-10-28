@@ -17,6 +17,10 @@ const targetProfile = {
   platform: 'youtube_shorts',
   account_key: 'poke-quizz-youtube',
   metadata: {
+    automatic_comments: {
+      enabled: true,
+      default_variants: [{ id: 'question', text: 'How many did you get right?' }],
+    },
     publisher: {
       targets: [{
         platform: 'instagram_reels',
@@ -43,6 +47,8 @@ function publication(overrides = {}) {
     external_id: null,
     metadata: {
       workflow_state: 'scheduled',
+      source_account_key: 'poke-quizz-youtube',
+      source_publication_id: 'source-publication-1',
       publisher_target: {
         platform: 'instagram_reels',
         account_key: 'poke-quizzz-instagram',
@@ -225,6 +231,120 @@ test('executeDueInstagramPublications schedules processing follow-up before the 
   assert.equal(results.at(-1).action, 'instagram_processing');
   assert.equal(stored.metadata.next_status_poll_at, '2026-10-09T10:04:00.000Z');
   assert.equal(resolveInstagramDueAction(stored, '2026-10-09T10:05:00.000Z'), 'status');
+});
+
+test('executeDueInstagramPublications runs the inherited comment policy after a Reel is published', async () => {
+  let stored = publication();
+  const store = {
+    async fetchPublicationsByPlatform() { return [stored]; },
+    async fetchPublicationById(id) {
+      return id === 'source-publication-1'
+        ? { id, metadata: { publication_policy: { auto_comment_enabled: true } } }
+        : null;
+    },
+    async fetchVideoById() { return { id: 'video-1' }; },
+    async claimPublicationForUpload(_id, patch) {
+      stored = { ...stored, ...patch, metadata: patch.metadata };
+      return stored;
+    },
+    async updatePublication(_id, patch) {
+      stored = { ...stored, ...patch, metadata: patch.metadata || stored.metadata };
+      return stored;
+    },
+  };
+  const commentCalls = [];
+  const results = await executeDueInstagramPublications({
+    'as-of': '2026-10-09T10:00:00.000Z',
+  }, {
+    runtimeConfig: {
+      env: {
+        INSTAGRAM_DELIVERY_ENABLED: 'true',
+        INSTAGRAM_COMMENTING_ENABLED: 'true',
+      },
+    },
+    publicationStore: store,
+    loadPublicationChannelProfiles: async () => [targetProfile],
+    deliverSocialPublicationLifecycleAlerts: passThroughAlerts,
+    deliverPublicationFailureAlerts: passThroughAlerts,
+    publishInstagramReel: async () => ({
+      workflowState: 'published',
+      status: 'published',
+      mediaId: 'media-1',
+      externalId: 'media-1',
+      publicUrl: 'https://www.instagram.com/reel/example/',
+      publishedAt: '2026-10-09T10:01:00.000Z',
+      stagingRemoved: true,
+    }),
+    syncInstagramAutoCommentState: async (input) => {
+      commentCalls.push(input);
+      return {
+        publication: input.publication,
+        action: 'posted',
+        status: 'posted',
+        reason: 'posted',
+        commentId: 'comment-1',
+        variantId: 'default-question',
+      };
+    },
+  });
+
+  assert.equal(commentCalls.length, 1);
+  assert.equal(commentCalls[0].sourceChannelProfile.account_key, 'poke-quizz-youtube');
+  assert.equal(results.at(-1).action, 'instagram_comment_posted');
+  assert.equal(results.at(-1).comment_id, 'comment-1');
+});
+
+test('executeDueInstagramPublications resumes a pending comment without republishing the Reel', async () => {
+  const row = publication({
+    status: 'published',
+    external_id: 'media-1',
+    public_url: 'https://www.instagram.com/reel/example/',
+    metadata: {
+      workflow_state: 'published',
+      instagram_media_id: 'media-1',
+      source_account_key: 'poke-quizz-youtube',
+      source_publication_id: 'source-publication-1',
+      publisher_target: {
+        platform: 'instagram_reels',
+        account_key: 'poke-quizzz-instagram',
+        instagram: targetProfile.metadata.publisher.targets[0].instagram,
+      },
+      instagram_auto_comment: {
+        status: 'pending',
+        reason: 'rate_limited',
+        attempt_count: 1,
+        text: 'How many did you get right?',
+      },
+    },
+  });
+  let publishCalls = 0;
+  const results = await executeDueInstagramPublications({}, {
+    runtimeConfig: {
+      env: {
+        INSTAGRAM_DELIVERY_ENABLED: 'true',
+        INSTAGRAM_COMMENTING_ENABLED: 'true',
+      },
+    },
+    publicationStore: {
+      async fetchPublicationsByPlatform() { return [row]; },
+      async fetchPublicationById() { return { metadata: {} }; },
+      async updatePublication() { return row; },
+    },
+    loadPublicationChannelProfiles: async () => [targetProfile],
+    deliverSocialPublicationLifecycleAlerts: passThroughAlerts,
+    deliverPublicationFailureAlerts: passThroughAlerts,
+    publishInstagramReel: async () => { publishCalls += 1; },
+    syncInstagramAutoCommentState: async () => ({
+      publication: row,
+      action: 'posted',
+      status: 'posted',
+      commentId: 'comment-2',
+    }),
+  });
+
+  assert.equal(publishCalls, 0);
+  assert.equal(results.at(-1).action, 'instagram_comment_posted');
+  assert.equal(results.at(-1).comment_id, 'comment-2');
 });
 
 test('executeDueInstagramPublications alerts #alerts when publishing fails', async () => {

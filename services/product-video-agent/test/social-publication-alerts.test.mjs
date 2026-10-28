@@ -89,6 +89,30 @@ test('publication failure alert payload identifies the failed destination', () =
   assert.equal(embed.fields.find((field) => field.name === 'Error').value, 'TikTok rejected the post.');
 });
 
+test('publication failure alert keeps automatic comments separate from Reel delivery', () => {
+  const base = buildPublication({
+    id: 'publication-instagram',
+    platform: 'instagram_reels',
+    account_key: 'poke-quizzz-instagram',
+    status: 'published',
+    public_url: 'https://www.instagram.com/reel/example/',
+  });
+  const publication = {
+    ...base,
+    metadata: buildPublicationFailureAlertMetadata(base, {
+      action: 'instagram_auto_comment_failed',
+      workflowState: 'published',
+      reason: 'instagram_comment_uncertain',
+      error: 'network dropped',
+    }),
+  };
+  const payload = buildPublicationFailureAlertPayload(publication);
+  const embed = payload.embeds[0];
+
+  assert.equal(embed.title, 'Instagram automatic comment needs attention');
+  assert.match(embed.description, /Reel remains published/u);
+});
+
 test('publication failure alert posts once to #alerts and persists audit fields', async () => {
   const base = buildPublication({ status: 'failed' });
   const publication = {
