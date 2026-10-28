@@ -1,14 +1,10 @@
-<!--
-  Official ORION banner placeholder.
-  When an approved banner is available, add it at docs/assets/orion-banner.png
-  and place it above the project title.
--->
-
 <div align="center">
+
+<img src="docs/assets/orion-logo.png" alt="ORION logo — Operational Reasoning & Intelligent Orchestration Network" width="640" />
 
 # ORION
 
-### Intelligent AI Orchestration & Autonomous Business Operations
+### Operational Reasoning & Intelligent Orchestration Network
 
 ORION turns business objectives into controlled, observable workflows that combine
 local AI, deterministic automation, human approval, and verified external actions.
@@ -17,7 +13,7 @@ local AI, deterministic automation, human approval, and verified external action
 
 ## What is ORION?
 
-ORION is a local-first orchestration platform for operating repeatable business workflows from one shared control plane. It routes work to specialized services, preserves operational context, applies human approval where an action has real-world impact, and records the result for monitoring and future decisions.
+**ORION**—the **Operational Reasoning & Intelligent Orchestration Network**—is a local-first orchestration platform for operating repeatable business workflows from one shared control plane. It routes work to specialized services, preserves operational context, applies human approval where an action has real-world impact, and records the result for monitoring and future decisions.
 
 The project currently coordinates content production and multi-platform publishing, lead operations, developer workflows, and emerging digital-product capabilities. ORION is designed so a new channel, provider, or business domain can reuse the same scheduling, approval, persistence, and alerting foundations instead of creating a parallel system.
 
