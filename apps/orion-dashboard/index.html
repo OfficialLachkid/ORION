@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="Private ORION operations dashboard" />
+    <title>ORION Command Center</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <div id="loading-view" class="loading-view" aria-live="polite">
+      <div class="loading-mark"></div>
+      <p>Connecting to ORION</p>
+    </div>
+
+    <main id="login-view" class="login-view hidden">
+      <section class="login-card" aria-labelledby="login-title">
+        <img src="/brand/orion-logo.png" class="login-logo" alt="ORION" />
+        <p class="eyebrow">Private operations</p>
+        <h1 id="login-title">Command Center</h1>
+        <p class="login-copy">One secure view over the same state that powers ORION and Discord.</p>
+        <form id="login-form" class="login-form">
+          <label>
+            Administrator
+            <input id="username" name="username" autocomplete="username" required />
+          </label>
+          <label>
+            Password
+            <input id="password" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <p id="login-error" class="form-error" role="alert"></p>
+          <button type="submit" class="primary-button">Sign in</button>
+        </form>
+        <p class="security-note">No public registration. Credentials stay on the ORION runtime.</p>
+      </section>
+    </main>
+
+    <div id="app-view" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="brand">
+          <img src="/brand/orion-logo.png" class="brand-logo" alt="" />
+          <div>
+            <strong>ORION</strong>
+            <span>Command Center</span>
+          </div>
+        </div>
+        <div class="sync-indicator">
+          <span class="sync-dot"></span>
+          <div>
+            <strong>Shared control plane</strong>
+            <span>Discord remains active</span>
+          </div>
+        </div>
+        <nav aria-label="Dashboard modules">
+          <p class="nav-label">Workspace</p>
+          <div id="module-list" class="module-list"></div>
+        </nav>
+        <div class="sidebar-footer">
+          <span id="session-user">Administrator</span>
+          <button id="logout-button" class="text-button" type="button">Sign out</button>
+        </div>
+      </aside>
+
+      <main class="dashboard-main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Operational overview</p>
+            <h1>Good overview. One source of truth.</h1>
+            <p id="last-updated" class="muted">Loading current ORION state…</p>
+          </div>
+          <button id="refresh-button" class="secondary-button" type="button">Refresh data</button>
+        </header>
+
+        <div id="dashboard-error" class="dashboard-error hidden" role="alert"></div>
+
+        <section id="kpi-grid" class="kpi-grid" aria-label="ORION key status"></section>
+
+        <div class="content-grid">
+          <section class="panel health-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Runtime</p>
+                <h2>System health</h2>
+              </div>
+              <span id="overall-health" class="status-pill">Unknown</span>
+            </div>
+            <div id="health-list" class="stack-list"></div>
+          </section>
+
+          <section class="panel approvals-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Shared with Discord</p>
+                <h2>Pending approvals</h2>
+              </div>
+              <span class="read-only-badge">Read only</span>
+            </div>
+            <div id="approval-list" class="stack-list"></div>
+          </section>
+
+          <section class="panel wide-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Multi-platform publishing</p>
+                <h2>Upcoming content</h2>
+              </div>
+              <span id="publication-count" class="panel-count"></span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Content</th>
+                    <th>Destination</th>
+                    <th>Status</th>
+                    <th>Scheduled</th>
+                  </tr>
+                </thead>
+                <tbody id="publication-table"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel channels-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Connected destinations</p>
+                <h2>Channels</h2>
+              </div>
+              <span id="channel-count" class="panel-count"></span>
+            </div>
+            <div id="channel-list" class="stack-list"></div>
+          </section>
+
+          <section class="panel activity-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Operational events</p>
+                <h2>Recent activity</h2>
+              </div>
+              <span class="read-only-badge">24h view</span>
+            </div>
+            <div id="activity-list" class="timeline"></div>
+          </section>
+        </div>
+
+        <section class="source-strip" aria-label="Dashboard data sources">
+          <div>
+            <p class="eyebrow">Integration contract</p>
+            <h2>Dashboard observes. ORION executes.</h2>
+          </div>
+          <div id="source-list" class="source-list"></div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
