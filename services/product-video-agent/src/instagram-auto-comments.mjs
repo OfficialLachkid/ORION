@@ -97,6 +97,34 @@ function targetAllowsComments(target = {}) {
   return !(override && typeof override === 'object' && override.enabled === false);
 }
 
+function parseTimestamp(value) {
+  const normalized = normalizeText(value);
+  const timestamp = normalized ? new Date(normalized).getTime() : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+export function resolveInstagramAutoCommentActivationEligibility(
+  publication = {},
+  runtimeEnv = {},
+) {
+  const cutoff = parseTimestamp(runtimeEnv.INSTAGRAM_COMMENTING_ENABLED_SINCE);
+  if (cutoff === null) {
+    return { eligible: false, reason: 'activation_cutoff_missing' };
+  }
+  const publicationTimestamp = parseTimestamp(
+    publication.scheduled_for
+      || publication.metadata?.approved_at
+      || publication.created_at,
+  );
+  if (publicationTimestamp === null) {
+    return { eligible: false, reason: 'publication_time_unknown' };
+  }
+  if (publicationTimestamp < cutoff) {
+    return { eligible: false, reason: 'before_activation_cutoff' };
+  }
+  return { eligible: true, reason: 'eligible' };
+}
+
 async function findExistingComment({ client, mediaId, text, target }) {
   const comments = await client.fetchMediaComments(mediaId, { limit: 50 });
   const username = expectedUsername(target);
@@ -184,6 +212,34 @@ export async function syncInstagramAutoCommentState({
       reason: 'already_posted',
       updated: false,
       record: existingRecord,
+    };
+  }
+
+  const activation = resolveInstagramAutoCommentActivationEligibility(
+    publication,
+    runtimeEnv,
+  );
+  if (!activation.eligible) {
+    if (!existingRecord.status) {
+      return {
+        publication,
+        action: 'disabled',
+        status: '',
+        reason: activation.reason,
+        updated: false,
+        record: existingRecord,
+      };
+    }
+    const result = await upsertRecord({
+      status: 'skipped',
+      reason: activation.reason,
+      last_error: '',
+    });
+    return {
+      ...result,
+      action: 'disabled',
+      status: 'skipped',
+      reason: activation.reason,
     };
   }
 

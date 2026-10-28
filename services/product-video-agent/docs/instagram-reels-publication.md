@@ -1,6 +1,6 @@
 # Instagram Reels publication
 
-Last updated: 2026-10-27
+Last updated: 2026-10-28
 
 ## Decision
 
@@ -213,6 +213,7 @@ INSTAGRAM_OAUTH_REDIRECT_URI=<EXACT_CALLBACK_URI>
 INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN=<ACCOUNT_ACCESS_TOKEN>
 INSTAGRAM_DELIVERY_ENABLED=false
 INSTAGRAM_COMMENTING_ENABLED=false
+INSTAGRAM_COMMENTING_ENABLED_SINCE=<ISO_8601_ACTIVATION_TIME>
 ```
 
 ## Delivery sequence
@@ -231,6 +232,11 @@ INSTAGRAM_COMMENTING_ENABLED=false
     `automatic_comments` policy and posts one top-level comment.
 12. ORION stores the remote comment id. An interrupted attempt is reconciled by exact text and
     account identity before any further write.
+
+`INSTAGRAM_COMMENTING_ENABLED_SINCE` is a required no-backfill boundary. A Reel whose scheduled
+time (or fallback approval/creation time) is older than this timestamp is never auto-commented,
+including a legacy `publishing` row that only finishes reconciliation after activation. Missing or
+invalid activation timestamps fail closed.
 
 If the network drops during `media_publish`, ORION does not blindly repeat the request. It records an uncertain outcome for operator reconciliation, preventing duplicate Reels.
 
@@ -273,8 +279,9 @@ Development-mode users with app roles/tester access are used for the first owned
 - [x] reuse the source channel's automatic-comment variants and recent-history rotation;
 - [x] persist comment state and reconcile uncertain writes before retrying;
 - [x] alert `#alerts` without marking a successfully delivered Reel as failed;
-- [ ] merge and deploy the commenting feature;
+- [x] merge and deploy the commenting feature;
 - [ ] enable `INSTAGRAM_COMMENTING_ENABLED=true` on the Mac after deployment;
+- [ ] set `INSTAGRAM_COMMENTING_ENABLED_SINCE` to the deployment activation time;
 - [ ] observe the first unattended comment and confirm its stored comment id.
 
 ## Meta API requirements used by the adapter

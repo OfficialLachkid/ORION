@@ -260,6 +260,7 @@ test('executeDueInstagramPublications runs the inherited comment policy after a 
       env: {
         INSTAGRAM_DELIVERY_ENABLED: 'true',
         INSTAGRAM_COMMENTING_ENABLED: 'true',
+        INSTAGRAM_COMMENTING_ENABLED_SINCE: '2026-10-09T00:00:00.000Z',
       },
     },
     publicationStore: store,
@@ -323,6 +324,7 @@ test('executeDueInstagramPublications resumes a pending comment without republis
       env: {
         INSTAGRAM_DELIVERY_ENABLED: 'true',
         INSTAGRAM_COMMENTING_ENABLED: 'true',
+        INSTAGRAM_COMMENTING_ENABLED_SINCE: '2026-10-09T00:00:00.000Z',
       },
     },
     publicationStore: {
