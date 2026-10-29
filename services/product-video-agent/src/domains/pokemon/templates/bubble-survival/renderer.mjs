@@ -48,12 +48,76 @@ function resolveTimelineFrame(plan, videoTime) {
   return frames[frameIndex] || frames.at(-1);
 }
 
-export function buildBubbleSurvivalTitleMarkup(centerX) {
-  const sharedAttributes = `x=\"${centerX}\" text-anchor=\"middle\" font-family=\"Arial Black, Arial, sans-serif\" font-size=\"30\" font-weight=\"900\" fill=\"#fff\" stroke=\"#091020\" stroke-width=\"5\" paint-order=\"stroke\"`;
-  return [
-    `<text ${sharedAttributes} y=\"88\">POKEMON BUBBLE</text>`,
-    `<text ${sharedAttributes} y=\"120\">SURVIVAL</text>`,
-  ];
+function estimateSvgTextWidth(text, fontSize) {
+  return [...String(text || '')].reduce((width, character) => {
+    if (/\s/u.test(character)) return width + (fontSize * 0.36);
+    if (/[MW]/u.test(character)) return width + (fontSize * 0.96);
+    if (/[A-Z0-9]/u.test(character)) return width + (fontSize * 0.74);
+    return width + (fontSize * 0.62);
+  }, 0);
+}
+
+export function wrapTextInsideFrame({ text, frameWidth, fontSize, sideMargin = 50 }) {
+  const words = String(text || '').trim().split(/\s+/u).filter(Boolean);
+  const maximumWidth = Math.max(1, Number(frameWidth) - (Number(sideMargin) * 2));
+  const lines = [];
+  for (const word of words) {
+    const candidate = lines.length > 0 ? `${lines.at(-1)} ${word}` : word;
+    if (lines.length === 0 || estimateSvgTextWidth(candidate, fontSize) <= maximumWidth) {
+      if (lines.length === 0) lines.push(word);
+      else lines[lines.length - 1] = candidate;
+    } else {
+      lines.push(word);
+    }
+  }
+  return {
+    lines: lines.length > 0 ? lines : [''],
+    maximum_width: maximumWidth,
+    estimated_widths: (lines.length > 0 ? lines : [''])
+      .map((line) => Math.min(maximumWidth, estimateSvgTextWidth(line, fontSize))),
+  };
+}
+
+function buildBoundaryAwareTextMarkup({
+  text,
+  centerX,
+  frameWidth,
+  fontSize,
+  startY,
+  lineHeight,
+  sideMargin = 50,
+  attributes,
+}) {
+  const wrapped = wrapTextInsideFrame({ text, frameWidth, fontSize, sideMargin });
+  const markup = wrapped.lines.map((line, index) => {
+    const naturalWidth = estimateSvgTextWidth(line, fontSize);
+    const fitAttributes = naturalWidth > wrapped.maximum_width
+      ? ` textLength="${wrapped.maximum_width}" lengthAdjust="spacingAndGlyphs"`
+      : '';
+    return `<text x="${centerX}" y="${startY + (index * lineHeight)}" text-anchor="middle" font-size="${fontSize}"${fitAttributes} ${attributes}>${escapeXml(line)}</text>`;
+  });
+  return {
+    ...wrapped,
+    markup,
+    end_y: startY + ((wrapped.lines.length - 1) * lineHeight),
+  };
+}
+
+export function buildBubbleSurvivalTitleMarkup({ centerX, frameWidth }) {
+  const title = buildBoundaryAwareTextMarkup({
+    text: 'POKEMON BUBBLE SURVIVAL',
+    centerX,
+    frameWidth,
+    fontSize: 30,
+    startY: 88,
+    lineHeight: 32,
+    sideMargin: 50,
+    attributes: 'font-family="Arial Black, Arial, sans-serif" font-weight="900" fill="#fff" stroke="#091020" stroke-width="5" paint-order="stroke"',
+  });
+  return {
+    ...title,
+    category_y: title.end_y + 31,
+  };
 }
 
 function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
@@ -61,7 +125,8 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
   const height = Number(plan.video.frame_height);
   const introSeconds = Number(plan.video.intro_seconds);
   const simulationSeconds = Number(plan.simulation.duration_seconds);
-  const winnerStart = introSeconds + simulationSeconds;
+  const winnerDelaySeconds = Number(plan.video.winner_delay_seconds || 0);
+  const winnerStart = introSeconds + simulationSeconds + winnerDelaySeconds;
   const state = resolveTimelineFrame(plan, videoTime);
   const subjects = plan.selection.selected_subjects;
   const subjectById = new Map(subjects.map((subject, index) => [subject.id, { ...subject, index }]));
@@ -110,17 +175,28 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     ].join('');
   } else if (winnerMode && winner) {
     const imageSize = 190;
+    const winnerName = buildBoundaryAwareTextMarkup({
+      text: winner.name.toUpperCase(),
+      centerX,
+      frameWidth: width,
+      fontSize: 38,
+      startY: centerY + 145,
+      lineHeight: 42,
+      sideMargin: 50,
+      attributes: 'font-family="Arial Black, Arial, sans-serif" font-weight="900" fill="#fff" stroke="#11182a" stroke-width="6" paint-order="stroke"',
+    });
     overlayMarkup = [
       `<rect width="${width}" height="${height}" fill="#02040a" fill-opacity="0.78"/>`,
       `<circle cx="${centerX}" cy="${centerY - 25}" r="135" fill="#0b1b31" stroke="#FFD166" stroke-width="6" filter="url(#winnerGlow)"/>`,
       `<image href="${spriteDataUris.get(winner.id)}" x="${centerX - (imageSize / 2)}" y="${centerY - 120}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid meet"/>`,
       `<text x="${centerX}" y="${centerY - 178}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="34" font-weight="900" fill="#FFD166" stroke="#241900" stroke-width="5" paint-order="stroke">WINNER</text>`,
-      `<text x="${centerX}" y="${centerY + 145}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="38" font-weight="900" fill="#fff" stroke="#11182a" stroke-width="6" paint-order="stroke">${escapeXml(winner.name.toUpperCase())}</text>`,
-      `<text x="${centerX}" y="${centerY + 190}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#cce8ff">LAST TAIL STANDING</text>`,
+      ...winnerName.markup,
+      `<text x="${centerX}" y="${winnerName.end_y + 40}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#cce8ff">LAST TAIL STANDING</text>`,
     ].join('');
   }
 
   const categoryLabel = escapeXml(String(plan.selection.category || '').replaceAll('-', ' ').toUpperCase());
+  const title = buildBubbleSurvivalTitleMarkup({ centerX, frameWidth: width });
   return Buffer.from([
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     '<defs>',
@@ -133,8 +209,8 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     '<g opacity="0.18">',
     ...Array.from({ length: 22 }, (_, index) => `<circle cx="${(index * 97) % width}" cy="${(index * 173) % height}" r="${1 + (index % 3)}" fill="#8edcff"/>`),
     '</g>',
-    ...buildBubbleSurvivalTitleMarkup(centerX),
-    `<text x="${centerX}" y="151" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#76ddff">${categoryLabel}</text>`,
+    ...title.markup,
+    `<text x="${centerX}" y="${title.category_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#76ddff">${categoryLabel}</text>`,
     `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius + 5}" fill="#03101b" fill-opacity="0.36" stroke="#11263f" stroke-width="8"/>`,
     `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius}" fill="none" stroke="#67dcff" stroke-width="3" filter="url(#bubbleGlow)"/>`,
     tailMarkup,
@@ -168,9 +244,10 @@ async function loadSpriteDataUris(subjects) {
 async function renderFrames({ plan, template, framesRoot }) {
   await rm(framesRoot, { recursive: true, force: true });
   await mkdir(framesRoot, { recursive: true });
-  const durationSeconds = Number(plan.video.intro_seconds)
+  const durationSeconds = Number((Number(plan.video.intro_seconds)
     + Number(plan.simulation.duration_seconds)
-    + Number(plan.video.winner_seconds);
+    + Number(plan.video.winner_delay_seconds || 0)
+    + Number(plan.video.winner_seconds)).toFixed(3));
   const frameFps = Number(plan.video.frame_fps);
   const frameCount = Math.ceil(durationSeconds * frameFps);
   const spriteDataUris = await loadSpriteDataUris(plan.selection.selected_subjects);
@@ -187,7 +264,20 @@ async function renderFrames({ plan, template, framesRoot }) {
   return { durationSeconds, frameCount };
 }
 
-function buildFfmpegArgs({ plan, framesRoot, narrationPath, outputPath, durationSeconds }) {
+export function buildBubbleSurvivalFfmpegArgs({
+  plan,
+  framesRoot,
+  narrationPath,
+  outputPath,
+  durationSeconds,
+}) {
+  const countdownPlaybackRate = Math.min(2, Math.max(0.5, Number(plan.video.countdown_playback_rate || 1)));
+  const winnerRevealSeconds = Number(plan.video.intro_seconds)
+    + Number(plan.simulation.duration_seconds)
+    + Number(plan.video.winner_delay_seconds || 0);
+  const winnerDelayMs = Math.round(winnerRevealSeconds * 1000);
+  const musicVolume = Number(plan.audio?.music_volume ?? 0.12);
+  const winnerDingVolume = Number(plan.audio?.winner_ding_volume ?? 0.9);
   const args = [
     '-y',
     '-framerate', String(plan.video.frame_fps),
@@ -195,10 +285,12 @@ function buildFfmpegArgs({ plan, framesRoot, narrationPath, outputPath, duration
     '-stream_loop', '-1',
     '-i', plan.assets.music_path,
     '-i', narrationPath,
+    '-i', plan.assets.winner_ding_path,
     '-filter_complex', [
-      `[1:a]atrim=0:${durationSeconds.toFixed(3)},asetpts=N/SR/TB,volume=0.12,afade=t=out:st=${Math.max(0, durationSeconds - 1).toFixed(3)}:d=1[music]`,
-      '[2:a]volume=1.0[voice]',
-      '[music][voice]amix=inputs=2:duration=first:dropout_transition=0[audio]',
+      `[1:a]atrim=0:${durationSeconds.toFixed(3)},asetpts=N/SR/TB,volume=${musicVolume},afade=t=out:st=${Math.max(0, durationSeconds - 1).toFixed(3)}:d=1[music]`,
+      `[2:a]atempo=${countdownPlaybackRate},atrim=0:${Number(plan.video.intro_seconds).toFixed(3)},asetpts=N/SR/TB,volume=1.0[voice]`,
+      `[3:a]atrim=0:3,asetpts=N/SR/TB,adelay=${winnerDelayMs}|${winnerDelayMs},volume=${winnerDingVolume}[winner]`,
+      '[music][voice][winner]amix=inputs=3:duration=first:dropout_transition=0[audio]',
     ].join(';'),
     '-map', '0:v:0',
     '-map', '[audio]',
@@ -218,16 +310,15 @@ function buildFfmpegArgs({ plan, framesRoot, narrationPath, outputPath, duration
 }
 
 export function buildPokeQuizzRenderPlan({ plan }) {
+  const durationSeconds = Number((Number(plan.video.intro_seconds)
+    + Number(plan.simulation.duration_seconds)
+    + Number(plan.video.winner_delay_seconds || 0)
+    + Number(plan.video.winner_seconds)).toFixed(3));
   return {
     template_id: plan.template_id,
-    duration_seconds: Number(plan.video.intro_seconds)
-      + Number(plan.simulation.duration_seconds)
-      + Number(plan.video.winner_seconds),
+    duration_seconds: durationSeconds,
     winner: plan.winner,
-    frame_count: Math.ceil(
-      (Number(plan.video.intro_seconds) + Number(plan.simulation.duration_seconds) + Number(plan.video.winner_seconds))
-      * Number(plan.video.frame_fps),
-    ),
+    frame_count: Math.ceil(durationSeconds * Number(plan.video.frame_fps)),
   };
 }
 
@@ -265,7 +356,7 @@ export async function renderPokeQuizzVideo({
   const { durationSeconds, frameCount } = await renderFrames({ plan, template, framesRoot });
   await runLocalProcess({
     executable: ffmpegExecutable,
-    args: buildFfmpegArgs({
+    args: buildBubbleSurvivalFfmpegArgs({
       plan,
       framesRoot,
       narrationPath,

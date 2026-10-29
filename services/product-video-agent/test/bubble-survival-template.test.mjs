@@ -13,7 +13,12 @@ import {
   simulateBubbleSurvival,
 } from '../src/domains/pokemon/templates/bubble-survival/simulation.mjs';
 import { planPokemonBubbleSurvival } from '../src/domains/pokemon/templates/bubble-survival/planner.mjs';
-import { buildBubbleSurvivalTitleMarkup } from '../src/domains/pokemon/templates/bubble-survival/renderer.mjs';
+import {
+  buildBubbleSurvivalFfmpegArgs,
+  buildBubbleSurvivalTitleMarkup,
+  buildPokeQuizzRenderPlan,
+  wrapTextInsideFrame,
+} from '../src/domains/pokemon/templates/bubble-survival/renderer.mjs';
 import {
   resolvePokeQuizzPlanner,
   resolvePokeQuizzRenderer,
@@ -129,7 +134,9 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
   const root = await mkdtemp(join(tmpdir(), 'bubble-survival-'));
   try {
     const musicPath = join(root, 'music.mp3');
+    const dingPath = join(root, 'ding-sound.mp3');
     await writeFile(musicPath, 'music');
+    await writeFile(dingPath, 'ding');
     const rows = [];
     for (let index = 0; index < 14; index += 1) {
       const spritePath = join(root, `sprite-${index}.png`);
@@ -148,13 +155,13 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
       template_id: 'pokemon.bubble-survival.v1',
       template_key: 'bubble-survival',
       selection_rules: { category: 'legendary', pokemon_count: 12 },
-      simulation: { maximum_seconds: 20, maximum_attempts: 2 },
+      simulation: { maximum_seconds: 40, maximum_attempts: 4 },
     };
     const options = {
       template,
       pokedexRows: rows,
       seed: 'planner-seed',
-      assetInventory: { music: [musicPath] },
+      assetInventory: { music: [musicPath], sound_effects: { ding: dingPath } },
     };
     const first = await planPokemonBubbleSurvival(options);
     const second = await planPokemonBubbleSurvival(options);
@@ -162,7 +169,12 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.selection.selected_subjects.length, 12);
     assert.equal(new Set(first.selection.selected_subjects.map((subject) => subject.id)).size, 12);
     assert.equal(first.simulation.outcome, 'winner');
+    assert.equal(first.simulation.config.initial_speed, 92.5);
     assert.equal(first.assets.music_path, musicPath);
+    assert.equal(first.assets.winner_ding_path, dingPath);
+    assert.equal(first.video.intro_seconds, 1.6);
+    assert.equal(first.video.countdown_playback_rate, 2);
+    assert.equal(first.video.winner_delay_seconds, 1.5);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -184,9 +196,52 @@ test('Bubble Survival is exposed through template routing and the runtime regist
 });
 
 test('Bubble Survival title is split into frame-safe lines', () => {
-  const titleMarkup = buildBubbleSurvivalTitleMarkup(270).join('');
+  const title = buildBubbleSurvivalTitleMarkup({ centerX: 270, frameWidth: 540 });
+  const titleMarkup = title.markup.join('');
   assert.match(titleMarkup, />POKEMON BUBBLE<\/text>/u);
   assert.match(titleMarkup, />SURVIVAL<\/text>/u);
   assert.doesNotMatch(titleMarkup, />POKEMON BUBBLE SURVIVAL<\/text>/u);
+  assert.equal(title.maximum_width, 440);
+  assert.equal(title.estimated_widths.every((width) => width <= title.maximum_width), true);
+  const longWord = wrapTextInsideFrame({
+    text: 'EXTRAORDINARILYLONGPOKEMONNAME',
+    frameWidth: 540,
+    fontSize: 38,
+    sideMargin: 50,
+  });
+  assert.equal(longWord.estimated_widths[0], longWord.maximum_width);
+});
+
+test('winner hold and ding are scheduled at the reveal boundary', () => {
+  const plan = {
+    template_id: 'pokemon.bubble-survival.v1',
+    simulation: { duration_seconds: 20 },
+    assets: { music_path: '/tmp/music.mp3', winner_ding_path: '/tmp/ding-sound.mp3' },
+    audio: { music_volume: 0.12, winner_ding_volume: 0.9 },
+    video: {
+      intro_seconds: 1.6,
+      countdown_playback_rate: 2,
+      winner_delay_seconds: 1.5,
+      winner_seconds: 2.8,
+      frame_fps: 15,
+      output_fps: 30,
+      output_width: 1080,
+      output_height: 1920,
+    },
+  };
+  const renderPlan = buildPokeQuizzRenderPlan({ plan });
+  assert.equal(renderPlan.duration_seconds, 25.9);
+  const args = buildBubbleSurvivalFfmpegArgs({
+    plan,
+    framesRoot: '/tmp/frames',
+    narrationPath: '/tmp/countdown.wav',
+    outputPath: '/tmp/output.mp4',
+    durationSeconds: renderPlan.duration_seconds,
+  });
+  assert.equal(args.includes('/tmp/ding-sound.mp3'), true);
+  const filter = args[args.indexOf('-filter_complex') + 1];
+  assert.match(filter, /atempo=2/u);
+  assert.match(filter, /adelay=23100\|23100/u);
+  assert.match(filter, /amix=inputs=3/u);
 });
 

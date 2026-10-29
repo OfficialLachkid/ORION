@@ -62,12 +62,12 @@ function buildSimulationConfig(template) {
     arena_radius: Number(template?.arena?.radius ?? 230),
     bubble_radius: Number(template?.bubbles?.radius ?? 21),
     start_inset: Number(template?.bubbles?.start_inset ?? 5),
-    initial_speed: Number(template?.bubbles?.initial_speed ?? 185),
+    initial_speed: Number(template?.bubbles?.initial_speed ?? 92.5),
     initial_angle_variation_degrees: Number(template?.bubbles?.initial_angle_variation_degrees ?? 0),
     collision_restitution: Number(template?.bubbles?.collision_restitution ?? 0.98),
     fixed_step_seconds: Number(template?.simulation?.fixed_step_seconds ?? (1 / 120)),
     sample_fps: Number(template?.render?.frame_fps ?? 15),
-    maximum_seconds: Number(template?.simulation?.maximum_seconds ?? 34),
+    maximum_seconds: Number(template?.simulation?.maximum_seconds ?? 40),
     stagnation_seconds: Number(template?.simulation?.stagnation_seconds ?? 10),
     speed_up_interval_seconds: Number(template?.simulation?.speed_up_interval_seconds ?? 7),
     speed_up_multiplier: Number(template?.simulation?.speed_up_multiplier ?? 1.12),
@@ -137,10 +137,19 @@ export async function planPokemonBubbleSurvival({
   if (!musicPath) {
     throw new Error('Bubble Survival requires at least one readable Poke Quizz music asset on T7.');
   }
+  const winnerDingPath = String(inventory?.sound_effects?.ding || '').trim();
+  if (!winnerDingPath || !(await pathIsReadable(winnerDingPath))) {
+    throw new Error('Bubble Survival requires the readable T7 ding sound effect for its winner reveal.');
+  }
   const winner = selectedSubjects.find((subject) => subject.id === simulation.winner_id);
   if (!winner) {
     throw new Error(`Bubble Survival winner ${simulation.winner_id} is missing from the selected subjects.`);
   }
+
+  const introSeconds = Number(template?.intro?.duration_seconds ?? 1.6);
+  const countdownPlaybackRate = Number(template?.intro?.voice_playback_rate ?? 2);
+  const winnerDelaySeconds = Number(template?.winner?.announcement_delay_seconds ?? 1.5);
+  const winnerSeconds = Number(template?.winner?.duration_seconds ?? 2.8);
 
   return {
     template_id: String(template?.template_id || 'pokemon.bubble-survival.v1'),
@@ -166,10 +175,17 @@ export async function planPokemonBubbleSurvival({
     },
     assets: {
       music_path: musicPath,
+      winner_ding_path: winnerDingPath,
+    },
+    audio: {
+      music_volume: Number(template?.audio?.music_volume ?? 0.12),
+      winner_ding_volume: Number(template?.winner?.sound_volume ?? 0.9),
     },
     video: {
-      intro_seconds: Number(template?.intro?.duration_seconds ?? 3.2),
-      winner_seconds: Number(template?.winner?.duration_seconds ?? 2.8),
+      intro_seconds: introSeconds,
+      countdown_playback_rate: countdownPlaybackRate,
+      winner_delay_seconds: winnerDelaySeconds,
+      winner_seconds: winnerSeconds,
       output_fps: Number(template?.video?.fps ?? 30),
       output_width: Number(template?.video?.resolution?.[0] ?? 1080),
       output_height: Number(template?.video?.resolution?.[1] ?? 1920),
@@ -178,9 +194,10 @@ export async function planPokemonBubbleSurvival({
       frame_fps: Number(template?.render?.frame_fps ?? 15),
     },
     timing: {
-      total_duration_seconds: Number(template?.intro?.duration_seconds ?? 3.2)
+      total_duration_seconds: introSeconds
         + simulation.duration_seconds
-        + Number(template?.winner?.duration_seconds ?? 2.8),
+        + winnerDelaySeconds
+        + winnerSeconds,
     },
     selection_state: buildSelectionState(category, selectedSubjects),
   };

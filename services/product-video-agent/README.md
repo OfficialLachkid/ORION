@@ -329,7 +329,7 @@ node services/product-video-agent/scripts/generate-poke-quizz-review.mjs \
   --no-local-model
 ```
 
-The template defaults to the existing 1080x1920/30 fps output contract. Its checked-in render resolution is lower only for intermediate SVG/PNG frames; FFmpeg performs the final Lanczos upscale. Music remains a physically present T7 selection and countdown narration reuses the configured Kokoro profile/cache.
+The template defaults to the existing 1080x1920/30 fps output contract. Its checked-in render resolution is lower only for intermediate SVG/PNG frames; FFmpeg performs the final Lanczos upscale. Music remains a physically present T7 selection and countdown narration reuses the configured Kokoro profile/cache. The round begins with a half-strength launch impulse and then leaves motion to the physics simulation. The countdown runs at half its original duration, title and winner text wrap against a 50 px frame boundary, and the T7 `ding-sound` cue plays after the 1.5-second final-elimination hold when the winner card appears.
 
 Create and use these Poke Quizz asset directories on T7:
 
