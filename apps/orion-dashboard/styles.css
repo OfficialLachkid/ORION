@@ -342,9 +342,32 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: auto;
   padding: 18px 8px 0;
   border-top: 1px solid var(--border);
+}
+
+.sidebar-bottom {
+  display: grid;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.external-module {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.external-module:hover,
+.external-module:focus-visible {
+  color: var(--text);
+  border-color: rgba(244, 194, 104, 0.35);
+  background: rgba(244, 194, 104, 0.08);
+  outline: none;
+}
+
+.external-mark {
+  color: var(--gold);
+  font-size: 0.9rem;
 }
 
 .text-button {
@@ -920,6 +943,10 @@ td strong,
   .sync-indicator,
   .sidebar-footer {
     display: none;
+  }
+
+  .sidebar-bottom {
+    margin-top: 10px;
   }
 
   .brand {

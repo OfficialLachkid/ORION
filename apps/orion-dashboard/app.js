@@ -1,3 +1,5 @@
+const OVERVIEW_REFRESH_INTERVAL_MS = 15 * 60_000;
+
 const state = {
   csrfToken: '',
   username: '',
@@ -10,6 +12,8 @@ const state = {
   leadOperations: null,
   leadLoading: false,
   leadError: '',
+  overviewLoading: false,
+  lastOverviewLoadedAt: 0,
 };
 
 const MODULE_COPY = {
@@ -507,11 +511,14 @@ function renderOverview(overview) {
 }
 
 async function loadOverview(force = false) {
+  if (state.overviewLoading) return;
+  state.overviewLoading = true;
   elements['refresh-button'].disabled = true;
   hide(elements['dashboard-error']);
   try {
     const overview = await api(`/api/overview${force ? '?refresh=1' : ''}`);
     renderOverview(overview);
+    state.lastOverviewLoadedAt = Date.now();
   } catch (error) {
     if (error.status === 401) {
       showLogin();
@@ -520,6 +527,7 @@ async function loadOverview(force = false) {
     elements['dashboard-error'].textContent = error.message;
     show(elements['dashboard-error']);
   } finally {
+    state.overviewLoading = false;
     elements['refresh-button'].disabled = false;
   }
 }
@@ -650,8 +658,15 @@ async function initialize() {
   }
 }
 
-setInterval(() => {
-  if (!elements['app-view'].classList.contains('hidden')) void loadOverview();
-}, 5 * 60_000);
+function refreshOverviewWhenDue() {
+  const appIsVisible = !elements['app-view'].classList.contains('hidden');
+  const snapshotIsStale = Date.now() - state.lastOverviewLoadedAt >= OVERVIEW_REFRESH_INTERVAL_MS;
+  if (document.visibilityState === 'visible' && appIsVisible && snapshotIsStale) {
+    void loadOverview();
+  }
+}
+
+setInterval(refreshOverviewWhenDue, OVERVIEW_REFRESH_INTERVAL_MS);
+document.addEventListener('visibilitychange', refreshOverviewWhenDue);
 
 void initialize();

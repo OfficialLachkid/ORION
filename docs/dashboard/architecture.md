@@ -58,8 +58,8 @@ The Supabase secret key remains server-side. Raw channel settings, environment v
 
 Dashboard modules do not own independent polling loops. All enabled modules share one bounded server-side snapshot.
 
-- The browser refreshes at most every five minutes while the authenticated page remains open.
-- The server caches a snapshot for two minutes by default and deduplicates all widgets onto that result.
+- The browser refreshes at most every fifteen minutes while the authenticated page is visible; background tabs do not poll.
+- The server caches a snapshot for five minutes by default and deduplicates all widgets onto that result.
 - Manual refresh is the only deliberate cache bypass.
 - Social Media loads at most 100 future publication rows, a bounded channel list, and one header-only failed-publication count.
 - Lead Operations makes no request until opened. Its normal unfiltered view uses one 25-row query with an exact total plus one header-only `new` count. A status-filtered view adds one header-only overall-total count.
@@ -111,14 +111,14 @@ Tailscale Serve / private reverse proxy
 ORION dashboard on 127.0.0.1:4317
 ```
 
-GitHub Pages is not suitable because this dashboard handles privileged private data. Do not bind the Node server to a public interface. Before enabling remote access, update `ORION_DASHBOARD_PUBLIC_ORIGIN` to the exact HTTPS origin and enable secure cookies.
+GitHub Pages is not suitable for hosting dashboard data because this dashboard handles privileged private state. Its root may redirect to the private tailnet URL and retain the public Sites gallery under `/sites/`, but the authenticated application and all data APIs remain on the Mac mini behind Tailscale Serve. Do not bind the Node server to a public interface. Before enabling remote access, update `ORION_DASHBOARD_PUBLIC_ORIGIN` to the exact HTTPS origin and enable secure cookies.
 
 ## Phased delivery
 
 ### Phase 1: secure read-only foundation
 
 - Current increment: authentication plus functional Overview, Social Media, Digital Assets, and Lead Operations views.
-- Add a launch agent and Tailscale Serve configuration only after supervised local validation.
+- Run the dashboard through its dedicated loopback-only LaunchAgent and route it through tailnet-only Tailscale Serve after supervised local validation.
 
 ### Phase 2: shared approvals and social review
 
