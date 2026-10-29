@@ -58,6 +58,8 @@
   "audio": {
     "use_existing_t7_music_library": true,
     "music_volume": 0.12,
+    "tail_break_sound_role": "reflection",
+    "tail_break_sound_volume": 0.55,
     "duck_music_during_voiceover": true
   },
   "winner": {

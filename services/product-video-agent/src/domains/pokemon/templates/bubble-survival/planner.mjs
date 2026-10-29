@@ -141,6 +141,10 @@ export async function planPokemonBubbleSurvival({
   if (!winnerDingPath || !(await pathIsReadable(winnerDingPath))) {
     throw new Error('Bubble Survival requires the readable T7 ding sound effect for its winner reveal.');
   }
+  const tailBreakSoundPath = String(inventory?.sound_effects?.reflection || '').trim();
+  if (!tailBreakSoundPath || !(await pathIsReadable(tailBreakSoundPath))) {
+    throw new Error('Bubble Survival requires the readable T7 reflection sound effect for tail breaks.');
+  }
   const winner = selectedSubjects.find((subject) => subject.id === simulation.winner_id);
   if (!winner) {
     throw new Error(`Bubble Survival winner ${simulation.winner_id} is missing from the selected subjects.`);
@@ -176,10 +180,12 @@ export async function planPokemonBubbleSurvival({
     assets: {
       music_path: musicPath,
       winner_ding_path: winnerDingPath,
+      tail_break_sound_path: tailBreakSoundPath,
     },
     audio: {
       music_volume: Number(template?.audio?.music_volume ?? 0.12),
       winner_ding_volume: Number(template?.winner?.sound_volume ?? 0.9),
+      tail_break_sound_volume: Number(template?.audio?.tail_break_sound_volume ?? 0.55),
     },
     video: {
       intro_seconds: introSeconds,

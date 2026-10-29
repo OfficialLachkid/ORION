@@ -128,6 +128,9 @@ test('fixed-step simulation is deterministic, creates wall tails, and ends with 
     true,
   );
   assert.equal(first.frames.some((frame) => frame.bubbles.length < subjects.length), true);
+  const tailBreakEvents = first.events.filter((event) => event.type === 'tail_destroyed');
+  assert.ok(tailBreakEvents.length > 0);
+  assert.equal(tailBreakEvents.every((event) => Number.isFinite(event.time)), true);
 });
 
 test('planner selects unique readable Pokemon, produces replay data, and is seed-stable', async () => {
@@ -135,8 +138,10 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
   try {
     const musicPath = join(root, 'music.mp3');
     const dingPath = join(root, 'ding-sound.mp3');
+    const reflectionPath = join(root, 'reflection-sound.mp3');
     await writeFile(musicPath, 'music');
     await writeFile(dingPath, 'ding');
+    await writeFile(reflectionPath, 'reflection');
     const rows = [];
     for (let index = 0; index < 14; index += 1) {
       const spritePath = join(root, `sprite-${index}.png`);
@@ -161,7 +166,10 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
       template,
       pokedexRows: rows,
       seed: 'planner-seed',
-      assetInventory: { music: [musicPath], sound_effects: { ding: dingPath } },
+      assetInventory: {
+        music: [musicPath],
+        sound_effects: { ding: dingPath, reflection: reflectionPath },
+      },
     };
     const first = await planPokemonBubbleSurvival(options);
     const second = await planPokemonBubbleSurvival(options);
@@ -172,6 +180,7 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.simulation.config.initial_speed, 92.5);
     assert.equal(first.assets.music_path, musicPath);
     assert.equal(first.assets.winner_ding_path, dingPath);
+    assert.equal(first.assets.tail_break_sound_path, reflectionPath);
     assert.equal(first.video.intro_seconds, 1.5);
     assert.equal(first.video.countdown_playback_rate, 4 / 3);
     assert.equal(first.video.winner_delay_seconds, 0.75);
@@ -215,9 +224,24 @@ test('Bubble Survival title is split into frame-safe lines', () => {
 test('winner hold and ding are scheduled at the reveal boundary', () => {
   const plan = {
     template_id: 'pokemon.bubble-survival.v1',
-    simulation: { duration_seconds: 20 },
-    assets: { music_path: '/tmp/music.mp3', winner_ding_path: '/tmp/ding-sound.mp3' },
-    audio: { music_volume: 0.12, winner_ding_volume: 0.9 },
+    simulation: {
+      duration_seconds: 20,
+      events: [
+        { type: 'tail_destroyed', time: 4.125 },
+        { type: 'tail_destroyed', time: 7 },
+        { type: 'eliminated', time: 7 },
+      ],
+    },
+    assets: {
+      music_path: '/tmp/music.mp3',
+      winner_ding_path: '/tmp/ding-sound.mp3',
+      tail_break_sound_path: '/tmp/reflection-sound.mp3',
+    },
+    audio: {
+      music_volume: 0.12,
+      winner_ding_volume: 0.9,
+      tail_break_sound_volume: 0.55,
+    },
     video: {
       intro_seconds: 1.5,
       countdown_playback_rate: 4 / 3,
@@ -239,9 +263,14 @@ test('winner hold and ding are scheduled at the reveal boundary', () => {
     durationSeconds: renderPlan.duration_seconds,
   });
   assert.equal(args.includes('/tmp/ding-sound.mp3'), true);
+  assert.equal(args.filter((arg) => arg === '/tmp/reflection-sound.mp3').length, 2);
   const filter = args[args.indexOf('-filter_complex') + 1];
   assert.match(filter, /atempo=1\.3333333333333333/u);
   assert.match(filter, /adelay=22250\|22250/u);
   assert.match(filter, /afade=t=out:st=22\.250:d=1\.800/u);
+  assert.match(filter, /adelay=5625\|5625,volume=0\.55\[tail_break_0\]/u);
+  assert.match(filter, /adelay=8500\|8500,volume=0\.55\[tail_break_1\]/u);
+  assert.match(filter, /\[base\]\[tail_break_0\]\[tail_break_1\]amix=inputs=3/u);
+  assert.match(filter, /normalize=0,alimiter=limit=0\.95\[audio\]/u);
   assert.match(filter, /amix=inputs=3/u);
 });

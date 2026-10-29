@@ -157,12 +157,14 @@ test('timer_finished stays the shared timer-end default when a ding file is also
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/shiny-sound.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/timer_finished.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/pokeball_wiggle.mp3',
+    '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/reflection-sound.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/rotating-slot-complete.mp3',
     '/Volumes/T7/O.R.I.O.N. Video Generation/Pokemon/Poke Quizz/Audio/Sound Effects/rotating-slot.mp3',
   ]);
 
   assert.match(soundEffectPresets.countdown_tick || '', /countdown\.mp3$/u);
   assert.match(soundEffectPresets.ding || '', /ding-sound\.mp3$/u);
+  assert.match(soundEffectPresets.reflection || '', /reflection-sound\.mp3$/u);
   assert.match(soundEffectPresets.timer_end || '', /timer_finished\.mp3$/u);
   assert.match(soundEffectPresets.reveal || '', /timer_finished\.mp3$/u);
   assert.match(soundEffectPresets.shiny || '', /shiny-sound\.mp3$/u);

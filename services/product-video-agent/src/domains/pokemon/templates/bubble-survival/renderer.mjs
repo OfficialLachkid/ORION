@@ -278,6 +278,21 @@ export function buildBubbleSurvivalFfmpegArgs({
   const winnerSeconds = Number(plan.video.winner_seconds || 0);
   const musicVolume = Number(plan.audio?.music_volume ?? 0.12);
   const winnerDingVolume = Number(plan.audio?.winner_ding_volume ?? 0.9);
+  const tailBreakSoundVolume = Number(plan.audio?.tail_break_sound_volume ?? 0.55);
+  const tailBreakEvents = (Array.isArray(plan.simulation?.events) ? plan.simulation.events : [])
+    .filter((event) => event?.type === 'tail_destroyed' && Number.isFinite(Number(event.time)))
+    .sort((left, right) => Number(left.time) - Number(right.time));
+  const tailBreakInputs = tailBreakEvents.flatMap(() => [
+    '-i', plan.assets.tail_break_sound_path,
+  ]);
+  const tailBreakFilters = tailBreakEvents.map((event, index) => {
+    const delayMs = Math.round((Number(plan.video.intro_seconds) + Number(event.time)) * 1000);
+    return `[${index + 4}:a]atrim=0:2,asetpts=N/SR/TB,adelay=${delayMs}|${delayMs},volume=${tailBreakSoundVolume}[tail_break_${index}]`;
+  });
+  const baseAudioFilter = '[music][voice][winner]amix=inputs=3:duration=first:dropout_transition=0';
+  const audioMixFilter = tailBreakEvents.length > 0
+    ? `${baseAudioFilter}[base];[base]${tailBreakEvents.map((_event, index) => `[tail_break_${index}]`).join('')}amix=inputs=${tailBreakEvents.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[audio]`
+    : `${baseAudioFilter}[audio]`;
   const args = [
     '-y',
     '-framerate', String(plan.video.frame_fps),
@@ -286,11 +301,13 @@ export function buildBubbleSurvivalFfmpegArgs({
     '-i', plan.assets.music_path,
     '-i', narrationPath,
     '-i', plan.assets.winner_ding_path,
+    ...tailBreakInputs,
     '-filter_complex', [
       `[1:a]atrim=0:${durationSeconds.toFixed(3)},asetpts=N/SR/TB,volume=${musicVolume},afade=t=out:st=${winnerRevealSeconds.toFixed(3)}:d=${winnerSeconds.toFixed(3)}[music]`,
       `[2:a]atempo=${countdownPlaybackRate},atrim=0:${Number(plan.video.intro_seconds).toFixed(3)},asetpts=N/SR/TB,volume=1.0[voice]`,
       `[3:a]atrim=0:3,asetpts=N/SR/TB,adelay=${winnerDelayMs}|${winnerDelayMs},volume=${winnerDingVolume}[winner]`,
-      '[music][voice][winner]amix=inputs=3:duration=first:dropout_transition=0[audio]',
+      ...tailBreakFilters,
+      audioMixFilter,
     ].join(';'),
     '-map', '0:v:0',
     '-map', '[audio]',

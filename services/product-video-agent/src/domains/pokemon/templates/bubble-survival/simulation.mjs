@@ -255,12 +255,14 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
           { x: owner.x, y: owner.y },
         )) {
           destroyedTailIds.add(tail.id);
-          stepEvents.push({
+          const event = {
             type: 'tail_destroyed',
             attacker_id: attacker.id,
             owner_id: tail.owner_id,
             tail_id: tail.id,
-          });
+          };
+          stepEvents.push(event);
+          eventLog.push({ time: Math.round(time * 1000) / 1000, ...event });
         }
       }
     }
