@@ -48,6 +48,14 @@ function resolveTimelineFrame(plan, videoTime) {
   return frames[frameIndex] || frames.at(-1);
 }
 
+export function buildBubbleSurvivalTitleMarkup(centerX) {
+  const sharedAttributes = `x=\"${centerX}\" text-anchor=\"middle\" font-family=\"Arial Black, Arial, sans-serif\" font-size=\"30\" font-weight=\"900\" fill=\"#fff\" stroke=\"#091020\" stroke-width=\"5\" paint-order=\"stroke\"`;
+  return [
+    `<text ${sharedAttributes} y=\"88\">POKEMON BUBBLE</text>`,
+    `<text ${sharedAttributes} y=\"120\">SURVIVAL</text>`,
+  ];
+}
+
 function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
   const width = Number(plan.video.frame_width);
   const height = Number(plan.video.frame_height);
@@ -125,8 +133,8 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     '<g opacity="0.18">',
     ...Array.from({ length: 22 }, (_, index) => `<circle cx="${(index * 97) % width}" cy="${(index * 173) % height}" r="${1 + (index % 3)}" fill="#8edcff"/>`),
     '</g>',
-    `<text x="${centerX}" y="105" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="34" font-weight="900" fill="#fff" stroke="#091020" stroke-width="5" paint-order="stroke">POKEMON BUBBLE SURVIVAL</text>`,
-    `<text x="${centerX}" y="139" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#76ddff">${categoryLabel}</text>`,
+    ...buildBubbleSurvivalTitleMarkup(centerX),
+    `<text x="${centerX}" y="151" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#76ddff">${categoryLabel}</text>`,
     `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius + 5}" fill="#03101b" fill-opacity="0.36" stroke="#11263f" stroke-width="8"/>`,
     `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius}" fill="none" stroke="#67dcff" stroke-width="3" filter="url(#bubbleGlow)"/>`,
     tailMarkup,

@@ -13,6 +13,7 @@ import {
   simulateBubbleSurvival,
 } from '../src/domains/pokemon/templates/bubble-survival/simulation.mjs';
 import { planPokemonBubbleSurvival } from '../src/domains/pokemon/templates/bubble-survival/planner.mjs';
+import { buildBubbleSurvivalTitleMarkup } from '../src/domains/pokemon/templates/bubble-survival/renderer.mjs';
 import {
   resolvePokeQuizzPlanner,
   resolvePokeQuizzRenderer,
@@ -180,5 +181,12 @@ test('Bubble Survival is exposed through template routing and the runtime regist
     PRODUCT_VIDEO_TEMPLATE_DEFINITIONS.some((definition) => definition.templateKey === 'bubble-survival'),
     true,
   );
+});
+
+test('Bubble Survival title is split into frame-safe lines', () => {
+  const titleMarkup = buildBubbleSurvivalTitleMarkup(270).join('');
+  assert.match(titleMarkup, />POKEMON BUBBLE<\/text>/u);
+  assert.match(titleMarkup, />SURVIVAL<\/text>/u);
+  assert.doesNotMatch(titleMarkup, />POKEMON BUBBLE SURVIVAL<\/text>/u);
 });
 
