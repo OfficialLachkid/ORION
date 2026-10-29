@@ -18,6 +18,15 @@ import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '.
 import { syncPokeQuizzQueueStatusMessage } from '../../src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import {
+  ACTIVE_RUNTIME_EXCLUDED_STATUSES,
+  ACTIVE_RUNTIME_PUBLICATION_SELECT,
+  hydratePublication,
+  loadPublicationSnapshot,
+  normalizeRuntimePublication,
+  RECONCILIATION_RUNTIME_PUBLICATION_SELECT,
+  RECONCILIATION_RUNTIME_STATUSES,
+} from '../../src/publication-runtime-snapshot.mjs';
+import {
   buildPublicationReviewTaskAndPayload,
   syncPublicationReviewMessage,
 } from '../../src/publication-review-message-sync.mjs';
@@ -71,6 +80,9 @@ function chunkItems(items, size = 25) {
 }
 
 function normalizeWorkflowState(publication = {}) {
+  if (publication.workflow_state) {
+    return String(publication.workflow_state).trim().toLowerCase();
+  }
   if (publication.metadata?.workflow_state) {
     return String(publication.metadata.workflow_state).trim().toLowerCase();
   }
@@ -259,10 +271,20 @@ async function persistPublicationState({
   channelProfile,
   channelSelector,
 }) {
-  const updatedPublication = await store.updatePublication(publication.id, patch)
-    || mergePublicationPatch(publication, patch);
-  const videoRow = publication.video_id
-    ? await store.fetchVideoById(publication.video_id)
+  const hydratedPublication = await hydratePublication(store, publication);
+  const safePatch = patch?.metadata && hydratedPublication !== publication
+    ? {
+      ...patch,
+      metadata: {
+        ...(hydratedPublication.metadata || {}),
+        ...patch.metadata,
+      },
+    }
+    : patch;
+  const updatedPublication = await store.updatePublication(hydratedPublication.id, safePatch)
+    || mergePublicationPatch(hydratedPublication, safePatch);
+  const videoRow = hydratedPublication.video_id
+    ? await store.fetchVideoById(hydratedPublication.video_id)
     : null;
   await updatePublicationReviewMessage({
     runtimeConfig,
@@ -345,20 +367,26 @@ async function syncPublicationYoutubeAutoComment({
   }
 
   try {
+    const autoComment = publication?.metadata?.youtube_auto_comment || {};
+    const canUseCompactPublication = autoComment.status === 'posted'
+      && Boolean(String(autoComment.comment_id || '').trim());
+    const resolvedPublication = canUseCompactPublication
+      ? publication
+      : await hydratePublication(store, publication);
     const result = await syncYoutubeAutoCommentImpl({
       store,
-      publication,
+      publication: resolvedPublication,
       channelProfile,
       clientConfig,
       refreshToken,
       asOf,
       liveStatus,
     });
-    const updatedPublication = result?.publication || publication;
+    const updatedPublication = result?.publication || resolvedPublication;
     if (result?.updated) {
       let resolvedVideoRow = videoRow;
-      if (!resolvedVideoRow && publication?.video_id && store?.fetchVideoById) {
-        resolvedVideoRow = await store.fetchVideoById(publication.video_id);
+      if (!resolvedVideoRow && resolvedPublication?.video_id && store?.fetchVideoById) {
+        resolvedVideoRow = await store.fetchVideoById(resolvedPublication.video_id);
       }
       if (resolvedVideoRow) {
         await updatePublicationReviewMessage({
@@ -1377,6 +1405,7 @@ async function main() {
       '                             a previous run recorded false-positive apply_status=applied that needs a retry.',
       '  --schedule-approved        Apply schedule updates instead of preview uploads.',
       '  --reconcile-only           Reconcile YouTube state/comments and refresh the queue card; upload nothing.',
+      '  --publications-snapshot <path>  Reuse a compact scheduler snapshot instead of refetching channel history.',
       '  --max-scheduled-days <n>   Limit schedule assignment to the next N days from --as-of.',
       '  --dry-run                  Print the planned work without calling YouTube.',
       '  --as-of <ISO>              Deterministic schedule planning timestamp. Default: now.',
@@ -1394,6 +1423,7 @@ async function main() {
   );
   const channelSelector = getStringOption(options, 'channel', 'poke-quizz-youtube');
   const publicationId = getStringOption(options, 'publication-id', '');
+  const publicationSnapshotPath = getStringOption(options, 'publications-snapshot', '');
   const dryRun = getBooleanOption(options, 'dry-run', false);
   const refreshRelatedVideosOnly = getBooleanOption(options, 'refresh-related-videos', false);
   const includePublishedInRefresh = getBooleanOption(options, 'include-published', false);
@@ -1415,12 +1445,41 @@ async function main() {
     supabaseUrl: runtimeConfig.env.SUPABASE_URL,
     apiKey: runtimeConfig.env.SUPABASE_SECRET_KEY || runtimeConfig.env.SUPABASE_PUBLISHABLE_KEY,
   });
+  const snapshotPublications = refreshRelatedVideosOnly
+    ? null
+    : loadPublicationSnapshot(publicationSnapshotPath);
+  const loadChannelPublications = async () => {
+    if (snapshotPublications) {
+      return snapshotPublications.filter((publication) => (
+        publication.platform === channelProfile.platform
+        && publication.account_key === channelProfile.account_key
+      ));
+    }
+    if (refreshRelatedVideosOnly) {
+      return store.fetchPublicationsByChannel({
+        platform: channelProfile.platform,
+        accountKey: channelProfile.account_key,
+      });
+    }
+    const [activeRows, reconciliationRows] = await Promise.all([
+      store.fetchPublicationsByChannel({
+        platform: channelProfile.platform,
+        accountKey: channelProfile.account_key,
+        status: `not.in.(${ACTIVE_RUNTIME_EXCLUDED_STATUSES})`,
+        select: ACTIVE_RUNTIME_PUBLICATION_SELECT,
+      }),
+      store.fetchPublicationsByChannel({
+        platform: channelProfile.platform,
+        accountKey: channelProfile.account_key,
+        status: `in.(${RECONCILIATION_RUNTIME_STATUSES})`,
+        select: RECONCILIATION_RUNTIME_PUBLICATION_SELECT,
+      }),
+    ]);
+    return [...activeRows, ...reconciliationRows].map(normalizeRuntimePublication);
+  };
   const [clientConfig, publications] = await Promise.all([
     loadYoutubeClientCredentials(channelProfile.youtube.oauth_client_secret_path, projectRoot),
-    store.fetchPublicationsByChannel({
-      platform: channelProfile.platform,
-      accountKey: channelProfile.account_key,
-    }),
+    loadChannelPublications(),
   ]);
 
   const scopedPublications = publicationId
@@ -1456,6 +1515,7 @@ async function main() {
         channelProfile,
         channelSelector,
         asOf,
+        publications: refreshed.publications,
       });
     }
     process.stdout.write(`${JSON.stringify(refreshed.results, null, 2)}\n`);
@@ -1527,9 +1587,10 @@ async function main() {
 
   const results = [...preflightResults];
   for (const item of workItems) {
-    const publication = previewUploadMode
+    const selectedPublication = previewUploadMode
       ? item
       : scopedPublications.find((row) => row.id === item.id) || item;
+    const publication = await hydratePublication(store, selectedPublication);
     if (!publication) continue;
     const videoRow = publication.video_id
       ? await store.fetchVideoById(publication.video_id)
@@ -1845,6 +1906,7 @@ async function main() {
       channelProfile,
       channelSelector,
       asOf,
+      publications: workItems.length === 0 ? effectivePublications : null,
     });
   }
 

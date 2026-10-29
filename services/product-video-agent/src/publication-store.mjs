@@ -117,12 +117,15 @@ export class SupabasePublicationStore {
     accountKey,
     order = 'created_at.asc',
     limit = null,
+    select = '*',
+    status = '',
   }) {
     return this.request('video_publications', {
       params: {
-        select: '*',
+        select,
         platform: `eq.${platform}`,
         account_key: `eq.${accountKey}`,
+        status,
         order,
         limit,
       },
@@ -133,11 +136,14 @@ export class SupabasePublicationStore {
     platform,
     order = 'created_at.asc',
     limit = null,
+    select = '*',
+    status = '',
   }) {
     return this.request('video_publications', {
       params: {
-        select: '*',
+        select,
         platform: `eq.${platform}`,
+        status,
         order,
         limit,
       },

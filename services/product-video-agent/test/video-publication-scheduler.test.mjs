@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   loadQueuedPublications,
+  loadRuntimePublications,
   runVideoPublicationScheduler,
 } from '../scripts/run-video-publication-scheduler.mjs';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
@@ -99,6 +103,119 @@ test('loadQueuedPublications excludes terminal rows and only selects queue field
   assert.equal(url.searchParams.get('select').includes('*'), false);
 });
 
+test('loadRuntimePublications uses compact metadata aliases and preserves reconciliation states', async () => {
+  const requestedUrls = [];
+  const rows = await loadRuntimePublications({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_SECRET_KEY: 'service-key',
+  }, {
+    channelProfiles: [activeChannelProfile, secondActiveChannelProfile],
+    cachePath: '',
+    fetchJson: async (url) => {
+      requestedUrls.push(String(url));
+      return [];
+    },
+  });
+
+  assert.deepEqual(rows, []);
+  assert.equal(requestedUrls.length, 2);
+  const urls = requestedUrls.map((url) => new URL(url));
+  const activeUrl = urls.find((url) => url.searchParams.get('status')?.startsWith('not.in.'));
+  const reconciliationUrl = urls.find((url) => url.searchParams.get('status')?.startsWith('in.'));
+  assert.equal(activeUrl.searchParams.get('status'), 'not.in.(published,withdrawn,deleted,failed,blocked)');
+  assert.equal(reconciliationUrl.searchParams.get('status'), 'in.(published,withdrawn)');
+  assert.equal(activeUrl.searchParams.get('platform'), 'in.(youtube_shorts)');
+  assert.equal(
+    activeUrl.searchParams.get('account_key'),
+    'in.(poke-quizz-youtube,dexguess-youtube)',
+  );
+  assert.equal(activeUrl.searchParams.get('limit'), '1000');
+  assert.equal(activeUrl.searchParams.get('offset'), '0');
+  assert.match(activeUrl.searchParams.get('select'), /workflow_state:metadata->>workflow_state/u);
+  assert.match(
+    reconciliationUrl.searchParams.get('select'),
+    /youtube_auto_comment_status:metadata->youtube_auto_comment->>status/u,
+  );
+  assert.equal(activeUrl.searchParams.get('select').includes('metadata,'), false);
+});
+
+test('loadRuntimePublications paginates beyond the Supabase response cap', async () => {
+  const requestedOffsets = [];
+  const rows = await loadRuntimePublications({
+    SUPABASE_URL: 'https://example.supabase.co',
+    SUPABASE_SECRET_KEY: 'service-key',
+  }, {
+    channelProfiles: [activeChannelProfile],
+    cachePath: '',
+    fetchJson: async (url) => {
+      const parsedUrl = new URL(url);
+      const offset = Number(parsedUrl.searchParams.get('offset'));
+      const status = parsedUrl.searchParams.get('status');
+      requestedOffsets.push(`${status}:${offset}`);
+      if (status === 'in.(published,withdrawn)') return [];
+      return offset === 0
+        ? Array.from({ length: 1000 }, (_, index) => ({ id: `pub-${index}` }))
+        : [{ id: 'pub-1000' }];
+    },
+  });
+
+  assert.deepEqual(requestedOffsets, [
+    'not.in.(published,withdrawn,deleted,failed,blocked):0',
+    'in.(published,withdrawn):0',
+    'not.in.(published,withdrawn,deleted,failed,blocked):1000',
+  ]);
+  assert.equal(rows.length, 1001);
+});
+
+test('loadRuntimePublications incrementally refreshes its rebuildable historical cache', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'orion-runtime-cache-test-'));
+  const cachePath = join(directory, 'publication-runtime-cache.json');
+  const requests = [];
+  let pass = 1;
+  const fetchJson = async (url) => {
+    const parsedUrl = new URL(url);
+    const status = parsedUrl.searchParams.get('status') || '';
+    const updatedAfter = parsedUrl.searchParams.get('updated_at') || '';
+    requests.push({ pass, status, updatedAfter });
+    if (status.startsWith('not.in.')) {
+      return [{ id: 'active-1', status: 'approved', updated_at: '2026-10-29T09:00:00.000Z' }];
+    }
+    if (pass === 1) {
+      return [{ id: 'historical-1', status: 'published', updated_at: '2026-10-29T08:00:00.000Z' }];
+    }
+    return [{ id: 'historical-1', status: 'withdrawn', updated_at: '2026-10-29T09:55:00.000Z' }];
+  };
+
+  try {
+    const first = await loadRuntimePublications({
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_SECRET_KEY: 'service-key',
+    }, {
+      channelProfiles: [activeChannelProfile],
+      cachePath,
+      asOf: '2026-10-29T09:00:00.000Z',
+      fetchJson,
+    });
+    pass = 2;
+    const second = await loadRuntimePublications({
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_SECRET_KEY: 'service-key',
+    }, {
+      channelProfiles: [activeChannelProfile],
+      cachePath,
+      asOf: '2026-10-29T10:00:00.000Z',
+      fetchJson,
+    });
+
+    assert.deepEqual(first.map((row) => row.status).sort(), ['approved', 'published']);
+    assert.deepEqual(second.map((row) => row.status).sort(), ['approved', 'withdrawn']);
+    const incrementalRequest = requests.find((request) => request.pass === 2 && !request.status);
+    assert.equal(incrementalRequest.updatedAfter, 'gte.2026-10-29T08:55:00.000Z');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('runVideoPublicationScheduler executes preview uploads and schedule updates for active channels', async () => {
   const executionCalls = [];
   const socialExecutionCalls = [];
@@ -139,6 +256,36 @@ test('runVideoPublicationScheduler executes preview uploads and schedule updates
   assert.deepEqual(result.social_publication_results, [
     { publication_id: 'pub-tiktok', action: 'tiktok_publish_due' },
   ]);
+});
+
+test('runVideoPublicationScheduler reuses one publication snapshot and always cleans it up', async () => {
+  const snapshotPaths = [];
+  let cleanupCount = 0;
+  await runVideoPublicationScheduler({
+    channels: 'services/product-video-agent/publication-channels.example.json',
+    'as-of': '2026-08-01T10:01:00.000Z',
+  }, {
+    runtimeConfig: { env: {} },
+    loadPublicationChannelProfiles: async () => [activeChannelProfile],
+    loadQueuedPublications: async () => [previewPending, previewApproved],
+    createPublicationSnapshot: async () => ({
+      path: '/tmp/orion-publications-test/snapshot.json',
+      cleanup: async () => {
+        cleanupCount += 1;
+      },
+    }),
+    executePublicationPhase: async ({ publicationSnapshotPath }) => {
+      snapshotPaths.push(publicationSnapshotPath);
+      return [];
+    },
+    executeSocialPublicationPhase: async () => [],
+  });
+
+  assert.deepEqual(snapshotPaths, [
+    '/tmp/orion-publications-test/snapshot.json',
+    '/tmp/orion-publications-test/snapshot.json',
+  ]);
+  assert.equal(cleanupCount, 1);
 });
 
 test('runVideoPublicationScheduler skips execution in plan-only mode', async () => {

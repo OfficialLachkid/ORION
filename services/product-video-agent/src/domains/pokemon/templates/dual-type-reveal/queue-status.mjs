@@ -181,6 +181,7 @@ export async function syncPokeQuizzQueueStatusMessage({
   asOf = new Date().toISOString(),
   reviewTargetCount = POKE_QUIZZ_REVIEW_TARGET_COUNT,
   presentation = DEFAULT_QUEUE_STATUS_PRESENTATION,
+  publications = null,
 } = {}) {
   const channelId = String(runtimeConfig?.channelIds?.pokemon || '').trim();
   const reviewThreadId = resolvePublicationReviewThreadId(runtimeConfig, channelProfile);
@@ -192,11 +193,22 @@ export async function syncPokeQuizzQueueStatusMessage({
     };
   }
 
-  const publications = await store.fetchPublicationsByChannel({
-    platform: channelProfile.platform,
-    accountKey: channelProfile.account_key,
-  });
-  const queueStatus = computePokeQuizzQueueStatus(publications, channelProfile, asOf);
+  const resolvedPublications = Array.isArray(publications)
+    ? publications
+    : await store.fetchPublicationsByChannel({
+      platform: channelProfile.platform,
+      accountKey: channelProfile.account_key,
+      select: [
+        'id',
+        'platform',
+        'account_key',
+        'status',
+        'scheduled_for',
+        'created_at',
+        'workflow_state:metadata->>workflow_state',
+      ].join(','),
+    });
+  const queueStatus = computePokeQuizzQueueStatus(resolvedPublications, channelProfile, asOf);
   const payload = buildPokeQuizzQueueStatusPayload({
     channelProfile,
     queueStatus,
