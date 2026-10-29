@@ -378,4 +378,3 @@ export async function renderPokeQuizzVideo({
     winner: plan.winner,
   };
 }
-

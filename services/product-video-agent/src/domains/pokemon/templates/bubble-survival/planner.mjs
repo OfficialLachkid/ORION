@@ -202,4 +202,3 @@ export async function planPokemonBubbleSurvival({
     selection_state: buildSelectionState(category, selectedSubjects),
   };
 }
-

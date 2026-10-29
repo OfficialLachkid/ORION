@@ -327,4 +327,3 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
     config,
   };
 }
-

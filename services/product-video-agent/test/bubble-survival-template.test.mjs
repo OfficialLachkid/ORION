@@ -244,4 +244,3 @@ test('winner hold and ding are scheduled at the reveal boundary', () => {
   assert.match(filter, /adelay=23100\|23100/u);
   assert.match(filter, /amix=inputs=3/u);
 });
-
