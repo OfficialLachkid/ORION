@@ -191,7 +191,6 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
       `<image href="${spriteDataUris.get(winner.id)}" x="${centerX - (imageSize / 2)}" y="${centerY - 120}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid meet"/>`,
       `<text x="${centerX}" y="${centerY - 178}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="34" font-weight="900" fill="#FFD166" stroke="#241900" stroke-width="5" paint-order="stroke">WINNER</text>`,
       ...winnerName.markup,
-      `<text x="${centerX}" y="${winnerName.end_y + 40}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#cce8ff">LAST TAIL STANDING</text>`,
     ].join('');
   }
 
