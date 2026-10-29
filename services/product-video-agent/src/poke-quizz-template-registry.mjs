@@ -68,6 +68,13 @@ import {
   buildPokeQuizzRenderPlan as buildCryMatchRenderPlan,
   renderPokeQuizzVideo as renderCryMatchVideo,
 } from './domains/pokemon/templates/cry-match/renderer.mjs';
+import {
+  planPokemonBubbleSurvival,
+} from './domains/pokemon/templates/bubble-survival/planner.mjs';
+import {
+  buildPokeQuizzRenderPlan as buildBubbleSurvivalRenderPlan,
+  renderPokeQuizzVideo as renderBubbleSurvivalVideo,
+} from './domains/pokemon/templates/bubble-survival/renderer.mjs';
 
 const TEMPLATE_REGISTRY = Object.freeze({
   'dual-type-reveal': Object.freeze({
@@ -125,6 +132,11 @@ const TEMPLATE_REGISTRY = Object.freeze({
     buildRenderPlan: buildCryMatchRenderPlan,
     renderVideo: renderCryMatchVideo,
   }),
+  'bubble-survival': Object.freeze({
+    planner: planPokemonBubbleSurvival,
+    buildRenderPlan: buildBubbleSurvivalRenderPlan,
+    renderVideo: renderBubbleSurvivalVideo,
+  }),
 });
 
 function normalizeTemplateSelector(template = {}) {
@@ -163,6 +175,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   if (templateKey === 'cry-match') {
     return 'cry-match';
   }
+  if (templateKey === 'bubble-survival' || templateKey === 'bubble-battle') {
+    return 'bubble-survival';
+  }
   if (templateKey === 'stat-clash' || templateKey === 'stat-battle') {
     return 'stat-clash';
   }
@@ -189,6 +204,9 @@ export function resolvePokeQuizzTemplateKey(template = {}) {
   }
   if (templateId.includes('cry-match')) {
     return 'cry-match';
+  }
+  if (templateId.includes('bubble-survival') || templateId.includes('bubble-battle')) {
+    return 'bubble-survival';
   }
   if (templateId.includes('stat-clash') || templateId.includes('stat-battle')) {
     return 'stat-clash';

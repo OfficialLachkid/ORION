@@ -1,0 +1,69 @@
+{
+  "template_id": "pokemon.bubble-survival.v1",
+  "template_key": "bubble-survival",
+  "version": 1,
+  "selection_rules": {
+    "category": "legendary",
+    "pokemon_count": 12,
+    "supported_categories": [
+      "legendary",
+      "mythical",
+      "starters",
+      "first-evolutions",
+      "baby",
+      "final-evolutions",
+      "mega-evolutions"
+    ]
+  },
+  "video": {
+    "aspect_ratio": "9:16",
+    "resolution": [1080, 1920],
+    "fps": 30
+  },
+  "render": {
+    "frame_width": 540,
+    "frame_height": 960,
+    "frame_fps": 15
+  },
+  "arena": {
+    "center_x": 270,
+    "center_y": 500,
+    "radius": 230,
+    "stationary": true
+  },
+  "bubbles": {
+    "radius": 21,
+    "start_inset": 5,
+    "initial_speed": 185,
+    "initial_direction": "toward_center",
+    "initial_angle_variation_degrees": 0,
+    "collision_restitution": 0.98
+  },
+  "simulation": {
+    "fixed_step_seconds": 0.008333333333333333,
+    "maximum_seconds": 34,
+    "stagnation_seconds": 10,
+    "maximum_attempts": 8,
+    "speed_up_interval_seconds": 7,
+    "speed_up_multiplier": 1.12,
+    "draw_policy": "retry-with-derived-seed"
+  },
+  "intro": {
+    "duration_seconds": 3.2,
+    "text": ["3", "2", "1", "LET'S GO!"],
+    "voiceover": "3, 2, 1, let's go!",
+    "use_existing_voice_model": true
+  },
+  "audio": {
+    "use_existing_t7_music_library": true,
+    "music_volume": 0.12,
+    "duck_music_during_voiceover": true
+  },
+  "winner": {
+    "duration_seconds": 2.8,
+    "show_pokemon_name": true,
+    "show_pokemon_sprite": true,
+    "animation_enabled": true
+  }
+}
+

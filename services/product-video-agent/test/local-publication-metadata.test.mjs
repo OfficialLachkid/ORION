@@ -53,6 +53,16 @@ const findTheShinyPlan = {
   },
 };
 
+const bubbleSurvivalPlan = {
+  template_id: 'pokemon.bubble-survival.v1',
+  template_key: 'bubble-survival',
+  selection: {
+    category: 'legendary',
+    selected_subjects: Array.from({ length: 12 }, (_unused, index) => ({ name: `Legendary ${index + 1}` })),
+  },
+  winner: { name: 'Mewtwo' },
+};
+
 const typeQuizPlan = {
   template_id: 'pokemon.type-quiz.v1',
   selection: {
@@ -592,4 +602,19 @@ test('seeded build-your-team fallback metadata uses the supported generic title 
     ))),
     expectedBuildYourTeamSeededTitles,
   );
+});
+
+test('fallback publication metadata describes Bubble Survival without spoiling the title', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(bubbleSurvivalPlan, channelProfile);
+  assert.equal(metadata.title, 'Legendary Pokemon Bubble Survival!');
+  assert.match(metadata.description, /wall bounce adds a tail/iu);
+  assert.match(metadata.description, /Mewtwo took the win/iu);
+  assert.equal(metadata.title.includes('Mewtwo'), false);
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#bubblesurvival',
+    '#physicssimulation',
+    '#pokemonbattle',
+    '#shorts',
+  ]);
 });

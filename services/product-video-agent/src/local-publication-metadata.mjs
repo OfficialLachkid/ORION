@@ -113,6 +113,9 @@ function resolveTemplateFlavor(plan = {}) {
   if (templateKey.includes('cry-match') || templateId.includes('cry-match')) {
     return 'cry-match';
   }
+  if (templateKey.includes('bubble-survival') || templateId.includes('bubble-survival')) {
+    return 'bubble-survival';
+  }
   return 'dual-type-reveal';
 }
 
@@ -283,6 +286,10 @@ function buildMetadataPrompt(plan) {
 
 function buildTemplateAwareDefaultTitle(plan) {
   const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'bubble-survival') {
+    const category = titleCaseWord(String(plan?.selection?.category || 'Pokemon').replaceAll('-', ' '));
+    return `${category} Pokemon Bubble Survival!`;
+  }
   if (flavor === 'pixelated-reveal') {
     const seed = String(plan?.seed || '').trim();
     const templateIndex = seed
@@ -361,6 +368,14 @@ function buildTemplateAwareDefaultTitle(plan) {
 function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
   const flavor = resolveTemplateFlavor(plan);
   const channelName = resolveMetadataChannelName(channelProfile);
+  if (flavor === 'bubble-survival') {
+    const category = String(plan?.selection?.category || 'Pokemon').replaceAll('-', ' ');
+    const winnerName = String(plan?.winner?.name || '').trim();
+    return joinDescriptionParagraphs(
+      `${plan?.selection?.selected_subjects?.length || 12} ${category} Pokemon enter the bubble arena. Every wall bounce adds a tail, every crossed rival tail gets cut, and only one survives.`,
+      `${winnerName ? `${winnerName} took the win. ` : ''}Who did you expect to survive? Welcome to ${channelName}.`,
+    );
+  }
   if (flavor === 'pixelated-reveal') {
     const roundCount = Number(plan?.selection?.round_count || 0) || 4;
     return joinDescriptionParagraphs(
@@ -442,6 +457,23 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
 
 function buildTemplateAwareMetadataPrompt(plan) {
   const flavor = resolveTemplateFlavor(plan);
+  if (flavor === 'bubble-survival') {
+    const selectedSubjects = plan?.selection?.selected_subjects || [];
+    return [
+      'Write YouTube Shorts publication metadata as JSON for a Pokemon physics survival simulation.',
+      `Category: ${String(plan?.selection?.category || 'mixed')}`,
+      `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
+      `Winner: ${String(plan?.winner?.name || '')}`,
+      'Mechanic: wall hits add anchored tails; crossing an opponent tail cuts it; losing the last tail eliminates that Pokemon.',
+      'Return JSON with title, description, and hashtags.',
+      'Requirements:',
+      '- Keep the title under 70 characters and do not spoil the winner.',
+      '- Explain the survival mechanic in one concise sentence.',
+      '- Ask the viewer who they expected to win.',
+      '- Use 4 to 6 short hashtags including pokemon and shorts.',
+      'Return JSON only.',
+    ].join('\n');
+  }
   if (flavor === 'pixelated-reveal') {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     return [
@@ -640,6 +672,15 @@ function buildTemplateAwareHashtags(plan) {
   const flavor = resolveTemplateFlavor(plan);
   const typePair = plan?.selection?.type_pair || [];
   const typeHashtags = buildTypeHashtags(typePair);
+  if (flavor === 'bubble-survival') {
+    return normalizeHashtags([
+      'pokemon',
+      'bubblesurvival',
+      'physicssimulation',
+      'pokemonbattle',
+      'shorts',
+    ]);
+  }
   if (flavor === 'pixelated-reveal') {
     return normalizeHashtags([
       'pokemon',

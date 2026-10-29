@@ -43,6 +43,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     .map((choice) => choice.value)
     .sort();
   assert.deepEqual(generateTemplateChoiceValues, [
+    'bubble-survival',
     'build-your-team',
     'cry-match',
     'dual-type-reveal',
