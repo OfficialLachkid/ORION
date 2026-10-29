@@ -49,8 +49,8 @@
     "draw_policy": "retry-with-derived-seed"
   },
   "intro": {
-    "duration_seconds": 1.6,
-    "voice_playback_rate": 2,
+    "duration_seconds": 1.5,
+    "voice_playback_rate": 1.3333333333333333,
     "text": ["3", "2", "1", "LET'S GO!"],
     "voiceover": "3, 2, 1, let's go!",
     "use_existing_voice_model": true

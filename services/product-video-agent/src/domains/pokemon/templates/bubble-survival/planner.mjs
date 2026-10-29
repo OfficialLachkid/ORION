@@ -146,8 +146,8 @@ export async function planPokemonBubbleSurvival({
     throw new Error(`Bubble Survival winner ${simulation.winner_id} is missing from the selected subjects.`);
   }
 
-  const introSeconds = Number(template?.intro?.duration_seconds ?? 1.6);
-  const countdownPlaybackRate = Number(template?.intro?.voice_playback_rate ?? 2);
+  const introSeconds = Number(template?.intro?.duration_seconds ?? 1.5);
+  const countdownPlaybackRate = Number(template?.intro?.voice_playback_rate ?? (4 / 3));
   const winnerDelaySeconds = Number(template?.winner?.announcement_delay_seconds ?? 1.5);
   const winnerSeconds = Number(template?.winner?.duration_seconds ?? 2.8);
 

@@ -172,8 +172,8 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.simulation.config.initial_speed, 92.5);
     assert.equal(first.assets.music_path, musicPath);
     assert.equal(first.assets.winner_ding_path, dingPath);
-    assert.equal(first.video.intro_seconds, 1.6);
-    assert.equal(first.video.countdown_playback_rate, 2);
+    assert.equal(first.video.intro_seconds, 1.5);
+    assert.equal(first.video.countdown_playback_rate, 4 / 3);
     assert.equal(first.video.winner_delay_seconds, 1.5);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -219,8 +219,8 @@ test('winner hold and ding are scheduled at the reveal boundary', () => {
     assets: { music_path: '/tmp/music.mp3', winner_ding_path: '/tmp/ding-sound.mp3' },
     audio: { music_volume: 0.12, winner_ding_volume: 0.9 },
     video: {
-      intro_seconds: 1.6,
-      countdown_playback_rate: 2,
+      intro_seconds: 1.5,
+      countdown_playback_rate: 4 / 3,
       winner_delay_seconds: 1.5,
       winner_seconds: 2.8,
       frame_fps: 15,
@@ -230,7 +230,7 @@ test('winner hold and ding are scheduled at the reveal boundary', () => {
     },
   };
   const renderPlan = buildPokeQuizzRenderPlan({ plan });
-  assert.equal(renderPlan.duration_seconds, 25.9);
+  assert.equal(renderPlan.duration_seconds, 25.8);
   const args = buildBubbleSurvivalFfmpegArgs({
     plan,
     framesRoot: '/tmp/frames',
@@ -240,7 +240,7 @@ test('winner hold and ding are scheduled at the reveal boundary', () => {
   });
   assert.equal(args.includes('/tmp/ding-sound.mp3'), true);
   const filter = args[args.indexOf('-filter_complex') + 1];
-  assert.match(filter, /atempo=2/u);
-  assert.match(filter, /adelay=23100\|23100/u);
+  assert.match(filter, /atempo=1\.3333333333333333/u);
+  assert.match(filter, /adelay=23000\|23000/u);
   assert.match(filter, /amix=inputs=3/u);
 });
