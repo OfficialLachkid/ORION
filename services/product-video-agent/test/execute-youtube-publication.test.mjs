@@ -241,6 +241,56 @@ test('missing preview renders are marked blocked so they are not retried', async
   });
 });
 
+test('state persistence hydrates compact rows before merging metadata', async () => {
+  const compactPublication = {
+    id: 'pub-compact-metadata',
+    video_id: 'video-compact-metadata',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'approved',
+    metadata: { workflow_state: 'preview_upload_pending' },
+    _metadata_complete: false,
+  };
+  const fullPublication = {
+    ...compactPublication,
+    metadata: {
+      workflow_state: 'preview_upload_pending',
+      render_path: '/Volumes/T7/render.mp4',
+      durable_review_receipt: { id: 'receipt-1' },
+    },
+  };
+  delete fullPublication._metadata_complete;
+  let persistedPatch = null;
+  const store = {
+    async fetchPublicationById(id) {
+      assert.equal(id, compactPublication.id);
+      return structuredClone(fullPublication);
+    },
+    async updatePublication(id, patch) {
+      assert.equal(id, compactPublication.id);
+      persistedPatch = structuredClone(patch);
+      return { ...fullPublication, ...patch };
+    },
+    async fetchVideoById() {
+      return null;
+    },
+  };
+
+  await blockMissingPreviewPublication({
+    store,
+    runtimeConfig: { env: {} },
+    publication: compactPublication,
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    renderPath: '/Volumes/T7/render.mp4',
+    error: Object.assign(new Error('render missing'), { code: 'ENOENT' }),
+    blockedAt: '2026-10-29T12:00:00.000Z',
+  });
+
+  assert.deepEqual(persistedPatch.metadata.durable_review_receipt, { id: 'receipt-1' });
+  assert.equal(persistedPatch.metadata.workflow_state, 'blocked');
+});
+
 test('scheduled queue reconciliation reopens a missing YouTube video for approval', async () => {
   const publication = {
     id: 'pub-missing',

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import process from 'node:process';
-import { resolve } from 'node:path';
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../lib/runtime-config.mjs';
 import {
@@ -15,6 +17,13 @@ import {
 import { createHeaders, fetchJson, getRuntimeApiKey } from '../../../../scripts/lib/supabase-bridge-api.mjs';
 import { buildPublicationQueuePlan } from '../../src/publication-queue.mjs';
 import { loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
+import {
+  ACTIVE_RUNTIME_EXCLUDED_STATUSES,
+  ACTIVE_RUNTIME_PUBLICATION_SELECT,
+  isReconciliationStatus,
+  RECONCILIATION_RUNTIME_PUBLICATION_SELECT,
+  RECONCILIATION_RUNTIME_STATUSES,
+} from '../../src/publication-runtime-snapshot.mjs';
 import { runLocalProcess } from '../../src/process-runner.mjs';
 import {
   buildYoutubePreviewUploadPlan,
@@ -41,7 +50,34 @@ const QUEUE_PUBLICATION_SELECT = [
 ].join(',');
 
 const TERMINAL_PUBLICATION_STATUSES = 'published,withdrawn,deleted,failed,blocked';
+const DEFAULT_RUNTIME_CACHE_PATH = 'data/runtime/product-video-agent/publication-runtime-cache.json';
+const RUNTIME_CACHE_VERSION = 1;
+const RUNTIME_CACHE_FULL_REFRESH_MS = 24 * 60 * 60 * 1000;
+const RUNTIME_CACHE_OVERLAP_MS = 5 * 60 * 1000;
+function toTimestamp(value = '') {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
 
+async function loadRuntimePublicationCache(cachePath) {
+  if (!cachePath) return null;
+  try {
+    const parsed = JSON.parse(await readFile(cachePath, 'utf8'));
+    if (parsed?.version !== RUNTIME_CACHE_VERSION || !Array.isArray(parsed.rows)) return null;
+    return parsed;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    return null;
+  }
+}
+
+async function saveRuntimePublicationCache(cachePath, cache) {
+  if (!cachePath) return;
+  await mkdir(dirname(cachePath), { recursive: true });
+  const temporaryPath = `${cachePath}.${process.pid}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(cache)}\n`, { encoding: 'utf8', mode: 0o600 });
+  await rename(temporaryPath, cachePath);
+}
 export async function loadQueuedPublications(runtimeEnv, options = {}) {
   const fetchJsonImpl = options.fetchJson || fetchJson;
   const supabaseUrl = runtimeEnv.SUPABASE_URL || '';
@@ -58,6 +94,125 @@ export async function loadQueuedPublications(runtimeEnv, options = {}) {
     method: 'GET',
     headers: createHeaders(apiKey),
   });
+}
+
+export async function loadRuntimePublications(runtimeEnv, options = {}) {
+  const fetchJsonImpl = options.fetchJson || fetchJson;
+  const supabaseUrl = runtimeEnv.SUPABASE_URL || '';
+  const apiKey = getRuntimeApiKey(runtimeEnv);
+  if (!supabaseUrl || !apiKey) {
+    throw new Error('Supabase is not configured (missing SUPABASE_URL or API key).');
+  }
+
+  const profiles = Array.isArray(options.channelProfiles) ? options.channelProfiles : [];
+  const asOf = String(options.asOf || new Date().toISOString());
+  const asOfTimestamp = toTimestamp(asOf) ?? Date.now();
+  const cachePath = options.cachePath === ''
+    ? ''
+    : resolve(projectRoot, options.cachePath || DEFAULT_RUNTIME_CACHE_PATH);
+  const platforms = [...new Set(profiles.map((profile) => String(profile?.platform || '').trim()).filter(Boolean))];
+  const accountKeys = [...new Set(profiles.map((profile) => String(profile?.account_key || '').trim()).filter(Boolean))];
+  const cacheScope = JSON.stringify({
+    platforms: [...platforms].sort(),
+    account_keys: [...accountKeys].sort(),
+  });
+  const pageSize = 1000;
+  const loadPages = async ({ select, status = '', updatedAfter = '' }) => {
+    const baseUrl = new URL('/rest/v1/video_publications', supabaseUrl);
+    baseUrl.searchParams.set('select', select);
+    if (status) baseUrl.searchParams.set('status', status);
+    if (updatedAfter) baseUrl.searchParams.set('updated_at', `gte.${updatedAfter}`);
+    if (platforms.length > 0) {
+      baseUrl.searchParams.set('platform', `in.(${platforms.join(',')})`);
+    }
+    if (accountKeys.length > 0) {
+      baseUrl.searchParams.set('account_key', `in.(${accountKeys.join(',')})`);
+    }
+    baseUrl.searchParams.set('order', 'created_at.asc');
+
+    const rows = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const pageUrl = new URL(baseUrl);
+      pageUrl.searchParams.set('limit', String(pageSize));
+      pageUrl.searchParams.set('offset', String(offset));
+      const page = await fetchJsonImpl(pageUrl.toString(), {
+        method: 'GET',
+        headers: createHeaders(apiKey),
+      });
+      rows.push(...page);
+      if (page.length < pageSize) break;
+    }
+    return rows;
+  };
+
+  const cached = await loadRuntimePublicationCache(cachePath);
+  const lastFullRefreshTimestamp = toTimestamp(cached?.refreshed_at);
+  const needsFullRefresh = !cached
+    || cached.scope !== cacheScope
+    || lastFullRefreshTimestamp === null
+    || asOfTimestamp - lastFullRefreshTimestamp >= RUNTIME_CACHE_FULL_REFRESH_MS;
+  const syncedThroughTimestamp = toTimestamp(cached?.synced_through);
+  const incrementalUpdatedAfter = !needsFullRefresh && syncedThroughTimestamp !== null
+    ? new Date(Math.max(0, syncedThroughTimestamp - RUNTIME_CACHE_OVERLAP_MS)).toISOString()
+    : '';
+
+  const [activePublications, fetchedReconciliationRows] = await Promise.all([
+    loadPages({
+      select: ACTIVE_RUNTIME_PUBLICATION_SELECT,
+      status: `not.in.(${ACTIVE_RUNTIME_EXCLUDED_STATUSES})`,
+    }),
+    loadPages({
+      select: RECONCILIATION_RUNTIME_PUBLICATION_SELECT,
+      status: needsFullRefresh ? `in.(${RECONCILIATION_RUNTIME_STATUSES})` : '',
+      updatedAfter: incrementalUpdatedAfter,
+    }),
+  ]);
+
+  const reconciliationById = new Map(
+    (needsFullRefresh ? [] : cached.rows)
+      .filter((row) => row?.id && isReconciliationStatus(row.status))
+      .map((row) => [row.id, row]),
+  );
+  for (const row of fetchedReconciliationRows) {
+    if (!row?.id) continue;
+    if (isReconciliationStatus(row.status)) {
+      reconciliationById.set(row.id, row);
+    } else {
+      reconciliationById.delete(row.id);
+    }
+  }
+  const reconciliationPublications = [...reconciliationById.values()];
+  try {
+    await saveRuntimePublicationCache(cachePath, {
+      version: RUNTIME_CACHE_VERSION,
+      scope: cacheScope,
+      refreshed_at: needsFullRefresh ? asOf : cached.refreshed_at,
+      synced_through: asOf,
+      rows: reconciliationPublications,
+    });
+  } catch (error) {
+    printWarn(`Could not save the rebuildable publication runtime cache: ${error.message}`);
+  }
+
+  const publicationsById = new Map(
+    reconciliationPublications.filter((row) => row?.id).map((row) => [row.id, row]),
+  );
+  for (const row of activePublications) {
+    if (row?.id) publicationsById.set(row.id, row);
+  }
+  return [...publicationsById.values()];
+}
+
+export async function createPublicationSnapshot(publications = []) {
+  const directory = await mkdtemp(join(tmpdir(), 'orion-publications-'));
+  const path = join(directory, 'snapshot.json');
+  await writeFile(path, JSON.stringify(publications), { encoding: 'utf8', mode: 0o600 });
+  return {
+    path,
+    async cleanup() {
+      await rm(directory, { recursive: true, force: true });
+    },
+  };
 }
 
 function parseTrailingJsonArray(stdout) {
@@ -87,6 +242,7 @@ async function executePublicationPhase({
   asOf,
   scheduleApproved = false,
   reconcileOnly = false,
+  publicationSnapshotPath = '',
 }, options = {}) {
   const runProcess = options.runProcess || runLocalProcess;
   const executable = options.executable || process.execPath;
@@ -105,6 +261,9 @@ async function executePublicationPhase({
     args.push('--reconcile-only');
   } else if (scheduleApproved) {
     args.push('--schedule-approved');
+  }
+  if (publicationSnapshotPath) {
+    args.push('--publications-snapshot', publicationSnapshotPath);
   }
 
   const result = await runProcess({
@@ -179,12 +338,21 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
   const reconcileOnly = getBooleanOption(options, 'reconcile-only', false);
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
   const loadProfiles = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
-  const loadPublications = dependencies.loadQueuedPublications || loadQueuedPublications;
+  const loadPublications = dependencies.loadRuntimePublications
+    || dependencies.loadQueuedPublications
+    || loadRuntimePublications;
   const executePhase = dependencies.executePublicationPhase || executePublicationPhase;
   const executeSocialPhase = dependencies.executeSocialPublicationPhase || executeSocialPublicationPhase;
   const profiles = await loadProfiles(channelsPath, { projectRoot });
   const activeProfiles = profiles.filter((profile) => profile.status === 'active');
-  const publications = await loadPublications(runtimeConfig.env || {}, { fetchJson: dependencies.fetchJson || fetchJson });
+  const publications = await loadPublications(runtimeConfig.env || {}, {
+    fetchJson: dependencies.fetchJson || fetchJson,
+    channelProfiles: activeProfiles,
+    asOf,
+    ...(dependencies.runtimeCachePath === undefined
+      ? {}
+      : { cachePath: dependencies.runtimeCachePath }),
+  });
   const queuePlan = buildPublicationQueuePlan({
     publications,
     channelProfiles: activeProfiles,
@@ -206,78 +374,85 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
   let socialPublicationResults = [];
 
   if (!planOnly) {
+    const prepareSnapshot = dependencies.createPublicationSnapshot || createPublicationSnapshot;
+    const publicationSnapshot = await prepareSnapshot(publications);
     const phaseOptions = {
       runProcess: dependencies.runProcess,
       executable: dependencies.executable,
       scriptPath: dependencies.scriptPath,
     };
-
-    // Reconcile every channel before a missing or invalid preview can affect uploads.
-    for (let index = 0; index < activeProfiles.length; index += 1) {
-      const profile = activeProfiles[index];
-      const result = executionResults[index];
-      try {
-        result.schedule_update_results = await executePhase({
-          channelSelector: profile.account_key,
-          channelsPath,
-          asOf,
-          scheduleApproved: !reconcileOnly,
-          reconcileOnly,
-        }, phaseOptions);
-      } catch (error) {
-        result.schedule_update_error = String(error?.message || error);
-        executionErrors.push({
-          channel: profile.account_key,
-          phase: reconcileOnly ? 'reconciliation' : 'schedule_reconciliation',
-          error: result.schedule_update_error,
-        });
-      }
-    }
-
-    if (!reconcileOnly) {
+    try {
+      // Reconcile every channel before a missing or invalid preview can affect uploads.
       for (let index = 0; index < activeProfiles.length; index += 1) {
         const profile = activeProfiles[index];
         const result = executionResults[index];
         try {
-          result.preview_upload_results = await executePhase({
+          result.schedule_update_results = await executePhase({
             channelSelector: profile.account_key,
             channelsPath,
             asOf,
-            scheduleApproved: false,
-            reconcileOnly: false,
+            scheduleApproved: !reconcileOnly,
+            reconcileOnly,
+            publicationSnapshotPath: publicationSnapshot.path,
           }, phaseOptions);
         } catch (error) {
-          result.preview_upload_error = String(error?.message || error);
+          result.schedule_update_error = String(error?.message || error);
           executionErrors.push({
             channel: profile.account_key,
-            phase: 'preview_upload',
-            error: result.preview_upload_error,
+            phase: reconcileOnly ? 'reconciliation' : 'schedule_reconciliation',
+            error: result.schedule_update_error,
           });
         }
       }
-    }
 
-    for (const result of executionResults) {
-      printInfo(
-        `Processed ${result.channel.account_key}: ${result.preview_upload_results.length} preview upload(s), `
-        + `${result.schedule_update_results.length} schedule/reconciliation update(s).`
-      );
-    }
-    try {
-      socialPublicationResults = await executeSocialPhase({
-        asOf,
-      }, {
-        runProcess: dependencies.runProcess,
-        executable: dependencies.executable,
-        scriptPath: dependencies.socialScriptPath,
-      });
-      printInfo(`Processed ${socialPublicationResults.length} social publication task(s).`);
-    } catch (error) {
-      executionErrors.push({
-        channel: 'social',
-        phase: 'social_publication',
-        error: String(error?.message || error),
-      });
+      if (!reconcileOnly) {
+        for (let index = 0; index < activeProfiles.length; index += 1) {
+          const profile = activeProfiles[index];
+          const result = executionResults[index];
+          try {
+            result.preview_upload_results = await executePhase({
+              channelSelector: profile.account_key,
+              channelsPath,
+              asOf,
+              scheduleApproved: false,
+              reconcileOnly: false,
+              publicationSnapshotPath: publicationSnapshot.path,
+            }, phaseOptions);
+          } catch (error) {
+            result.preview_upload_error = String(error?.message || error);
+            executionErrors.push({
+              channel: profile.account_key,
+              phase: 'preview_upload',
+              error: result.preview_upload_error,
+            });
+          }
+        }
+      }
+
+      for (const result of executionResults) {
+        printInfo(
+          `Processed ${result.channel.account_key}: ${result.preview_upload_results.length} preview upload(s), `
+          + `${result.schedule_update_results.length} schedule/reconciliation update(s).`
+        );
+      }
+      try {
+        socialPublicationResults = await executeSocialPhase({
+          asOf,
+        }, {
+          runProcess: dependencies.runProcess,
+          executable: dependencies.executable,
+          scriptPath: dependencies.socialScriptPath,
+        });
+        printInfo(`Processed ${socialPublicationResults.length} social publication task(s).`);
+      } catch (error) {
+        executionErrors.push({
+          channel: 'social',
+          phase: 'social_publication',
+          error: String(error?.message || error),
+        });
+      }
+    } finally {
+      await publicationSnapshot.cleanup();
     }
   }
 

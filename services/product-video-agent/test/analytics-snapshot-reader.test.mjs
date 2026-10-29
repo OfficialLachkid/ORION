@@ -97,6 +97,35 @@ test('SupabasePublicationStore applies the analytics lookback filter and compact
   assert.equal(url.searchParams.get('captured_at'), 'gte.2026-09-06T07:00:00.000Z');
 });
 
+test('SupabasePublicationStore supports compact channel publication projections', async () => {
+  let requestUrl = '';
+  const store = new SupabasePublicationStore({
+    supabaseUrl: 'https://example.supabase.co',
+    apiKey: 'service-key',
+    fetchImpl: async (url) => {
+      requestUrl = String(url);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => '[]',
+      };
+    },
+  });
+
+  await store.fetchPublicationsByChannel({
+    platform: 'youtube_shorts',
+    accountKey: 'poke-quizz-youtube',
+    select: 'id,status,workflow_state:metadata->>workflow_state',
+    status: 'not.in.(published,deleted)',
+  });
+
+  const url = new URL(requestUrl);
+  assert.equal(url.searchParams.get('select'), 'id,status,workflow_state:metadata->>workflow_state');
+  assert.equal(url.searchParams.get('platform'), 'eq.youtube_shorts');
+  assert.equal(url.searchParams.get('account_key'), 'eq.poke-quizz-youtube');
+  assert.equal(url.searchParams.get('status'), 'not.in.(published,deleted)');
+});
+
 test('mergeAnalyticsSnapshotRows deduplicates overlap and prunes stale or unrelated cache rows', () => {
   const rows = mergeAnalyticsSnapshotRows({
     cachedSnapshots: [
