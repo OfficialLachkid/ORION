@@ -64,7 +64,7 @@
     "announcement_delay_seconds": 1.5,
     "sound_effect_role": "ding",
     "sound_volume": 0.9,
-    "duration_seconds": 2.8,
+    "duration_seconds": 1.8,
     "show_pokemon_name": true,
     "show_pokemon_sprite": true,
     "animation_enabled": true

@@ -222,7 +222,7 @@ test('winner hold and ding are scheduled at the reveal boundary', () => {
       intro_seconds: 1.5,
       countdown_playback_rate: 4 / 3,
       winner_delay_seconds: 1.5,
-      winner_seconds: 2.8,
+      winner_seconds: 1.8,
       frame_fps: 15,
       output_fps: 30,
       output_width: 1080,
@@ -230,7 +230,7 @@ test('winner hold and ding are scheduled at the reveal boundary', () => {
     },
   };
   const renderPlan = buildPokeQuizzRenderPlan({ plan });
-  assert.equal(renderPlan.duration_seconds, 25.8);
+  assert.equal(renderPlan.duration_seconds, 24.8);
   const args = buildBubbleSurvivalFfmpegArgs({
     plan,
     framesRoot: '/tmp/frames',
@@ -242,5 +242,6 @@ test('winner hold and ding are scheduled at the reveal boundary', () => {
   const filter = args[args.indexOf('-filter_complex') + 1];
   assert.match(filter, /atempo=1\.3333333333333333/u);
   assert.match(filter, /adelay=23000\|23000/u);
+  assert.match(filter, /afade=t=out:st=23\.000:d=1\.800/u);
   assert.match(filter, /amix=inputs=3/u);
 });

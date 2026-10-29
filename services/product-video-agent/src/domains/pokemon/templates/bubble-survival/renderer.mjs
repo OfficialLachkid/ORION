@@ -276,6 +276,7 @@ export function buildBubbleSurvivalFfmpegArgs({
     + Number(plan.simulation.duration_seconds)
     + Number(plan.video.winner_delay_seconds || 0);
   const winnerDelayMs = Math.round(winnerRevealSeconds * 1000);
+  const winnerSeconds = Number(plan.video.winner_seconds || 0);
   const musicVolume = Number(plan.audio?.music_volume ?? 0.12);
   const winnerDingVolume = Number(plan.audio?.winner_ding_volume ?? 0.9);
   const args = [
@@ -287,7 +288,7 @@ export function buildBubbleSurvivalFfmpegArgs({
     '-i', narrationPath,
     '-i', plan.assets.winner_ding_path,
     '-filter_complex', [
-      `[1:a]atrim=0:${durationSeconds.toFixed(3)},asetpts=N/SR/TB,volume=${musicVolume},afade=t=out:st=${Math.max(0, durationSeconds - 1).toFixed(3)}:d=1[music]`,
+      `[1:a]atrim=0:${durationSeconds.toFixed(3)},asetpts=N/SR/TB,volume=${musicVolume},afade=t=out:st=${winnerRevealSeconds.toFixed(3)}:d=${winnerSeconds.toFixed(3)}[music]`,
       `[2:a]atempo=${countdownPlaybackRate},atrim=0:${Number(plan.video.intro_seconds).toFixed(3)},asetpts=N/SR/TB,volume=1.0[voice]`,
       `[3:a]atrim=0:3,asetpts=N/SR/TB,adelay=${winnerDelayMs}|${winnerDelayMs},volume=${winnerDingVolume}[winner]`,
       '[music][voice][winner]amix=inputs=3:duration=first:dropout_transition=0[audio]',
