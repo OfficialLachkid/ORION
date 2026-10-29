@@ -148,7 +148,7 @@ export async function planPokemonBubbleSurvival({
 
   const introSeconds = Number(template?.intro?.duration_seconds ?? 1.5);
   const countdownPlaybackRate = Number(template?.intro?.voice_playback_rate ?? (4 / 3));
-  const winnerDelaySeconds = Number(template?.winner?.announcement_delay_seconds ?? 1.5);
+  const winnerDelaySeconds = Number(template?.winner?.announcement_delay_seconds ?? 0.75);
   const winnerSeconds = Number(template?.winner?.duration_seconds ?? 1.8);
 
   return {

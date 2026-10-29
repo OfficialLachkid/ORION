@@ -61,7 +61,7 @@
     "duck_music_during_voiceover": true
   },
   "winner": {
-    "announcement_delay_seconds": 1.5,
+    "announcement_delay_seconds": 0.75,
     "sound_effect_role": "ding",
     "sound_volume": 0.9,
     "duration_seconds": 1.8,
