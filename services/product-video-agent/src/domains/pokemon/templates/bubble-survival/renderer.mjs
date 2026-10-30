@@ -298,7 +298,8 @@ async function renderFrames({ plan, template, framesRoot }) {
   const frameCount = Math.ceil(durationSeconds * frameFps);
   const spriteDataUris = await loadSpriteDataUris(plan.selection.selected_subjects);
   const indexes = Array.from({ length: frameCount }, (_, index) => index);
-  await mapWithConcurrency(indexes, 4, async (index) => {
+  // librsvg can corrupt unrelated SVG tiles when filtered sprite frames are rasterized concurrently.
+  await mapWithConcurrency(indexes, 1, async (index) => {
     const svg = renderArenaSvg({
       plan,
       template,
