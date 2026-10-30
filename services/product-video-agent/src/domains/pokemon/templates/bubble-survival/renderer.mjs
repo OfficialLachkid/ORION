@@ -193,12 +193,17 @@ function renderArenaSvg({ plan, template, videoTime }) {
     // Avoid librsvg corruption once the sprite becomes a sub-pixel-scale despawn remnant.
     if (renderScale <= 0.2) return '';
     const renderRadius = bubbleRadius * renderScale;
+    const counterOffset = bubbleRadius * 0.63 * renderScale;
+    const counterX = bubble.x + counterOffset;
+    const counterY = bubble.y - counterOffset;
     return [
       '<g>',
       bubble.is_defeated
         ? ''
         : `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius + (3 * renderScale)}" fill="none" stroke="${color}" stroke-width="${8 * renderScale}" opacity="0.18"/>`,
       `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="${3 * renderScale}"/>`,
+      `<circle cx="${counterX}" cy="${counterY}" r="${7 * renderScale}" fill="#06101c" stroke="${color}" stroke-width="${1.5 * renderScale}"/>`,
+      `<text x="${counterX}" y="${counterY + (3 * renderScale)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${7 * renderScale}" font-weight="700" fill="#fff">${bubble.tail_count}</text>`,
       '</g>',
     ].join('');
   }).join('');
@@ -354,42 +359,6 @@ async function buildSpriteComposites({
   return composites;
 }
 
-function renderCounterOverlaySvg({ plan, videoTime }) {
-  const width = Number(plan.video.frame_width);
-  const height = Number(plan.video.frame_height);
-  const introSeconds = Number(plan.video.intro_seconds);
-  const winnerStart = introSeconds
-    + Number(plan.simulation.duration_seconds)
-    + Number(plan.video.winner_delay_seconds || 0);
-  if (videoTime >= winnerStart) return null;
-  const state = resolveTimelineFrame(plan, videoTime);
-  const simulationTime = Math.max(0, videoTime - introSeconds);
-  const bubbleRadius = Number(plan.simulation.config.bubble_radius);
-  const subjectIndexById = new Map(
-    plan.selection.selected_subjects.map((subject, index) => [subject.id, index]),
-  );
-  const markup = (state?.bubbles || []).map((bubble) => {
-    const renderScale = resolveDefeatedBubbleScale({
-      bubble,
-      simulationTime,
-      popScale: Number(plan.simulation.config.defeat_pop_scale ?? 1.2),
-      popSeconds: Number(plan.simulation.config.defeat_pop_seconds ?? 0.1),
-      shrinkSeconds: Number(plan.simulation.config.defeat_shrink_seconds ?? 0.577),
-    });
-    if (renderScale <= 0.2) return '';
-    const subjectIndex = subjectIndexById.get(bubble.id) ?? 0;
-    const color = BUBBLE_COLORS[subjectIndex % BUBBLE_COLORS.length];
-    const counterOffset = bubbleRadius * 0.63 * renderScale;
-    const counterX = bubble.x + counterOffset;
-    const counterY = bubble.y - counterOffset;
-    return [
-      `<circle cx="${counterX}" cy="${counterY}" r="${7 * renderScale}" fill="#06101c" stroke="${color}" stroke-width="${1.5 * renderScale}"/>`,
-      `<text x="${counterX}" y="${counterY + (3 * renderScale)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${7 * renderScale}" font-weight="700" fill="#fff">${bubble.tail_count}</text>`,
-    ].join('');
-  }).join('');
-  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${markup}</svg>`);
-}
-
 async function renderFrames({ plan, template, framesRoot }) {
   await rm(framesRoot, { recursive: true, force: true });
   await mkdir(framesRoot, { recursive: true });
@@ -421,12 +390,8 @@ async function renderFrames({ plan, template, framesRoot }) {
         spriteBuffers,
         resizedSpriteCache,
       });
-      const counterOverlay = renderCounterOverlaySvg({ plan, videoTime });
       await sharp(svg, { sequentialRead: true })
-        .composite([
-          ...spriteComposites,
-          ...(counterOverlay ? [{ input: counterOverlay }] : []),
-        ])
+        .composite(spriteComposites)
         .png({ compressionLevel: 4 })
         .toFile(resolve(framesRoot, frameFileName(index)));
     });
