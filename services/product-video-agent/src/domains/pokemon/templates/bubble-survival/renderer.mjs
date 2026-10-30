@@ -31,9 +31,16 @@ function frameFileName(index) {
   return `frame-${String(index).padStart(5, '0')}.png`;
 }
 
-function resolveCountdownText(time, introSeconds) {
-  const phase = Math.min(3, Math.floor((time / introSeconds) * 4));
-  return ['3', '2', '1', "LET'S GO!"][phase];
+export function resolveCountdownVisualState(time, introSeconds, playbackRate = 1) {
+  const duration = Math.max(0.001, Number(introSeconds) || 1.5);
+  const rate = Math.max(0.1, Number(playbackRate) || 1);
+  const scaledPhase = Math.max(0, (Number(time) / duration) * 4 * rate);
+  const phaseIndex = Math.min(3, Math.floor(scaledPhase));
+  return {
+    text: ['3', '2', '1', "LET'S GO!"][phaseIndex],
+    phase_index: phaseIndex,
+    local_phase: Math.min(1, Math.max(0, scaledPhase - phaseIndex)),
+  };
 }
 
 function resolveTimelineFrame(plan, videoTime) {
@@ -48,12 +55,25 @@ function resolveTimelineFrame(plan, videoTime) {
   return frames[frameIndex] || frames.at(-1);
 }
 
-export function resolveDefeatedBubbleScale({ bubble, simulationTime, shrinkSeconds }) {
+export function resolveDefeatedBubbleScale({
+  bubble,
+  simulationTime,
+  popScale = 1.2,
+  popSeconds = 0.1,
+  shrinkSeconds = 0.577,
+}) {
   if (!bubble?.is_defeated) return 1;
   if (bubble.defeated_at == null || !Number.isFinite(Number(bubble.defeated_at))) return 0;
-  const duration = Math.max(0.05, Number(shrinkSeconds) || 0.75);
   const elapsed = Math.max(0, Number(simulationTime) - Number(bubble.defeated_at));
-  return Math.max(0, Math.min(1, 1 - (elapsed / duration)));
+  const maximumScale = Math.max(1, Number(popScale) || 1.2);
+  const popDuration = Math.max(0.01, Number(popSeconds) || 0.1);
+  if (elapsed < popDuration) {
+    return 1 + ((maximumScale - 1) * (elapsed / popDuration));
+  }
+  const shrinkDuration = Math.max(0.05, Number(shrinkSeconds) || 0.577);
+  const shrinkElapsed = elapsed - popDuration;
+  const remainingScaleRatio = 1 - (shrinkElapsed / shrinkDuration);
+  return remainingScaleRatio <= 1e-9 ? 0 : maximumScale * remainingScaleRatio;
 }
 
 function estimateSvgTextWidth(text, fontSize) {
@@ -144,7 +164,9 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
   const centerY = Number(plan.simulation.config.center_y);
   const arenaRadius = Number(plan.simulation.config.arena_radius);
   const bubbleRadius = Number(plan.simulation.config.bubble_radius);
-  const defeatShrinkSeconds = Number(plan.simulation.config.defeat_shrink_seconds ?? 0.75);
+  const defeatPopScale = Number(plan.simulation.config.defeat_pop_scale ?? 1.2);
+  const defeatPopSeconds = Number(plan.simulation.config.defeat_pop_seconds ?? 0.1);
+  const defeatShrinkSeconds = Number(plan.simulation.config.defeat_shrink_seconds ?? 0.577);
   const winnerMode = videoTime >= winnerStart;
   const introMode = videoTime < introSeconds;
   const winner = subjectById.get(plan.winner.id);
@@ -165,10 +187,12 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     const renderScale = resolveDefeatedBubbleScale({
       bubble,
       simulationTime,
+      popScale: defeatPopScale,
+      popSeconds: defeatPopSeconds,
       shrinkSeconds: defeatShrinkSeconds,
     });
     if (renderScale <= 0) return '';
-    const shrinkTransform = renderScale < 1
+    const shrinkTransform = Math.abs(renderScale - 1) > 0.0001
       ? ` transform="translate(${bubble.x} ${bubble.y}) scale(${renderScale}) translate(${-bubble.x} ${-bubble.y})"`
       : '';
     const glowFilter = bubble.is_defeated ? '' : ' filter="url(#bubbleGlow)"';
@@ -184,13 +208,16 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
 
   let overlayMarkup = '';
   if (introMode) {
-    const countdown = resolveCountdownText(videoTime, introSeconds);
-    const localPhase = ((videoTime / introSeconds) * 4) % 1;
-    const scale = 1 + (Math.sin(Math.min(1, localPhase) * Math.PI) * 0.18);
+    const countdown = resolveCountdownVisualState(
+      videoTime,
+      introSeconds,
+      plan.video.visual_countdown_playback_rate,
+    );
+    const scale = 1 + (Math.sin(countdown.local_phase * Math.PI) * 0.18);
     overlayMarkup = [
       `<rect width="${width}" height="${height}" fill="#02040a" fill-opacity="0.18"/>`,
       `<g transform="translate(${centerX} ${centerY}) scale(${scale})">`,
-      `<text x="0" y="14" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${countdown.length > 2 ? 54 : 82}" font-weight="900" fill="#fff" stroke="#121b33" stroke-width="7" paint-order="stroke" filter="url(#textGlow)">${escapeXml(countdown)}</text>`,
+      `<text x="0" y="14" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${countdown.text.length > 2 ? 54 : 82}" font-weight="900" fill="#fff" stroke="#121b33" stroke-width="7" paint-order="stroke" filter="url(#textGlow)">${escapeXml(countdown.text)}</text>`,
       '</g>',
     ].join('');
   } else if (winnerMode && winner) {

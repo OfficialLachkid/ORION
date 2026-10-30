@@ -66,7 +66,9 @@ function buildSimulationConfig(template) {
     initial_tail_anchor_spread_degrees: Number(
       template?.bubbles?.initial_tail_anchor_spread_degrees ?? 7,
     ),
-    defeat_shrink_seconds: Number(template?.bubbles?.defeat_shrink_seconds ?? 0.75),
+    defeat_pop_scale: Number(template?.bubbles?.defeat_pop_scale ?? 1.2),
+    defeat_pop_seconds: Number(template?.bubbles?.defeat_pop_seconds ?? 0.1),
+    defeat_shrink_seconds: Number(template?.bubbles?.defeat_shrink_seconds ?? 0.577),
     initial_speed: Number(template?.bubbles?.initial_speed ?? 92.5),
     initial_angle_variation_degrees: Number(template?.bubbles?.initial_angle_variation_degrees ?? 0),
     collision_restitution: Number(template?.bubbles?.collision_restitution ?? 0.98),
@@ -157,6 +159,7 @@ export async function planPokemonBubbleSurvival({
 
   const introSeconds = Number(template?.intro?.duration_seconds ?? 1.5);
   const countdownPlaybackRate = Number(template?.intro?.voice_playback_rate ?? (4 / 3));
+  const visualCountdownPlaybackRate = Number(template?.intro?.visual_playback_rate ?? 1.3);
   const winnerDelaySeconds = Number(template?.winner?.announcement_delay_seconds ?? 0.75);
   const winnerSeconds = Number(template?.winner?.duration_seconds ?? 1.8);
 
@@ -195,6 +198,7 @@ export async function planPokemonBubbleSurvival({
     video: {
       intro_seconds: introSeconds,
       countdown_playback_rate: countdownPlaybackRate,
+      visual_countdown_playback_rate: visualCountdownPlaybackRate,
       winner_delay_seconds: winnerDelaySeconds,
       winner_seconds: winnerSeconds,
       output_fps: Number(template?.video?.fps ?? 30),

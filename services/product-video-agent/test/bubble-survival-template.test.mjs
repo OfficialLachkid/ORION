@@ -17,6 +17,7 @@ import {
   buildBubbleSurvivalFfmpegArgs,
   buildBubbleSurvivalTitleMarkup,
   buildPokeQuizzRenderPlan,
+  resolveCountdownVisualState,
   resolveDefeatedBubbleScale,
   wrapTextInsideFrame,
 } from '../src/domains/pokemon/templates/bubble-survival/renderer.mjs';
@@ -146,10 +147,26 @@ test('fixed-step simulation is deterministic, starts without overlap, and shrink
   assert.ok(tailBreakEvents.length > 0);
   assert.equal(tailBreakEvents.every((event) => Number.isFinite(event.time)), true);
   assert.equal(first.events.filter((event) => event.type === 'eliminated').length, 8);
-  assert.equal(resolveDefeatedBubbleScale({ bubble: { is_defeated: false }, simulationTime: 5, shrinkSeconds: 0.75 }), 1);
-  assert.equal(resolveDefeatedBubbleScale({ bubble: { is_defeated: true, defeated_at: 4 }, simulationTime: 4, shrinkSeconds: 0.75 }), 1);
-  assert.equal(resolveDefeatedBubbleScale({ bubble: { is_defeated: true, defeated_at: 4 }, simulationTime: 4.375, shrinkSeconds: 0.75 }), 0.5);
-  assert.equal(resolveDefeatedBubbleScale({ bubble: { is_defeated: true, defeated_at: 4 }, simulationTime: 4.75, shrinkSeconds: 0.75 }), 0);
+  const defeatedBubble = { is_defeated: true, defeated_at: 4 };
+  const despawn = { popScale: 1.2, popSeconds: 0.1, shrinkSeconds: 0.577 };
+  assert.equal(resolveDefeatedBubbleScale({ bubble: { is_defeated: false }, simulationTime: 5, ...despawn }), 1);
+  assert.equal(resolveDefeatedBubbleScale({ bubble: defeatedBubble, simulationTime: 4, ...despawn }), 1);
+  assert.ok(Math.abs(resolveDefeatedBubbleScale({
+    bubble: defeatedBubble,
+    simulationTime: 4.05,
+    ...despawn,
+  }) - 1.1) < 1e-9);
+  assert.ok(Math.abs(resolveDefeatedBubbleScale({
+    bubble: defeatedBubble,
+    simulationTime: 4.1,
+    ...despawn,
+  }) - 1.2) < 1e-9);
+  assert.ok(Math.abs(resolveDefeatedBubbleScale({
+    bubble: defeatedBubble,
+    simulationTime: 4.3885,
+    ...despawn,
+  }) - 0.6) < 1e-9);
+  assert.equal(resolveDefeatedBubbleScale({ bubble: defeatedBubble, simulationTime: 4.677, ...despawn }), 0);
 });
 
 test('planner selects unique readable Pokemon, produces replay data, and is seed-stable', async () => {
@@ -198,13 +215,16 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.simulation.outcome, 'winner');
     assert.equal(first.simulation.config.bubble_radius, 25.2);
     assert.equal(first.simulation.config.initial_tail_count, 3);
-    assert.equal(first.simulation.config.defeat_shrink_seconds, 0.75);
+    assert.equal(first.simulation.config.defeat_pop_scale, 1.2);
+    assert.equal(first.simulation.config.defeat_pop_seconds, 0.1);
+    assert.equal(first.simulation.config.defeat_shrink_seconds, 0.577);
     assert.equal(first.simulation.config.initial_speed, 92.5);
     assert.equal(first.assets.music_path, musicPath);
     assert.equal(first.assets.winner_ding_path, dingPath);
     assert.equal(first.assets.defeat_sound_path, reflectionPath);
     assert.equal(first.video.intro_seconds, 1.5);
     assert.equal(first.video.countdown_playback_rate, 4 / 3);
+    assert.equal(first.video.visual_countdown_playback_rate, 1.3);
     assert.equal(first.video.winner_delay_seconds, 0.75);
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -241,6 +261,18 @@ test('Bubble Survival title is split into frame-safe lines', () => {
     sideMargin: 50,
   });
   assert.equal(longWord.estimated_widths[0], longWord.maximum_width);
+});
+
+test('visual countdown advances 30 percent faster and holds LETS GO through the intro', () => {
+  assert.deepEqual(resolveCountdownVisualState(0, 1.5, 1.3), {
+    text: '3',
+    phase_index: 0,
+    local_phase: 0,
+  });
+  assert.equal(resolveCountdownVisualState(0.3, 1.5, 1.3).text, '2');
+  assert.equal(resolveCountdownVisualState(0.6, 1.5, 1.3).text, '1');
+  assert.equal(resolveCountdownVisualState(0.9, 1.5, 1.3).text, "LET'S GO!");
+  assert.equal(resolveCountdownVisualState(1.45, 1.5, 1.3).text, "LET'S GO!");
 });
 
 test('winner hold, ding, and defeat-only shrink cues are scheduled at their boundaries', () => {

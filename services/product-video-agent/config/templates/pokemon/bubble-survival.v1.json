@@ -36,7 +36,9 @@
     "start_inset": 5,
     "initial_tail_count": 3,
     "initial_tail_anchor_spread_degrees": 7,
-    "defeat_shrink_seconds": 0.75,
+    "defeat_pop_scale": 1.2,
+    "defeat_pop_seconds": 0.1,
+    "defeat_shrink_seconds": 0.577,
     "initial_speed": 92.5,
     "initial_direction": "toward_center",
     "initial_angle_variation_degrees": 0,
@@ -54,6 +56,7 @@
   "intro": {
     "duration_seconds": 1.5,
     "voice_playback_rate": 1.3333333333333333,
+    "visual_playback_rate": 1.3,
     "text": ["3", "2", "1", "LET'S GO!"],
     "voiceover": "3, 2, 1, let's go!",
     "use_existing_voice_model": true

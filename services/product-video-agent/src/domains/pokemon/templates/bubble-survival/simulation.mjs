@@ -70,13 +70,13 @@ export function movingCircleIntersectsSegment(previousCenter, center, radius, st
   return segmentToSegmentDistanceSquared(previousCenter, center, start, end) <= radius * radius;
 }
 
-function snapshotState(time, bubbles, tails, events, defeatShrinkSeconds) {
+function snapshotState(time, bubbles, tails, events, defeatDespawnSeconds) {
   const livingIds = new Set(bubbles.filter((bubble) => bubble.alive).map((bubble) => bubble.id));
   const renderableBubbles = bubbles.filter((bubble) => (
     bubble.alive
     || (
       Number.isFinite(bubble.defeated_at)
-      && time - bubble.defeated_at <= defeatShrinkSeconds + EPSILON
+      && time - bubble.defeated_at <= defeatDespawnSeconds + EPSILON
     )
   ));
   return {
@@ -182,7 +182,9 @@ function normalizeSimulationConfig(raw = {}) {
     start_inset: Number(raw.start_inset ?? 5),
     initial_tail_count: Math.max(1, Math.round(Number(raw.initial_tail_count ?? 3))),
     initial_tail_anchor_spread_radians: Number(raw.initial_tail_anchor_spread_degrees ?? 7) * Math.PI / 180,
-    defeat_shrink_seconds: Math.max(0.05, Number(raw.defeat_shrink_seconds ?? 0.75)),
+    defeat_pop_scale: Math.max(1, Number(raw.defeat_pop_scale ?? 1.2)),
+    defeat_pop_seconds: Math.max(0, Number(raw.defeat_pop_seconds ?? 0.1)),
+    defeat_shrink_seconds: Math.max(0.05, Number(raw.defeat_shrink_seconds ?? 0.577)),
     initial_speed: Number(raw.initial_speed ?? 92.5),
     initial_angle_variation_radians: Number(raw.initial_angle_variation_degrees ?? 0) * Math.PI / 180,
     restitution: clamp(Number(raw.collision_restitution ?? 0.98), 0, 1),
@@ -207,7 +209,8 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
   let nextSampleTime = 1 / config.sample_fps;
   let lastEliminationTime = 0;
   let nextSpeedUpTime = config.speed_up_interval_seconds;
-  const frames = [snapshotState(0, bubbles, tails, [], config.defeat_shrink_seconds)];
+  const defeatDespawnSeconds = config.defeat_pop_seconds + config.defeat_shrink_seconds;
+  const frames = [snapshotState(0, bubbles, tails, [], defeatDespawnSeconds)];
   const eventLog = [];
 
   while (time <= config.maximum_seconds + EPSILON) {
@@ -319,13 +322,13 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
     }
 
     if (time + EPSILON >= nextSampleTime) {
-      frames.push(snapshotState(time, bubbles, tails, stepEvents, config.defeat_shrink_seconds));
+      frames.push(snapshotState(time, bubbles, tails, stepEvents, defeatDespawnSeconds));
       nextSampleTime += 1 / config.sample_fps;
     }
 
     const survivors = bubbles.filter((bubble) => bubble.alive);
     if (survivors.length <= 1) {
-      frames.push(snapshotState(time, bubbles, tails, stepEvents, config.defeat_shrink_seconds));
+      frames.push(snapshotState(time, bubbles, tails, stepEvents, defeatDespawnSeconds));
       return {
         outcome: survivors.length === 1 ? 'winner' : 'draw',
         winner_id: survivors[0]?.id || null,
