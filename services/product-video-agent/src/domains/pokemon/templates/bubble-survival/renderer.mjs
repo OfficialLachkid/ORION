@@ -171,8 +171,9 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     const shrinkTransform = renderScale < 1
       ? ` transform="translate(${bubble.x} ${bubble.y}) scale(${renderScale}) translate(${-bubble.x} ${-bubble.y})"`
       : '';
+    const glowFilter = bubble.is_defeated ? '' : ' filter="url(#bubbleGlow)"';
     return [
-      `<g filter="url(#bubbleGlow)"${shrinkTransform}>`,
+      `<g${glowFilter}${shrinkTransform}>`,
       `<circle cx="${bubble.x}" cy="${bubble.y}" r="${bubbleRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="3"/>`,
       `<image href="${spriteDataUris.get(subject.id)}" x="${bubble.x - (imageSize / 2)}" y="${bubble.y - (imageSize / 2)}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid meet"/>`,
       `<circle cx="${bubble.x + (bubbleRadius * 0.63)}" cy="${bubble.y - (bubbleRadius * 0.63)}" r="7" fill="#06101c" stroke="${color}" stroke-width="1.5"/>`,
