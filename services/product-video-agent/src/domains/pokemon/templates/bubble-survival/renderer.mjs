@@ -197,9 +197,11 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     const counterOffset = bubbleRadius * 0.63 * renderScale;
     const counterX = bubble.x + counterOffset;
     const counterY = bubble.y - counterOffset;
-    const glowFilter = bubble.is_defeated ? '' : ' filter="url(#bubbleGlow)"';
     return [
-      `<g${glowFilter}>`,
+      '<g>',
+      bubble.is_defeated
+        ? ''
+        : `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius + (3 * renderScale)}" fill="none" stroke="${color}" stroke-width="${8 * renderScale}" opacity="0.18"/>`,
       `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="${3 * renderScale}"/>`,
       `<image href="${spriteDataUris.get(subject.id)}" x="${bubble.x - (imageSize / 2)}" y="${bubble.y - (imageSize / 2)}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid meet"/>`,
       `<circle cx="${counterX}" cy="${counterY}" r="${7 * renderScale}" fill="#06101c" stroke="${color}" stroke-width="${1.5 * renderScale}"/>`,
@@ -217,9 +219,11 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     );
     const scale = 1 + (Math.sin(countdown.local_phase * Math.PI) * 0.18);
     const baseFontSize = countdown.text.length > 2 ? 54 : 82;
+    const countdownText = escapeXml(countdown.text);
     overlayMarkup = [
       `<rect width="${width}" height="${height}" fill="#02040a" fill-opacity="0.18"/>`,
-      `<text x="${centerX}" y="${centerY + (14 * scale)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${baseFontSize * scale}" font-weight="900" fill="#fff" stroke="#121b33" stroke-width="${7 * scale}" paint-order="stroke" filter="url(#textGlow)">${escapeXml(countdown.text)}</text>`,
+      `<text x="${centerX}" y="${centerY + (14 * scale)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${baseFontSize * scale}" font-weight="900" fill="none" stroke="#8ea7e8" stroke-width="${16 * scale}" opacity="0.16">${countdownText}</text>`,
+      `<text x="${centerX}" y="${centerY + (14 * scale)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${baseFontSize * scale}" font-weight="900" fill="#fff" stroke="#121b33" stroke-width="${7 * scale}" paint-order="stroke">${countdownText}</text>`,
     ].join('');
   } else if (winnerMode && winner) {
     const imageSize = 190;
@@ -235,7 +239,8 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     });
     overlayMarkup = [
       `<rect width="${width}" height="${height}" fill="#02040a" fill-opacity="0.78"/>`,
-      `<circle cx="${centerX}" cy="${centerY - 25}" r="135" fill="#0b1b31" stroke="#FFD166" stroke-width="6" filter="url(#winnerGlow)"/>`,
+      `<circle cx="${centerX}" cy="${centerY - 25}" r="142" fill="none" stroke="#FFD166" stroke-width="14" opacity="0.18"/>`,
+      `<circle cx="${centerX}" cy="${centerY - 25}" r="135" fill="#0b1b31" stroke="#FFD166" stroke-width="6"/>`,
       `<image href="${spriteDataUris.get(winner.id)}" x="${centerX - (imageSize / 2)}" y="${centerY - 120}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid meet"/>`,
       `<text x="${centerX}" y="${centerY - 178}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="34" font-weight="900" fill="#FFD166" stroke="#241900" stroke-width="5" paint-order="stroke">WINNER</text>`,
       ...winnerName.markup,
@@ -248,9 +253,6 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     '<defs>',
     '<radialGradient id="bg" cx="50%" cy="42%" r="75%"><stop offset="0%" stop-color="#13233d"/><stop offset="58%" stop-color="#050914"/><stop offset="100%" stop-color="#010204"/></radialGradient>',
-    '<filter id="bubbleGlow"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
-    '<filter id="textGlow"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
-    '<filter id="winnerGlow"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>',
     '</defs>',
     `<rect width="${width}" height="${height}" fill="url(#bg)"/>`,
     '<g opacity="0.18">',
@@ -259,7 +261,8 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     ...title.markup,
     `<text x="${centerX}" y="${title.category_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#76ddff">${categoryLabel}</text>`,
     `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius + 5}" fill="#03101b" fill-opacity="0.36" stroke="#11263f" stroke-width="8"/>`,
-    `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius}" fill="none" stroke="#67dcff" stroke-width="3" filter="url(#bubbleGlow)"/>`,
+    `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius + 2}" fill="none" stroke="#67dcff" stroke-width="11" opacity="0.16"/>`,
+    `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius}" fill="none" stroke="#67dcff" stroke-width="3"/>`,
     tailMarkup,
     bubbleMarkup,
     `<text x="${centerX}" y="${height - 75}" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#b7c9dc">CROSS A RIVAL'S TAIL TO CUT IT</text>`,
