@@ -148,7 +148,7 @@ export function buildBubbleSurvivalTitleMarkup({ centerX, frameWidth }) {
   };
 }
 
-function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
+function renderArenaSvg({ plan, template, videoTime }) {
   const width = Number(plan.video.frame_width);
   const height = Number(plan.video.frame_height);
   const introSeconds = Number(plan.video.intro_seconds);
@@ -193,19 +193,12 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     // Avoid librsvg corruption once the sprite becomes a sub-pixel-scale despawn remnant.
     if (renderScale <= 0.2) return '';
     const renderRadius = bubbleRadius * renderScale;
-    const imageSize = bubbleRadius * 1.55 * renderScale;
-    const counterOffset = bubbleRadius * 0.63 * renderScale;
-    const counterX = bubble.x + counterOffset;
-    const counterY = bubble.y - counterOffset;
     return [
       '<g>',
       bubble.is_defeated
         ? ''
         : `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius + (3 * renderScale)}" fill="none" stroke="${color}" stroke-width="${8 * renderScale}" opacity="0.18"/>`,
       `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="${3 * renderScale}"/>`,
-      `<image href="${spriteDataUris.get(subject.id)}" x="${bubble.x - (imageSize / 2)}" y="${bubble.y - (imageSize / 2)}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid meet"/>`,
-      `<circle cx="${counterX}" cy="${counterY}" r="${7 * renderScale}" fill="#06101c" stroke="${color}" stroke-width="${1.5 * renderScale}"/>`,
-      `<text x="${counterX}" y="${counterY + (3 * renderScale)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${7 * renderScale}" font-weight="700" fill="#fff">${bubble.tail_count}</text>`,
       '</g>',
     ].join('');
   }).join('');
@@ -226,7 +219,6 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
       `<text x="${centerX}" y="${centerY + (14 * scale)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${baseFontSize * scale}" font-weight="900" fill="#fff" stroke="#121b33" stroke-width="${7 * scale}" paint-order="stroke">${countdownText}</text>`,
     ].join('');
   } else if (winnerMode && winner) {
-    const imageSize = 190;
     const winnerName = buildBoundaryAwareTextMarkup({
       text: winner.name.toUpperCase(),
       centerX,
@@ -241,7 +233,6 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
       `<rect width="${width}" height="${height}" fill="#02040a" fill-opacity="0.78"/>`,
       `<circle cx="${centerX}" cy="${centerY - 25}" r="142" fill="none" stroke="#FFD166" stroke-width="14" opacity="0.18"/>`,
       `<circle cx="${centerX}" cy="${centerY - 25}" r="135" fill="#0b1b31" stroke="#FFD166" stroke-width="6"/>`,
-      `<image href="${spriteDataUris.get(winner.id)}" x="${centerX - (imageSize / 2)}" y="${centerY - 120}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid meet"/>`,
       `<text x="${centerX}" y="${centerY - 178}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="34" font-weight="900" fill="#FFD166" stroke="#241900" stroke-width="5" paint-order="stroke">WINNER</text>`,
       ...winnerName.markup,
     ].join('');
@@ -283,12 +274,120 @@ async function mapWithConcurrency(values, concurrency, iteratee) {
   await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, () => worker()));
 }
 
-async function loadSpriteDataUris(subjects) {
+async function loadSpriteBuffers(subjects) {
   const entries = await Promise.all(subjects.map(async (subject) => {
     const bytes = await readFile(subject.sprite_path);
-    return [subject.id, `data:image/png;base64,${bytes.toString('base64')}`];
+    return [subject.id, bytes];
   }));
   return new Map(entries);
+}
+
+async function resizeSprite({ subjectId, size, spriteBuffers, resizedSpriteCache }) {
+  const roundedSize = Math.max(1, Math.round(size));
+  const cacheKey = `${subjectId}:${roundedSize}`;
+  if (!resizedSpriteCache.has(cacheKey)) {
+    const source = spriteBuffers.get(subjectId);
+    if (!source) throw new Error(`Missing Bubble Survival sprite buffer for ${subjectId}.`);
+    resizedSpriteCache.set(cacheKey, sharp(source)
+      .resize(roundedSize, roundedSize, { fit: 'contain' })
+      .png()
+      .toBuffer());
+  }
+  return {
+    input: await resizedSpriteCache.get(cacheKey),
+    size: roundedSize,
+  };
+}
+
+async function buildSpriteComposites({
+  plan,
+  videoTime,
+  spriteBuffers,
+  resizedSpriteCache,
+}) {
+  const introSeconds = Number(plan.video.intro_seconds);
+  const simulationSeconds = Number(plan.simulation.duration_seconds);
+  const winnerStart = introSeconds
+    + simulationSeconds
+    + Number(plan.video.winner_delay_seconds || 0);
+  const centerX = Number(plan.simulation.config.center_x);
+  const centerY = Number(plan.simulation.config.center_y);
+  if (videoTime >= winnerStart) {
+    const sprite = await resizeSprite({
+      subjectId: plan.winner.id,
+      size: 190,
+      spriteBuffers,
+      resizedSpriteCache,
+    });
+    return [{
+      input: sprite.input,
+      left: Math.round(centerX - (sprite.size / 2)),
+      top: Math.round(centerY - 120),
+    }];
+  }
+
+  const state = resolveTimelineFrame(plan, videoTime);
+  const simulationTime = Math.max(0, videoTime - introSeconds);
+  const bubbleRadius = Number(plan.simulation.config.bubble_radius);
+  const composites = [];
+  for (const bubble of state?.bubbles || []) {
+    const renderScale = resolveDefeatedBubbleScale({
+      bubble,
+      simulationTime,
+      popScale: Number(plan.simulation.config.defeat_pop_scale ?? 1.2),
+      popSeconds: Number(plan.simulation.config.defeat_pop_seconds ?? 0.1),
+      shrinkSeconds: Number(plan.simulation.config.defeat_shrink_seconds ?? 0.577),
+    });
+    if (renderScale <= 0.2) continue;
+    const sprite = await resizeSprite({
+      subjectId: bubble.id,
+      size: bubbleRadius * 1.55 * renderScale,
+      spriteBuffers,
+      resizedSpriteCache,
+    });
+    composites.push({
+      input: sprite.input,
+      left: Math.round(bubble.x - (sprite.size / 2)),
+      top: Math.round(bubble.y - (sprite.size / 2)),
+    });
+  }
+  return composites;
+}
+
+function renderCounterOverlaySvg({ plan, videoTime }) {
+  const width = Number(plan.video.frame_width);
+  const height = Number(plan.video.frame_height);
+  const introSeconds = Number(plan.video.intro_seconds);
+  const winnerStart = introSeconds
+    + Number(plan.simulation.duration_seconds)
+    + Number(plan.video.winner_delay_seconds || 0);
+  if (videoTime >= winnerStart) return null;
+  const state = resolveTimelineFrame(plan, videoTime);
+  const simulationTime = Math.max(0, videoTime - introSeconds);
+  const bubbleRadius = Number(plan.simulation.config.bubble_radius);
+  const subjectIndexById = new Map(
+    plan.selection.selected_subjects.map((subject, index) => [subject.id, index]),
+  );
+  const markup = (state?.bubbles || []).map((bubble) => {
+    const renderScale = resolveDefeatedBubbleScale({
+      bubble,
+      simulationTime,
+      popScale: Number(plan.simulation.config.defeat_pop_scale ?? 1.2),
+      popSeconds: Number(plan.simulation.config.defeat_pop_seconds ?? 0.1),
+      shrinkSeconds: Number(plan.simulation.config.defeat_shrink_seconds ?? 0.577),
+    });
+    if (renderScale <= 0.2) return '';
+    const subjectIndex = subjectIndexById.get(bubble.id) ?? 0;
+    const color = BUBBLE_COLORS[subjectIndex % BUBBLE_COLORS.length];
+    const counterOffset = bubbleRadius * 0.63 * renderScale;
+    const counterX = bubble.x + counterOffset;
+    const counterY = bubble.y - counterOffset;
+    return [
+      `<circle cx="${counterX}" cy="${counterY}" r="${7 * renderScale}" fill="#06101c" stroke="${color}" stroke-width="${1.5 * renderScale}"/>`,
+      `<text x="${counterX}" y="${counterY + (3 * renderScale)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${7 * renderScale}" font-weight="700" fill="#fff">${bubble.tail_count}</text>`,
+    ].join('');
+  }).join('');
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${markup}</svg>`);
 }
 
 async function renderFrames({ plan, template, framesRoot }) {
@@ -300,7 +399,8 @@ async function renderFrames({ plan, template, framesRoot }) {
     + Number(plan.video.winner_seconds)).toFixed(3));
   const frameFps = Number(plan.video.frame_fps);
   const frameCount = Math.ceil(durationSeconds * frameFps);
-  const spriteDataUris = await loadSpriteDataUris(plan.selection.selected_subjects);
+  const spriteBuffers = await loadSpriteBuffers(plan.selection.selected_subjects);
+  const resizedSpriteCache = new Map();
   const indexes = Array.from({ length: frameCount }, (_, index) => index);
   const previousConcurrency = sharp.concurrency();
   const previousCache = sharp.cache();
@@ -313,9 +413,20 @@ async function renderFrames({ plan, template, framesRoot }) {
         plan,
         template,
         videoTime: index / frameFps,
-        spriteDataUris,
       });
+      const videoTime = index / frameFps;
+      const spriteComposites = await buildSpriteComposites({
+        plan,
+        videoTime,
+        spriteBuffers,
+        resizedSpriteCache,
+      });
+      const counterOverlay = renderCounterOverlaySvg({ plan, videoTime });
       await sharp(svg, { sequentialRead: true })
+        .composite([
+          ...spriteComposites,
+          ...(counterOverlay ? [{ input: counterOverlay }] : []),
+        ])
         .png({ compressionLevel: 4 })
         .toFile(resolve(framesRoot, frameFileName(index)));
     });
