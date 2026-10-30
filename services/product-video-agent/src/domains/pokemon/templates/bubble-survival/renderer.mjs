@@ -183,7 +183,6 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     const subject = subjectById.get(bubble.id);
     if (!subject) return '';
     const color = BUBBLE_COLORS[subject.index % BUBBLE_COLORS.length];
-    const imageSize = bubbleRadius * 1.55;
     const renderScale = resolveDefeatedBubbleScale({
       bubble,
       simulationTime,
@@ -192,16 +191,18 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
       shrinkSeconds: defeatShrinkSeconds,
     });
     if (renderScale <= 0) return '';
-    const shrinkTransform = Math.abs(renderScale - 1) > 0.0001
-      ? ` transform="translate(${bubble.x} ${bubble.y}) scale(${renderScale}) translate(${-bubble.x} ${-bubble.y})"`
-      : '';
+    const renderRadius = bubbleRadius * renderScale;
+    const imageSize = bubbleRadius * 1.55 * renderScale;
+    const counterOffset = bubbleRadius * 0.63 * renderScale;
+    const counterX = bubble.x + counterOffset;
+    const counterY = bubble.y - counterOffset;
     const glowFilter = bubble.is_defeated ? '' : ' filter="url(#bubbleGlow)"';
     return [
-      `<g${glowFilter}${shrinkTransform}>`,
-      `<circle cx="${bubble.x}" cy="${bubble.y}" r="${bubbleRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="3"/>`,
+      `<g${glowFilter}>`,
+      `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="${3 * renderScale}"/>`,
       `<image href="${spriteDataUris.get(subject.id)}" x="${bubble.x - (imageSize / 2)}" y="${bubble.y - (imageSize / 2)}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid meet"/>`,
-      `<circle cx="${bubble.x + (bubbleRadius * 0.63)}" cy="${bubble.y - (bubbleRadius * 0.63)}" r="7" fill="#06101c" stroke="${color}" stroke-width="1.5"/>`,
-      `<text x="${bubble.x + (bubbleRadius * 0.63)}" y="${bubble.y - (bubbleRadius * 0.63) + 3}" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" font-weight="700" fill="#fff">${bubble.tail_count}</text>`,
+      `<circle cx="${counterX}" cy="${counterY}" r="${7 * renderScale}" fill="#06101c" stroke="${color}" stroke-width="${1.5 * renderScale}"/>`,
+      `<text x="${counterX}" y="${counterY + (3 * renderScale)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${7 * renderScale}" font-weight="700" fill="#fff">${bubble.tail_count}</text>`,
       '</g>',
     ].join('');
   }).join('');
@@ -214,11 +215,10 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
       plan.video.visual_countdown_playback_rate,
     );
     const scale = 1 + (Math.sin(countdown.local_phase * Math.PI) * 0.18);
+    const baseFontSize = countdown.text.length > 2 ? 54 : 82;
     overlayMarkup = [
       `<rect width="${width}" height="${height}" fill="#02040a" fill-opacity="0.18"/>`,
-      `<g transform="translate(${centerX} ${centerY}) scale(${scale})">`,
-      `<text x="0" y="14" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${countdown.text.length > 2 ? 54 : 82}" font-weight="900" fill="#fff" stroke="#121b33" stroke-width="7" paint-order="stroke" filter="url(#textGlow)">${escapeXml(countdown.text)}</text>`,
-      '</g>',
+      `<text x="${centerX}" y="${centerY + (14 * scale)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${baseFontSize * scale}" font-weight="900" fill="#fff" stroke="#121b33" stroke-width="${7 * scale}" paint-order="stroke" filter="url(#textGlow)">${escapeXml(countdown.text)}</text>`,
     ].join('');
   } else if (winnerMode && winner) {
     const imageSize = 190;
