@@ -4,7 +4,7 @@
   "version": 1,
   "selection_rules": {
     "category": "legendary",
-    "pokemon_count": 12,
+    "pokemon_count": 9,
     "supported_categories": [
       "legendary",
       "mythical",
@@ -32,8 +32,11 @@
     "stationary": true
   },
   "bubbles": {
-    "radius": 21,
+    "radius": 25.2,
     "start_inset": 5,
+    "initial_tail_count": 3,
+    "initial_tail_anchor_spread_degrees": 7,
+    "defeat_shrink_seconds": 0.75,
     "initial_speed": 92.5,
     "initial_direction": "toward_center",
     "initial_angle_variation_degrees": 0,
@@ -45,7 +48,7 @@
     "stagnation_seconds": 10,
     "maximum_attempts": 8,
     "speed_up_interval_seconds": 7,
-    "speed_up_multiplier": 1.12,
+    "speed_up_multiplier": 1.18,
     "draw_policy": "retry-with-derived-seed"
   },
   "intro": {
@@ -58,8 +61,8 @@
   "audio": {
     "use_existing_t7_music_library": true,
     "music_volume": 0.12,
-    "tail_break_sound_role": "reflection",
-    "tail_break_sound_volume": 0.55,
+    "defeat_sound_role": "reflection",
+    "defeat_sound_volume": 0.55,
     "duck_music_during_voiceover": true
   },
   "winner": {

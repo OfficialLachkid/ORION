@@ -48,6 +48,14 @@ function resolveTimelineFrame(plan, videoTime) {
   return frames[frameIndex] || frames.at(-1);
 }
 
+export function resolveDefeatedBubbleScale({ bubble, simulationTime, shrinkSeconds }) {
+  if (!bubble?.is_defeated) return 1;
+  if (bubble.defeated_at == null || !Number.isFinite(Number(bubble.defeated_at))) return 0;
+  const duration = Math.max(0.05, Number(shrinkSeconds) || 0.75);
+  const elapsed = Math.max(0, Number(simulationTime) - Number(bubble.defeated_at));
+  return Math.max(0, Math.min(1, 1 - (elapsed / duration)));
+}
+
 function estimateSvgTextWidth(text, fontSize) {
   return [...String(text || '')].reduce((width, character) => {
     if (/\s/u.test(character)) return width + (fontSize * 0.36);
@@ -127,6 +135,7 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
   const simulationSeconds = Number(plan.simulation.duration_seconds);
   const winnerDelaySeconds = Number(plan.video.winner_delay_seconds || 0);
   const winnerStart = introSeconds + simulationSeconds + winnerDelaySeconds;
+  const simulationTime = Math.max(0, videoTime - introSeconds);
   const state = resolveTimelineFrame(plan, videoTime);
   const subjects = plan.selection.selected_subjects;
   const subjectById = new Map(subjects.map((subject, index) => [subject.id, { ...subject, index }]));
@@ -135,6 +144,7 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
   const centerY = Number(plan.simulation.config.center_y);
   const arenaRadius = Number(plan.simulation.config.arena_radius);
   const bubbleRadius = Number(plan.simulation.config.bubble_radius);
+  const defeatShrinkSeconds = Number(plan.simulation.config.defeat_shrink_seconds ?? 0.75);
   const winnerMode = videoTime >= winnerStart;
   const introMode = videoTime < introSeconds;
   const winner = subjectById.get(plan.winner.id);
@@ -152,8 +162,17 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
     if (!subject) return '';
     const color = BUBBLE_COLORS[subject.index % BUBBLE_COLORS.length];
     const imageSize = bubbleRadius * 1.55;
+    const renderScale = resolveDefeatedBubbleScale({
+      bubble,
+      simulationTime,
+      shrinkSeconds: defeatShrinkSeconds,
+    });
+    if (renderScale <= 0) return '';
+    const shrinkTransform = renderScale < 1
+      ? ` transform="translate(${bubble.x} ${bubble.y}) scale(${renderScale}) translate(${-bubble.x} ${-bubble.y})"`
+      : '';
     return [
-      `<g filter="url(#bubbleGlow)">`,
+      `<g filter="url(#bubbleGlow)"${shrinkTransform}>`,
       `<circle cx="${bubble.x}" cy="${bubble.y}" r="${bubbleRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="3"/>`,
       `<image href="${spriteDataUris.get(subject.id)}" x="${bubble.x - (imageSize / 2)}" y="${bubble.y - (imageSize / 2)}" width="${imageSize}" height="${imageSize}" preserveAspectRatio="xMidYMid meet"/>`,
       `<circle cx="${bubble.x + (bubbleRadius * 0.63)}" cy="${bubble.y - (bubbleRadius * 0.63)}" r="7" fill="#06101c" stroke="${color}" stroke-width="1.5"/>`,
@@ -278,20 +297,20 @@ export function buildBubbleSurvivalFfmpegArgs({
   const winnerSeconds = Number(plan.video.winner_seconds || 0);
   const musicVolume = Number(plan.audio?.music_volume ?? 0.12);
   const winnerDingVolume = Number(plan.audio?.winner_ding_volume ?? 0.9);
-  const tailBreakSoundVolume = Number(plan.audio?.tail_break_sound_volume ?? 0.55);
-  const tailBreakEvents = (Array.isArray(plan.simulation?.events) ? plan.simulation.events : [])
-    .filter((event) => event?.type === 'tail_destroyed' && Number.isFinite(Number(event.time)))
+  const defeatSoundVolume = Number(plan.audio?.defeat_sound_volume ?? 0.55);
+  const defeatEvents = (Array.isArray(plan.simulation?.events) ? plan.simulation.events : [])
+    .filter((event) => event?.type === 'eliminated' && Number.isFinite(Number(event.time)))
     .sort((left, right) => Number(left.time) - Number(right.time));
-  const tailBreakInputs = tailBreakEvents.flatMap(() => [
-    '-i', plan.assets.tail_break_sound_path,
+  const defeatInputs = defeatEvents.flatMap(() => [
+    '-i', plan.assets.defeat_sound_path,
   ]);
-  const tailBreakFilters = tailBreakEvents.map((event, index) => {
+  const defeatFilters = defeatEvents.map((event, index) => {
     const delayMs = Math.round((Number(plan.video.intro_seconds) + Number(event.time)) * 1000);
-    return `[${index + 4}:a]atrim=0:2,asetpts=N/SR/TB,adelay=${delayMs}|${delayMs},volume=${tailBreakSoundVolume}[tail_break_${index}]`;
+    return `[${index + 4}:a]atrim=0:2,asetpts=N/SR/TB,adelay=${delayMs}|${delayMs},volume=${defeatSoundVolume}[defeat_${index}]`;
   });
   const baseAudioFilter = '[music][voice][winner]amix=inputs=3:duration=first:dropout_transition=0';
-  const audioMixFilter = tailBreakEvents.length > 0
-    ? `${baseAudioFilter}[base];[base]${tailBreakEvents.map((_event, index) => `[tail_break_${index}]`).join('')}amix=inputs=${tailBreakEvents.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[audio]`
+  const audioMixFilter = defeatEvents.length > 0
+    ? `${baseAudioFilter}[base];[base]${defeatEvents.map((_event, index) => `[defeat_${index}]`).join('')}amix=inputs=${defeatEvents.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[audio]`
     : `${baseAudioFilter}[audio]`;
   const args = [
     '-y',
@@ -301,12 +320,12 @@ export function buildBubbleSurvivalFfmpegArgs({
     '-i', plan.assets.music_path,
     '-i', narrationPath,
     '-i', plan.assets.winner_ding_path,
-    ...tailBreakInputs,
+    ...defeatInputs,
     '-filter_complex', [
       `[1:a]atrim=0:${durationSeconds.toFixed(3)},asetpts=N/SR/TB,volume=${musicVolume},afade=t=out:st=${winnerRevealSeconds.toFixed(3)}:d=${winnerSeconds.toFixed(3)}[music]`,
       `[2:a]atempo=${countdownPlaybackRate},atrim=0:${Number(plan.video.intro_seconds).toFixed(3)},asetpts=N/SR/TB,volume=1.0[voice]`,
       `[3:a]atrim=0:3,asetpts=N/SR/TB,adelay=${winnerDelayMs}|${winnerDelayMs},volume=${winnerDingVolume}[winner]`,
-      ...tailBreakFilters,
+      ...defeatFilters,
       audioMixFilter,
     ].join(';'),
     '-map', '0:v:0',

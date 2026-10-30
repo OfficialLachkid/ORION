@@ -70,15 +70,26 @@ export function movingCircleIntersectsSegment(previousCenter, center, radius, st
   return segmentToSegmentDistanceSquared(previousCenter, center, start, end) <= radius * radius;
 }
 
-function snapshotState(time, bubbles, tails, events) {
+function snapshotState(time, bubbles, tails, events, defeatShrinkSeconds) {
   const livingIds = new Set(bubbles.filter((bubble) => bubble.alive).map((bubble) => bubble.id));
+  const renderableBubbles = bubbles.filter((bubble) => (
+    bubble.alive
+    || (
+      Number.isFinite(bubble.defeated_at)
+      && time - bubble.defeated_at <= defeatShrinkSeconds + EPSILON
+    )
+  ));
   return {
     time: Math.round(time * 1000) / 1000,
-    bubbles: bubbles.filter((bubble) => bubble.alive).map((bubble) => ({
+    bubbles: renderableBubbles.map((bubble) => ({
       id: bubble.id,
       x: Math.round(bubble.x * 1000) / 1000,
       y: Math.round(bubble.y * 1000) / 1000,
       tail_count: tails.filter((tail) => tail.owner_id === bubble.id).length,
+      is_defeated: !bubble.alive,
+      defeated_at: Number.isFinite(bubble.defeated_at)
+        ? Math.round(bubble.defeated_at * 1000) / 1000
+        : null,
     })),
     tails: tails.filter((tail) => livingIds.has(tail.owner_id)).map((tail) => ({
       id: tail.id,
@@ -134,19 +145,31 @@ function createInitialState(subjects, config, seed) {
       vy: Math.sin(inwardAngle) * config.initial_speed,
       wall_contact: false,
       alive: true,
+      defeated_at: null,
     };
   });
-  const tails = bubbles.map((bubble, index) => {
+  const tails = bubbles.flatMap((bubble, index) => {
     const dx = bubble.x - config.center_x;
     const dy = bubble.y - config.center_y;
-    const length = Math.hypot(dx, dy) || 1;
-    return {
-      id: `tail-${index}-0`,
-      owner_id: bubble.id,
-      anchor_x: config.center_x + ((dx / length) * config.arena_radius),
-      anchor_y: config.center_y + ((dy / length) * config.arena_radius),
-    };
+    const angle = Math.atan2(dy, dx);
+    return Array.from({ length: config.initial_tail_count }, (_unused, tailIndex) => {
+      const centeredIndex = tailIndex - ((config.initial_tail_count - 1) / 2);
+      const anchorAngle = angle + (centeredIndex * config.initial_tail_anchor_spread_radians);
+      return {
+        id: `tail-${index}-${tailIndex}`,
+        owner_id: bubble.id,
+        anchor_x: config.center_x + (Math.cos(anchorAngle) * config.arena_radius),
+        anchor_y: config.center_y + (Math.sin(anchorAngle) * config.arena_radius),
+      };
+    });
   });
+  for (let leftIndex = 0; leftIndex < bubbles.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < bubbles.length; rightIndex += 1) {
+      if (distanceSquared(bubbles[leftIndex], bubbles[rightIndex]) < (config.bubble_radius * 2) ** 2) {
+        throw new Error('Bubble Survival initial layout contains overlapping bubbles.');
+      }
+    }
+  }
   return { bubbles, tails, nextTailId: tails.length };
 }
 
@@ -155,8 +178,11 @@ function normalizeSimulationConfig(raw = {}) {
     center_x: Number(raw.center_x ?? 270),
     center_y: Number(raw.center_y ?? 480),
     arena_radius: Number(raw.arena_radius ?? 230),
-    bubble_radius: Number(raw.bubble_radius ?? 21),
+    bubble_radius: Number(raw.bubble_radius ?? 25.2),
     start_inset: Number(raw.start_inset ?? 5),
+    initial_tail_count: Math.max(1, Math.round(Number(raw.initial_tail_count ?? 3))),
+    initial_tail_anchor_spread_radians: Number(raw.initial_tail_anchor_spread_degrees ?? 7) * Math.PI / 180,
+    defeat_shrink_seconds: Math.max(0.05, Number(raw.defeat_shrink_seconds ?? 0.75)),
     initial_speed: Number(raw.initial_speed ?? 92.5),
     initial_angle_variation_radians: Number(raw.initial_angle_variation_degrees ?? 0) * Math.PI / 180,
     restitution: clamp(Number(raw.collision_restitution ?? 0.98), 0, 1),
@@ -165,7 +191,7 @@ function normalizeSimulationConfig(raw = {}) {
     maximum_seconds: Number(raw.maximum_seconds ?? 40),
     stagnation_seconds: Number(raw.stagnation_seconds ?? 10),
     speed_up_interval_seconds: Number(raw.speed_up_interval_seconds ?? 7),
-    speed_up_multiplier: Number(raw.speed_up_multiplier ?? 1.12),
+    speed_up_multiplier: Number(raw.speed_up_multiplier ?? 1.18),
   };
 }
 
@@ -181,7 +207,7 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
   let nextSampleTime = 1 / config.sample_fps;
   let lastEliminationTime = 0;
   let nextSpeedUpTime = config.speed_up_interval_seconds;
-  const frames = [snapshotState(0, bubbles, tails, [])];
+  const frames = [snapshotState(0, bubbles, tails, [], config.defeat_shrink_seconds)];
   const eventLog = [];
 
   while (time <= config.maximum_seconds + EPSILON) {
@@ -271,6 +297,9 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
       for (const bubble of living) {
         if (!tails.some((tail) => tail.owner_id === bubble.id)) {
           bubble.alive = false;
+          bubble.defeated_at = time;
+          bubble.vx = 0;
+          bubble.vy = 0;
           lastEliminationTime = time;
           const event = { type: 'eliminated', bubble_id: bubble.id };
           stepEvents.push(event);
@@ -290,13 +319,13 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
     }
 
     if (time + EPSILON >= nextSampleTime) {
-      frames.push(snapshotState(time, bubbles, tails, stepEvents));
+      frames.push(snapshotState(time, bubbles, tails, stepEvents, config.defeat_shrink_seconds));
       nextSampleTime += 1 / config.sample_fps;
     }
 
     const survivors = bubbles.filter((bubble) => bubble.alive);
     if (survivors.length <= 1) {
-      frames.push(snapshotState(time, bubbles, tails, stepEvents));
+      frames.push(snapshotState(time, bubbles, tails, stepEvents, config.defeat_shrink_seconds));
       return {
         outcome: survivors.length === 1 ? 'winner' : 'draw',
         winner_id: survivors[0]?.id || null,

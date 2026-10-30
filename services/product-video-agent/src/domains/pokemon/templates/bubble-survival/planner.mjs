@@ -13,7 +13,7 @@ import {
   simulateBubbleSurvival,
 } from './simulation.mjs';
 
-const DEFAULT_POKEMON_COUNT = 12;
+const DEFAULT_POKEMON_COUNT = 9;
 const DEFAULT_MAXIMUM_SIMULATION_ATTEMPTS = 8;
 
 async function pathIsReadable(filePath) {
@@ -60,8 +60,13 @@ function buildSimulationConfig(template) {
     center_x: Number(template?.arena?.center_x ?? (frameWidth / 2)),
     center_y: Number(template?.arena?.center_y ?? (frameHeight / 2)),
     arena_radius: Number(template?.arena?.radius ?? 230),
-    bubble_radius: Number(template?.bubbles?.radius ?? 21),
+    bubble_radius: Number(template?.bubbles?.radius ?? 25.2),
     start_inset: Number(template?.bubbles?.start_inset ?? 5),
+    initial_tail_count: Number(template?.bubbles?.initial_tail_count ?? 3),
+    initial_tail_anchor_spread_degrees: Number(
+      template?.bubbles?.initial_tail_anchor_spread_degrees ?? 7,
+    ),
+    defeat_shrink_seconds: Number(template?.bubbles?.defeat_shrink_seconds ?? 0.75),
     initial_speed: Number(template?.bubbles?.initial_speed ?? 92.5),
     initial_angle_variation_degrees: Number(template?.bubbles?.initial_angle_variation_degrees ?? 0),
     collision_restitution: Number(template?.bubbles?.collision_restitution ?? 0.98),
@@ -70,7 +75,7 @@ function buildSimulationConfig(template) {
     maximum_seconds: Number(template?.simulation?.maximum_seconds ?? 40),
     stagnation_seconds: Number(template?.simulation?.stagnation_seconds ?? 10),
     speed_up_interval_seconds: Number(template?.simulation?.speed_up_interval_seconds ?? 7),
-    speed_up_multiplier: Number(template?.simulation?.speed_up_multiplier ?? 1.12),
+    speed_up_multiplier: Number(template?.simulation?.speed_up_multiplier ?? 1.18),
   };
 }
 
@@ -141,9 +146,9 @@ export async function planPokemonBubbleSurvival({
   if (!winnerDingPath || !(await pathIsReadable(winnerDingPath))) {
     throw new Error('Bubble Survival requires the readable T7 ding sound effect for its winner reveal.');
   }
-  const tailBreakSoundPath = String(inventory?.sound_effects?.reflection || '').trim();
-  if (!tailBreakSoundPath || !(await pathIsReadable(tailBreakSoundPath))) {
-    throw new Error('Bubble Survival requires the readable T7 reflection sound effect for tail breaks.');
+  const defeatSoundPath = String(inventory?.sound_effects?.reflection || '').trim();
+  if (!defeatSoundPath || !(await pathIsReadable(defeatSoundPath))) {
+    throw new Error('Bubble Survival requires the readable T7 reflection sound effect for defeats.');
   }
   const winner = selectedSubjects.find((subject) => subject.id === simulation.winner_id);
   if (!winner) {
@@ -180,12 +185,12 @@ export async function planPokemonBubbleSurvival({
     assets: {
       music_path: musicPath,
       winner_ding_path: winnerDingPath,
-      tail_break_sound_path: tailBreakSoundPath,
+      defeat_sound_path: defeatSoundPath,
     },
     audio: {
       music_volume: Number(template?.audio?.music_volume ?? 0.12),
       winner_ding_volume: Number(template?.winner?.sound_volume ?? 0.9),
-      tail_break_sound_volume: Number(template?.audio?.tail_break_sound_volume ?? 0.55),
+      defeat_sound_volume: Number(template?.audio?.defeat_sound_volume ?? 0.55),
     },
     video: {
       intro_seconds: introSeconds,
