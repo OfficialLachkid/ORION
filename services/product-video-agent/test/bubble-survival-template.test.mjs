@@ -14,6 +14,7 @@ import {
 } from '../src/domains/pokemon/templates/bubble-survival/simulation.mjs';
 import { planPokemonBubbleSurvival } from '../src/domains/pokemon/templates/bubble-survival/planner.mjs';
 import {
+  alphaBlendRgba,
   buildBubbleSurvivalFfmpegArgs,
   buildBubbleSurvivalTitleMarkup,
   buildPokeQuizzRenderPlan,
@@ -273,6 +274,25 @@ test('visual countdown advances 30 percent faster and holds LETS GO through the 
   assert.equal(resolveCountdownVisualState(0.6, 1.5, 1.3).text, '1');
   assert.equal(resolveCountdownVisualState(0.9, 1.5, 1.3).text, "LET'S GO!");
   assert.equal(resolveCountdownVisualState(1.45, 1.5, 1.3).text, "LET'S GO!");
+});
+
+test('sprite compositing alpha-blends RGBA pixels without altering untouched pixels', () => {
+  const destination = Buffer.from([
+    10, 20, 30, 255,
+    40, 50, 60, 255,
+  ]);
+  alphaBlendRgba({
+    destination,
+    destinationWidth: 2,
+    destinationHeight: 1,
+    source: Buffer.from([210, 120, 30, 128]),
+    sourceWidth: 1,
+    sourceHeight: 1,
+    left: 1,
+    top: 0,
+  });
+  assert.deepEqual([...destination.subarray(0, 4)], [10, 20, 30, 255]);
+  assert.deepEqual([...destination.subarray(4)], [125, 85, 45, 255]);
 });
 
 test('winner hold, ding, and defeat-only shrink cues are scheduled at their boundaries', () => {

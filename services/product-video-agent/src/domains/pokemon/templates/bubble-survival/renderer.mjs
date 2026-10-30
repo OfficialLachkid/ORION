@@ -294,14 +294,52 @@ async function resizeSprite({ subjectId, size, spriteBuffers, resizedSpriteCache
     const source = spriteBuffers.get(subjectId);
     if (!source) throw new Error(`Missing Bubble Survival sprite buffer for ${subjectId}.`);
     resizedSpriteCache.set(cacheKey, sharp(source)
+      .ensureAlpha()
       .resize(roundedSize, roundedSize, { fit: 'contain' })
-      .png()
-      .toBuffer());
+      .raw()
+      .toBuffer({ resolveWithObject: true }));
   }
+  const resized = await resizedSpriteCache.get(cacheKey);
   return {
-    input: await resizedSpriteCache.get(cacheKey),
+    input: resized.data,
     size: roundedSize,
+    width: resized.info.width,
+    height: resized.info.height,
+    channels: resized.info.channels,
   };
+}
+
+export function alphaBlendRgba({
+  destination,
+  destinationWidth,
+  destinationHeight,
+  source,
+  sourceWidth,
+  sourceHeight,
+  left,
+  top,
+}) {
+  for (let sourceY = 0; sourceY < sourceHeight; sourceY += 1) {
+    const destinationY = top + sourceY;
+    if (destinationY < 0 || destinationY >= destinationHeight) continue;
+    for (let sourceX = 0; sourceX < sourceWidth; sourceX += 1) {
+      const destinationX = left + sourceX;
+      if (destinationX < 0 || destinationX >= destinationWidth) continue;
+      const sourceOffset = ((sourceY * sourceWidth) + sourceX) * 4;
+      const sourceAlpha = source[sourceOffset + 3] / 255;
+      if (sourceAlpha <= 0) continue;
+      const destinationOffset = ((destinationY * destinationWidth) + destinationX) * 4;
+      const destinationAlpha = destination[destinationOffset + 3] / 255;
+      const outputAlpha = sourceAlpha + (destinationAlpha * (1 - sourceAlpha));
+      for (let channel = 0; channel < 3; channel += 1) {
+        destination[destinationOffset + channel] = Math.round((
+          (source[sourceOffset + channel] * sourceAlpha)
+          + (destination[destinationOffset + channel] * destinationAlpha * (1 - sourceAlpha))
+        ) / outputAlpha);
+      }
+      destination[destinationOffset + 3] = Math.round(outputAlpha * 255);
+    }
+  }
 }
 
 async function buildSpriteComposites({
@@ -326,6 +364,8 @@ async function buildSpriteComposites({
     });
     return [{
       input: sprite.input,
+      width: sprite.width,
+      height: sprite.height,
       left: Math.round(centerX - (sprite.size / 2)),
       top: Math.round(centerY - 120),
     }];
@@ -352,6 +392,8 @@ async function buildSpriteComposites({
     });
     composites.push({
       input: sprite.input,
+      width: sprite.width,
+      height: sprite.height,
       left: Math.round(bubble.x - (sprite.size / 2)),
       top: Math.round(bubble.y - (sprite.size / 2)),
     });
@@ -390,8 +432,29 @@ async function renderFrames({ plan, template, framesRoot }) {
         spriteBuffers,
         resizedSpriteCache,
       });
-      await sharp(svg, { sequentialRead: true })
-        .composite(spriteComposites)
+      const baseFrame = await sharp(svg, { sequentialRead: true })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      for (const sprite of spriteComposites) {
+        alphaBlendRgba({
+          destination: baseFrame.data,
+          destinationWidth: baseFrame.info.width,
+          destinationHeight: baseFrame.info.height,
+          source: sprite.input,
+          sourceWidth: sprite.width,
+          sourceHeight: sprite.height,
+          left: sprite.left,
+          top: sprite.top,
+        });
+      }
+      await sharp(baseFrame.data, {
+        raw: {
+          width: baseFrame.info.width,
+          height: baseFrame.info.height,
+          channels: baseFrame.info.channels,
+        },
+      })
         .png({ compressionLevel: 4 })
         .toFile(resolve(framesRoot, frameFileName(index)));
     });
