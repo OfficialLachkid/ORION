@@ -479,8 +479,8 @@ export function buildBubbleSurvivalFfmpegArgs({
   const winnerDelayMs = Math.round(winnerRevealSeconds * 1000);
   const winnerSeconds = Number(plan.video.winner_seconds || 0);
   const musicVolume = Number(plan.audio?.music_volume ?? 0.12);
-  const winnerDingVolume = Number(plan.audio?.winner_ding_volume ?? 0.9);
-  const defeatSoundVolume = Number(plan.audio?.defeat_sound_volume ?? 0.55);
+  const winnerDingVolume = Number(plan.audio?.winner_ding_volume ?? 0.36);
+  const defeatSoundVolume = Number(plan.audio?.defeat_sound_volume ?? 0.165);
   const defeatEvents = (Array.isArray(plan.simulation?.events) ? plan.simulation.events : [])
     .filter((event) => event?.type === 'eliminated' && Number.isFinite(Number(event.time)))
     .sort((left, right) => Number(left.time) - Number(right.time));
@@ -499,7 +499,6 @@ export function buildBubbleSurvivalFfmpegArgs({
     '-y',
     '-framerate', String(plan.video.frame_fps),
     '-i', resolve(framesRoot, 'frame-%05d.png'),
-    '-stream_loop', '-1',
     '-i', plan.assets.music_path,
     '-i', narrationPath,
     '-i', plan.assets.winner_ding_path,
@@ -572,6 +571,17 @@ export async function renderPokeQuizzVideo({
   if (!narrationDuration) {
     throw new Error('Bubble Survival countdown narration could not be probed.');
   }
+  const requiredMusicDuration = buildPokeQuizzRenderPlan({ plan }).duration_seconds;
+  const musicDuration = await probeMediaDurationSeconds({
+    ffmpegExecutable,
+    mediaPath: plan.assets.music_path,
+    cwd: projectRoot,
+  });
+  if (!musicDuration || musicDuration + 0.001 < requiredMusicDuration) {
+    throw new Error(
+      `Bubble Survival music must be at least ${requiredMusicDuration.toFixed(3)} seconds long; selected track is ${musicDuration || 0} seconds.`,
+    );
+  }
   const { durationSeconds, frameCount } = await renderFrames({ plan, template, framesRoot });
   await runLocalProcess({
     executable: ffmpegExecutable,
@@ -594,6 +604,7 @@ export async function renderPokeQuizzVideo({
     duration_seconds: durationSeconds,
     frame_count: frameCount,
     narration_paths: [narrationPath],
+    music_duration_seconds: musicDuration,
     winner: plan.winner,
   };
 }

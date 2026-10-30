@@ -23,11 +23,11 @@
   "render": {
     "frame_width": 540,
     "frame_height": 960,
-    "frame_fps": 15
+    "frame_fps": 30
   },
   "arena": {
     "center_x": 270,
-    "center_y": 500,
+    "center_y": 450,
     "radius": 230,
     "stationary": true
   },
@@ -54,7 +54,7 @@
     "draw_policy": "retry-with-derived-seed"
   },
   "intro": {
-    "duration_seconds": 1.5,
+    "duration_seconds": 1.16,
     "voice_playback_rate": 1.3333333333333333,
     "visual_playback_rate": 1.3,
     "text": ["3", "2", "1", "LET'S GO!"],
@@ -65,13 +65,13 @@
     "use_existing_t7_music_library": true,
     "music_volume": 0.12,
     "defeat_sound_role": "reflection",
-    "defeat_sound_volume": 0.55,
+    "defeat_sound_volume": 0.165,
     "duck_music_during_voiceover": true
   },
   "winner": {
     "announcement_delay_seconds": 0.75,
     "sound_effect_role": "ding",
-    "sound_volume": 0.9,
+    "sound_volume": 0.36,
     "duration_seconds": 1.8,
     "show_pokemon_name": true,
     "show_pokemon_sprite": true,

@@ -144,9 +144,22 @@ test('fixed-step simulation is deterministic, starts without overlap, and shrink
   assert.equal(first.frames.at(-1).bubbles.filter((bubble) => !bubble.is_defeated).length, 1);
   assert.equal(first.frames.at(-1).bubbles.some((bubble) => bubble.is_defeated), true);
   assert.equal(first.frames.some((frame) => frame.bubbles.length < subjects.length), true);
+  assert.equal(first.config.sample_fps, 30);
+  const defeatedBubbleKeepsMoving = first.frames.some((frame, frameIndex) => {
+    const nextFrame = first.frames[frameIndex + 1];
+    if (!nextFrame) return false;
+    return frame.bubbles.some((bubble) => {
+      if (!bubble.is_defeated) return false;
+      const nextBubble = nextFrame.bubbles.find((candidate) => candidate.id === bubble.id);
+      return nextBubble?.is_defeated
+        && Math.hypot(nextBubble.x - bubble.x, nextBubble.y - bubble.y) > 0.01;
+    });
+  });
+  assert.equal(defeatedBubbleKeepsMoving, true);
   const tailBreakEvents = first.events.filter((event) => event.type === 'tail_destroyed');
   assert.ok(tailBreakEvents.length > 0);
   assert.equal(tailBreakEvents.every((event) => Number.isFinite(event.time)), true);
+  assert.equal(tailBreakEvents.some((event) => event.attacker_is_defeated), true);
   assert.equal(first.events.filter((event) => event.type === 'eliminated').length, 8);
   const defeatedBubble = { is_defeated: true, defeated_at: 4 };
   const despawn = { popScale: 1.2, popSeconds: 0.1, shrinkSeconds: 0.577 };
@@ -174,9 +187,11 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
   const root = await mkdtemp(join(tmpdir(), 'bubble-survival-'));
   try {
     const musicPath = join(root, 'music.mp3');
+    const shortMusicPath = join(root, 'short-music.mp3');
     const dingPath = join(root, 'ding-sound.mp3');
     const reflectionPath = join(root, 'reflection-sound.mp3');
     await writeFile(musicPath, 'music');
+    await writeFile(shortMusicPath, 'short music');
     await writeFile(dingPath, 'ding');
     await writeFile(reflectionPath, 'reflection');
     const rows = [];
@@ -204,9 +219,10 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
       pokedexRows: rows,
       seed: 'planner-seed',
       assetInventory: {
-        music: [musicPath],
+        music: [shortMusicPath, musicPath],
         sound_effects: { ding: dingPath, reflection: reflectionPath },
       },
+      probeDuration: async ({ mediaPath }) => (mediaPath === musicPath ? 120 : 5),
     };
     const first = await planPokemonBubbleSurvival(options);
     const second = await planPokemonBubbleSurvival(options);
@@ -220,13 +236,19 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.simulation.config.defeat_pop_seconds, 0.1);
     assert.equal(first.simulation.config.defeat_shrink_seconds, 0.577);
     assert.equal(first.simulation.config.initial_speed, 92.5);
+    assert.equal(first.simulation.config.center_y, 450);
     assert.equal(first.assets.music_path, musicPath);
+    assert.equal(first.assets.music_duration_seconds, 120);
+    assert.ok(first.assets.minimum_music_duration_seconds > 5);
     assert.equal(first.assets.winner_ding_path, dingPath);
     assert.equal(first.assets.defeat_sound_path, reflectionPath);
-    assert.equal(first.video.intro_seconds, 1.5);
+    assert.equal(first.video.intro_seconds, 1.16);
     assert.equal(first.video.countdown_playback_rate, 4 / 3);
     assert.equal(first.video.visual_countdown_playback_rate, 1.3);
     assert.equal(first.video.winner_delay_seconds, 0.75);
+    assert.equal(first.video.frame_fps, 30);
+    assert.equal(first.audio.defeat_sound_volume, 0.165);
+    assert.equal(first.audio.winner_ding_volume, 0.36);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -264,16 +286,16 @@ test('Bubble Survival title is split into frame-safe lines', () => {
   assert.equal(longWord.estimated_widths[0], longWord.maximum_width);
 });
 
-test('visual countdown advances 30 percent faster and holds LETS GO through the intro', () => {
-  assert.deepEqual(resolveCountdownVisualState(0, 1.5, 1.3), {
+test('visual countdown advances 30 percent faster and ends as physics begins', () => {
+  assert.deepEqual(resolveCountdownVisualState(0, 1.16, 1.3), {
     text: '3',
     phase_index: 0,
     local_phase: 0,
   });
-  assert.equal(resolveCountdownVisualState(0.3, 1.5, 1.3).text, '2');
-  assert.equal(resolveCountdownVisualState(0.6, 1.5, 1.3).text, '1');
-  assert.equal(resolveCountdownVisualState(0.9, 1.5, 1.3).text, "LET'S GO!");
-  assert.equal(resolveCountdownVisualState(1.45, 1.5, 1.3).text, "LET'S GO!");
+  assert.equal(resolveCountdownVisualState(0.23, 1.16, 1.3).text, '2');
+  assert.equal(resolveCountdownVisualState(0.46, 1.16, 1.3).text, '1');
+  assert.equal(resolveCountdownVisualState(0.7, 1.16, 1.3).text, "LET'S GO!");
+  assert.equal(resolveCountdownVisualState(1.15, 1.16, 1.3).text, "LET'S GO!");
 });
 
 test('sprite compositing alpha-blends RGBA pixels without altering untouched pixels', () => {
@@ -314,22 +336,22 @@ test('winner hold, ding, and defeat-only shrink cues are scheduled at their boun
     },
     audio: {
       music_volume: 0.12,
-      winner_ding_volume: 0.9,
-      defeat_sound_volume: 0.55,
+      winner_ding_volume: 0.36,
+      defeat_sound_volume: 0.165,
     },
     video: {
-      intro_seconds: 1.5,
+      intro_seconds: 1.16,
       countdown_playback_rate: 4 / 3,
       winner_delay_seconds: 0.75,
       winner_seconds: 1.8,
-      frame_fps: 15,
+      frame_fps: 30,
       output_fps: 30,
       output_width: 1080,
       output_height: 1920,
     },
   };
   const renderPlan = buildPokeQuizzRenderPlan({ plan });
-  assert.equal(renderPlan.duration_seconds, 24.05);
+  assert.equal(renderPlan.duration_seconds, 23.71);
   const args = buildBubbleSurvivalFfmpegArgs({
     plan,
     framesRoot: '/tmp/frames',
@@ -341,11 +363,12 @@ test('winner hold, ding, and defeat-only shrink cues are scheduled at their boun
   assert.equal(args.filter((arg) => arg === '/tmp/reflection-sound.mp3').length, 2);
   const filter = args[args.indexOf('-filter_complex') + 1];
   assert.match(filter, /atempo=1\.3333333333333333/u);
-  assert.match(filter, /adelay=22250\|22250/u);
-  assert.match(filter, /afade=t=out:st=22\.250:d=1\.800/u);
+  assert.match(filter, /adelay=21910\|21910/u);
+  assert.match(filter, /afade=t=out:st=21\.910:d=1\.800/u);
   assert.doesNotMatch(filter, /adelay=5625\|5625/u);
-  assert.match(filter, /adelay=8500\|8500,volume=0\.55\[defeat_0\]/u);
-  assert.match(filter, /adelay=10500\|10500,volume=0\.55\[defeat_1\]/u);
+  assert.match(filter, /adelay=8160\|8160,volume=0\.165\[defeat_0\]/u);
+  assert.match(filter, /adelay=10160\|10160,volume=0\.165\[defeat_1\]/u);
+  assert.doesNotMatch(args.join(' '), /-stream_loop/u);
   assert.match(filter, /\[base\]\[defeat_0\]\[defeat_1\]amix=inputs=3/u);
   assert.match(filter, /normalize=0,alimiter=limit=0\.95\[audio\]/u);
   assert.match(filter, /amix=inputs=3/u);

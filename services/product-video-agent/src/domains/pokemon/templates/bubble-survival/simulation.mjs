@@ -70,6 +70,24 @@ export function movingCircleIntersectsSegment(previousCenter, center, radius, st
   return segmentToSegmentDistanceSquared(previousCenter, center, start, end) <= radius * radius;
 }
 
+function resolveDefeatedBodyScale(bubble, time, config) {
+  if (bubble.alive || !Number.isFinite(bubble.defeated_at)) return 1;
+  const elapsed = Math.max(0, time - bubble.defeated_at);
+  if (elapsed <= config.defeat_pop_seconds) {
+    if (config.defeat_pop_seconds <= EPSILON) return config.defeat_pop_scale;
+    return 1 + ((config.defeat_pop_scale - 1) * (elapsed / config.defeat_pop_seconds));
+  }
+  const shrinkElapsed = elapsed - config.defeat_pop_seconds;
+  return Math.max(0, config.defeat_pop_scale * (1 - (shrinkElapsed / config.defeat_shrink_seconds)));
+}
+
+function isPhysicsActive(bubble, time, defeatDespawnSeconds) {
+  return bubble.alive || (
+    Number.isFinite(bubble.defeated_at)
+    && time - bubble.defeated_at <= defeatDespawnSeconds + EPSILON
+  );
+}
+
 function snapshotState(time, bubbles, tails, events, defeatDespawnSeconds) {
   const livingIds = new Set(bubbles.filter((bubble) => bubble.alive).map((bubble) => bubble.id));
   const renderableBubbles = bubbles.filter((bubble) => (
@@ -85,6 +103,8 @@ function snapshotState(time, bubbles, tails, events, defeatDespawnSeconds) {
       id: bubble.id,
       x: Math.round(bubble.x * 1000) / 1000,
       y: Math.round(bubble.y * 1000) / 1000,
+      vx: Math.round(bubble.vx * 1000) / 1000,
+      vy: Math.round(bubble.vy * 1000) / 1000,
       tail_count: tails.filter((tail) => tail.owner_id === bubble.id).length,
       is_defeated: !bubble.alive,
       defeated_at: Number.isFinite(bubble.defeated_at)
@@ -101,11 +121,11 @@ function snapshotState(time, bubbles, tails, events, defeatDespawnSeconds) {
   };
 }
 
-function resolveBubbleCollision(left, right, radius, restitution) {
+function resolveBubbleCollision(left, right, leftRadius, rightRadius, restitution) {
   const dx = right.x - left.x;
   const dy = right.y - left.y;
   const distance = Math.hypot(dx, dy);
-  const minimumDistance = radius * 2;
+  const minimumDistance = leftRadius + rightRadius;
   if (distance >= minimumDistance || distance <= EPSILON) return false;
 
   const nx = dx / distance;
@@ -176,7 +196,7 @@ function createInitialState(subjects, config, seed) {
 function normalizeSimulationConfig(raw = {}) {
   return {
     center_x: Number(raw.center_x ?? 270),
-    center_y: Number(raw.center_y ?? 480),
+    center_y: Number(raw.center_y ?? 450),
     arena_radius: Number(raw.arena_radius ?? 230),
     bubble_radius: Number(raw.bubble_radius ?? 25.2),
     start_inset: Number(raw.start_inset ?? 5),
@@ -189,7 +209,7 @@ function normalizeSimulationConfig(raw = {}) {
     initial_angle_variation_radians: Number(raw.initial_angle_variation_degrees ?? 0) * Math.PI / 180,
     restitution: clamp(Number(raw.collision_restitution ?? 0.98), 0, 1),
     fixed_step_seconds: Number(raw.fixed_step_seconds ?? (1 / 120)),
-    sample_fps: Number(raw.sample_fps ?? 15),
+    sample_fps: Number(raw.sample_fps ?? 30),
     maximum_seconds: Number(raw.maximum_seconds ?? 40),
     stagnation_seconds: Number(raw.stagnation_seconds ?? 10),
     speed_up_interval_seconds: Number(raw.speed_up_interval_seconds ?? 7),
@@ -216,7 +236,7 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
   while (time <= config.maximum_seconds + EPSILON) {
     const stepEvents = [];
     for (const bubble of bubbles) {
-      if (!bubble.alive) continue;
+      if (!isPhysicsActive(bubble, time, defeatDespawnSeconds)) continue;
       bubble.previous_x = bubble.x;
       bubble.previous_y = bubble.y;
       bubble.x += bubble.vx * config.fixed_step_seconds;
@@ -225,7 +245,8 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
       const dx = bubble.x - config.center_x;
       const dy = bubble.y - config.center_y;
       const distance = Math.hypot(dx, dy) || 1;
-      const maximumCenterDistance = config.arena_radius - config.bubble_radius;
+      const bodyRadius = config.bubble_radius * resolveDefeatedBodyScale(bubble, time, config);
+      const maximumCenterDistance = config.arena_radius - bodyRadius;
       if (distance > maximumCenterDistance) {
         const nx = dx / distance;
         const ny = dy / distance;
@@ -236,7 +257,7 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
           bubble.vx -= (1 + config.restitution) * normalVelocity * nx;
           bubble.vy -= (1 + config.restitution) * normalVelocity * ny;
         }
-        if (!bubble.wall_contact) {
+        if (bubble.alive && !bubble.wall_contact) {
           const tail = {
             id: `tail-${nextTailId}`,
             owner_id: bubble.id,
@@ -254,24 +275,29 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
     }
 
     const living = bubbles.filter((bubble) => bubble.alive);
+    const activeBodies = bubbles.filter((bubble) => isPhysicsActive(bubble, time, defeatDespawnSeconds));
     for (let leftIndex = 0; leftIndex < living.length; leftIndex += 1) {
       for (let rightIndex = leftIndex + 1; rightIndex < living.length; rightIndex += 1) {
+        const left = living[leftIndex];
+        const right = living[rightIndex];
         if (resolveBubbleCollision(
-          living[leftIndex],
-          living[rightIndex],
+          left,
+          right,
+          config.bubble_radius,
           config.bubble_radius,
           config.restitution,
         )) {
-          stepEvents.push({ type: 'bubble_collision', bubble_ids: [living[leftIndex].id, living[rightIndex].id] });
+          stepEvents.push({ type: 'bubble_collision', bubble_ids: [left.id, right.id] });
         }
       }
     }
 
     const bubbleById = new Map(bubbles.map((bubble) => [bubble.id, bubble]));
     const destroyedTailIds = new Set();
-    for (const attacker of living) {
+    for (const attacker of activeBodies) {
       const previousCenter = { x: attacker.previous_x, y: attacker.previous_y };
       const center = { x: attacker.x, y: attacker.y };
+      const attackerRadius = config.bubble_radius * resolveDefeatedBodyScale(attacker, time, config);
       for (const tail of tails) {
         if (tail.owner_id === attacker.id || destroyedTailIds.has(tail.id)) continue;
         const owner = bubbleById.get(tail.owner_id);
@@ -279,7 +305,7 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
         if (movingCircleIntersectsSegment(
           previousCenter,
           center,
-          config.bubble_radius,
+          attackerRadius,
           { x: tail.anchor_x, y: tail.anchor_y },
           { x: owner.x, y: owner.y },
         )) {
@@ -287,6 +313,7 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
           const event = {
             type: 'tail_destroyed',
             attacker_id: attacker.id,
+            attacker_is_defeated: !attacker.alive,
             owner_id: tail.owner_id,
             tail_id: tail.id,
           };
@@ -301,8 +328,6 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
         if (!tails.some((tail) => tail.owner_id === bubble.id)) {
           bubble.alive = false;
           bubble.defeated_at = time;
-          bubble.vx = 0;
-          bubble.vy = 0;
           lastEliminationTime = time;
           const event = { type: 'eliminated', bubble_id: bubble.id };
           stepEvents.push(event);
