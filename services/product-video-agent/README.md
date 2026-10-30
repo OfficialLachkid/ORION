@@ -309,6 +309,28 @@ npm run product-video:plan-poke-quizz -- \
 
 The planner uses only grounded `pokedex` rows, no paid API, and no hosted inference. It selects an observed dual-type pair, samples one to four matching species, records the exact T7 asset directories, and flags what is still missing before narration or render execution should begin.
 
+### Pokemon Bubble Survival
+
+`pokemon.bubble-survival.v1` is a manual-review Poke Quizz template built on the same grounded catalog, Kokoro voice cache, T7 music inventory, FFmpeg export, publication metadata, and Discord review path as the other Pokemon Shorts. It does not introduce a separate video pipeline.
+
+The planner selects 12 unique readable localized forms from one explicit category, then creates a deterministic fixed-step simulation timeline. The simulation owns circular bubble/wall collisions, fixed wall anchors, swept circle-to-tail intersections, simultaneous tail removal, elimination, draw retries, timeout/stagnation guards, and the winner. Rendering consumes that timeline without recalculating gameplay. The first rollout is deliberately manual-only and is excluded from night shift until several review videos have been approved.
+
+Supported categories are `legendary`, `mythical`, `starters`, `first-evolutions`, `baby`, `final-evolutions`, and `mega-evolutions`. Category truth comes from enriched Pokedex flags/evolution metadata plus the existing explicit starter and baby classifications. Single-stage Pokemon are not treated as final evolutions, Legendary and Mythical remain separate, and Mega forms use their form-specific rows and sprites.
+
+Generate and post a review video on the Mac mini with the existing review workflow:
+
+```bash
+node services/product-video-agent/scripts/generate-poke-quizz-review.mjs \
+  --catalog-json data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json \
+  --channel-config services/product-video-agent/config/channels/poke-quizz-youtube.json \
+  --template-id pokemon.bubble-survival.v1 \
+  --bubble-category legendary \
+  --seed bubble-survival-review-001 \
+  --no-local-model
+```
+
+The template defaults to the existing 1080x1920/30 fps output contract. Its checked-in render resolution is lower only for intermediate SVG/PNG frames; FFmpeg performs the final Lanczos upscale. Music remains a physically present T7 selection and countdown narration reuses the configured Kokoro profile/cache. Nine 20%-larger players begin in a validated non-overlapping layout with three fan-shaped strings each. The round begins with a half-strength launch impulse and then leaves motion to the physics simulation. The 2-second source narration is retimed to a 1.5-second intro while the visual `3, 2, 1, LET'S GO!` sequence advances at 1.3x and holds its final message until the round starts. Title and winner text wrap against a 50 px frame boundary. Tail breaks remain silent. A defeated player freezes at its collision position, pops from 100% to 120% over 0.1 seconds, then shrinks away over 0.577 seconds and triggers the T7 `reflection-sound` cue once when the despawn starts. The T7 `ding-sound` cue plays when the winner card appears. The champion card lasts 1.8 seconds, with background music fading from the reveal through the end of the video. Publication titles and descriptions never name the simulated winner.
+
 Create and use these Poke Quizz asset directories on T7:
 
 - `Backgrounds`: `/Volumes/T7/O.R.I.O.N. Video Generation/Assets/Pokemon/Poke Quizz/Backgrounds`

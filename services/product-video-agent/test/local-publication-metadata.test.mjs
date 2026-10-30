@@ -53,6 +53,17 @@ const findTheShinyPlan = {
   },
 };
 
+const bubbleSurvivalPlan = {
+  template_id: 'pokemon.bubble-survival.v1',
+  template_key: 'bubble-survival',
+  selection: {
+    category: 'legendary-mythical',
+    category_label: 'Legendary + Mythical Pokemon',
+    selected_subjects: Array.from({ length: 9 }, (_unused, index) => ({ name: `Legendary ${index + 1}` })),
+  },
+  winner: { name: 'Mewtwo' },
+};
+
 const typeQuizPlan = {
   template_id: 'pokemon.type-quiz.v1',
   selection: {
@@ -592,4 +603,40 @@ test('seeded build-your-team fallback metadata uses the supported generic title 
     ))),
     expectedBuildYourTeamSeededTitles,
   );
+});
+
+test('fallback publication metadata describes Bubble Survival without spoiling the winner', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(bubbleSurvivalPlan, channelProfile);
+  assert.equal(metadata.title, 'Legendary + Mythical Pokemon Bubble Battle!');
+  assert.match(metadata.description, /^9 Legendary \+ Mythical Pokemon enter/iu);
+  assert.match(metadata.description, /wall bounce adds a tail/iu);
+  assert.doesNotMatch(metadata.description, /Mewtwo|took the win/iu);
+  assert.equal(metadata.title.includes('Mewtwo'), false);
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#bubblesurvival',
+    '#physicssimulation',
+    '#pokemonbattle',
+    '#shorts',
+  ]);
+});
+
+test('Bubble Survival metadata follows every selected Pokemon pool label', () => {
+  for (const categoryLabel of [
+    'Mixed / All Pokemon',
+    'First / Base Stage Pokemon',
+    'Middle Stage Pokemon',
+    'Legendary + Mythical Pokemon',
+    'Dynamax / Gigantamax Pokemon',
+    'Final Starter Evolutions',
+    'Mega + Legendary Pokemon',
+  ]) {
+    const metadata = buildPokeQuizzFallbackPublicationMetadata({
+      ...bubbleSurvivalPlan,
+      selection: { ...bubbleSurvivalPlan.selection, category_label: categoryLabel },
+    }, channelProfile);
+    assert.match(metadata.title, new RegExp(categoryLabel.replace(/[+]/gu, '\\+'), 'u'));
+    assert.match(metadata.description, new RegExp(`9 ${categoryLabel.replace(/[+]/gu, '\\+')} enter`, 'u'));
+    assert.doesNotMatch(`${metadata.title} ${metadata.description}`, /Mewtwo/iu);
+  }
 });

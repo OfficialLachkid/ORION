@@ -99,6 +99,10 @@ for (const { templatePath, expectedGenreLabel } of [
     templatePath: 'services/product-video-agent/config/templates/pokemon/build-your-team.v1.json',
     expectedGenreLabel: 'Build Your Team',
   },
+  {
+    templatePath: 'services/product-video-agent/config/templates/pokemon/bubble-survival.v1.json',
+    expectedGenreLabel: 'Bubble Survival',
+  },
 ]) {
   test(`resolveVideoTemplateRuntime remaps manual override ${expectedGenreLabel}`, async () => {
     const runtime = await resolveVideoTemplateRuntime({
@@ -186,6 +190,27 @@ for (const {
     channelSelector: 'poke-quizz-youtube',
     genreLabel: 'Build Your Team',
   },
+  {
+    label: 'Poke Quizz Bubble Survival',
+    channelConfigPath: DEFAULT_VIDEO_CHANNEL_CONFIG_PATH,
+    templateId: 'pokemon.bubble-survival.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/bubble-survival.v1.json',
+    channelSelector: 'poke-quizz-youtube',
+    genreLabel: 'Bubble Survival',
+  },
+  ...[
+    ['TrivaMon', 'trivamon-youtube'],
+    ['Poke Guess', 'poke-guess-youtube'],
+    ['DexGuess', 'dexguess-youtube'],
+    ['ProffMon', 'proffmon-youtube'],
+  ].map(([channelName, channelSelector]) => ({
+    label: `${channelName} Bubble Survival`,
+    channelConfigPath: `services/product-video-agent/config/channels/${channelSelector}.json`,
+    templateId: 'pokemon.bubble-survival.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/bubble-survival.v1.json',
+    channelSelector,
+    genreLabel: 'Bubble Survival',
+  })),
   {
     label: 'DexGuess Build Your Team manual selection',
     channelConfigPath: 'services/product-video-agent/config/channels/dexguess-youtube.json',

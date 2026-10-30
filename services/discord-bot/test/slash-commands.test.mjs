@@ -43,6 +43,7 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     .map((choice) => choice.value)
     .sort();
   assert.deepEqual(generateTemplateChoiceValues, [
+    'bubble-survival',
     'build-your-team',
     'cry-match',
     'dual-type-reveal',
@@ -382,6 +383,33 @@ test('normalizeSupportedSlashCommandInteraction converts a manual video generati
   assert.equal(message?.content, 'generate video template: find-the-shiny channel: trivamon-youtube');
   assert.equal(message?.channelKey, 'commands');
 });
+
+for (const channel of [
+  'poke-quizz-youtube',
+  'trivamon-youtube',
+  'poke-guess-youtube',
+  'dexguess-youtube',
+  'proffmon-youtube',
+]) {
+  test(`Bubble Survival slash generation routes through ${channel}`, () => {
+    const message = normalizeSupportedSlashCommandInteraction({
+      id: `interaction-bubble-survival-${channel}`,
+      type: 2,
+      guild_id: 'guild-1',
+      channel_id: 'channel-bubble-survival',
+      data: {
+        name: 'generate-video',
+        options: [
+          { name: 'template', value: 'bubble-survival' },
+          { name: 'channel', value: channel },
+        ],
+      },
+      member: { user: { id: 'user-1', username: 'vbjservices' } },
+    });
+    assert.equal(message?.content, `generate video template: bubble-survival channel: ${channel}`);
+    assert.equal(message?.channelKey, 'commands');
+  });
+}
 
 test('normalizeSupportedSlashCommandInteraction converts a memory slash command into a routed message', () => {
   const message = normalizeSupportedSlashCommandInteraction({

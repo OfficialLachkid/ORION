@@ -94,6 +94,15 @@ function resolveTypePairSlug(plan) {
     .join('-');
 }
 
+function resolvePreviewSlug(plan) {
+  const typePairSlug = resolveTypePairSlug(plan);
+  if (typePairSlug) return typePairSlug;
+  if (String(plan?.template_key || '').trim().toLowerCase() === 'bubble-survival') {
+    return `bubble-survival-${slugify(plan?.selection?.category || 'mixed')}`;
+  }
+  return 'pokemon-type-challenge';
+}
+
 function applyStatClashPoolOverride(template, forcedPoolValue) {
   const normalizedPoolValue = String(forcedPoolValue || '').trim();
   if (!normalizedPoolValue) {
@@ -109,6 +118,23 @@ function applyStatClashPoolOverride(template, forcedPoolValue) {
     selection_rules: {
       ...(template.selection_rules || {}),
       force_pool_key: normalizedPoolValue,
+    },
+  };
+}
+
+function applyBubbleSurvivalCategoryOverride(template, forcedCategoryValue) {
+  const normalizedCategory = String(forcedCategoryValue || '').trim();
+  if (!normalizedCategory) return template;
+  const templateKey = String(template?.template_key || '').trim().toLowerCase();
+  const templateId = String(template?.template_id || '').trim().toLowerCase();
+  if (templateKey !== 'bubble-survival' && !templateId.includes('bubble-survival')) {
+    throw new Error('--bubble-category can only be used with the Bubble Survival template.');
+  }
+  return {
+    ...template,
+    selection_rules: {
+      ...(template.selection_rules || {}),
+      category: normalizedCategory,
     },
   };
 }
@@ -145,13 +171,16 @@ async function resolvePlan(
   const forcedTypePair = forcedTypePairInput
     ? normalizeTypePair(forcedTypePairInput.split(','))
     : null;
-  const template = applyStatClashPoolOverride(
-    await loadJson(templatePath),
-    getStringOption(
-      options,
-      'stat-clash-pool',
-      getStringOption(options, 'stat-clash-pool-weight', ''),
+  const template = applyBubbleSurvivalCategoryOverride(
+    applyStatClashPoolOverride(
+      await loadJson(templatePath),
+      getStringOption(
+        options,
+        'stat-clash-pool',
+        getStringOption(options, 'stat-clash-pool-weight', ''),
+      ),
     ),
+    getStringOption(options, 'bubble-category', ''),
   );
   const statePath = getStringOption(
     options,
@@ -245,7 +274,7 @@ async function generateAndReviewPokeQuizz(options) {
     submittedAt,
     { templatePath, channelProfile },
   );
-  const typePairSlug = resolveTypePairSlug(plan) || 'pokemon-type-challenge';
+  const typePairSlug = resolvePreviewSlug(plan);
   const seedSlug = slugify(plan.seed || 'preview');
   const outputPath = getStringOption(
     options,
@@ -395,6 +424,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       '  --seed <text>              Deterministic planning seed.',
       '  --type-pair <a,b>          Optional forced pair such as water,flying.',
       '  --stat-clash-pool <key>    Optional Stat Clash pool override. Accepts key, selector, label, or weight.',
+      '  --bubble-category <key>     Optional Bubble Survival category override.',
       '  --output <path>            Render output MP4 path.',
       `  --channel-config <path>    Channel/program/style config. Default: ${DEFAULT_VIDEO_CHANNEL_CONFIG_PATH}`,
       '  --template-id <id>         Template id/key from the selected channel config.',
