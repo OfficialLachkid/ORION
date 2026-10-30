@@ -190,7 +190,8 @@ function renderArenaSvg({ plan, template, videoTime, spriteDataUris }) {
       popSeconds: defeatPopSeconds,
       shrinkSeconds: defeatShrinkSeconds,
     });
-    if (renderScale <= 0) return '';
+    // Avoid librsvg corruption once the sprite becomes a sub-pixel-scale despawn remnant.
+    if (renderScale <= 0.2) return '';
     const renderRadius = bubbleRadius * renderScale;
     const imageSize = bubbleRadius * 1.55 * renderScale;
     const counterOffset = bubbleRadius * 0.63 * renderScale;
