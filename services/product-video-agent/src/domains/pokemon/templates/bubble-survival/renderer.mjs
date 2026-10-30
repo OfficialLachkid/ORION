@@ -302,16 +302,27 @@ async function renderFrames({ plan, template, framesRoot }) {
   const frameCount = Math.ceil(durationSeconds * frameFps);
   const spriteDataUris = await loadSpriteDataUris(plan.selection.selected_subjects);
   const indexes = Array.from({ length: frameCount }, (_, index) => index);
-  // librsvg can corrupt unrelated SVG tiles when filtered sprite frames are rasterized concurrently.
-  await mapWithConcurrency(indexes, 1, async (index) => {
-    const svg = renderArenaSvg({
-      plan,
-      template,
-      videoTime: index / frameFps,
-      spriteDataUris,
+  const previousConcurrency = sharp.concurrency();
+  const previousCache = sharp.cache();
+  sharp.concurrency(1);
+  sharp.cache(false);
+  try {
+    // librsvg can corrupt unrelated SVG tiles when sprite frames are rasterized concurrently.
+    await mapWithConcurrency(indexes, 1, async (index) => {
+      const svg = renderArenaSvg({
+        plan,
+        template,
+        videoTime: index / frameFps,
+        spriteDataUris,
+      });
+      await sharp(svg, { sequentialRead: true })
+        .png({ compressionLevel: 4 })
+        .toFile(resolve(framesRoot, frameFileName(index)));
     });
-    await sharp(svg).png({ compressionLevel: 4 }).toFile(resolve(framesRoot, frameFileName(index)));
-  });
+  } finally {
+    sharp.concurrency(previousConcurrency);
+    sharp.cache(previousCache);
+  }
   return { durationSeconds, frameCount };
 }
 
