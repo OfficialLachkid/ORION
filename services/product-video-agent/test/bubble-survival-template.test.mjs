@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -63,21 +63,36 @@ function row(overrides = {}) {
   };
 }
 
-test('category resolver implements the seven explicit Pokemon pools', () => {
+test('category resolver implements every explicit Pokemon pool', () => {
   const examples = {
-    legendary: row({ slug: 'mewtwo', metadata: { is_legendary: true, is_mythical: false } }),
-    mythical: row({ slug: 'mew', metadata: { is_mythical: true } }),
-    starters: row({ slug: 'bulbasaur' }),
-    'first-evolutions': row({
+    mixed: row({ slug: 'eevee' }),
+    'first-stage': row({ slug: 'caterpie' }),
+    'middle-stage': row({
       slug: 'ivysaur',
       metadata: { evolution_depth: 1, is_final_evolution: false },
     }),
-    baby: row({ slug: 'pichu' }),
-    'final-evolutions': row({
+    'legendary-mythical': row({ slug: 'mew', metadata: { is_mythical: true } }),
+    'dynamax-gigantamax': row({
+      slug: 'charizard-gmax',
+      is_default_form: false,
+      metadata: { pokemon_api: { form_name: 'gigantamax', is_default_form: false } },
+    }),
+    'final-starter': row({
       slug: 'venusaur',
       metadata: { evolution_depth: 2, is_final_evolution: true, evolves_from_species_id: 2 },
     }),
-    'mega-evolutions': row({
+    'mega-legendary': row({
+      slug: 'mewtwo-mega-x',
+      is_default_form: false,
+      metadata: { pokemon_api: { is_mega: true, is_default_form: false } },
+    }),
+    baby: row({ slug: 'pichu' }),
+    starters: row({ slug: 'bulbasaur' }),
+    'final-stage': row({
+      slug: 'gengar',
+      metadata: { evolution_depth: 2, is_final_evolution: true, evolves_from_species_id: 2 },
+    }),
+    mega: row({
       slug: 'charizard-mega-x',
       is_default_form: false,
       metadata: { pokemon_api: { species_name: 'charizard', pokemon_name: 'charizard-mega-x', pokemon_id: 10034, is_default_form: false, is_mega: true } },
@@ -88,7 +103,9 @@ test('category resolver implements the seven explicit Pokemon pools', () => {
   for (const [category, candidate] of Object.entries(examples)) {
     assert.equal(isEligibleForBubbleSurvivalCategory(candidate, category), true, category);
   }
-  assert.equal(isEligibleForBubbleSurvivalCategory(examples.mythical, 'legendary'), false);
+  assert.equal(isEligibleForBubbleSurvivalCategory(examples['middle-stage'], 'first-stage'), false);
+  assert.equal(isEligibleForBubbleSurvivalCategory(examples['middle-stage'], 'first-evolutions'), true);
+  assert.equal(isEligibleForBubbleSurvivalCategory(examples['legendary-mythical'], 'mythical'), true);
 });
 
 test('category pool removes duplicate forms and rows without localized sprites', () => {
@@ -96,8 +113,21 @@ test('category pool removes duplicate forms and rows without localized sprites',
   const duplicate = row({ id: 'b', slug: 'mewtwo', pokemon_id: 150, metadata: { is_legendary: true } });
   const missingSprite = row({ id: 'c', slug: 'lugia', pokemon_id: 249, sprite_path: '', metadata: { is_legendary: true } });
   assert.deepEqual(
-    resolveBubbleSurvivalCategoryPool([legendary, duplicate, missingSprite], 'legendary').map((item) => item.id),
+    resolveBubbleSurvivalCategoryPool([legendary, duplicate, missingSprite], 'legendary-mythical').map((item) => item.id),
     ['a'],
+  );
+});
+
+test('template rotates through the complete Bubble Survival pool catalog', async () => {
+  const template = JSON.parse(await readFile(join(
+    process.cwd(),
+    'services/product-video-agent/config/templates/pokemon/bubble-survival.v1.json',
+  ), 'utf8'));
+  assert.equal(template.selection_rules.category, undefined);
+  assert.equal(template.selection_rules.pool_selection_mode, 'seeded_weighted');
+  assert.deepEqual(
+    template.selection_rules.pool_variants.map((pool) => pool.category),
+    [...BUBBLE_SURVIVAL_CATEGORIES],
   );
 });
 
@@ -228,6 +258,8 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     const second = await planPokemonBubbleSurvival(options);
     assert.deepEqual(first, second);
     assert.equal(first.selection.selected_subjects.length, 9);
+    assert.equal(first.selection.category, 'legendary-mythical');
+    assert.equal(first.selection.category_label, 'Legendary + Mythical Pokemon');
     assert.equal(new Set(first.selection.selected_subjects.map((subject) => subject.id)).size, 9);
     assert.equal(first.simulation.outcome, 'winner');
     assert.equal(first.simulation.config.bubble_radius, 25.2);
@@ -315,6 +347,30 @@ test('sprite compositing alpha-blends RGBA pixels without altering untouched pix
   });
   assert.deepEqual([...destination.subarray(0, 4)], [10, 20, 30, 255]);
   assert.deepEqual([...destination.subarray(4)], [125, 85, 45, 255]);
+});
+
+test('sprite compositing preserves smooth fractional-pixel motion', () => {
+  const compositeAt = (left) => {
+    const destination = Buffer.alloc(3 * 4);
+    alphaBlendRgba({
+      destination,
+      destinationWidth: 3,
+      destinationHeight: 1,
+      source: Buffer.from([255, 255, 255, 255]),
+      sourceWidth: 1,
+      sourceHeight: 1,
+      left,
+      top: 0,
+    });
+    const alphas = [destination[3], destination[7], destination[11]];
+    const totalAlpha = alphas.reduce((sum, alpha) => sum + alpha, 0);
+    const centroid = alphas.reduce((sum, alpha, index) => sum + (alpha * index), 0) / totalAlpha;
+    return { alphas, centroid };
+  };
+  const quarterPixel = compositeAt(0.25);
+  assert.deepEqual(quarterPixel.alphas, [191, 64, 0]);
+  assert.ok(Math.abs(quarterPixel.centroid - 0.25) < 0.002);
+  assert.ok(Math.abs(compositeAt(0.51).centroid - compositeAt(0.49).centroid - 0.02) < 0.002);
 });
 
 test('winner hold, ding, and defeat-only shrink cues are scheduled at their boundaries', () => {

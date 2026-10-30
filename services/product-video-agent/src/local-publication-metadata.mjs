@@ -128,6 +128,19 @@ const DEFAULT_QUIZ_TITLE_BUILDERS = Object.freeze([
   () => 'Test your Pokemon knowledge!',
 ]);
 
+const DEFAULT_BUBBLE_SURVIVAL_TITLE_BUILDERS = Object.freeze([
+  (poolLabel) => `${poolLabel} Bubble Battle!`,
+  (poolLabel) => `${poolLabel} Bubble Survival!`,
+  (poolLabel) => `Which ${poolLabel} Survives?`,
+]);
+
+function resolveBubbleSurvivalPoolLabel(plan) {
+  const explicitLabel = String(plan?.selection?.category_label || '').trim();
+  if (explicitLabel) return explicitLabel;
+  const category = titleCaseWord(String(plan?.selection?.category || 'mixed').replaceAll('-', ' '));
+  return /pokemon/iu.test(category) ? category : `${category} Pokemon`;
+}
+
 const DEFAULT_FIND_THE_SHINY_TITLE_BUILDERS = Object.freeze([
   () => 'Find the Shiny Pokemon',
   () => 'Find the Shiny \u2728',
@@ -287,8 +300,13 @@ function buildMetadataPrompt(plan) {
 function buildTemplateAwareDefaultTitle(plan) {
   const flavor = resolveTemplateFlavor(plan);
   if (flavor === 'bubble-survival') {
-    const category = titleCaseWord(String(plan?.selection?.category || 'Pokemon').replaceAll('-', ' '));
-    return `${category} Pokemon Bubble Survival!`;
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|bubble-survival`) % DEFAULT_BUBBLE_SURVIVAL_TITLE_BUILDERS.length
+      : 0;
+    return DEFAULT_BUBBLE_SURVIVAL_TITLE_BUILDERS[templateIndex](
+      resolveBubbleSurvivalPoolLabel(plan),
+    );
   }
   if (flavor === 'pixelated-reveal') {
     const seed = String(plan?.seed || '').trim();
@@ -369,9 +387,9 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
   const flavor = resolveTemplateFlavor(plan);
   const channelName = resolveMetadataChannelName(channelProfile);
   if (flavor === 'bubble-survival') {
-    const category = String(plan?.selection?.category || 'Pokemon').replaceAll('-', ' ');
+    const poolLabel = resolveBubbleSurvivalPoolLabel(plan);
     return joinDescriptionParagraphs(
-      `${plan?.selection?.selected_subjects?.length || 12} ${category} Pokemon enter the bubble arena. Every wall bounce adds a tail, every crossed rival tail gets cut, and only one survives.`,
+      `${plan?.selection?.selected_subjects?.length || 9} ${poolLabel} enter the bubble arena. Every wall bounce adds a tail, every crossed rival tail gets cut, and only one survives.`,
       `Who do you expect to survive? Welcome to ${channelName}.`,
     );
   }
@@ -460,7 +478,7 @@ function buildTemplateAwareMetadataPrompt(plan) {
     const selectedSubjects = plan?.selection?.selected_subjects || [];
     return [
       'Write YouTube Shorts publication metadata as JSON for a Pokemon physics survival simulation.',
-      `Category: ${String(plan?.selection?.category || 'mixed')}`,
+      `Pokemon pool: ${resolveBubbleSurvivalPoolLabel(plan)}`,
       `Pokemon shown: ${selectedSubjects.map((subject) => subject.name).join(', ')}`,
       'Mechanic: wall hits add anchored tails; crossing an opponent tail cuts it; losing the last tail eliminates that Pokemon.',
       'Return JSON with title, description, and hashtags.',

@@ -198,6 +198,19 @@ for (const {
     channelSelector: 'poke-quizz-youtube',
     genreLabel: 'Bubble Survival',
   },
+  ...[
+    ['TrivaMon', 'trivamon-youtube'],
+    ['Poke Guess', 'poke-guess-youtube'],
+    ['DexGuess', 'dexguess-youtube'],
+    ['ProffMon', 'proffmon-youtube'],
+  ].map(([channelName, channelSelector]) => ({
+    label: `${channelName} Bubble Survival`,
+    channelConfigPath: `services/product-video-agent/config/channels/${channelSelector}.json`,
+    templateId: 'pokemon.bubble-survival.v1',
+    templatePath: 'services/product-video-agent/config/templates/pokemon/bubble-survival.v1.json',
+    channelSelector,
+    genreLabel: 'Bubble Survival',
+  })),
   {
     label: 'DexGuess Build Your Team manual selection',
     channelConfigPath: 'services/product-video-agent/config/channels/dexguess-youtube.json',

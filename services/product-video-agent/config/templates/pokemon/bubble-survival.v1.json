@@ -3,16 +3,20 @@
   "template_key": "bubble-survival",
   "version": 1,
   "selection_rules": {
-    "category": "legendary",
     "pokemon_count": 9,
-    "supported_categories": [
-      "legendary",
-      "mythical",
-      "starters",
-      "first-evolutions",
-      "baby",
-      "final-evolutions",
-      "mega-evolutions"
+    "pool_selection_mode": "seeded_weighted",
+    "pool_variants": [
+      { "category": "mixed", "weight": 1 },
+      { "category": "first-stage", "weight": 1 },
+      { "category": "middle-stage", "weight": 1 },
+      { "category": "legendary-mythical", "weight": 1 },
+      { "category": "dynamax-gigantamax", "weight": 1 },
+      { "category": "final-starter", "weight": 1 },
+      { "category": "mega-legendary", "weight": 1 },
+      { "category": "baby", "weight": 1 },
+      { "category": "starters", "weight": 1 },
+      { "category": "final-stage", "weight": 1 },
+      { "category": "mega", "weight": 1 }
     ]
   },
   "video": {

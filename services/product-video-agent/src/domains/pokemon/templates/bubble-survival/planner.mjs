@@ -7,6 +7,8 @@ import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selecti
 import { probeMediaDurationSeconds } from '../../../../media-duration.mjs';
 import { resolveFfmpegExecutable } from '../../../../runtime-executables.mjs';
 import {
+  BUBBLE_SURVIVAL_CATEGORIES,
+  getBubbleSurvivalCategoryLabel,
   normalizeBubbleSurvivalCategory,
   resolveBubbleSurvivalCategoryPool,
 } from './category-resolver.mjs';
@@ -39,6 +41,29 @@ function shuffle(values, random) {
 function positiveInteger(value, fallback) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function resolveConfiguredPools(template) {
+  const configured = Array.isArray(template?.selection_rules?.pool_variants)
+    ? template.selection_rules.pool_variants
+    : [];
+  const variants = configured.length > 0
+    ? configured
+    : BUBBLE_SURVIVAL_CATEGORIES.map((category) => ({ category, weight: 1 }));
+  return variants.map((variant) => ({
+    category: normalizeBubbleSurvivalCategory(variant?.category || variant?.key),
+    weight: positiveInteger(variant?.weight, 1),
+  }));
+}
+
+function selectWeightedPool(pools, random) {
+  const totalWeight = pools.reduce((sum, pool) => sum + pool.weight, 0);
+  let cursor = random() * totalWeight;
+  for (const pool of pools) {
+    cursor -= pool.weight;
+    if (cursor <= 0) return pool;
+  }
+  return pools.at(-1) || null;
 }
 
 function compactSubject(row, index) {
@@ -100,9 +125,6 @@ export async function planPokemonBubbleSurvival({
   projectRoot = process.cwd(),
 } = {}) {
   const normalizedSeed = String(seed || new Date().toISOString()).trim();
-  const category = normalizeBubbleSurvivalCategory(
-    template?.selection_rules?.category || 'legendary',
-  );
   const pokemonCount = positiveInteger(
     template?.selection_rules?.pokemon_count,
     DEFAULT_POKEMON_COUNT,
@@ -111,10 +133,32 @@ export async function planPokemonBubbleSurvival({
     template?.simulation?.maximum_attempts,
     DEFAULT_MAXIMUM_SIMULATION_ATTEMPTS,
   );
-  const categoryPool = resolveBubbleSurvivalCategoryPool(pokedexRows, category);
-  const readablePool = [];
-  for (const row of categoryPool) {
-    if (await pathIsReadable(row.sprite_path)) readablePool.push(row);
+  const readableRows = [];
+  for (const row of Array.isArray(pokedexRows) ? pokedexRows : []) {
+    if (row?.sprite_path && await pathIsReadable(row.sprite_path)) readableRows.push(row);
+  }
+  const configuredCategory = String(template?.selection_rules?.category || '').trim();
+  let category;
+  let readablePool;
+  if (configuredCategory && configuredCategory.toLowerCase() !== 'random') {
+    category = normalizeBubbleSurvivalCategory(configuredCategory);
+    readablePool = resolveBubbleSurvivalCategoryPool(readableRows, category);
+  } else {
+    const viablePools = resolveConfiguredPools(template)
+      .map((pool) => ({
+        ...pool,
+        subjects: resolveBubbleSurvivalCategoryPool(readableRows, pool.category),
+      }))
+      .filter((pool) => pool.subjects.length >= pokemonCount);
+    if (viablePools.length === 0) {
+      throw new Error(`Bubble Survival has no configured pool with ${pokemonCount} readable unique sprites.`);
+    }
+    const selectedPool = selectWeightedPool(
+      viablePools,
+      createSeededRandom(`${normalizedSeed}|pool`),
+    );
+    category = selectedPool.category;
+    readablePool = selectedPool.subjects;
   }
   if (readablePool.length < pokemonCount) {
     throw new Error(
@@ -193,6 +237,7 @@ export async function planPokemonBubbleSurvival({
     seed: normalizedSeed,
     selection: {
       category,
+      category_label: getBubbleSurvivalCategoryLabel(category),
       requested_count: pokemonCount,
       eligible_count: readablePool.length,
       selected_subjects: selectedSubjects,

@@ -243,7 +243,9 @@ function renderArenaSvg({ plan, template, videoTime }) {
     ].join('');
   }
 
-  const categoryLabel = escapeXml(String(plan.selection.category || '').replaceAll('-', ' ').toUpperCase());
+  const categoryLabel = escapeXml(String(
+    plan.selection.category_label || plan.selection.category || '',
+  ).replaceAll('-', ' ').toUpperCase());
   const title = buildBubbleSurvivalTitleMarkup({ centerX, frameWidth: width });
   return Buffer.from([
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
@@ -319,23 +321,51 @@ export function alphaBlendRgba({
   left,
   top,
 }) {
-  for (let sourceY = 0; sourceY < sourceHeight; sourceY += 1) {
-    const destinationY = top + sourceY;
-    if (destinationY < 0 || destinationY >= destinationHeight) continue;
-    for (let sourceX = 0; sourceX < sourceWidth; sourceX += 1) {
-      const destinationX = left + sourceX;
-      if (destinationX < 0 || destinationX >= destinationWidth) continue;
-      const sourceOffset = ((sourceY * sourceWidth) + sourceX) * 4;
-      const sourceAlpha = source[sourceOffset + 3] / 255;
+  const offsetX = Number(left);
+  const offsetY = Number(top);
+  const startX = Math.max(0, Math.floor(offsetX));
+  const startY = Math.max(0, Math.floor(offsetY));
+  const endX = Math.min(destinationWidth, Math.ceil(offsetX + sourceWidth));
+  const endY = Math.min(destinationHeight, Math.ceil(offsetY + sourceHeight));
+  for (let destinationY = startY; destinationY < endY; destinationY += 1) {
+    const sourceY = destinationY - offsetY;
+    const sourceY0 = Math.floor(sourceY);
+    const fractionY = sourceY - sourceY0;
+    for (let destinationX = startX; destinationX < endX; destinationX += 1) {
+      const sourceX = destinationX - offsetX;
+      const sourceX0 = Math.floor(sourceX);
+      const fractionX = sourceX - sourceX0;
+      const samples = [
+        [sourceX0, sourceY0, (1 - fractionX) * (1 - fractionY)],
+        [sourceX0 + 1, sourceY0, fractionX * (1 - fractionY)],
+        [sourceX0, sourceY0 + 1, (1 - fractionX) * fractionY],
+        [sourceX0 + 1, sourceY0 + 1, fractionX * fractionY],
+      ];
+      let sourceAlpha = 0;
+      const sourcePremultiplied = [0, 0, 0];
+      for (const [sampleX, sampleY, weight] of samples) {
+        if (weight <= 0
+          || sampleX < 0 || sampleX >= sourceWidth
+          || sampleY < 0 || sampleY >= sourceHeight) continue;
+        const sourceOffset = ((sampleY * sourceWidth) + sampleX) * 4;
+        const sampleAlpha = source[sourceOffset + 3] / 255;
+        sourceAlpha += sampleAlpha * weight;
+        for (let channel = 0; channel < 3; channel += 1) {
+          sourcePremultiplied[channel] += (source[sourceOffset + channel] / 255)
+            * sampleAlpha * weight;
+        }
+      }
       if (sourceAlpha <= 0) continue;
       const destinationOffset = ((destinationY * destinationWidth) + destinationX) * 4;
       const destinationAlpha = destination[destinationOffset + 3] / 255;
       const outputAlpha = sourceAlpha + (destinationAlpha * (1 - sourceAlpha));
       for (let channel = 0; channel < 3; channel += 1) {
+        const destinationPremultiplied = (destination[destinationOffset + channel] / 255)
+          * destinationAlpha;
         destination[destinationOffset + channel] = Math.round((
-          (source[sourceOffset + channel] * sourceAlpha)
-          + (destination[destinationOffset + channel] * destinationAlpha * (1 - sourceAlpha))
-        ) / outputAlpha);
+          (sourcePremultiplied[channel]
+            + (destinationPremultiplied * (1 - sourceAlpha))) / outputAlpha
+        ) * 255);
       }
       destination[destinationOffset + 3] = Math.round(outputAlpha * 255);
     }
@@ -366,8 +396,8 @@ async function buildSpriteComposites({
       input: sprite.input,
       width: sprite.width,
       height: sprite.height,
-      left: Math.round(centerX - (sprite.size / 2)),
-      top: Math.round(centerY - 120),
+      left: centerX - (sprite.size / 2),
+      top: centerY - 120,
     }];
   }
 
@@ -394,8 +424,8 @@ async function buildSpriteComposites({
       input: sprite.input,
       width: sprite.width,
       height: sprite.height,
-      left: Math.round(bubble.x - (sprite.size / 2)),
-      top: Math.round(bubble.y - (sprite.size / 2)),
+      left: bubble.x - (sprite.size / 2),
+      top: bubble.y - (sprite.size / 2),
     });
   }
   return composites;
