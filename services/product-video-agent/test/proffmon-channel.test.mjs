@@ -18,6 +18,7 @@ import {
   parseProductVideoCommand,
 } from '../../task-router/src/product-video-command-parser.mjs';
 import { discoverNightShiftChannelRuntimes } from '../../../scripts/lib/night-shift/pokemon-maintenance-runtime.mjs';
+import { resolveAutomaticCommentConfig } from '../src/automatic-comment-policy.mjs';
 
 const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 const CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
@@ -48,6 +49,23 @@ test('ProffMon publication profile uses its own YouTube identity, OAuth token, a
   assert.equal(profile.youtube.oauth_refresh_token_env, 'YOUTUBE_PROFFMON_REFRESH_TOKEN');
   assert.equal(resolvePublicationChannelUrl(profile), 'https://www.youtube.com/channel/UCoBQkiRDRgyrOCjiu5TDSMg');
   assert.equal(resolvePublicationReviewThreadId({}, profile), '1549355550553280542');
+});
+
+test('every Pokemon channel uses the Bubble Survival discussion comments', async () => {
+  const profiles = await loadPublicationChannelProfiles(CHANNELS_PATH, { projectRoot: PROJECT_ROOT });
+  const pokemonProfiles = profiles.filter((profile) => profile.niche === 'pokemon_quiz');
+  assert.equal(pokemonProfiles.length, 5);
+  for (const profile of pokemonProfiles) {
+    const config = resolveAutomaticCommentConfig(profile, { platform: 'youtube' });
+    assert.deepEqual(
+      config.templateVariants['pokemon.bubble-survival.v1'].map((variant) => variant.text),
+      [
+        'Which Pokémon pool should battle next?',
+        'Who did you think would win?',
+      ],
+      profile.account_key,
+    );
+  }
 });
 
 test('ProffMon uses every Poke Quizz template with its selected weight overrides', async () => {

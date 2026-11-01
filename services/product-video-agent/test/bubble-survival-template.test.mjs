@@ -20,6 +20,7 @@ import {
   buildPokeQuizzRenderPlan,
   cropSpriteToVisibleAlphaBounds,
   renderArenaSvg,
+  resizeSprite,
   resolveCountdownVisualState,
   resolveDefeatedBubbleScale,
   wrapTextInsideFrame,
@@ -387,6 +388,21 @@ test('Bubble Survival fills bubbles from visible alpha bounds instead of transpa
   const metadata = await sharp(croppedSprite).metadata();
   assert.equal(metadata.width, 38);
   assert.equal(metadata.height, 58);
+
+  const resized = await resizeSprite({
+    subjectId: 'padded-sprite',
+    size: 50,
+    spriteBuffers: new Map([['padded-sprite', croppedSprite]]),
+    resizedSpriteCache: new Map(),
+  });
+  assert.equal(resized.width, 50);
+  assert.equal(resized.height, 50);
+  assert.equal(resized.input[3], 0, 'contain padding must stay transparent');
+  assert.equal(
+    resized.input[(((25 * resized.width) + 25) * 4) + 3],
+    255,
+    'visible sprite pixels must remain opaque',
+  );
 });
 
 test('visual countdown advances 30 percent faster and ends as physics begins', () => {

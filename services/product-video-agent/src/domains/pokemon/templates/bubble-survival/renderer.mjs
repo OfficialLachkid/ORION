@@ -303,7 +303,7 @@ async function loadSpriteBuffers(subjects) {
   return new Map(entries);
 }
 
-async function resizeSprite({ subjectId, size, spriteBuffers, resizedSpriteCache }) {
+export async function resizeSprite({ subjectId, size, spriteBuffers, resizedSpriteCache }) {
   const roundedSize = Math.max(1, Math.round(size));
   const cacheKey = `${subjectId}:${roundedSize}`;
   if (!resizedSpriteCache.has(cacheKey)) {
@@ -311,7 +311,10 @@ async function resizeSprite({ subjectId, size, spriteBuffers, resizedSpriteCache
     if (!source) throw new Error(`Missing Bubble Survival sprite buffer for ${subjectId}.`);
     resizedSpriteCache.set(cacheKey, sharp(source)
       .ensureAlpha()
-      .resize(roundedSize, roundedSize, { fit: 'contain' })
+      .resize(roundedSize, roundedSize, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 },
+      })
       .raw()
       .toBuffer({ resolveWithObject: true }));
   }

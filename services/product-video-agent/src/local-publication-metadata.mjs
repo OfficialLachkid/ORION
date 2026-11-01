@@ -129,9 +129,20 @@ const DEFAULT_QUIZ_TITLE_BUILDERS = Object.freeze([
 ]);
 
 const DEFAULT_BUBBLE_SURVIVAL_TITLE_BUILDERS = Object.freeze([
-  (poolLabel) => `${poolLabel} Bubble Battle!`,
-  (poolLabel) => `${poolLabel} Bubble Survival!`,
-  (poolLabel) => `Which ${poolLabel} Survives?`,
+  (poolLabel) => `${poolLabel} - Who Will Win?`,
+  (poolLabel) => `${poolLabel} - Who Takes the Win?`,
+  (poolLabel) => `${poolLabel} - Pick the Winner!`,
+]);
+
+const DEFAULT_BUBBLE_SURVIVAL_DESCRIPTION_BUILDERS = Object.freeze([
+  ({ poolLabel, participantCount, channelName }) => joinDescriptionParagraphs(
+    `${participantCount} ${poolLabel} enter the bubble arena. Every wall bounce adds a tail, every crossed rival tail gets cut, and only one survives.`,
+    `Who do you expect to survive? Welcome to ${channelName}.`,
+  ),
+  ({ poolLabel, participantCount }) => {
+    const participantLabel = participantCount === 9 ? 'Nine' : String(participantCount);
+    return `No stats or type advantage, just physics! ${participantLabel} ${poolLabel}, three tails each, one survivor. Who is your pick?`;
+  },
 ]);
 
 function resolveBubbleSurvivalPoolLabel(plan) {
@@ -388,10 +399,17 @@ function buildTemplateAwareDefaultDescription(plan, channelProfile = null) {
   const channelName = resolveMetadataChannelName(channelProfile);
   if (flavor === 'bubble-survival') {
     const poolLabel = resolveBubbleSurvivalPoolLabel(plan);
-    return joinDescriptionParagraphs(
-      `${plan?.selection?.selected_subjects?.length || 9} ${poolLabel} enter the bubble arena. Every wall bounce adds a tail, every crossed rival tail gets cut, and only one survives.`,
-      `Who do you expect to survive? Welcome to ${channelName}.`,
-    );
+    const participantCount = plan?.selection?.selected_subjects?.length || 9;
+    const seed = String(plan?.seed || '').trim();
+    const templateIndex = seed
+      ? hashSeed(`${seed}|bubble-survival-description`)
+        % DEFAULT_BUBBLE_SURVIVAL_DESCRIPTION_BUILDERS.length
+      : 0;
+    return DEFAULT_BUBBLE_SURVIVAL_DESCRIPTION_BUILDERS[templateIndex]({
+      poolLabel,
+      participantCount,
+      channelName,
+    });
   }
   if (flavor === 'pixelated-reveal') {
     const roundCount = Number(plan?.selection?.round_count || 0) || 4;
