@@ -1,6 +1,10 @@
+import {
+  expandVisibleSpriteBounds,
+  findVisibleSpriteBounds,
+} from '../../shared/render/sprite-visible-bounds.mjs';
+
 const DEFAULT_VISIBLE_MARGIN_PX = 24;
 const DEFAULT_CROP_PADDING_PX = 4;
-const MIN_VISIBLE_ALPHA = 8;
 const MAX_OPAQUE_ANALYSIS_POINTS = 18000;
 
 const spriteAnalysisCache = new Map();
@@ -86,60 +90,12 @@ export function resolveSpriteFrameHeight(metadata, info) {
   return totalHeight > 0 ? Math.max(1, Math.round(totalHeight / pages)) : 0;
 }
 
-function findVisibleBounds(data, info, frameHeightHint) {
-  const sourceWidth = Number(info?.width || 0);
-  const totalHeight = Number(info?.height || 0);
-  const hintedFrameHeight = Number(frameHeightHint || 0);
-  const sourceHeight = hintedFrameHeight > 0
-    ? Math.min(totalHeight, Math.round(hintedFrameHeight))
-    : Number(info?.pageHeight || totalHeight);
-  const channels = Number(info?.channels || 4);
-  if (
-    sourceWidth <= 0
-    || sourceHeight <= 0
-    || totalHeight <= 0
-    || channels < 4
-    || !data?.length
-  ) {
-    return null;
-  }
-
-  const visibleMask = new Uint8Array(sourceWidth * sourceHeight);
-  let minX = sourceWidth;
-  let minY = sourceHeight;
-  let maxX = -1;
-  let maxY = -1;
-  for (let sourceY = 0; sourceY < totalHeight; sourceY += 1) {
-    const localY = sourceY % sourceHeight;
-    for (let x = 0; x < sourceWidth; x += 1) {
-      const alphaIndex = ((sourceY * sourceWidth) + x) * channels + 3;
-      if ((data[alphaIndex] || 0) < MIN_VISIBLE_ALPHA) continue;
-      visibleMask[(localY * sourceWidth) + x] = 1;
-      if (x < minX) minX = x;
-      if (localY < minY) minY = localY;
-      if (x > maxX) maxX = x;
-      if (localY > maxY) maxY = localY;
-    }
-  }
-  if (maxX < minX || maxY < minY) return null;
-  return {
-    sourceWidth,
-    sourceHeight,
-    visibleMask,
-    minX,
-    minY,
-    maxX,
-    maxY,
-  };
-}
-
 function buildVisibleAnalysis(bounds, layout) {
-  const cropX = Math.max(0, bounds.minX - layout.cropPadding);
-  const cropY = Math.max(0, bounds.minY - layout.cropPadding);
-  const cropRight = Math.min(bounds.sourceWidth - 1, bounds.maxX + layout.cropPadding);
-  const cropBottom = Math.min(bounds.sourceHeight - 1, bounds.maxY + layout.cropPadding);
-  const cropWidth = cropRight - cropX + 1;
-  const cropHeight = cropBottom - cropY + 1;
+  const crop = expandVisibleSpriteBounds(bounds, layout.cropPadding);
+  const cropX = crop.x;
+  const cropY = crop.y;
+  const cropWidth = crop.width;
+  const cropHeight = crop.height;
   const displayScale = Math.min(
     layout.visibleWidth / cropWidth,
     layout.visibleHeight / cropHeight,
@@ -167,14 +123,7 @@ function buildVisibleAnalysis(bounds, layout) {
   return {
     ...layout,
     opaquePoints,
-    spriteCrop: {
-      x: cropX,
-      y: cropY,
-      width: cropWidth,
-      height: cropHeight,
-      source_width: bounds.sourceWidth,
-      source_height: bounds.sourceHeight,
-    },
+    spriteCrop: crop,
   };
 }
 
@@ -204,7 +153,7 @@ export async function loadOpaqueSpriteAnalysis(spritePath, template) {
         .raw()
         .toBuffer({ resolveWithObject: true });
       const frameHeight = resolveSpriteFrameHeight(metadata, info);
-      const bounds = findVisibleBounds(data, info, frameHeight);
+      const bounds = findVisibleSpriteBounds(data, info, { frameHeight });
       return bounds ? buildVisibleAnalysis(bounds, layout) : createEmptyAnalysis(layout);
     } catch {
       return createEmptyAnalysis(layout);

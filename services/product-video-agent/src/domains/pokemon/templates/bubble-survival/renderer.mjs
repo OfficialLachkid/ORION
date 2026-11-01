@@ -4,6 +4,10 @@ import sharp from 'sharp';
 import { probeMediaDurationSeconds } from '../../../../media-duration.mjs';
 import { runLocalProcess } from '../../../../process-runner.mjs';
 import { synthesizeNarrationTrack } from '../dual-type-reveal/render/narration-synthesis.mjs';
+import {
+  expandVisibleSpriteBounds,
+  findVisibleSpriteBounds,
+} from '../shared/render/sprite-visible-bounds.mjs';
 
 const BUBBLE_COLORS = Object.freeze([
   '#4CC9F0', '#F72585', '#B8F2E6', '#FFD166', '#9B5DE5', '#00F5D4',
@@ -148,7 +152,7 @@ export function buildBubbleSurvivalTitleMarkup({ centerX, frameWidth }) {
   };
 }
 
-function renderArenaSvg({ plan, template, videoTime }) {
+export function renderArenaSvg({ plan, template, videoTime }) {
   const width = Number(plan.video.frame_width);
   const height = Number(plan.video.frame_height);
   const introSeconds = Number(plan.video.intro_seconds);
@@ -193,17 +197,12 @@ function renderArenaSvg({ plan, template, videoTime }) {
     // Avoid librsvg corruption once the sprite becomes a sub-pixel-scale despawn remnant.
     if (renderScale <= 0.2) return '';
     const renderRadius = bubbleRadius * renderScale;
-    const counterOffset = bubbleRadius * 0.63 * renderScale;
-    const counterX = bubble.x + counterOffset;
-    const counterY = bubble.y - counterOffset;
     return [
       '<g>',
       bubble.is_defeated
         ? ''
         : `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius + (3 * renderScale)}" fill="none" stroke="${color}" stroke-width="${8 * renderScale}" opacity="0.18"/>`,
       `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="${3 * renderScale}"/>`,
-      `<circle cx="${counterX}" cy="${counterY}" r="${7 * renderScale}" fill="#06101c" stroke="${color}" stroke-width="${1.5 * renderScale}"/>`,
-      `<text x="${counterX}" y="${counterY + (3 * renderScale)}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${7 * renderScale}" font-weight="700" fill="#fff">${bubble.tail_count}</text>`,
       '</g>',
     ].join('');
   }).join('');
@@ -281,10 +280,25 @@ async function mapWithConcurrency(values, concurrency, iteratee) {
   await Promise.all(Array.from({ length: Math.min(concurrency, values.length) }, () => worker()));
 }
 
+export async function cropSpriteToVisibleAlphaBounds(source, cropPadding = 4) {
+  const decoded = await sharp(source)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const bounds = findVisibleSpriteBounds(decoded.data, decoded.info);
+  const crop = expandVisibleSpriteBounds(bounds, cropPadding);
+  if (!crop) return source;
+  return sharp(source)
+    .ensureAlpha()
+    .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
+    .png()
+    .toBuffer();
+}
+
 async function loadSpriteBuffers(subjects) {
   const entries = await Promise.all(subjects.map(async (subject) => {
     const bytes = await readFile(subject.sprite_path);
-    return [subject.id, bytes];
+    return [subject.id, await cropSpriteToVisibleAlphaBounds(bytes)];
   }));
   return new Map(entries);
 }

@@ -198,7 +198,7 @@ function normalizeSimulationConfig(raw = {}) {
     center_x: Number(raw.center_x ?? 270),
     center_y: Number(raw.center_y ?? 450),
     arena_radius: Number(raw.arena_radius ?? 230),
-    bubble_radius: Number(raw.bubble_radius ?? 25.2),
+    bubble_radius: Number(raw.bubble_radius ?? 32.76),
     start_inset: Number(raw.start_inset ?? 5),
     initial_tail_count: Math.max(1, Math.round(Number(raw.initial_tail_count ?? 3))),
     initial_tail_anchor_spread_radians: Number(raw.initial_tail_anchor_spread_degrees ?? 7) * Math.PI / 180,
@@ -212,8 +212,8 @@ function normalizeSimulationConfig(raw = {}) {
     sample_fps: Number(raw.sample_fps ?? 30),
     maximum_seconds: Number(raw.maximum_seconds ?? 40),
     stagnation_seconds: Number(raw.stagnation_seconds ?? 10),
-    speed_up_interval_seconds: Number(raw.speed_up_interval_seconds ?? 7),
-    speed_up_multiplier: Number(raw.speed_up_multiplier ?? 1.18),
+    speed_up_interval_seconds: Number(raw.speed_up_interval_seconds ?? 5),
+    speed_up_multiplier: Number(raw.speed_up_multiplier ?? 1.25),
   };
 }
 

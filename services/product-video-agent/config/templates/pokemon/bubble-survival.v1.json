@@ -36,7 +36,7 @@
     "stationary": true
   },
   "bubbles": {
-    "radius": 25.2,
+    "radius": 32.76,
     "start_inset": 5,
     "initial_tail_count": 3,
     "initial_tail_anchor_spread_degrees": 7,
@@ -53,8 +53,8 @@
     "maximum_seconds": 40,
     "stagnation_seconds": 10,
     "maximum_attempts": 8,
-    "speed_up_interval_seconds": 7,
-    "speed_up_multiplier": 1.18,
+    "speed_up_interval_seconds": 5,
+    "speed_up_multiplier": 1.25,
     "draw_policy": "retry-with-derived-seed"
   },
   "intro": {

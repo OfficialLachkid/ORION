@@ -18,6 +18,8 @@ import {
   buildBubbleSurvivalFfmpegArgs,
   buildBubbleSurvivalTitleMarkup,
   buildPokeQuizzRenderPlan,
+  cropSpriteToVisibleAlphaBounds,
+  renderArenaSvg,
   resolveCountdownVisualState,
   resolveDefeatedBubbleScale,
   wrapTextInsideFrame,
@@ -262,12 +264,14 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.selection.category_label, 'Legendary + Mythical Pokemon');
     assert.equal(new Set(first.selection.selected_subjects.map((subject) => subject.id)).size, 9);
     assert.equal(first.simulation.outcome, 'winner');
-    assert.equal(first.simulation.config.bubble_radius, 25.2);
+    assert.equal(first.simulation.config.bubble_radius, 32.76);
     assert.equal(first.simulation.config.initial_tail_count, 3);
     assert.equal(first.simulation.config.defeat_pop_scale, 1.2);
     assert.equal(first.simulation.config.defeat_pop_seconds, 0.1);
     assert.equal(first.simulation.config.defeat_shrink_seconds, 0.577);
     assert.equal(first.simulation.config.initial_speed, 92.5);
+    assert.equal(first.simulation.config.speed_up_interval_seconds, 5);
+    assert.equal(first.simulation.config.speed_up_multiplier, 1.25);
     assert.equal(first.simulation.config.center_y, 450);
     assert.equal(first.assets.music_path, musicPath);
     assert.equal(first.assets.music_duration_seconds, 120);
@@ -316,6 +320,73 @@ test('Bubble Survival title is split into frame-safe lines', () => {
     sideMargin: 50,
   });
   assert.equal(longWord.estimated_widths[0], longWord.maximum_width);
+});
+
+test('Bubble Survival hides numeric tail counters because the tails show the state', () => {
+  const svg = renderArenaSvg({
+    plan: {
+      video: {
+        frame_width: 540,
+        frame_height: 960,
+        intro_seconds: 1,
+        frame_fps: 30,
+        winner_delay_seconds: 0.75,
+      },
+      simulation: {
+        duration_seconds: 10,
+        config: {
+          center_x: 270,
+          center_y: 450,
+          arena_radius: 200,
+          bubble_radius: 32.76,
+        },
+        frames: [{
+          bubbles: [{ id: 'pikachu', x: 100, y: 100, tail_count: 3, is_defeated: false }],
+          tails: [],
+        }],
+      },
+      selection: {
+        category: 'mixed',
+        category_label: 'Mixed Pokemon',
+        selected_subjects: [{ id: 'pikachu', name: 'Pikachu' }],
+      },
+      winner: { id: 'pikachu' },
+    },
+    template: {},
+    videoTime: 2,
+  }).toString('utf8');
+  assert.doesNotMatch(svg, />3<\/text>/u);
+  assert.doesNotMatch(svg, /font-size="7/u);
+});
+
+test('Bubble Survival fills bubbles from visible alpha bounds instead of transparent padding', async (context) => {
+  const runtimeDirectory = await mkdtemp(join(tmpdir(), 'orion-bubble-alpha-fit-'));
+  context.after(() => rm(runtimeDirectory, { recursive: true, force: true }));
+  const { default: sharp } = await import('sharp');
+  const visibleSprite = await sharp({
+    create: {
+      width: 30,
+      height: 50,
+      channels: 4,
+      background: { r: 0, g: 120, b: 255, alpha: 1 },
+    },
+  }).png().toBuffer();
+  const paddedSprite = await sharp({
+    create: {
+      width: 100,
+      height: 100,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  })
+    .composite([{ input: visibleSprite, left: 35, top: 25 }])
+    .png()
+    .toBuffer();
+
+  const croppedSprite = await cropSpriteToVisibleAlphaBounds(paddedSprite);
+  const metadata = await sharp(croppedSprite).metadata();
+  assert.equal(metadata.width, 38);
+  assert.equal(metadata.height, 58);
 });
 
 test('visual countdown advances 30 percent faster and ends as physics begins', () => {

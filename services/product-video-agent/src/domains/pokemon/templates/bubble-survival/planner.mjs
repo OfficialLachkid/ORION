@@ -87,7 +87,7 @@ function buildSimulationConfig(template) {
     center_x: Number(template?.arena?.center_x ?? (frameWidth / 2)),
     center_y: Number(template?.arena?.center_y ?? ((frameHeight / 2) - 30)),
     arena_radius: Number(template?.arena?.radius ?? 230),
-    bubble_radius: Number(template?.bubbles?.radius ?? 25.2),
+    bubble_radius: Number(template?.bubbles?.radius ?? 32.76),
     start_inset: Number(template?.bubbles?.start_inset ?? 5),
     initial_tail_count: Number(template?.bubbles?.initial_tail_count ?? 3),
     initial_tail_anchor_spread_degrees: Number(
@@ -103,8 +103,8 @@ function buildSimulationConfig(template) {
     sample_fps: Number(template?.render?.frame_fps ?? 30),
     maximum_seconds: Number(template?.simulation?.maximum_seconds ?? 40),
     stagnation_seconds: Number(template?.simulation?.stagnation_seconds ?? 10),
-    speed_up_interval_seconds: Number(template?.simulation?.speed_up_interval_seconds ?? 7),
-    speed_up_multiplier: Number(template?.simulation?.speed_up_multiplier ?? 1.18),
+    speed_up_interval_seconds: Number(template?.simulation?.speed_up_interval_seconds ?? 5),
+    speed_up_multiplier: Number(template?.simulation?.speed_up_multiplier ?? 1.25),
   };
 }
 
