@@ -28,6 +28,15 @@
     "arena_center_x": 480,
     "arena_center_y": 300,
     "arena_radius": 220,
+    "arena_shape_pool": [
+      "circle",
+      "triangle",
+      "square",
+      "diamond",
+      "rectangle",
+      "hexagon",
+      "octagon"
+    ],
     "bubble_radius": 35,
     "title_y": 52,
     "title_font_size": 30,
@@ -46,7 +55,32 @@
       "enabled": true,
       "start_seconds": 0.08,
       "letter_interval_seconds": 0.085,
-      "letter_pop_seconds": 0.12
+      "letter_pop_seconds": 0.12,
+      "wobble_enabled": true,
+      "wobble_amplitude_px": 3.5,
+      "wobble_rotation_degrees": 2.4,
+      "wobble_scale_amplitude": 0.025,
+      "wobble_period_seconds": 1.25,
+      "wobble_phase_step_radians": 0.7
+    },
+    "round_label": {
+      "font_size": 44,
+      "category_font_size": 28,
+      "background_width": 360,
+      "background_height": 64,
+      "category_background_width": 350,
+      "category_background_height": 44
+    },
+    "program_card": {
+      "style": "premium_3d",
+      "animate_elements": true,
+      "card_enter_seconds": 0.55,
+      "eyebrow_delay_seconds": 0.18,
+      "title_delay_seconds": 0.34,
+      "subtitle_delay_seconds": 0.62,
+      "element_enter_seconds": 0.42,
+      "title_depth_px": 12,
+      "title_depth_steps": 6
     }
   },
   "layout": {

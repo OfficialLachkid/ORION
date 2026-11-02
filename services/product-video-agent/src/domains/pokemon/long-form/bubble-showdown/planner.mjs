@@ -1,4 +1,8 @@
 import { BUBBLE_SURVIVAL_CATEGORIES } from '../../templates/bubble-survival/category-resolver.mjs';
+import {
+  BUBBLE_SURVIVAL_ARENA_SHAPES,
+  normalizeBubbleSurvivalArenaShape,
+} from '../../templates/bubble-survival/arena-geometry.mjs';
 
 function hashSeed(input) {
   let hash = 2166136261;
@@ -76,6 +80,31 @@ export function selectBubbleShowdownCategoryOrder({
   return result;
 }
 
+export function selectBubbleShowdownArenaShapeOrder({
+  shapes = [],
+  seed = '',
+  maximumRounds = 12,
+  previousShape = '',
+} = {}) {
+  const configured = (Array.isArray(shapes) && shapes.length > 0
+    ? shapes
+    : BUBBLE_SURVIVAL_ARENA_SHAPES)
+    .map(normalizeBubbleSurvivalArenaShape)
+    .filter((shape, index, values) => values.indexOf(shape) === index);
+  const random = createPrng(`${seed}:arena-shape-order`);
+  const result = [];
+  let bag = [...configured];
+  while (result.length < Math.max(1, positiveInteger(maximumRounds, 12))) {
+    if (bag.length === 0) bag = [...configured];
+    let index = Math.floor(random() * bag.length);
+    const lastShape = result.at(-1) || normalizeBubbleSurvivalArenaShape(previousShape);
+    if (bag.length > 1 && bag[index] === lastShape) index = (index + 1) % bag.length;
+    result.push(bag[index]);
+    bag.splice(index, 1);
+  }
+  return result;
+}
+
 export function resolveBubbleShowdownDurationConfig(template = {}) {
   const minimum = Math.max(60, numberOr(template?.episode?.minimum_duration_seconds, 240));
   const maximum = Math.max(minimum, numberOr(template?.episode?.maximum_duration_seconds, 360));
@@ -138,6 +167,7 @@ export function adaptBubbleSurvivalTemplateToLandscape({
   shortTemplate = {},
   longTemplate = {},
   category,
+  arenaShape = 'circle',
 } = {}) {
   const landscape = longTemplate?.round_layout || {};
   return {
@@ -167,6 +197,7 @@ export function adaptBubbleSurvivalTemplateToLandscape({
       center_x: numberOr(landscape.arena_center_x, 480),
       center_y: numberOr(landscape.arena_center_y, 300),
       radius: numberOr(landscape.arena_radius, 220),
+      shape: normalizeBubbleSurvivalArenaShape(arenaShape),
     },
     bubbles: {
       ...(shortTemplate.bubbles || {}),
@@ -189,7 +220,14 @@ export function adaptBubbleSurvivalTemplateToLandscape({
         start_seconds: numberOr(longTemplate?.presentation?.showdown_title_animation?.start_seconds, 0.08),
         letter_interval_seconds: numberOr(longTemplate?.presentation?.showdown_title_animation?.letter_interval_seconds, 0.085),
         letter_pop_seconds: numberOr(longTemplate?.presentation?.showdown_title_animation?.letter_pop_seconds, 0.12),
+        wobble_enabled: longTemplate?.presentation?.showdown_title_animation?.wobble_enabled === true,
+        wobble_amplitude_px: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_amplitude_px, 3.5),
+        wobble_rotation_degrees: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_rotation_degrees, 2.4),
+        wobble_scale_amplitude: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_scale_amplitude, 0.025),
+        wobble_period_seconds: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_period_seconds, 1.25),
+        wobble_phase_step_radians: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_phase_step_radians, 0.7),
       },
+      round_label: structuredClone(longTemplate?.presentation?.round_label || {}),
     },
   };
 }

@@ -17,6 +17,7 @@ import {
   buildBubbleShowdownLongFormPlan,
   filterUnusedBubbleShowdownSubjects,
   resolveBubbleShowdownDurationConfig,
+  selectBubbleShowdownArenaShapeOrder,
   selectBubbleShowdownCategoryOrder,
   shouldAppendBubbleShowdownRound,
 } from '../src/domains/pokemon/long-form/bubble-showdown/planner.mjs';
@@ -97,6 +98,7 @@ function buildRoundSummary(plan, renderResult, roundPlanPath) {
     seed: String(plan?.seed || ''),
     category: String(plan?.selection?.category || ''),
     category_label: String(plan?.selection?.category_label || ''),
+    arena_shape: String(plan?.simulation?.config?.arena_shape || 'circle'),
     duration_seconds: Number(renderResult?.duration_seconds || 0),
     selected_subjects: plan?.selection?.selected_subjects || [],
     winner: plan?.winner || null,
@@ -167,6 +169,12 @@ export async function generatePokemonBubbleShowdownLongFormReview(options = {}) 
     maximumRounds: durationConfig.maximum_rounds,
     previousCategory: selectionState.last_category,
   });
+  const arenaShapeOrder = selectBubbleShowdownArenaShapeOrder({
+    shapes: template?.round_layout?.arena_shape_pool,
+    seed,
+    maximumRounds: durationConfig.maximum_rounds,
+    previousShape: selectionState.last_arena_shape,
+  });
   const runtimeRoot = resolve(
     projectRoot,
     'data/runtime/product-video-agent/pokemon-long-form/bubble-showdown',
@@ -199,8 +207,11 @@ export async function generatePokemonBubbleShowdownLongFormReview(options = {}) 
       shortTemplate,
       longTemplate: template,
       category,
+      arenaShape: arenaShapeOrder[roundIndex],
     });
-    printInfo(`Planning Bubble Showdown round ${roundIndex + 1}: ${category}.`);
+    printInfo(
+      `Planning Bubble Showdown round ${roundIndex + 1}: ${category} in ${arenaShapeOrder[roundIndex]}.`,
+    );
     const plan = await planPokemonBubbleSurvival({
       template: roundTemplate,
       pokedexRows: availableRows,
@@ -314,6 +325,7 @@ export async function generatePokemonBubbleShowdownLongFormReview(options = {}) 
   }));
   const nextSelectionState = {
     last_category: roundSummaries.at(-1)?.category || null,
+    last_arena_shape: roundSummaries.at(-1)?.arena_shape || null,
     last_music_path: musicSchedule.at(-1)?.path || null,
     recent_subject_ids: [...usedSubjectKeys],
   };

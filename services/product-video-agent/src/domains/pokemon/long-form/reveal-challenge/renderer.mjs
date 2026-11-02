@@ -31,15 +31,62 @@ function appendProgramCard(filters, inputs, {
   subtitle,
   accentColor,
   fontPath,
+  programCard = {},
 }) {
   const duration = Math.max(0.5, durationSeconds);
   const fadeOutStart = Math.max(0, roundTime(duration - 0.45));
   const videoLabel = `cardv${index}`;
   const audioLabel = `carda${index}`;
   const font = fontPart(fontPath);
-  filters.push(
-    `color=c=0x071426:s=${width}x${height}:r=${fps}:d=${duration},format=rgba,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=0x020813@0.62:t=fill,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=${accentColor}@0.9:t=5,drawtext=text='${escapeDrawtextText(eyebrow)}'${font}:fontcolor=${accentColor}:fontsize=46:borderw=3:bordercolor=black:x=(w-text_w)/2:y=285,drawtext=text='${escapeDrawtextText(title)}'${font}:fontcolor=white:fontsize=86:borderw=7:bordercolor=black:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=(w-text_w)/2:y=425,drawtext=text='${escapeDrawtextText(subtitle)}'${font}:fontcolor=0xDCEBFF:fontsize=42:borderw=3:bordercolor=black:x=(w-text_w)/2:y=625,fade=t=in:st=0:d=0.35,fade=t=out:st=${fadeOutStart}:d=0.45,format=yuv420p[${videoLabel}]`,
-  );
+  if (programCard?.style === 'premium_3d' && programCard?.animate_elements !== false) {
+    const cardEnterSeconds = Math.max(0.1, ensureNumber(programCard?.card_enter_seconds, 0.55));
+    const elementEnterSeconds = Math.max(
+      0.1,
+      ensureNumber(programCard?.element_enter_seconds, 0.42),
+    );
+    const eyebrowDelay = Math.max(0, ensureNumber(programCard?.eyebrow_delay_seconds, 0.18));
+    const titleDelay = Math.max(0, ensureNumber(programCard?.title_delay_seconds, 0.34));
+    const subtitleDelay = Math.max(0, ensureNumber(programCard?.subtitle_delay_seconds, 0.62));
+    const cardWidth = width - 240;
+    const cardHeight = height - 310;
+    const expressionProgress = (start, seconds) => (
+      `min(1\\,max(0\\,(t-${roundTime(start)})/${roundTime(seconds)}))`
+    );
+    const cardProgress = expressionProgress(0.04, cardEnterSeconds);
+    const eyebrowProgress = expressionProgress(eyebrowDelay, elementEnterSeconds);
+    const titleProgress = expressionProgress(titleDelay, elementEnterSeconds);
+    const subtitleProgress = expressionProgress(subtitleDelay, elementEnterSeconds);
+    const operations = [
+      'format=rgba',
+      'fade=t=in:st=0:d=0.3',
+      `drawbox=x='(${width}-(${cardWidth}*${cardProgress}))/2':y='(${height}-(${cardHeight}*${cardProgress}))/2':w='${cardWidth}*${cardProgress}':h='${cardHeight}*${cardProgress}':color=0x020813@0.76:t=fill`,
+      `drawbox=x='(${width}-(${cardWidth}*${cardProgress}))/2':y='(${height}-(${cardHeight}*${cardProgress}))/2':w='${cardWidth}*${cardProgress}':h='${cardHeight}*${cardProgress}':color=${accentColor}@0.92:t=5`,
+      `drawbox=x='(${width}-(${Math.round(cardWidth * 0.72)}*${eyebrowProgress}))/2':y=245:w='${Math.round(cardWidth * 0.72)}*${eyebrowProgress}':h=5:color=${accentColor}@0.78:t=fill`,
+      `drawtext=text='${escapeDrawtextText(eyebrow)}'${font}:fontcolor=${accentColor}:fontsize=46:borderw=3:bordercolor=black:shadowx=3:shadowy=4:shadowcolor=black@0.7:x=(w-text_w)/2:y='285+24*(1-${eyebrowProgress})':alpha='${eyebrowProgress}'`,
+    ];
+    const depthPx = Math.max(0, Math.round(ensureNumber(programCard?.title_depth_px, 12)));
+    const depthSteps = Math.max(1, Math.round(ensureNumber(programCard?.title_depth_steps, 6)));
+    for (let depthStep = depthSteps; depthStep >= 1; depthStep -= 1) {
+      const offset = Number(((depthPx * depthStep) / depthSteps).toFixed(3));
+      operations.push(
+        `drawtext=text='${escapeDrawtextText(title)}'${font}:fontcolor=0x2B6DA6:fontsize=86:borderw=7:bordercolor=0x102A49:x=(w-text_w)/2+${offset}:y='425+${offset}+34*(1-${titleProgress})':alpha='${titleProgress}'`,
+      );
+    }
+    operations.push(
+      `drawtext=text='${escapeDrawtextText(title)}'${font}:fontcolor=0xF4FBFF:fontsize=86:borderw=7:bordercolor=0x173A63:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=(w-text_w)/2:y='425+34*(1-${titleProgress})':alpha='${titleProgress}'`,
+      `drawtext=text='${escapeDrawtextText(subtitle)}'${font}:fontcolor=0xDCEBFF:fontsize=42:borderw=3:bordercolor=black:shadowx=3:shadowy=5:shadowcolor=black@0.65:x=(w-text_w)/2:y='625+28*(1-${subtitleProgress})':alpha='${subtitleProgress}'`,
+      `drawbox=x='(${width}-(${Math.round(cardWidth * 0.72)}*${subtitleProgress}))/2':y=714:w='${Math.round(cardWidth * 0.72)}*${subtitleProgress}':h=5:color=${accentColor}@0.78:t=fill`,
+      `fade=t=out:st=${fadeOutStart}:d=0.45`,
+      'format=yuv420p',
+    );
+    filters.push(
+      `color=c=0x071426:s=${width}x${height}:r=${fps}:d=${duration},${operations.join(',')}[${videoLabel}]`,
+    );
+  } else {
+    filters.push(
+      `color=c=0x071426:s=${width}x${height}:r=${fps}:d=${duration},format=rgba,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=0x020813@0.62:t=fill,drawbox=x=120:y=155:w=${width - 240}:h=${height - 310}:color=${accentColor}@0.9:t=5,drawtext=text='${escapeDrawtextText(eyebrow)}'${font}:fontcolor=${accentColor}:fontsize=46:borderw=3:bordercolor=black:x=(w-text_w)/2:y=285,drawtext=text='${escapeDrawtextText(title)}'${font}:fontcolor=white:fontsize=86:borderw=7:bordercolor=black:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=(w-text_w)/2:y=425,drawtext=text='${escapeDrawtextText(subtitle)}'${font}:fontcolor=0xDCEBFF:fontsize=42:borderw=3:bordercolor=black:x=(w-text_w)/2:y=625,fade=t=in:st=0:d=0.35,fade=t=out:st=${fadeOutStart}:d=0.45,format=yuv420p[${videoLabel}]`,
+    );
+  }
   filters.push(
     `anullsrc=channel_layout=stereo:sample_rate=48000,atrim=duration=${duration},asetpts=PTS-STARTPTS[${audioLabel}]`,
   );
@@ -104,6 +151,7 @@ export function buildRevealChallengeProgramFilter(sectionCount, {
     subtitle: String(template?.presentation?.intro_subtitle || 'PROGRESSIVE + PIXELATED REVEALS'),
     accentColor: accent,
     fontPath,
+    programCard: template?.presentation?.program_card,
   });
 
   let programDurationSeconds = introDuration;
@@ -142,6 +190,7 @@ export function buildRevealChallengeProgramFilter(sectionCount, {
     subtitle: String(template?.presentation?.outro_subtitle || 'SHARE YOUR SCORE IN THE COMMENTS'),
     accentColor: String(template?.presentation?.outro_accent_color || '0x56C7FF'),
     fontPath,
+    programCard: template?.presentation?.program_card,
   });
 
   filters.push(

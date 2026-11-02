@@ -16,6 +16,11 @@ import {
   createSeededRandom,
   simulateBubbleSurvival,
 } from './simulation.mjs';
+import {
+  BUBBLE_SURVIVAL_ARENA_SHAPES,
+  normalizeBubbleSurvivalArenaShape,
+} from './arena-geometry.mjs';
+import { resolvePokemonCryPath } from '../shared/pokemon-cry-resolver.mjs';
 
 const DEFAULT_POKEMON_COUNT = 9;
 const DEFAULT_MAXIMUM_SIMULATION_ATTEMPTS = 8;
@@ -75,18 +80,42 @@ function compactSubject(row, index) {
     generation: Number(row.generation || 0) || null,
     types: Array.isArray(row.types) ? [...row.types] : [],
     sprite_path: String(row.sprite_path || '').trim(),
+    cry_path: String(row.cry_path || '').trim(),
+    cry_source_url: String(row.cry_source_url || '').trim(),
     form_id: row?.metadata?.pokemon_api?.form_id || null,
     pokemon_id: row?.metadata?.pokemon_api?.pokemon_id || null,
   };
 }
 
-function buildSimulationConfig(template) {
+function selectArenaShape(template, seed) {
+  const configuredShape = String(template?.arena?.shape || '').trim().toLowerCase();
+  if (!configuredShape) return 'circle';
+  if (configuredShape && configuredShape !== 'random') {
+    return normalizeBubbleSurvivalArenaShape(configuredShape);
+  }
+  const configuredPool = Array.isArray(template?.arena?.shape_pool)
+    ? template.arena.shape_pool
+    : BUBBLE_SURVIVAL_ARENA_SHAPES;
+  const pool = configuredPool
+    .map((entry) => ({
+      shape: normalizeBubbleSurvivalArenaShape(entry?.shape || entry),
+      weight: positiveInteger(entry?.weight, 1),
+    }))
+    .filter((entry, index, values) => (
+      values.findIndex((candidate) => candidate.shape === entry.shape) === index
+    ));
+  return selectWeightedPool(pool, createSeededRandom(`${seed}|arena-shape`))?.shape || 'circle';
+}
+
+function buildSimulationConfig(template, arenaShape) {
   const frameWidth = Number(template?.render?.frame_width || 540);
   const frameHeight = Number(template?.render?.frame_height || 960);
   return {
     center_x: Number(template?.arena?.center_x ?? (frameWidth / 2)),
     center_y: Number(template?.arena?.center_y ?? ((frameHeight / 2) - 30)),
     arena_radius: Number(template?.arena?.radius ?? 230),
+    arena_shape: arenaShape,
+    arena_shape_aspect_ratio: Number(template?.arena?.shape_aspect_ratio ?? 0.72),
     bubble_radius: Number(template?.bubbles?.radius ?? 32.76),
     start_inset: Number(template?.bubbles?.start_inset ?? 5),
     initial_tail_count: Number(template?.bubbles?.initial_tail_count ?? 3),
@@ -125,6 +154,7 @@ export async function planPokemonBubbleSurvival({
   probeDuration = probeMediaDurationSeconds,
   ffmpegExecutable = resolveFfmpegExecutable({}),
   projectRoot = process.cwd(),
+  resolveCryPath = resolvePokemonCryPath,
 } = {}) {
   const normalizedSeed = String(seed || new Date().toISOString()).trim();
   const pokemonCount = positiveInteger(
@@ -172,7 +202,8 @@ export async function planPokemonBubbleSurvival({
   const selectedSubjects = shuffle(readablePool, random)
     .slice(0, pokemonCount)
     .map(compactSubject);
-  const simulationConfig = buildSimulationConfig(template);
+  const arenaShape = selectArenaShape(template, normalizedSeed);
+  const simulationConfig = buildSimulationConfig(template, arenaShape);
   let simulation = null;
   let simulationSeed = '';
   for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
@@ -231,6 +262,11 @@ export async function planPokemonBubbleSurvival({
   if (!winner) {
     throw new Error(`Bubble Survival winner ${simulation.winner_id} is missing from the selected subjects.`);
   }
+  const winnerCryPath = String(await resolveCryPath(winner) || '').trim();
+  if (!winnerCryPath || !(await pathIsReadable(winnerCryPath))) {
+    throw new Error(`Bubble Survival requires a readable Pokemon cry for winner ${winner.name}.`);
+  }
+  winner.cry_path = winnerCryPath;
 
   return {
     template_id: String(template?.template_id || 'pokemon.bubble-survival.v1'),
@@ -260,11 +296,16 @@ export async function planPokemonBubbleSurvival({
       music_duration_seconds: selectedMusic.duration_seconds,
       minimum_music_duration_seconds: totalDurationSeconds,
       winner_ding_path: winnerDingPath,
+      winner_cry_path: winnerCryPath,
       defeat_sound_path: defeatSoundPath,
     },
     audio: {
       music_volume: Number(template?.audio?.music_volume ?? 0.12),
       winner_ding_volume: Number(template?.winner?.sound_volume ?? 0.36),
+      winner_cry_volume: Number(template?.winner?.cry_volume ?? 0.12),
+      winner_cry_delay_seconds: Number(
+        template?.winner?.cry_delay_after_ding_seconds ?? 0.18,
+      ),
       defeat_sound_volume: Number(template?.audio?.defeat_sound_volume ?? 0.165),
     },
     video: {

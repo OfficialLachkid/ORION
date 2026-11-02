@@ -33,6 +33,17 @@
     "center_x": 270,
     "center_y": 450,
     "radius": 230,
+    "shape": "random",
+    "shape_aspect_ratio": 0.72,
+    "shape_pool": [
+      { "shape": "circle", "weight": 2 },
+      { "shape": "triangle", "weight": 1 },
+      { "shape": "square", "weight": 1 },
+      { "shape": "diamond", "weight": 1 },
+      { "shape": "rectangle", "weight": 1 },
+      { "shape": "hexagon", "weight": 2 },
+      { "shape": "octagon", "weight": 2 }
+    ],
     "stationary": true
   },
   "bubbles": {
@@ -78,6 +89,8 @@
     "announcement_delay_seconds": 0.75,
     "sound_effect_role": "ding",
     "sound_volume": 0.36,
+    "cry_volume": 0.12,
+    "cry_delay_after_ding_seconds": 0.18,
     "duration_seconds": 1.8,
     "show_pokemon_name": true,
     "show_pokemon_sprite": true,

@@ -14,6 +14,11 @@ import {
 } from '../src/domains/pokemon/templates/bubble-survival/simulation.mjs';
 import { planPokemonBubbleSurvival } from '../src/domains/pokemon/templates/bubble-survival/planner.mjs';
 import {
+  BUBBLE_SURVIVAL_ARENA_SHAPES,
+  constrainBubbleToArena,
+  createBubbleSurvivalArenaGeometry,
+} from '../src/domains/pokemon/templates/bubble-survival/arena-geometry.mjs';
+import {
   alphaBlendRgba,
   buildBubbleSurvivalFfmpegArgs,
   buildBubbleSurvivalTitleMarkup,
@@ -216,6 +221,32 @@ test('fixed-step simulation is deterministic, starts without overlap, and shrink
   assert.equal(resolveDefeatedBubbleScale({ bubble: defeatedBubble, simulationTime: 4.677, ...despawn }), 0);
 });
 
+test('every convex arena shape drives real wall physics and tail anchors', () => {
+  const subjects = Array.from({ length: 9 }, (_, index) => ({ id: `shape-subject-${index}` }));
+  for (const arenaShape of BUBBLE_SURVIVAL_ARENA_SHAPES) {
+    const simulation = simulateBubbleSurvival({
+      subjects,
+      seed: `arena-${arenaShape}`,
+      config: { arena_shape: arenaShape, maximum_seconds: 2 },
+    });
+    assert.equal(simulation.config.arena_shape, arenaShape);
+    assert.equal(simulation.frames[0].bubbles.length, 9);
+    assert.equal(simulation.frames[0].tails.length, 27);
+    const geometry = createBubbleSurvivalArenaGeometry(simulation.config);
+    for (const bubble of simulation.frames[0].bubbles) {
+      const constrained = constrainBubbleToArena(
+        geometry,
+        bubble,
+        simulation.config.bubble_radius,
+      );
+      assert.ok(
+        Math.hypot(constrained.x - bubble.x, constrained.y - bubble.y) < 0.01,
+        `${arenaShape}:${bubble.id}`,
+      );
+    }
+  }
+});
+
 test('seeded initial physics distributes winners across every starting slot', () => {
   const subjects = Array.from({ length: 9 }, (_, index) => ({ id: `subject-${index}` }));
   const winnerIds = new Set();
@@ -236,10 +267,12 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     const shortMusicPath = join(root, 'short-music.mp3');
     const dingPath = join(root, 'ding-sound.mp3');
     const reflectionPath = join(root, 'reflection-sound.mp3');
+    const cryPath = join(root, 'winner-cry.ogg');
     await writeFile(musicPath, 'music');
     await writeFile(shortMusicPath, 'short music');
     await writeFile(dingPath, 'ding');
     await writeFile(reflectionPath, 'reflection');
+    await writeFile(cryPath, 'cry');
     const rows = [];
     for (let index = 0; index < 14; index += 1) {
       const spritePath = join(root, `sprite-${index}.png`);
@@ -251,6 +284,7 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
         pokemon_id: 1000 + index,
         national_dex_number: 1000 + index,
         sprite_path: spritePath,
+        cry_path: cryPath,
         metadata: { is_legendary: true, is_mythical: false },
       }));
     }
@@ -296,6 +330,7 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.assets.music_duration_seconds, 120);
     assert.ok(first.assets.minimum_music_duration_seconds > 5);
     assert.equal(first.assets.winner_ding_path, dingPath);
+    assert.equal(first.assets.winner_cry_path, cryPath);
     assert.equal(first.assets.defeat_sound_path, reflectionPath);
     assert.equal(first.video.intro_seconds, 1.16);
     assert.equal(first.video.countdown_playback_rate, 4 / 3);
@@ -304,6 +339,8 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.video.frame_fps, 30);
     assert.equal(first.audio.defeat_sound_volume, 0.165);
     assert.equal(first.audio.winner_ding_volume, 0.36);
+    assert.equal(first.audio.winner_cry_volume, 0.12);
+    assert.equal(first.audio.winner_cry_delay_seconds, 0.18);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -494,11 +531,14 @@ test('winner hold, ding, and defeat-only shrink cues are scheduled at their boun
     assets: {
       music_path: '/tmp/music.mp3',
       winner_ding_path: '/tmp/ding-sound.mp3',
+      winner_cry_path: '/tmp/pikachu-cry.ogg',
       defeat_sound_path: '/tmp/reflection-sound.mp3',
     },
     audio: {
       music_volume: 0.12,
       winner_ding_volume: 0.36,
+      winner_cry_volume: 0.12,
+      winner_cry_delay_seconds: 0.18,
       defeat_sound_volume: 0.165,
     },
     video: {
@@ -522,10 +562,12 @@ test('winner hold, ding, and defeat-only shrink cues are scheduled at their boun
     durationSeconds: renderPlan.duration_seconds,
   });
   assert.equal(args.includes('/tmp/ding-sound.mp3'), true);
+  assert.equal(args.includes('/tmp/pikachu-cry.ogg'), true);
   assert.equal(args.filter((arg) => arg === '/tmp/reflection-sound.mp3').length, 2);
   const filter = args[args.indexOf('-filter_complex') + 1];
   assert.match(filter, /atempo=1\.3333333333333333/u);
   assert.match(filter, /adelay=21910\|21910/u);
+  assert.match(filter, /adelay=22090\|22090,volume=0\.12\[winnercry\]/u);
   assert.match(filter, /afade=t=out:st=21\.910:d=1\.800/u);
   assert.doesNotMatch(filter, /adelay=5625\|5625/u);
   assert.match(filter, /adelay=8160\|8160,volume=0\.165\[defeat_0\]/u);
@@ -533,5 +575,5 @@ test('winner hold, ding, and defeat-only shrink cues are scheduled at their boun
   assert.doesNotMatch(args.join(' '), /-stream_loop/u);
   assert.match(filter, /\[base\]\[defeat_0\]\[defeat_1\]amix=inputs=3/u);
   assert.match(filter, /normalize=0,alimiter=limit=0\.95\[audio\]/u);
-  assert.match(filter, /amix=inputs=3/u);
+  assert.match(filter, /\[music\]\[voice\]\[winner\]\[winnercry\]amix=inputs=4/u);
 });

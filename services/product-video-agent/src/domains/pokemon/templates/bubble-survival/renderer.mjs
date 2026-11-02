@@ -15,6 +15,10 @@ import {
   resolveShowdownTitleAnimationState,
   wrapTextInsideFrame,
 } from './title-renderer.mjs';
+import {
+  buildBubbleSurvivalArenaSvgMarkup,
+  createBubbleSurvivalArenaGeometry,
+} from './arena-geometry.mjs';
 
 export {
   buildAnimatedBubbleSurvivalTitleMarkup,
@@ -108,7 +112,7 @@ export function renderArenaSvg({ plan, template, videoTime }) {
   const bubbleById = new Map((state?.bubbles || []).map((bubble) => [bubble.id, bubble]));
   const centerX = Number(plan.simulation.config.center_x);
   const centerY = Number(plan.simulation.config.center_y);
-  const arenaRadius = Number(plan.simulation.config.arena_radius);
+  const arenaGeometry = createBubbleSurvivalArenaGeometry(plan.simulation.config);
   const bubbleRadius = Number(plan.simulation.config.bubble_radius);
   const defeatPopScale = Number(plan.simulation.config.defeat_pop_scale ?? 1.2);
   const defeatPopSeconds = Number(plan.simulation.config.defeat_pop_seconds ?? 0.1);
@@ -198,24 +202,36 @@ export function renderArenaSvg({ plan, template, videoTime }) {
       })
     : buildBubbleSurvivalTitleMarkup({ centerX, frameWidth: width });
   const roundIntroMarkup = introMode && plan?.presentation?.round_label
-    ? [
-        `<text x="${centerX}" y="${centerY - 132}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="22" font-weight="900" fill="#67dcff" stroke="#07111f" stroke-width="4" paint-order="stroke">${escapeXml(plan.presentation.round_label)}</text>`,
-        `<text x="${centerX}" y="${centerY + 126}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="20" font-weight="900" fill="#FFD166" stroke="#07111f" stroke-width="4" paint-order="stroke">${escapeXml(plan.presentation.category_label || '')}</text>`,
-      ].join('')
+    ? (() => {
+        const config = template?.presentation?.round_label || {};
+        const fontSize = Number(config.font_size ?? 44);
+        const categoryFontSize = Number(config.category_font_size ?? 28);
+        const roundY = centerY - 132;
+        const categoryY = centerY + 126;
+        const backgroundWidth = Number(config.background_width ?? 360);
+        const backgroundHeight = Number(config.background_height ?? 64);
+        const categoryBackgroundWidth = Number(config.category_background_width ?? 350);
+        const categoryBackgroundHeight = Number(config.category_background_height ?? 44);
+        return [
+          `<rect x="${centerX - (backgroundWidth / 2)}" y="${roundY - (fontSize * 0.9)}" width="${backgroundWidth}" height="${backgroundHeight}" rx="14" fill="#020813" fill-opacity="0.88" stroke="#67dcff" stroke-width="2.5"/>`,
+          `<text x="${centerX}" y="${roundY}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${fontSize}" font-weight="900" fill="#F4FBFF" stroke="#173A63" stroke-width="6" paint-order="stroke">${escapeXml(plan.presentation.round_label)}</text>`,
+          `<rect x="${centerX - (categoryBackgroundWidth / 2)}" y="${categoryY - (categoryFontSize * 0.9)}" width="${categoryBackgroundWidth}" height="${categoryBackgroundHeight}" rx="11" fill="#020813" fill-opacity="0.84" stroke="#FFD166" stroke-width="2"/>`,
+          `<text x="${centerX}" y="${categoryY}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${categoryFontSize}" font-weight="900" fill="#FFD166" stroke="#704400" stroke-width="4" paint-order="stroke">${escapeXml(plan.presentation.category_label || '')}</text>`,
+        ].join('');
+      })()
     : '';
   return Buffer.from([
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     '<defs>',
     '<radialGradient id="bg" cx="50%" cy="42%" r="75%"><stop offset="0%" stop-color="#13233d"/><stop offset="58%" stop-color="#050914"/><stop offset="100%" stop-color="#010204"/></radialGradient>',
+    '<linearGradient id="premiumTitleGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="46%" stop-color="#DFF6FF"/><stop offset="100%" stop-color="#67DCFF"/></linearGradient>',
     '</defs>',
     `<rect width="${width}" height="${height}" fill="url(#bg)"/>`,
     '<g opacity="0.18">',
     ...Array.from({ length: 22 }, (_, index) => `<circle cx="${(index * 97) % width}" cy="${(index * 173) % height}" r="${1 + (index % 3)}" fill="#8edcff"/>`),
     '</g>',
     ...title.markup,
-    `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius + 5}" fill="#03101b" fill-opacity="0.36" stroke="#11263f" stroke-width="8"/>`,
-    `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius + 2}" fill="none" stroke="#67dcff" stroke-width="11" opacity="0.16"/>`,
-    `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius}" fill="none" stroke="#67dcff" stroke-width="3"/>`,
+    ...buildBubbleSurvivalArenaSvgMarkup(arenaGeometry),
     tailMarkup,
     bubbleMarkup,
     overlayMarkup,
@@ -483,6 +499,10 @@ export function buildBubbleSurvivalFfmpegArgs({
   const winnerSeconds = Number(plan.video.winner_seconds || 0);
   const musicVolume = Number(plan.audio?.music_volume ?? 0.12);
   const winnerDingVolume = Number(plan.audio?.winner_ding_volume ?? 0.36);
+  const winnerCryPath = String(plan.assets?.winner_cry_path || '').trim();
+  const winnerCryVolume = Number(plan.audio?.winner_cry_volume ?? 0.12);
+  const winnerCryDelaySeconds = Math.max(0, Number(plan.audio?.winner_cry_delay_seconds ?? 0.18));
+  const winnerCryDelayMs = Math.round((winnerRevealSeconds + winnerCryDelaySeconds) * 1000);
   const defeatSoundVolume = Number(plan.audio?.defeat_sound_volume ?? 0.165);
   const defeatEvents = (Array.isArray(plan.simulation?.events) ? plan.simulation.events : [])
     .filter((event) => event?.type === 'eliminated' && Number.isFinite(Number(event.time)))
@@ -490,11 +510,18 @@ export function buildBubbleSurvivalFfmpegArgs({
   const defeatInputs = defeatEvents.flatMap(() => [
     '-i', plan.assets.defeat_sound_path,
   ]);
+  const defeatInputStartIndex = winnerCryPath ? 5 : 4;
   const defeatFilters = defeatEvents.map((event, index) => {
     const delayMs = Math.round((Number(plan.video.intro_seconds) + Number(event.time)) * 1000);
-    return `[${index + 4}:a]atrim=0:2,asetpts=N/SR/TB,adelay=${delayMs}|${delayMs},volume=${defeatSoundVolume}[defeat_${index}]`;
+    return `[${index + defeatInputStartIndex}:a]atrim=0:2,asetpts=N/SR/TB,adelay=${delayMs}|${delayMs},volume=${defeatSoundVolume}[defeat_${index}]`;
   });
-  const baseAudioFilter = '[music][voice][winner]amix=inputs=3:duration=first:dropout_transition=0';
+  const winnerCryFilter = winnerCryPath
+    ? `[4:a]silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB,adelay=${winnerCryDelayMs}|${winnerCryDelayMs},volume=${winnerCryVolume}[winnercry]`
+    : '';
+  const baseMixLabels = winnerCryPath
+    ? '[music][voice][winner][winnercry]'
+    : '[music][voice][winner]';
+  const baseAudioFilter = `${baseMixLabels}amix=inputs=${winnerCryPath ? 4 : 3}:duration=first:dropout_transition=0`;
   const audioMixFilter = defeatEvents.length > 0
     ? `${baseAudioFilter}[base];[base]${defeatEvents.map((_event, index) => `[defeat_${index}]`).join('')}amix=inputs=${defeatEvents.length + 1}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[audio]`
     : `${baseAudioFilter}[audio]`;
@@ -505,11 +532,13 @@ export function buildBubbleSurvivalFfmpegArgs({
     '-i', plan.assets.music_path,
     '-i', narrationPath,
     '-i', plan.assets.winner_ding_path,
+    ...(winnerCryPath ? ['-i', winnerCryPath] : []),
     ...defeatInputs,
     '-filter_complex', [
       `[1:a]atrim=0:${durationSeconds.toFixed(3)},asetpts=N/SR/TB,volume=${musicVolume},afade=t=out:st=${winnerRevealSeconds.toFixed(3)}:d=${winnerSeconds.toFixed(3)}[music]`,
       `[2:a]atempo=${countdownPlaybackRate},atrim=0:${Number(plan.video.intro_seconds).toFixed(3)},asetpts=N/SR/TB,volume=1.0[voice]`,
       `[3:a]atrim=0:3,asetpts=N/SR/TB,adelay=${winnerDelayMs}|${winnerDelayMs},volume=${winnerDingVolume}[winner]`,
+      ...(winnerCryFilter ? [winnerCryFilter] : []),
       ...defeatFilters,
       audioMixFilter,
     ].join(';'),

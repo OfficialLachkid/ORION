@@ -5,6 +5,7 @@ import {
   adaptBubbleSurvivalTemplateToLandscape,
   buildBubbleShowdownLongFormPlan,
   resolveBubbleShowdownDurationConfig,
+  selectBubbleShowdownArenaShapeOrder,
   selectBubbleShowdownCategoryOrder,
   shouldAppendBubbleShowdownRound,
 } from '../src/domains/pokemon/long-form/bubble-showdown/planner.mjs';
@@ -13,6 +14,7 @@ import {
   renderArenaSvg,
   resolveShowdownTitleAnimationState,
 } from '../src/domains/pokemon/templates/bubble-survival/renderer.mjs';
+import { buildRevealChallengeProgramFilter } from '../src/domains/pokemon/long-form/reveal-challenge/renderer.mjs';
 import { BUBBLE_SURVIVAL_CATEGORIES } from '../src/domains/pokemon/templates/bubble-survival/category-resolver.mjs';
 import { buildPokeQuizzPreviewDirectory } from '../src/poke-quizz-asset-layout.mjs';
 import {
@@ -66,6 +68,15 @@ test('category order is deterministic and exhausts unique pools before reuse', (
   assert.notEqual(first[10], first[11]);
 });
 
+test('arena shape order is deterministic and exhausts convex shapes before reuse', () => {
+  const shapes = ['circle', 'triangle', 'square', 'diamond', 'rectangle', 'hexagon', 'octagon'];
+  const first = selectBubbleShowdownArenaShapeOrder({ shapes, seed: 'shape-order', maximumRounds: 10 });
+  const second = selectBubbleShowdownArenaShapeOrder({ shapes, seed: 'shape-order', maximumRounds: 10 });
+  assert.deepEqual(first, second);
+  assert.equal(new Set(first.slice(0, shapes.length)).size, shapes.length);
+  assert.notEqual(first[6], first[7]);
+});
+
 test('duration planner keeps minimum rounds and rejects rounds beyond the bounded target', () => {
   const template = {
     episode: {
@@ -104,6 +115,7 @@ test('landscape adapter preserves shared physics while changing only presentatio
     shortTemplate,
     longTemplate,
     category: 'mega',
+    arenaShape: 'hexagon',
   });
   assert.equal(adapted.selection_rules.category, 'mega');
   assert.deepEqual(adapted.video.resolution, [1920, 1080]);
@@ -111,10 +123,12 @@ test('landscape adapter preserves shared physics while changing only presentatio
   assert.equal(adapted.render.frame_width, 960);
   assert.equal(adapted.render.frame_height, 540);
   assert.equal(adapted.arena.center_x, 480);
+  assert.equal(adapted.arena.shape, 'hexagon');
   assert.equal(adapted.bubbles.initial_tail_count, shortTemplate.bubbles.initial_tail_count);
   assert.equal(adapted.simulation.fixed_step_seconds, shortTemplate.simulation.fixed_step_seconds);
   assert.equal(adapted.audio.music_volume, 0);
   assert.equal(adapted.presentation.showdown_title_animation.enabled, true);
+  assert.equal(adapted.presentation.showdown_title_animation.wobble_enabled, true);
 });
 
 test('Showdown title animates letter by letter at fixed final positions', () => {
@@ -122,6 +136,10 @@ test('Showdown title animates letter by letter at fixed final positions', () => 
     start_seconds: 0.08,
     letter_interval_seconds: 0.085,
     letter_pop_seconds: 0.12,
+    wobble_enabled: true,
+    wobble_amplitude_px: 3.5,
+    wobble_period_seconds: 1.25,
+    wobble_phase_step_radians: 0.7,
   };
   const before = resolveShowdownTitleAnimationState(0, animation, 8);
   const during = resolveShowdownTitleAnimationState(0.3, animation, 8);
@@ -130,6 +148,7 @@ test('Showdown title animates letter by letter at fixed final positions', () => 
   assert.ok(during.letters.filter((letter) => letter.visible).length > 1);
   assert.ok(during.letters.filter((letter) => letter.visible).length < 8);
   assert.equal(after.complete, true);
+  assert.notEqual(after.letters[0].offset_y, after.letters[1].offset_y);
   const markup = buildAnimatedBubbleSurvivalTitleMarkup({
     centerX: 480,
     frameWidth: 960,
@@ -146,7 +165,13 @@ test('long-form round intro shows round and pool labels without changing short-f
     video: { frame_width: 960, frame_height: 540, intro_seconds: 1.16, frame_fps: 30, winner_delay_seconds: 0.75 },
     simulation: {
       duration_seconds: 10,
-      config: { center_x: 480, center_y: 300, arena_radius: 220, bubble_radius: 35 },
+      config: {
+        center_x: 480,
+        center_y: 300,
+        arena_radius: 220,
+        arena_shape: 'hexagon',
+        bubble_radius: 35,
+      },
       frames: [{ bubbles: [{ id: 'pikachu', x: 480, y: 100, is_defeated: false }], tails: [] }],
     },
     selection: { selected_subjects: [{ id: 'pikachu', name: 'Pikachu' }] },
@@ -163,7 +188,23 @@ test('long-form round intro shows round and pool labels without changing short-f
   const battleSvg = renderArenaSvg({ plan, template, videoTime: 2 }).toString('utf8');
   assert.match(introSvg, /ROUND 2 \/ 10/u);
   assert.match(introSvg, /Mega Pokemon/u);
+  assert.match(introSvg, /font-size="44"/u);
+  assert.match(introSvg, /stroke="#67dcff"/u);
+  assert.match(introSvg, /<polygon points=/u);
   assert.doesNotMatch(battleSvg, /ROUND 2 \/ 10|Mega Pokemon/u);
+});
+
+test('long-form program cards animate every premium intro and outro layer', async () => {
+  const template = await loadJson('services/product-video-agent/config/templates/pokemon/long/bubble-showdown.v1.json');
+  const filter = buildRevealChallengeProgramFilter(1, {
+    sections: [{ duration_seconds: 24 }],
+    template,
+    fontPath: '/tmp/font.ttf',
+  });
+  assert.match(filter, /drawbox=x='\(1920-\(1680\*min\(1\\,max\(0/u);
+  assert.ok((filter.match(/fontcolor=0x2B6DA6/gu) || []).length >= 12);
+  assert.match(filter, /alpha='min\(1\\,max\(0/u);
+  assert.match(filter, /SHOWDOWN COMPLETE/u);
 });
 
 test('long-form plan keeps winner metadata spoiler-free and uses the shared review pipeline contract', async () => {
