@@ -10,7 +10,15 @@ import {
   PLIST_LABEL,
 } from '../install-weekly-analytics-review-schedule.mjs';
 
-const { buildDataPack, buildAnalystPrompt, summarizeChannel, templateSlugFromMetadata, variantKeyFromMetadata, buildPerPlatformPerformance } = __testables;
+const {
+  buildDataPack,
+  buildAnalystPrompt,
+  summarizeChannel,
+  templateSlugFromMetadata,
+  variantKeyFromMetadata,
+  buildPerPlatformPerformance,
+  WEEKLY_REVIEW_PUBLICATION_SELECT,
+} = __testables;
 
 test('templateSlugFromMetadata strips pokemon prefix and v-suffix', () => {
   assert.equal(templateSlugFromMetadata({ template_id: 'pokemon.cry-match.v1' }), 'cry-match');
@@ -300,6 +308,74 @@ test('buildDataPack: cross_platform_activity flows through from the fetch helper
   const packWithPerPlat = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y', perPlatformPerformance: perPlat });
   assert.deepEqual(packWithPerPlat.per_platform_performance, perPlat, 'passed-through per_platform_performance reaches the data pack');
   assert.strictEqual(packNoActivity.per_platform_performance, null, 'defaults to null when not provided');
+});
+
+// ─── Egress-aware projection (2026-11-02 follow-up) ───────────────
+
+test('WEEKLY_REVIEW_PUBLICATION_SELECT uses JSONB projection — does NOT pull the whole metadata column', () => {
+  // Egress guard — Jacobs-2/07_Products/Product_Video_Agent/Runtime_Ops.md
+  // § Supabase egress optimization — 2026-11-02. If this test fails
+  // because someone added `,metadata` back to the SELECT, that defeats
+  // the egress reduction and should be caught at CI.
+  assert.ok(!/\bmetadata\b(?!->|->>)/u.test(WEEKLY_REVIEW_PUBLICATION_SELECT),
+    'the whole `metadata` column must NOT be fetched — only JSONB-projected fields (`metadata->X` or `metadata->>X`)');
+  // Pinned individual projections — these are the ONLY metadata fields
+  // the weekly review needs. Adding more should be a conscious choice.
+  assert.ok(WEEKLY_REVIEW_PUBLICATION_SELECT.includes('template_id:metadata->>template_id'),
+    'must project template_id as a top-level alias');
+  assert.ok(WEEKLY_REVIEW_PUBLICATION_SELECT.includes('manifest_hashtags:metadata->manifest_publication->hashtags'),
+    'must project the manifest_publication.hashtags fallback');
+  assert.ok(WEEKLY_REVIEW_PUBLICATION_SELECT.includes('video_signals:metadata->video_signals'),
+    'must project video_signals for the per-template-variant rollup');
+});
+
+
+test('templateSlugFromMetadata reads from the projected top-level alias (pub.template_id) first', () => {
+  // The projected shape (post-2026-11-02) is what the live weekly
+  // review query produces. The legacy nested shape is still accepted
+  // as a fallback so test fixtures and any future caller handing in a
+  // bare metadata object both work.
+  const projected = { template_id: 'pokemon.stat-clash.v3' };
+  assert.equal(templateSlugFromMetadata(projected), 'stat-clash');
+  const legacy = { metadata: { template_id: 'pokemon.cry-match.v1' } };
+  assert.equal(templateSlugFromMetadata(legacy), 'cry-match');
+  const bareMetadata = { template_id: 'pokemon.memory.v2' };
+  assert.equal(templateSlugFromMetadata(bareMetadata), 'memory',
+    'bare-metadata path still works');
+});
+
+test('variantKeyFromMetadata reads video_signals from the projected top-level alias first', () => {
+  const projected = { video_signals: { variant: { difficulty: 'hard' } } };
+  assert.equal(variantKeyFromMetadata(projected), 'hard');
+  const legacy = { metadata: { video_signals: { variant: { difficulty: 'easy' } } } };
+  assert.equal(variantKeyFromMetadata(legacy), 'easy');
+});
+
+test('buildDataPack works end-to-end with the projected shape (no `metadata` field at all on the publication rows)', () => {
+  // Mirrors what the live Supabase query actually returns after the
+  // projection switch: template_id, manifest_hashtags, video_signals
+  // as top-level columns; no `metadata` key.
+  const publications = [
+    { id: 'p1', account_key: 'trivamon-youtube', title: 'Hard 1', published_at: '2026-11-01T06:00:00Z', external_id: 'p1',
+      template_id: 'pokemon.stat-clash.v3',
+      video_signals: { variant: { difficulty: 'hard', round_count: 7 } },
+      manifest_hashtags: ['#stat', '#pokemon'] },
+    { id: 'p2', account_key: 'poke-guess-youtube', title: 'Easy 1', published_at: '2026-11-01T10:00:00Z', external_id: 'p2',
+      template_id: 'pokemon.stat-clash.v3',
+      video_signals: { variant: { difficulty: 'easy', round_count: 3 } },
+      manifest_hashtags: ['#stat', '#pokemon'] },
+  ];
+  const analytics = new Map([
+    ['p1', { metrics: { views: 2000, likes: 40 } }],
+    ['p2', { metrics: { views: 5000, likes: 90 } }],
+  ]);
+  const pack = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y' });
+  assert.equal(pack.per_template['stat-clash'].videos_published, 2);
+  assert.equal(pack.per_template_variant['stat-clash:hard'].videos_published, 1);
+  assert.equal(pack.per_template_variant['stat-clash:easy'].videos_published, 1);
+  // Hashtag fallback uses projected manifest_hashtags when metrics +
+  // top-level pub.hashtags are both empty.
+  assert.deepEqual(pack.top_videos[0].hashtags, ['#stat', '#pokemon']);
 });
 
 // ─── Variant tagging pilot (2026-11-02 — stat-clash first) ─────────

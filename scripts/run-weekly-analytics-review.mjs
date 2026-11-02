@@ -62,10 +62,40 @@ function supabaseFetch(config, path) {
   });
 }
 
+// Supabase projection: only pull the fields the review ACTUALLY reads,
+// not the whole `metadata` JSONB. Mirrors the pattern already used by
+// publication-runtime-snapshot.mjs ("workflow_state:metadata->>workflow_state")
+// to project a single JSONB field as a top-level column.
+//
+// Egress rationale (Jacobs-2/07_Products/Product_Video_Agent/Runtime_Ops.md
+// § Supabase egress optimization — 2026-11-02):
+//   • A typical publication's metadata JSONB is ~1–2 KB (selected_subjects
+//     is the big-ticket item). The weekly review needs ~3 fields totaling
+//     ~200–400 bytes. The old `metadata` SELECT dragged ~110 pubs ×
+//     ~1 KB of unused payload every weekly run.
+//   • Projection stays flat even as the video_signals pilot rolls to
+//     more templates — each new template adds signal data inside
+//     `video_signals`, which we DO project, but doesn't inflate the
+//     unprojected fields.
+const WEEKLY_REVIEW_PUBLICATION_SELECT = [
+  'id',
+  'account_key',
+  'external_id',
+  'title',
+  'published_at',
+  'hashtags',
+  // Projected metadata fields — top-level aliases so downstream code
+  // reads `pub.template_id`, `pub.manifest_hashtags`, `pub.video_signals`
+  // without needing the whole metadata JSONB.
+  'template_id:metadata->>template_id',
+  'manifest_hashtags:metadata->manifest_publication->hashtags',
+  'video_signals:metadata->video_signals',
+].join(',');
+
 async function fetchPokemonPublications(config, sinceIso) {
   const rows = await supabaseFetch(
     config,
-    `video_publications?platform=eq.youtube_shorts&status=eq.published&external_id=not.is.null&select=id,account_key,external_id,title,published_at,hashtags,metadata&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at.asc&limit=2000`,
+    `video_publications?platform=eq.youtube_shorts&status=eq.published&external_id=not.is.null&select=${WEEKLY_REVIEW_PUBLICATION_SELECT}&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at.asc&limit=2000`,
   );
   return (Array.isArray(rows) ? rows : []).filter((row) => POKE_CHANNELS.has(row.account_key));
 }
@@ -93,8 +123,20 @@ async function fetchLatestAnalyticsByPub(config, publicationIds = []) {
 
 // ─── Data pack shape ───────────────────────────────────────────────
 
-function templateSlugFromMetadata(metadata) {
-  const tplId = String(metadata?.template_id || '').trim();
+// Accepts either a projected publication row (post-2026-11-02:
+// `pub.template_id` is a top-level alias of `metadata->>template_id`)
+// or a legacy row carrying the full `metadata` JSONB. The projected
+// path is the egress-aware one — matters for the Supabase egress
+// rules in Jacobs-2/07_Products/Product_Video_Agent/Runtime_Ops.md.
+function templateSlugFromMetadata(pubOrMetadata) {
+  // The old call shape was `templateSlugFromMetadata(pub.metadata)`.
+  // Keep tolerating that so test fixtures and any future caller
+  // handing in a bare metadata object both work.
+  const tplId = String(
+    pubOrMetadata?.template_id
+    ?? pubOrMetadata?.metadata?.template_id
+    ?? '',
+  ).trim();
   if (!tplId) return 'unknown';
   return tplId.replace(/^pokemon\./u, '').replace(/\.v\d+$/u, '');
 }
@@ -142,10 +184,18 @@ function summarizeChannel(publications, analyticsByPub) {
 // metadata.manifest_publication.hashtags, and future analytics writers
 // might attach them to the metrics row itself. Prefer the freshest
 // non-empty source in that order.
+//
+// The projected `pub.manifest_hashtags` is the egress-aware way to get
+// the JSONB-nested fallback (`metadata->manifest_publication->hashtags`)
+// without pulling the full metadata column. The legacy
+// `pub.metadata.manifest_publication.hashtags` path stays as a fallback
+// so test fixtures and any future caller handing in a legacy row still
+// work.
 function pickHashtags(metrics, pub) {
   const candidates = [
     Array.isArray(metrics?.hashtags) ? metrics.hashtags : null,
     Array.isArray(pub?.hashtags) ? pub.hashtags : null,
+    Array.isArray(pub?.manifest_hashtags) ? pub.manifest_hashtags : null,
     Array.isArray(pub?.metadata?.manifest_publication?.hashtags)
       ? pub.metadata.manifest_publication.hashtags
       : null,
@@ -164,14 +214,19 @@ function pickHashtags(metrics, pub) {
 // deliberately-null variants. See Jacobs-2/07_Products/
 // Product_Video_Agent/Analytics.md and Runtime_Ops.md § Supabase
 // egress optimization.
-function videoSignalsFromMetadata(metadata) {
-  const signals = metadata?.video_signals;
+// Accepts either a projected publication row (`pub.video_signals` is
+// a top-level alias of `metadata->video_signals`) or a legacy row
+// carrying the full `metadata` object. The projected path is the
+// egress-aware one.
+function videoSignalsFromMetadata(pubOrMetadata) {
+  const signals = pubOrMetadata?.video_signals
+    ?? pubOrMetadata?.metadata?.video_signals;
   if (!signals || typeof signals !== 'object') return null;
   return signals;
 }
 
-function variantKeyFromMetadata(metadata) {
-  const signals = videoSignalsFromMetadata(metadata);
+function variantKeyFromMetadata(pubOrMetadata) {
+  const signals = videoSignalsFromMetadata(pubOrMetadata);
   const diff = String(signals?.variant?.difficulty || '').trim().toLowerCase();
   return diff || '(none)';
 }
@@ -184,8 +239,8 @@ function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, cross
 
   for (const pub of publications) {
     const ch = pub.account_key;
-    const tpl = templateSlugFromMetadata(pub.metadata);
-    const variantKey = variantKeyFromMetadata(pub.metadata);
+    const tpl = templateSlugFromMetadata(pub);
+    const variantKey = variantKeyFromMetadata(pub);
     const tplVariantKey = `${tpl}:${variantKey}`;
     if (!byChannel.has(ch)) byChannel.set(ch, []);
     byChannel.get(ch).push(pub);
@@ -605,6 +660,7 @@ export const __testables = {
   templateSlugFromMetadata,
   variantKeyFromMetadata,
   buildPerPlatformPerformance,
+  WEEKLY_REVIEW_PUBLICATION_SELECT,
 };
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
