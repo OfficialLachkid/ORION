@@ -11,6 +11,7 @@ import {
 } from '../src/domains/pokemon/long-form/bubble-showdown/planner.mjs';
 import {
   buildAnimatedBubbleSurvivalTitleMarkup,
+  renderArenaForegroundSvg,
   renderArenaSvg,
   resolveShowdownTitleAnimationState,
 } from '../src/domains/pokemon/templates/bubble-survival/renderer.mjs';
@@ -186,12 +187,16 @@ test('long-form round intro shows round and pool labels without changing short-f
   };
   const introSvg = renderArenaSvg({ plan, template, videoTime: 0.5 }).toString('utf8');
   const battleSvg = renderArenaSvg({ plan, template, videoTime: 2 }).toString('utf8');
+  const foregroundSvg = renderArenaForegroundSvg({ plan, template, videoTime: 0.5 }).toString('utf8');
   assert.match(introSvg, /ROUND 2 \/ 10/u);
   assert.match(introSvg, /Mega Pokemon/u);
   assert.match(introSvg, /font-size="44"/u);
   assert.match(introSvg, /stroke="#67dcff"/u);
   assert.match(introSvg, /<polygon points=/u);
   assert.doesNotMatch(battleSvg, /ROUND 2 \/ 10|Mega Pokemon/u);
+  assert.match(foregroundSvg, /ROUND 2 \/ 10/u);
+  assert.match(foregroundSvg, /Mega Pokemon/u);
+  assert.doesNotMatch(foregroundSvg, /<polygon points=|fill="url\(#bg\)"/u);
 });
 
 test('long-form program cards animate every premium intro and outro layer', async () => {

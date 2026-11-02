@@ -98,60 +98,23 @@ export function resolveDefeatedBubbleScale({
   return remainingScaleRatio <= 1e-9 ? 0 : maximumScale * remainingScaleRatio;
 }
 
-export function renderArenaSvg({ plan, template, videoTime }) {
+function buildBubbleSurvivalTextLayer({
+  plan,
+  template,
+  videoTime,
+  includeWinnerOverlay = true,
+}) {
   const width = Number(plan.video.frame_width);
   const height = Number(plan.video.frame_height);
   const introSeconds = Number(plan.video.intro_seconds);
-  const simulationSeconds = Number(plan.simulation.duration_seconds);
-  const winnerDelaySeconds = Number(plan.video.winner_delay_seconds || 0);
-  const winnerStart = introSeconds + simulationSeconds + winnerDelaySeconds;
-  const simulationTime = Math.max(0, videoTime - introSeconds);
-  const state = resolveTimelineFrame(plan, videoTime);
-  const subjects = plan.selection.selected_subjects;
-  const subjectById = new Map(subjects.map((subject, index) => [subject.id, { ...subject, index }]));
-  const bubbleById = new Map((state?.bubbles || []).map((bubble) => [bubble.id, bubble]));
+  const winnerStart = introSeconds
+    + Number(plan.simulation.duration_seconds)
+    + Number(plan.video.winner_delay_seconds || 0);
   const centerX = Number(plan.simulation.config.center_x);
   const centerY = Number(plan.simulation.config.center_y);
-  const arenaGeometry = createBubbleSurvivalArenaGeometry(plan.simulation.config);
-  const bubbleRadius = Number(plan.simulation.config.bubble_radius);
-  const defeatPopScale = Number(plan.simulation.config.defeat_pop_scale ?? 1.2);
-  const defeatPopSeconds = Number(plan.simulation.config.defeat_pop_seconds ?? 0.1);
-  const defeatShrinkSeconds = Number(plan.simulation.config.defeat_shrink_seconds ?? 0.577);
   const winnerMode = videoTime >= winnerStart;
   const introMode = videoTime < introSeconds;
-  const winner = subjectById.get(plan.winner.id);
-
-  const tailMarkup = (state?.tails || []).map((tail) => {
-    const bubble = bubbleById.get(tail.owner_id);
-    const subject = subjectById.get(tail.owner_id);
-    if (!bubble || !subject) return '';
-    const color = BUBBLE_COLORS[subject.index % BUBBLE_COLORS.length];
-    return `<line x1="${tail.anchor_x}" y1="${tail.anchor_y}" x2="${bubble.x}" y2="${bubble.y}" stroke="${color}" stroke-width="2.4" stroke-linecap="round" opacity="0.72"/>`;
-  }).join('');
-
-  const bubbleMarkup = (state?.bubbles || []).map((bubble) => {
-    const subject = subjectById.get(bubble.id);
-    if (!subject) return '';
-    const color = BUBBLE_COLORS[subject.index % BUBBLE_COLORS.length];
-    const renderScale = resolveDefeatedBubbleScale({
-      bubble,
-      simulationTime,
-      popScale: defeatPopScale,
-      popSeconds: defeatPopSeconds,
-      shrinkSeconds: defeatShrinkSeconds,
-    });
-    // Avoid librsvg corruption once the sprite becomes a sub-pixel-scale despawn remnant.
-    if (renderScale <= 0.2) return '';
-    const renderRadius = bubbleRadius * renderScale;
-    return [
-      '<g>',
-      bubble.is_defeated
-        ? ''
-        : `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius + (3 * renderScale)}" fill="none" stroke="${color}" stroke-width="${8 * renderScale}" opacity="0.18"/>`,
-      `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="${3 * renderScale}"/>`,
-      '</g>',
-    ].join('');
-  }).join('');
+  const winner = plan.selection.selected_subjects.find((subject) => subject.id === plan.winner.id);
 
   let overlayMarkup = '';
   if (introMode) {
@@ -168,7 +131,7 @@ export function renderArenaSvg({ plan, template, videoTime }) {
       `<text x="${centerX}" y="${centerY + (14 * scale)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${baseFontSize * scale}" font-weight="900" fill="none" stroke="#8ea7e8" stroke-width="${16 * scale}" opacity="0.16">${countdownText}</text>`,
       `<text x="${centerX}" y="${centerY + (14 * scale)}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${baseFontSize * scale}" font-weight="900" fill="#fff" stroke="#121b33" stroke-width="${7 * scale}" paint-order="stroke">${countdownText}</text>`,
     ].join('');
-  } else if (winnerMode && winner) {
+  } else if (winnerMode && winner && includeWinnerOverlay) {
     const winnerName = buildBoundaryAwareTextMarkup({
       text: winner.name.toUpperCase(),
       centerX,
@@ -220,6 +183,77 @@ export function renderArenaSvg({ plan, template, videoTime }) {
         ].join('');
       })()
     : '';
+
+  return {
+    markup: [...title.markup, overlayMarkup, roundIntroMarkup].join(''),
+    winnerMode,
+  };
+}
+
+export function renderArenaForegroundSvg({ plan, template, videoTime }) {
+  const width = Number(plan.video.frame_width);
+  const height = Number(plan.video.frame_height);
+  const textLayer = buildBubbleSurvivalTextLayer({
+    plan,
+    template,
+    videoTime,
+    includeWinnerOverlay: false,
+  });
+  return Buffer.from([
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
+    '<defs><linearGradient id="premiumTitleGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="46%" stop-color="#DFF6FF"/><stop offset="100%" stop-color="#67DCFF"/></linearGradient></defs>',
+    textLayer.markup,
+    '</svg>',
+  ].join(''));
+}
+
+export function renderArenaSvg({ plan, template, videoTime }) {
+  const width = Number(plan.video.frame_width);
+  const height = Number(plan.video.frame_height);
+  const introSeconds = Number(plan.video.intro_seconds);
+  const simulationTime = Math.max(0, videoTime - introSeconds);
+  const state = resolveTimelineFrame(plan, videoTime);
+  const subjects = plan.selection.selected_subjects;
+  const subjectById = new Map(subjects.map((subject, index) => [subject.id, { ...subject, index }]));
+  const bubbleById = new Map((state?.bubbles || []).map((bubble) => [bubble.id, bubble]));
+  const arenaGeometry = createBubbleSurvivalArenaGeometry(plan.simulation.config);
+  const bubbleRadius = Number(plan.simulation.config.bubble_radius);
+  const defeatPopScale = Number(plan.simulation.config.defeat_pop_scale ?? 1.2);
+  const defeatPopSeconds = Number(plan.simulation.config.defeat_pop_seconds ?? 0.1);
+  const defeatShrinkSeconds = Number(plan.simulation.config.defeat_shrink_seconds ?? 0.577);
+  const tailMarkup = (state?.tails || []).map((tail) => {
+    const bubble = bubbleById.get(tail.owner_id);
+    const subject = subjectById.get(tail.owner_id);
+    if (!bubble || !subject) return '';
+    const color = BUBBLE_COLORS[subject.index % BUBBLE_COLORS.length];
+    return `<line x1="${tail.anchor_x}" y1="${tail.anchor_y}" x2="${bubble.x}" y2="${bubble.y}" stroke="${color}" stroke-width="2.4" stroke-linecap="round" opacity="0.72"/>`;
+  }).join('');
+
+  const bubbleMarkup = (state?.bubbles || []).map((bubble) => {
+    const subject = subjectById.get(bubble.id);
+    if (!subject) return '';
+    const color = BUBBLE_COLORS[subject.index % BUBBLE_COLORS.length];
+    const renderScale = resolveDefeatedBubbleScale({
+      bubble,
+      simulationTime,
+      popScale: defeatPopScale,
+      popSeconds: defeatPopSeconds,
+      shrinkSeconds: defeatShrinkSeconds,
+    });
+    // Avoid librsvg corruption once the sprite becomes a sub-pixel-scale despawn remnant.
+    if (renderScale <= 0.2) return '';
+    const renderRadius = bubbleRadius * renderScale;
+    return [
+      '<g>',
+      bubble.is_defeated
+        ? ''
+        : `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius + (3 * renderScale)}" fill="none" stroke="${color}" stroke-width="${8 * renderScale}" opacity="0.18"/>`,
+      `<circle cx="${bubble.x}" cy="${bubble.y}" r="${renderRadius}" fill="#07111f" fill-opacity="0.94" stroke="${color}" stroke-width="${3 * renderScale}"/>`,
+      '</g>',
+    ].join('');
+  }).join('');
+
+  const textLayer = buildBubbleSurvivalTextLayer({ plan, template, videoTime });
   return Buffer.from([
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     '<defs>',
@@ -230,12 +264,10 @@ export function renderArenaSvg({ plan, template, videoTime }) {
     '<g opacity="0.18">',
     ...Array.from({ length: 22 }, (_, index) => `<circle cx="${(index * 97) % width}" cy="${(index * 173) % height}" r="${1 + (index % 3)}" fill="#8edcff"/>`),
     '</g>',
-    ...title.markup,
     ...buildBubbleSurvivalArenaSvgMarkup(arenaGeometry),
     tailMarkup,
     bubbleMarkup,
-    overlayMarkup,
-    roundIntroMarkup,
+    textLayer.markup,
     '</svg>',
   ].join(''));
 }
@@ -467,6 +499,21 @@ async function renderFrames({ plan, template, framesRoot }) {
           top: sprite.top,
         });
       }
+      const foregroundSvg = renderArenaForegroundSvg({ plan, template, videoTime });
+      const foreground = await sharp(foregroundSvg, { sequentialRead: true })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      alphaBlendRgba({
+        destination: baseFrame.data,
+        destinationWidth: baseFrame.info.width,
+        destinationHeight: baseFrame.info.height,
+        source: foreground.data,
+        sourceWidth: foreground.info.width,
+        sourceHeight: foreground.info.height,
+        left: 0,
+        top: 0,
+      });
       await sharp(baseFrame.data, {
         raw: {
           width: baseFrame.info.width,
