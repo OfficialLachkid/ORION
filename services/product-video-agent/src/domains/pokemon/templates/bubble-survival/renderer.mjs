@@ -8,6 +8,20 @@ import {
   expandVisibleSpriteBounds,
   findVisibleSpriteBounds,
 } from '../shared/render/sprite-visible-bounds.mjs';
+import {
+  buildAnimatedBubbleSurvivalTitleMarkup,
+  buildBoundaryAwareTextMarkup,
+  buildBubbleSurvivalTitleMarkup,
+  resolveShowdownTitleAnimationState,
+  wrapTextInsideFrame,
+} from './title-renderer.mjs';
+
+export {
+  buildAnimatedBubbleSurvivalTitleMarkup,
+  buildBubbleSurvivalTitleMarkup,
+  resolveShowdownTitleAnimationState,
+  wrapTextInsideFrame,
+};
 
 const BUBBLE_COLORS = Object.freeze([
   '#4CC9F0', '#F72585', '#B8F2E6', '#FFD166', '#9B5DE5', '#00F5D4',
@@ -78,75 +92,6 @@ export function resolveDefeatedBubbleScale({
   const shrinkElapsed = elapsed - popDuration;
   const remainingScaleRatio = 1 - (shrinkElapsed / shrinkDuration);
   return remainingScaleRatio <= 1e-9 ? 0 : maximumScale * remainingScaleRatio;
-}
-
-function estimateSvgTextWidth(text, fontSize) {
-  return [...String(text || '')].reduce((width, character) => {
-    if (/\s/u.test(character)) return width + (fontSize * 0.36);
-    if (/[MW]/u.test(character)) return width + (fontSize * 0.96);
-    if (/[A-Z0-9]/u.test(character)) return width + (fontSize * 0.74);
-    return width + (fontSize * 0.62);
-  }, 0);
-}
-
-export function wrapTextInsideFrame({ text, frameWidth, fontSize, sideMargin = 50 }) {
-  const words = String(text || '').trim().split(/\s+/u).filter(Boolean);
-  const maximumWidth = Math.max(1, Number(frameWidth) - (Number(sideMargin) * 2));
-  const lines = [];
-  for (const word of words) {
-    const candidate = lines.length > 0 ? `${lines.at(-1)} ${word}` : word;
-    if (lines.length === 0 || estimateSvgTextWidth(candidate, fontSize) <= maximumWidth) {
-      if (lines.length === 0) lines.push(word);
-      else lines[lines.length - 1] = candidate;
-    } else {
-      lines.push(word);
-    }
-  }
-  return {
-    lines: lines.length > 0 ? lines : [''],
-    maximum_width: maximumWidth,
-    estimated_widths: (lines.length > 0 ? lines : [''])
-      .map((line) => Math.min(maximumWidth, estimateSvgTextWidth(line, fontSize))),
-  };
-}
-
-function buildBoundaryAwareTextMarkup({
-  text,
-  centerX,
-  frameWidth,
-  fontSize,
-  startY,
-  lineHeight,
-  sideMargin = 50,
-  attributes,
-}) {
-  const wrapped = wrapTextInsideFrame({ text, frameWidth, fontSize, sideMargin });
-  const markup = wrapped.lines.map((line, index) => {
-    const naturalWidth = estimateSvgTextWidth(line, fontSize);
-    const fitAttributes = naturalWidth > wrapped.maximum_width
-      ? ` textLength="${wrapped.maximum_width}" lengthAdjust="spacingAndGlyphs"`
-      : '';
-    return `<text x="${centerX}" y="${startY + (index * lineHeight)}" text-anchor="middle" font-size="${fontSize}"${fitAttributes} ${attributes}>${escapeXml(line)}</text>`;
-  });
-  return {
-    ...wrapped,
-    markup,
-    end_y: startY + ((wrapped.lines.length - 1) * lineHeight),
-  };
-}
-
-export function buildBubbleSurvivalTitleMarkup({ centerX, frameWidth }) {
-  const title = buildBoundaryAwareTextMarkup({
-    text: 'SHOWDOWN',
-    centerX,
-    frameWidth,
-    fontSize: 30,
-    startY: 88,
-    lineHeight: 32,
-    sideMargin: 50,
-    attributes: 'font-family="Arial Black, Arial, sans-serif" font-weight="900" fill="#fff" stroke="#091020" stroke-width="5" paint-order="stroke"',
-  });
-  return title;
 }
 
 export function renderArenaSvg({ plan, template, videoTime }) {
@@ -239,7 +184,25 @@ export function renderArenaSvg({ plan, template, videoTime }) {
     ].join('');
   }
 
-  const title = buildBubbleSurvivalTitleMarkup({ centerX, frameWidth: width });
+  const titlePresentation = template?.presentation?.title || {};
+  const titleAnimation = template?.presentation?.showdown_title_animation || {};
+  const title = titleAnimation.enabled === true
+    ? buildAnimatedBubbleSurvivalTitleMarkup({
+        centerX,
+        frameWidth: width,
+        videoTime,
+        animation: titleAnimation,
+        fontSize: Number(titlePresentation.font_size ?? 30),
+        startY: Number(titlePresentation.y ?? 88),
+        sideMargin: Number(titlePresentation.side_margin ?? 50),
+      })
+    : buildBubbleSurvivalTitleMarkup({ centerX, frameWidth: width });
+  const roundIntroMarkup = introMode && plan?.presentation?.round_label
+    ? [
+        `<text x="${centerX}" y="${centerY - 132}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="22" font-weight="900" fill="#67dcff" stroke="#07111f" stroke-width="4" paint-order="stroke">${escapeXml(plan.presentation.round_label)}</text>`,
+        `<text x="${centerX}" y="${centerY + 126}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="20" font-weight="900" fill="#FFD166" stroke="#07111f" stroke-width="4" paint-order="stroke">${escapeXml(plan.presentation.category_label || '')}</text>`,
+      ].join('')
+    : '';
   return Buffer.from([
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     '<defs>',
@@ -256,6 +219,7 @@ export function renderArenaSvg({ plan, template, videoTime }) {
     tailMarkup,
     bubbleMarkup,
     overlayMarkup,
+    roundIntroMarkup,
     '</svg>',
   ].join(''));
 }

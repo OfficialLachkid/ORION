@@ -1,6 +1,6 @@
 const CHANNELS_CONFIG_DIR = 'services/product-video-agent/config/channels';
 
-export const PRODUCT_VIDEO_TEMPLATE_DEFINITIONS = Object.freeze([
+export const PRODUCT_VIDEO_SHORT_TEMPLATE_DEFINITIONS = Object.freeze([
   {
     templateKey: 'dual-type-reveal',
     templateId: 'pokemon.dual-type-reveal.v1',
@@ -81,10 +81,52 @@ export const PRODUCT_VIDEO_TEMPLATE_DEFINITIONS = Object.freeze([
   {
     templateKey: 'bubble-survival',
     templateId: 'pokemon.bubble-survival.v1',
-    label: 'Bubble Survival',
-    genreLabel: 'Bubble Survival',
+    label: 'Bubble Showdown',
+    genreLabel: 'Bubble Showdown',
     legacyConfigSlug: '',
   },
+]);
+
+export const PRODUCT_VIDEO_LONG_TEMPLATE_DEFINITIONS = Object.freeze([
+  Object.freeze({
+    templateKey: 'long-bubble-showdown',
+    templateId: 'pokemon.long.bubble-showdown.v1',
+    label: 'Bubble Showdown',
+    genreLabel: 'Long-form Bubble Showdown',
+    generationScript: 'services/product-video-agent/scripts/generate-pokemon-bubble-showdown-long-form-review.mjs',
+    legacyConfigSlug: '',
+  }),
+  Object.freeze({
+    templateKey: 'long-reveal-challenge',
+    templateId: 'pokemon.long.reveal-challenge.v1',
+    label: 'Reveal Challenge',
+    genreLabel: 'Long-form Pokemon Reveal Challenge',
+    generationScript: 'services/product-video-agent/scripts/generate-pokemon-reveal-long-form-review.mjs',
+    legacyConfigSlug: '',
+  }),
+  Object.freeze({
+    templateKey: 'long-mixed-challenge',
+    templateId: 'pokemon.long.mixed-challenge.v1',
+    label: 'Mixed Challenge',
+    genreLabel: 'Long-form Pokemon Challenge Compilation',
+    generationScript: 'services/product-video-agent/scripts/generate-pokemon-long-form-review.mjs',
+    legacyConfigSlug: '',
+  }),
+]);
+
+export const PRODUCT_VIDEO_TEMPLATE_DEFINITIONS = Object.freeze([
+  ...PRODUCT_VIDEO_SHORT_TEMPLATE_DEFINITIONS.map((definition) => Object.freeze({
+    ...definition,
+    contentFormat: 'short_form',
+  })),
+]);
+
+export const PRODUCT_VIDEO_ALL_TEMPLATE_DEFINITIONS = Object.freeze([
+  ...PRODUCT_VIDEO_TEMPLATE_DEFINITIONS,
+  ...PRODUCT_VIDEO_LONG_TEMPLATE_DEFINITIONS.map((definition) => Object.freeze({
+    ...definition,
+    contentFormat: 'long_form',
+  })),
 ]);
 
 export const PRODUCT_VIDEO_CHANNEL_DEFINITIONS = Object.freeze([
@@ -127,6 +169,7 @@ const TEMPLATE_KEY_ALIASES = Object.freeze({
   'team-builder': 'build-your-team',
   'type-quiz': 'type-speed-quiz',
   'bubble-battle': 'bubble-survival',
+  'bubble-showdown-long': 'long-bubble-showdown',
 });
 
 function normalizeIdentifier(value) {
@@ -138,13 +181,17 @@ function normalizeTemplateKey(value) {
   return TEMPLATE_KEY_ALIASES[normalized] || normalized;
 }
 
-export function findProductVideoTemplateDefinition(value) {
+export function findProductVideoTemplateDefinition(value, contentFormat = '') {
   const normalized = normalizeTemplateKey(value);
-  return PRODUCT_VIDEO_TEMPLATE_DEFINITIONS.find((definition) => (
-    definition.templateKey === normalized
-    || definition.templateId === normalized
-    || normalizeIdentifier(definition.label) === normalized
-    || normalizeIdentifier(definition.genreLabel) === normalized
+  const normalizedContentFormat = normalizeIdentifier(contentFormat);
+  return PRODUCT_VIDEO_ALL_TEMPLATE_DEFINITIONS.find((definition) => (
+    (!normalizedContentFormat || definition.contentFormat === normalizedContentFormat)
+    && (
+      definition.templateKey === normalized
+      || definition.templateId === normalized
+      || normalizeIdentifier(definition.label) === normalized
+      || normalizeIdentifier(definition.genreLabel) === normalized
+    )
   )) || null;
 }
 

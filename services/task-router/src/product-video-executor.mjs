@@ -15,6 +15,7 @@ import {
 import { syncPokeQuizzQueueStatusMessage } from '../../product-video-agent/src/poke-quizz-queue-status.mjs';
 import { isManagedPokeQuizzPreviewPath as isManagedPokeQuizzPreviewStoragePath } from '../../product-video-agent/src/poke-quizz-preview-storage.mjs';
 import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
+import { findProductVideoTemplateDefinition } from '../../product-video-agent/src/product-video-template-routing.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
   DEFAULT_CONFIG_PATH,
@@ -933,8 +934,19 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
 
   const submittedAt = task.submitted_at || new Date().toISOString();
   const runProcess = dependencies.runProcess || runLocalProcess;
+  const contentFormat = generation.contentFormat === 'long_form' ? 'long_form' : 'short_form';
+  const templateDefinition = findProductVideoTemplateDefinition(
+    generation.templateKey || generation.templateId,
+    contentFormat,
+  );
+  const generationScript = contentFormat === 'long_form'
+    ? templateDefinition?.generationScript
+    : 'services/product-video-agent/scripts/generate-poke-quizz-review.mjs';
+  if (!generationScript && !dependencies.generateReviewScriptPath) {
+    throw new Error(`No ${contentFormat} generation script is registered for ${generation.templateKey || generation.templateId}.`);
+  }
   const generateReviewScriptPath = dependencies.generateReviewScriptPath
-    || resolve(projectRoot, 'services/product-video-agent/scripts/generate-poke-quizz-review.mjs');
+    || resolve(projectRoot, generationScript);
   const profilesLoader = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
   const channelFinder = dependencies.findPublicationChannelProfile || findPublicationChannelProfile;
   const profiles = await profilesLoader(
@@ -951,8 +963,9 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
       resolve(projectRoot, catalogJsonPath),
       '--channel-config',
       resolve(projectRoot, generation.channelConfigPath),
-      '--template-id',
-      generation.templateId || generation.templateKey || '',
+      ...(contentFormat === 'short_form'
+        ? ['--template-id', generation.templateId || generation.templateKey || '']
+        : []),
       '--channel',
       generation.channelSelector,
       ...(reviewThreadId ? ['--thread-id', reviewThreadId] : []),
@@ -960,7 +973,7 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
       submittedAt,
     ],
     cwd: projectRoot,
-    timeoutMs: 1_200_000,
+    timeoutMs: contentFormat === 'long_form' ? 7_200_000 : 1_200_000,
   });
 
   const reviewPayload = parseLastJsonObject(reviewResult.stdout) || {};
@@ -973,7 +986,7 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
     report: {
       state: 'preview_generated',
       severity: 'success',
-      summary: `Generated a ${generation.templateLabel || 'Poke Quizz'} review video for ${generation.channelLabel || generation.channelSelector} and posted it to the configured review thread.`,
+      summary: `Generated a ${contentFormat === 'long_form' ? 'long-form ' : ''}${generation.templateLabel || 'Poke Quizz'} review video for ${generation.channelLabel || generation.channelSelector} and posted it to the configured review thread.`,
       publicationId: reviewPayload.publication_id || '',
       previewUrl: reviewPayload.preview_url || '',
       reviewTaskId: reviewPayload.task_id || '',
@@ -983,6 +996,7 @@ async function executeGenerateReviewTask(task, _config, dependencies = {}) {
       channelConfigPath: generation.channelConfigPath,
       templateKey: generation.templateKey || '',
       templateId: generation.templateId || '',
+      contentFormat,
     },
   };
 }

@@ -101,7 +101,7 @@ for (const { templatePath, expectedGenreLabel } of [
   },
   {
     templatePath: 'services/product-video-agent/config/templates/pokemon/bubble-survival.v1.json',
-    expectedGenreLabel: 'Bubble Survival',
+    expectedGenreLabel: 'Bubble Showdown',
   },
 ]) {
   test(`resolveVideoTemplateRuntime remaps manual override ${expectedGenreLabel}`, async () => {

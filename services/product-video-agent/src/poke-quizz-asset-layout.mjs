@@ -39,6 +39,8 @@ const POKE_QUIZZ_PREVIEW_TEMPLATE_DIRECTORIES = Object.freeze({
   'cry-match': 'Cry Match',
   'bubble-survival': 'Bubble Survival',
   'long-reveal-challenge': 'Reveal Challenge Long Form',
+  'long-bubble-showdown': 'Bubble Showdown Long Form',
+  'long-mixed-challenge': 'Mixed Challenge Long Form',
 });
 
 export function formatDexNumber(value) {
@@ -93,6 +95,12 @@ export function resolvePokeQuizzPreviewTemplateKey(templateRef) {
   }
   if (candidates.some((value) => value.includes('build-your-team') || value.includes('team-builder'))) {
     return 'build-your-team';
+  }
+  if (candidates.some((value) => value.includes('long-bubble-showdown'))) {
+    return 'long-bubble-showdown';
+  }
+  if (candidates.some((value) => value.includes('long-mixed-challenge'))) {
+    return 'long-mixed-challenge';
   }
   if (candidates.some((value) => value.includes('tournament') || value.includes('showdown'))) {
     return 'tournament';
