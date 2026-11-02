@@ -37,6 +37,26 @@ const PLACEHOLDER_PATTERNS = [
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
 
+// File-extension / asset-path "TLDs" that only appear when the lead
+// scraper mistook a URL fragment or filename for a contact email.
+// `flags@2x.webp` passed the plain shape check on 2026-10-27 because
+// `.webp` has `[^\s@]+\.[^\s@]+` structure; nobody has a real inbox
+// at `.webp`, so this is pure junk. Lowercased, compared against the
+// substring after the final `.` in the "to" address.
+export const BLOCKED_TLD_EXTENSIONS = new Set([
+  // Image / media
+  'webp', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'bmp', 'tiff', 'tif',
+  'webm', 'mp4', 'mp3', 'mov', 'avi', 'wav', 'ogg', 'flac',
+  // Code / page assets
+  'css', 'js', 'mjs', 'ts', 'tsx', 'jsx', 'html', 'htm', 'json', 'xml',
+  'yaml', 'yml', 'map', 'scss', 'sass', 'less', 'php',
+  // Docs / archives
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv',
+  'zip', 'tar', 'gz', 'rar', '7z',
+  // Fonts
+  'woff', 'woff2', 'ttf', 'otf', 'eot',
+]);
+
 function emailAddress(task) {
   return String(task?.email_request?.to || '').trim();
 }
@@ -68,9 +88,15 @@ export function checkRequiredFields(task) {
 
 export function checkEmailShape(task) {
   const to = emailAddress(task);
-  return EMAIL_SHAPE.test(to)
-    ? { ok: true }
-    : { ok: false, reason: `invalid_to_address:${to}` };
+  if (!EMAIL_SHAPE.test(to)) return { ok: false, reason: `invalid_to_address:${to}` };
+  // Guard against scraped-asset addresses (e.g. flags@2x.webp): the
+  // substring after the final `.` must not be a known file extension.
+  const lastDot = to.lastIndexOf('.');
+  const tld = lastDot === -1 ? '' : to.slice(lastDot + 1).toLowerCase();
+  if (BLOCKED_TLD_EXTENSIONS.has(tld)) {
+    return { ok: false, reason: `invalid_to_address_asset_tld:${to}` };
+  }
+  return { ok: true };
 }
 
 export function checkBodyLength(task, { min = DEFAULT_BODY_MIN_CHARS, max = DEFAULT_BODY_MAX_CHARS } = {}) {
