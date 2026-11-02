@@ -110,6 +110,7 @@ function selectArenaShape(template, seed) {
 function buildSimulationConfig(template, arenaShape) {
   const frameWidth = Number(template?.render?.frame_width || 540);
   const frameHeight = Number(template?.render?.frame_height || 960);
+  const shapeOverride = template?.simulation?.shape_overrides?.[arenaShape] || {};
   return {
     center_x: Number(template?.arena?.center_x ?? (frameWidth / 2)),
     center_y: Number(template?.arena?.center_y ?? ((frameHeight / 2) - 30)),
@@ -132,8 +133,12 @@ function buildSimulationConfig(template, arenaShape) {
     collision_restitution: Number(template?.bubbles?.collision_restitution ?? 0.98),
     fixed_step_seconds: Number(template?.simulation?.fixed_step_seconds ?? (1 / 120)),
     sample_fps: Number(template?.render?.frame_fps ?? 30),
-    maximum_seconds: Number(template?.simulation?.maximum_seconds ?? 40),
-    stagnation_seconds: Number(template?.simulation?.stagnation_seconds ?? 10),
+    maximum_seconds: Number(
+      shapeOverride.maximum_seconds ?? template?.simulation?.maximum_seconds ?? 40,
+    ),
+    stagnation_seconds: Number(
+      shapeOverride.stagnation_seconds ?? template?.simulation?.stagnation_seconds ?? 10,
+    ),
     speed_up_interval_seconds: Number(template?.simulation?.speed_up_interval_seconds ?? 5),
     speed_up_multiplier: Number(template?.simulation?.speed_up_multiplier ?? 1.25),
   };
@@ -160,10 +165,6 @@ export async function planPokemonBubbleSurvival({
   const pokemonCount = positiveInteger(
     template?.selection_rules?.pokemon_count,
     DEFAULT_POKEMON_COUNT,
-  );
-  const maximumAttempts = positiveInteger(
-    template?.simulation?.maximum_attempts,
-    DEFAULT_MAXIMUM_SIMULATION_ATTEMPTS,
   );
   const readableRows = [];
   for (const row of Array.isArray(pokedexRows) ? pokedexRows : []) {
@@ -203,6 +204,11 @@ export async function planPokemonBubbleSurvival({
     .slice(0, pokemonCount)
     .map(compactSubject);
   const arenaShape = selectArenaShape(template, normalizedSeed);
+  const maximumAttempts = positiveInteger(
+    template?.simulation?.shape_overrides?.[arenaShape]?.maximum_attempts
+      ?? template?.simulation?.maximum_attempts,
+    DEFAULT_MAXIMUM_SIMULATION_ATTEMPTS,
+  );
   const simulationConfig = buildSimulationConfig(template, arenaShape);
   let simulation = null;
   let simulationSeed = '';
