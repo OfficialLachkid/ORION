@@ -28,6 +28,62 @@ function buildVideoId(plan, renderPath) {
   });
 }
 
+// Short, stable slug for an asset path — the basename without its
+// extension. Keeps analytics bucket labels readable
+// ("neon-plasma-armory" instead of a 70-byte full path) AND keeps
+// the publication-metadata JSONB small, which matters for the
+// Supabase egress rules (see Jacobs-2/07_Products/Product_Video_Agent/
+// Runtime_Ops.md § Supabase egress optimization — 2026-11-02).
+export function assetSlugFromPath(fullPath) {
+  const name = basename(String(fullPath || '').trim());
+  if (!name) return null;
+  const stem = name.replace(/\.[^.]+$/u, '');
+  return stem || null;
+}
+
+// Compact analytics-oriented signals extracted from the render plan.
+// Attached to `publicationRow.metadata.video_signals` so the weekly
+// analytics review can bucket by variant (difficulty / background /
+// music / length) alongside the existing per-template bucketing.
+//
+// Rules the shape follows:
+//   - Only non-null, non-empty values are emitted (null-safe).
+//   - Each sub-object is omitted entirely when all its fields are
+//     empty, so a template that has no variant data (yet) adds
+//     ZERO bytes to the metadata column.
+//   - Target size per publication: ~200-300 bytes for a filled-in
+//     template, 0 bytes for an un-onboarded one.
+export function buildVideoSignals(plan) {
+  if (!plan || typeof plan !== 'object') return null;
+  const out = {};
+
+  const difficulty = String(plan?.selection?.difficulty_id || '').trim();
+  const roundCount = Number(plan?.selection?.round_count);
+  if (difficulty || Number.isFinite(roundCount)) {
+    out.variant = {};
+    if (difficulty) out.variant.difficulty = difficulty;
+    if (Number.isFinite(roundCount)) out.variant.round_count = roundCount;
+  }
+
+  const backgroundSlug = assetSlugFromPath(plan?.assets?.background?.selected_path);
+  const musicSlug = assetSlugFromPath(plan?.assets?.audio?.selected_battle_intro_music_path);
+  if (backgroundSlug || musicSlug) {
+    out.selection = {};
+    if (backgroundSlug) out.selection.background_slug = backgroundSlug;
+    if (musicSlug) out.selection.music_slug = musicSlug;
+  }
+
+  const durationSeconds = Number(plan?.timing?.total_duration_seconds);
+  const subjectPool = String(plan?.selection?.pool_key || '').trim();
+  if (Number.isFinite(durationSeconds) || subjectPool) {
+    out.shape = {};
+    if (Number.isFinite(durationSeconds)) out.shape.duration_seconds = Math.round(durationSeconds * 10) / 10;
+    if (subjectPool) out.shape.subject_pool = subjectPool;
+  }
+
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 function buildPublicationId(videoId, channelProfile) {
   return createStableId('publication', {
     videoId,
@@ -188,6 +244,7 @@ export async function createPokeQuizzPublicationRegistration({
     completed_at: fileDetails.modifiedAt || registeredAt,
   };
 
+  const videoSignals = buildVideoSignals(plan);
   const publicationRow = {
     id: publicationId,
     video_id: videoId,
@@ -221,6 +278,14 @@ export async function createPokeQuizzPublicationRegistration({
       description_generation_model: metadata.model || channelProfile.metadata?.description_generation_model || 'fallback',
       generation_provider: metadata.generation_provider || 'template',
       registration_source: 'poke-quizz-local-render',
+      // Analytics variant signals (2026-11-02 pilot — stat-clash first;
+      // see Jacobs-2/07_Products/Product_Video_Agent/Analytics.md).
+      // Omitted entirely when the plan has no video_signals data
+      // (un-onboarded template) so metadata size stays flat for those
+      // rows — matters for the Supabase egress rules in
+      // Jacobs-2/07_Products/Product_Video_Agent/Runtime_Ops.md §
+      // Supabase egress optimization.
+      ...(videoSignals ? { video_signals: videoSignals } : {}),
     },
   };
 
