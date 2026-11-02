@@ -13,6 +13,9 @@ import {
   buildAnimatedBubbleSurvivalTitleMarkup,
   renderArenaForegroundSvg,
   renderArenaSvg,
+  resolveAnimatedRoundNumber,
+  resolveBubbleSurvivalNeonTheme,
+  resolveDefeatedRosterEntries,
   resolveShowdownTitleAnimationState,
 } from '../src/domains/pokemon/templates/bubble-survival/renderer.mjs';
 import { buildRevealChallengeProgramFilter } from '../src/domains/pokemon/long-form/reveal-challenge/renderer.mjs';
@@ -27,16 +30,16 @@ async function loadJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
 
-test('long-form Bubble Showdown config targets a bounded 4-6 minute landscape episode', async () => {
+test('long-form Bubble Showdown config stays around a three-minute landscape episode', async () => {
   const template = await loadJson('services/product-video-agent/config/templates/pokemon/long/bubble-showdown.v1.json');
   const duration = resolveBubbleShowdownDurationConfig(template);
   assert.deepEqual(duration, {
-    minimum_seconds: 240,
-    target_seconds: 300,
-    maximum_seconds: 360,
-    minimum_rounds: 8,
-    target_rounds: 10,
-    maximum_rounds: 12,
+    minimum_seconds: 135,
+    target_seconds: 165,
+    maximum_seconds: 180,
+    minimum_rounds: 4,
+    target_rounds: 5,
+    maximum_rounds: 6,
     intro_seconds: 5,
     outro_seconds: 6,
   });
@@ -69,13 +72,16 @@ test('category order is deterministic and exhausts unique pools before reuse', (
   assert.notEqual(first[10], first[11]);
 });
 
-test('arena shape order is deterministic and exhausts convex shapes before reuse', () => {
-  const shapes = ['circle', 'triangle', 'square', 'diamond', 'rectangle', 'hexagon', 'octagon'];
-  const first = selectBubbleShowdownArenaShapeOrder({ shapes, seed: 'shape-order', maximumRounds: 10 });
-  const second = selectBubbleShowdownArenaShapeOrder({ shapes, seed: 'shape-order', maximumRounds: 10 });
+test('arena shape order is deterministic and exhausts fixed and contour shapes before reuse', () => {
+  const shapes = [
+    'circle', 'triangle', 'square', 'diamond', 'rectangle', 'pentagon', 'hexagon',
+    'octagon', 'trefoil', 'quatrefoil', 'pokemon-silhouette',
+  ];
+  const first = selectBubbleShowdownArenaShapeOrder({ shapes, seed: 'shape-order', maximumRounds: 14 });
+  const second = selectBubbleShowdownArenaShapeOrder({ shapes, seed: 'shape-order', maximumRounds: 14 });
   assert.deepEqual(first, second);
   assert.equal(new Set(first.slice(0, shapes.length)).size, shapes.length);
-  assert.notEqual(first[6], first[7]);
+  assert.notEqual(first[10], first[11]);
 });
 
 test('duration planner keeps minimum rounds and rejects rounds beyond the bounded target', () => {
@@ -177,7 +183,12 @@ test('long-form round intro shows round and pool labels without changing short-f
     },
     selection: { selected_subjects: [{ id: 'pikachu', name: 'Pikachu' }] },
     winner: { id: 'pikachu' },
-    presentation: { round_label: 'ROUND 2 / 10', category_label: 'Mega Pokemon' },
+    presentation: {
+      round_number: 2,
+      round_total: 10,
+      round_label: 'ROUND 2 / 10',
+      category_label: 'Mega Pokemon',
+    },
   };
   const template = {
     presentation: {
@@ -191,12 +202,60 @@ test('long-form round intro shows round and pool labels without changing short-f
   assert.match(introSvg, /ROUND 2 \/ 10/u);
   assert.match(introSvg, /Mega Pokemon/u);
   assert.match(introSvg, /font-size="44"/u);
-  assert.match(introSvg, /stroke="#67dcff"/u);
+  assert.match(introSvg, /stroke="#[0-9A-F]{6}"/u);
   assert.match(introSvg, /<polygon points=/u);
   assert.doesNotMatch(battleSvg, /ROUND 2 \/ 10|Mega Pokemon/u);
   assert.match(foregroundSvg, /ROUND 2 \/ 10/u);
   assert.match(foregroundSvg, /Mega Pokemon/u);
   assert.doesNotMatch(foregroundSvg, /<polygon points=|fill="url\(#bg\)"/u);
+});
+
+test('round counters count upward and defeated Pokemon occupy alternating side roster slots', () => {
+  assert.equal(resolveAnimatedRoundNumber({ videoTime: 0, introSeconds: 1.16, roundNumber: 8 }), 1);
+  assert.ok(resolveAnimatedRoundNumber({ videoTime: 0.3, introSeconds: 1.16, roundNumber: 8 }) > 1);
+  assert.equal(resolveAnimatedRoundNumber({ videoTime: 1, introSeconds: 1.16, roundNumber: 8 }), 8);
+  const plan = {
+    video: { intro_seconds: 1.16 },
+    simulation: {
+      config: {
+        center_x: 480,
+        center_y: 300,
+        arena_radius: 220,
+        defeat_pop_seconds: 0.1,
+        defeat_shrink_seconds: 0.5,
+      },
+      events: [
+        { type: 'eliminated', time: 1, bubble_id: 'a' },
+        { type: 'eliminated', time: 2, bubble_id: 'b' },
+      ],
+    },
+    selection: { selected_subjects: [{ id: 'a' }, { id: 'b' }] },
+  };
+  const template = { presentation: { defeated_roster: { enabled: true } } };
+  const entries = resolveDefeatedRosterEntries({ plan, template, videoTime: 5 });
+  assert.equal(entries.length, 2);
+  assert.ok(entries[0].x < 260);
+  assert.ok(entries[1].x > 700);
+  assert.equal(entries.every((entry) => entry.scale === 1), true);
+});
+
+test('showdown neon theme is deterministic and rotates through configured colors', () => {
+  const template = {
+    presentation: {
+      showdown_title_animation: {
+        neon_palette: ['#67DCFF', '#FFD166', '#9B5DE5', '#F72585', '#39E58C'],
+      },
+    },
+  };
+  const themes = Array.from({ length: 20 }, (_unused, index) => resolveBubbleSurvivalNeonTheme({
+    plan: { seed: `theme-${index}`, simulation: { config: { arena_shape: 'circle' } } },
+    template,
+  }));
+  assert.deepEqual(themes[0], resolveBubbleSurvivalNeonTheme({
+    plan: { seed: 'theme-0', simulation: { config: { arena_shape: 'circle' } } },
+    template,
+  }));
+  assert.ok(new Set(themes.map((theme) => theme.accent)).size >= 4);
 });
 
 test('long-form program cards animate every premium intro and outro layer', async () => {
@@ -208,6 +267,7 @@ test('long-form program cards animate every premium intro and outro layer', asyn
   });
   assert.match(filter, /drawbox=x='\(1920-\(1680\*min\(1\\,max\(0/u);
   assert.ok((filter.match(/fontcolor=0x2B6DA6/gu) || []).length >= 12);
+  assert.match(filter, /sin\(2\*PI\*\(t-/u);
   assert.match(filter, /alpha='min\(1\\,max\(0/u);
   assert.match(filter, /SHOWDOWN COMPLETE/u);
 });

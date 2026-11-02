@@ -118,6 +118,7 @@ export function buildAnimatedBubbleSurvivalTitleMarkup({
   fontSize = 30,
   startY = 88,
   sideMargin = 50,
+  colors = {},
 }) {
   const characters = [...'SHOWDOWN'];
   const maximumWidth = Math.max(1, Number(frameWidth) - (Number(sideMargin) * 2));
@@ -125,6 +126,10 @@ export function buildAnimatedBubbleSurvivalTitleMarkup({
   const naturalWidth = naturalWidths.reduce((sum, width) => sum + width, 0);
   const fitScale = Math.min(1, maximumWidth / Math.max(1, naturalWidth));
   const state = resolveShowdownTitleAnimationState(videoTime, animation, characters.length);
+  const depthColor = String(colors.depth || '#2B6DA6');
+  const strokeColor = String(colors.stroke || '#102A49');
+  const faceStrokeColor = String(colors.face_stroke || '#173A63');
+  const faceFill = String(colors.face_fill || 'url(#premiumTitleGradient)');
   let cursor = Number(centerX) - ((naturalWidth * fitScale) / 2);
   const markup = characters.map((character, index) => {
     const characterWidth = naturalWidths[index] * fitScale;
@@ -134,9 +139,9 @@ export function buildAnimatedBubbleSurvivalTitleMarkup({
     if (!letter.visible) return '';
     const transform = `translate(${characterCenterX.toFixed(3)} ${(startY + letter.offset_y).toFixed(3)}) rotate(${letter.rotation_degrees.toFixed(3)}) scale(${letter.scale.toFixed(3)})`;
     const depth = [6, 4, 2].map((offset) => (
-      `<text x="${offset}" y="${offset}" text-anchor="middle" font-size="${fontSize * fitScale}" font-family="Arial Black, Arial, sans-serif" font-weight="900" fill="#2B6DA6" stroke="#102A49" stroke-width="5" paint-order="stroke" opacity="${letter.opacity.toFixed(3)}" transform="${transform}">${escapeXml(character)}</text>`
+      `<text x="${offset}" y="${offset}" text-anchor="middle" font-size="${fontSize * fitScale}" font-family="Arial Black, Arial, sans-serif" font-weight="900" fill="${depthColor}" stroke="${strokeColor}" stroke-width="5" paint-order="stroke" opacity="${letter.opacity.toFixed(3)}" transform="${transform}">${escapeXml(character)}</text>`
     )).join('');
-    const face = `<text x="0" y="0" text-anchor="middle" font-size="${fontSize * fitScale}" font-family="Arial Black, Arial, sans-serif" font-weight="900" fill="url(#premiumTitleGradient)" stroke="#173A63" stroke-width="5" paint-order="stroke" opacity="${letter.opacity.toFixed(3)}" transform="${transform}">${escapeXml(character)}</text>`;
+    const face = `<text x="0" y="0" text-anchor="middle" font-size="${fontSize * fitScale}" font-family="Arial Black, Arial, sans-serif" font-weight="900" fill="${faceFill}" stroke="${faceStrokeColor}" stroke-width="5" paint-order="stroke" opacity="${letter.opacity.toFixed(3)}" transform="${transform}">${escapeXml(character)}</text>`;
     return `${depth}${face}`;
   });
   return {

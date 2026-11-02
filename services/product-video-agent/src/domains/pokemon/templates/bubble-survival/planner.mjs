@@ -21,6 +21,7 @@ import {
   normalizeBubbleSurvivalArenaShape,
 } from './arena-geometry.mjs';
 import { resolvePokemonCryPath } from '../shared/pokemon-cry-resolver.mjs';
+import { buildPokemonSpriteArenaContour } from './sprite-arena-contour.mjs';
 
 const DEFAULT_POKEMON_COUNT = 9;
 const DEFAULT_MAXIMUM_SIMULATION_ATTEMPTS = 8;
@@ -107,17 +108,19 @@ function selectArenaShape(template, seed) {
   return selectWeightedPool(pool, createSeededRandom(`${seed}|arena-shape`))?.shape || 'circle';
 }
 
-function buildSimulationConfig(template, arenaShape) {
+function buildSimulationConfig(template, arenaShape, arenaContour = null) {
   const frameWidth = Number(template?.render?.frame_width || 540);
   const frameHeight = Number(template?.render?.frame_height || 960);
   const shapeOverride = template?.simulation?.shape_overrides?.[arenaShape] || {};
   return {
     center_x: Number(template?.arena?.center_x ?? (frameWidth / 2)),
     center_y: Number(template?.arena?.center_y ?? ((frameHeight / 2) - 30)),
-    arena_radius: Number(template?.arena?.radius ?? 230),
+    arena_radius: Number(shapeOverride.arena_radius ?? template?.arena?.radius ?? 230),
     arena_shape: arenaShape,
     arena_shape_aspect_ratio: Number(template?.arena?.shape_aspect_ratio ?? 0.72),
-    bubble_radius: Number(template?.bubbles?.radius ?? 32.76),
+    arena_contour_points: arenaContour?.points || [],
+    arena_contour_source_id: arenaContour?.source_id || '',
+    bubble_radius: Number(shapeOverride.bubble_radius ?? template?.bubbles?.radius ?? 32.76),
     start_inset: Number(template?.bubbles?.start_inset ?? 5),
     initial_tail_count: Number(template?.bubbles?.initial_tail_count ?? 3),
     initial_tail_anchor_spread_degrees: Number(
@@ -210,12 +213,27 @@ export async function planPokemonBubbleSurvival({
     .slice(0, pokemonCount)
     .map(compactSubject);
   const arenaShape = selectArenaShape(template, normalizedSeed);
+  let arenaContour = null;
+  if (arenaShape === 'pokemon-silhouette') {
+    const silhouetteRandom = createSeededRandom(`${normalizedSeed}|arena-silhouette-source`);
+    const sourceSubject = selectedSubjects[Math.floor(silhouetteRandom() * selectedSubjects.length)];
+    const contour = await buildPokemonSpriteArenaContour(sourceSubject.sprite_path, {
+      pointCount: positiveInteger(template?.arena?.silhouette_point_count, 96),
+      alphaThreshold: positiveInteger(template?.arena?.silhouette_alpha_threshold, 24),
+      minimumRadiusRatio: Number(template?.arena?.silhouette_minimum_radius_ratio ?? 0.56),
+    });
+    arenaContour = {
+      ...contour,
+      source_id: sourceSubject.id,
+      source_name: sourceSubject.name,
+    };
+  }
   const maximumAttempts = positiveInteger(
     template?.simulation?.shape_overrides?.[arenaShape]?.maximum_attempts
       ?? template?.simulation?.maximum_attempts,
     DEFAULT_MAXIMUM_SIMULATION_ATTEMPTS,
   );
-  const simulationConfig = buildSimulationConfig(template, arenaShape);
+  const simulationConfig = buildSimulationConfig(template, arenaShape, arenaContour);
   let simulation = null;
   let simulationSeed = '';
   for (let attempt = 0; attempt < maximumAttempts; attempt += 1) {
@@ -291,6 +309,9 @@ export async function planPokemonBubbleSurvival({
       requested_count: pokemonCount,
       eligible_count: readablePool.length,
       selected_subjects: selectedSubjects,
+      arena_contour_source: arenaContour
+        ? { id: arenaContour.source_id, name: arenaContour.source_name }
+        : null,
       type_pair: [],
     },
     simulation: {

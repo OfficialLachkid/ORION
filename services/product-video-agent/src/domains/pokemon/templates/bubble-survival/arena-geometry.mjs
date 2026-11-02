@@ -6,14 +6,19 @@ export const BUBBLE_SURVIVAL_ARENA_SHAPES = Object.freeze([
   'square',
   'diamond',
   'rectangle',
+  'pentagon',
   'hexagon',
   'octagon',
+  'trefoil',
+  'quatrefoil',
+  'pokemon-silhouette',
 ]);
 
 const REGULAR_POLYGON_SIDES = Object.freeze({
   triangle: 3,
   square: 4,
   diamond: 4,
+  pentagon: 5,
   hexagon: 6,
   octagon: 8,
 });
@@ -50,6 +55,58 @@ function buildRectangleVertices({ centerX, centerY, radius, aspectRatio }) {
   ];
 }
 
+function buildLobedVertices({ centerX, centerY, radius, lobes }) {
+  const pointCount = Math.max(72, lobes * 24);
+  return Array.from({ length: pointCount }, (_unused, index) => {
+    const angle = (-Math.PI / 2) + ((Math.PI * 2 * index) / pointCount);
+    const radialRatio = 0.78 + (0.22 * Math.cos(lobes * (angle + (Math.PI / 2))));
+    return {
+      x: centerX + (Math.cos(angle) * radius * radialRatio),
+      y: centerY + (Math.sin(angle) * radius * radialRatio),
+    };
+  });
+}
+
+function buildConfiguredContourVertices({ centerX, centerY, radius, points }) {
+  const normalized = (Array.isArray(points) ? points : [])
+    .map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+  if (normalized.length < 12) return [];
+  return normalized.map((point) => ({
+    x: centerX + (point.x * radius),
+    y: centerY + (point.y * radius),
+  }));
+}
+
+function pointIsInsidePolygon(point, vertices) {
+  let inside = false;
+  for (let current = 0, previous = vertices.length - 1; current < vertices.length; previous = current, current += 1) {
+    const left = vertices[current];
+    const right = vertices[previous];
+    const crosses = ((left.y > point.y) !== (right.y > point.y))
+      && (point.x < (((right.x - left.x) * (point.y - left.y))
+        / (right.y - left.y)) + left.x);
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function polygonIsConvex(vertices) {
+  let direction = 0;
+  for (let index = 0; index < vertices.length; index += 1) {
+    const first = vertices[index];
+    const second = vertices[(index + 1) % vertices.length];
+    const third = vertices[(index + 2) % vertices.length];
+    const cross = ((second.x - first.x) * (third.y - second.y))
+      - ((second.y - first.y) * (third.x - second.x));
+    if (Math.abs(cross) <= EPSILON) continue;
+    const nextDirection = Math.sign(cross);
+    if (direction !== 0 && nextDirection !== direction) return false;
+    direction = nextDirection;
+  }
+  return true;
+}
+
 function buildPolygonEdges(vertices, center) {
   let perimeter = 0;
   return vertices.map((start, index) => {
@@ -60,7 +117,12 @@ function buildPolygonEdges(vertices, center) {
     let inwardX = -dy / Math.max(EPSILON, length);
     let inwardY = dx / Math.max(EPSILON, length);
     const midpoint = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 };
-    if (((center.x - midpoint.x) * inwardX) + ((center.y - midpoint.y) * inwardY) < 0) {
+    const probeDistance = Math.min(1, Math.max(0.05, length * 0.01));
+    const probe = {
+      x: midpoint.x + (inwardX * probeDistance),
+      y: midpoint.y + (inwardY * probeDistance),
+    };
+    if (!pointIsInsidePolygon(probe, vertices)) {
       inwardX *= -1;
       inwardY *= -1;
     }
@@ -95,14 +157,34 @@ export function createBubbleSurvivalArenaGeometry(config = {}) {
       edges: [],
     };
   }
-  const vertices = shape === 'rectangle'
-    ? buildRectangleVertices({
-        centerX: center.x,
-        centerY: center.y,
-        radius,
-        aspectRatio: Number(config.arena_shape_aspect_ratio ?? 0.72),
-      })
-    : buildRegularPolygonVertices({ centerX: center.x, centerY: center.y, radius, shape });
+  let vertices;
+  if (shape === 'rectangle') {
+    vertices = buildRectangleVertices({
+      centerX: center.x,
+      centerY: center.y,
+      radius,
+      aspectRatio: Number(config.arena_shape_aspect_ratio ?? 0.72),
+    });
+  } else if (shape === 'trefoil' || shape === 'quatrefoil') {
+    vertices = buildLobedVertices({
+      centerX: center.x,
+      centerY: center.y,
+      radius,
+      lobes: shape === 'trefoil' ? 3 : 4,
+    });
+  } else if (shape === 'pokemon-silhouette') {
+    vertices = buildConfiguredContourVertices({
+      centerX: center.x,
+      centerY: center.y,
+      radius,
+      points: config.arena_contour_points,
+    });
+    if (vertices.length === 0) {
+      vertices = buildRegularPolygonVertices({ centerX: center.x, centerY: center.y, radius, shape: 'octagon' });
+    }
+  } else {
+    vertices = buildRegularPolygonVertices({ centerX: center.x, centerY: center.y, radius, shape });
+  }
   const edges = buildPolygonEdges(vertices, center);
   return {
     shape,
@@ -110,6 +192,8 @@ export function createBubbleSurvivalArenaGeometry(config = {}) {
     radius,
     vertices,
     edges,
+    is_convex: polygonIsConvex(vertices),
+    contour_source_id: String(config.arena_contour_source_id || '').trim() || null,
     perimeter: edges.reduce((sum, edge) => sum + edge.length, 0),
   };
 }
@@ -129,7 +213,7 @@ function projectPointToEdge(point, edge) {
 }
 
 function buildInsetPolygonGeometry(geometry, inset) {
-  if (inset <= EPSILON) return geometry;
+  if (inset <= EPSILON || geometry.is_convex === false) return geometry;
   const vertices = geometry.edges.map((edge, index) => {
     const previous = geometry.edges[(index - 1 + geometry.edges.length) % geometry.edges.length];
     const a1 = previous.inward_normal.x;
@@ -167,22 +251,114 @@ export function sampleBubbleSurvivalArenaBoundary(geometry, fraction = 0, inset 
       outward_normal: outward,
     };
   }
-  const sampleGeometry = buildInsetPolygonGeometry(
-    geometry,
-    Math.max(0, Number(inset) || 0),
-  );
+  const normalizedInset = Math.max(0, Number(inset) || 0);
+  const sampleGeometry = buildInsetPolygonGeometry(geometry, normalizedInset);
   const targetDistance = normalizedFraction * sampleGeometry.perimeter;
   const edge = sampleGeometry.edges.find((candidate) => (
     targetDistance <= candidate.perimeter_start + candidate.length + EPSILON
   )) || sampleGeometry.edges.at(-1);
   const localDistance = clamp(targetDistance - edge.perimeter_start, 0, edge.length);
   const ratio = edge.length <= EPSILON ? 0 : localDistance / edge.length;
-  return {
+  const boundaryPoint = {
     x: edge.start.x + (edge.dx * ratio),
     y: edge.start.y + (edge.dy * ratio),
+  };
+  const insetPoint = geometry.is_convex === false && normalizedInset > EPSILON
+    ? {
+        x: boundaryPoint.x + (edge.inward_normal.x * normalizedInset),
+        y: boundaryPoint.y + (edge.inward_normal.y * normalizedInset),
+      }
+    : boundaryPoint;
+  return {
+    x: insetPoint.x,
+    y: insetPoint.y,
     inward_normal: edge.inward_normal,
     outward_normal: { x: -edge.inward_normal.x, y: -edge.inward_normal.y },
   };
+}
+
+function nearestPolygonBoundary(geometry, point) {
+  let nearest = null;
+  for (let edgeIndex = 0; edgeIndex < geometry.edges.length; edgeIndex += 1) {
+    const edge = geometry.edges[edgeIndex];
+    const projected = projectPointToEdge(point, edge);
+    const distance = Math.hypot(point.x - projected.x, point.y - projected.y);
+    if (!nearest || distance < nearest.distance) {
+      const ratio = edge.length <= EPSILON
+        ? 0
+        : Math.hypot(projected.x - edge.start.x, projected.y - edge.start.y) / edge.length;
+      nearest = { edge, edgeIndex, projected, distance, ratio };
+    }
+  }
+  return nearest;
+}
+
+function buildPackedContourStartingSamples({
+  geometry,
+  count,
+  inset,
+  rotationFraction,
+  minimumSpacing,
+}) {
+  const xs = geometry.vertices.map((point) => point.x);
+  const ys = geometry.vertices.map((point) => point.y);
+  const spacing = Math.max(1, Number(minimumSpacing) || 1);
+  const gridStep = Math.max(4, spacing * 0.34);
+  const candidates = [];
+  let rowIndex = 0;
+  for (let y = Math.min(...ys); y <= Math.max(...ys) + EPSILON; y += gridStep) {
+    const offsetX = rowIndex % 2 === 0 ? 0 : gridStep / 2;
+    for (let x = Math.min(...xs) + offsetX; x <= Math.max(...xs) + EPSILON; x += gridStep) {
+      const constrained = constrainBubbleToArena(geometry, { x, y }, inset);
+      if (Math.hypot(constrained.x - x, constrained.y - y) > 0.01) continue;
+      const nearest = nearestPolygonBoundary(geometry, { x, y });
+      if (!nearest) continue;
+      candidates.push({
+        x,
+        y,
+        inward_normal: nearest.edge.inward_normal,
+        outward_normal: {
+          x: -nearest.edge.inward_normal.x,
+          y: -nearest.edge.inward_normal.y,
+        },
+        boundary_fraction: (
+          nearest.edge.perimeter_start + (nearest.edge.length * nearest.ratio)
+        ) / geometry.perimeter,
+      });
+    }
+    rowIndex += 1;
+  }
+  if (candidates.length < count) {
+    throw new Error(`Arena ${geometry.shape} has too little usable area for ${count} bubbles.`);
+  }
+  const target = sampleBubbleSurvivalArenaBoundary(geometry, rotationFraction, inset);
+  const first = candidates.reduce((best, candidate) => {
+    if (!best) return candidate;
+    return Math.hypot(candidate.x - target.x, candidate.y - target.y)
+      < Math.hypot(best.x - target.x, best.y - target.y) ? candidate : best;
+  }, null);
+  const selected = [first];
+  while (selected.length < count) {
+    let bestCandidate = null;
+    let bestDistance = -1;
+    for (const candidate of candidates) {
+      if (selected.includes(candidate)) continue;
+      const distance = Math.min(...selected.map((chosen) => Math.hypot(
+        candidate.x - chosen.x,
+        candidate.y - chosen.y,
+      )));
+      if (distance > bestDistance) {
+        bestDistance = distance;
+        bestCandidate = candidate;
+      }
+    }
+    if (!bestCandidate || bestDistance + EPSILON < spacing) break;
+    selected.push(bestCandidate);
+  }
+  if (selected.length !== count) {
+    throw new Error(`Arena ${geometry.shape} cannot place ${count} bubbles at ${spacing}px spacing.`);
+  }
+  return selected;
 }
 
 export function buildBubbleSurvivalArenaStartingSamples({
@@ -201,6 +377,15 @@ export function buildBubbleSurvivalArenaStartingSamples({
         ...sampleBubbleSurvivalArenaBoundary(geometry, boundaryFraction, inset),
         boundary_fraction: boundaryFraction,
       };
+    });
+  }
+  if (geometry.is_convex === false) {
+    return buildPackedContourStartingSamples({
+      geometry,
+      count: sampleCount,
+      inset: Math.max(0, Number(inset) || 0),
+      rotationFraction: normalizedRotation,
+      minimumSpacing,
     });
   }
   const insetGeometry = buildInsetPolygonGeometry(
@@ -406,6 +591,38 @@ export function constrainBubbleToArena(geometry, point, bodyRadius) {
           y: geometry.center.y + (outward.y * geometry.radius),
         },
       }],
+    };
+  }
+
+  if (geometry.is_convex === false) {
+    const corrected = { x: point.x, y: point.y };
+    const contactsByEdge = new Map();
+    for (let iteration = 0; iteration < 12; iteration += 1) {
+      const nearest = nearestPolygonBoundary(geometry, corrected);
+      if (!nearest) break;
+      const inside = pointIsInsidePolygon(corrected, geometry.vertices);
+      const signedClearance = inside ? nearest.distance : -nearest.distance;
+      if (signedClearance + EPSILON >= radius) break;
+      const correction = radius - signedClearance;
+      corrected.x += nearest.edge.inward_normal.x * correction;
+      corrected.y += nearest.edge.inward_normal.y * correction;
+      contactsByEdge.set(nearest.edgeIndex, nearest);
+    }
+    const nearest = nearestPolygonBoundary(geometry, corrected);
+    const inside = pointIsInsidePolygon(corrected, geometry.vertices);
+    const clearance = nearest && inside ? Math.max(0, nearest.distance - radius) : 0;
+    const contacts = [...contactsByEdge.values()].map((contact) => ({
+      outward_normal: {
+        x: -contact.edge.inward_normal.x,
+        y: -contact.edge.inward_normal.y,
+      },
+      anchor: contact.projected,
+    }));
+    return {
+      ...corrected,
+      collided: contacts.length > 0,
+      contacts,
+      clearance,
     };
   }
 

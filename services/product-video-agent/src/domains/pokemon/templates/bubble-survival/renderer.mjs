@@ -32,6 +32,53 @@ const BUBBLE_COLORS = Object.freeze([
   '#FF7B00', '#90BE6D', '#577590', '#F15BB5', '#43AA8B', '#F94144',
 ]);
 
+const DEFAULT_NEON_PALETTE = Object.freeze([
+  '#67DCFF', '#FFD166', '#9B5DE5', '#F72585', '#FF4D5A', '#FF7BCB', '#39E58C',
+]);
+
+function hashText(value) {
+  let hash = 2166136261;
+  for (const character of String(value || 'bubble-showdown')) {
+    hash ^= character.codePointAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function normalizeHexColor(value, fallback = '#67DCFF') {
+  const normalized = String(value || '').trim().replace(/^0x/iu, '#');
+  return /^#[0-9a-f]{6}$/iu.test(normalized) ? normalized.toUpperCase() : fallback;
+}
+
+function mixHexColors(left, right, ratio) {
+  const amount = Math.min(1, Math.max(0, Number(ratio) || 0));
+  const parse = (value, offset) => Number.parseInt(value.slice(offset, offset + 2), 16);
+  const channel = (start, end) => Math.round(start + ((end - start) * amount))
+    .toString(16).padStart(2, '0');
+  return `#${channel(parse(left, 1), parse(right, 1))}${channel(parse(left, 3), parse(right, 3))}${channel(parse(left, 5), parse(right, 5))}`.toUpperCase();
+}
+
+export function resolveBubbleSurvivalNeonTheme({ plan = {}, template = {} } = {}) {
+  const animation = template?.presentation?.showdown_title_animation || {};
+  const configured = Array.isArray(animation.neon_palette)
+    ? animation.neon_palette.map((color) => normalizeHexColor(color, '')).filter(Boolean)
+    : [];
+  const palette = configured.length > 0 ? configured : DEFAULT_NEON_PALETTE;
+  const key = `${plan.seed || ''}|${plan.simulation?.config?.arena_shape || ''}|${plan.presentation?.round_number || ''}`;
+  const accent = palette[hashText(key) % palette.length];
+  return {
+    accent,
+    highlight: mixHexColors(accent, '#FFFFFF', 0.68),
+    depth: mixHexColors(accent, '#071426', 0.44),
+    stroke: mixHexColors(accent, '#020813', 0.7),
+    glow: mixHexColors(accent, '#FFFFFF', 0.22),
+  };
+}
+
+function buildPremiumTitleGradient(theme) {
+  return `<linearGradient id="premiumTitleGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="46%" stop-color="${theme.highlight}"/><stop offset="100%" stop-color="${theme.accent}"/></linearGradient>`;
+}
+
 function escapeXml(value) {
   return String(value || '')
     .replaceAll('&', '&amp;')
@@ -98,6 +145,56 @@ export function resolveDefeatedBubbleScale({
   return remainingScaleRatio <= 1e-9 ? 0 : maximumScale * remainingScaleRatio;
 }
 
+export function resolveAnimatedRoundNumber({ videoTime, introSeconds, roundNumber }) {
+  const target = Math.max(1, Math.round(Number(roundNumber) || 1));
+  if (target === 1) return 1;
+  const duration = Math.max(0.2, Math.min(Number(introSeconds) * 0.7, target * 0.085));
+  const progress = Math.min(1, Math.max(0, Number(videoTime) / duration));
+  const eased = 1 - ((1 - progress) ** 3);
+  return Math.min(target, 1 + Math.floor(eased * target));
+}
+
+export function resolveDefeatedRosterEntries({ plan, template, videoTime }) {
+  const config = template?.presentation?.defeated_roster || {};
+  if (config.enabled !== true) return [];
+  const introSeconds = Number(plan.video.intro_seconds || 0);
+  const simulationTime = Math.max(0, Number(videoTime) - introSeconds);
+  const popSeconds = Number(plan.simulation.config.defeat_pop_seconds ?? 0.1);
+  const shrinkSeconds = Math.max(0.05, Number(plan.simulation.config.defeat_shrink_seconds ?? 0.577));
+  const centerX = Number(plan.simulation.config.center_x);
+  const centerY = Number(plan.simulation.config.center_y);
+  const arenaRadius = Number(plan.simulation.config.arena_radius);
+  const size = Math.max(24, Number(config.sprite_size ?? 70));
+  const horizontalGap = Math.max(12, Number(config.horizontal_gap ?? 92));
+  const columnOffset = arenaRadius + horizontalGap;
+  const verticalGap = Math.max(size + 4, Number(config.vertical_gap ?? 92));
+  const events = (Array.isArray(plan.simulation.events) ? plan.simulation.events : [])
+    .filter((event) => event?.type === 'eliminated' && Number.isFinite(Number(event.time)))
+    .sort((left, right) => Number(left.time) - Number(right.time));
+  return events.flatMap((event, index) => {
+    const enterStart = Number(event.time) + popSeconds + shrinkSeconds;
+    const elapsed = simulationTime - enterStart;
+    if (elapsed < 0) return [];
+    const progress = Math.min(1, elapsed / shrinkSeconds);
+    const scale = Math.sin((progress * Math.PI) / 2);
+    const sideIndex = Math.floor(index / 2);
+    const side = index % 2 === 0 ? -1 : 1;
+    const slotsPerSide = Math.ceil(events.length / 2);
+    const y = centerY + ((sideIndex - ((slotsPerSide - 1) / 2)) * verticalGap);
+    const subjectIndex = plan.selection.selected_subjects.findIndex(
+      (subject) => subject.id === event.bubble_id,
+    );
+    return [{
+      subject_id: event.bubble_id,
+      subject_index: subjectIndex,
+      x: centerX + (side * columnOffset),
+      y,
+      size,
+      scale,
+    }];
+  });
+}
+
 function buildBubbleSurvivalTextLayer({
   plan,
   template,
@@ -115,6 +212,7 @@ function buildBubbleSurvivalTextLayer({
   const winnerMode = videoTime >= winnerStart;
   const introMode = videoTime < introSeconds;
   const winner = plan.selection.selected_subjects.find((subject) => subject.id === plan.winner.id);
+  const theme = resolveBubbleSurvivalNeonTheme({ plan, template });
 
   let overlayMarkup = '';
   if (introMode) {
@@ -162,6 +260,11 @@ function buildBubbleSurvivalTextLayer({
         fontSize: Number(titlePresentation.font_size ?? 30),
         startY: Number(titlePresentation.y ?? 88),
         sideMargin: Number(titlePresentation.side_margin ?? 50),
+        colors: {
+          depth: theme.depth,
+          stroke: theme.stroke,
+          face_stroke: mixHexColors(theme.accent, '#020813', 0.62),
+        },
       })
     : buildBubbleSurvivalTitleMarkup({ centerX, frameWidth: width });
   const roundIntroMarkup = introMode && plan?.presentation?.round_label
@@ -175,9 +278,19 @@ function buildBubbleSurvivalTextLayer({
         const backgroundHeight = Number(config.background_height ?? 64);
         const categoryBackgroundWidth = Number(config.category_background_width ?? 350);
         const categoryBackgroundHeight = Number(config.category_background_height ?? 44);
+        const targetRoundNumber = Number(plan.presentation.round_number || 0);
+        const roundTotal = Number(plan.presentation.round_total || 0);
+        const visibleRoundNumber = resolveAnimatedRoundNumber({
+          videoTime,
+          introSeconds,
+          roundNumber: targetRoundNumber,
+        });
+        const roundLabel = targetRoundNumber > 0 && roundTotal > 0
+          ? `ROUND ${visibleRoundNumber} / ${roundTotal}`
+          : plan.presentation.round_label;
         return [
-          `<rect x="${centerX - (backgroundWidth / 2)}" y="${roundY - (fontSize * 0.9)}" width="${backgroundWidth}" height="${backgroundHeight}" rx="14" fill="#020813" fill-opacity="0.88" stroke="#67dcff" stroke-width="2.5"/>`,
-          `<text x="${centerX}" y="${roundY}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${fontSize}" font-weight="900" fill="#F4FBFF" stroke="#173A63" stroke-width="6" paint-order="stroke">${escapeXml(plan.presentation.round_label)}</text>`,
+          `<rect x="${centerX - (backgroundWidth / 2)}" y="${roundY - (fontSize * 0.9)}" width="${backgroundWidth}" height="${backgroundHeight}" rx="14" fill="#020813" fill-opacity="0.88" stroke="${theme.accent}" stroke-width="2.5"/>`,
+          `<text x="${centerX}" y="${roundY}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${fontSize}" font-weight="900" fill="#F4FBFF" stroke="${theme.stroke}" stroke-width="6" paint-order="stroke">${escapeXml(roundLabel)}</text>`,
           `<rect x="${centerX - (categoryBackgroundWidth / 2)}" y="${categoryY - (categoryFontSize * 0.9)}" width="${categoryBackgroundWidth}" height="${categoryBackgroundHeight}" rx="11" fill="#020813" fill-opacity="0.84" stroke="#FFD166" stroke-width="2"/>`,
           `<text x="${centerX}" y="${categoryY}" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="${categoryFontSize}" font-weight="900" fill="#FFD166" stroke="#704400" stroke-width="4" paint-order="stroke">${escapeXml(plan.presentation.category_label || '')}</text>`,
         ].join('');
@@ -199,9 +312,10 @@ export function renderArenaForegroundSvg({ plan, template, videoTime }) {
     videoTime,
     includeWinnerOverlay: false,
   });
+  const theme = resolveBubbleSurvivalNeonTheme({ plan, template });
   return Buffer.from([
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
-    '<defs><linearGradient id="premiumTitleGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="46%" stop-color="#DFF6FF"/><stop offset="100%" stop-color="#67DCFF"/></linearGradient></defs>',
+    `<defs>${buildPremiumTitleGradient(theme)}</defs>`,
     textLayer.markup,
     '</svg>',
   ].join(''));
@@ -221,6 +335,16 @@ export function renderArenaSvg({ plan, template, videoTime }) {
   const defeatPopScale = Number(plan.simulation.config.defeat_pop_scale ?? 1.2);
   const defeatPopSeconds = Number(plan.simulation.config.defeat_pop_seconds ?? 0.1);
   const defeatShrinkSeconds = Number(plan.simulation.config.defeat_shrink_seconds ?? 0.577);
+  const theme = resolveBubbleSurvivalNeonTheme({ plan, template });
+  const rosterEntries = resolveDefeatedRosterEntries({ plan, template, videoTime });
+  const rosterMarkup = rosterEntries.map((entry) => {
+    const color = BUBBLE_COLORS[Math.max(0, entry.subject_index) % BUBBLE_COLORS.length];
+    const radius = (entry.size * 0.54) * entry.scale;
+    return [
+      `<circle cx="${entry.x}" cy="${entry.y}" r="${radius + (4 * entry.scale)}" fill="none" stroke="${color}" stroke-width="${7 * entry.scale}" opacity="0.16"/>`,
+      `<circle cx="${entry.x}" cy="${entry.y}" r="${radius}" fill="#07111f" fill-opacity="0.92" stroke="${color}" stroke-width="${3 * entry.scale}"/>`,
+    ].join('');
+  }).join('');
   const tailMarkup = (state?.tails || []).map((tail) => {
     const bubble = bubbleById.get(tail.owner_id);
     const subject = subjectById.get(tail.owner_id);
@@ -258,13 +382,14 @@ export function renderArenaSvg({ plan, template, videoTime }) {
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     '<defs>',
     '<radialGradient id="bg" cx="50%" cy="42%" r="75%"><stop offset="0%" stop-color="#13233d"/><stop offset="58%" stop-color="#050914"/><stop offset="100%" stop-color="#010204"/></radialGradient>',
-    '<linearGradient id="premiumTitleGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFFFFF"/><stop offset="46%" stop-color="#DFF6FF"/><stop offset="100%" stop-color="#67DCFF"/></linearGradient>',
+    buildPremiumTitleGradient(theme),
     '</defs>',
     `<rect width="${width}" height="${height}" fill="url(#bg)"/>`,
     '<g opacity="0.18">',
     ...Array.from({ length: 22 }, (_, index) => `<circle cx="${(index * 97) % width}" cy="${(index * 173) % height}" r="${1 + (index % 3)}" fill="#8edcff"/>`),
     '</g>',
-    ...buildBubbleSurvivalArenaSvgMarkup(arenaGeometry),
+    ...buildBubbleSurvivalArenaSvgMarkup(arenaGeometry, { stroke: theme.accent }),
+    rosterMarkup,
     tailMarkup,
     bubbleMarkup,
     textLayer.markup,
@@ -395,6 +520,7 @@ export function alphaBlendRgba({
 
 async function buildSpriteComposites({
   plan,
+  template,
   videoTime,
   spriteBuffers,
   resizedSpriteCache,
@@ -449,6 +575,23 @@ async function buildSpriteComposites({
       top: bubble.y - (sprite.size / 2),
     });
   }
+  const rosterEntries = resolveDefeatedRosterEntries({ plan, template, videoTime });
+  for (const entry of rosterEntries) {
+    if (entry.scale <= 0.01) continue;
+    const sprite = await resizeSprite({
+      subjectId: entry.subject_id,
+      size: entry.size * entry.scale,
+      spriteBuffers,
+      resizedSpriteCache,
+    });
+    composites.push({
+      input: sprite.input,
+      width: sprite.width,
+      height: sprite.height,
+      left: entry.x - (sprite.size / 2),
+      top: entry.y - (sprite.size / 2),
+    });
+  }
   return composites;
 }
 
@@ -479,6 +622,7 @@ async function renderFrames({ plan, template, framesRoot }) {
       const videoTime = index / frameFps;
       const spriteComposites = await buildSpriteComposites({
         plan,
+        template,
         videoTime,
         spriteBuffers,
         resizedSpriteCache,

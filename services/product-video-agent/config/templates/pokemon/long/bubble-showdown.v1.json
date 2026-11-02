@@ -12,12 +12,12 @@
     "aspect_ratio": "16:9"
   },
   "episode": {
-    "minimum_duration_seconds": 240,
-    "target_duration_seconds": 300,
-    "maximum_duration_seconds": 360,
-    "minimum_rounds": 8,
-    "target_rounds": 10,
-    "maximum_rounds": 12,
+    "minimum_duration_seconds": 135,
+    "target_duration_seconds": 165,
+    "maximum_duration_seconds": 180,
+    "minimum_rounds": 4,
+    "target_rounds": 5,
+    "maximum_rounds": 6,
     "intro_duration_seconds": 5,
     "outro_duration_seconds": 6,
     "avoid_duplicate_subjects": true
@@ -34,8 +34,12 @@
       "square",
       "diamond",
       "rectangle",
+      "pentagon",
       "hexagon",
-      "octagon"
+      "octagon",
+      "trefoil",
+      "quatrefoil",
+      "pokemon-silhouette"
     ],
     "bubble_radius": 35,
     "title_y": 52,
@@ -61,7 +65,10 @@
       "wobble_rotation_degrees": 2.4,
       "wobble_scale_amplitude": 0.025,
       "wobble_period_seconds": 1.25,
-      "wobble_phase_step_radians": 0.7
+      "wobble_phase_step_radians": 0.7,
+      "neon_palette": [
+        "#67DCFF", "#FFD166", "#9B5DE5", "#F72585", "#FF4D5A", "#FF7BCB", "#39E58C"
+      ]
     },
     "round_label": {
       "font_size": 44,
@@ -70,6 +77,12 @@
       "background_height": 64,
       "category_background_width": 350,
       "category_background_height": 44
+    },
+    "defeated_roster": {
+      "enabled": true,
+      "sprite_size": 70,
+      "horizontal_gap": 92,
+      "vertical_gap": 92
     },
     "program_card": {
       "style": "premium_3d",
@@ -80,7 +93,10 @@
       "subtitle_delay_seconds": 0.62,
       "element_enter_seconds": 0.42,
       "title_depth_px": 12,
-      "title_depth_steps": 6
+      "title_depth_steps": 6,
+      "eyebrow_animation": "slide_fade",
+      "title_animation": "letter_wave",
+      "subtitle_animation": "rise_fade"
     }
   },
   "layout": {

@@ -13,6 +13,7 @@ import {
   simulateBubbleSurvival,
 } from '../src/domains/pokemon/templates/bubble-survival/simulation.mjs';
 import { planPokemonBubbleSurvival } from '../src/domains/pokemon/templates/bubble-survival/planner.mjs';
+import { buildPokemonSpriteArenaContour } from '../src/domains/pokemon/templates/bubble-survival/sprite-arena-contour.mjs';
 import {
   BUBBLE_SURVIVAL_ARENA_SHAPES,
   constrainBubbleToArena,
@@ -142,6 +143,13 @@ test('template rotates through the complete Bubble Survival pool catalog', async
     speed_up_interval_seconds: 3,
     speed_up_multiplier: 1.4,
   });
+  assert.equal(template.presentation.showdown_title_animation.enabled, true);
+  assert.equal(template.presentation.showdown_title_animation.wobble_enabled, true);
+  assert.ok(template.presentation.showdown_title_animation.neon_palette.length >= 7);
+  assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'pentagon'), true);
+  assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'trefoil'), true);
+  assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'quatrefoil'), true);
+  assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'pokemon-silhouette'), true);
 });
 
 test('swept circle-to-tail collision detects crossings between fixed steps', () => {
@@ -226,7 +234,7 @@ test('fixed-step simulation is deterministic, starts without overlap, and shrink
   assert.equal(resolveDefeatedBubbleScale({ bubble: defeatedBubble, simulationTime: 4.677, ...despawn }), 0);
 });
 
-test('every convex arena shape drives real wall physics and tail anchors', () => {
+test('every fixed and contour arena shape drives real wall physics and tail anchors', () => {
   const subjects = Array.from({ length: 9 }, (_, index) => ({ id: `shape-subject-${index}` }));
   for (const arenaShape of BUBBLE_SURVIVAL_ARENA_SHAPES) {
     const simulation = simulateBubbleSurvival({
@@ -255,6 +263,67 @@ test('every convex arena shape drives real wall physics and tail anchors', () =>
       );
     }
   }
+  assert.equal(createBubbleSurvivalArenaGeometry({ arena_shape: 'pentagon' }).is_convex, true);
+  assert.equal(createBubbleSurvivalArenaGeometry({ arena_shape: 'trefoil' }).is_convex, false);
+  assert.equal(createBubbleSurvivalArenaGeometry({ arena_shape: 'quatrefoil' }).is_convex, false);
+});
+
+test('Pokemon sprite alpha produces a reusable physics-safe arena contour', async (context) => {
+  const runtimeDirectory = await mkdtemp(join(tmpdir(), 'orion-bubble-contour-'));
+  context.after(() => rm(runtimeDirectory, { recursive: true, force: true }));
+  const spritePath = join(runtimeDirectory, 'sprite.png');
+  const { default: sharp } = await import('sharp');
+  const vertical = await sharp({
+    create: {
+      width: 30,
+      height: 110,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  }).png().toBuffer();
+  const horizontal = await sharp({
+    create: {
+      width: 110,
+      height: 30,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  }).png().toBuffer();
+  await sharp({
+    create: {
+      width: 140,
+      height: 140,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).composite([
+    { input: vertical, left: 55, top: 15 },
+    { input: horizontal, left: 15, top: 55 },
+  ]).png().toFile(spritePath);
+  const contour = await buildPokemonSpriteArenaContour(spritePath, { pointCount: 72 });
+  assert.equal(contour.points.length, 72);
+  assert.ok(contour.visible_pixel_count > 1000);
+  const geometry = createBubbleSurvivalArenaGeometry({
+    arena_shape: 'pokemon-silhouette',
+    arena_radius: 220,
+    arena_contour_points: contour.points,
+    arena_contour_source_id: 'cross-sprite',
+  });
+  assert.equal(geometry.contour_source_id, 'cross-sprite');
+  assert.equal(geometry.is_convex, false);
+  const subjects = Array.from({ length: 9 }, (_unused, index) => ({ id: `silhouette-${index}` }));
+  const simulation = simulateBubbleSurvival({
+    subjects,
+    seed: 'sprite-contour-physics',
+    config: {
+      arena_shape: 'pokemon-silhouette',
+      arena_radius: 220,
+      arena_contour_points: contour.points,
+      maximum_seconds: 2,
+    },
+  });
+  assert.equal(simulation.frames[0].bubbles.length, 9);
+  assert.equal(simulation.frames[0].tails.length, 27);
 });
 
 test('seeded initial physics distributes winners across every starting slot', () => {

@@ -226,8 +226,12 @@ export function adaptBubbleSurvivalTemplateToLandscape({
         wobble_scale_amplitude: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_scale_amplitude, 0.025),
         wobble_period_seconds: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_period_seconds, 1.25),
         wobble_phase_step_radians: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_phase_step_radians, 0.7),
+        neon_palette: structuredClone(
+          longTemplate?.presentation?.showdown_title_animation?.neon_palette || [],
+        ),
       },
       round_label: structuredClone(longTemplate?.presentation?.round_label || {}),
+      defeated_roster: structuredClone(longTemplate?.presentation?.defeated_roster || {}),
     },
   };
 }

@@ -66,14 +66,46 @@ function appendProgramCard(filters, inputs, {
     ];
     const depthPx = Math.max(0, Math.round(ensureNumber(programCard?.title_depth_px, 12)));
     const depthSteps = Math.max(1, Math.round(ensureNumber(programCard?.title_depth_steps, 6)));
-    for (let depthStep = depthSteps; depthStep >= 1; depthStep -= 1) {
-      const offset = Number(((depthPx * depthStep) / depthSteps).toFixed(3));
+    const titleAnimation = String(programCard?.title_animation || 'rise_fade').trim().toLowerCase();
+    if (titleAnimation === 'letter_wave') {
+      const characters = [...String(title || '')];
+      const fontSize = 86;
+      const characterWidths = characters.map((character) => (
+        /\s/u.test(character) ? fontSize * 0.34 : fontSize * 0.67
+      ));
+      const totalWidth = characterWidths.reduce((sum, value) => sum + value, 0);
+      let cursor = (width - totalWidth) / 2;
+      characters.forEach((character, characterIndex) => {
+        const characterWidth = characterWidths[characterIndex];
+        const characterX = cursor + (characterWidth / 2);
+        cursor += characterWidth;
+        if (/\s/u.test(character)) return;
+        const characterDelay = titleDelay + (characterIndex * 0.045);
+        const characterProgress = expressionProgress(characterDelay, elementEnterSeconds);
+        const wave = `7*sin(2*PI*(t-${roundTime(characterDelay)})/1.4+${roundTime(characterIndex * 0.62)})*${characterProgress}`;
+        const escapedCharacter = escapeDrawtextText(character);
+        for (let depthStep = Math.min(3, depthSteps); depthStep >= 1; depthStep -= 1) {
+          const offset = Number(((depthPx * depthStep) / Math.min(3, depthSteps)).toFixed(3));
+          operations.push(
+            `drawtext=text='${escapedCharacter}'${font}:fontcolor=0x2B6DA6:fontsize=${fontSize}:borderw=7:bordercolor=0x102A49:x=${roundTime(characterX)}-text_w/2+${offset}:y='425+${offset}+34*(1-${characterProgress})+${wave}':alpha='${characterProgress}'`,
+          );
+        }
+        operations.push(
+          `drawtext=text='${escapedCharacter}'${font}:fontcolor=0xF4FBFF:fontsize=${fontSize}:borderw=7:bordercolor=0x173A63:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=${roundTime(characterX)}-text_w/2:y='425+34*(1-${characterProgress})+${wave}':alpha='${characterProgress}'`,
+        );
+      });
+    } else {
+      for (let depthStep = depthSteps; depthStep >= 1; depthStep -= 1) {
+        const offset = Number(((depthPx * depthStep) / depthSteps).toFixed(3));
+        operations.push(
+          `drawtext=text='${escapeDrawtextText(title)}'${font}:fontcolor=0x2B6DA6:fontsize=86:borderw=7:bordercolor=0x102A49:x=(w-text_w)/2+${offset}:y='425+${offset}+34*(1-${titleProgress})':alpha='${titleProgress}'`,
+        );
+      }
       operations.push(
-        `drawtext=text='${escapeDrawtextText(title)}'${font}:fontcolor=0x2B6DA6:fontsize=86:borderw=7:bordercolor=0x102A49:x=(w-text_w)/2+${offset}:y='425+${offset}+34*(1-${titleProgress})':alpha='${titleProgress}'`,
+        `drawtext=text='${escapeDrawtextText(title)}'${font}:fontcolor=0xF4FBFF:fontsize=86:borderw=7:bordercolor=0x173A63:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=(w-text_w)/2:y='425+34*(1-${titleProgress})':alpha='${titleProgress}'`,
       );
     }
     operations.push(
-      `drawtext=text='${escapeDrawtextText(title)}'${font}:fontcolor=0xF4FBFF:fontsize=86:borderw=7:bordercolor=0x173A63:shadowx=7:shadowy=9:shadowcolor=${accentColor}@0.7:x=(w-text_w)/2:y='425+34*(1-${titleProgress})':alpha='${titleProgress}'`,
       `drawtext=text='${escapeDrawtextText(subtitle)}'${font}:fontcolor=0xDCEBFF:fontsize=42:borderw=3:bordercolor=black:shadowx=3:shadowy=5:shadowcolor=black@0.65:x=(w-text_w)/2:y='625+28*(1-${subtitleProgress})':alpha='${subtitleProgress}'`,
       `drawbox=x='(${width}-(${Math.round(cardWidth * 0.72)}*${subtitleProgress}))/2':y=714:w='${Math.round(cardWidth * 0.72)}*${subtitleProgress}':h=5:color=${accentColor}@0.78:t=fill`,
       `fade=t=out:st=${fadeOutStart}:d=0.45`,

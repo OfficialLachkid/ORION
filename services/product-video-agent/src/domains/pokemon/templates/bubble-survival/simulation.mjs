@@ -233,6 +233,10 @@ function normalizeSimulationConfig(raw = {}) {
     arena_radius: Number(raw.arena_radius ?? 230),
     arena_shape: String(raw.arena_shape || 'circle'),
     arena_shape_aspect_ratio: Number(raw.arena_shape_aspect_ratio ?? 0.72),
+    arena_contour_points: Array.isArray(raw.arena_contour_points)
+      ? raw.arena_contour_points.map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
+      : [],
+    arena_contour_source_id: String(raw.arena_contour_source_id || ''),
     bubble_radius: Number(raw.bubble_radius ?? 32.76),
     start_inset: Number(raw.start_inset ?? 5),
     initial_tail_count: Math.max(1, Math.round(Number(raw.initial_tail_count ?? 3))),
