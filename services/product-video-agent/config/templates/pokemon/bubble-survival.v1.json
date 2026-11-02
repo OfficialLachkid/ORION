@@ -68,8 +68,9 @@
     "maximum_attempts": 8,
     "shape_overrides": {
       "triangle": {
-        "maximum_seconds": 60,
-        "maximum_attempts": 12
+        "maximum_attempts": 12,
+        "speed_up_interval_seconds": 3,
+        "speed_up_multiplier": 1.4
       }
     },
     "speed_up_interval_seconds": 5,

@@ -139,8 +139,14 @@ function buildSimulationConfig(template, arenaShape) {
     stagnation_seconds: Number(
       shapeOverride.stagnation_seconds ?? template?.simulation?.stagnation_seconds ?? 10,
     ),
-    speed_up_interval_seconds: Number(template?.simulation?.speed_up_interval_seconds ?? 5),
-    speed_up_multiplier: Number(template?.simulation?.speed_up_multiplier ?? 1.25),
+    speed_up_interval_seconds: Number(
+      shapeOverride.speed_up_interval_seconds
+        ?? template?.simulation?.speed_up_interval_seconds
+        ?? 5,
+    ),
+    speed_up_multiplier: Number(
+      shapeOverride.speed_up_multiplier ?? template?.simulation?.speed_up_multiplier ?? 1.25,
+    ),
   };
 }
 

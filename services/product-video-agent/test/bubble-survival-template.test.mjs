@@ -137,6 +137,11 @@ test('template rotates through the complete Bubble Survival pool catalog', async
     template.selection_rules.pool_variants.map((pool) => pool.category),
     [...BUBBLE_SURVIVAL_CATEGORIES],
   );
+  assert.deepEqual(template.simulation.shape_overrides.triangle, {
+    maximum_attempts: 12,
+    speed_up_interval_seconds: 3,
+    speed_up_multiplier: 1.4,
+  });
 });
 
 test('swept circle-to-tail collision detects crossings between fixed steps', () => {
