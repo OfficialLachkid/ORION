@@ -34,6 +34,9 @@ const PROFFMON_WEIGHT_THREE_TEMPLATE_IDS = new Set([
 const MANUAL_ONLY_TEMPLATE_IDS = new Set([
   'pokemon.bubble-survival.v1',
 ]);
+const PROFFMON_MANUAL_TEMPLATE_WEIGHTS = new Map([
+  ['pokemon.bubble-survival.v1', 1],
+]);
 async function loadJson(projectRelativePath) {
   return JSON.parse(await readFile(resolve(PROJECT_ROOT, projectRelativePath), 'utf8'));
 }
@@ -79,9 +82,10 @@ test('ProffMon uses every Poke Quizz template with its selected weight overrides
     Object.keys(pokeQuizzConfig.templates),
   );
   for (const [templateId, proffmonTemplate] of Object.entries(proffmonConfig.templates)) {
-    const expectedWeight = PROFFMON_WEIGHT_THREE_TEMPLATE_IDS.has(templateId)
-      ? 3
-      : pokeQuizzConfig.templates[templateId].weight;
+    const expectedWeight = PROFFMON_MANUAL_TEMPLATE_WEIGHTS.get(templateId)
+      ?? (PROFFMON_WEIGHT_THREE_TEMPLATE_IDS.has(templateId)
+        ? 3
+        : pokeQuizzConfig.templates[templateId].weight);
     assert.equal(proffmonTemplate.enabled, true, `${templateId} must be enabled`);
     assert.equal(proffmonTemplate.manual_generate, true, `${templateId} must support manual generation`);
     assert.equal(
