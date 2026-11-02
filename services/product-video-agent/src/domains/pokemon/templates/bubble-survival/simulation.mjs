@@ -150,10 +150,17 @@ function createInitialState(subjects, config, seed) {
   const random = createSeededRandom(seed);
   const count = subjects.length;
   const startRadius = config.arena_radius - config.bubble_radius - config.start_inset;
+  const startingRotation = (-Math.PI / 2) + (
+    config.randomize_initial_rotation ? random() * Math.PI * 2 : 0
+  );
   const bubbles = subjects.map((subject, index) => {
-    const angle = (-Math.PI / 2) + ((Math.PI * 2 * index) / count);
+    const angle = startingRotation + ((Math.PI * 2 * index) / count);
     const variation = ((random() * 2) - 1) * config.initial_angle_variation_radians;
     const inwardAngle = angle + Math.PI + variation;
+    const speedVariation = 1 + (
+      ((random() * 2) - 1) * config.initial_speed_variation_ratio
+    );
+    const initialSpeed = config.initial_speed * speedVariation;
     return {
       id: String(subject.id || index),
       subject_index: index,
@@ -161,8 +168,8 @@ function createInitialState(subjects, config, seed) {
       y: config.center_y + (Math.sin(angle) * startRadius),
       previous_x: 0,
       previous_y: 0,
-      vx: Math.cos(inwardAngle) * config.initial_speed,
-      vy: Math.sin(inwardAngle) * config.initial_speed,
+      vx: Math.cos(inwardAngle) * initialSpeed,
+      vy: Math.sin(inwardAngle) * initialSpeed,
       wall_contact: false,
       alive: true,
       defeated_at: null,
@@ -206,7 +213,13 @@ function normalizeSimulationConfig(raw = {}) {
     defeat_pop_seconds: Math.max(0, Number(raw.defeat_pop_seconds ?? 0.1)),
     defeat_shrink_seconds: Math.max(0.05, Number(raw.defeat_shrink_seconds ?? 0.577)),
     initial_speed: Number(raw.initial_speed ?? 92.5),
-    initial_angle_variation_radians: Number(raw.initial_angle_variation_degrees ?? 0) * Math.PI / 180,
+    initial_speed_variation_ratio: clamp(
+      Number(raw.initial_speed_variation_ratio ?? 0.12),
+      0,
+      0.5,
+    ),
+    randomize_initial_rotation: raw.randomize_initial_rotation !== false,
+    initial_angle_variation_radians: Number(raw.initial_angle_variation_degrees ?? 12) * Math.PI / 180,
     restitution: clamp(Number(raw.collision_restitution ?? 0.98), 0, 1),
     fixed_step_seconds: Number(raw.fixed_step_seconds ?? (1 / 120)),
     sample_fps: Number(raw.sample_fps ?? 30),

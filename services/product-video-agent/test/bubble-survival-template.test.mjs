@@ -216,6 +216,19 @@ test('fixed-step simulation is deterministic, starts without overlap, and shrink
   assert.equal(resolveDefeatedBubbleScale({ bubble: defeatedBubble, simulationTime: 4.677, ...despawn }), 0);
 });
 
+test('seeded initial physics distributes winners across every starting slot', () => {
+  const subjects = Array.from({ length: 9 }, (_, index) => ({ id: `subject-${index}` }));
+  const winnerIds = new Set();
+  for (let index = 0; index < 45; index += 1) {
+    const simulation = simulateBubbleSurvival({
+      subjects,
+      seed: `winner-distribution-${index}`,
+    });
+    if (simulation.winner_id) winnerIds.add(simulation.winner_id);
+  }
+  assert.deepEqual(winnerIds, new Set(subjects.map((subject) => subject.id)));
+});
+
 test('planner selects unique readable Pokemon, produces replay data, and is seed-stable', async () => {
   const root = await mkdtemp(join(tmpdir(), 'bubble-survival-'));
   try {
@@ -271,6 +284,11 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.simulation.config.defeat_pop_seconds, 0.1);
     assert.equal(first.simulation.config.defeat_shrink_seconds, 0.577);
     assert.equal(first.simulation.config.initial_speed, 92.5);
+    assert.equal(first.simulation.config.initial_speed_variation_ratio, 0.12);
+    assert.equal(first.simulation.config.randomize_initial_rotation, true);
+    assert.ok(Math.abs(
+      first.simulation.config.initial_angle_variation_radians - (Math.PI / 15)
+    ) < 1e-9);
     assert.equal(first.simulation.config.speed_up_interval_seconds, 5);
     assert.equal(first.simulation.config.speed_up_multiplier, 1.25);
     assert.equal(first.simulation.config.center_y, 450);
@@ -306,12 +324,11 @@ test('Bubble Survival is exposed through template routing and the runtime regist
   );
 });
 
-test('Bubble Survival title is split into frame-safe lines', () => {
+test('Bubble Survival uses the compact Showdown title', () => {
   const title = buildBubbleSurvivalTitleMarkup({ centerX: 270, frameWidth: 540 });
   const titleMarkup = title.markup.join('');
-  assert.match(titleMarkup, />POKEMON BUBBLE<\/text>/u);
-  assert.match(titleMarkup, />SURVIVAL<\/text>/u);
-  assert.doesNotMatch(titleMarkup, />POKEMON BUBBLE SURVIVAL<\/text>/u);
+  assert.match(titleMarkup, />SHOWDOWN<\/text>/u);
+  assert.doesNotMatch(titleMarkup, /POKEMON BUBBLE|SURVIVAL/u);
   assert.equal(title.maximum_width, 440);
   assert.equal(title.estimated_widths.every((width) => width <= title.maximum_width), true);
   const longWord = wrapTextInsideFrame({
@@ -356,6 +373,8 @@ test('Bubble Survival hides numeric tail counters because the tails show the sta
     template: {},
     videoTime: 2,
   }).toString('utf8');
+  assert.match(svg, />SHOWDOWN<\/text>/u);
+  assert.doesNotMatch(svg, /MIXED POKEMON|CROSS A RIVAL&apos;S TAIL TO CUT IT/u);
   assert.doesNotMatch(svg, />3<\/text>/u);
   assert.doesNotMatch(svg, /font-size="7/u);
 });

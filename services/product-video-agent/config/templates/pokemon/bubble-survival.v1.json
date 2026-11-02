@@ -9,14 +9,14 @@
       { "category": "mixed", "weight": 1 },
       { "category": "first-stage", "weight": 1 },
       { "category": "middle-stage", "weight": 1 },
-      { "category": "legendary-mythical", "weight": 1 },
+      { "category": "legendary-mythical", "weight": 2 },
       { "category": "dynamax-gigantamax", "weight": 1 },
-      { "category": "final-starter", "weight": 1 },
-      { "category": "mega-legendary", "weight": 1 },
+      { "category": "final-starter", "weight": 2 },
+      { "category": "mega-legendary", "weight": 2 },
       { "category": "baby", "weight": 1 },
-      { "category": "starters", "weight": 1 },
+      { "category": "starters", "weight": 2 },
       { "category": "final-stage", "weight": 1 },
-      { "category": "mega", "weight": 1 }
+      { "category": "mega", "weight": 2 }
     ]
   },
   "video": {
@@ -44,8 +44,10 @@
     "defeat_pop_seconds": 0.1,
     "defeat_shrink_seconds": 0.577,
     "initial_speed": 92.5,
+    "initial_speed_variation_ratio": 0.12,
     "initial_direction": "toward_center",
-    "initial_angle_variation_degrees": 0,
+    "randomize_initial_rotation": true,
+    "initial_angle_variation_degrees": 12,
     "collision_restitution": 0.98
   },
   "simulation": {

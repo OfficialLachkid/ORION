@@ -137,7 +137,7 @@ function buildBoundaryAwareTextMarkup({
 
 export function buildBubbleSurvivalTitleMarkup({ centerX, frameWidth }) {
   const title = buildBoundaryAwareTextMarkup({
-    text: 'POKEMON BUBBLE SURVIVAL',
+    text: 'SHOWDOWN',
     centerX,
     frameWidth,
     fontSize: 30,
@@ -146,10 +146,7 @@ export function buildBubbleSurvivalTitleMarkup({ centerX, frameWidth }) {
     sideMargin: 50,
     attributes: 'font-family="Arial Black, Arial, sans-serif" font-weight="900" fill="#fff" stroke="#091020" stroke-width="5" paint-order="stroke"',
   });
-  return {
-    ...title,
-    category_y: title.end_y + 31,
-  };
+  return title;
 }
 
 export function renderArenaSvg({ plan, template, videoTime }) {
@@ -242,9 +239,6 @@ export function renderArenaSvg({ plan, template, videoTime }) {
     ].join('');
   }
 
-  const categoryLabel = escapeXml(String(
-    plan.selection.category_label || plan.selection.category || '',
-  ).replaceAll('-', ' ').toUpperCase());
   const title = buildBubbleSurvivalTitleMarkup({ centerX, frameWidth: width });
   return Buffer.from([
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
@@ -256,13 +250,11 @@ export function renderArenaSvg({ plan, template, videoTime }) {
     ...Array.from({ length: 22 }, (_, index) => `<circle cx="${(index * 97) % width}" cy="${(index * 173) % height}" r="${1 + (index % 3)}" fill="#8edcff"/>`),
     '</g>',
     ...title.markup,
-    `<text x="${centerX}" y="${title.category_y}" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#76ddff">${categoryLabel}</text>`,
     `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius + 5}" fill="#03101b" fill-opacity="0.36" stroke="#11263f" stroke-width="8"/>`,
     `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius + 2}" fill="none" stroke="#67dcff" stroke-width="11" opacity="0.16"/>`,
     `<circle cx="${centerX}" cy="${centerY}" r="${arenaRadius}" fill="none" stroke="#67dcff" stroke-width="3"/>`,
     tailMarkup,
     bubbleMarkup,
-    `<text x="${centerX}" y="${height - 75}" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#b7c9dc">CROSS A RIVAL'S TAIL TO CUT IT</text>`,
     overlayMarkup,
     '</svg>',
   ].join(''));
