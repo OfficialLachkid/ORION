@@ -12,6 +12,8 @@
 // sleep). The entry point `run-morning-shift.mjs` wires in the real deps;
 // tests wire in fakes.
 
+import { hasValidEmailTld } from '../email-tld-allowlist.mjs';
+
 const DEFAULT_DISCORD_API = 'https://discord.com/api/v10';
 const DEFAULT_SLEEP_MS = 800;
 
@@ -19,6 +21,17 @@ export function pickApprovedFollowUpSends(tasks) {
   return tasks
     .filter((t) => t?.source_type === 'lead_follow_up' && t?.runtime_action === 'gmail_send_draft')
     .sort((a, b) => String(a.task_id).localeCompare(String(b.task_id)));
+}
+
+// Returns the reason to skip a follow-up at send time, or null to
+// proceed. Defense in depth — the drafter-side gate in run-follow-ups.mjs
+// catches new drafts; this catches legacy drafts already in the
+// pending-approval store from before the drafter gate landed.
+export function followUpPresendRejectionReason(task) {
+  const to = String(task?.email_request?.to || '').trim();
+  if (!to) return 'missing_to_address';
+  if (!hasValidEmailTld(to)) return `invalid_to_address_tld:${to}`;
+  return null;
 }
 
 export function buildDiscordApi(token, fetchImpl, sleep, apiBase = DEFAULT_DISCORD_API) {
@@ -78,10 +91,14 @@ export async function deleteApprovalCard({ config, taskId, discordApi, searchApp
 // morning. A card-delete failure is intentionally non-fatal — the email is
 // already out and the stale card can be cleaned up by hand.
 export async function sendOneFollowUp(task, deps) {
+  const skipReason = followUpPresendRejectionReason(task);
+  if (skipReason) {
+    return { ok: false, skipped: true, taskId: task.task_id, to: task.email_request?.to, reason: skipReason };
+  }
   const result = await deps.executeTask(task, deps.config);
   if (result?.outcome !== 'completed') {
     const message = result?.error?.message || 'executeTask did not complete';
-    return { ok: false, taskId: task.task_id, to: task.email_request?.to, error: message };
+    return { ok: false, skipped: false, taskId: task.task_id, to: task.email_request?.to, error: message };
   }
   deps.removePersistedPendingTask(deps.config, task.task_id);
   const cardResult = await deps.deleteApprovalCard({
@@ -92,6 +109,7 @@ export async function sendOneFollowUp(task, deps) {
   }).catch((error) => ({ deleted: false, reason: 'delete_failed', error: error.message || String(error) }));
   return {
     ok: true,
+    skipped: false,
     taskId: task.task_id,
     to: task.email_request?.to,
     cardDeleted: Boolean(cardResult?.deleted),
@@ -127,10 +145,11 @@ export async function sendApprovedFollowUps(options) {
   const picks = pickApprovedFollowUpSends(pending);
   stdout.write(`[morning-shift] approved follow-ups to send: ${picks.length}\n`);
   if (picks.length === 0) {
-    return { picked: 0, sent: 0, failed: 0, cardsDeleted: 0, failures: [], outcomes: [] };
+    return { picked: 0, sent: 0, skipped: 0, failed: 0, cardsDeleted: 0, failures: [], outcomes: [] };
   }
 
   let sent = 0;
+  let skipped = 0;
   let failed = 0;
   let cardsDeleted = 0;
   const failures = [];
@@ -152,6 +171,9 @@ export async function sendApprovedFollowUps(options) {
         sent += 1;
         if (outcome.cardDeleted) cardsDeleted += 1;
         stdout.write(`[morning-shift] sent ${marker}${outcome.cardDeleted ? ' (card deleted)' : ''}\n`);
+      } else if (outcome.skipped) {
+        skipped += 1;
+        stdout.write(`[morning-shift] SKIPPED ${marker}: ${outcome.reason}\n`);
       } else {
         failed += 1;
         failures.push({ taskId: task.task_id, to: task.email_request?.to, error: outcome.error });
@@ -160,13 +182,13 @@ export async function sendApprovedFollowUps(options) {
     } catch (error) {
       failed += 1;
       failures.push({ taskId: task.task_id, to: task.email_request?.to, error: error.message || String(error) });
-      outcomes.push({ ok: false, taskId: task.task_id, to: task.email_request?.to, error: error.message || String(error) });
+      outcomes.push({ ok: false, skipped: false, taskId: task.task_id, to: task.email_request?.to, error: error.message || String(error) });
       stdout.write(`[morning-shift] THREW ${marker}: ${error.message || error}\n`);
     }
     if (i < picks.length - 1) await sleep(sleepMs);
   }
 
-  const summary = { picked: picks.length, sent, failed, cardsDeleted, failures, outcomes };
-  stdout.write(`[morning-shift] summary: ${JSON.stringify({ picked: picks.length, sent, failed, cardsDeleted })}\n`);
+  const summary = { picked: picks.length, sent, skipped, failed, cardsDeleted, failures, outcomes };
+  stdout.write(`[morning-shift] summary: ${JSON.stringify({ picked: picks.length, sent, skipped, failed, cardsDeleted })}\n`);
   return summary;
 }

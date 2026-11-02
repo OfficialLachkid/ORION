@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   deleteApprovalCard,
+  followUpPresendRejectionReason,
   pickApprovedFollowUpSends,
   sendApprovedFollowUps,
   sendOneFollowUp,
@@ -111,6 +112,61 @@ test('deleteApprovalCard reports no_channels_configured when config missing chan
   assert.equal(result.reason, 'no_channels_configured');
 });
 
+// ─── followUpPresendRejectionReason (added 2026-11-02) ─────────────
+
+test('followUpPresendRejectionReason rejects follow-ups to glued-word and asset TLDs', () => {
+  // These are the exact production cases observed in the morning-shift
+  // log 2026-10-28 and 2026-10-31: four follow-ups went out to bogus
+  // addresses because the follow-up path had no TLD check at all.
+  assert.match(
+    followUpPresendRejectionReason(makeTask({ email_request: { to: 'klantenservice@nijmegenkozijnen.comtelefoonnummer', subject: 'Re: Hi', bodyText: '.' } })),
+    /^invalid_to_address_tld:/u,
+  );
+  assert.match(
+    followUpPresendRejectionReason(makeTask({ email_request: { to: 'contact@isolatiebedrijfnijmegen.commaandag', subject: 'Re: Hi', bodyText: '.' } })),
+    /^invalid_to_address_tld:/u,
+  );
+  assert.match(
+    followUpPresendRejectionReason(makeTask({ email_request: { to: 'flags@2x.webp', subject: 'Re: Hi', bodyText: '.' } })),
+    /^invalid_to_address_tld:/u,
+  );
+});
+
+test('followUpPresendRejectionReason rejects a missing to-address', () => {
+  assert.equal(
+    followUpPresendRejectionReason(makeTask({ email_request: { to: '', subject: 'Re: Hi', bodyText: '.' } })),
+    'missing_to_address',
+  );
+});
+
+test('followUpPresendRejectionReason returns null for a valid recipient (do not over-reject)', () => {
+  assert.equal(followUpPresendRejectionReason(makeTask()), null, 'lead@example.nl must pass');
+  assert.equal(
+    followUpPresendRejectionReason(makeTask({ email_request: { to: 'info@westlanders.nu', subject: 'Re: Hi', bodyText: '.' } })),
+    null,
+    '.nu is a real Dutch ccTLD, do not reject',
+  );
+});
+
+test('sendOneFollowUp: REFUSES to send when the recipient fails the TLD check (defense in depth for legacy drafts in the store)', async () => {
+  const executeCalls = [];
+  const result = await sendOneFollowUp(
+    makeTask({ email_request: { to: 'contact@foo.commaandag', subject: 'Re: Hi', bodyText: '.' } }),
+    {
+      config: makeConfig(),
+      executeTask: async (t) => { executeCalls.push(t); return { outcome: 'completed' }; },
+      removePersistedPendingTask: () => {},
+      deleteApprovalCard: async () => ({ deleted: true }),
+      discordApi: async () => null,
+      searchApprovalMessageInThreads: async () => null,
+    },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(result.skipped, true);
+  assert.match(result.reason, /^invalid_to_address_tld:/u);
+  assert.equal(executeCalls.length, 0, 'executeTask must NOT fire when the TLD check fails');
+});
+
 test('sendOneFollowUp: success removes task from store AND deletes card', async () => {
   const removed = [];
   const result = await sendOneFollowUp(makeTask(), {
@@ -215,7 +271,7 @@ test('sendApprovedFollowUps: no-op when the store has no approved follow-ups', a
     sleep: async () => {},
     stdout,
   });
-  assert.deepEqual(summary, { picked: 0, sent: 0, failed: 0, cardsDeleted: 0, failures: [], outcomes: [] });
+  assert.deepEqual(summary, { picked: 0, sent: 0, skipped: 0, failed: 0, cardsDeleted: 0, failures: [], outcomes: [] });
 });
 
 test('sendApprovedFollowUps: a single failure does not stop the batch; failures array carries context', async () => {

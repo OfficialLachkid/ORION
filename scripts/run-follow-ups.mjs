@@ -20,6 +20,7 @@ import { loadRuntimeConfig } from '../services/lib/runtime-config.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
 import { fetchLeads, updateLead } from './lib/leadgen-supabase.mjs';
 import { draftFollowUp } from '../services/leadgen-qualifier/src/follow-up-drafter.mjs';
+import { hasValidEmailTld } from './lib/email-tld-allowlist.mjs';
 import { getGmailThread, gmailReadScopeAvailable } from '../services/gmail/src/read.mjs';
 import { resolveGmailConfig } from '../services/gmail/src/config.mjs';
 import { executeTask } from '../services/task-router/src/executor.mjs';
@@ -94,6 +95,14 @@ async function main() {
   const eligible = sent.filter((l) => {
     if (l.responded_at) return false; // replied — stop
     if (!l.contact_email || !l.qualification?.gmail_thread_id) return false;
+    // Earliest-stage TLD gate — refuse to draft follow-ups to leads
+    // whose contact_email fails the allowlist. Catches historical
+    // leads whose first touch landed on a bogus address (.commaandag,
+    // .netmaandag, .comtelefoonnummer etc), got marked `status=sent`
+    // because the Gmail API accepted the send even though delivery
+    // bounced, and are now stuck in the follow-up loop forever. No
+    // draft gets created, no Claude call, no Discord card.
+    if (!hasValidEmailTld(l.contact_email)) return false;
     const followUps = Number(l.qualification?.follow_up_count || 0);
     if (followUps >= MAX_FOLLOW_UPS) return false;
     const lastAt = l.qualification?.last_follow_up_at || l.sent_at;
