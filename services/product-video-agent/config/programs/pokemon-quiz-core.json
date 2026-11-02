@@ -46,6 +46,10 @@
     {
       "template_id": "pokemon.cry-match.v1",
       "path": "../templates/pokemon/cry-match.v1.json"
+    },
+    {
+      "template_id": "pokemon.bubble-survival.v1",
+      "path": "../templates/pokemon/bubble-survival.v1.json"
     }
   ]
 }

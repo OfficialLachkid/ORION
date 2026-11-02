@@ -18,6 +18,7 @@ import {
   parseProductVideoCommand,
 } from '../../task-router/src/product-video-command-parser.mjs';
 import { discoverNightShiftChannelRuntimes } from '../../../scripts/lib/night-shift/pokemon-maintenance-runtime.mjs';
+import { resolveAutomaticCommentConfig } from '../src/automatic-comment-policy.mjs';
 
 const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..', '..');
 const CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
@@ -29,6 +30,12 @@ const PROFFMON_WEIGHT_THREE_TEMPLATE_IDS = new Set([
   'pokemon.stat-clash.v1',
   'pokemon.build-your-team.v1',
   'pokemon.cry-match.v1',
+]);
+const MANUAL_ONLY_TEMPLATE_IDS = new Set([
+  'pokemon.bubble-survival.v1',
+]);
+const PROFFMON_MANUAL_TEMPLATE_WEIGHTS = new Map([
+  ['pokemon.bubble-survival.v1', 1],
 ]);
 async function loadJson(projectRelativePath) {
   return JSON.parse(await readFile(resolve(PROJECT_ROOT, projectRelativePath), 'utf8'));
@@ -47,6 +54,23 @@ test('ProffMon publication profile uses its own YouTube identity, OAuth token, a
   assert.equal(resolvePublicationReviewThreadId({}, profile), '1549355550553280542');
 });
 
+test('every Pokemon channel uses the Bubble Survival discussion comments', async () => {
+  const profiles = await loadPublicationChannelProfiles(CHANNELS_PATH, { projectRoot: PROJECT_ROOT });
+  const pokemonProfiles = profiles.filter((profile) => profile.niche === 'pokemon_quiz');
+  assert.equal(pokemonProfiles.length, 5);
+  for (const profile of pokemonProfiles) {
+    const config = resolveAutomaticCommentConfig(profile, { platform: 'youtube' });
+    assert.deepEqual(
+      config.templateVariants['pokemon.bubble-survival.v1'].map((variant) => variant.text),
+      [
+        'Which Pokémon pool should battle next?',
+        'Who did you think would win?',
+      ],
+      profile.account_key,
+    );
+  }
+});
+
 test('ProffMon uses every Poke Quizz template with its selected weight overrides', async () => {
   const [proffmonConfig, pokeQuizzConfig, runtimes] = await Promise.all([
     loadJson(PROFFMON_CONFIG_PATH),
@@ -58,12 +82,17 @@ test('ProffMon uses every Poke Quizz template with its selected weight overrides
     Object.keys(pokeQuizzConfig.templates),
   );
   for (const [templateId, proffmonTemplate] of Object.entries(proffmonConfig.templates)) {
-    const expectedWeight = PROFFMON_WEIGHT_THREE_TEMPLATE_IDS.has(templateId)
-      ? 3
-      : pokeQuizzConfig.templates[templateId].weight;
+    const expectedWeight = PROFFMON_MANUAL_TEMPLATE_WEIGHTS.get(templateId)
+      ?? (PROFFMON_WEIGHT_THREE_TEMPLATE_IDS.has(templateId)
+        ? 3
+        : pokeQuizzConfig.templates[templateId].weight);
     assert.equal(proffmonTemplate.enabled, true, `${templateId} must be enabled`);
     assert.equal(proffmonTemplate.manual_generate, true, `${templateId} must support manual generation`);
-    assert.equal(proffmonTemplate.night_shift, true, `${templateId} must participate in night shift`);
+    assert.equal(
+      proffmonTemplate.night_shift,
+      !MANUAL_ONLY_TEMPLATE_IDS.has(templateId),
+      `${templateId} must use its rollout-appropriate night-shift setting`,
+    );
     assert.equal(
       proffmonTemplate.weight,
       expectedWeight,
@@ -84,9 +113,9 @@ test('ProffMon uses every Poke Quizz template with its selected weight overrides
   assert.ok(proffmonRuntime);
   assert.deepEqual(
     proffmonRuntime.nightShift.reviewBacklogTemplateWeights,
-    Object.fromEntries(Object.entries(proffmonConfig.templates).map(([templateId, template]) => (
-      [templateId, template.weight]
-    ))),
+    Object.fromEntries(Object.entries(proffmonConfig.templates)
+      .filter(([_templateId, template]) => template.night_shift)
+      .map(([templateId, template]) => [templateId, template.weight])),
   );
   assert.equal(proffmonRuntime.nightShift.publicationAutomationEnabled, true);
   assert.equal(proffmonRuntime.nightShift.publicationAutomationMode, 'auto');

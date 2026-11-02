@@ -160,6 +160,12 @@ export function selectSoundEffectPresets(soundEffects) {
   const allSoundEffects = Array.isArray(soundEffects) ? soundEffects : [];
   const countdownTick = matchSoundEffect(allSoundEffects, ['countdown', 'tick', 'beep']);
   const ding = matchSoundEffect(allSoundEffects, ['ding-sound', 'ding_sound', 'ding sound', 'ding']);
+  const reflection = matchSoundEffect(allSoundEffects, [
+    'reflection-sound',
+    'reflection_sound',
+    'reflection sound',
+    'reflection',
+  ]);
   const timerEnd = (
     matchSoundEffect(allSoundEffects, ['timer-end', 'time-up', 'timer_finished', 'timer-finished', 'finished', 'reveal-hit'])
     || matchSoundEffect(allSoundEffects, ['ding'])
@@ -203,6 +209,7 @@ export function selectSoundEffectPresets(soundEffects) {
     all: allSoundEffects,
     countdown_tick: countdownTick,
     ding,
+    reflection,
     timer_end: timerEnd,
     reveal,
     shiny,

@@ -161,6 +161,16 @@
                 "id": "memory-fooled",
                 "text": "Which choice almost fooled you?"
               }
+            ],
+            "pokemon.bubble-survival.v1": [
+              {
+                "id": "bubble-next-pool",
+                "text": "Which Pokémon pool should battle next?"
+              },
+              {
+                "id": "bubble-winner-pick",
+                "text": "Who did you think would win?"
+              }
             ]
           }
         },
@@ -375,6 +385,16 @@
                 "id": "memory-fooled",
                 "text": "Which choice almost fooled you?"
               }
+            ],
+            "pokemon.bubble-survival.v1": [
+              {
+                "id": "bubble-next-pool",
+                "text": "Which Pokémon pool should battle next?"
+              },
+              {
+                "id": "bubble-winner-pick",
+                "text": "Who did you think would win?"
+              }
             ]
           }
         },
@@ -586,6 +606,16 @@
               {
                 "id": "memory-fooled",
                 "text": "Which choice almost fooled you?"
+              }
+            ],
+            "pokemon.bubble-survival.v1": [
+              {
+                "id": "bubble-next-pool",
+                "text": "Which Pokémon pool should battle next?"
+              },
+              {
+                "id": "bubble-winner-pick",
+                "text": "Who did you think would win?"
               }
             ]
           }
@@ -799,6 +829,16 @@
                 "id": "memory-fooled",
                 "text": "Which choice almost fooled you?"
               }
+            ],
+            "pokemon.bubble-survival.v1": [
+              {
+                "id": "bubble-next-pool",
+                "text": "Which Pokémon pool should battle next?"
+              },
+              {
+                "id": "bubble-winner-pick",
+                "text": "Who did you think would win?"
+              }
             ]
           }
         },
@@ -991,6 +1031,16 @@
               {
                 "id": "memory-fooled",
                 "text": "Which choice almost fooled you?"
+              }
+            ],
+            "pokemon.bubble-survival.v1": [
+              {
+                "id": "bubble-next-pool",
+                "text": "Which Pokémon pool should battle next?"
+              },
+              {
+                "id": "bubble-winner-pick",
+                "text": "Who did you think would win?"
               }
             ]
           }

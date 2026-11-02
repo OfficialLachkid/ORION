@@ -330,6 +330,28 @@ test('normalizeTaskMessage recognizes build-your-team generation commands as exp
   );
 });
 
+test('normalizeTaskMessage recognizes Bubble Survival generation in every video channel', () => {
+  const config = loadRuntimeConfig();
+  for (const channelSelector of [
+    'poke-quizz-youtube',
+    'trivamon-youtube',
+    'poke-guess-youtube',
+    'dexguess-youtube',
+    'proffmon-youtube',
+  ]) {
+    const result = normalizeTaskMessage({
+      channelKey: 'commands',
+      submittedAt: '2026-10-30T12:00:00.000Z',
+      content: `generate video template: bubble-survival channel: ${channelSelector}`,
+      author: { id: 'operator-1', displayName: 'VBJ Services' },
+    }, config);
+    assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
+    assert.equal(result.task.poke_quizz_generate_review.templateKey, 'bubble-survival');
+    assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.bubble-survival.v1');
+    assert.equal(result.task.poke_quizz_generate_review.channelSelector, channelSelector);
+  }
+});
+
 test('normalizeTaskMessage recognizes progressive-reveal generation commands as explicit runtime actions', () => {
   const config = loadRuntimeConfig();
   const result = normalizeTaskMessage({

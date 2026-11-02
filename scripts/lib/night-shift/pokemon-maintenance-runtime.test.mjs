@@ -51,3 +51,22 @@ test('all Pokemon channel replenish pools include Progressive Reveal with channe
     );
   }
 });
+
+test('Bubble Showdown automatic rollout is limited to Poke Quizz and TrivaMon at weight two', async () => {
+  const runtimes = await discoverNightShiftChannelRuntimes();
+  const runtimeByChannel = new Map(runtimes.map((runtime) => [runtime.channelSelector, runtime]));
+  const automaticChannels = new Set(['poke-quizz-youtube', 'trivamon-youtube']);
+
+  for (const channelSelector of POKEMON_CHANNEL_SELECTORS) {
+    const runtime = runtimeByChannel.get(channelSelector);
+    const templateIds = runtime.nightShift.reviewBacklogTemplateIds;
+    const templateWeights = runtime.nightShift.reviewBacklogTemplateWeights;
+    if (automaticChannels.has(channelSelector)) {
+      assert.equal(templateIds.includes('pokemon.bubble-survival.v1'), true, channelSelector);
+      assert.equal(templateWeights['pokemon.bubble-survival.v1'], 2, channelSelector);
+    } else {
+      assert.equal(templateIds.includes('pokemon.bubble-survival.v1'), false, channelSelector);
+      assert.equal(templateWeights['pokemon.bubble-survival.v1'], undefined, channelSelector);
+    }
+  }
+});

@@ -53,6 +53,17 @@ const findTheShinyPlan = {
   },
 };
 
+const bubbleSurvivalPlan = {
+  template_id: 'pokemon.bubble-survival.v1',
+  template_key: 'bubble-survival',
+  selection: {
+    category: 'legendary-mythical',
+    category_label: 'Legendary + Mythical Pokemon',
+    selected_subjects: Array.from({ length: 9 }, (_unused, index) => ({ name: `Legendary ${index + 1}` })),
+  },
+  winner: { name: 'Mewtwo' },
+};
+
 const typeQuizPlan = {
   template_id: 'pokemon.type-quiz.v1',
   selection: {
@@ -592,4 +603,59 @@ test('seeded build-your-team fallback metadata uses the supported generic title 
     ))),
     expectedBuildYourTeamSeededTitles,
   );
+});
+
+test('fallback publication metadata describes Bubble Survival without spoiling the winner', () => {
+  const metadata = buildPokeQuizzFallbackPublicationMetadata(bubbleSurvivalPlan, channelProfile);
+  assert.equal(metadata.title, 'Legendary + Mythical Pokemon - Who Will Win?');
+  assert.match(metadata.description, /Legendary \+ Mythical Pokemon/iu);
+  assert.match(metadata.description, /wall bounce adds a tail|just physics/iu);
+  assert.doesNotMatch(metadata.description, /Mewtwo|took the win/iu);
+  assert.equal(metadata.title.includes('Mewtwo'), false);
+  assert.deepEqual(metadata.hashtags, [
+    '#pokemon',
+    '#bubblesurvival',
+    '#physicssimulation',
+    '#pokemonbattle',
+    '#shorts',
+  ]);
+});
+
+test('Bubble Survival metadata follows every selected Pokemon pool label', () => {
+  for (const categoryLabel of [
+    'Mixed / All Pokemon',
+    'First / Base Stage Pokemon',
+    'Middle Stage Pokemon',
+    'Legendary + Mythical Pokemon',
+    'Dynamax / Gigantamax Pokemon',
+    'Final Starter Evolutions',
+    'Mega + Legendary Pokemon',
+  ]) {
+    const metadata = buildPokeQuizzFallbackPublicationMetadata({
+      ...bubbleSurvivalPlan,
+      selection: { ...bubbleSurvivalPlan.selection, category_label: categoryLabel },
+    }, channelProfile);
+    assert.match(metadata.title, new RegExp(categoryLabel.replace(/[+]/gu, '\\+'), 'u'));
+    assert.match(metadata.description, new RegExp(categoryLabel.replace(/[+]/gu, '\\+'), 'u'));
+    assert.doesNotMatch(`${metadata.title} ${metadata.description}`, /Mewtwo/iu);
+  }
+});
+
+test('Bubble Survival rotates only the new winner-prediction titles and two spoiler-free descriptions', () => {
+  const metadataVariants = Array.from({ length: 512 }, (_unused, index) => (
+    buildPokeQuizzFallbackPublicationMetadata({
+      ...bubbleSurvivalPlan,
+      seed: `bubble-survival-metadata-${index}`,
+    }, channelProfile)
+  ));
+  assert.deepEqual(new Set(metadataVariants.map((metadata) => metadata.title)), new Set([
+    'Legendary + Mythical Pokemon - Who Will Win?',
+    'Legendary + Mythical Pokemon - Who Takes the Win?',
+    'Legendary + Mythical Pokemon - Pick the Winner!',
+  ]));
+  assert.equal(new Set(metadataVariants.map((metadata) => metadata.description)).size, 2);
+  assert.ok(metadataVariants.some((metadata) => (
+    metadata.description === 'No stats or type advantage, just physics! Nine Legendary + Mythical Pokemon, three tails each, one survivor. Who is your pick?'
+  )));
+  assert.equal(metadataVariants.every((metadata) => !/Mewtwo|took the win/iu.test(metadata.description)), true);
 });

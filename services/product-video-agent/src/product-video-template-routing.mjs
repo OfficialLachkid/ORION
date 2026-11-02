@@ -78,6 +78,13 @@ export const PRODUCT_VIDEO_TEMPLATE_DEFINITIONS = Object.freeze([
     genreLabel: 'Cry Match',
     legacyConfigSlug: 'cry-match',
   },
+  {
+    templateKey: 'bubble-survival',
+    templateId: 'pokemon.bubble-survival.v1',
+    label: 'Bubble Survival',
+    genreLabel: 'Bubble Survival',
+    legacyConfigSlug: '',
+  },
 ]);
 
 export const PRODUCT_VIDEO_CHANNEL_DEFINITIONS = Object.freeze([
@@ -119,6 +126,7 @@ const TEMPLATE_KEY_ALIASES = Object.freeze({
   'stat-battle': 'stat-clash',
   'team-builder': 'build-your-team',
   'type-quiz': 'type-speed-quiz',
+  'bubble-battle': 'bubble-survival',
 });
 
 function normalizeIdentifier(value) {

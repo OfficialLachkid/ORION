@@ -93,6 +93,14 @@
       "night_shift": true,
       "weight": 3,
       "genre_label": "Cry Match"
+    },
+    "pokemon.bubble-survival.v1": {
+      "template_key": "bubble-survival",
+      "enabled": true,
+      "manual_generate": true,
+      "night_shift": false,
+      "weight": 1,
+      "genre_label": "Bubble Survival"
     }
   },
   "night_shift": {
