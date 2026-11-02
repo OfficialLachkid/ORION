@@ -156,18 +156,43 @@ function pickHashtags(metrics, pub) {
   return [];
 }
 
+// Reads the analytics-oriented `video_signals` object a template's
+// publication-registration attaches to publication metadata (pilot:
+// stat-clash, 2026-11-02). Templates that aren't onboarded yet have no
+// signals; those publications bucket into the "(none)" variant key
+// so the analyst can distinguish historical / pre-pilot rows from
+// deliberately-null variants. See Jacobs-2/07_Products/
+// Product_Video_Agent/Analytics.md and Runtime_Ops.md § Supabase
+// egress optimization.
+function videoSignalsFromMetadata(metadata) {
+  const signals = metadata?.video_signals;
+  if (!signals || typeof signals !== 'object') return null;
+  return signals;
+}
+
+function variantKeyFromMetadata(metadata) {
+  const signals = videoSignalsFromMetadata(metadata);
+  const diff = String(signals?.variant?.difficulty || '').trim().toLowerCase();
+  return diff || '(none)';
+}
+
 function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, crossPlatformActivity = null, perPlatformPerformance = null }) {
   const byChannel = new Map();
   const byTemplate = new Map();
+  const byTemplateVariant = new Map(); // key = `${templateSlug}:${variantKey}`
   const scoredVideos = [];
 
   for (const pub of publications) {
     const ch = pub.account_key;
     const tpl = templateSlugFromMetadata(pub.metadata);
+    const variantKey = variantKeyFromMetadata(pub.metadata);
+    const tplVariantKey = `${tpl}:${variantKey}`;
     if (!byChannel.has(ch)) byChannel.set(ch, []);
     byChannel.get(ch).push(pub);
     if (!byTemplate.has(tpl)) byTemplate.set(tpl, []);
     byTemplate.get(tpl).push(pub);
+    if (!byTemplateVariant.has(tplVariantKey)) byTemplateVariant.set(tplVariantKey, []);
+    byTemplateVariant.get(tplVariantKey).push(pub);
 
     const row = analyticsByPub.get(pub.id);
     const metrics = row?.metrics || {};
@@ -194,6 +219,16 @@ function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, cross
   const templateSummaries = {};
   for (const [tpl, pubs] of byTemplate.entries()) {
     templateSummaries[tpl] = summarizeChannel(pubs, analyticsByPub);
+  }
+
+  // Per-template-variant rollup (pilot — stat-clash first, 2026-11-02).
+  // Entries whose key ends in `:(none)` are either un-onboarded
+  // templates OR publications registered before the pilot; the analyst
+  // prompt tells the model to treat those as noise rather than a
+  // separate variant.
+  const templateVariantSummaries = {};
+  for (const [key, pubs] of byTemplateVariant.entries()) {
+    templateVariantSummaries[key] = summarizeChannel(pubs, analyticsByPub);
   }
 
   scoredVideos.sort((a, b) => b.views - a.views);
@@ -252,6 +287,7 @@ function buildDataPack({ publications, analyticsByPub, sinceIso, untilIso, cross
     },
     per_channel: channelSummaries,
     per_template: templateSummaries,
+    per_template_variant: templateVariantSummaries,
     publish_hour_rollup: {
       note: 'hours are UTC. current schedule fires 08/12/14 CEST which is 06/10/12 UTC (or 07/11/13 UTC on standard time).',
       network_wide: publishHourBuckets,
@@ -348,6 +384,7 @@ function buildAnalystPrompt(dataPack, priorSummary = '') {
     '4b. **Audience mix (geo + traffic)** — read `viewer_geography` and `traffic_sources_split`. Report the top-3 countries network-wide (with view %s) and any channel that skews meaningfully differently from the network mix. Then report the traffic-source split (browse / suggested / search / external) — is one source disproportionately carrying a channel or template? If `videos_with_data` is 0 for either block, say "no data yet, expected next review" and skip the section rather than fabricate.',
     '5. **Concrete adjustments to consider** — a bulleted list of specific things the operator could try. Each bullet must include: WHAT to change (template weight, title pattern, hashtag mix, thumbnail idea, posting cadence), WHERE to change it (which channel or template), and WHY (which datapoint in the pack supports it). Bold every number cited as evidence.',
     '6. **Metadata patterns** — 1-3 bullets describing patterns in the top-video titles/hashtags that do NOT appear in the bottom-video titles/hashtags.',
+    '6b. **Variant performance (pilot — stat-clash first, 2026-11-02)** — read `per_template_variant`. Keys are `<template-slug>:<variant>` (e.g. "stat-clash:hard", "stat-clash:easy", "cry-match:(none)"). The `(none)` suffix means that template is NOT YET onboarded into variant tagging OR the publication predates the pilot — treat those as un-tagged bulk, do NOT compare them against each other. For templates with multiple real variants (currently only stat-clash — others will join in subsequent PRs), compare v/vid, median, and like-rate across variants, and call out whether the harder/longer variant underperforms, outperforms, or is indistinguishable from the easier/shorter one. If every variant has fewer than 5 videos, say the pilot sample is too small this week rather than over-reading. If the whole block only has `:(none)` entries, say so once and skip the rest of the section.',
     '7. **Needs manual investigation** — anything you cannot decide from data alone (e.g., "trivamon lagging by 15% on medians — worth eyeballing thumbnails / upload timing manually"). Include any instrumentation gaps that block a real answer.',
     '',
     'Tone: analytical, terse, no marketing language, no filler. It is fine to say "no clear signal this week" for any section if the data does not support a conclusion. Do NOT recommend permanent deprecations from a single week of data.',
@@ -566,6 +603,7 @@ export const __testables = {
   buildAnalystPrompt,
   summarizeChannel,
   templateSlugFromMetadata,
+  variantKeyFromMetadata,
   buildPerPlatformPerformance,
 };
 

@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPokeQuizzPublicationRegistration, mergeRegisteredPublicationRow } from '../src/poke-quizz-publication-registration.mjs';
+import {
+  assetSlugFromPath,
+  buildVideoSignals,
+  createPokeQuizzPublicationRegistration,
+  mergeRegisteredPublicationRow,
+} from '../src/poke-quizz-publication-registration.mjs';
 import { normalizePublicationChannelProfile } from '../src/publication-channels.mjs';
 
 const channelProfile = normalizePublicationChannelProfile({
@@ -87,6 +92,121 @@ test('Poke Quizz publication registration creates pending preview-upload rows', 
   assert.deepEqual(registration.publicationRow.metadata.type_pair, ['psychic', 'water']);
   assert.deepEqual(registration.videoRow.source_data.reveal_methods, ['spiral', 'diamond', 'cross']);
   assert.match(registration.publicationRow.metadata.background_path || '', /beach-backgrounds/u);
+});
+
+// ─── video_signals pilot (2026-11-02 — stat-clash first) ────────────
+
+test('assetSlugFromPath returns the basename stem — no extension, no directory', () => {
+  assert.equal(
+    assetSlugFromPath('/Volumes/T7/.../Backgrounds/neon-plasma-armory.jpg'),
+    'neon-plasma-armory',
+  );
+  assert.equal(
+    assetSlugFromPath('/x/audio/upbeat-electronic-01.wav'),
+    'upbeat-electronic-01',
+  );
+  assert.equal(assetSlugFromPath(''), null);
+  assert.equal(assetSlugFromPath(null), null);
+  assert.equal(assetSlugFromPath('bare-name'), 'bare-name');
+});
+
+test('buildVideoSignals emits a compact object for a fully-populated stat-clash plan', () => {
+  const statClashPlan = {
+    selection: {
+      difficulty_id: 'hard',
+      round_count: 7,
+      pool_key: 'gen1_starters',
+    },
+    assets: {
+      background: { selected_path: '/x/backgrounds/neon-plasma-armory.jpg' },
+      audio: { selected_battle_intro_music_path: '/y/music/upbeat-01.wav' },
+    },
+    timing: { total_duration_seconds: 48.57 },
+  };
+  const signals = buildVideoSignals(statClashPlan);
+  assert.deepEqual(signals, {
+    variant: { difficulty: 'hard', round_count: 7 },
+    selection: { background_slug: 'neon-plasma-armory', music_slug: 'upbeat-01' },
+    shape: { duration_seconds: 48.6, subject_pool: 'gen1_starters' },
+  });
+  // Egress discipline — the whole object should be under ~300 bytes to
+  // keep the publication-metadata JSONB from inflating. See
+  // Jacobs-2/07_Products/Product_Video_Agent/Runtime_Ops.md § egress.
+  assert.ok(JSON.stringify(signals).length < 300, 'video_signals must stay compact');
+});
+
+test('buildVideoSignals returns null for a plan with no variant / selection / shape data', () => {
+  assert.equal(buildVideoSignals(null), null);
+  assert.equal(buildVideoSignals({}), null);
+  assert.equal(buildVideoSignals({ selection: {}, assets: {}, timing: {} }), null);
+});
+
+test('buildVideoSignals is null-safe — only populates sub-objects that have at least one value', () => {
+  const planOnlyVariant = { selection: { difficulty_id: 'easy', round_count: 3 } };
+  assert.deepEqual(buildVideoSignals(planOnlyVariant), {
+    variant: { difficulty: 'easy', round_count: 3 },
+  });
+  const planOnlySelection = {
+    assets: { background: { selected_path: '/x/beach-01.jpg' } },
+  };
+  assert.deepEqual(buildVideoSignals(planOnlySelection), {
+    selection: { background_slug: 'beach-01' },
+  });
+});
+
+test('publication registration attaches video_signals when the plan carries variant data (stat-clash shape)', async () => {
+  const statClashPlan = {
+    ...plan,
+    template_id: 'pokemon.stat-clash.v3',
+    template_key: 'stat-clash',
+    selection: {
+      ...plan.selection,
+      difficulty_id: 'hard',
+      round_count: 7,
+      pool_key: 'kanto',
+    },
+    assets: {
+      ...plan.assets,
+      audio: { selected_battle_intro_music_path: '/music/upbeat-01.wav' },
+    },
+    timing: { total_duration_seconds: 48 },
+  };
+  const registration = await createPokeQuizzPublicationRegistration({
+    plan: statClashPlan,
+    channelProfile,
+    renderPath: '/Volumes/T7/.../stat-clash-video.mp4',
+    metadata: { title: 'x', description: 'y', hashtags: ['#a', '#b', '#c'] },
+    registeredAt: '2026-11-02T19:30:00.000Z',
+    renderFileDetails: { sizeBytes: 1024, modifiedAt: '2026-11-02T19:07:29.000Z' },
+  });
+  assert.equal(registration.publicationRow.metadata.video_signals.variant.difficulty, 'hard');
+  assert.equal(registration.publicationRow.metadata.video_signals.variant.round_count, 7);
+  assert.equal(registration.publicationRow.metadata.video_signals.shape.subject_pool, 'kanto');
+  assert.equal(registration.publicationRow.metadata.video_signals.selection.music_slug, 'upbeat-01');
+  assert.match(registration.publicationRow.metadata.video_signals.selection.background_slug, /beach/u);
+});
+
+test('publication registration still emits ONLY the sub-objects it actually has — un-onboarded template gets just the background slug (free signal, no variant/music keys)', async () => {
+  // The baseline `plan` fixture is a type-quiz with no difficulty_id,
+  // round_count, music path, or duration. It DOES have a background,
+  // so video_signals carries just selection.background_slug — a free
+  // asset signal every poke-quizz template gets even without being
+  // explicitly onboarded. The empty sub-objects (variant/shape) are
+  // omitted entirely so metadata stays flat.
+  const registration = await createPokeQuizzPublicationRegistration({
+    plan,
+    channelProfile,
+    renderPath: '/x/preview.mp4',
+    metadata: { title: 'x', description: 'y', hashtags: ['#a', '#b', '#c'] },
+    registeredAt: '2026-11-02T19:30:00.000Z',
+    renderFileDetails: { sizeBytes: 1024, modifiedAt: '2026-11-02T19:07:29.000Z' },
+  });
+  const signals = registration.publicationRow.metadata.video_signals;
+  assert.ok(signals, 'video_signals present because the plan carries a background path');
+  assert.ok(signals.selection?.background_slug, 'background slug captured');
+  assert.equal(signals.variant, undefined, 'no variant block for un-onboarded template');
+  assert.equal(signals.shape, undefined, 'no shape block without duration or pool_key');
+  assert.ok(JSON.stringify(signals).length < 100, 'un-onboarded signal payload is tiny');
 });
 
 test('mergeRegisteredPublicationRow preserves upload state on re-registration', () => {

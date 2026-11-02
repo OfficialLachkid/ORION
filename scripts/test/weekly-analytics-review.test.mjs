@@ -10,7 +10,7 @@ import {
   PLIST_LABEL,
 } from '../install-weekly-analytics-review-schedule.mjs';
 
-const { buildDataPack, buildAnalystPrompt, summarizeChannel, templateSlugFromMetadata, buildPerPlatformPerformance } = __testables;
+const { buildDataPack, buildAnalystPrompt, summarizeChannel, templateSlugFromMetadata, variantKeyFromMetadata, buildPerPlatformPerformance } = __testables;
 
 test('templateSlugFromMetadata strips pokemon prefix and v-suffix', () => {
   assert.equal(templateSlugFromMetadata({ template_id: 'pokemon.cry-match.v1' }), 'cry-match');
@@ -83,6 +83,13 @@ test('buildDataPack groups by channel + template and produces top/bottom slices'
   // Per-channel rollup keeps channels separate
   assert.equal(pack.publish_hour_rollup.per_channel['poke-quizz-youtube'][6].videos, 1);
   assert.equal(pack.publish_hour_rollup.per_channel['dexguess-youtube'][12].videos, 1);
+
+  // Per-template-variant rollup — this fixture has no video_signals,
+  // so every row buckets into the `:(none)` key. The analyst prompt
+  // explicitly tells the model to treat these as un-tagged bulk.
+  assert.ok(pack.per_template_variant);
+  assert.equal(pack.per_template_variant['cry-match:(none)'].videos_published, 2);
+  assert.equal(pack.per_template_variant['dual-type-reveal:(none)'].videos_published, 1);
 
   // Viewer geography + traffic blocks always emitted, with a coverage
   // hint so the prompt can say "no data yet" when both are empty.
@@ -293,6 +300,63 @@ test('buildDataPack: cross_platform_activity flows through from the fetch helper
   const packWithPerPlat = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y', perPlatformPerformance: perPlat });
   assert.deepEqual(packWithPerPlat.per_platform_performance, perPlat, 'passed-through per_platform_performance reaches the data pack');
   assert.strictEqual(packNoActivity.per_platform_performance, null, 'defaults to null when not provided');
+});
+
+// ─── Variant tagging pilot (2026-11-02 — stat-clash first) ─────────
+
+test('variantKeyFromMetadata reads the chosen variant difficulty from video_signals', () => {
+  assert.equal(
+    variantKeyFromMetadata({ template_id: 'pokemon.stat-clash.v3', video_signals: { variant: { difficulty: 'hard' } } }),
+    'hard',
+  );
+  assert.equal(
+    variantKeyFromMetadata({ template_id: 'pokemon.stat-clash.v3', video_signals: { variant: { difficulty: 'EASY' } } }),
+    'easy',
+    'lowercased for stable bucketing',
+  );
+  // Templates without video_signals OR without a variant.difficulty get a
+  // "(none)" bucket so the analyst can distinguish un-tagged bulk from
+  // deliberately-null variants.
+  assert.equal(variantKeyFromMetadata({ template_id: 'pokemon.cry-match.v1' }), '(none)');
+  assert.equal(variantKeyFromMetadata({ template_id: 'pokemon.stat-clash.v3', video_signals: {} }), '(none)');
+  assert.equal(variantKeyFromMetadata({}), '(none)');
+  assert.equal(variantKeyFromMetadata(null), '(none)');
+});
+
+test('buildDataPack per_template_variant splits a single template across its difficulty variants', () => {
+  const publications = [
+    { id: 'sc1', account_key: 'trivamon-youtube', title: 'Hard 1', published_at: '2026-11-01T06:00:00Z', external_id: 'sc1',
+      metadata: { template_id: 'pokemon.stat-clash.v3', video_signals: { variant: { difficulty: 'hard', round_count: 7 } } } },
+    { id: 'sc2', account_key: 'trivamon-youtube', title: 'Hard 2', published_at: '2026-11-01T10:00:00Z', external_id: 'sc2',
+      metadata: { template_id: 'pokemon.stat-clash.v3', video_signals: { variant: { difficulty: 'hard', round_count: 7 } } } },
+    { id: 'sc3', account_key: 'poke-guess-youtube', title: 'Easy 1', published_at: '2026-11-01T12:00:00Z', external_id: 'sc3',
+      metadata: { template_id: 'pokemon.stat-clash.v3', video_signals: { variant: { difficulty: 'easy', round_count: 3 } } } },
+    { id: 'cm1', account_key: 'dexguess-youtube', title: 'Not onboarded', published_at: '2026-11-01T14:00:00Z', external_id: 'cm1',
+      metadata: { template_id: 'pokemon.cry-match.v1' } },
+  ];
+  const analytics = new Map([
+    ['sc1', { metrics: { views: 2000, likes: 40 } }],
+    ['sc2', { metrics: { views: 3000, likes: 60 } }],
+    ['sc3', { metrics: { views: 5000, likes: 90 } }],
+    ['cm1', { metrics: { views: 1500, likes: 20 } }],
+  ]);
+  const pack = buildDataPack({ publications, analyticsByPub: analytics, sinceIso: 'X', untilIso: 'Y' });
+  assert.ok(pack.per_template_variant);
+  assert.equal(pack.per_template_variant['stat-clash:hard'].videos_published, 2);
+  assert.equal(pack.per_template_variant['stat-clash:hard'].total_views, 5000);
+  assert.equal(pack.per_template_variant['stat-clash:easy'].videos_published, 1);
+  assert.equal(pack.per_template_variant['stat-clash:easy'].total_views, 5000);
+  assert.equal(pack.per_template_variant['cry-match:(none)'].videos_published, 1,
+    'un-onboarded template buckets into :(none) so the analyst can set it aside');
+});
+
+test('buildAnalystPrompt tells the analyst how to read per_template_variant (pilot section 6b)', () => {
+  const pack = { totals: { publications: 0 }, per_channel: {}, per_template: {}, per_template_variant: {}, top_videos: [], bottom_videos: [], window: { since: 'X', until: 'Y', days: 7 } };
+  const prompt = buildAnalystPrompt(pack, '');
+  assert.match(prompt, /per_template_variant/u, 'prompt must reference the per_template_variant block');
+  assert.match(prompt, /Variant performance/u, 'prompt must have a dedicated variant section (6b)');
+  assert.match(prompt, /\(none\)/u, 'prompt must explain the :(none) bucket is un-tagged bulk');
+  assert.match(prompt, /stat-clash/u, 'prompt must name stat-clash as the pilot template so the analyst knows the pilot scope');
 });
 
 test('install-schedule plist uses the Monday post-sweep schedule and exposes Homebrew tools', () => {
