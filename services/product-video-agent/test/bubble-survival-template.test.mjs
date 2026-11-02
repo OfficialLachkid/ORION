@@ -227,7 +227,12 @@ test('every convex arena shape drives real wall physics and tail anchors', () =>
     const simulation = simulateBubbleSurvival({
       subjects,
       seed: `arena-${arenaShape}`,
-      config: { arena_shape: arenaShape, maximum_seconds: 2 },
+      config: {
+        arena_shape: arenaShape,
+        arena_radius: 220,
+        bubble_radius: 35,
+        maximum_seconds: 2,
+      },
     });
     assert.equal(simulation.config.arena_shape, arenaShape);
     assert.equal(simulation.frames[0].bubbles.length, 9);

@@ -208,8 +208,49 @@ export function buildBubbleSurvivalArenaStartingSamples({
     Math.max(0, Number(inset) || 0),
   );
   const edgeCount = insetGeometry.edges.length;
-  const startEdge = Math.floor(normalizedRotation * edgeCount) % edgeCount;
   const spacing = Math.max(1, Number(minimumSpacing) || 1);
+  if (geometry.shape === 'triangle' && sampleCount === 9) {
+    const topY = Math.min(...insetGeometry.vertices.map((point) => point.y));
+    const baseY = Math.max(...insetGeometry.vertices.map((point) => point.y));
+    const rowFractions = [0.34, 0.66, 0.98];
+    const rowCounts = [2, 3, 4];
+    const rotationSteps = Math.floor(normalizedRotation * 3) % 3;
+    const rotationRadians = rotationSteps * ((Math.PI * 2) / 3);
+    const triangleSamples = rowFractions.flatMap((rowFraction, rowIndex) => {
+      const rowCount = rowCounts[rowIndex];
+      const y = topY + ((baseY - topY) * rowFraction);
+      return Array.from({ length: rowCount }, (_unused, columnIndex) => {
+        const x = geometry.center.x
+          + ((columnIndex - ((rowCount - 1) / 2)) * spacing);
+        const dx = x - geometry.center.x;
+        const dy = y - geometry.center.y;
+        const rotatedX = geometry.center.x
+          + (dx * Math.cos(rotationRadians))
+          - (dy * Math.sin(rotationRadians));
+        const rotatedY = geometry.center.y
+          + (dx * Math.sin(rotationRadians))
+          + (dy * Math.cos(rotationRadians));
+        const angle = Math.atan2(rotatedY - geometry.center.y, rotatedX - geometry.center.x);
+        return {
+          x: rotatedX,
+          y: rotatedY,
+          inward_normal: { x: -Math.cos(angle), y: -Math.sin(angle) },
+          outward_normal: { x: Math.cos(angle), y: Math.sin(angle) },
+          boundary_fraction: ((angle + (Math.PI / 2)) / (Math.PI * 2)) % 1,
+        };
+      });
+    });
+    const valid = triangleSamples.every((sample) => {
+      const constrained = constrainBubbleToArena(geometry, sample, inset);
+      return Math.hypot(constrained.x - sample.x, constrained.y - sample.y) < 0.01;
+    }) && triangleSamples.every((left, leftIndex) => (
+      triangleSamples.slice(leftIndex + 1).every((right) => (
+        Math.hypot(left.x - right.x, left.y - right.y) + EPSILON >= spacing
+      ))
+    ));
+    if (valid) return triangleSamples;
+  }
+  const startEdge = Math.floor(normalizedRotation * edgeCount) % edgeCount;
   const capacities = insetGeometry.edges.map((edge) => Math.max(
     1,
     Math.floor(edge.length / spacing) - 1,
@@ -270,7 +311,75 @@ export function buildBubbleSurvivalArenaStartingSamples({
       });
     }
   }
-  return samples;
+  const hasRequiredSpacing = (values) => values.every((left, leftIndex) => (
+    values.slice(leftIndex + 1).every((right) => (
+      Math.hypot(left.x - right.x, left.y - right.y) + EPSILON >= spacing
+    ))
+  ));
+  if (samples.length === sampleCount && hasRequiredSpacing(samples)) return samples;
+
+  const xs = geometry.vertices.map((point) => point.x);
+  const ys = geometry.vertices.map((point) => point.y);
+  const gridStep = spacing * 0.45;
+  const candidates = [...samples];
+  let rowIndex = 0;
+  for (
+    let y = Math.min(...ys);
+    y <= Math.max(...ys) + EPSILON;
+    y += gridStep
+  ) {
+    const offsetX = rowIndex % 2 === 0 ? 0 : gridStep / 2;
+    for (
+      let x = Math.min(...xs) + offsetX;
+      x <= Math.max(...xs) + EPSILON;
+      x += gridStep
+    ) {
+      const constrained = constrainBubbleToArena(geometry, { x, y }, inset);
+      if (Math.hypot(constrained.x - x, constrained.y - y) > 0.01) continue;
+      const angle = Math.atan2(y - geometry.center.y, x - geometry.center.x);
+      candidates.push({
+        x,
+        y,
+        inward_normal: { x: -Math.cos(angle), y: -Math.sin(angle) },
+        outward_normal: { x: Math.cos(angle), y: Math.sin(angle) },
+        boundary_fraction: ((angle + (Math.PI / 2)) / (Math.PI * 2)) % 1,
+      });
+    }
+    rowIndex += 1;
+  }
+  const uniqueCandidates = candidates.filter((candidate, index, values) => (
+    values.findIndex((other) => Math.hypot(
+      candidate.x - other.x,
+      candidate.y - other.y,
+    ) < 0.01) === index
+  ));
+  for (let startOffset = 0; startOffset < uniqueCandidates.length; startOffset += 1) {
+    const startIndex = (
+      Math.floor(normalizedRotation * uniqueCandidates.length) + startOffset
+    ) % uniqueCandidates.length;
+    const selected = [uniqueCandidates[startIndex]];
+    while (selected.length < sampleCount) {
+      let bestCandidate = null;
+      let bestDistance = -1;
+      for (const candidate of uniqueCandidates) {
+        if (selected.includes(candidate)) continue;
+        const distance = Math.min(...selected.map((chosen) => Math.hypot(
+          candidate.x - chosen.x,
+          candidate.y - chosen.y,
+        )));
+        if (distance > bestDistance) {
+          bestDistance = distance;
+          bestCandidate = candidate;
+        }
+      }
+      if (!bestCandidate || bestDistance + EPSILON < spacing) break;
+      selected.push(bestCandidate);
+    }
+    if (selected.length === sampleCount) return selected;
+  }
+  throw new Error(
+    `Arena ${geometry.shape} cannot place ${sampleCount} bubbles at ${spacing}px spacing.`,
+  );
 }
 
 export function constrainBubbleToArena(geometry, point, bodyRadius) {
