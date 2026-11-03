@@ -280,12 +280,15 @@ test('arena outline renders over tail attachment endpoints', () => {
     winner: { id: 'pikachu' },
   };
   const svg = renderArenaSvg({ plan, template: {}, videoTime: 1 }).toString('utf8');
+  const winnerSvg = renderArenaSvg({ plan, template: {}, videoTime: 12 }).toString('utf8');
   const tailIndex = svg.indexOf('<line x1="480"');
   const glowOutlineIndex = svg.indexOf('stroke-width="11"');
   const crispOutlineIndex = svg.indexOf('stroke-width="3"');
   assert.ok(tailIndex > 0);
   assert.ok(glowOutlineIndex > tailIndex);
   assert.ok(crispOutlineIndex > glowOutlineIndex);
+  assert.doesNotMatch(winnerSvg, /<line x1="480"/u);
+  assert.doesNotMatch(winnerSvg, /<circle cx="480" cy="100" r="35"/u);
 });
 
 test('showdown neon theme is deterministic and rotates through configured colors', () => {

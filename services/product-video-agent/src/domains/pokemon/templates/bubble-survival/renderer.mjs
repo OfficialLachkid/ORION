@@ -390,10 +390,10 @@ export function renderArenaSvg({ plan, template, videoTime }) {
     ...Array.from({ length: 22 }, (_, index) => `<circle cx="${(index * 97) % width}" cy="${(index * 173) % height}" r="${1 + (index % 3)}" fill="#8edcff"/>`),
     '</g>',
     arenaMarkup[0],
-    tailMarkup,
+    textLayer.winnerMode ? '' : tailMarkup,
     ...arenaMarkup.slice(1),
     rosterMarkup,
-    bubbleMarkup,
+    textLayer.winnerMode ? '' : bubbleMarkup,
     textLayer.markup,
     '</svg>',
   ].join(''));
