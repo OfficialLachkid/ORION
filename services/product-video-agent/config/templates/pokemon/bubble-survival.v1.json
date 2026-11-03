@@ -70,7 +70,6 @@
   },
   "simulation": {
     "fixed_step_seconds": 0.008333333333333333,
-    "tail_hit_cooldown_seconds": 0.12,
     "maximum_seconds": 40,
     "stagnation_seconds": 10,
     "maximum_attempts": 8,

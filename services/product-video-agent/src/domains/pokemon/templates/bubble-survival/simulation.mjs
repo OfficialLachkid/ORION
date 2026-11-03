@@ -241,7 +241,6 @@ function normalizeSimulationConfig(raw = {}) {
     start_inset: Number(raw.start_inset ?? 5),
     initial_tail_count: Math.max(1, Math.round(Number(raw.initial_tail_count ?? 3))),
     initial_tail_anchor_spread_radians: Number(raw.initial_tail_anchor_spread_degrees ?? 7) * Math.PI / 180,
-    tail_hit_cooldown_seconds: Math.max(0, Number(raw.tail_hit_cooldown_seconds ?? 0.12)),
     defeat_pop_scale: Math.max(1, Number(raw.defeat_pop_scale ?? 1.2)),
     defeat_pop_seconds: Math.max(0, Number(raw.defeat_pop_seconds ?? 0.1)),
     defeat_shrink_seconds: Math.max(0.05, Number(raw.defeat_shrink_seconds ?? 0.577)),
@@ -279,7 +278,6 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
   const defeatDespawnSeconds = config.defeat_pop_seconds + config.defeat_shrink_seconds;
   const frames = [snapshotState(0, bubbles, tails, [], defeatDespawnSeconds)];
   const eventLog = [];
-  const lastTailCutTimeByOwner = new Map();
 
   while (time <= config.maximum_seconds + EPSILON) {
     const stepEvents = [];
@@ -344,7 +342,6 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
 
     const bubbleById = new Map(bubbles.map((bubble) => [bubble.id, bubble]));
     const destroyedTailIds = new Set();
-    let lethalTailCutScheduled = false;
     const remainingTailCountByOwner = new Map();
     for (const tail of tails) {
       remainingTailCountByOwner.set(
@@ -360,15 +357,6 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
         if (tail.owner_id === attacker.id || destroyedTailIds.has(tail.id)) continue;
         const owner = bubbleById.get(tail.owner_id);
         if (!owner?.alive) continue;
-        const lastTailCutTime = lastTailCutTimeByOwner.get(tail.owner_id);
-        if (Number.isFinite(lastTailCutTime)
-          && time - lastTailCutTime + EPSILON < config.tail_hit_cooldown_seconds) continue;
-        const tailCountBeforeCut = remainingTailCountByOwner.get(tail.owner_id) || 0;
-        const lethalTailCut = tailCountBeforeCut === 1;
-        if (lethalTailCut && (
-          lethalTailCutScheduled
-          || time - lastEliminationTime + EPSILON < config.tail_hit_cooldown_seconds
-        )) continue;
         if (movingCircleIntersectsSegment(
           previousCenter,
           center,
@@ -377,8 +365,6 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
           { x: owner.x, y: owner.y },
         )) {
           destroyedTailIds.add(tail.id);
-          if (lethalTailCut) lethalTailCutScheduled = true;
-          lastTailCutTimeByOwner.set(tail.owner_id, time);
           const remainingTailCount = Math.max(
             0,
             (remainingTailCountByOwner.get(tail.owner_id) || 0) - 1,
