@@ -28,6 +28,10 @@ import {
 } from '../src/domains/pokemon/long-form/mixed-challenge/planner.mjs';
 import { selectRevealChallengeMusicSchedule } from '../src/domains/pokemon/long-form/reveal-challenge/planner.mjs';
 import { resolveBubbleSurvivalCategoryPool } from '../src/domains/pokemon/templates/bubble-survival/category-resolver.mjs';
+import {
+  BUBBLE_SURVIVAL_ARENA_SHAPES,
+  normalizeBubbleSurvivalArenaShape,
+} from '../src/domains/pokemon/templates/bubble-survival/arena-geometry.mjs';
 import { planPokemonBubbleSurvival } from '../src/domains/pokemon/templates/bubble-survival/planner.mjs';
 import {
   buildPokeQuizzRenderPlan,
@@ -131,6 +135,15 @@ export async function generatePokemonBubbleShowdownLongFormReview(options = {}) 
   );
   if (!channelConfigPath) throw new Error(`Unknown Pokemon channel: ${channelSelector}`);
   const seed = getStringOption(options, 'seed', new Date().toISOString());
+  const requestedArenaShape = getStringOption(options, 'arena-shape', '').trim().toLowerCase();
+  if (requestedArenaShape && !BUBBLE_SURVIVAL_ARENA_SHAPES.includes(requestedArenaShape)) {
+    throw new Error(
+      `Unknown Bubble Showdown arena shape ${requestedArenaShape}. Expected one of: ${BUBBLE_SURVIVAL_ARENA_SHAPES.join(', ')}.`,
+    );
+  }
+  const forcedArenaShape = requestedArenaShape
+    ? normalizeBubbleSurvivalArenaShape(requestedArenaShape)
+    : '';
   const catalogJsonPath = getStringOption(
     options,
     'catalog-json',
@@ -170,7 +183,7 @@ export async function generatePokemonBubbleShowdownLongFormReview(options = {}) 
     previousCategory: selectionState.last_category,
   });
   const arenaShapeOrder = selectBubbleShowdownArenaShapeOrder({
-    shapes: template?.round_layout?.arena_shape_pool,
+    shapes: forcedArenaShape ? [forcedArenaShape] : template?.round_layout?.arena_shape_pool,
     seed,
     maximumRounds: durationConfig.maximum_rounds,
     previousShape: selectionState.last_arena_shape,
@@ -407,6 +420,7 @@ async function main() {
       '  --channel <selector>       Pokemon channel. Default: poke-quizz-youtube',
       '  --thread-id <id>           Optional Discord review thread override.',
       '  --seed <text>              Deterministic episode seed. Default: current timestamp.',
+      '  --arena-shape <shape>      Force every round to use one arena shape.',
       '  --catalog-json <path>      Localized Pokedex JSON override.',
       '  --template <path>          Long-form Bubble Showdown template JSON override.',
       '  --short-template <path>    Shared short-form Bubble Showdown template override.',

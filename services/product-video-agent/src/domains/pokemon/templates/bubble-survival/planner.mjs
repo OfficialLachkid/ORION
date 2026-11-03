@@ -126,6 +126,7 @@ function buildSimulationConfig(template, arenaShape, arenaContour = null) {
     initial_tail_anchor_spread_degrees: Number(
       template?.bubbles?.initial_tail_anchor_spread_degrees ?? 7,
     ),
+    tail_hit_cooldown_seconds: Number(template?.simulation?.tail_hit_cooldown_seconds ?? 0.12),
     defeat_pop_scale: Number(template?.bubbles?.defeat_pop_scale ?? 1.2),
     defeat_pop_seconds: Number(template?.bubbles?.defeat_pop_seconds ?? 0.1),
     defeat_shrink_seconds: Number(template?.bubbles?.defeat_shrink_seconds ?? 0.577),

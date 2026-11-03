@@ -378,6 +378,7 @@ export function renderArenaSvg({ plan, template, videoTime }) {
   }).join('');
 
   const textLayer = buildBubbleSurvivalTextLayer({ plan, template, videoTime });
+  const arenaMarkup = buildBubbleSurvivalArenaSvgMarkup(arenaGeometry, { stroke: theme.accent });
   return Buffer.from([
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
     '<defs>',
@@ -388,9 +389,10 @@ export function renderArenaSvg({ plan, template, videoTime }) {
     '<g opacity="0.18">',
     ...Array.from({ length: 22 }, (_, index) => `<circle cx="${(index * 97) % width}" cy="${(index * 173) % height}" r="${1 + (index % 3)}" fill="#8edcff"/>`),
     '</g>',
-    ...buildBubbleSurvivalArenaSvgMarkup(arenaGeometry, { stroke: theme.accent }),
-    rosterMarkup,
+    arenaMarkup[0],
     tailMarkup,
+    ...arenaMarkup.slice(1),
+    rosterMarkup,
     bubbleMarkup,
     textLayer.markup,
     '</svg>',
@@ -432,9 +434,16 @@ async function loadSpriteBuffers(subjects) {
   return new Map(entries);
 }
 
-export async function resizeSprite({ subjectId, size, spriteBuffers, resizedSpriteCache }) {
+export async function resizeSprite({
+  subjectId,
+  size,
+  spriteBuffers,
+  resizedSpriteCache,
+  treatment = 'standard',
+}) {
+  const normalizedTreatment = treatment === 'defeated' ? 'defeated' : 'standard';
   const roundedSize = Math.max(1, Math.round(size));
-  const cacheKey = `${subjectId}:${roundedSize}`;
+  const cacheKey = `${subjectId}:${roundedSize}:${normalizedTreatment}`;
   if (!resizedSpriteCache.has(cacheKey)) {
     const source = spriteBuffers.get(subjectId);
     if (!source) throw new Error(`Missing Bubble Survival sprite buffer for ${subjectId}.`);
@@ -445,7 +454,13 @@ export async function resizeSprite({ subjectId, size, spriteBuffers, resizedSpri
         background: { r: 0, g: 0, b: 0, alpha: 0 },
       })
       .raw()
-      .toBuffer({ resolveWithObject: true }));
+      .toBuffer({ resolveWithObject: true })
+      .then((resized) => ({
+        ...resized,
+        data: normalizedTreatment === 'defeated'
+          ? applyDefeatedSpriteTreatment(resized.data)
+          : resized.data,
+      })));
   }
   const resized = await resizedSpriteCache.get(cacheKey);
   return {
@@ -455,6 +470,26 @@ export async function resizeSprite({ subjectId, size, spriteBuffers, resizedSpri
     height: resized.info.height,
     channels: resized.info.channels,
   };
+}
+
+export function applyDefeatedSpriteTreatment(input) {
+  const output = Buffer.from(input);
+  for (let offset = 0; offset + 3 < output.length; offset += 4) {
+    if (output[offset + 3] === 0) continue;
+    const luminance = (output[offset] * 0.2126)
+      + (output[offset + 1] * 0.7152)
+      + (output[offset + 2] * 0.0722);
+    const darkened = Math.max(0, Math.min(
+      255,
+      ((luminance - 128) * 1.22) + 128 - (0.42 * 255),
+    ));
+    const channel = Math.round(darkened);
+    output[offset] = channel;
+    output[offset + 1] = channel;
+    output[offset + 2] = channel;
+    output[offset + 3] = Math.round(output[offset + 3] * 0.94);
+  }
+  return output;
 }
 
 export function alphaBlendRgba({
@@ -532,26 +567,48 @@ async function buildSpriteComposites({
     + Number(plan.video.winner_delay_seconds || 0);
   const centerX = Number(plan.simulation.config.center_x);
   const centerY = Number(plan.simulation.config.center_y);
+  const rosterEntries = resolveDefeatedRosterEntries({ plan, template, videoTime });
+  const composites = [];
+  const appendRosterComposites = async () => {
+    for (const entry of rosterEntries) {
+      if (entry.scale <= 0.01) continue;
+      const sprite = await resizeSprite({
+        subjectId: entry.subject_id,
+        size: entry.size * entry.scale,
+        spriteBuffers,
+        resizedSpriteCache,
+        treatment: 'defeated',
+      });
+      composites.push({
+        input: sprite.input,
+        width: sprite.width,
+        height: sprite.height,
+        left: entry.x - (sprite.size / 2),
+        top: entry.y - (sprite.size / 2),
+      });
+    }
+  };
   if (videoTime >= winnerStart) {
+    await appendRosterComposites();
     const sprite = await resizeSprite({
       subjectId: plan.winner.id,
       size: 190,
       spriteBuffers,
       resizedSpriteCache,
     });
-    return [{
+    composites.push({
       input: sprite.input,
       width: sprite.width,
       height: sprite.height,
       left: centerX - (sprite.size / 2),
       top: centerY - 120,
-    }];
+    });
+    return composites;
   }
 
   const state = resolveTimelineFrame(plan, videoTime);
   const simulationTime = Math.max(0, videoTime - introSeconds);
   const bubbleRadius = Number(plan.simulation.config.bubble_radius);
-  const composites = [];
   for (const bubble of state?.bubbles || []) {
     const renderScale = resolveDefeatedBubbleScale({
       bubble,
@@ -575,23 +632,7 @@ async function buildSpriteComposites({
       top: bubble.y - (sprite.size / 2),
     });
   }
-  const rosterEntries = resolveDefeatedRosterEntries({ plan, template, videoTime });
-  for (const entry of rosterEntries) {
-    if (entry.scale <= 0.01) continue;
-    const sprite = await resizeSprite({
-      subjectId: entry.subject_id,
-      size: entry.size * entry.scale,
-      spriteBuffers,
-      resizedSpriteCache,
-    });
-    composites.push({
-      input: sprite.input,
-      width: sprite.width,
-      height: sprite.height,
-      left: entry.x - (sprite.size / 2),
-      top: entry.y - (sprite.size / 2),
-    });
-  }
+  await appendRosterComposites();
   return composites;
 }
 

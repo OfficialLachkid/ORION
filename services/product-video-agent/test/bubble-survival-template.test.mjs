@@ -211,7 +211,34 @@ test('fixed-step simulation is deterministic, starts without overlap, and shrink
   assert.ok(tailBreakEvents.length > 0);
   assert.equal(tailBreakEvents.every((event) => Number.isFinite(event.time)), true);
   assert.equal(tailBreakEvents.some((event) => event.attacker_is_defeated), true);
+  assert.equal(tailBreakEvents.every((event) => event.remaining_tail_count >= 0), true);
+  const tailBreaksByOwner = new Map();
+  for (const event of tailBreakEvents) {
+    const ownerEvents = tailBreaksByOwner.get(event.owner_id) || [];
+    ownerEvents.push(event);
+    tailBreaksByOwner.set(event.owner_id, ownerEvents);
+  }
+  for (const ownerEvents of tailBreaksByOwner.values()) {
+    for (let index = 1; index < ownerEvents.length; index += 1) {
+      assert.ok(
+        ownerEvents[index].time - ownerEvents[index - 1].time + 1e-9
+          >= first.config.tail_hit_cooldown_seconds,
+      );
+    }
+  }
   assert.equal(first.events.filter((event) => event.type === 'eliminated').length, 8);
+  assert.equal(
+    first.events.filter((event) => event.type === 'eliminated')
+      .every((event) => event.remaining_tail_count === 0),
+    true,
+  );
+  const eliminationEvents = first.events.filter((event) => event.type === 'eliminated');
+  for (let index = 1; index < eliminationEvents.length; index += 1) {
+    assert.ok(
+      eliminationEvents[index].time - eliminationEvents[index - 1].time + 1e-9
+        >= first.config.tail_hit_cooldown_seconds,
+    );
+  }
   const defeatedBubble = { is_defeated: true, defeated_at: 4 };
   const despawn = { popScale: 1.2, popSeconds: 0.1, shrinkSeconds: 0.577 };
   assert.equal(resolveDefeatedBubbleScale({ bubble: { is_defeated: false }, simulationTime: 5, ...despawn }), 1);
@@ -329,7 +356,7 @@ test('Pokemon sprite alpha produces a reusable physics-safe arena contour', asyn
 test('seeded initial physics distributes winners across every starting slot', () => {
   const subjects = Array.from({ length: 9 }, (_, index) => ({ id: `subject-${index}` }));
   const winnerIds = new Set();
-  for (let index = 0; index < 45; index += 1) {
+  for (let index = 0; index < 60; index += 1) {
     const simulation = simulateBubbleSurvival({
       subjects,
       seed: `winner-distribution-${index}`,
@@ -393,6 +420,7 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.simulation.outcome, 'winner');
     assert.equal(first.simulation.config.bubble_radius, 32.76);
     assert.equal(first.simulation.config.initial_tail_count, 3);
+    assert.equal(first.simulation.config.tail_hit_cooldown_seconds, 0.12);
     assert.equal(first.simulation.config.defeat_pop_scale, 1.2);
     assert.equal(first.simulation.config.defeat_pop_seconds, 0.1);
     assert.equal(first.simulation.config.defeat_shrink_seconds, 0.577);

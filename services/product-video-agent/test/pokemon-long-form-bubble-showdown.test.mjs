@@ -10,6 +10,7 @@ import {
   shouldAppendBubbleShowdownRound,
 } from '../src/domains/pokemon/long-form/bubble-showdown/planner.mjs';
 import {
+  applyDefeatedSpriteTreatment,
   buildAnimatedBubbleSurvivalTitleMarkup,
   renderArenaForegroundSvg,
   renderArenaSvg,
@@ -237,6 +238,54 @@ test('round counters count upward and defeated Pokemon occupy alternating side r
   assert.ok(entries[0].x < 260);
   assert.ok(entries[1].x > 700);
   assert.equal(entries.every((entry) => entry.scale === 1), true);
+});
+
+test('defeated side-roster sprites use the shared dark grayscale treatment', () => {
+  const treated = applyDefeatedSpriteTreatment(Buffer.from([
+    250, 80, 20, 255,
+    0, 0, 0, 0,
+  ]));
+  assert.equal(treated[0], treated[1]);
+  assert.equal(treated[1], treated[2]);
+  assert.ok(treated[0] < 80);
+  assert.equal(treated[3], 240);
+  assert.deepEqual([...treated.subarray(4)], [0, 0, 0, 0]);
+});
+
+test('arena outline renders over tail attachment endpoints', () => {
+  const plan = {
+    video: {
+      frame_width: 960,
+      frame_height: 540,
+      intro_seconds: 0,
+      frame_fps: 30,
+      winner_delay_seconds: 1,
+    },
+    simulation: {
+      duration_seconds: 10,
+      config: {
+        center_x: 480,
+        center_y: 300,
+        arena_radius: 220,
+        arena_shape: 'hexagon',
+        bubble_radius: 35,
+      },
+      frames: [{
+        bubbles: [{ id: 'pikachu', x: 480, y: 100, is_defeated: false }],
+        tails: [{ id: 'tail-1', owner_id: 'pikachu', anchor_x: 480, anchor_y: 80 }],
+      }],
+      events: [],
+    },
+    selection: { selected_subjects: [{ id: 'pikachu', name: 'Pikachu' }] },
+    winner: { id: 'pikachu' },
+  };
+  const svg = renderArenaSvg({ plan, template: {}, videoTime: 1 }).toString('utf8');
+  const tailIndex = svg.indexOf('<line x1="480"');
+  const glowOutlineIndex = svg.indexOf('stroke-width="11"');
+  const crispOutlineIndex = svg.indexOf('stroke-width="3"');
+  assert.ok(tailIndex > 0);
+  assert.ok(glowOutlineIndex > tailIndex);
+  assert.ok(crispOutlineIndex > glowOutlineIndex);
 });
 
 test('showdown neon theme is deterministic and rotates through configured colors', () => {
