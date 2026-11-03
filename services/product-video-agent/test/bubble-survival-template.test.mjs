@@ -145,6 +145,7 @@ test('template rotates through the complete Bubble Survival pool catalog', async
   });
   assert.equal(template.presentation.showdown_title_animation.enabled, true);
   assert.equal(template.presentation.showdown_title_animation.wobble_enabled, true);
+  assert.equal(template.presentation.showdown_title_animation.wobble_period_seconds, 2);
   assert.ok(template.presentation.showdown_title_animation.neon_palette.length >= 7);
   assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'pentagon'), true);
   assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'trefoil'), true);

@@ -132,7 +132,7 @@
       "wobble_amplitude_px": 3.5,
       "wobble_rotation_degrees": 2.4,
       "wobble_scale_amplitude": 0.025,
-      "wobble_period_seconds": 1.25,
+      "wobble_period_seconds": 2.0,
       "wobble_phase_step_radians": 0.7,
       "neon_palette": [
         "#67DCFF", "#FFD166", "#9B5DE5", "#F72585", "#FF4D5A", "#FF7BCB", "#39E58C"

@@ -50,6 +50,7 @@ test('long-form Bubble Showdown config stays around a three-minute landscape epi
     fps: 30,
     aspect_ratio: '16:9',
   });
+  assert.equal(template.presentation.showdown_title_animation.wobble_period_seconds, 2);
 });
 
 test('category order is deterministic and exhausts unique pools before reuse', () => {
@@ -137,6 +138,7 @@ test('landscape adapter preserves shared physics while changing only presentatio
   assert.equal(adapted.audio.music_volume, 0);
   assert.equal(adapted.presentation.showdown_title_animation.enabled, true);
   assert.equal(adapted.presentation.showdown_title_animation.wobble_enabled, true);
+  assert.equal(adapted.presentation.showdown_title_animation.wobble_period_seconds, 2);
 });
 
 test('Showdown title animates letter by letter at fixed final positions', () => {

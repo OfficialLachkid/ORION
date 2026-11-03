@@ -224,7 +224,7 @@ export function adaptBubbleSurvivalTemplateToLandscape({
         wobble_amplitude_px: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_amplitude_px, 3.5),
         wobble_rotation_degrees: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_rotation_degrees, 2.4),
         wobble_scale_amplitude: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_scale_amplitude, 0.025),
-        wobble_period_seconds: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_period_seconds, 1.25),
+        wobble_period_seconds: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_period_seconds, 2),
         wobble_phase_step_radians: numberOr(longTemplate?.presentation?.showdown_title_animation?.wobble_phase_step_radians, 0.7),
         neon_palette: structuredClone(
           longTemplate?.presentation?.showdown_title_animation?.neon_palette || [],

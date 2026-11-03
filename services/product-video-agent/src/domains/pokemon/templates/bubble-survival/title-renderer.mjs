@@ -80,7 +80,7 @@ export function resolveShowdownTitleAnimationState(videoTime, animation = {}, ch
   const intervalSeconds = Math.max(0.01, Number(animation?.letter_interval_seconds ?? 0.085));
   const popSeconds = Math.max(0.01, Number(animation?.letter_pop_seconds ?? 0.12));
   const wobbleEnabled = animation?.wobble_enabled === true;
-  const wobblePeriod = Math.max(0.2, Number(animation?.wobble_period_seconds ?? 1.25));
+  const wobblePeriod = Math.max(0.2, Number(animation?.wobble_period_seconds ?? 2));
   const wobbleAmplitude = Math.max(0, Number(animation?.wobble_amplitude_px ?? 3.5));
   const wobbleRotation = Math.max(0, Number(animation?.wobble_rotation_degrees ?? 2.4));
   const wobbleScaleAmplitude = Math.max(0, Number(animation?.wobble_scale_amplitude ?? 0.025));
