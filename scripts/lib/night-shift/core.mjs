@@ -4,7 +4,7 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../../../services/lib/runtime-config.mjs';
 import { recordOpsMetric } from '../../../services/lib/metrics-store.mjs';
-import { fetchLeads } from '../leadgen-supabase.mjs';
+import { countLeads } from '../leadgen-supabase.mjs';
 import { reconcileDrafts } from '../draft-reconciler.mjs';
 import { detectReplies } from '../reply-detector.mjs';
 import {
@@ -89,7 +89,7 @@ function buildRuntime(deps) {
     replenishPokeQuizzReviewBacklog,
     refreshPokeQuizzReviewMessages,
     reconcilePokeQuizzReviewThreads,
-    fetchLeads,
+    countLeads,
     countOpenDrafts,
     postNightShiftFailure,
     postLeadNightShiftDigest,
@@ -341,8 +341,8 @@ export async function runNightShift(argv = process.argv, deps = {}) {
     writeMarker(marker, runtime.now(), runtime);
   }
 
-  const backlog = await runtime.fetchLeads({ status: 'new', limit: 2000 })
-    .then((leads) => leads.length)
+  const backlog = await runtime.countLeads({ status: 'new' })
+    .then((count) => count ?? 0)
     .catch(() => 0);
   const openDrafts = await runtime.countOpenDrafts(config);
 

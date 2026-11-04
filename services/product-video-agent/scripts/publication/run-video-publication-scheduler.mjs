@@ -91,6 +91,11 @@ export async function loadQueuedPublications(runtimeEnv, options = {}) {
   url.searchParams.set('status', `not.in.(${TERMINAL_PUBLICATION_STATUSES})`);
   url.searchParams.set('order', 'created_at.asc');
   return fetchJsonImpl(url.toString(), {
+    egressTelemetry: {
+      ledgerDir: options.egressLedgerDir,
+      service: 'publication_scheduler',
+      queryClass: 'queued_publications',
+    },
     method: 'GET',
     headers: createHeaders(apiKey),
   });
@@ -117,7 +122,7 @@ export async function loadRuntimePublications(runtimeEnv, options = {}) {
     account_keys: [...accountKeys].sort(),
   });
   const pageSize = 1000;
-  const loadPages = async ({ select, status = '', updatedAfter = '' }) => {
+  const loadPages = async ({ select, status = '', updatedAfter = '', queryClass = 'runtime_publications' }) => {
     const baseUrl = new URL('/rest/v1/video_publications', supabaseUrl);
     baseUrl.searchParams.set('select', select);
     if (status) baseUrl.searchParams.set('status', status);
@@ -136,6 +141,11 @@ export async function loadRuntimePublications(runtimeEnv, options = {}) {
       pageUrl.searchParams.set('limit', String(pageSize));
       pageUrl.searchParams.set('offset', String(offset));
       const page = await fetchJsonImpl(pageUrl.toString(), {
+        egressTelemetry: {
+          ledgerDir: options.egressLedgerDir,
+          service: 'publication_scheduler',
+          queryClass,
+        },
         method: 'GET',
         headers: createHeaders(apiKey),
       });
@@ -160,11 +170,15 @@ export async function loadRuntimePublications(runtimeEnv, options = {}) {
     loadPages({
       select: ACTIVE_RUNTIME_PUBLICATION_SELECT,
       status: `not.in.(${ACTIVE_RUNTIME_EXCLUDED_STATUSES})`,
+      queryClass: 'active_runtime_publications',
     }),
     loadPages({
       select: RECONCILIATION_RUNTIME_PUBLICATION_SELECT,
       status: needsFullRefresh ? `in.(${RECONCILIATION_RUNTIME_STATUSES})` : '',
       updatedAfter: incrementalUpdatedAfter,
+      queryClass: needsFullRefresh
+        ? 'reconciliation_publications_full'
+        : 'reconciliation_publications_incremental',
     }),
   ]);
 
@@ -349,6 +363,7 @@ export async function runVideoPublicationScheduler(options = {}, dependencies = 
     fetchJson: dependencies.fetchJson || fetchJson,
     channelProfiles: activeProfiles,
     asOf,
+    egressLedgerDir: runtimeConfig.runtimePaths?.supabaseEgressLedgerDir,
     ...(dependencies.runtimeCachePath === undefined
       ? {}
       : { cachePath: dependencies.runtimeCachePath }),

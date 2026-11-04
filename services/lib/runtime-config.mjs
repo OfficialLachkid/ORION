@@ -220,6 +220,8 @@ export function loadRuntimeConfig(options = {}) {
   const resolvedMetricsEventsFile = env.METRICS_EVENTS_PATH || resolve(resolvedLogDir, 'ops-events.jsonl');
   const resolvedHealthMonitorStateFile =
     env.HEALTH_MONITOR_STATE_PATH || resolve(resolvedLogDir, 'health-monitor-state.json');
+  const resolvedSupabaseEgressLedgerDir =
+    env.SUPABASE_EGRESS_LEDGER_DIR || resolve(resolvedLogDir, 'supabase-egress');
   const publicationReviewThreads = loadPublicationReviewThreads();
 
   return {
@@ -237,6 +239,7 @@ export function loadRuntimeConfig(options = {}) {
       logDir: resolvedLogDir,
       metricsEventsFile: resolvedMetricsEventsFile,
       healthMonitorStateFile: resolvedHealthMonitorStateFile,
+      supabaseEgressLedgerDir: resolvedSupabaseEgressLedgerDir,
     },
     transcription: {
       provider: env.TRANSCRIPTION_PROVIDER || 'local',

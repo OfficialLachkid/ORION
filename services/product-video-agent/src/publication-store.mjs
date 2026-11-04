@@ -1,11 +1,15 @@
 import { toVideoChannelRow } from './publication-channels.mjs';
 import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
+import { recordSupabaseEgress } from '../../lib/supabase-egress-ledger.mjs';
+import { basename } from 'node:path';
 
 export class SupabasePublicationStore {
   constructor(options = {}) {
     this.supabaseUrl = options.supabaseUrl || '';
     this.apiKey = options.apiKey || '';
     this.fetchImpl = options.fetchImpl || globalThis.fetch;
+    this.egressLedgerDir = options.egressLedgerDir || '';
+    this.telemetryService = options.telemetryService || basename(process.argv[1] || 'product-video-runtime');
   }
 
   assertConfigured() {
@@ -40,13 +44,29 @@ export class SupabasePublicationStore {
       headers: this.createHeaders(options.prefer),
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     });
+    const text = response.status === 204 ? '' : await response.text();
+    let body = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      body = text;
+    }
+    await recordSupabaseEgress({
+      ledgerDir: this.egressLedgerDir,
+      service: this.telemetryService,
+      resource: table,
+      queryClass: options.queryClass || `${table}_${String(options.method || 'GET').toLowerCase()}`,
+      method: options.method || 'GET',
+      response,
+      responseText: text,
+      body,
+    });
     if (!response.ok) {
-      const detail = (await response.text()).slice(0, 600);
+      const detail = text.slice(0, 600);
       throw new Error(`Supabase ${table} request failed (${response.status}): ${detail}`);
     }
     if (response.status === 204) return null;
-    const text = await response.text();
-    return text ? JSON.parse(text) : null;
+    return body;
   }
 
   async upsert(table, rows) {

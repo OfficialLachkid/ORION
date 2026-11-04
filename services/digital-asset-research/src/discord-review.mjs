@@ -29,6 +29,7 @@ function parseCustomId(value) {
 async function findOrCreateChannel(options) {
   const channels = await discordRequest(options.token, `/guilds/${options.guildId}/channels`, {
     fetchImpl: options.fetchImpl,
+    egressLedgerDir: options.config.runtimePaths?.supabaseEgressLedgerDir,
   });
   const category = channels.find((item) => item.type === CATEGORY
     && String(item.name).toLowerCase() === options.categoryName.toLowerCase());

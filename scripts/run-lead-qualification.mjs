@@ -10,7 +10,7 @@ import { resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
-import { fetchLeads, fetchSuppressedDomains, updateLead } from './lib/leadgen-supabase.mjs';
+import { fetchLeadBatch, fetchSuppressedDomains, updateLead } from './lib/leadgen-supabase.mjs';
 import { hasValidEmailTld } from './lib/email-tld-allowlist.mjs';
 import { measurePageSpeed, qualifyLead } from '../services/leadgen-qualifier/src/qualifier.mjs';
 import { executeTask } from '../services/task-router/src/executor.mjs';
@@ -193,13 +193,12 @@ async function main() {
     : recoverEmails ? 'qualified_no_email'
     : (retryUnreachable ? 'site_unreachable' : 'new');
 
-  const allNew = await fetchLeads({
+  const batch = await fetchLeadBatch({
     status,
     niche: niche || undefined,
-    limit: 100,
+    limit: Math.max(1, Math.min(limit, 100)),
     order: 'oldest',
   });
-  const batch = allNew.slice(0, Math.max(1, Math.min(limit, 100)));
 
   if (batch.length === 0) {
     process.stdout.write(`No leads with status=${status} to process.\n`);

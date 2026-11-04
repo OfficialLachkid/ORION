@@ -5,8 +5,22 @@ import {
   getRuntimeApiKey,
   retryTransientSupabaseOperation,
 } from './supabase-bridge-api.mjs';
+import { recordSupabaseEgress } from '../../services/lib/supabase-egress-ledger.mjs';
 
 export const DEFAULT_LEADS_TABLE = 'leads';
+export const FOLLOW_UP_LEAD_SELECT = 'id,business_name,source_url,niche,domain,contact_email,responded_at,sent_at,qualification';
+export const REPLY_DETECTION_LEAD_SELECT = 'id,business_name,responded_at,qualification';
+
+function requestOptions(config, queryClass) {
+  return {
+    fetchImpl: config.fetchImpl || globalThis.fetch,
+    egressTelemetry: {
+      ledgerDir: config.egressLedgerDir,
+      service: 'leadgen',
+      queryClass,
+    },
+  };
+}
 
 export function getLeadgenPersistenceConfig() {
   const runtimeConfig = loadRuntimeConfig();
@@ -16,6 +30,8 @@ export function getLeadgenPersistenceConfig() {
     supabaseUrl: env.SUPABASE_URL || '',
     apiKey: getRuntimeApiKey(env),
     leadsTable: env.LEADGEN_LEADS_TABLE || DEFAULT_LEADS_TABLE,
+    egressLedgerDir: runtimeConfig.runtimePaths?.supabaseEgressLedgerDir || '',
+    fetchImpl: globalThis.fetch,
   };
 }
 
@@ -36,13 +52,17 @@ export async function upsertLeads(rows, config = getLeadgenPersistenceConfig()) 
   const url = new URL(`/rest/v1/${config.leadsTable}`, config.supabaseUrl);
   url.searchParams.set('on_conflict', 'domain');
 
-  return fetchJson(url.toString(), {
+  await fetchJson(url.toString(), {
+    ...requestOptions(config, 'lead_upsert'),
     method: 'POST',
     headers: createHeaders(config.apiKey, {
-      Prefer: 'resolution=merge-duplicates,return=representation',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
     }),
     body: JSON.stringify(nextRows),
   });
+  // The scraper falls back to the submitted row count when no representation
+  // is returned, preserving its Discord/runtime totals without downloading rows.
+  return null;
 }
 
 export async function fetchExistingLeadKeys(config = getLeadgenPersistenceConfig()) {
@@ -55,6 +75,7 @@ export async function fetchExistingLeadKeys(config = getLeadgenPersistenceConfig
   url.searchParams.set('limit', '10000');
 
   const rows = await fetchJson(url.toString(), {
+    ...requestOptions(config, 'existing_lead_keys'),
     headers: createHeaders(config.apiKey),
   });
 
@@ -94,6 +115,7 @@ export async function fetchBlockedDomains(filters = {}, config = getLeadgenPersi
   }
 
   const rows = await fetchJson(url.toString(), {
+    ...requestOptions(config, 'blocked_domains'),
     headers: createHeaders(config.apiKey),
   });
 
@@ -109,9 +131,10 @@ export async function addBlockedDomain(domain, reason, config = getLeadgenPersis
   url.searchParams.set('on_conflict', 'domain');
 
   return fetchJson(url.toString(), {
+    ...requestOptions(config, 'blocked_domain_upsert'),
     method: 'POST',
     headers: createHeaders(config.apiKey, {
-      Prefer: 'resolution=merge-duplicates,return=representation',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
     }),
     body: JSON.stringify([{ domain, reason: reason || '' }]),
   });
@@ -126,9 +149,10 @@ export async function updateLead(id, patch, config = getLeadgenPersistenceConfig
   url.searchParams.set('id', `eq.${id}`);
 
   return retryTransientSupabaseOperation(() => fetchJson(url.toString(), {
+    ...requestOptions(config, 'lead_update'),
     method: 'PATCH',
     headers: createHeaders(config.apiKey, {
-      Prefer: 'return=representation',
+      Prefer: 'return=minimal',
     }),
     body: JSON.stringify(patch),
   }));
@@ -147,9 +171,10 @@ export async function deleteLead(id, config = getLeadgenPersistenceConfig()) {
   url.searchParams.set('id', `eq.${id}`);
 
   return fetchJson(url.toString(), {
+    ...requestOptions(config, 'lead_delete'),
     method: 'DELETE',
     headers: createHeaders(config.apiKey, {
-      Prefer: 'return=representation',
+      Prefer: 'return=minimal',
     }),
   });
 }
@@ -164,6 +189,7 @@ export async function fetchLeadById(id, config = getLeadgenPersistenceConfig()) 
   url.searchParams.set('limit', '1');
 
   const rows = await fetchJson(url.toString(), {
+    ...requestOptions(config, 'lead_by_id'),
     method: 'GET',
     headers: createHeaders(config.apiKey),
   });
@@ -186,9 +212,26 @@ export async function countLeads(filters = {}, config = getLeadgenPersistenceCon
     url.searchParams.set('status', `eq.${filters.status}`);
   }
 
-  const response = await fetch(url.toString(), {
+  const response = await (config.fetchImpl || globalThis.fetch)(url.toString(), {
     method: 'GET',
     headers: createHeaders(config.apiKey, { Prefer: 'count=exact' }),
+  });
+  const responseText = await response.text();
+  let responseBody = null;
+  try {
+    responseBody = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    responseBody = responseText;
+  }
+  await recordSupabaseEgress({
+    ledgerDir: config.egressLedgerDir,
+    service: 'leadgen',
+    queryClass: 'lead_count',
+    url: url.toString(),
+    method: 'GET',
+    response,
+    responseText,
+    body: responseBody,
   });
   if (!response.ok) {
     return null;
@@ -205,7 +248,7 @@ export async function fetchLeads(filters = {}, config = getLeadgenPersistenceCon
   }
 
   const url = new URL(`/rest/v1/${config.leadsTable}`, config.supabaseUrl);
-  url.searchParams.set('select', '*');
+  url.searchParams.set('select', filters.select || '*');
   url.searchParams.set('order', filters.order === 'oldest' ? 'created_at.asc' : 'created_at.desc');
   url.searchParams.set('limit', String(filters.limit || 100));
   if (filters.status) {
@@ -216,8 +259,46 @@ export async function fetchLeads(filters = {}, config = getLeadgenPersistenceCon
   }
 
   return retryTransientSupabaseOperation(() => fetchJson(url.toString(), {
+    ...requestOptions(config, filters.queryClass || 'lead_list'),
     headers: createHeaders(config.apiKey),
   }));
+}
+
+export async function fetchLeadIds(filters = {}, config = getLeadgenPersistenceConfig()) {
+  const rows = await fetchLeads({
+    ...filters,
+    select: 'id',
+    queryClass: filters.queryClass || 'qualification_candidate_ids',
+  }, config);
+  return (Array.isArray(rows) ? rows : []).map((row) => row?.id).filter(Boolean);
+}
+
+export async function fetchLeadsByIds(ids = [], filters = {}, config = getLeadgenPersistenceConfig()) {
+  const orderedIds = Array.from(new Set((Array.isArray(ids) ? ids : []).map(String).filter(Boolean)));
+  if (orderedIds.length === 0) return [];
+  if (!isLeadgenPersistenceConfigured(config)) {
+    throw new Error('Supabase is not configured (missing SUPABASE_URL or API key).');
+  }
+
+  const url = new URL(`/rest/v1/${config.leadsTable}`, config.supabaseUrl);
+  url.searchParams.set('select', '*');
+  const escaped = orderedIds.map((id) => `"${id.replace(/"/gu, '""')}"`).join(',');
+  url.searchParams.set('id', `in.(${escaped})`);
+  url.searchParams.set('limit', String(orderedIds.length));
+  if (filters.status) url.searchParams.set('status', `eq.${filters.status}`);
+  if (filters.niche) url.searchParams.set('niche', `eq.${filters.niche}`);
+  const rows = await retryTransientSupabaseOperation(() => fetchJson(url.toString(), {
+    ...requestOptions(config, 'qualification_selected_leads'),
+    headers: createHeaders(config.apiKey),
+  }));
+  const byId = new Map((Array.isArray(rows) ? rows : []).map((row) => [String(row.id), row]));
+  return orderedIds.map((id) => byId.get(id)).filter(Boolean);
+}
+
+export async function fetchLeadBatch(filters = {}, config = getLeadgenPersistenceConfig()) {
+  const limit = Math.max(1, Math.min(Number(filters.limit || 30), 100));
+  const ids = await fetchLeadIds({ ...filters, limit }, config);
+  return fetchLeadsByIds(ids, filters, config);
 }
 
 // Domain-level suppression check for the qualifier's pre-draft gate.
@@ -245,6 +326,7 @@ export async function fetchSuppressedDomains(domains = [], config = getLeadgenPe
   url.searchParams.set('limit', String(list.length));
 
   const rows = await retryTransientSupabaseOperation(() => fetchJson(url.toString(), {
+    ...requestOptions(config, 'suppressed_domains'),
     headers: createHeaders(config.apiKey),
   })).catch(() => []);
   return new Set((Array.isArray(rows) ? rows : [])

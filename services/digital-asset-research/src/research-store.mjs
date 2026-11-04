@@ -1,4 +1,5 @@
 import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
+import { recordSupabaseEgress } from '../../lib/supabase-egress-ledger.mjs';
 
 function headers(apiKey, prefer = 'return=representation') {
   return createSupabaseApiHeaders(apiKey, {
@@ -12,6 +13,8 @@ export class DigitalAssetResearchStore {
     this.supabaseUrl = String(options.supabaseUrl || '').replace(/\/+$/u, '');
     this.apiKey = String(options.apiKey || '');
     this.fetchImpl = options.fetchImpl || fetch;
+    this.egressLedgerDir = options.egressLedgerDir || '';
+    this.telemetryService = options.telemetryService || 'digital_asset_research';
     if (!this.supabaseUrl || !this.apiKey) {
       throw new Error('Research persistence requires SUPABASE_URL and SUPABASE_SECRET_KEY.');
     }
@@ -26,12 +29,32 @@ export class DigitalAssetResearchStore {
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     });
     const text = await response.text();
+    let body = [];
+    try {
+      body = text ? JSON.parse(text) : [];
+    } catch {
+      body = text;
+    }
+    await recordSupabaseEgress({
+      ledgerDir: this.egressLedgerDir,
+      service: this.telemetryService,
+      resource: table,
+      queryClass: options.queryClass || `${table}_${String(options.method || 'GET').toLowerCase()}`,
+      method: options.method || 'GET',
+      response,
+      responseText: text,
+      body,
+    });
     if (!response.ok) throw new Error(`Supabase research ${table} request failed (${response.status}): ${text}`);
-    return text ? JSON.parse(text) : [];
+    return body;
   }
 
   insertRun(run) {
-    return this.request('digital_asset_research_runs', { method: 'POST', body: run });
+    return this.request('digital_asset_research_runs', {
+      method: 'POST',
+      body: run,
+      prefer: 'return=minimal',
+    });
   }
 
   updateRun(runId, patch) {
@@ -39,6 +62,7 @@ export class DigitalAssetResearchStore {
       method: 'PATCH',
       query: { run_id: `eq.${runId}` },
       body: patch,
+      prefer: 'return=minimal',
     });
   }
 
@@ -46,7 +70,7 @@ export class DigitalAssetResearchStore {
     return this.request('digital_asset_research_observations', {
       method: 'POST',
       body: observations,
-      prefer: 'resolution=ignore-duplicates,return=representation',
+      prefer: 'resolution=ignore-duplicates,return=minimal',
     });
   }
 
@@ -76,7 +100,7 @@ export class DigitalAssetResearchStore {
     return this.request('digital_asset_research_opportunities', {
       method: 'POST',
       body: row,
-      prefer: 'resolution=merge-duplicates,return=representation',
+      prefer: 'resolution=merge-duplicates,return=minimal',
       query: { on_conflict: 'recommendation_id' },
     });
   }
@@ -93,6 +117,7 @@ export class DigitalAssetResearchStore {
       method: 'PATCH',
       query: { recommendation_id: `eq.${recommendationId}` },
       body: patch,
+      prefer: 'return=minimal',
     });
   }
 
@@ -100,7 +125,7 @@ export class DigitalAssetResearchStore {
     return this.request('digital_asset_research_reviews', {
       method: 'POST',
       query: { on_conflict: 'discord_interaction_id' },
-      prefer: 'resolution=ignore-duplicates,return=representation',
+      prefer: 'resolution=ignore-duplicates,return=minimal',
       body: row,
     });
   }

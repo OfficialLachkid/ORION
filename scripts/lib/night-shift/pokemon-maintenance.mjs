@@ -37,6 +37,8 @@ function createPublicationStore(config) {
   return new SupabasePublicationStore({
     supabaseUrl: config.env.SUPABASE_URL,
     apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY,
+    egressLedgerDir: config.runtimePaths?.supabaseEgressLedgerDir,
+    telemetryService: 'night_shift_video_maintenance',
   });
 }
 

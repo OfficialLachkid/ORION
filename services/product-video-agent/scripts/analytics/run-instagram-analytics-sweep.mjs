@@ -26,6 +26,7 @@
 
 import { loadRuntimeConfig, projectRoot } from '../../../lib/runtime-config.mjs';
 import { createSupabaseApiHeaders } from '../../../lib/supabase-api-headers.mjs';
+import { recordSupabaseEgress } from '../../../lib/supabase-egress-ledger.mjs';
 import { loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
 import {
@@ -58,7 +59,18 @@ async function supabaseFetch(config, path) {
     headers: createSupabaseApiHeaders(key),
   });
   if (!response.ok) throw new Error(`Supabase ${path} → ${response.status}: ${(await response.text()).slice(0, 400)}`);
-  return response.json();
+  const body = await response.json();
+  await recordSupabaseEgress({
+    ledgerDir: config.runtimePaths?.supabaseEgressLedgerDir,
+    service: 'instagram_analytics',
+    resource: 'video_publications',
+    queryClass: 'published_instagram_publications',
+    method: 'GET',
+    response,
+    responseText: JSON.stringify(body),
+    body,
+  });
+  return body;
 }
 
 async function main() {
@@ -68,6 +80,8 @@ async function main() {
   const store = new SupabasePublicationStore({
     supabaseUrl: config.env.SUPABASE_URL,
     apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY,
+    egressLedgerDir: config.runtimePaths?.supabaseEgressLedgerDir,
+    telemetryService: 'instagram_analytics',
   });
 
   const sinceIso = new Date(Date.now() - args.sinceDays * 24 * 60 * 60 * 1000).toISOString();

@@ -1,5 +1,6 @@
 import { getStringOption } from './ruflo-wrapper-utils.mjs';
 import { createSupabaseApiHeaders } from '../../services/lib/supabase-api-headers.mjs';
+import { recordSupabaseEgress } from '../../services/lib/supabase-egress-ledger.mjs';
 
 export const DEFAULT_MEMORY_TABLE = 'orion_memory_records';
 export const DEFAULT_SYNC_RUNS_TABLE = 'orion_memory_sync_runs';
@@ -50,7 +51,12 @@ export async function retryTransientSupabaseOperation(operation, options = {}) {
 }
 
 export async function fetchJson(url, options = {}) {
-  const response = await fetch(url, options);
+  const {
+    egressTelemetry = null,
+    fetchImpl = globalThis.fetch,
+    ...fetchOptions
+  } = options;
+  const response = await fetchImpl(url, fetchOptions);
   const text = await response.text();
   let body = null;
 
@@ -61,6 +67,15 @@ export async function fetchJson(url, options = {}) {
       body = text;
     }
   }
+
+  await recordSupabaseEgress({
+    ...egressTelemetry,
+    url,
+    method: fetchOptions.method || 'GET',
+    response,
+    responseText: text,
+    body,
+  });
 
   if (!response.ok) {
     throw new Error(`Supabase request failed (${response.status}): ${text}`);
