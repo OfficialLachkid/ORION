@@ -25,7 +25,7 @@
 import { getGmailThread, gmailReadScopeAvailable } from '../../services/gmail/src/read.mjs';
 import { resolveGmailConfig } from '../../services/gmail/src/config.mjs';
 import { classifyThreadReply } from './reply-classifier.mjs';
-import { fetchLeads, updateLead } from './leadgen-supabase.mjs';
+import { REPLY_DETECTION_LEAD_SELECT, fetchLeads, updateLead } from './leadgen-supabase.mjs';
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
@@ -69,7 +69,12 @@ export async function detectReplies(config) {
     return { available: false, replies: 0, bounces: 0, autoReplies: 0, optOuts: 0, softOptOutFlags: 0, checked: 0 };
   }
 
-  const sent = await fetchLeads({ status: 'sent', limit: 500 }).catch(() => []);
+  const sent = await fetchLeads({
+    status: 'sent',
+    limit: 500,
+    select: REPLY_DETECTION_LEAD_SELECT,
+    queryClass: 'reply_detection_candidates',
+  }).catch(() => []);
   // Only leads that carry a gmail_thread_id (captured at send time) and haven't
   // already been marked as responded.
   const candidates = sent.filter((l) => l.qualification?.gmail_thread_id && !l.responded_at);

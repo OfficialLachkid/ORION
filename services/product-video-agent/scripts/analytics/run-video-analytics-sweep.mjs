@@ -855,6 +855,8 @@ export async function runVideoAnalyticsSweep(options = {}, dependencies = {}) {
     supabaseUrl: runtimeConfig.env.SUPABASE_URL,
     apiKey: runtimeConfig.env.SUPABASE_SECRET_KEY || runtimeConfig.env.SUPABASE_PUBLISHABLE_KEY,
     fetchImpl,
+    egressLedgerDir: runtimeConfig.runtimePaths?.supabaseEgressLedgerDir,
+    telemetryService: 'video_analytics',
   });
 
   const state = await loadState(statePath);

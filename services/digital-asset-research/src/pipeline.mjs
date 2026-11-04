@@ -56,6 +56,7 @@ function createStore(options) {
     apiKey: options.runtimeConfig?.env?.SUPABASE_SECRET_KEY
       || options.runtimeConfig?.env?.SUPABASE_SERVICE_ROLE_KEY,
     fetchImpl: options.fetchImpl,
+    egressLedgerDir: options.runtimeConfig?.runtimePaths?.supabaseEgressLedgerDir,
   });
 }
 

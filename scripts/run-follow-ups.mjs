@@ -18,7 +18,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import process from 'node:process';
 import { loadRuntimeConfig } from '../services/lib/runtime-config.mjs';
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
-import { fetchLeads, updateLead } from './lib/leadgen-supabase.mjs';
+import { FOLLOW_UP_LEAD_SELECT, fetchLeads, updateLead } from './lib/leadgen-supabase.mjs';
 import { draftFollowUp } from '../services/leadgen-qualifier/src/follow-up-drafter.mjs';
 import { hasValidEmailTld } from './lib/email-tld-allowlist.mjs';
 import { getGmailThread, gmailReadScopeAvailable } from '../services/gmail/src/read.mjs';
@@ -91,7 +91,12 @@ async function main() {
   }
 
   const cutoff = Date.now() - waitMinutes * 60 * 1000;
-  const sent = await fetchLeads({ status: 'sent', limit: 500 });
+  const sent = await fetchLeads({
+    status: 'sent',
+    limit: 500,
+    select: FOLLOW_UP_LEAD_SELECT,
+    queryClass: 'follow_up_candidates',
+  });
   const eligible = sent.filter((l) => {
     if (l.responded_at) return false; // replied — stop
     if (!l.contact_email || !l.qualification?.gmail_thread_id) return false;

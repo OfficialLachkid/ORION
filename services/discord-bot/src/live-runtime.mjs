@@ -216,6 +216,8 @@ export async function rehydratePokeQuizzReviewTask(decision, config, dependencie
     const store = dependencies.publicationStore || new SupabasePublicationStore({
       supabaseUrl: config.env.SUPABASE_URL,
       apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY || '',
+      egressLedgerDir: config.runtimePaths?.supabaseEgressLedgerDir,
+      telemetryService: 'discord_bot',
     });
     const profiles = await profilesLoader(POKE_QUIZZ_CHANNELS_PATH, { projectRoot });
 
