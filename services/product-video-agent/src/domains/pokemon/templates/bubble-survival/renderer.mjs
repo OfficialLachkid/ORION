@@ -168,6 +168,7 @@ export function resolveDefeatedRosterEntries({ plan, template, videoTime }) {
   const horizontalGap = Math.max(12, Number(config.horizontal_gap ?? 92));
   const columnOffset = arenaRadius + horizontalGap;
   const verticalGap = Math.max(size + 4, Number(config.vertical_gap ?? 92));
+  const layout = config.layout === 'top-bottom' ? 'top-bottom' : 'side-columns';
   const events = (Array.isArray(plan.simulation.events) ? plan.simulation.events : [])
     .filter((event) => event?.type === 'eliminated' && Number.isFinite(Number(event.time)))
     .sort((left, right) => Number(left.time) - Number(right.time));
@@ -180,14 +181,35 @@ export function resolveDefeatedRosterEntries({ plan, template, videoTime }) {
     const sideIndex = Math.floor(index / 2);
     const side = index % 2 === 0 ? -1 : 1;
     const slotsPerSide = Math.ceil(events.length / 2);
-    const y = centerY + ((sideIndex - ((slotsPerSide - 1) / 2)) * verticalGap);
+    const x = layout === 'top-bottom'
+      ? centerX + ((sideIndex - ((slotsPerSide - 1) / 2)) * horizontalGap)
+      : centerX + (side * columnOffset);
+    const y = layout === 'top-bottom'
+      ? Number(side < 0 ? config.top_y : config.bottom_y)
+      : centerY + ((sideIndex - ((slotsPerSide - 1) / 2)) * verticalGap);
+    if (layout === 'top-bottom') {
+      const frameWidth = Number(plan.video.frame_width);
+      const frameHeight = Number(plan.video.frame_height);
+      const arenaClearance = Math.max(0, Number(config.arena_clearance ?? 10));
+      const frameMargin = Math.max(0, Number(config.frame_margin ?? 8));
+      const rosterRadius = (size * 0.54) + 4;
+      const overlapsArena = Math.hypot(x - centerX, y - centerY)
+        < arenaRadius + rosterRadius + arenaClearance;
+      const exceedsFrame = !Number.isFinite(x)
+        || !Number.isFinite(y)
+        || x - rosterRadius < frameMargin
+        || x + rosterRadius > frameWidth - frameMargin
+        || y - rosterRadius < frameMargin
+        || y + rosterRadius > frameHeight - frameMargin;
+      if (overlapsArena || exceedsFrame) return [];
+    }
     const subjectIndex = plan.selection.selected_subjects.findIndex(
       (subject) => subject.id === event.bubble_id,
     );
     return [{
       subject_id: event.bubble_id,
       subject_index: subjectIndex,
-      x: centerX + (side * columnOffset),
+      x,
       y,
       size,
       scale,

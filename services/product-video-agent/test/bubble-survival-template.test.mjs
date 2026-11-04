@@ -29,6 +29,7 @@ import {
   resizeSprite,
   resolveCountdownVisualState,
   resolveDefeatedBubbleScale,
+  resolveDefeatedRosterEntries,
   wrapTextInsideFrame,
 } from '../src/domains/pokemon/templates/bubble-survival/renderer.mjs';
 import {
@@ -147,10 +148,89 @@ test('template rotates through the complete Bubble Survival pool catalog', async
   assert.equal(template.presentation.showdown_title_animation.wobble_enabled, true);
   assert.equal(template.presentation.showdown_title_animation.wobble_period_seconds, 2);
   assert.ok(template.presentation.showdown_title_animation.neon_palette.length >= 7);
+  assert.equal(template.presentation.defeated_roster.enabled, true);
+  assert.equal(template.presentation.defeated_roster.layout, 'top-bottom');
   assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'pentagon'), true);
   assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'trefoil'), true);
   assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'quatrefoil'), true);
   assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'pokemon-silhouette'), true);
+});
+
+test('short defeated roster uses safe top and bottom slots outside the arena', () => {
+  const plan = {
+    video: { frame_width: 540, frame_height: 960, intro_seconds: 1.16 },
+    simulation: {
+      config: {
+        center_x: 270,
+        center_y: 450,
+        arena_radius: 235,
+        defeat_pop_seconds: 0.1,
+        defeat_shrink_seconds: 0.5,
+      },
+      events: [
+        { type: 'eliminated', time: 1, bubble_id: 'a' },
+        { type: 'eliminated', time: 2, bubble_id: 'b' },
+      ],
+    },
+    selection: { selected_subjects: [{ id: 'a' }, { id: 'b' }] },
+  };
+  const defeatedRoster = {
+    enabled: true,
+    layout: 'top-bottom',
+    sprite_size: 60,
+    horizontal_gap: 88,
+    top_y: 155,
+    bottom_y: 748,
+    arena_clearance: 10,
+    frame_margin: 8,
+  };
+  const entries = resolveDefeatedRosterEntries({
+    plan,
+    template: { presentation: { defeated_roster: defeatedRoster } },
+    videoTime: 5,
+  });
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries.map((entry) => entry.y), [155, 748]);
+  for (const entry of entries) {
+    const rosterRadius = (entry.size * 0.54) + 4;
+    assert.ok(
+      Math.hypot(entry.x - 270, entry.y - 450)
+        >= 235 + rosterRadius + defeatedRoster.arena_clearance,
+    );
+  }
+});
+
+test('short defeated roster omits slots that would overlap the arena', () => {
+  const plan = {
+    video: { frame_width: 540, frame_height: 960, intro_seconds: 0 },
+    simulation: {
+      config: {
+        center_x: 270,
+        center_y: 450,
+        arena_radius: 235,
+        defeat_pop_seconds: 0.1,
+        defeat_shrink_seconds: 0.5,
+      },
+      events: [{ type: 'eliminated', time: 0, bubble_id: 'a' }],
+    },
+    selection: { selected_subjects: [{ id: 'a' }] },
+  };
+  const entries = resolveDefeatedRosterEntries({
+    plan,
+    template: {
+      presentation: {
+        defeated_roster: {
+          enabled: true,
+          layout: 'top-bottom',
+          sprite_size: 60,
+          top_y: 450,
+          bottom_y: 450,
+        },
+      },
+    },
+    videoTime: 2,
+  });
+  assert.deepEqual(entries, []);
 });
 
 test('swept circle-to-tail collision detects crossings between fixed steps', () => {
