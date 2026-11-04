@@ -156,6 +156,27 @@ test('template rotates through the complete Bubble Survival pool catalog', async
   assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'pokemon-silhouette'), true);
 });
 
+test('Bubble Showdown participates in every Pokemon channel mix at its rollout weight', async () => {
+  const expectedWeights = new Map([
+    ['poke-quizz-youtube', 2],
+    ['trivamon-youtube', 2],
+    ['poke-guess-youtube', 1],
+    ['dexguess-youtube', 1],
+    ['proffmon-youtube', 1],
+  ]);
+  for (const [channelId, expectedWeight] of expectedWeights) {
+    const channel = JSON.parse(await readFile(join(
+      process.cwd(),
+      `services/product-video-agent/config/channels/${channelId}.json`,
+    ), 'utf8'));
+    const bubbleShowdown = channel.templates['pokemon.bubble-survival.v1'];
+    assert.equal(bubbleShowdown.enabled, true, channelId);
+    assert.equal(bubbleShowdown.manual_generate, true, channelId);
+    assert.equal(bubbleShowdown.night_shift, true, channelId);
+    assert.equal(bubbleShowdown.weight, expectedWeight, channelId);
+  }
+});
+
 test('short defeated roster uses safe top and bottom slots outside the arena', () => {
   const plan = {
     video: { frame_width: 540, frame_height: 960, intro_seconds: 1.16 },
