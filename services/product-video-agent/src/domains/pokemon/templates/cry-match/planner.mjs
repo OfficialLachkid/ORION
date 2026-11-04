@@ -14,6 +14,7 @@ import {
   selectSeededFile,
 } from '../../../../poke-quizz-asset-inventory.mjs';
 import { buildNormalAndPixelBackgroundPool } from '../shared/background-pools.mjs';
+import { selectPokemonSpeciesRepresentatives } from '../shared/pokemon-subject-pools.mjs';
 import { normalizeBaseStats } from '../tournament/battle-logic.mjs';
 import { selectCryMatchRoundPools } from './subject-pools.mjs';
 
@@ -231,18 +232,8 @@ function selectEligibleSubjects(pokedexRows = [], generationScope = []) {
     ));
 }
 
-function collapseDuplicateSubjects(subjects = []) {
-  const seen = new Set();
-  const unique = [];
-  for (const subject of subjects) {
-    const key = normalizeSlug(subject.slug || subject.name || subject.id || subject.sprite_path);
-    if (!key || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    unique.push(subject);
-  }
-  return unique;
+function collapseDuplicateSubjects(subjects = [], random = 0) {
+  return selectPokemonSpeciesRepresentatives(subjects, random);
 }
 
 function buildTypeDisplay(types = []) {
@@ -461,11 +452,13 @@ export async function planPokemonCryMatchChallenge({
   );
   const countdownFrom = ensurePositiveInteger(template?.layout?.timer?.countdown_from, 4);
   const countdownTo = Number.parseInt(String(template?.layout?.timer?.countdown_to ?? 0), 10);
-  const eligibleSubjects = collapseDuplicateSubjects(
-    selectEligibleSubjects(pokedexRows, template?.selection_rules?.generation_scope || []),
+  const eligibleSubjects = selectEligibleSubjects(
+    pokedexRows,
+    template?.selection_rules?.generation_scope || [],
   );
-  if (eligibleSubjects.length < candidateCount) {
-    throw new Error(`Cry Match requires at least ${candidateCount} Pokemon with local sprites, found ${eligibleSubjects.length}.`);
+  const eligibleSpeciesCount = collapseDuplicateSubjects(eligibleSubjects, random).length;
+  if (eligibleSpeciesCount < candidateCount) {
+    throw new Error(`Cry Match requires at least ${candidateCount} Pokemon with local sprites, found ${eligibleSpeciesCount}.`);
   }
   const roundSubjectPools = selectCryMatchRoundPools({
     eligibleSubjects,

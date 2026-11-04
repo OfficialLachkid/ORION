@@ -14,6 +14,7 @@ import {
   selectSeededFile,
   selectTypeIconSet,
 } from '../../../../poke-quizz-asset-inventory.mjs';
+import { selectPokemonSpeciesRepresentatives } from '../shared/pokemon-subject-pools.mjs';
 
 const TYPE_THEMED_BACKGROUND_FOLDER_HINTS = Object.freeze({
   fire: ['fire-backgrounds'],
@@ -213,13 +214,6 @@ function readSubjectMetadataValue(subject, keys = []) {
   return undefined;
 }
 
-function readSubjectPokemonApiMetadata(subject, key) {
-  const pokemonApi = subject?.metadata?.pokemon_api && typeof subject.metadata.pokemon_api === 'object'
-    ? subject.metadata.pokemon_api
-    : {};
-  return pokemonApi[key];
-}
-
 function isTruthyMetadataFlag(value) {
   if (value === true) return true;
   const normalized = String(value || '').trim().toLowerCase();
@@ -264,107 +258,8 @@ function isFinalEvolutionLikeSubject(subject) {
   return evolutionStage === 'final' || evolutionStage === 'fully_evolved';
 }
 
-function normalizeSubjectSlug(subject) {
-  return String(
-    readSubjectPokemonApiMetadata(subject, 'pokemon_name')
-    || subject?.slug
-    || '',
-  ).trim().toLowerCase();
-}
-
-function isMegaLikeSubject(subject) {
-  if (isTruthyMetadataFlag(readSubjectMetadataValue(subject, [
-    'is_mega',
-    'isMega',
-  ]))) {
-    return true;
-  }
-  if (readSubjectPokemonApiMetadata(subject, 'is_mega') === true) {
-    return true;
-  }
-  return normalizeSubjectSlug(subject).includes('-mega');
-}
-
-function isGigantamaxLikeSubject(subject) {
-  const formName = String(
-    readSubjectPokemonApiMetadata(subject, 'form_name')
-    || readSubjectMetadataValue(subject, ['form_name', 'formName'])
-    || '',
-  ).trim().toLowerCase();
-  return formName === 'gigantamax' || normalizeSubjectSlug(subject).endsWith('-gmax');
-}
-
-function isDefaultFormLikeSubject(subject) {
-  if (subject?.is_default_form === true) {
-    return true;
-  }
-  return readSubjectPokemonApiMetadata(subject, 'is_default_form') === true;
-}
-
-function isBattleOnlyLikeSubject(subject) {
-  return readSubjectPokemonApiMetadata(subject, 'is_battle_only') === true;
-}
-
-function subjectVariantPriority(subject) {
-  if (isMegaLikeSubject(subject)) {
-    return 0;
-  }
-  if (isDefaultFormLikeSubject(subject) && !isGigantamaxLikeSubject(subject)) {
-    return 1;
-  }
-  if (!isBattleOnlyLikeSubject(subject) && !isGigantamaxLikeSubject(subject)) {
-    return 2;
-  }
-  if (isGigantamaxLikeSubject(subject)) {
-    return 3;
-  }
-  if (isBattleOnlyLikeSubject(subject)) {
-    return 4;
-  }
-  return 5;
-}
-
-function comparePreferredSubjectVariant(left, right) {
-  const variantPriority = subjectVariantPriority(left) - subjectVariantPriority(right);
-  if (variantPriority !== 0) {
-    return variantPriority;
-  }
-
-  const leftOrder = Number(readSubjectPokemonApiMetadata(left, 'order') || Number.MAX_SAFE_INTEGER);
-  const rightOrder = Number(readSubjectPokemonApiMetadata(right, 'order') || Number.MAX_SAFE_INTEGER);
-  if (leftOrder !== rightOrder) {
-    return leftOrder - rightOrder;
-  }
-
-  const leftFormOrder = Number(readSubjectPokemonApiMetadata(left, 'form_order') || Number.MAX_SAFE_INTEGER);
-  const rightFormOrder = Number(readSubjectPokemonApiMetadata(right, 'form_order') || Number.MAX_SAFE_INTEGER);
-  if (leftFormOrder !== rightFormOrder) {
-    return leftFormOrder - rightFormOrder;
-  }
-
-  return String(left.slug || '').localeCompare(String(right.slug || ''));
-}
-
-function collapseSubjectVariants(subjects = []) {
-  const groupedSubjects = new Map();
-
-  for (const subject of subjects || []) {
-    const groupKey = String(subject?.national_dex_number || subject?.id || '').trim();
-    if (!groupKey) {
-      continue;
-    }
-    if (!groupedSubjects.has(groupKey)) {
-      groupedSubjects.set(groupKey, []);
-    }
-    groupedSubjects.get(groupKey).push(subject);
-  }
-
-  return [...groupedSubjects.values()]
-    .map((variants) => [...variants].sort(comparePreferredSubjectVariant)[0])
-    .sort((left, right) => (
-      (left.national_dex_number - right.national_dex_number)
-      || String(left.slug || '').localeCompare(String(right.slug || ''))
-    ));
+function collapseSubjectVariants(subjects = [], random = 0) {
+  return selectPokemonSpeciesRepresentatives(subjects, random);
 }
 
 function subjectSelectionPriority(subject) {
@@ -766,7 +661,7 @@ export async function planPokemonTypeChallenge({
   const localizedMatches = selectedPair.matches.filter((subject) => subject.sprite_path);
   const selectableSubjects = collapseSubjectVariants(localizedMatches.length > 0
     ? localizedMatches
-    : selectedPair.matches);
+    : selectedPair.matches, random);
   const prioritizedSelectableSubjects = prioritizeSelectableSubjects(selectableSubjects, random);
   const selectedSubjectCount = Math.max(
     config.selectedSubjectsMin,

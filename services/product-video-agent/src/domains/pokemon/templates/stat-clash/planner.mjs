@@ -13,6 +13,7 @@ import {
   selectSeededFile,
 } from '../../../../poke-quizz-asset-inventory.mjs';
 import { buildNormalAndPixelBackgroundPool } from '../shared/background-pools.mjs';
+import { selectPokemonSpeciesRepresentatives } from '../shared/pokemon-subject-pools.mjs';
 import { normalizeBaseStats } from '../tournament/battle-logic.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
@@ -324,18 +325,8 @@ function selectEligibleSubjects(pokedexRows = [], generationScope = []) {
     ));
 }
 
-function collapseDuplicateSubjects(subjects = []) {
-  const seen = new Set();
-  const unique = [];
-  for (const subject of subjects) {
-    const key = normalizeSlug(subject.slug || subject.name || subject.id || subject.sprite_path);
-    if (!key || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    unique.push(subject);
-  }
-  return unique;
+function collapseDuplicateSubjects(subjects = [], random = 0) {
+  return selectPokemonSpeciesRepresentatives(subjects, random);
 }
 
 function resolveStatClashPoolVariants(template = {}) {
@@ -438,6 +429,7 @@ function selectConfiguredSubjectPool({
     }
     const forcedSubjects = collapseDuplicateSubjects(
       filterSubjectsForStatClashPool(eligibleSubjects, forcedPool),
+      random,
     );
     if (forcedSubjects.length < candidateCount) {
       throw new Error(
@@ -454,7 +446,7 @@ function selectConfiguredSubjectPool({
   const configuredPools = poolVariants
     .map((pool) => ({
       ...pool,
-      subjects: collapseDuplicateSubjects(filterSubjectsForStatClashPool(eligibleSubjects, pool)),
+      subjects: collapseDuplicateSubjects(filterSubjectsForStatClashPool(eligibleSubjects, pool), random),
     }))
     .filter((pool) => pool.subjects.length >= candidateCount);
   const selectedPool = selectWeightedStatClashPool(configuredPools, random);
@@ -467,7 +459,7 @@ function selectConfiguredSubjectPool({
     selector: 'all',
     weight: 1,
     forced: false,
-    subjects: eligibleSubjects,
+    subjects: collapseDuplicateSubjects(eligibleSubjects, random),
   };
 }
 
@@ -751,11 +743,13 @@ export async function planPokemonStatClashChallenge({
     maxWinnerMargin: ensureFiniteNumber(template?.selection_rules?.max_winner_margin, DEFAULT_MAX_WINNER_MARGIN),
     maxStatSpread: ensureFiniteNumber(template?.selection_rules?.max_stat_spread, DEFAULT_MAX_STAT_SPREAD),
   };
-  const eligibleSubjects = collapseDuplicateSubjects(
-    selectEligibleSubjects(pokedexRows, template?.selection_rules?.generation_scope || []),
+  const eligibleSubjects = selectEligibleSubjects(
+    pokedexRows,
+    template?.selection_rules?.generation_scope || [],
   );
-  if (eligibleSubjects.length < candidateCount) {
-    throw new Error(`Stat Clash requires at least ${candidateCount} Pokemon with local sprites and base stats, found ${eligibleSubjects.length}.`);
+  const eligibleSpeciesCount = collapseDuplicateSubjects(eligibleSubjects, random).length;
+  if (eligibleSpeciesCount < candidateCount) {
+    throw new Error(`Stat Clash requires at least ${candidateCount} Pokemon with local sprites and base stats, found ${eligibleSpeciesCount}.`);
   }
   const selectedSubjectPool = selectConfiguredSubjectPool({
     eligibleSubjects,

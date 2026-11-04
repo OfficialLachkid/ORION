@@ -1,4 +1,7 @@
-import { filterPokemonSubjectsForPool } from '../shared/pokemon-subject-pools.mjs';
+import {
+  filterPokemonSubjectsForPool,
+  selectPokemonSpeciesRepresentatives,
+} from '../shared/pokemon-subject-pools.mjs';
 
 function normalizeSlug(value) {
   return String(value || '').trim().toLowerCase();
@@ -8,16 +11,8 @@ export function filterSubjectsForCryMatchPool(subjects = [], pool = {}) {
   return filterPokemonSubjectsForPool(subjects, pool?.selector || 'all');
 }
 
-function collapseDuplicateSubjects(subjects = []) {
-  const seen = new Set();
-  const unique = [];
-  for (const subject of subjects) {
-    const key = normalizeSlug(subject?.slug || subject?.name || subject?.id || subject?.sprite_path);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    unique.push(subject);
-  }
-  return unique;
+function collapseDuplicateSubjects(subjects = [], random = 0) {
+  return selectPokemonSpeciesRepresentatives(subjects, random);
 }
 
 function ensurePositiveInteger(value, fallback) {
@@ -63,7 +58,7 @@ export function selectCryMatchRoundPools({
   );
   const evaluatedPools = configuredPools.map((pool) => ({
     ...pool,
-    subjects: collapseDuplicateSubjects(filterSubjectsForCryMatchPool(eligibleSubjects, pool)),
+    subjects: collapseDuplicateSubjects(filterSubjectsForCryMatchPool(eligibleSubjects, pool), random),
   }));
 
   if (forcedPoolKey) {
@@ -90,7 +85,7 @@ export function selectCryMatchRoundPools({
     label: 'Mixed Pokemon',
     selector: 'all',
     weight: 1,
-    subjects: collapseDuplicateSubjects(eligibleSubjects),
+    subjects: collapseDuplicateSubjects(eligibleSubjects, random),
     forced: false,
   };
   const pools = viablePools.length > 0 ? viablePools : [fallbackPool];

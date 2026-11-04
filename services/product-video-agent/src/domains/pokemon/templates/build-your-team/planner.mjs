@@ -18,6 +18,7 @@ import { normalizeBaseStats } from '../tournament/battle-logic.mjs';
 import {
   filterPokemonSubjectsForPool,
   isStarterPokemonSubject,
+  selectPokemonSpeciesRepresentatives,
 } from '../shared/pokemon-subject-pools.mjs';
 
 const DEFAULT_ROUND_COUNT = 6;
@@ -173,18 +174,8 @@ function selectEligibleSubjects(pokedexRows = [], generationScope = []) {
     ));
 }
 
-function collapseDuplicateSubjects(subjects = []) {
-  const seen = new Set();
-  const unique = [];
-  for (const subject of subjects) {
-    const key = normalizeSlug(subject.slug || subject.name || subject.id || subject.sprite_path);
-    if (!key || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    unique.push(subject);
-  }
-  return unique;
+function collapseDuplicateSubjects(subjects = [], random = 0) {
+  return selectPokemonSpeciesRepresentatives(subjects, random);
 }
 
 function resolveBuildYourTeamPoolVariants(template = {}) {
@@ -215,13 +206,14 @@ function filterSubjectsForBuildYourTeamPool(subjects = [], pool = {}) {
 
 function buildRoundPoolSequence(template, eligibleSubjects, candidateCount, roundCount, random) {
   const configuredPools = resolveBuildYourTeamPoolVariants(template);
+  const mixedSubjects = collapseDuplicateSubjects(eligibleSubjects, random);
   const viablePools = configuredPools.map((pool) => {
-    const subjects = collapseDuplicateSubjects(filterSubjectsForBuildYourTeamPool(eligibleSubjects, pool));
+    const subjects = collapseDuplicateSubjects(filterSubjectsForBuildYourTeamPool(eligibleSubjects, pool), random);
     return subjects.length >= candidateCount
       ? { ...pool, subjects, fallback: false }
       : {
         ...pool,
-        subjects: eligibleSubjects,
+        subjects: mixedSubjects,
         fallback: true,
         fallback_subject_count: subjects.length,
       };
@@ -235,7 +227,7 @@ function buildRoundPoolSequence(template, eligibleSubjects, candidateCount, roun
       prompt_color: 'white',
       selector: 'all',
       weight: 1,
-      subjects: eligibleSubjects,
+      subjects: mixedSubjects,
       fallback: false,
     }];
   const shuffledPools = shuffle(pools, random);
@@ -646,11 +638,13 @@ export async function planPokemonBuildYourTeamChallenge({
   );
   const countdownFrom = ensurePositiveNumber(template?.layout?.timer?.countdown_from, 4);
   const countdownTo = Number.parseInt(String(template?.layout?.timer?.countdown_to ?? 0), 10);
-  const eligibleSubjects = collapseDuplicateSubjects(
-    selectEligibleSubjects(pokedexRows, template?.selection_rules?.generation_scope || []),
+  const eligibleSubjects = selectEligibleSubjects(
+    pokedexRows,
+    template?.selection_rules?.generation_scope || [],
   );
-  if (eligibleSubjects.length < candidateCount) {
-    throw new Error(`Build Your Team requires at least ${candidateCount} Pokemon with local sprites, found ${eligibleSubjects.length}.`);
+  const eligibleSpeciesCount = collapseDuplicateSubjects(eligibleSubjects, random).length;
+  if (eligibleSpeciesCount < candidateCount) {
+    throw new Error(`Build Your Team requires at least ${candidateCount} Pokemon with local sprites, found ${eligibleSpeciesCount}.`);
   }
 
   const backgroundPool = resolveBackgroundPool(inventory);

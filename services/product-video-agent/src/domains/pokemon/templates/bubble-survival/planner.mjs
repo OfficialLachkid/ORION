@@ -184,12 +184,20 @@ export async function planPokemonBubbleSurvival({
   let readablePool;
   if (configuredCategory && configuredCategory.toLowerCase() !== 'random') {
     category = normalizeBubbleSurvivalCategory(configuredCategory);
-    readablePool = resolveBubbleSurvivalCategoryPool(readableRows, category);
+    readablePool = resolveBubbleSurvivalCategoryPool(
+      readableRows,
+      category,
+      createSeededRandom(`${seed}|pool-forms|${category}`),
+    );
   } else {
     const viablePools = resolveConfiguredPools(template)
       .map((pool) => ({
         ...pool,
-        subjects: resolveBubbleSurvivalCategoryPool(readableRows, pool.category),
+        subjects: resolveBubbleSurvivalCategoryPool(
+          readableRows,
+          pool.category,
+          createSeededRandom(`${seed}|pool-forms|${pool.category}`),
+        ),
       }))
       .filter((pool) => pool.subjects.length >= pokemonCount);
     if (viablePools.length === 0) {

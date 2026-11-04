@@ -10,6 +10,7 @@ import {
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
 import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selection-state.mjs';
+import { selectPokemonSpeciesRepresentatives } from '../shared/pokemon-subject-pools.mjs';
 
 const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
 const DEFAULT_SHINY_SPARKLE_SCALE_MULTIPLIER = 1.35;
@@ -507,12 +508,12 @@ export async function planPokemonTypeQuizChallenge({
     1.12,
   );
 
-  const eligibleSubjects = (Array.isArray(pokedexRows) ? pokedexRows : [])
+  const eligibleSubjects = selectPokemonSpeciesRepresentatives((Array.isArray(pokedexRows) ? pokedexRows : [])
     .filter((row) => row && typeof row === 'object')
     .filter((row) => String(row.name || '').trim())
     .filter((row) => Array.isArray(row.types) && row.types.length > 0)
     .filter((row) => String(row.sprite_path || '').trim())
-    .filter((row) => matchesTypeCardinality(row.types, typeCardinalityMode));
+    .filter((row) => matchesTypeCardinality(row.types, typeCardinalityMode)), random);
   if (eligibleSubjects.length < roundCount) {
     throw new Error(`No sufficient localized Pokemon rows are available for a ${typeCardinalityMode} type quiz. Need ${roundCount}, found ${eligibleSubjects.length}.`);
   }

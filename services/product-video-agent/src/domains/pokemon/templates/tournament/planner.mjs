@@ -19,6 +19,7 @@ import {
   resolveTournamentTypeAdvantage,
   sumBaseStats,
 } from './battle-logic.mjs';
+import { selectPokemonSpeciesRepresentatives } from '../shared/pokemon-subject-pools.mjs';
 import { selectTournamentBattleStat } from './battle-stat.mjs';
 
 const DEFAULT_PARTICIPANT_COUNT = 4;
@@ -397,18 +398,8 @@ function selectEligibleCombatants(pokedexRows = [], generationScope = []) {
     ));
 }
 
-function collapseDuplicateCombatants(subjects = []) {
-  const seen = new Set();
-  const unique = [];
-  for (const subject of subjects) {
-    const key = normalizeSlug(subject.slug || subject.name || subject.id);
-    if (!key || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    unique.push(subject);
-  }
-  return unique;
+function collapseDuplicateCombatants(subjects = [], random = 0) {
+  return selectPokemonSpeciesRepresentatives(subjects, random);
 }
 
 function resolveTournamentPoolVariants(template = {}) {
@@ -829,18 +820,23 @@ export async function planPokemonTournamentChallenge({
     template?.selection_rules?.participant_count,
     DEFAULT_PARTICIPANT_COUNT,
   );
-  const eligibleCombatants = collapseDuplicateCombatants(
-    selectEligibleCombatants(pokedexRows, template?.selection_rules?.generation_scope || []),
+  const eligibleCombatants = selectEligibleCombatants(
+    pokedexRows,
+    template?.selection_rules?.generation_scope || [],
   );
+  const mixedCombatants = collapseDuplicateCombatants(eligibleCombatants, random);
 
-  if (eligibleCombatants.length < participantCount) {
-    throw new Error(`Tournament requires at least ${participantCount} Pokemon with local sprites and base stats, found ${eligibleCombatants.length}.`);
+  if (mixedCombatants.length < participantCount) {
+    throw new Error(`Tournament requires at least ${participantCount} Pokemon with local sprites and base stats, found ${mixedCombatants.length}.`);
   }
   const configuredPools = resolveTournamentPoolVariants(template);
   const availablePools = configuredPools
     .map((pool) => ({
       ...pool,
-      subjects: collapseDuplicateCombatants(filterCombatantsForTournamentPool(eligibleCombatants, pool, template)),
+      subjects: collapseDuplicateCombatants(
+        filterCombatantsForTournamentPool(eligibleCombatants, pool, template),
+        random,
+      ),
     }))
     .filter((pool) => pool.subjects.length >= participantCount);
   const selectedPool = selectWeightedTournamentPool(availablePools, random) || {
@@ -848,7 +844,7 @@ export async function planPokemonTournamentChallenge({
     label: 'All Combatants',
     selector: 'all',
     weight: 1,
-    subjects: eligibleCombatants,
+    subjects: mixedCombatants,
   };
   const balancedSelection = selectBalancedCombatants(
     selectedPool.subjects,
