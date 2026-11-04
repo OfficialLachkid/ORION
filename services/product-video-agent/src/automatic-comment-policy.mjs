@@ -81,6 +81,30 @@ function platformSettings(source = {}, platform = '') {
   return settings && typeof settings === 'object' && !Array.isArray(settings) ? settings : {};
 }
 
+const FOLLOW_WORDING_PLATFORMS = new Set([
+  'instagram',
+  'instagram_reels',
+  'tiktok',
+  'tiktok_video',
+]);
+
+function preserveWordCase(source, replacement) {
+  if (source === source.toUpperCase()) return replacement.toUpperCase();
+  if (source === source.toLowerCase()) return replacement.toLowerCase();
+  if (source[0] === source[0]?.toUpperCase()) {
+    return `${replacement[0].toUpperCase()}${replacement.slice(1).toLowerCase()}`;
+  }
+  return replacement;
+}
+
+export function adaptAutomaticCommentTextForPlatform(text, platform = '') {
+  const normalizedPlatform = normalizeText(platform).toLowerCase();
+  const value = normalizeText(text);
+  if (!value || !FOLLOW_WORDING_PLATFORMS.has(normalizedPlatform)) return value;
+
+  return value.replace(/\bsubscribe\b/giu, (match) => preserveWordCase(match, 'follow'));
+}
+
 export function resolveAutomaticCommentConfig(channelProfile = {}, options = {}) {
   const platform = normalizeText(options.platform).toLowerCase();
   const metadata = channelProfile?.metadata || {};
@@ -133,7 +157,10 @@ export function collectAutomaticCommentVariants({
   return dedupeVariants([
     ...(templateId ? (config.templateVariants[templateId] || []) : []),
     ...config.defaultVariants,
-  ]);
+  ]).map((variant) => ({
+    ...variant,
+    text: adaptAutomaticCommentTextForPlatform(variant.text, platform),
+  }));
 }
 
 export function selectAutomaticCommentVariant({

@@ -1,6 +1,7 @@
 import {
   filterPokemonSubjectsForPool,
   getPokemonPoolDefinition,
+  selectPokemonSpeciesRepresentatives,
 } from '../shared/pokemon-subject-pools.mjs';
 
 export const BUBBLE_SURVIVAL_CATEGORIES = Object.freeze([
@@ -80,25 +81,9 @@ export function isEligibleForBubbleSurvivalCategory(row, categoryValue) {
   return filterPokemonSubjectsForPool([row], CATEGORY_TO_SHARED_POOL[category]).length === 1;
 }
 
-function uniqueFormKey(row) {
-  const pokemonApi = row?.metadata?.pokemon_api || {};
-  return String(
-    pokemonApi.pokemon_id
-    || pokemonApi.pokemon_name
-    || row?.id
-    || `${row?.national_dex_number || ''}:${row?.slug || row?.name || ''}`,
-  );
-}
-
-export function resolveBubbleSurvivalCategoryPool(rows, categoryValue) {
+export function resolveBubbleSurvivalCategoryPool(rows, categoryValue, random = 0) {
   const category = normalizeBubbleSurvivalCategory(categoryValue);
-  const seen = new Set();
-  return filterPokemonSubjectsForPool(rows, CATEGORY_TO_SHARED_POOL[category])
+  const eligibleSubjects = filterPokemonSubjectsForPool(rows, CATEGORY_TO_SHARED_POOL[category])
     .filter((row) => row && String(row.sprite_path || '').trim())
-    .filter((row) => {
-      const key = uniqueFormKey(row);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
+  return selectPokemonSpeciesRepresentatives(eligibleSubjects, random);
 }

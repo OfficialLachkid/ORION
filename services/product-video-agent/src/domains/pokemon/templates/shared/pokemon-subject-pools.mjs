@@ -81,6 +81,99 @@ function speciesSlug(subject) {
   ).replaceAll('_', '-');
 }
 
+function normalizedIdentifier(value) {
+  return String(value ?? '').trim().toLowerCase();
+}
+
+function positiveIntegerIdentifier(value) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? String(parsed) : '';
+}
+
+export function resolvePokemonSpeciesKey(subject) {
+  const pokemonApi = pokemonApiFor(subject);
+  const metadata = metadataFor(subject);
+  const speciesId = positiveIntegerIdentifier(
+    pokemonApi.species_id ?? metadata.species_id ?? subject?.species_id,
+  );
+  if (speciesId) return `species-id:${speciesId}`;
+
+  const speciesName = normalizedIdentifier(
+    pokemonApi.species_name
+    ?? metadata.species_name
+    ?? subject?.species_name
+    ?? subject?.species_slug
+    ?? metadata.species_slug,
+  );
+  if (speciesName) return `species-name:${speciesName}`;
+
+  const nationalDexNumber = positiveIntegerIdentifier(
+    subject?.national_dex_number
+    ?? metadata.national_dex_number
+    ?? pokemonApi.national_dex_number,
+  );
+  if (nationalDexNumber) return `national-dex:${nationalDexNumber}`;
+
+  const fallback = normalizedIdentifier(
+    pokemonApi.pokemon_name
+    ?? subject?.slug
+    ?? subject?.name
+    ?? subject?.id
+    ?? subject?.sprite_path,
+  );
+  return fallback ? `subject:${fallback}` : '';
+}
+
+function resolvePokemonFormKey(subject) {
+  const pokemonApi = pokemonApiFor(subject);
+  const pokemonId = positiveIntegerIdentifier(
+    pokemonApi.pokemon_id ?? subject?.pokemon_id,
+  );
+  if (pokemonId) return `pokemon-id:${pokemonId}`;
+
+  const fallback = normalizedIdentifier(
+    pokemonApi.pokemon_name
+    ?? subject?.slug
+    ?? subject?.name
+    ?? subject?.id
+    ?? subject?.sprite_path,
+  );
+  return fallback ? `form:${fallback}` : '';
+}
+
+function boundedRandomIndex(random, length) {
+  if (length <= 1) return 0;
+  const numericRandom = typeof random === 'function' ? Number(random()) : Number(random);
+  const boundedRandom = Number.isFinite(numericRandom)
+    ? Math.min(Math.max(numericRandom, 0), 0.999999)
+    : 0;
+  return Math.floor(boundedRandom * length);
+}
+
+/**
+ * Gives every canonical Pokemon species one selection slot, then chooses one
+ * eligible form within that species. Filtering must happen before this helper
+ * so special-form pools (Mega, Gigantamax, etc.) retain their intended forms.
+ */
+export function selectPokemonSpeciesRepresentatives(subjects = [], random = 0) {
+  const speciesGroups = new Map();
+  for (const subject of Array.isArray(subjects) ? subjects : []) {
+    if (!subject || typeof subject !== 'object') continue;
+    const speciesKey = resolvePokemonSpeciesKey(subject);
+    if (!speciesKey) continue;
+    if (!speciesGroups.has(speciesKey)) speciesGroups.set(speciesKey, new Map());
+    const formKey = resolvePokemonFormKey(subject) || `row:${speciesGroups.get(speciesKey).size}`;
+    if (!speciesGroups.get(speciesKey).has(formKey)) {
+      speciesGroups.get(speciesKey).set(formKey, subject);
+    }
+  }
+
+  return [...speciesGroups.values()].map((forms) => {
+    const eligibleForms = [...forms.values()];
+    return eligibleForms[boundedRandomIndex(random, eligibleForms.length)];
+  });
+}
+
 function evolutionStage(subject) {
   return normalizeToken(readValue(subject, ['evolution_stage', 'evolutionStage']));
 }

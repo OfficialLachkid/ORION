@@ -4,6 +4,8 @@ import {
   filterPokemonSubjectsForPool,
   getPokemonPoolDefinition,
   normalizePokemonPoolKey,
+  resolvePokemonSpeciesKey,
+  selectPokemonSpeciesRepresentatives,
 } from '../src/domains/pokemon/templates/shared/pokemon-subject-pools.mjs';
 
 function subject(slug, metadata = {}, direct = {}) {
@@ -66,4 +68,42 @@ test('shared Pokemon pool aliases normalize strictly and expose stable labels', 
   assert.equal(normalizePokemonPoolKey('gigantamax'), 'dynamax');
   assert.equal(getPokemonPoolDefinition('legendary_or_mythical').label, 'Legendary + Mythical Pokemon');
   assert.throws(() => normalizePokemonPoolKey('not-a-real-pool'), /Unsupported Pokemon pool/u);
+});
+
+test('species-first selection gives multi-form Pokemon one slot while preserving form variety', () => {
+  const miniorForms = ['red', 'orange', 'yellow', 'green', 'blue'].map((color, index) => subject(
+    `minior-${color}`,
+    {
+      pokemon_api: {
+        species_id: 774,
+        species_name: 'minior',
+        pokemon_id: 10_100 + index,
+      },
+    },
+    { national_dex_number: 774 },
+  ));
+  const pikachu = subject('pikachu', {
+    pokemon_api: { species_id: 25, species_name: 'pikachu', pokemon_id: 25 },
+  }, { national_dex_number: 25 });
+
+  const first = selectPokemonSpeciesRepresentatives([...miniorForms, pikachu], () => 0);
+  const last = selectPokemonSpeciesRepresentatives([...miniorForms, pikachu], () => 0.999999);
+
+  assert.equal(first.length, 2);
+  assert.deepEqual(first.map(resolvePokemonSpeciesKey), ['species-id:774', 'species-id:25']);
+  assert.equal(first[0].slug, 'minior-red');
+  assert.equal(last[0].slug, 'minior-blue');
+  assert.equal(last[1].slug, 'pikachu');
+});
+
+test('canonical species keys prefer species id, then species name, then National Dex', () => {
+  assert.equal(resolvePokemonSpeciesKey({
+    national_dex_number: 999,
+    metadata: { pokemon_api: { species_id: 774, species_name: 'wrong-name' } },
+  }), 'species-id:774');
+  assert.equal(resolvePokemonSpeciesKey({
+    national_dex_number: 999,
+    metadata: { pokemon_api: { species_name: 'Minior' } },
+  }), 'species-name:minior');
+  assert.equal(resolvePokemonSpeciesKey({ national_dex_number: 774 }), 'national-dex:774');
 });

@@ -450,7 +450,7 @@ test('planner prefers legendary subjects before final-stage evolutions when trim
   );
 });
 
-test('planner collapses same-dex variants and prefers Mega forms over base and Gigantamax final evolutions', async () => {
+test('planner gives same-species variants one slot and chooses the form deterministically from the seed', async () => {
   const megaPriorityTemplate = {
     ...template,
     selection_rules: {
@@ -648,7 +648,7 @@ test('planner collapses same-dex variants and prefers Mega forms over base and G
 
   assert.deepEqual(
     plan.selection.selected_subjects.map((subject) => subject.name),
-    ['Venusaur (Mega)', 'Victreebel'],
+    ['Venusaur (Gigantamax)', 'Victreebel'],
   );
   assert.equal(
     plan.selection.selected_subjects.filter((subject) => subject.national_dex_number === 3).length,

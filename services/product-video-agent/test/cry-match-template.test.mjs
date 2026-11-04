@@ -148,7 +148,8 @@ test('cry-match skips configured pools that cannot fill all four candidate slots
     },
   });
   assert.equal(selectedPool.key, 'mixed');
-  assert.equal(selectedPool.subjects.length, subjects.length);
+  assert.equal(selectedPool.subjects.length, 8);
+  assert.equal(new Set(selectedPool.subjects.map((subject) => subject.national_dex_number)).size, 8);
 });
 
 test('cry-match randomly assigns a different viable specialty pool to every round', async () => {

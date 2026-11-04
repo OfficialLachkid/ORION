@@ -12,6 +12,7 @@ import {
   PROGRESSIVE_REVEAL_METHODS,
 } from '../shared/render/progressive-reveal-engine.mjs';
 import { resolvePokemonCryPath } from '../shared/pokemon-cry-resolver.mjs';
+import { selectPokemonSpeciesRepresentatives } from '../shared/pokemon-subject-pools.mjs';
 import { loadOpaqueSpriteAnalysis } from './render/sprite-alpha-analysis.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
@@ -120,15 +121,8 @@ function selectEligibleSubjects(pokedexRows = [], generationScope = []) {
     .filter((row) => allowedGenerations.size === 0 || allowedGenerations.has(Number(row.generation)));
 }
 
-function collapseDuplicateSubjects(subjects = []) {
-  const unique = new Map();
-  for (const subject of subjects) {
-    const key = normalizeSlug(subject.slug || subject.name || subject.id);
-    if (key && !unique.has(key)) {
-      unique.set(key, subject);
-    }
-  }
-  return [...unique.values()];
+function collapseDuplicateSubjects(subjects = [], random = 0) {
+  return selectPokemonSpeciesRepresentatives(subjects, random);
 }
 
 async function canAccessPath(filePath) {
@@ -357,7 +351,7 @@ export async function planPokemonProgressiveRevealChallenge({
   const eligibleSubjects = collapseDuplicateSubjects(selectEligibleSubjects(
     pokedexRows,
     template?.selection_rules?.generation_scope,
-  ));
+  ), random);
   if (eligibleSubjects.length < roundCount) {
     throw new Error(`Progressive Reveal requires at least ${roundCount} Pokemon with local sprites, found ${eligibleSubjects.length}.`);
   }

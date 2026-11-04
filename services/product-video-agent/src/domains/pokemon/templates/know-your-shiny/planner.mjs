@@ -9,6 +9,7 @@ import {
   scanPokeQuizzAssetInventory,
   selectSeededFile,
 } from '../../../../poke-quizz-asset-inventory.mjs';
+import { selectPokemonSpeciesRepresentatives } from '../shared/pokemon-subject-pools.mjs';
 
 const DEFAULT_ROUND_COUNT = 3;
 const DEFAULT_REVEAL_HOLD_SECONDS = 1.05;
@@ -160,18 +161,8 @@ function selectEligibleSubjects(pokedexRows = [], generationScope = []) {
     .filter((row) => !String(row.shiny_sprite_path || '').toLowerCase().includes('/placeholder/'));
 }
 
-function collapseDuplicateSubjects(subjects = []) {
-  const seen = new Set();
-  const unique = [];
-  for (const subject of subjects) {
-    const key = normalizeSlug(subject.shiny_sprite_path || subject.slug || subject.name || subject.id);
-    if (!key || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    unique.push(subject);
-  }
-  return unique;
+function collapseDuplicateSubjects(subjects = [], random = 0) {
+  return selectPokemonSpeciesRepresentatives(subjects, random);
 }
 
 async function resolveKnowYourShinySpritePath(subject) {
@@ -344,6 +335,7 @@ export async function planKnowYourShinyChallenge({
   const countdownTo = Number.parseInt(String(template?.layout?.timer?.countdown_to ?? 0), 10);
   const eligibleSubjects = collapseDuplicateSubjects(
     selectEligibleSubjects(pokedexRows, template?.selection_rules?.generation_scope || []),
+    random,
   );
   if (eligibleSubjects.length < roundCount) {
     throw new Error(`Know your shiny requires at least ${roundCount} Pokemon with local shiny sprites, found ${eligibleSubjects.length}.`);
