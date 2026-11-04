@@ -39,7 +39,10 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'verify_memory_promotion_rules',
   ]);
   const generateVideoCommand = commands.find((command) => command.name === 'generate-video');
-  const generateTemplateChoiceValues = (generateVideoCommand?.options?.find((option) => option.name === 'template')?.choices || [])
+  assert.deepEqual(generateVideoCommand.options.map((option) => option.name), ['short', 'long']);
+  const shortSubcommand = generateVideoCommand.options.find((option) => option.name === 'short');
+  const longSubcommand = generateVideoCommand.options.find((option) => option.name === 'long');
+  const generateTemplateChoiceValues = (shortSubcommand?.options?.find((option) => option.name === 'template')?.choices || [])
     .map((choice) => choice.value)
     .sort();
   assert.deepEqual(generateTemplateChoiceValues, [
@@ -56,7 +59,13 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'tournament',
     'type-speed-quiz',
   ]);
-  const generateChannelChoiceValues = (generateVideoCommand?.options?.find((option) => option.name === 'channel')?.choices || [])
+  assert.deepEqual(
+    (longSubcommand?.options?.find((option) => option.name === 'template')?.choices || [])
+      .map((choice) => choice.value)
+      .sort(),
+    ['long-bubble-showdown', 'long-mixed-challenge', 'long-reveal-challenge'],
+  );
+  const generateChannelChoiceValues = (shortSubcommand?.options?.find((option) => option.name === 'channel')?.choices || [])
     .map((choice) => choice.value)
     .sort();
   assert.deepEqual(generateChannelChoiceValues, [
@@ -66,6 +75,12 @@ test('buildGuildSlashCommands returns the supported slash commands', () => {
     'proffmon-youtube',
     'trivamon-youtube',
   ]);
+  assert.deepEqual(
+    (longSubcommand?.options?.find((option) => option.name === 'channel')?.choices || [])
+      .map((choice) => choice.value)
+      .sort(),
+    generateChannelChoiceValues,
+  );
   const generateImageCommand = commands.find((command) => command.name === 'generate-image');
   assert.equal(generateImageCommand.options.find((option) => option.name === 'prompt').required, true);
   assert.equal(generateImageCommand.options.find((option) => option.name === 'count').max_value, 8);
@@ -382,6 +397,32 @@ test('normalizeSupportedSlashCommandInteraction converts a manual video generati
 
   assert.equal(message?.content, 'generate video template: find-the-shiny channel: trivamon-youtube');
   assert.equal(message?.channelKey, 'commands');
+});
+
+test('normalizeSupportedSlashCommandInteraction routes the long Bubble Showdown subcommand', () => {
+  const message = normalizeSupportedSlashCommandInteraction({
+    id: 'interaction-generate-video-long-bubble',
+    type: 2,
+    guild_id: 'guild-1',
+    channel_id: 'channel-7',
+    data: {
+      name: 'generate-video',
+      options: [{
+        type: 1,
+        name: 'long',
+        options: [
+          { name: 'template', value: 'long-bubble-showdown' },
+          { name: 'channel', value: 'poke-quizz-youtube' },
+        ],
+      }],
+    },
+    member: { user: { id: 'user-1', username: 'vbjservices' } },
+  });
+
+  assert.equal(
+    message?.content,
+    'generate video format: long_form template: long-bubble-showdown channel: poke-quizz-youtube',
+  );
 });
 
 for (const channel of [

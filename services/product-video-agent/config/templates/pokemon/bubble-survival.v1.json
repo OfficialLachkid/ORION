@@ -33,6 +33,24 @@
     "center_x": 270,
     "center_y": 450,
     "radius": 230,
+    "shape": "random",
+    "shape_aspect_ratio": 0.72,
+    "silhouette_point_count": 96,
+    "silhouette_alpha_threshold": 24,
+    "silhouette_minimum_radius_ratio": 0.56,
+    "shape_pool": [
+      { "shape": "circle", "weight": 2 },
+      { "shape": "triangle", "weight": 1 },
+      { "shape": "square", "weight": 1 },
+      { "shape": "diamond", "weight": 1 },
+      { "shape": "rectangle", "weight": 1 },
+      { "shape": "pentagon", "weight": 1 },
+      { "shape": "hexagon", "weight": 2 },
+      { "shape": "octagon", "weight": 2 },
+      { "shape": "trefoil", "weight": 1 },
+      { "shape": "quatrefoil", "weight": 1 },
+      { "shape": "pokemon-silhouette", "weight": 1 }
+    ],
     "stationary": true
   },
   "bubbles": {
@@ -55,6 +73,31 @@
     "maximum_seconds": 40,
     "stagnation_seconds": 10,
     "maximum_attempts": 8,
+    "shape_overrides": {
+      "triangle": {
+        "maximum_attempts": 12,
+        "speed_up_interval_seconds": 3,
+        "speed_up_multiplier": 1.4
+      },
+      "trefoil": {
+        "maximum_attempts": 12,
+        "arena_radius": 235,
+        "speed_up_interval_seconds": 3,
+        "speed_up_multiplier": 1.4
+      },
+      "quatrefoil": {
+        "maximum_attempts": 12,
+        "arena_radius": 235,
+        "speed_up_interval_seconds": 3,
+        "speed_up_multiplier": 1.4
+      },
+      "pokemon-silhouette": {
+        "maximum_attempts": 12,
+        "arena_radius": 235,
+        "speed_up_interval_seconds": 3,
+        "speed_up_multiplier": 1.4
+      }
+    },
     "speed_up_interval_seconds": 5,
     "speed_up_multiplier": 1.25,
     "draw_policy": "retry-with-derived-seed"
@@ -74,10 +117,44 @@
     "defeat_sound_volume": 0.165,
     "duck_music_during_voiceover": true
   },
+  "presentation": {
+    "title": {
+      "font_size": 30,
+      "y": 88,
+      "side_margin": 50
+    },
+    "showdown_title_animation": {
+      "enabled": true,
+      "start_seconds": 0.08,
+      "letter_interval_seconds": 0.085,
+      "letter_pop_seconds": 0.12,
+      "wobble_enabled": true,
+      "wobble_amplitude_px": 3.5,
+      "wobble_rotation_degrees": 2.4,
+      "wobble_scale_amplitude": 0.025,
+      "wobble_period_seconds": 2.0,
+      "wobble_phase_step_radians": 0.7,
+      "neon_palette": [
+        "#67DCFF", "#FFD166", "#9B5DE5", "#F72585", "#FF4D5A", "#FF7BCB", "#39E58C"
+      ]
+    },
+    "defeated_roster": {
+      "enabled": true,
+      "layout": "top-bottom",
+      "sprite_size": 60,
+      "horizontal_gap": 88,
+      "top_y": 155,
+      "bottom_y": 748,
+      "arena_clearance": 10,
+      "frame_margin": 8
+    }
+  },
   "winner": {
     "announcement_delay_seconds": 0.75,
     "sound_effect_role": "ding",
     "sound_volume": 0.36,
+    "cry_volume": 0.12,
+    "cry_delay_after_ding_seconds": 0.18,
     "duration_seconds": 1.8,
     "show_pokemon_name": true,
     "show_pokemon_sprite": true,

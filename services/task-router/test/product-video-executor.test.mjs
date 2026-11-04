@@ -78,6 +78,59 @@ test('manual review generation uses the selected channel config and default revi
   assert.equal(result.report.publicationId, 'publication-trivamon-review-1');
 });
 
+test('manual long-form Bubble Showdown generation uses its dedicated script and shared review routing', async () => {
+  const runCalls = [];
+  const normalizePath = (value) => String(value || '').replaceAll('\\', '/');
+  const result = await executeProductVideoAction(
+    'poke_quizz_generate_review',
+    {
+      task_id: 'TASK-ORION-PQ-GENERATE-LONG-BUBBLE',
+      submitted_at: '2026-11-02T12:00:00.000Z',
+      poke_quizz_generate_review: {
+        templateKey: 'long-bubble-showdown',
+        templateId: 'pokemon.long.bubble-showdown.v1',
+        templateLabel: 'Bubble Showdown',
+        contentFormat: 'long_form',
+        channelSelector: 'poke-quizz-youtube',
+        channelLabel: 'Poke Quizz',
+        channelConfigPath: 'services/product-video-agent/config/channels/poke-quizz-youtube.json',
+      },
+    },
+    { env: {} },
+    {
+      ensurePreferredPokeQuizzCatalogJsonPath: async () => 'data/runtime/product-video-agent/pokedex/gen1-gen9-localized.json',
+      loadPublicationChannelProfiles: async () => ([{
+        platform: 'youtube',
+        account_key: 'poke-quizz-youtube',
+        metadata: { review_thread_id: 'long-review-thread' },
+      }]),
+      findPublicationChannelProfile: (profiles) => profiles[0],
+      runProcess: async (options) => {
+        runCalls.push(options);
+        return {
+          stdout: JSON.stringify({
+            publication_id: 'publication-long-bubble-1',
+            preview_url: 'https://youtube.com/watch?v=long-bubble',
+            task_id: 'TASK-ORION-PQ-PUBLISH-LONG',
+            message_id: 'long-review-message',
+            render_path: '/Volumes/T7/bubble-showdown-long.mp4',
+          }),
+        };
+      },
+    },
+  );
+
+  assert.equal(runCalls.length, 1);
+  assert.equal(
+    normalizePath(runCalls[0].args[0]).endsWith('services/product-video-agent/scripts/generate-pokemon-bubble-showdown-long-form-review.mjs'),
+    true,
+  );
+  assert.equal(runCalls[0].args.includes('--template-id'), false);
+  assert.equal(runCalls[0].timeoutMs, 7_200_000);
+  assert.equal(result.report.contentFormat, 'long_form');
+  assert.match(result.report.summary, /long-form Bubble Showdown/u);
+});
+
 test('manual review generation supports the type-speed-quiz channel config for TrivaMon', async () => {
   const runCalls = [];
   const normalizePath = (value) => String(value || '').replaceAll('\\', '/');

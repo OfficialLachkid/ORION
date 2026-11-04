@@ -6,7 +6,8 @@ import {
 } from '../../task-router/src/leadgen-command-parser.mjs';
 import {
   PRODUCT_VIDEO_CHANNEL_OPTIONS,
-  PRODUCT_VIDEO_TEMPLATE_OPTIONS,
+  PRODUCT_VIDEO_LONG_TEMPLATE_OPTIONS,
+  PRODUCT_VIDEO_SHORT_TEMPLATE_OPTIONS,
   serializeProductVideoCommand,
 } from '../../task-router/src/product-video-command-parser.mjs';
 import {
@@ -24,6 +25,7 @@ import {
 const DISCORD_INTERACTION_TYPE_APPLICATION_COMMAND = 2;
 const DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING = 3;
 const DISCORD_APPLICATION_COMMAND_OPTION_TYPE_INTEGER = 4;
+const DISCORD_APPLICATION_COMMAND_OPTION_TYPE_SUBCOMMAND = 1;
 const HELP_COMMAND_NAMES = new Set(['commands', 'help']);
 const STATUS_COMMAND_NAMES = new Set(['health', 'status']);
 const SYNC_COMMAND_NAMES = new Set(['sync']);
@@ -157,6 +159,31 @@ function buildAuthorFromInteraction(interaction) {
   };
 }
 
+function buildProductVideoSubcommandOptions(templateOptions) {
+  return [
+    {
+      type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING,
+      name: 'template',
+      description: 'Which video template to generate.',
+      required: true,
+      choices: templateOptions.map((option) => ({
+        name: option.name,
+        value: option.value,
+      })),
+    },
+    {
+      type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING,
+      name: 'channel',
+      description: 'Which channel should receive the review video.',
+      required: true,
+      choices: PRODUCT_VIDEO_CHANNEL_OPTIONS.map((option) => ({
+        name: option.name,
+        value: option.value,
+      })),
+    },
+  ];
+}
+
 export function buildGuildSlashCommands() {
   return [
     {
@@ -239,28 +266,20 @@ export function buildGuildSlashCommands() {
     },
     {
       name: 'generate-video',
-      description: 'Generate a manual Poke Quizz review video for a chosen template and channel.',
+      description: 'Generate a manual short- or long-form Pokemon review video.',
       type: 1,
       options: [
         {
-          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING,
-          name: 'template',
-          description: 'Which video template to generate.',
-          required: true,
-          choices: PRODUCT_VIDEO_TEMPLATE_OPTIONS.map((option) => ({
-            name: option.name,
-            value: option.value,
-          })),
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_SUBCOMMAND,
+          name: 'short',
+          description: 'Generate a short-form review video.',
+          options: buildProductVideoSubcommandOptions(PRODUCT_VIDEO_SHORT_TEMPLATE_OPTIONS),
         },
         {
-          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_STRING,
-          name: 'channel',
-          description: 'Which channel should receive the review video.',
-          required: true,
-          choices: PRODUCT_VIDEO_CHANNEL_OPTIONS.map((option) => ({
-            name: option.name,
-            value: option.value,
-          })),
+          type: DISCORD_APPLICATION_COMMAND_OPTION_TYPE_SUBCOMMAND,
+          name: 'long',
+          description: 'Generate a long-form review video.',
+          options: buildProductVideoSubcommandOptions(PRODUCT_VIDEO_LONG_TEMPLATE_OPTIONS),
         },
       ],
     },
@@ -447,14 +466,32 @@ export function normalizeInteractionAsHelpMessage(interaction) {
   };
 }
 
+function findSlashCommandOption(options, optionName) {
+  for (const option of Array.isArray(options) ? options : []) {
+    if (String(option?.name || '').toLowerCase() === optionName) return option;
+    const nested = findSlashCommandOption(option?.options, optionName);
+    if (nested) return nested;
+  }
+  return null;
+}
+
 function getSlashCommandOptionValue(interaction, optionName) {
-  const options = Array.isArray(interaction?.data?.options) ? interaction.data.options : [];
-  const option = options.find((item) => String(item?.name || '').toLowerCase() === optionName);
+  const option = findSlashCommandOption(interaction?.data?.options, optionName);
   if (!option) {
     return '';
   }
 
   return String(option.value || '');
+}
+
+function getProductVideoContentFormat(interaction) {
+  const firstOption = Array.isArray(interaction?.data?.options)
+    ? interaction.data.options[0]
+    : null;
+  const subcommand = String(firstOption?.name || '').trim().toLowerCase();
+  if (subcommand === 'long') return 'long_form';
+  if (subcommand === 'short') return 'short_form';
+  return '';
 }
 
 function resolveSlashCommandContent(interaction) {
@@ -483,6 +520,7 @@ function resolveSlashCommandContent(interaction) {
     return serializeProductVideoCommand({
       templateKey: getSlashCommandOptionValue(interaction, 'template'),
       channelSelector: getSlashCommandOptionValue(interaction, 'channel'),
+      contentFormat: getProductVideoContentFormat(interaction),
     });
   }
 

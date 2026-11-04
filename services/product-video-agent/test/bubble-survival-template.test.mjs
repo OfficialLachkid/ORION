@@ -13,6 +13,12 @@ import {
   simulateBubbleSurvival,
 } from '../src/domains/pokemon/templates/bubble-survival/simulation.mjs';
 import { planPokemonBubbleSurvival } from '../src/domains/pokemon/templates/bubble-survival/planner.mjs';
+import { buildPokemonSpriteArenaContour } from '../src/domains/pokemon/templates/bubble-survival/sprite-arena-contour.mjs';
+import {
+  BUBBLE_SURVIVAL_ARENA_SHAPES,
+  constrainBubbleToArena,
+  createBubbleSurvivalArenaGeometry,
+} from '../src/domains/pokemon/templates/bubble-survival/arena-geometry.mjs';
 import {
   alphaBlendRgba,
   buildBubbleSurvivalFfmpegArgs,
@@ -23,6 +29,7 @@ import {
   resizeSprite,
   resolveCountdownVisualState,
   resolveDefeatedBubbleScale,
+  resolveDefeatedRosterEntries,
   wrapTextInsideFrame,
 } from '../src/domains/pokemon/templates/bubble-survival/renderer.mjs';
 import {
@@ -132,6 +139,119 @@ test('template rotates through the complete Bubble Survival pool catalog', async
     template.selection_rules.pool_variants.map((pool) => pool.category),
     [...BUBBLE_SURVIVAL_CATEGORIES],
   );
+  assert.deepEqual(template.simulation.shape_overrides.triangle, {
+    maximum_attempts: 12,
+    speed_up_interval_seconds: 3,
+    speed_up_multiplier: 1.4,
+  });
+  assert.equal(template.presentation.showdown_title_animation.enabled, true);
+  assert.equal(template.presentation.showdown_title_animation.wobble_enabled, true);
+  assert.equal(template.presentation.showdown_title_animation.wobble_period_seconds, 2);
+  assert.ok(template.presentation.showdown_title_animation.neon_palette.length >= 7);
+  assert.equal(template.presentation.defeated_roster.enabled, true);
+  assert.equal(template.presentation.defeated_roster.layout, 'top-bottom');
+  assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'pentagon'), true);
+  assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'trefoil'), true);
+  assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'quatrefoil'), true);
+  assert.equal(template.arena.shape_pool.some((entry) => entry.shape === 'pokemon-silhouette'), true);
+});
+
+test('Bubble Showdown participates in every Pokemon channel mix at its rollout weight', async () => {
+  const expectedWeights = new Map([
+    ['poke-quizz-youtube', 2],
+    ['trivamon-youtube', 2],
+    ['poke-guess-youtube', 1],
+    ['dexguess-youtube', 1],
+    ['proffmon-youtube', 1],
+  ]);
+  for (const [channelId, expectedWeight] of expectedWeights) {
+    const channel = JSON.parse(await readFile(join(
+      process.cwd(),
+      `services/product-video-agent/config/channels/${channelId}.json`,
+    ), 'utf8'));
+    const bubbleShowdown = channel.templates['pokemon.bubble-survival.v1'];
+    assert.equal(bubbleShowdown.enabled, true, channelId);
+    assert.equal(bubbleShowdown.manual_generate, true, channelId);
+    assert.equal(bubbleShowdown.night_shift, true, channelId);
+    assert.equal(bubbleShowdown.weight, expectedWeight, channelId);
+  }
+});
+
+test('short defeated roster uses safe top and bottom slots outside the arena', () => {
+  const plan = {
+    video: { frame_width: 540, frame_height: 960, intro_seconds: 1.16 },
+    simulation: {
+      config: {
+        center_x: 270,
+        center_y: 450,
+        arena_radius: 235,
+        defeat_pop_seconds: 0.1,
+        defeat_shrink_seconds: 0.5,
+      },
+      events: [
+        { type: 'eliminated', time: 1, bubble_id: 'a' },
+        { type: 'eliminated', time: 2, bubble_id: 'b' },
+      ],
+    },
+    selection: { selected_subjects: [{ id: 'a' }, { id: 'b' }] },
+  };
+  const defeatedRoster = {
+    enabled: true,
+    layout: 'top-bottom',
+    sprite_size: 60,
+    horizontal_gap: 88,
+    top_y: 155,
+    bottom_y: 748,
+    arena_clearance: 10,
+    frame_margin: 8,
+  };
+  const entries = resolveDefeatedRosterEntries({
+    plan,
+    template: { presentation: { defeated_roster: defeatedRoster } },
+    videoTime: 5,
+  });
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries.map((entry) => entry.y), [155, 748]);
+  for (const entry of entries) {
+    const rosterRadius = (entry.size * 0.54) + 4;
+    assert.ok(
+      Math.hypot(entry.x - 270, entry.y - 450)
+        >= 235 + rosterRadius + defeatedRoster.arena_clearance,
+    );
+  }
+});
+
+test('short defeated roster omits slots that would overlap the arena', () => {
+  const plan = {
+    video: { frame_width: 540, frame_height: 960, intro_seconds: 0 },
+    simulation: {
+      config: {
+        center_x: 270,
+        center_y: 450,
+        arena_radius: 235,
+        defeat_pop_seconds: 0.1,
+        defeat_shrink_seconds: 0.5,
+      },
+      events: [{ type: 'eliminated', time: 0, bubble_id: 'a' }],
+    },
+    selection: { selected_subjects: [{ id: 'a' }] },
+  };
+  const entries = resolveDefeatedRosterEntries({
+    plan,
+    template: {
+      presentation: {
+        defeated_roster: {
+          enabled: true,
+          layout: 'top-bottom',
+          sprite_size: 60,
+          top_y: 450,
+          bottom_y: 450,
+        },
+      },
+    },
+    videoTime: 2,
+  });
+  assert.deepEqual(entries, []);
 });
 
 test('swept circle-to-tail collision detects crossings between fixed steps', () => {
@@ -193,7 +313,26 @@ test('fixed-step simulation is deterministic, starts without overlap, and shrink
   assert.ok(tailBreakEvents.length > 0);
   assert.equal(tailBreakEvents.every((event) => Number.isFinite(event.time)), true);
   assert.equal(tailBreakEvents.some((event) => event.attacker_is_defeated), true);
+  assert.equal(tailBreakEvents.every((event) => event.remaining_tail_count >= 0), true);
+  const tailBreaksByOwnerAndSweep = new Map();
+  for (const event of tailBreakEvents) {
+    const sweepKey = `${event.owner_id}@${event.time}`;
+    tailBreaksByOwnerAndSweep.set(
+      sweepKey,
+      (tailBreaksByOwnerAndSweep.get(sweepKey) || 0) + 1,
+    );
+  }
+  assert.equal(
+    [...tailBreaksByOwnerAndSweep.values()].some((tailCount) => tailCount > 1),
+    true,
+    'a high-speed sweep must cut every intersected tail instead of throttling after the first',
+  );
   assert.equal(first.events.filter((event) => event.type === 'eliminated').length, 8);
+  assert.equal(
+    first.events.filter((event) => event.type === 'eliminated')
+      .every((event) => event.remaining_tail_count === 0),
+    true,
+  );
   const defeatedBubble = { is_defeated: true, defeated_at: 4 };
   const despawn = { popScale: 1.2, popSeconds: 0.1, shrinkSeconds: 0.577 };
   assert.equal(resolveDefeatedBubbleScale({ bubble: { is_defeated: false }, simulationTime: 5, ...despawn }), 1);
@@ -216,10 +355,102 @@ test('fixed-step simulation is deterministic, starts without overlap, and shrink
   assert.equal(resolveDefeatedBubbleScale({ bubble: defeatedBubble, simulationTime: 4.677, ...despawn }), 0);
 });
 
+test('every fixed and contour arena shape drives real wall physics and tail anchors', () => {
+  const subjects = Array.from({ length: 9 }, (_, index) => ({ id: `shape-subject-${index}` }));
+  for (const arenaShape of BUBBLE_SURVIVAL_ARENA_SHAPES) {
+    const simulation = simulateBubbleSurvival({
+      subjects,
+      seed: `arena-${arenaShape}`,
+      config: {
+        arena_shape: arenaShape,
+        arena_radius: 220,
+        bubble_radius: 35,
+        maximum_seconds: 2,
+      },
+    });
+    assert.equal(simulation.config.arena_shape, arenaShape);
+    assert.equal(simulation.frames[0].bubbles.length, 9);
+    assert.equal(simulation.frames[0].tails.length, 27);
+    const geometry = createBubbleSurvivalArenaGeometry(simulation.config);
+    for (const bubble of simulation.frames[0].bubbles) {
+      const constrained = constrainBubbleToArena(
+        geometry,
+        bubble,
+        simulation.config.bubble_radius,
+      );
+      assert.ok(
+        Math.hypot(constrained.x - bubble.x, constrained.y - bubble.y) < 0.01,
+        `${arenaShape}:${bubble.id}`,
+      );
+    }
+  }
+  assert.equal(createBubbleSurvivalArenaGeometry({ arena_shape: 'pentagon' }).is_convex, true);
+  assert.equal(createBubbleSurvivalArenaGeometry({ arena_shape: 'trefoil' }).is_convex, false);
+  assert.equal(createBubbleSurvivalArenaGeometry({ arena_shape: 'quatrefoil' }).is_convex, false);
+});
+
+test('Pokemon sprite alpha produces a reusable physics-safe arena contour', async (context) => {
+  const runtimeDirectory = await mkdtemp(join(tmpdir(), 'orion-bubble-contour-'));
+  context.after(() => rm(runtimeDirectory, { recursive: true, force: true }));
+  const spritePath = join(runtimeDirectory, 'sprite.png');
+  const { default: sharp } = await import('sharp');
+  const vertical = await sharp({
+    create: {
+      width: 30,
+      height: 110,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  }).png().toBuffer();
+  const horizontal = await sharp({
+    create: {
+      width: 110,
+      height: 30,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
+  }).png().toBuffer();
+  await sharp({
+    create: {
+      width: 140,
+      height: 140,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    },
+  }).composite([
+    { input: vertical, left: 55, top: 15 },
+    { input: horizontal, left: 15, top: 55 },
+  ]).png().toFile(spritePath);
+  const contour = await buildPokemonSpriteArenaContour(spritePath, { pointCount: 72 });
+  assert.equal(contour.points.length, 72);
+  assert.ok(contour.visible_pixel_count > 1000);
+  const geometry = createBubbleSurvivalArenaGeometry({
+    arena_shape: 'pokemon-silhouette',
+    arena_radius: 220,
+    arena_contour_points: contour.points,
+    arena_contour_source_id: 'cross-sprite',
+  });
+  assert.equal(geometry.contour_source_id, 'cross-sprite');
+  assert.equal(geometry.is_convex, false);
+  const subjects = Array.from({ length: 9 }, (_unused, index) => ({ id: `silhouette-${index}` }));
+  const simulation = simulateBubbleSurvival({
+    subjects,
+    seed: 'sprite-contour-physics',
+    config: {
+      arena_shape: 'pokemon-silhouette',
+      arena_radius: 220,
+      arena_contour_points: contour.points,
+      maximum_seconds: 2,
+    },
+  });
+  assert.equal(simulation.frames[0].bubbles.length, 9);
+  assert.equal(simulation.frames[0].tails.length, 27);
+});
+
 test('seeded initial physics distributes winners across every starting slot', () => {
   const subjects = Array.from({ length: 9 }, (_, index) => ({ id: `subject-${index}` }));
   const winnerIds = new Set();
-  for (let index = 0; index < 45; index += 1) {
+  for (let index = 0; index < 60; index += 1) {
     const simulation = simulateBubbleSurvival({
       subjects,
       seed: `winner-distribution-${index}`,
@@ -236,10 +467,12 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     const shortMusicPath = join(root, 'short-music.mp3');
     const dingPath = join(root, 'ding-sound.mp3');
     const reflectionPath = join(root, 'reflection-sound.mp3');
+    const cryPath = join(root, 'winner-cry.ogg');
     await writeFile(musicPath, 'music');
     await writeFile(shortMusicPath, 'short music');
     await writeFile(dingPath, 'ding');
     await writeFile(reflectionPath, 'reflection');
+    await writeFile(cryPath, 'cry');
     const rows = [];
     for (let index = 0; index < 14; index += 1) {
       const spritePath = join(root, `sprite-${index}.png`);
@@ -251,6 +484,7 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
         pokemon_id: 1000 + index,
         national_dex_number: 1000 + index,
         sprite_path: spritePath,
+        cry_path: cryPath,
         metadata: { is_legendary: true, is_mythical: false },
       }));
     }
@@ -296,6 +530,7 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.assets.music_duration_seconds, 120);
     assert.ok(first.assets.minimum_music_duration_seconds > 5);
     assert.equal(first.assets.winner_ding_path, dingPath);
+    assert.equal(first.assets.winner_cry_path, cryPath);
     assert.equal(first.assets.defeat_sound_path, reflectionPath);
     assert.equal(first.video.intro_seconds, 1.16);
     assert.equal(first.video.countdown_playback_rate, 4 / 3);
@@ -304,6 +539,8 @@ test('planner selects unique readable Pokemon, produces replay data, and is seed
     assert.equal(first.video.frame_fps, 30);
     assert.equal(first.audio.defeat_sound_volume, 0.165);
     assert.equal(first.audio.winner_ding_volume, 0.36);
+    assert.equal(first.audio.winner_cry_volume, 0.12);
+    assert.equal(first.audio.winner_cry_delay_seconds, 0.18);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -494,11 +731,14 @@ test('winner hold, ding, and defeat-only shrink cues are scheduled at their boun
     assets: {
       music_path: '/tmp/music.mp3',
       winner_ding_path: '/tmp/ding-sound.mp3',
+      winner_cry_path: '/tmp/pikachu-cry.ogg',
       defeat_sound_path: '/tmp/reflection-sound.mp3',
     },
     audio: {
       music_volume: 0.12,
       winner_ding_volume: 0.36,
+      winner_cry_volume: 0.12,
+      winner_cry_delay_seconds: 0.18,
       defeat_sound_volume: 0.165,
     },
     video: {
@@ -522,10 +762,12 @@ test('winner hold, ding, and defeat-only shrink cues are scheduled at their boun
     durationSeconds: renderPlan.duration_seconds,
   });
   assert.equal(args.includes('/tmp/ding-sound.mp3'), true);
+  assert.equal(args.includes('/tmp/pikachu-cry.ogg'), true);
   assert.equal(args.filter((arg) => arg === '/tmp/reflection-sound.mp3').length, 2);
   const filter = args[args.indexOf('-filter_complex') + 1];
   assert.match(filter, /atempo=1\.3333333333333333/u);
   assert.match(filter, /adelay=21910\|21910/u);
+  assert.match(filter, /adelay=22090\|22090,volume=0\.12\[winnercry\]/u);
   assert.match(filter, /afade=t=out:st=21\.910:d=1\.800/u);
   assert.doesNotMatch(filter, /adelay=5625\|5625/u);
   assert.match(filter, /adelay=8160\|8160,volume=0\.165\[defeat_0\]/u);
@@ -533,5 +775,5 @@ test('winner hold, ding, and defeat-only shrink cues are scheduled at their boun
   assert.doesNotMatch(args.join(' '), /-stream_loop/u);
   assert.match(filter, /\[base\]\[defeat_0\]\[defeat_1\]amix=inputs=3/u);
   assert.match(filter, /normalize=0,alimiter=limit=0\.95\[audio\]/u);
-  assert.match(filter, /amix=inputs=3/u);
+  assert.match(filter, /\[music\]\[voice\]\[winner\]\[winnercry\]amix=inputs=4/u);
 });

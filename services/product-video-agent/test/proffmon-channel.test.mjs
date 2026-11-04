@@ -31,10 +31,7 @@ const PROFFMON_WEIGHT_THREE_TEMPLATE_IDS = new Set([
   'pokemon.build-your-team.v1',
   'pokemon.cry-match.v1',
 ]);
-const MANUAL_ONLY_TEMPLATE_IDS = new Set([
-  'pokemon.bubble-survival.v1',
-]);
-const PROFFMON_MANUAL_TEMPLATE_WEIGHTS = new Map([
+const PROFFMON_TEMPLATE_WEIGHT_OVERRIDES = new Map([
   ['pokemon.bubble-survival.v1', 1],
 ]);
 async function loadJson(projectRelativePath) {
@@ -82,7 +79,7 @@ test('ProffMon uses every Poke Quizz template with its selected weight overrides
     Object.keys(pokeQuizzConfig.templates),
   );
   for (const [templateId, proffmonTemplate] of Object.entries(proffmonConfig.templates)) {
-    const expectedWeight = PROFFMON_MANUAL_TEMPLATE_WEIGHTS.get(templateId)
+    const expectedWeight = PROFFMON_TEMPLATE_WEIGHT_OVERRIDES.get(templateId)
       ?? (PROFFMON_WEIGHT_THREE_TEMPLATE_IDS.has(templateId)
         ? 3
         : pokeQuizzConfig.templates[templateId].weight);
@@ -90,8 +87,8 @@ test('ProffMon uses every Poke Quizz template with its selected weight overrides
     assert.equal(proffmonTemplate.manual_generate, true, `${templateId} must support manual generation`);
     assert.equal(
       proffmonTemplate.night_shift,
-      !MANUAL_ONLY_TEMPLATE_IDS.has(templateId),
-      `${templateId} must use its rollout-appropriate night-shift setting`,
+      true,
+      `${templateId} must participate in the night-shift mix`,
     );
     assert.equal(
       proffmonTemplate.weight,

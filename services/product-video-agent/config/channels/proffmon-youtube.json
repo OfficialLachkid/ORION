@@ -98,7 +98,7 @@
       "template_key": "bubble-survival",
       "enabled": true,
       "manual_generate": true,
-      "night_shift": false,
+      "night_shift": true,
       "weight": 1,
       "genre_label": "Bubble Survival"
     }

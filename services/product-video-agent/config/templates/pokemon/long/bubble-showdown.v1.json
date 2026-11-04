@@ -1,0 +1,152 @@
+{
+  "template_id": "pokemon.long.bubble-showdown.v1",
+  "template_key": "long-bubble-showdown",
+  "domain": "pokemon",
+  "content_format": "long_form",
+  "content_surface": "youtube_watch",
+  "version": "1.0.0",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "aspect_ratio": "16:9"
+  },
+  "episode": {
+    "minimum_duration_seconds": 135,
+    "target_duration_seconds": 165,
+    "maximum_duration_seconds": 180,
+    "minimum_rounds": 4,
+    "target_rounds": 5,
+    "maximum_rounds": 6,
+    "intro_duration_seconds": 5,
+    "outro_duration_seconds": 6,
+    "avoid_duplicate_subjects": true
+  },
+  "round_layout": {
+    "frame_width": 960,
+    "frame_height": 540,
+    "arena_center_x": 480,
+    "arena_center_y": 300,
+    "arena_radius": 220,
+    "arena_shape_pool": [
+      "circle",
+      "triangle",
+      "square",
+      "diamond",
+      "rectangle",
+      "pentagon",
+      "hexagon",
+      "octagon",
+      "trefoil",
+      "quatrefoil",
+      "pokemon-silhouette"
+    ],
+    "bubble_radius": 35,
+    "title_y": 52,
+    "title_font_size": 30,
+    "title_side_margin": 60
+  },
+  "presentation": {
+    "accent_color": "0x67DCFF",
+    "intro_eyebrow": "PICK A WINNER EACH ROUND",
+    "intro_title": "POKEMON BUBBLE SHOWDOWN",
+    "intro_subtitle": "NINE POKEMON. THREE TAILS. ONE SURVIVOR.",
+    "outro_eyebrow": "SHOWDOWN COMPLETE",
+    "outro_title": "HOW MANY DID YOU PREDICT?",
+    "outro_subtitle": "TELL US WHICH POOL SHOULD BATTLE NEXT",
+    "outro_accent_color": "0xFFD166",
+    "showdown_title_animation": {
+      "enabled": true,
+      "start_seconds": 0.08,
+      "letter_interval_seconds": 0.085,
+      "letter_pop_seconds": 0.12,
+      "wobble_enabled": true,
+      "wobble_amplitude_px": 3.5,
+      "wobble_rotation_degrees": 2.4,
+      "wobble_scale_amplitude": 0.025,
+      "wobble_period_seconds": 2.0,
+      "wobble_phase_step_radians": 0.7,
+      "neon_palette": [
+        "#67DCFF", "#FFD166", "#9B5DE5", "#F72585", "#FF4D5A", "#FF7BCB", "#39E58C"
+      ]
+    },
+    "round_label": {
+      "font_size": 44,
+      "category_font_size": 28,
+      "background_width": 360,
+      "background_height": 64,
+      "category_background_width": 350,
+      "category_background_height": 44
+    },
+    "defeated_roster": {
+      "enabled": true,
+      "sprite_size": 70,
+      "horizontal_gap": 92,
+      "vertical_gap": 92
+    },
+    "program_card": {
+      "style": "premium_3d",
+      "animate_elements": true,
+      "card_enter_seconds": 0.55,
+      "eyebrow_delay_seconds": 0.18,
+      "title_delay_seconds": 0.34,
+      "subtitle_delay_seconds": 0.62,
+      "element_enter_seconds": 0.42,
+      "title_depth_px": 12,
+      "title_depth_steps": 6,
+      "eyebrow_animation": "slide_fade",
+      "title_animation": "letter_wave",
+      "subtitle_animation": "rise_fade"
+    }
+  },
+  "layout": {
+    "round_transition": {
+      "enabled": true,
+      "duration_seconds": 1.15,
+      "pokeball_size_px": 340,
+      "start_scale": 0.08,
+      "cover_scale": 7.2,
+      "rotation_turns": 1.25
+    }
+  },
+  "audio": {
+    "music_volume": 0.14,
+    "music_crossfade_seconds": 2,
+    "music_ending_fade_seconds": 2.5
+  },
+  "renderer": {
+    "video_codec": "libx264",
+    "preset": "fast",
+    "crf": 20,
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k",
+    "faststart": true
+  },
+  "publication": {
+    "title_variants": [
+      "{round_count} Pokemon Showdowns - Who Wins Each Round?",
+      "Pokemon Bubble Showdown - Pick Every Winner!",
+      "{round_count} Physics Battles - Which Pokemon Survive?"
+    ],
+    "description_variants": [
+      "No stats or type advantage, just physics. Nine Pokemon, three tails each, one survivor per round. How many winners can you predict?",
+      "Pick your winner before every Bubble Showdown. No stats, no type advantage - only physics decides who survives."
+    ],
+    "hashtags": [
+      "#pokemon",
+      "#pokemonchallenge",
+      "#pokemongame",
+      "#pokemonquiz"
+    ]
+  },
+  "publication_policy": {
+    "manual_review_required": true,
+    "night_shift_enabled": false,
+    "related_video_enabled": false,
+    "auto_comment_enabled": false,
+    "custom_thumbnail_required": false,
+    "playlist_enabled": false,
+    "watermark_enabled": false
+  }
+}

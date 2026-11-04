@@ -1,3 +1,10 @@
+import {
+  buildBubbleSurvivalArenaStartingSamples,
+  constrainBubbleToArena,
+  createBubbleSurvivalArenaGeometry,
+  sampleBubbleSurvivalArenaBoundary,
+} from './arena-geometry.mjs';
+
 const EPSILON = 1e-9;
 
 export function hashSeed(input) {
@@ -149,12 +156,27 @@ function resolveBubbleCollision(left, right, leftRadius, rightRadius, restitutio
 function createInitialState(subjects, config, seed) {
   const random = createSeededRandom(seed);
   const count = subjects.length;
-  const startRadius = config.arena_radius - config.bubble_radius - config.start_inset;
-  const startingRotation = (-Math.PI / 2) + (
-    config.randomize_initial_rotation ? random() * Math.PI * 2 : 0
-  );
+  const geometry = createBubbleSurvivalArenaGeometry(config);
+  const startingFraction = config.randomize_initial_rotation ? random() : 0;
+  const initialInset = config.bubble_radius + config.start_inset;
+  const startingSamples = buildBubbleSurvivalArenaStartingSamples({
+    geometry,
+    count,
+    inset: initialInset,
+    rotationFraction: startingFraction,
+    minimumSpacing: (config.bubble_radius * 2) + 1,
+  });
   const bubbles = subjects.map((subject, index) => {
-    const angle = startingRotation + ((Math.PI * 2 * index) / count);
+    const boundary = startingSamples[index];
+    const constrained = constrainBubbleToArena(
+      geometry,
+      boundary,
+      initialInset,
+    );
+    const angle = Math.atan2(
+      constrained.y - config.center_y,
+      constrained.x - config.center_x,
+    );
     const variation = ((random() * 2) - 1) * config.initial_angle_variation_radians;
     const inwardAngle = angle + Math.PI + variation;
     const speedVariation = 1 + (
@@ -164,8 +186,9 @@ function createInitialState(subjects, config, seed) {
     return {
       id: String(subject.id || index),
       subject_index: index,
-      x: config.center_x + (Math.cos(angle) * startRadius),
-      y: config.center_y + (Math.sin(angle) * startRadius),
+      x: constrained.x,
+      y: constrained.y,
+      boundary_fraction: boundary.boundary_fraction,
       previous_x: 0,
       previous_y: 0,
       vx: Math.cos(inwardAngle) * initialSpeed,
@@ -176,17 +199,20 @@ function createInitialState(subjects, config, seed) {
     };
   });
   const tails = bubbles.flatMap((bubble, index) => {
-    const dx = bubble.x - config.center_x;
-    const dy = bubble.y - config.center_y;
-    const angle = Math.atan2(dy, dx);
     return Array.from({ length: config.initial_tail_count }, (_unused, tailIndex) => {
       const centeredIndex = tailIndex - ((config.initial_tail_count - 1) / 2);
-      const anchorAngle = angle + (centeredIndex * config.initial_tail_anchor_spread_radians);
+      const spreadFraction = (
+        centeredIndex * config.initial_tail_anchor_spread_radians * config.arena_radius
+      ) / Math.max(EPSILON, geometry.perimeter);
+      const anchor = sampleBubbleSurvivalArenaBoundary(
+        geometry,
+        bubble.boundary_fraction + spreadFraction,
+      );
       return {
         id: `tail-${index}-${tailIndex}`,
         owner_id: bubble.id,
-        anchor_x: config.center_x + (Math.cos(anchorAngle) * config.arena_radius),
-        anchor_y: config.center_y + (Math.sin(anchorAngle) * config.arena_radius),
+        anchor_x: anchor.x,
+        anchor_y: anchor.y,
       };
     });
   });
@@ -205,6 +231,12 @@ function normalizeSimulationConfig(raw = {}) {
     center_x: Number(raw.center_x ?? 270),
     center_y: Number(raw.center_y ?? 450),
     arena_radius: Number(raw.arena_radius ?? 230),
+    arena_shape: String(raw.arena_shape || 'circle'),
+    arena_shape_aspect_ratio: Number(raw.arena_shape_aspect_ratio ?? 0.72),
+    arena_contour_points: Array.isArray(raw.arena_contour_points)
+      ? raw.arena_contour_points.map((point) => ({ x: Number(point?.x), y: Number(point?.y) }))
+      : [],
+    arena_contour_source_id: String(raw.arena_contour_source_id || ''),
     bubble_radius: Number(raw.bubble_radius ?? 32.76),
     start_inset: Number(raw.start_inset ?? 5),
     initial_tail_count: Math.max(1, Math.round(Number(raw.initial_tail_count ?? 3))),
@@ -235,6 +267,7 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
     throw new Error('Bubble Survival requires at least two subjects.');
   }
   const config = normalizeSimulationConfig(rawConfig);
+  const arenaGeometry = createBubbleSurvivalArenaGeometry(config);
   const { bubbles, tails: initialTails, nextTailId: initialNextTailId } = createInitialState(subjects, config, seed);
   let tails = initialTails;
   let nextTailId = initialNextTailId;
@@ -255,34 +288,36 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
       bubble.x += bubble.vx * config.fixed_step_seconds;
       bubble.y += bubble.vy * config.fixed_step_seconds;
 
-      const dx = bubble.x - config.center_x;
-      const dy = bubble.y - config.center_y;
-      const distance = Math.hypot(dx, dy) || 1;
       const bodyRadius = config.bubble_radius * resolveDefeatedBodyScale(bubble, time, config);
-      const maximumCenterDistance = config.arena_radius - bodyRadius;
-      if (distance > maximumCenterDistance) {
-        const nx = dx / distance;
-        const ny = dy / distance;
-        bubble.x = config.center_x + (nx * maximumCenterDistance);
-        bubble.y = config.center_y + (ny * maximumCenterDistance);
-        const normalVelocity = (bubble.vx * nx) + (bubble.vy * ny);
-        if (normalVelocity > 0) {
-          bubble.vx -= (1 + config.restitution) * normalVelocity * nx;
-          bubble.vy -= (1 + config.restitution) * normalVelocity * ny;
+      const constraint = constrainBubbleToArena(arenaGeometry, bubble, bodyRadius);
+      if (constraint.collided) {
+        bubble.x = constraint.x;
+        bubble.y = constraint.y;
+        for (const contact of constraint.contacts) {
+          const { x: nx, y: ny } = contact.outward_normal;
+          const normalVelocity = (bubble.vx * nx) + (bubble.vy * ny);
+          if (normalVelocity > 0) {
+            bubble.vx -= (1 + config.restitution) * normalVelocity * nx;
+            bubble.vy -= (1 + config.restitution) * normalVelocity * ny;
+          }
         }
         if (bubble.alive && !bubble.wall_contact) {
+          const anchor = constraint.contacts[0]?.anchor || {
+            x: bubble.x,
+            y: bubble.y,
+          };
           const tail = {
             id: `tail-${nextTailId}`,
             owner_id: bubble.id,
-            anchor_x: config.center_x + (nx * config.arena_radius),
-            anchor_y: config.center_y + (ny * config.arena_radius),
+            anchor_x: anchor.x,
+            anchor_y: anchor.y,
           };
           nextTailId += 1;
           tails.push(tail);
           stepEvents.push({ type: 'tail_created', bubble_id: bubble.id, tail_id: tail.id });
         }
         bubble.wall_contact = true;
-      } else if (distance < maximumCenterDistance - 0.5) {
+      } else if (constraint.clearance > 0.5) {
         bubble.wall_contact = false;
       }
     }
@@ -307,6 +342,13 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
 
     const bubbleById = new Map(bubbles.map((bubble) => [bubble.id, bubble]));
     const destroyedTailIds = new Set();
+    const remainingTailCountByOwner = new Map();
+    for (const tail of tails) {
+      remainingTailCountByOwner.set(
+        tail.owner_id,
+        (remainingTailCountByOwner.get(tail.owner_id) || 0) + 1,
+      );
+    }
     for (const attacker of activeBodies) {
       const previousCenter = { x: attacker.previous_x, y: attacker.previous_y };
       const center = { x: attacker.x, y: attacker.y };
@@ -323,12 +365,18 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
           { x: owner.x, y: owner.y },
         )) {
           destroyedTailIds.add(tail.id);
+          const remainingTailCount = Math.max(
+            0,
+            (remainingTailCountByOwner.get(tail.owner_id) || 0) - 1,
+          );
+          remainingTailCountByOwner.set(tail.owner_id, remainingTailCount);
           const event = {
             type: 'tail_destroyed',
             attacker_id: attacker.id,
             attacker_is_defeated: !attacker.alive,
             owner_id: tail.owner_id,
             tail_id: tail.id,
+            remaining_tail_count: remainingTailCount,
           };
           stepEvents.push(event);
           eventLog.push({ time: Math.round(time * 1000) / 1000, ...event });
@@ -342,7 +390,7 @@ export function simulateBubbleSurvival({ subjects, seed, config: rawConfig = {} 
           bubble.alive = false;
           bubble.defeated_at = time;
           lastEliminationTime = time;
-          const event = { type: 'eliminated', bubble_id: bubble.id };
+          const event = { type: 'eliminated', bubble_id: bubble.id, remaining_tail_count: 0 };
           stepEvents.push(event);
           eventLog.push({ time: Math.round(time * 1000) / 1000, ...event });
         }

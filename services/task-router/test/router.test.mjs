@@ -372,6 +372,23 @@ test('normalizeTaskMessage recognizes progressive-reveal generation commands as 
   );
 });
 
+test('normalizeTaskMessage routes long-form Bubble Showdown through the product-video agent', () => {
+  const config = loadRuntimeConfig();
+  const result = normalizeTaskMessage({
+    content: 'generate video format: long_form template: long-bubble-showdown channel: poke-quizz-youtube',
+    channelKey: 'commands',
+    messageId: 'message-long-bubble-showdown',
+    author: { id: 'operator-1', username: 'operator' },
+    submittedAt: '2026-11-02T12:00:00.000Z',
+  }, config);
+
+  assert.equal(result.task.runtime_action, 'poke_quizz_generate_review');
+  assert.equal(result.task.summary, 'Generate long-form Bubble Showdown review for Poke Quizz');
+  assert.equal(result.task.poke_quizz_generate_review.contentFormat, 'long_form');
+  assert.equal(result.task.poke_quizz_generate_review.templateKey, 'long-bubble-showdown');
+  assert.equal(result.task.poke_quizz_generate_review.templateId, 'pokemon.long.bubble-showdown.v1');
+});
+
 test('normalizeTaskMessage recognizes analytics digest commands as explicit runtime actions', () => {
   const config = loadRuntimeConfig();
   const result = normalizeTaskMessage({
