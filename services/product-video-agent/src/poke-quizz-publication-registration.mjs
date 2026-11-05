@@ -1,6 +1,7 @@
 import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { createStableId } from './ids.mjs';
+import { buildYoutubePlaylistClassification } from './youtube-playlists/classification.mjs';
 
 function slugify(value) {
   return String(value || '')
@@ -57,7 +58,13 @@ export function buildVideoSignals(plan) {
   if (!plan || typeof plan !== 'object') return null;
   const out = {};
 
-  const difficulty = String(plan?.selection?.difficulty_id || '').trim();
+  const playlistClassification = buildYoutubePlaylistClassification(plan);
+  const difficulty = String(
+    playlistClassification?.difficulty_key
+      || plan?.selection?.difficulty_key
+      || plan?.selection?.difficulty_id
+      || '',
+  ).trim();
   const roundCount = Number(plan?.selection?.round_count);
   if (difficulty || Number.isFinite(roundCount)) {
     out.variant = {};
@@ -245,6 +252,7 @@ export async function createPokeQuizzPublicationRegistration({
   };
 
   const videoSignals = buildVideoSignals(plan);
+  const playlistClassification = buildYoutubePlaylistClassification(plan);
   const publicationRow = {
     id: publicationId,
     video_id: videoId,
@@ -278,6 +286,7 @@ export async function createPokeQuizzPublicationRegistration({
       description_generation_model: metadata.model || channelProfile.metadata?.description_generation_model || 'fallback',
       generation_provider: metadata.generation_provider || 'template',
       registration_source: 'poke-quizz-local-render',
+      ...(playlistClassification ? { playlist_classification: playlistClassification } : {}),
       // Analytics variant signals (2026-11-02 pilot — stat-clash first;
       // see Jacobs-2/07_Products/Product_Video_Agent/Analytics.md).
       // Omitted entirely when the plan has no video_signals data

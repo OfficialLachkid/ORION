@@ -39,6 +39,7 @@ import { isRelatedVideoEligiblePublication } from '../../src/related-video/eligi
 import { planRelatedVideoSelection } from '../../src/related-video/selector.mjs';
 import { applyYoutubeRelatedVideoSelection } from '../../src/related-video/youtube-studio-automation.mjs';
 import { syncYoutubeAutoCommentState } from '../../src/youtube-auto-comments.mjs';
+import { syncYoutubePlaylistState } from '../../src/youtube-playlists/sync.mjs';
 import {
   YoutubeApiQuotaExceededError,
   ensureYoutubeAudienceDeclared,
@@ -263,6 +264,19 @@ function mergeAutoCommentResult(result = {}, autoCommentResult = {}) {
   };
 }
 
+function mergePlaylistResult(result = {}, playlistResult = {}) {
+  const status = String(playlistResult?.status || '').trim();
+  const reason = String(playlistResult?.reason || '').trim();
+  if ((!status && !reason) || status === 'skipped') return result;
+  return {
+    ...result,
+    youtube_playlist_status: status,
+    youtube_playlist_reason: reason,
+    youtube_playlist_expected_count: Number(playlistResult?.summary?.expected_count || 0),
+    youtube_playlist_verified_count: Number(playlistResult?.summary?.verified_count || 0),
+  };
+}
+
 async function persistPublicationState({
   store,
   runtimeConfig,
@@ -408,6 +422,37 @@ async function syncPublicationYoutubeAutoComment({
       publication,
       updated: false,
       action: 'sync_failed',
+      status: 'failed',
+      reason: 'sync_exception',
+      error: error.message || String(error),
+    };
+  }
+}
+
+async function syncPublicationYoutubePlaylists({
+  store,
+  publication,
+  channelProfile,
+  clientConfig,
+  refreshToken,
+  asOf = new Date().toISOString(),
+  liveStatus = null,
+  syncYoutubePlaylistImpl = syncYoutubePlaylistState,
+}) {
+  try {
+    return await syncYoutubePlaylistImpl({
+      store,
+      publication,
+      channelProfile,
+      clientConfig,
+      refreshToken,
+      asOf,
+      liveStatus,
+    });
+  } catch (error) {
+    return {
+      publication,
+      updated: false,
       status: 'failed',
       reason: 'sync_exception',
       error: error.message || String(error),
@@ -738,6 +783,7 @@ export async function reconcilePreviewPublications({
   fetchYoutubeStatuses = fetchYoutubeVideoStatuses,
   asOf = new Date().toISOString(),
   syncYoutubeAutoCommentImpl = syncYoutubeAutoCommentState,
+  syncYoutubePlaylistImpl = syncYoutubePlaylistState,
 }) {
   let refreshedPublications = [...publications];
   const results = [];
@@ -869,15 +915,26 @@ export async function reconcilePreviewPublications({
           syncYoutubeAutoCommentImpl,
         });
         updatedPublication = autoCommentResult.publication || updatedPublication;
+        const playlistResult = await syncPublicationYoutubePlaylists({
+          store,
+          publication: updatedPublication,
+          channelProfile,
+          clientConfig,
+          refreshToken,
+          asOf,
+          liveStatus,
+          syncYoutubePlaylistImpl,
+        });
+        updatedPublication = playlistResult.publication || updatedPublication;
         refreshedPublications = replacePublication(refreshedPublications, updatedPublication);
-        results.push(mergeAutoCommentResult({
+        results.push(mergePlaylistResult(mergeAutoCommentResult({
           publication_id: publication.id,
           action: 'preview_reconcile',
           workflow_state: 'published',
           reason: workflowState === 'preview_approved'
             ? 'approved_preview_made_public'
             : 'preview_made_public',
-        }, autoCommentResult));
+        }, autoCommentResult), playlistResult));
         continue;
       }
 
@@ -945,6 +1002,7 @@ export async function reconcilePublishedPublications({
   fetchYoutubeStatuses = fetchYoutubeVideoStatuses,
   asOf = new Date().toISOString(),
   syncYoutubeAutoCommentImpl = syncYoutubeAutoCommentState,
+  syncYoutubePlaylistImpl = syncYoutubePlaylistState,
 }) {
   let refreshedPublications = [...publications];
   const results = [];
@@ -1083,19 +1141,30 @@ export async function reconcilePublishedPublications({
           syncYoutubeAutoCommentImpl,
         });
         updatedPublication = autoCommentResult.publication || updatedPublication;
+        const playlistResult = await syncPublicationYoutubePlaylists({
+          store,
+          publication: updatedPublication,
+          channelProfile,
+          clientConfig,
+          refreshToken,
+          asOf,
+          liveStatus,
+          syncYoutubePlaylistImpl,
+        });
+        updatedPublication = playlistResult.publication || updatedPublication;
         refreshedPublications = replacePublication(refreshedPublications, updatedPublication);
-        if (!needsPublishedRefresh && !autoCommentResult.updated) {
+        if (!needsPublishedRefresh && !autoCommentResult.updated && !playlistResult.updated) {
           continue;
         }
 
-        results.push(mergeAutoCommentResult({
+        results.push(mergePlaylistResult(mergeAutoCommentResult({
           publication_id: publication.id,
           action: 'published_reconcile',
           workflow_state: 'published',
           reason: workflowState === 'withdrawn'
             ? 'youtube_public_restored'
             : 'published_metadata_refreshed',
-        }, autoCommentResult));
+        }, autoCommentResult), playlistResult));
         continue;
       }
 
@@ -1159,6 +1228,7 @@ export async function reconcileScheduledPublications({
   asOf = new Date().toISOString(),
   fetchYoutubeStatus = fetchYoutubeVideoStatus,
   syncYoutubeAutoCommentImpl = syncYoutubeAutoCommentState,
+  syncYoutubePlaylistImpl = syncYoutubePlaylistState,
 }) {
   let refreshedPublications = [...publications];
   const results = [];
@@ -1247,13 +1317,24 @@ export async function reconcileScheduledPublications({
         syncYoutubeAutoCommentImpl,
       });
       updatedPublication = autoCommentResult.publication || updatedPublication;
+      const playlistResult = await syncPublicationYoutubePlaylists({
+        store,
+        publication: updatedPublication,
+        channelProfile,
+        clientConfig,
+        refreshToken,
+        asOf,
+        liveStatus,
+        syncYoutubePlaylistImpl,
+      });
+      updatedPublication = playlistResult.publication || updatedPublication;
       refreshedPublications = replacePublication(refreshedPublications, updatedPublication);
-      results.push(mergeAutoCommentResult({
+      results.push(mergePlaylistResult(mergeAutoCommentResult({
         publication_id: publication.id,
         action: 'queue_reconcile',
         workflow_state: 'published',
         reason: 'already_public',
-      }, autoCommentResult));
+      }, autoCommentResult), playlistResult));
       continue;
     }
 
@@ -1720,6 +1801,16 @@ async function main() {
         liveStatus,
       });
       updatedPublication = autoCommentResult.publication || updatedPublication;
+      const playlistResult = await syncPublicationYoutubePlaylists({
+        store,
+        publication: updatedPublication || publication,
+        channelProfile,
+        clientConfig,
+        refreshToken,
+        asOf,
+        liveStatus,
+      });
+      updatedPublication = playlistResult.publication || updatedPublication;
       await updatePublicationReviewMessage({
         runtimeConfig,
         store,
@@ -1738,14 +1829,14 @@ async function main() {
         channelProfile,
         channelSelector,
       });
-      results.push(mergeAutoCommentResult({
+      results.push(mergePlaylistResult(mergeAutoCommentResult({
         publication_id: publication.id,
         action: 'reconcile_published',
         external_id: publication.external_id,
         public_url: updatedPublication?.public_url || publication.public_url || publication.preview_url || liveStatus.publicUrl || '',
         published_at: updatedPublication?.published_at || publication.published_at || liveStatus.publishedAt || '',
         workflow_state: updatedPublication?.metadata?.workflow_state || 'published',
-      }, autoCommentResult));
+      }, autoCommentResult), playlistResult));
       printInfo(`Marked publication ${publication.id} as published from live YouTube status.`);
       continue;
     }

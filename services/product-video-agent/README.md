@@ -14,6 +14,8 @@ The active targets are YouTube Shorts, Instagram Reels, and TikTok. Script jobs 
 
 Multi-platform publication details live in `docs/multi-platform-publication.md`. YouTube remains the preview/review surface; additional platforms are fanned out only from approved publication rows.
 
+Post-publication playlist behavior is documented in `docs/youtube-playlist-automation.md`. It dynamically supports active short-form YouTube channels and newly registered short-form templates; long-form playlist assignment remains disabled.
+
 ## Run
 
 From the repository root:

@@ -217,6 +217,113 @@ export class SupabasePublicationStore {
     });
   }
 
+  async ensureYoutubePlaylistAssignments(rows = []) {
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    await this.request('youtube_playlist_assignments', {
+      method: 'POST',
+      params: { on_conflict: 'publication_id,playlist_key' },
+      prefer: 'resolution=ignore-duplicates,return=minimal',
+      body: rows,
+    });
+  }
+
+  async fetchYoutubePlaylistAssignments(publicationId) {
+    return this.request('youtube_playlist_assignments', {
+      params: {
+        select: 'id,publication_id,account_key,playlist_key,youtube_playlist_id,youtube_playlist_item_id,configuration_version,status,claim_token,claimed_at,attempt_count,next_retry_at,last_error,verified_at',
+        publication_id: `eq.${publicationId}`,
+        order: 'created_at.asc',
+        limit: 10,
+      },
+    });
+  }
+
+  async claimYoutubePlaylistAssignment(id, patch) {
+    const rows = await this.request('youtube_playlist_assignments', {
+      method: 'PATCH',
+      params: {
+        id: `eq.${id}`,
+        status: 'in.(pending,retry)',
+        select: 'id,publication_id,account_key,playlist_key,youtube_playlist_id,youtube_playlist_item_id,configuration_version,status,claim_token,claimed_at,attempt_count,next_retry_at,last_error,verified_at',
+      },
+      prefer: 'return=representation',
+      body: patch,
+    });
+    return rows?.[0] || null;
+  }
+
+  async updateYoutubePlaylistAssignment(id, patch) {
+    const rows = await this.request('youtube_playlist_assignments', {
+      method: 'PATCH',
+      params: {
+        id: `eq.${id}`,
+        select: 'id,publication_id,account_key,playlist_key,youtube_playlist_id,youtube_playlist_item_id,configuration_version,status,claim_token,claimed_at,attempt_count,next_retry_at,last_error,verified_at',
+      },
+      prefer: 'return=representation',
+      body: patch,
+    });
+    return rows?.[0] || null;
+  }
+
+  async ensureYoutubePlaylistRegistryEntry(row) {
+    await this.request('youtube_playlist_registry', {
+      method: 'POST',
+      params: { on_conflict: 'account_key,playlist_key' },
+      prefer: 'resolution=ignore-duplicates,return=minimal',
+      body: [row],
+    });
+  }
+
+  async fetchYoutubePlaylistRegistryEntry(accountKey, playlistKey) {
+    const rows = await this.request('youtube_playlist_registry', {
+      params: {
+        select: 'id,account_key,playlist_key,youtube_playlist_id,title,description,privacy,configuration_version,status,claim_token,claimed_at,attempt_count,next_retry_at,last_error',
+        account_key: `eq.${accountKey}`,
+        playlist_key: `eq.${playlistKey}`,
+        limit: 1,
+      },
+    });
+    return rows?.[0] || null;
+  }
+
+  async claimYoutubePlaylistRegistryEntry(id, patch) {
+    const rows = await this.request('youtube_playlist_registry', {
+      method: 'PATCH',
+      params: {
+        id: `eq.${id}`,
+        status: 'in.(pending,retry)',
+        select: 'id,account_key,playlist_key,youtube_playlist_id,title,description,privacy,configuration_version,status,claim_token,claimed_at,attempt_count,next_retry_at,last_error',
+      },
+      prefer: 'return=representation',
+      body: patch,
+    });
+    return rows?.[0] || null;
+  }
+
+  async updateYoutubePlaylistRegistryEntry(id, patch) {
+    const rows = await this.request('youtube_playlist_registry', {
+      method: 'PATCH',
+      params: {
+        id: `eq.${id}`,
+        select: 'id,account_key,playlist_key,youtube_playlist_id,title,description,privacy,configuration_version,status,claim_token,claimed_at,attempt_count,next_retry_at,last_error',
+      },
+      prefer: 'return=representation',
+      body: patch,
+    });
+    return rows?.[0] || null;
+  }
+
+  async setYoutubePlaylistSummary(publicationId, summary) {
+    await this.request('rpc/set_youtube_playlist_summary', {
+      method: 'POST',
+      prefer: 'return=minimal',
+      body: {
+        p_publication_id: publicationId,
+        p_summary: summary,
+      },
+    });
+  }
+
   async upsertVideoAnalyticsSnapshot(snapshotRow) {
     const rows = await this.request('video_analytics', {
       method: 'POST',
