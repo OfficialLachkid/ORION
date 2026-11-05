@@ -1,4 +1,14 @@
+import { readFileSync } from 'node:fs';
+
 const SUPPORTED_DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
+const PLAYLIST_POLICY = JSON.parse(readFileSync(
+  new URL('../../config/youtube-playlist-policy.json', import.meta.url),
+  'utf8',
+));
+
+export const YOUTUBE_PLAYLIST_CONFIGURATION_VERSION = String(
+  PLAYLIST_POLICY.configuration_version || 'youtube-playlists-v1',
+).trim();
 
 function normalizeToken(value = '') {
   return String(value || '').trim().toLowerCase();
@@ -26,6 +36,17 @@ export function buildPlaylistTemplateTitle(templateId = '', override = '') {
   const key = normalizePlaylistTemplateKey(templateId);
   const segments = key.split('.').filter(Boolean);
   return titleCaseWords(segments.at(-1) || key || 'Video');
+}
+
+export function buildPlaylistTargetTitle(classification = {}) {
+  const templateKey = normalizePlaylistTemplateKey(classification.template_key);
+  const templateTitle = buildPlaylistTemplateTitle(
+    templateKey,
+    classification.template_title,
+  );
+  const style = PLAYLIST_POLICY.template_title_styles?.[templateKey]
+    || PLAYLIST_POLICY.default_template_title_style;
+  return style === 'plain' ? templateTitle : `${templateTitle} — All Difficulties`;
 }
 
 export function normalizePlaylistDifficulty(value = '') {

@@ -344,6 +344,18 @@ export class SupabasePublicationStore {
     return rows?.[0] || null;
   }
 
+  async fetchYoutubePlaylistRegistryEntries(accountKey, limit = 100) {
+    return this.request('youtube_playlist_registry', {
+      params: {
+        select: 'id,account_key,playlist_key,youtube_playlist_id,title,description,privacy,configuration_version,status,last_error',
+        account_key: `eq.${accountKey}`,
+        order: 'created_at.asc',
+        limit,
+      },
+      queryClass: 'youtube_playlist_registry_reconciliation',
+    });
+  }
+
   async claimYoutubePlaylistRegistryEntry(id, patch) {
     const rows = await this.request('youtube_playlist_registry', {
       method: 'PATCH',

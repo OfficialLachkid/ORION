@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  buildPlaylistTargetTitle,
   buildYoutubePlaylistClassification,
   classifyRelativeDifficulty,
   normalizePlaylistTemplateKey,
+  YOUTUBE_PLAYLIST_CONFIGURATION_VERSION,
 } from '../src/youtube-playlists/classification.mjs';
 
 test('short-form templates automatically receive a version-stable playlist classification', () => {
@@ -19,6 +21,25 @@ test('short-form templates automatically receive a version-stable playlist class
     difficulty_key: 'hard',
   });
   assert.equal(normalizePlaylistTemplateKey('pokemon.find-the-shiny.v12'), 'pokemon.find-the-shiny');
+});
+
+test('playlist title policy removes the suffix only for configured templates', () => {
+  for (const templateKey of [
+    'pokemon.build-your-team',
+    'pokemon.find-the-shiny',
+    'pokemon.pixelated-reveal',
+    'pokemon.progressive-reveal',
+  ]) {
+    assert.doesNotMatch(buildPlaylistTargetTitle({
+      template_key: templateKey,
+      template_title: 'Readable Title',
+    }), /All Difficulties/u);
+  }
+  assert.equal(buildPlaylistTargetTitle({
+    template_key: 'pokemon.stat-clash',
+    template_title: 'Stat Clash',
+  }), 'Stat Clash — All Difficulties');
+  assert.equal(YOUTUBE_PLAYLIST_CONFIGURATION_VERSION, 'youtube-playlists-v2');
 });
 
 test('long-form and explicitly disabled plans do not enter playlist automation', () => {

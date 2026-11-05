@@ -3,7 +3,10 @@ import test from 'node:test';
 
 import { SupabasePublicationStore } from '../src/publication-store.mjs';
 import { normalizeRuntimePublication } from '../src/publication-runtime-snapshot.mjs';
-import { resolvePublicationPlaylistClassification } from '../src/youtube-playlists/classification.mjs';
+import {
+  resolvePublicationPlaylistClassification,
+  YOUTUBE_PLAYLIST_CONFIGURATION_VERSION,
+} from '../src/youtube-playlists/classification.mjs';
 import {
   deriveLegacyPlaylistClassification,
   executeYoutubePlaylistBackfill,
@@ -66,7 +69,7 @@ test('backfill is channel-scoped, capped, idempotency-aware, and reports quota u
       id: 'publication-verified',
       external_id: 'youtube-video-2',
       youtube_playlist_status: 'verified',
-      youtube_playlist_configuration_version: 'youtube-playlists-v1',
+      youtube_playlist_configuration_version: YOUTUBE_PLAYLIST_CONFIGURATION_VERSION,
       youtube_playlist_target_signature: 'difficulty:hard|template:pokemon.find-the-shiny',
     }),
     publicationRow({ id: 'wrong-channel', account_key: 'another-channel' }),

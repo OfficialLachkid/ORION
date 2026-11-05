@@ -74,3 +74,17 @@ npm run product-video:backfill-youtube-playlists -- --channel proffmon-youtube -
 ```
 
 The backfill classification is stored before YouTube mutation, so a restart can resume the same publication through the normal reconciler. Existing verified assignments are skipped. OAuth access is refreshed once per backfill run, and videos are processed sequentially rather than as a quota burst.
+
+## Title-policy reconciliation
+
+Template playlist naming is channel-independent and versioned in `config/youtube-playlist-policy.json`. A title-policy change affects future playlists immediately. Existing managed playlists can be inspected and updated without replacing their playlist IDs or memberships:
+
+```bash
+# Read-only plan for one exact channel.
+npm run product-video:reconcile-youtube-playlists -- --channel proffmon-youtube
+
+# Apply only the reported title and registry-version changes.
+npm run product-video:reconcile-youtube-playlists -- --channel proffmon-youtube --apply
+```
+
+The command reads only the compact registry rows for the selected channel. It updates playlist metadata sequentially through the official YouTube API and is idempotent after the configured title and policy version match.

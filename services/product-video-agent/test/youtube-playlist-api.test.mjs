@@ -5,6 +5,7 @@ import {
   createYoutubePlaylist,
   findYoutubePlaylistByTitle,
   insertYoutubePlaylistItem,
+  updateYoutubePlaylist,
   YoutubePlaylistApiError,
 } from '../src/youtube-playlists/youtube-api.mjs';
 
@@ -35,6 +36,31 @@ test('YouTube playlist creation uses the authenticated official API', async () =
   assert.equal(calls[0].options.method, 'POST');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer token');
   assert.match(calls[0].url, /\/youtube\/v3\/playlists/iu);
+});
+
+test('playlist metadata update preserves identity while changing its title', async () => {
+  const result = await updateYoutubePlaylist({
+    accessToken: 'token',
+    playlistId: 'PL-template',
+    title: 'Find The Shiny',
+    description: 'Managed by ORION.',
+    fetchImpl: async (_url, options) => {
+      assert.equal(options.method, 'PUT');
+      const body = JSON.parse(options.body);
+      assert.equal(body.id, 'PL-template');
+      assert.equal(body.snippet.title, 'Find The Shiny');
+      return jsonResponse({
+        id: 'PL-template',
+        snippet: { title: 'Find The Shiny' },
+        status: { privacyStatus: 'public' },
+      });
+    },
+  });
+  assert.deepEqual(result, {
+    playlistId: 'PL-template',
+    title: 'Find The Shiny',
+    privacy: 'public',
+  });
 });
 
 test('managed playlist discovery reuses an exact existing title', async () => {

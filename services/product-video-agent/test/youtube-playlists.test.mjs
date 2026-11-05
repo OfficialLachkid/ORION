@@ -6,6 +6,7 @@ import {
   resolveYoutubePlaylistConfig,
   syncYoutubePlaylistState,
 } from '../src/youtube-playlists/sync.mjs';
+import { YOUTUBE_PLAYLIST_CONFIGURATION_VERSION } from '../src/youtube-playlists/classification.mjs';
 
 function channelProfile(overrides = {}) {
   return {
@@ -154,7 +155,7 @@ test('a verified summary prevents Supabase assignment reads and YouTube calls', 
   const current = publication();
   current.metadata.youtube_playlists = {
     status: 'verified',
-    configuration_version: 'youtube-playlists-v1',
+    configuration_version: YOUTUBE_PLAYLIST_CONFIGURATION_VERSION,
     target_signature: 'difficulty:hard|template:pokemon.find-the-shiny',
   };
   const result = await syncYoutubePlaylistState({

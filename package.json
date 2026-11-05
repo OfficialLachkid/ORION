@@ -167,6 +167,7 @@
     "product-video:register-poke-quizz-publication": "node services/product-video-agent/scripts/register-poke-quizz-publication.mjs",
     "product-video:execute-youtube-publication": "node services/product-video-agent/scripts/execute-youtube-publication.mjs",
     "product-video:backfill-youtube-playlists": "node services/product-video-agent/scripts/publication/backfill-youtube-playlists.mjs",
+    "product-video:reconcile-youtube-playlists": "node services/product-video-agent/scripts/publication/reconcile-youtube-playlists.mjs",
     "product-video:execute-tiktok-publication": "node services/product-video-agent/scripts/publication/social/tiktok/execute-due-publications.mjs",
     "product-video:execute-instagram-publication": "node services/product-video-agent/scripts/publication/social/instagram/execute-due-publications.mjs",
     "product-video:diagnose-instagram": "node services/product-video-agent/scripts/publication/social/instagram/execute-due-publications.mjs",
