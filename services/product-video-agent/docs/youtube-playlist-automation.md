@@ -60,3 +60,17 @@ The existing publication reconciliation and night-shift execution paths call the
 ## Rollout safety
 
 Normal runtime requires the normalized classification added to newly registered publications. Legacy published rows are not silently backfilled, preventing a deployment-time YouTube quota burst. Historical organization remains a separate future dry-run and bounded backfill operation.
+
+## Bounded historical backfill
+
+Backfill is an explicit operator action. It requires a channel selector, defaults to dry-run, reads only compact scalar metadata, processes newest videos first, and enforces a hard maximum of 25 videos per run. The dry-run reports a worst-case write-quota estimate before any YouTube call.
+
+```bash
+# Inspect the newest 10 ProffMon publications without writing anything.
+npm run product-video:backfill-youtube-playlists -- --channel proffmon-youtube --limit 10
+
+# Apply exactly that bounded channel run after reviewing the plan.
+npm run product-video:backfill-youtube-playlists -- --channel proffmon-youtube --limit 10 --apply
+```
+
+The backfill classification is stored before YouTube mutation, so a restart can resume the same publication through the normal reconciler. Existing verified assignments are skipped. OAuth access is refreshed once per backfill run, and videos are processed sequentially rather than as a quota burst.

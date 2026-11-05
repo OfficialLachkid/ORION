@@ -82,7 +82,9 @@ export function resolvePublicationPlaylistClassification(publication = {}) {
   if (contentSurface !== 'youtube_shorts') return null;
   if (metadata?.publication_policy?.playlist_enabled === false) return null;
 
-  const stored = metadata.playlist_classification || {};
+  const stored = metadata.playlist_classification
+    || metadata?.youtube_playlists?.backfill_classification
+    || {};
   const templateId = String(stored.template_key || publication.playlist_template_key || '').trim();
   const templateKey = normalizePlaylistTemplateKey(templateId);
   if (!templateKey) return null;

@@ -217,6 +217,64 @@ export class SupabasePublicationStore {
     });
   }
 
+  async fetchYoutubePlaylistBackfillCandidates({ accountKey, limit = 10 }) {
+    return this.request('video_publications', {
+      params: {
+        select: [
+          'id',
+          'account_key',
+          'platform',
+          'status',
+          'external_id',
+          'visibility',
+          'published_at',
+          'content_surface:metadata->>content_surface',
+          'playlist_enabled:metadata->publication_policy->>playlist_enabled',
+          'template_id:metadata->>template_id',
+          'playlist_template_key:metadata->playlist_classification->>template_key',
+          'playlist_template_title:metadata->playlist_classification->>template_title',
+          'playlist_difficulty_key:metadata->playlist_classification->>difficulty_key',
+          'video_difficulty:metadata->video_signals->variant->>difficulty',
+          'youtube_playlist_status:metadata->youtube_playlists->>status',
+          'youtube_playlist_configuration_version:metadata->youtube_playlists->>configuration_version',
+          'youtube_playlist_target_signature:metadata->youtube_playlists->>target_signature',
+          'backfill_template_key:metadata->youtube_playlists->backfill_classification->>template_key',
+          'backfill_template_title:metadata->youtube_playlists->backfill_classification->>template_title',
+          'backfill_difficulty_key:metadata->youtube_playlists->backfill_classification->>difficulty_key',
+        ].join(','),
+        platform: 'eq.youtube_shorts',
+        account_key: `eq.${accountKey}`,
+        status: 'eq.published',
+        visibility: 'eq.public',
+        external_id: 'not.is.null',
+        order: 'published_at.desc',
+        limit,
+      },
+      queryClass: 'youtube_playlist_backfill_candidates',
+    });
+  }
+
+  async verifyYoutubePlaylistAutomationSchema() {
+    await Promise.all([
+      this.request('youtube_playlist_registry', {
+        params: { select: 'id', limit: 1 },
+        queryClass: 'youtube_playlist_schema_preflight',
+      }),
+      this.request('youtube_playlist_assignments', {
+        params: { select: 'id', limit: 1 },
+        queryClass: 'youtube_playlist_schema_preflight',
+      }),
+    ]);
+  }
+
+  async setYoutubePlaylistBackfillClassification(publicationId, classification, receipt) {
+    await this.setYoutubePlaylistSummary(publicationId, {
+      status: 'pending',
+      backfill_classification: classification,
+      backfill_receipt: receipt,
+    });
+  }
+
   async ensureYoutubePlaylistAssignments(rows = []) {
     if (!Array.isArray(rows) || rows.length === 0) return;
     await this.request('youtube_playlist_assignments', {
