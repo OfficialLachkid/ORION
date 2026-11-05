@@ -329,3 +329,29 @@ test('resource-busy research gets one sequential retry immediately before leadge
     'leadgen must wait for the bounded research retry',
   );
 });
+
+test('transient research timeout gets one bounded retry before leadgen', async (t) => {
+  const root = makeTempRoot(t);
+  let attempts = 0;
+  const { calls, deps } = makeDeps(root, {
+    runNightShiftDigitalAssetResearch: async () => {
+      attempts += 1;
+      calls.push(`runNightShiftDigitalAssetResearch:${attempts}`);
+      return attempts === 1
+        ? { status: 'deferred', reason: 'transient_timeout' }
+        : { status: 'completed', runId: 'research-run-after-timeout' };
+    },
+  });
+
+  await runNightShift(['node', 'scripts/run-night-shift.mjs', '--limit', '30'], deps);
+
+  assert.equal(attempts, 2);
+  assert.ok(
+    calls.indexOf('runNightShiftDigitalAssetResearch:2') > calls.indexOf('postPokemonNightShiftDigest'),
+    'timeout retry must wait until normal night-shift maintenance is complete',
+  );
+  assert.ok(
+    calls.indexOf('kickOffScheduledLeadgen') > calls.indexOf('runNightShiftDigitalAssetResearch:2'),
+    'leadgen must remain after the bounded timeout retry',
+  );
+});

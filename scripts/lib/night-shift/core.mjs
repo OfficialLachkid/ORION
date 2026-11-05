@@ -41,6 +41,7 @@ const RETRYABLE_RESEARCH_DEFERRALS = new Set([
   'blocking_process_running',
   'digital_asset_generation_running',
   'resource_busy',
+  'transient_timeout',
 ]);
 
 export function markerPath(now = new Date(), root = projectRoot) {

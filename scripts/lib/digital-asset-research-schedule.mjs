@@ -82,6 +82,13 @@ function deferredResult(reason, details = {}) {
   };
 }
 
+function isTransientTimeout(error) {
+  const errorName = String(error?.name || '');
+  const message = String(error?.message || error || '');
+  return /^(AbortError|TimeoutError)$/u.test(errorName)
+    || /aborted due to timeout|exceeded its execution limit|timed?\s*out/iu.test(message);
+}
+
 export async function runScheduledDigitalAssetResearch(options) {
   const now = options.now || new Date();
   const state = (options.readState || readScheduleState)(options.statePath);
@@ -160,6 +167,11 @@ export async function runScheduledDigitalAssetResearch(options) {
   } catch (error) {
     if (/already held|Ollama is already in use/iu.test(String(error?.message || ''))) {
       return deferredResult('resource_busy', { detail: String(error.message).slice(0, 300) });
+    }
+    if (isTransientTimeout(error)) {
+      return deferredResult('transient_timeout', {
+        detail: String(error?.message || error).slice(0, 300),
+      });
     }
     throw error;
   } finally {

@@ -100,3 +100,41 @@ test('scheduled research acquires shared locks and records one successful collec
   assert.ok(processCall.args.includes('--scheduled'));
   assert.deepEqual(releases, [resolve(root, 'ollama.lock'), resolve(root, 'research.lock')]);
 });
+
+test('scheduled research defers transient timeouts without recording a partial snapshot', async () => {
+  const root = mkdtempSync(resolve(tmpdir(), 'orion-research-timeout-'));
+  const archiveRoot = resolve(root, 'archive');
+  mkdirSync(archiveRoot, { recursive: true });
+  const releases = [];
+  let wroteState = false;
+
+  const result = await runScheduledDigitalAssetResearch({
+    projectRoot: root,
+    archiveRoot,
+    statePath: resolve(root, 'state.json'),
+    generationLockPath: resolve(root, 'generation.lock'),
+    researchLockPath: resolve(root, 'research.lock'),
+    ollamaLockPath: resolve(root, 'ollama.lock'),
+    researchScriptPath: resolve(root, 'research.mjs'),
+    configPath: resolve(root, 'config.json'),
+    runtimeEnvPath: resolve(root, '.env'),
+    ollamaBaseUrl: 'http://127.0.0.1:11434',
+    ollamaModel: 'llama3.1:8b',
+    readState: () => ({}),
+    writeState: () => { wroteState = true; },
+    listProcesses: () => [],
+    acquireLock: (path) => () => releases.push(path),
+    inspectOllama: async () => ({ installed: true, loadedModelCount: 0 }),
+    runProcess: async () => {
+      const error = new Error('The operation was aborted due to timeout');
+      error.name = 'TimeoutError';
+      throw error;
+    },
+  });
+
+  assert.equal(result.status, 'deferred');
+  assert.equal(result.reason, 'transient_timeout');
+  assert.match(result.detail, /aborted due to timeout/iu);
+  assert.equal(wroteState, false);
+  assert.deepEqual(releases, [resolve(root, 'ollama.lock'), resolve(root, 'research.lock')]);
+});
