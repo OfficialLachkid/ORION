@@ -4,11 +4,13 @@ import { existsSync } from 'node:fs';
 function isMounted(root, dependencies) {
   try {
     const output = dependencies.execFileSync(
-      '/usr/bin/stat',
-      ['-f', '%m', root],
+      '/sbin/mount',
+      [],
       { encoding: 'utf8' },
     );
-    return String(output).trim() === root;
+    return String(output)
+      .split(/\r?\n/u)
+      .some((line) => line.includes(` on ${root} (`));
   } catch {
     return false;
   }
