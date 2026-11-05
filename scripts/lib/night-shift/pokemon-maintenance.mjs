@@ -17,6 +17,7 @@ import {
 } from './pokemon-maintenance-review-backlog.mjs';
 import {
   collectChildError,
+  parseLastJsonObject,
   parseTrailingJsonArray,
   runProjectNodeScript,
 } from './process-utils.mjs';
