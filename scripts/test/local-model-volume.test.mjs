@@ -18,7 +18,7 @@ test('mounted model volume is reused without attaching it again', () => {
     existsSync: () => true,
     execFileSync: (command, args) => {
       calls.push([command, args]);
-      return '/Volumes/ORION Models\n';
+      return '/dev/disk5s1 on /Volumes/ORION Models (apfs, local)\n';
     },
   });
   assert.equal(result.attached, false);
@@ -33,7 +33,9 @@ test('model sparse bundle is attached at the stable mount point', () => {
     execFileSync: (command, args) => {
       calls.push([command, args]);
       if (command === '/usr/bin/hdiutil') mounted = true;
-      return mounted ? '/Volumes/ORION Models\n' : '/\n';
+      return mounted
+        ? '/dev/disk5s1 on /Volumes/ORION Models (apfs, local)\n'
+        : '/dev/disk3s1 on / (apfs, local)\n';
     },
   });
   assert.equal(result.attached, true);
