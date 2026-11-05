@@ -260,7 +260,7 @@ async function processAssignment({
   }
 }
 
-function buildSummary(assignments, targets, config, asOf) {
+function buildSummary(assignments, targets, config, asOf, publication) {
   const expectedKeys = targets.map((target) => target.playlist_key).sort();
   const relevant = assignments.filter((row) => expectedKeys.includes(row.playlist_key));
   const verified = relevant.filter((row) => row.status === 'verified');
@@ -276,6 +276,10 @@ function buildSummary(assignments, targets, config, asOf) {
     target_signature: expectedKeys.join('|'),
     updated_at: asOf,
     ...(status === 'verified' ? { verified_at: asOf } : {}),
+    ...(publication?.metadata?.youtube_playlists?.backfill_classification ? {
+      backfill_classification: publication.metadata.youtube_playlists.backfill_classification,
+      backfill_receipt: publication.metadata.youtube_playlists.backfill_receipt || {},
+    } : {}),
   };
 }
 
@@ -374,7 +378,7 @@ export async function syncYoutubePlaylistState({
     assignments = [...assignmentByKey.values()];
   }
 
-  const summary = buildSummary(assignments, targets, config, asOf);
+  const summary = buildSummary(assignments, targets, config, asOf, publication);
   await store.setYoutubePlaylistSummary(publication.id, summary);
   return {
     publication: {

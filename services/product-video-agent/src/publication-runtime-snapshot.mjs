@@ -53,6 +53,9 @@ export const RECONCILIATION_RUNTIME_PUBLICATION_SELECT = [
   'youtube_playlist_status:metadata->youtube_playlists->>status',
   'youtube_playlist_configuration_version:metadata->youtube_playlists->>configuration_version',
   'youtube_playlist_target_signature:metadata->youtube_playlists->>target_signature',
+  'youtube_playlist_backfill_template_key:metadata->youtube_playlists->backfill_classification->>template_key',
+  'youtube_playlist_backfill_template_title:metadata->youtube_playlists->backfill_classification->>template_title',
+  'youtube_playlist_backfill_difficulty_key:metadata->youtube_playlists->backfill_classification->>difficulty_key',
 ].join(',');
 
 export function isReconciliationStatus(status = '') {
@@ -91,11 +94,18 @@ export function normalizeRuntimePublication(publication = {}) {
       variant: { difficulty: publication.playlist_signal_difficulty },
     };
   }
-  if (publication.youtube_playlist_status) {
+  if (publication.youtube_playlist_status || publication.youtube_playlist_backfill_template_key) {
     metadata.youtube_playlists = {
-      status: publication.youtube_playlist_status,
+      status: publication.youtube_playlist_status || '',
       configuration_version: publication.youtube_playlist_configuration_version || '',
       target_signature: publication.youtube_playlist_target_signature || '',
+      ...(publication.youtube_playlist_backfill_template_key ? {
+        backfill_classification: {
+          template_key: publication.youtube_playlist_backfill_template_key,
+          template_title: publication.youtube_playlist_backfill_template_title || '',
+          difficulty_key: publication.youtube_playlist_backfill_difficulty_key || '',
+        },
+      } : {}),
     };
   }
   return {
