@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveLocalModelStorageConfig } from './local-model-storage.mjs';
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 export const projectRoot = resolve(currentDir, '..', '..');
@@ -241,6 +242,7 @@ export function loadRuntimeConfig(options = {}) {
       healthMonitorStateFile: resolvedHealthMonitorStateFile,
       supabaseEgressLedgerDir: resolvedSupabaseEgressLedgerDir,
     },
+    localModels: resolveLocalModelStorageConfig({ env, projectRoot }),
     transcription: {
       provider: env.TRANSCRIPTION_PROVIDER || 'local',
       whisperModel: env.WHISPER_MODEL || 'medium',

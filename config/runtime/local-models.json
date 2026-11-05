@@ -1,0 +1,39 @@
+{
+  "schema_version": "1.0",
+  "default_root": "/Volumes/ORION Models",
+  "default_bundle_path": "/Volumes/T7/O.R.I.O.N. Models.sparsebundle",
+  "volume_name": "ORION Models",
+  "maximum_capacity": "250g",
+  "providers": {
+    "ollama": {
+      "directory": "ollama",
+      "models": [
+        "x/flux2-klein:4b-fp8",
+        "x/flux2-klein:4b",
+        "llama3.1:8b"
+      ]
+    },
+    "huggingface": {
+      "directory": "huggingface",
+      "repositories": [
+        "Systran/faster-whisper-small.en",
+        "Systran/faster-whisper-medium",
+        "hexgrad/Kokoro-82M"
+      ]
+    }
+  },
+  "compatibility_links": [
+    {
+      "name": "huggingface-default-cache",
+      "path_kind": "home",
+      "path": ".cache/huggingface",
+      "target_provider": "huggingface"
+    },
+    {
+      "name": "kokoro-product-video-cache",
+      "path_kind": "project",
+      "path": "data/runtime/product-video-agent/models/kokoro",
+      "target_provider": "huggingface"
+    }
+  ]
+}
