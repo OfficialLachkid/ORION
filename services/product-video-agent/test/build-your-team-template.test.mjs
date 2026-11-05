@@ -388,15 +388,15 @@ test('build-your-team planner builds six four-option pool rounds when the six-ro
   assert.match(plan.assets.outputs.previews_directory, /\/Previews\/Build Your Team$/u);
 });
 
-test('build-your-team planner can deterministically select every configured round-count variant', async () => {
+test('build-your-team planner assigns relative difficulty to every round-count variant', async () => {
   const cases = [
-    ['build-team-round-variant-10', 'three_rounds', 3],
-    ['build-team-round-variant-9', 'four_rounds', 4],
-    ['build-team-round-variant-1', 'five_rounds', 5],
-    ['build-team-round-variant-3', 'six_rounds', 6],
+    ['build-team-round-variant-10', 'three_rounds', 3, 'easy'],
+    ['build-team-round-variant-9', 'four_rounds', 4, 'medium'],
+    ['build-team-round-variant-1', 'five_rounds', 5, 'medium'],
+    ['build-team-round-variant-3', 'six_rounds', 6, 'hard'],
   ];
 
-  for (const [seed, expectedVariantId, expectedRoundCount] of cases) {
+  for (const [seed, expectedVariantId, expectedRoundCount, expectedDifficulty] of cases) {
     const plan = await planPokemonBuildYourTeamChallenge({
       template,
       pokedexRows,
@@ -405,6 +405,7 @@ test('build-your-team planner can deterministically select every configured roun
     });
     assert.equal(plan.selection.round_count_variant_id, expectedVariantId);
     assert.equal(plan.selection.round_count, expectedRoundCount);
+    assert.equal(plan.selection.difficulty_key, expectedDifficulty);
     assert.equal(plan.rounds.length, expectedRoundCount);
     assert.equal(plan.selection.display_subject_count, expectedRoundCount * 4);
     assert.equal(plan.rounds.at(-1)?.round_label, `${expectedRoundCount}/${expectedRoundCount}`);

@@ -10,6 +10,7 @@ import {
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
 import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selection-state.mjs';
+import { classifyRelativeDifficulty } from '../../../../youtube-playlists/classification.mjs';
 import {
   scanPokeQuizzAssetInventory,
   selectSeededFile,
@@ -632,6 +633,10 @@ export async function planPokemonBuildYourTeamChallenge({
   const selectedRoundCountVariant = chooseRoundCountVariant(roundCountVariantCatalog, random);
   const roundCount = selectedRoundCountVariant?.round_count
     ?? ensurePositiveInteger(template?.selection_rules?.round_count, DEFAULT_ROUND_COUNT);
+  const difficultyKey = classifyRelativeDifficulty(
+    roundCount,
+    roundCountVariantCatalog.map((entry) => entry.round_count),
+  );
   const candidateCount = ensurePositiveInteger(
     template?.selection_rules?.candidate_count,
     DEFAULT_CANDIDATE_COUNT,
@@ -855,6 +860,7 @@ export async function planPokemonBuildYourTeamChallenge({
     selection: {
       mode: String(template?.selection_rules?.mode || 'team_builder').trim().toLowerCase() || 'team_builder',
       round_count_variant_id: selectedRoundCountVariant?.id || null,
+      difficulty_key: difficultyKey || null,
       round_count: roundCount,
       candidate_count: candidateCount,
       pool_order_mode: String(template?.selection_rules?.pool_order_mode || 'shuffle_each_once').trim(),

@@ -10,6 +10,7 @@ import {
   POKE_QUIZZ_ASSET_LAYOUT,
 } from '../../../../poke-quizz-asset-layout.mjs';
 import { normalizePokeQuizzSelectionState } from '../../../../poke-quizz-selection-state.mjs';
+import { classifyRelativeDifficulty } from '../../../../youtube-playlists/classification.mjs';
 import { selectPokemonSpeciesRepresentatives } from '../shared/pokemon-subject-pools.mjs';
 
 const DEFAULT_SHINY_SPARKLE_DURATION_SECONDS = 0.9;
@@ -641,6 +642,10 @@ export async function planPokemonTypeQuizChallenge({
     selection: {
       mode: String(template?.selection_rules?.mode || 'random').trim().toLowerCase() || 'random',
       difficulty_id: selectedRoundCountDifficulty?.id || null,
+      difficulty_key: classifyRelativeDifficulty(
+        roundCount,
+        roundCountDifficultyCatalog.map((entry) => entry.round_count),
+      ) || null,
       type_cardinality: typeCardinalityMode,
       minimum_dual_type_rounds_between_single_type_rounds:
         minimumMultiTypeRoundsBetweenSingleTypes,

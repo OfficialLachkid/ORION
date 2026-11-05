@@ -299,7 +299,7 @@ test('type quiz planner can filter to single-type only when configured', async (
   assert.equal(plan.rounds.every((round) => round.subject.types.length === 1), true);
 });
 
-test('type quiz planner supports the short three-card round-count variant when configured', async () => {
+test('type quiz planner derives easy and hard from the configured round-count range', async () => {
   const shortVariantTemplate = structuredClone(template);
   shortVariantTemplate.selection_rules.round_count_weights = {
     short: 1,
@@ -308,20 +308,36 @@ test('type quiz planner supports the short three-card round-count variant when c
     short: {
       round_count: 3,
     },
+    full: {
+      round_count: 5,
+    },
   };
 
   const plan = await planPokemonTypeChallenge({
     template: shortVariantTemplate,
     pokedexRows,
-    seed: 'type-quiz-short-variant',
+    seed: 'type-quiz-variant-0',
     assetInventory,
   });
 
   assert.equal(plan.selection.difficulty_id, 'short');
+  assert.equal(plan.selection.difficulty_key, 'easy');
   assert.equal(plan.selection.round_count, 3);
   assert.equal(plan.rounds.length, 3);
   assert.equal(plan.rounds[0].round_label, '1/3');
   assert.equal(plan.rounds.at(-1)?.round_label, '3/3');
+
+  const fullVariantTemplate = structuredClone(shortVariantTemplate);
+  fullVariantTemplate.selection_rules.round_count_weights = { full: 1 };
+  const fullPlan = await planPokemonTypeChallenge({
+    template: fullVariantTemplate,
+    pokedexRows,
+    seed: 'type-quiz-variant-1',
+    assetInventory,
+  });
+  assert.equal(fullPlan.selection.difficulty_id, 'full');
+  assert.equal(fullPlan.selection.difficulty_key, 'hard');
+  assert.equal(fullPlan.selection.round_count, 5);
 });
 
 test('type quiz timer-end sound falls back to the shared default when the preferred ding file is unavailable', async () => {
