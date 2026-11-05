@@ -16,8 +16,7 @@ import {
   replenishReviewBacklogForRuntime,
 } from './pokemon-maintenance-review-backlog.mjs';
 import {
-  collectChildError,
-  parseLastJsonObject,
+  collectChildError, parseLastJsonObject,
   parseTrailingJsonArray,
   runProjectNodeScript,
 } from './process-utils.mjs';
