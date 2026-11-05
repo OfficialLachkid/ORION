@@ -135,6 +135,25 @@ test('evaluateHealthCheckResult marks idle Ollama as healthy and idle', () => {
   assert.match(check.summary, /healthy but idle/u);
 });
 
+test('evaluateHealthCheckResult marks unavailable local model storage as critical', () => {
+  const config = loadRuntimeConfig();
+  const check = evaluateHealthCheckResult('local_model_storage_health_check', {
+    outcome: 'completed',
+    executionResult: {
+      report: {
+        ready: false,
+        root: '/Volumes/T7/O.R.I.O.N. Models',
+        missing: ['/Volumes/T7/O.R.I.O.N. Models/ollama'],
+        invalidLinks: [],
+      },
+    },
+  }, config);
+
+  assert.equal(check.severity, 'critical');
+  assert.equal(check.state, 'unavailable');
+  assert.match(check.recoveryCommand, /models:verify/u);
+});
+
 test('planHealthNotifications waits for repeated unhealthy checks before alerting', () => {
   const currentChecks = [
     {

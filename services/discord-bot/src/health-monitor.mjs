@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { executeHealthAction } from '../../task-router/src/executor.mjs';
 import { recordOpsMetric } from '../../lib/metrics-store.mjs';
+import { inspectLocalModelStorage } from '../../lib/local-model-storage.mjs';
 import { buildHealthNotificationDiscordPayload } from './message-formatting.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
@@ -18,6 +19,9 @@ function getHealthCheckActions(config) {
   if (config?.orionWorkerService?.expected !== false) {
     actions.unshift('orion_daemon_health_check');
   }
+  if (config?.localModels?.expected === true) {
+    actions.push('local_model_storage_health_check');
+  }
 
   return actions;
 }
@@ -29,6 +33,7 @@ const HEALTH_CHECK_LABELS = {
   docker_colima_health_check: 'Docker and Colima',
   ollama_health_check: 'Ollama',
   disk_space_health_check: 'Disk space',
+  local_model_storage_health_check: 'Local model storage',
 };
 
 function buildAuthHeaders(token) {
@@ -140,11 +145,15 @@ function buildRecoveryCommand(action, check) {
   }
 
   if (action === 'ollama_health_check') {
-    return 'brew services start ollama';
+    return 'launchctl kickstart -k gui/$(id -u)/io.vbj.orion.ollama || brew services start ollama';
   }
 
   if (action === 'disk_space_health_check') {
-    return 'du -sh ~/Library/Logs/vbj ~/Workspace/ORION ~/.ollama 2>/dev/null';
+    return 'du -sh ~/Library/Logs/vbj ~/Workspace/ORION "/Volumes/ORION Models" 2>/dev/null';
+  }
+
+  if (action === 'local_model_storage_health_check') {
+    return 'npm run models:verify';
   }
 
   return '';
@@ -304,6 +313,24 @@ function evaluateSuccessfulCheck(action, report, config) {
     };
   }
 
+  if (action === 'local_model_storage_health_check') {
+    const ready = report.ready === true;
+    return {
+      action,
+      label,
+      severity: ready ? 'healthy' : 'critical',
+      state: ready ? 'ready' : 'unavailable',
+      summary: ready
+        ? `Local models are available on the T7 at ${report.root}.`
+        : `Local model storage is incomplete or unavailable at ${report.root}.`,
+      details: [
+        ...(report.missing || []).map((path) => `Missing: ${path}`),
+        ...(report.invalidLinks || []).map((link) => `Invalid link: ${link.path}`),
+      ].slice(0, 8),
+      recoveryCommand: ready ? '' : buildRecoveryCommand(action, { severity: 'critical' }),
+    };
+  }
+
   return {
     action,
     label,
@@ -453,9 +480,14 @@ export async function runHealthMonitor(config, options = {}) {
   const checks = [];
 
   for (const action of getHealthCheckActions(config)) {
-    const result = await executeHealthAction(action, config, {
-      commandRunner: options.commandRunner,
-    });
+    const result = action === 'local_model_storage_health_check'
+      ? {
+          outcome: 'completed',
+          executionResult: { report: inspectLocalModelStorage(config.localModels) },
+        }
+      : await executeHealthAction(action, config, {
+          commandRunner: options.commandRunner,
+        });
     const check = evaluateHealthCheckResult(action, result, config);
     check.thresholds = {
       alertConsecutiveUnhealthy: config.healthThresholds.alertConsecutiveUnhealthy,
