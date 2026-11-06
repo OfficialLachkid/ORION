@@ -317,6 +317,10 @@ npx claude-flow swarm coordinate --agents 15
 - NEVER wait for claude-flow to "do work" - it doesn't execute, YOU do
 - Use claude-flow commands to TRACK progress, not to EXECUTE tasks
 
+## ORION Project Design Gate
+
+Before proposing a GitHub issue, implementation plan, architecture change, recurring job, storage path, or external integration for ORION, read [`docs/ORION_ENGINEERING_GUARDRAILS.md`](docs/ORION_ENGINEERING_GUARDRAILS.md). Apply its egress, T7 storage, queue/idempotency, Discord, approval, scheduling, security, and issue-readiness checks. If a task conflicts with a guardrail, document the exception explicitly instead of silently bypassing it.
+
 ## 📁 FILE ORGANIZATION
 
 | Directory | Purpose |
