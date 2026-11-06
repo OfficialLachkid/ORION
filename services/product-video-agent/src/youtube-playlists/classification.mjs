@@ -97,6 +97,16 @@ export function buildYoutubePlaylistClassification(plan = {}) {
   };
 }
 
+function isAutomaticTemplateFallbackEligible(publication = {}) {
+  const cutoff = Date.parse(
+    PLAYLIST_POLICY.automatic_template_fallback_published_after || '',
+  );
+  const publishedAt = Date.parse(publication.published_at || '');
+  return Number.isFinite(cutoff)
+    && Number.isFinite(publishedAt)
+    && publishedAt >= cutoff;
+}
+
 export function resolvePublicationPlaylistClassification(publication = {}) {
   const metadata = publication?.metadata || {};
   const contentSurface = normalizeToken(metadata.content_surface || publication.content_surface || 'youtube_shorts');
@@ -106,7 +116,15 @@ export function resolvePublicationPlaylistClassification(publication = {}) {
   const stored = metadata.playlist_classification
     || metadata?.youtube_playlists?.backfill_classification
     || {};
-  const templateId = String(stored.template_key || publication.playlist_template_key || '').trim();
+  const automaticTemplateFallback = isAutomaticTemplateFallbackEligible(publication)
+    ? metadata.template_id || publication.template_id
+    : '';
+  const templateId = String(
+    stored.template_key
+      || publication.playlist_template_key
+      || automaticTemplateFallback
+      || '',
+  ).trim();
   const templateKey = normalizePlaylistTemplateKey(templateId);
   if (!templateKey) return null;
 

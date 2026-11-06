@@ -1,5 +1,6 @@
 {
   "configuration_version": "youtube-playlists-v3",
+  "automatic_template_fallback_published_after": "2026-11-06T00:00:00.000Z",
   "default_template_title_style": "easy_to_hard_suffix",
   "template_title_styles": {
     "pokemon.build-your-team": "plain",

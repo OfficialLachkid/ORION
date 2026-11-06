@@ -141,6 +141,21 @@ test('compact reconciliation snapshots preserve a persisted backfill classificat
   );
 });
 
+test('compact reconciliation snapshots derive playlist classification from template id', () => {
+  const publication = normalizeRuntimePublication(publicationRow({
+    published_at: '2026-11-06T11:00:06.000Z',
+    playlist_template_key: null,
+    youtube_playlist_status: null,
+    youtube_playlist_backfill_template_key: null,
+  }));
+
+  assert.deepEqual(resolvePublicationPlaylistClassification(publication), {
+    schema_version: 'youtube-playlist-classification-v1',
+    template_key: 'pokemon.find-the-shiny',
+    template_title: 'Find The Shiny',
+  });
+});
+
 test('apply validates schema and persists resumable classification before sequential sync', async () => {
   const events = [];
   let activeSyncs = 0;
