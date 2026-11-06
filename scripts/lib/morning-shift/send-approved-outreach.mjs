@@ -5,8 +5,8 @@
 //   1. Daily send cap — only up to DEFAULT_OUTREACH_DAILY_SEND_CAP
 //      drafts auto-send per morning run. The rest stay in the
 //      pending-approval store and keep their Discord cards so the
-//      operator can still click-approve them manually. Start small,
-//      scale up as confidence grows.
+//      operator can still click-approve them manually. Starts small,
+//      scales up as the clean-run streak grows.
 //
 //   2. Pre-send checks — each candidate runs through
 //      outreach-presend-checks.mjs (suppression, body shape,
@@ -25,9 +25,16 @@ import { createSupabaseApiHeaders } from '../../../services/lib/supabase-api-hea
 
 // ─── Daily send cap ─────────────────────────────────────────────────
 // Edit this value to change how many outreach drafts auto-send per
-// morning run. Start at 5 and scale up as confidence grows. Set to
-// Infinity to send every approved draft without a daily cap.
-export const DEFAULT_OUTREACH_DAILY_SEND_CAP = 5;
+// morning run. Set to Infinity to send every approved draft without
+// a daily cap.
+//
+// Cap history:
+//   2026-10-22 → 5  initial ship; validate pre-send gates on live mail
+//   2026-11-06 → 50 16-day clean streak (follow-ups 114/114 @ up to 28
+//                   per morning; outreach 25/25 sent, 25 correctly
+//                   skipped by suppression gate, 0 failures). Backlog
+//                   of ~271 approved drafts needs throughput to drain.
+export const DEFAULT_OUTREACH_DAILY_SEND_CAP = 50;
 
 const DEFAULT_SLEEP_MS = 800;
 

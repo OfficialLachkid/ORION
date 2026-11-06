@@ -53,11 +53,22 @@ test('pickApprovedOutreachSends picks ONLY lead_qualification + gmail_send_draft
   assert.deepEqual(pickApprovedOutreachSends(tasks).map((t) => t.task_id), ['A', 'D']);
 });
 
-test('pickApprovedOutreachSends respects the cap (default = 5, custom accepted)', () => {
-  const tasks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => makeTask({ task_id: `TASK-${String(n).padStart(3, '0')}` }));
+test('pickApprovedOutreachSends respects the cap (default + custom)', () => {
+  // Build a fixture bigger than any realistic cap so the assertion
+  // stays meaningful when the default is bumped. The exact size of
+  // the default cap is encoded in DEFAULT_OUTREACH_DAILY_SEND_CAP;
+  // the test asserts the slice honors it, whatever the current value.
+  const fixtureSize = DEFAULT_OUTREACH_DAILY_SEND_CAP + 10;
+  const tasks = Array.from({ length: fixtureSize }, (_, i) => makeTask({
+    task_id: `TASK-${String(i).padStart(4, '0')}`,
+  }));
   assert.equal(pickApprovedOutreachSends(tasks).length, DEFAULT_OUTREACH_DAILY_SEND_CAP);
   assert.equal(pickApprovedOutreachSends(tasks, { cap: 2 }).length, 2);
-  assert.equal(pickApprovedOutreachSends(tasks, { cap: 100 }).length, 10, 'cap higher than matched returns all matched');
+  assert.equal(
+    pickApprovedOutreachSends(tasks, { cap: fixtureSize + 100 }).length,
+    fixtureSize,
+    'cap higher than matched returns all matched',
+  );
 });
 
 test('pickApprovedOutreachSends with cap=Infinity returns every match (no cap)', () => {
@@ -157,10 +168,13 @@ test('sendApprovedOutreach short-circuits with picked=0 when the store is empty'
 
 test('sendApprovedOutreach caps picks at DEFAULT_OUTREACH_DAILY_SEND_CAP and reports matched vs picked', async () => {
   const stdout = silentStdout();
-  // Each task gets a unique domain so the in-batch dedup gate doesn't
+  // Build a fixture strictly bigger than the default cap so the cap
+  // is actually exercised regardless of its current value. Each task
+  // gets a unique domain so the in-batch dedup gate doesn't
   // short-circuit the cap check we're validating here.
-  const tasks = Array.from({ length: 12 }, (_, i) => makeTask({
-    task_id: `TASK-${String(i).padStart(3, '0')}`,
+  const fixtureSize = DEFAULT_OUTREACH_DAILY_SEND_CAP + 10;
+  const tasks = Array.from({ length: fixtureSize }, (_, i) => makeTask({
+    task_id: `TASK-${String(i).padStart(4, '0')}`,
     to: `info@lead-${i}.nl`,
     lead_domain: `lead-${i}.nl`,
   }));
@@ -176,7 +190,7 @@ test('sendApprovedOutreach caps picks at DEFAULT_OUTREACH_DAILY_SEND_CAP and rep
     sleep: async () => {},
     stdout,
   });
-  assert.equal(summary.matched, 12);
+  assert.equal(summary.matched, fixtureSize);
   assert.equal(summary.picked, DEFAULT_OUTREACH_DAILY_SEND_CAP);
   assert.equal(summary.sent, DEFAULT_OUTREACH_DAILY_SEND_CAP);
   assert.equal(summary.skipped, 0);
