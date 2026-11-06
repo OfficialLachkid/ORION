@@ -177,6 +177,7 @@ hive-mind-prompt-*.txt
 # Local workspace data
 /Jacobs-2
 /Jacobs-2/
+/.worktrees/
 
 # Claude Flow runtime data
 .claude-flow/data/

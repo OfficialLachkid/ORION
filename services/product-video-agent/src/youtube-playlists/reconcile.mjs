@@ -6,13 +6,13 @@ import {
 import { updateYoutubePlaylist } from './youtube-api.mjs';
 
 const TEMPLATE_PREFIX = 'template:';
-const ALL_DIFFICULTIES_SUFFIX = /\s+—\s+All Difficulties$/u;
+const MANAGED_DIFFICULTY_SUFFIX = /\s+—\s+(?:All Difficulties|Easy to Hard)$/u;
 
 function desiredRegistryTitle(entry = {}) {
   const playlistKey = String(entry.playlist_key || '').trim();
   if (!playlistKey.startsWith(TEMPLATE_PREFIX)) return String(entry.title || '').trim();
   const templateKey = playlistKey.slice(TEMPLATE_PREFIX.length);
-  const currentBaseTitle = String(entry.title || '').replace(ALL_DIFFICULTIES_SUFFIX, '').trim();
+  const currentBaseTitle = String(entry.title || '').replace(MANAGED_DIFFICULTY_SUFFIX, '').trim();
   return buildPlaylistTargetTitle({
     template_key: templateKey,
     template_title: buildPlaylistTemplateTitle(templateKey, currentBaseTitle),

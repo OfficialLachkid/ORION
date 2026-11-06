@@ -1,6 +1,6 @@
 {
-  "configuration_version": "youtube-playlists-v2",
-  "default_template_title_style": "all_difficulties_suffix",
+  "configuration_version": "youtube-playlists-v3",
+  "default_template_title_style": "easy_to_hard_suffix",
   "template_title_styles": {
     "pokemon.build-your-team": "plain",
     "pokemon.find-the-shiny": "plain",

@@ -33,13 +33,13 @@ test('playlist title policy removes the suffix only for configured templates', (
     assert.doesNotMatch(buildPlaylistTargetTitle({
       template_key: templateKey,
       template_title: 'Readable Title',
-    }), /All Difficulties/u);
+    }), /Easy to Hard/u);
   }
   assert.equal(buildPlaylistTargetTitle({
     template_key: 'pokemon.stat-clash',
     template_title: 'Stat Clash',
-  }), 'Stat Clash — All Difficulties');
-  assert.equal(YOUTUBE_PLAYLIST_CONFIGURATION_VERSION, 'youtube-playlists-v2');
+  }), 'Stat Clash — Easy to Hard');
+  assert.equal(YOUTUBE_PLAYLIST_CONFIGURATION_VERSION, 'youtube-playlists-v3');
 });
 
 test('long-form and explicitly disabled plans do not enter playlist automation', () => {

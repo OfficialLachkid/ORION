@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   DEFAULT_RECONCILE_DELAY_MINUTES,
+  DEFAULT_RECONCILE_DELAYS_MINUTES,
   PLIST_LABEL,
   RECONCILE_PLIST_LABEL,
+  buildReconcileScheduleEntries,
   buildPlistContent,
   collectActivePublicationScheduleEntries,
   offsetScheduleEntries,
@@ -56,6 +58,22 @@ test('publication reconciliation plist runs lightweight follow-ups at 08:05, 12:
   for (const { hour } of publicationScheduleEntries) {
     assert.match(plist, new RegExp(`<integer>${hour}</integer>`));
   }
+});
+
+test('publication reconciliation retries after each slot when YouTube visibility lags', () => {
+  const reconciliationEntries = buildReconcileScheduleEntries(
+    publicationScheduleEntries,
+    DEFAULT_RECONCILE_DELAYS_MINUTES,
+  );
+
+  assert.deepEqual(reconciliationEntries, [
+    { hour: 8, minute: 5 },
+    { hour: 8, minute: 15 },
+    { hour: 12, minute: 5 },
+    { hour: 12, minute: 15 },
+    { hour: 14, minute: 5 },
+    { hour: 14, minute: 15 },
+  ]);
 });
 
 test('scheduler wake times are derived from all active channel slots and handle rollover', () => {
