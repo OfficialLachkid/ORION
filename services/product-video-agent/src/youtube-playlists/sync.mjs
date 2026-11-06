@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { refreshYoutubeAccessToken } from '../youtube-oauth.mjs';
-import { resolvePublicationPlaylistClassification } from './classification.mjs';
+import {
+  buildPlaylistTargetTitle,
+  resolvePublicationPlaylistClassification,
+  YOUTUBE_PLAYLIST_CONFIGURATION_VERSION,
+} from './classification.mjs';
 import {
   createYoutubePlaylist,
   findYoutubePlaylistByTitle,
@@ -8,7 +12,7 @@ import {
   insertYoutubePlaylistItem,
 } from './youtube-api.mjs';
 
-const DEFAULT_CONFIGURATION_VERSION = 'youtube-playlists-v1';
+const DEFAULT_CONFIGURATION_VERSION = YOUTUBE_PLAYLIST_CONFIGURATION_VERSION;
 const DEFAULT_MAX_ATTEMPTS = 5;
 const DEFAULT_RETRY_MINUTES = 30;
 const DEFAULT_STALE_CLAIM_MINUTES = 15;
@@ -57,7 +61,7 @@ export function buildYoutubePlaylistTargets({ publication, channelProfile } = {}
   if (config.templatePlaylistsEnabled) {
     targets.push({
       playlist_key: `template:${classification.template_key}`,
-      title: `${classification.template_title} — All Difficulties`,
+      title: buildPlaylistTargetTitle(classification),
       description: `All ${classification.template_title} videos published by ${channelName}. Managed automatically by ORION.`,
       privacy: config.privacy,
       configuration_version: config.configurationVersion,

@@ -91,6 +91,34 @@ export async function createYoutubePlaylist({
   };
 }
 
+export async function updateYoutubePlaylist({
+  accessToken,
+  playlistId,
+  title,
+  description = '',
+  privacy = 'public',
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const url = new URL(YOUTUBE_PLAYLISTS_ENDPOINT);
+  url.searchParams.set('part', 'snippet,status');
+  url.searchParams.set('fields', 'id,snippet/title,status/privacyStatus');
+  const payload = await requestYoutubeJson(url, {
+    accessToken,
+    method: 'PUT',
+    body: {
+      id: playlistId,
+      snippet: { title, description },
+      status: { privacyStatus: privacy },
+    },
+    fetchImpl,
+  });
+  return {
+    playlistId: String(payload?.id || playlistId || '').trim(),
+    title: String(payload?.snippet?.title || title || '').trim(),
+    privacy: String(payload?.status?.privacyStatus || privacy || '').trim(),
+  };
+}
+
 export async function findYoutubePlaylistByTitle({
   accessToken,
   title,
