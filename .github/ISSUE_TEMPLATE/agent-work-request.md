@@ -26,6 +26,9 @@ assignees: []
 - Approval needed:
 - Secret handling constraints:
 - Repo or branch constraints:
+- Authoritative state and storage placement:
+- Supabase egress, platform quota, and schedule impact:
+- Retry, restart recovery, and idempotency:
 
 ## Expected Deliverable
 
@@ -40,6 +43,9 @@ assignees: []
 - [ ] No secrets are committed.
 - [ ] Conventional commit usage is preserved.
 - [ ] Script/module growth stays within the `500-700` line guardrail, or a justified exception is documented.
+- [ ] [`docs/ORION_ENGINEERING_GUARDRAILS.md`](../../docs/ORION_ENGINEERING_GUARDRAILS.md) was reviewed and any exception is explicit.
+- [ ] Recurring reads, writes, retries, and resource usage are bounded without removing valuable behavior.
+- [ ] New channels, products, templates, or marketplaces inherit the behavior without copied hardcoding where applicable.
 
 ## Relevant Context
 
