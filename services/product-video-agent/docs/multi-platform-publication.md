@@ -152,7 +152,7 @@ Buffer also supports `customScheduled` plus a `dueAt` timestamp. That is a fallb
 
 The operator accepted Buffer as the public TikTok delivery adapter on 2026-10-08, subject to the one-account proof of concept and the controls below. This aligns with the existing system and is not a material Mac or Supabase workload at the current Poke Quiz cadence:
 
-- No new always-running daemon is required. The adapter runs inside the existing channel-derived publication scheduler; the current main scheduler wakes at the four machine-wide slot times and the existing reconciliation pass follows five minutes later.
+- No new always-running daemon is required. The adapter runs inside the existing channel-derived publication scheduler; the current main scheduler wakes at the machine-wide slot times and bounded reconciliation passes follow five and fifteen minutes later.
 - No local transcoding or additional FFmpeg work is added. Upload the exact already-approved MP4 as a stream with concurrency `1`; Buffer/TikTok performs remote ingestion and processing.
 - At the current three Poke Quiz slots and approximately 6.6 MB smoke-test file size, the new Mac upload traffic and Supabase Storage delivery are each roughly 20 MB/day plus small JSON requests. Buffer downloads the staged file from Supabase Storage, not from the Mac.
 - Supabase currently publishes Free-plan allowances of 1 GB file storage, 5 GB egress, 5 GB cached egress, and a 50 MB maximum file upload. The approximately 0.6 GB/month Poke Quiz estimate fits only if project-wide usage leaves sufficient headroom. The adapter must check the exact file size and quota before staging and fail closed instead of attempting a file above the configured bucket/plan limit.

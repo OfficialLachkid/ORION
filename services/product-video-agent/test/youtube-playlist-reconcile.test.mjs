@@ -36,11 +36,11 @@ test('reconciliation is channel-scoped and reports title and version changes', (
     ],
   });
   assert.equal(plan.entries_examined, 2);
-  assert.equal(plan.remote_updates, 1);
+  assert.equal(plan.remote_updates, 2);
   assert.equal(plan.registry_updates, 2);
-  assert.equal(plan.estimated_write_quota_units, 50);
+  assert.equal(plan.estimated_write_quota_units, 100);
   assert.equal(plan.items[0].desired_title, 'Find The Shiny');
-  assert.equal(plan.items[1].desired_title, 'Stat Clash — All Difficulties');
+  assert.equal(plan.items[1].desired_title, 'Stat Clash — Easy to Hard');
 });
 
 test('apply updates YouTube only when the title changed and always advances stale policy state', async () => {
@@ -72,11 +72,11 @@ test('apply updates YouTube only when the title changed and always advances stal
   });
 
   assert.equal(result.dry_run, false);
-  assert.equal(remoteCalls.length, 1);
+  assert.equal(remoteCalls.length, 2);
   assert.equal(remoteCalls[0].title, 'Find The Shiny');
   assert.equal(registryCalls.length, 2);
-  assert.equal(registryCalls[0].patch.configuration_version, 'youtube-playlists-v2');
-  assert.equal(registryCalls[1].patch.title, 'Stat Clash — All Difficulties');
+  assert.equal(registryCalls[0].patch.configuration_version, 'youtube-playlists-v3');
+  assert.equal(registryCalls[1].patch.title, 'Stat Clash — Easy to Hard');
 });
 
 test('rerun is idempotent after title and policy version already match', () => {
@@ -84,7 +84,7 @@ test('rerun is idempotent after title and policy version already match', () => {
     accountKey: 'proffmon-youtube',
     entries: [entry({
       title: 'Find The Shiny',
-      configuration_version: 'youtube-playlists-v2',
+      configuration_version: 'youtube-playlists-v3',
     })],
   });
   assert.equal(plan.remote_updates, 0);

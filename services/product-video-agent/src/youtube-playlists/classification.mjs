@@ -46,7 +46,7 @@ export function buildPlaylistTargetTitle(classification = {}) {
   );
   const style = PLAYLIST_POLICY.template_title_styles?.[templateKey]
     || PLAYLIST_POLICY.default_template_title_style;
-  return style === 'plain' ? templateTitle : `${templateTitle} — All Difficulties`;
+  return style === 'plain' ? templateTitle : `${templateTitle} — Easy to Hard`;
 }
 
 export function normalizePlaylistDifficulty(value = '') {

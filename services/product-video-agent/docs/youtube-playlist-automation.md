@@ -22,7 +22,7 @@ Optional channel overrides:
       "template_playlists_enabled": true,
       "difficulty_playlists_enabled": true,
       "privacy": "public",
-      "configuration_version": "youtube-playlists-v1",
+      "configuration_version": "youtube-playlists-v3",
       "max_attempts": 5,
       "retry_minutes": 30,
       "stale_claim_minutes": 15
@@ -56,6 +56,8 @@ The publication metadata contains only a compact completion summary. Once its ta
 Creation and assignment use atomic conditional claims. Stale claims become retryable after a bounded interval. Retry delay grows exponentially, permanent failures stop for review, and ambiguous playlist-item insertions are verified remotely before another insertion is attempted.
 
 The existing publication reconciliation and night-shift execution paths call the same idempotent sync function. No extra worker, queue service, Redis instance, or full publication scan is introduced.
+
+The macOS publication reconciler follows every configured publishing slot twice: after five minutes and again after fifteen minutes. YouTube can briefly continue reporting a scheduled upload after viewers can see it as public. The second bounded pass closes that visibility-propagation gap without adding an always-running poller. Verified playlist summaries remain no-ops on later passes.
 
 ## Rollout safety
 

@@ -13,6 +13,7 @@ export const PLIST_LABEL = 'io.vbj.orion.video-publication-scheduler';
 export const RECONCILE_PLIST_LABEL = 'io.vbj.orion.video-publication-reconciler';
 export const DEFAULT_SCHEDULE_MINUTE = 0;
 export const DEFAULT_RECONCILE_DELAY_MINUTES = 5;
+export const DEFAULT_RECONCILE_DELAYS_MINUTES = [5, 15];
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -42,6 +43,19 @@ function getMinuteArgValue(flag, fallbackValue) {
     throw new Error(`Flag ${flag} expects an integer between 0 and 59.`);
   }
   return parsed;
+}
+
+function getMinuteListArgValue(flag, fallbackValues = []) {
+  const rawValue = getArgValue(flag);
+  if (!rawValue) return fallbackValues;
+  const values = rawValue
+    .split(',')
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isFinite(value));
+  if (values.length === 0 || values.some((value) => !Number.isInteger(value) || value < 0 || value > 59)) {
+    throw new Error(`Flag ${flag} expects comma-separated integers between 0 and 59.`);
+  }
+  return [...new Set(values)].sort((left, right) => left - right);
 }
 
 function getHourListArgValue(flag, fallbackValue = []) {
@@ -102,6 +116,15 @@ export function offsetScheduleEntries(entries = [], offsetMinutes = DEFAULT_RECO
       minute: minutesAfterMidnight % 60,
     };
   }));
+}
+
+export function buildReconcileScheduleEntries(
+  entries = [],
+  delayMinutes = DEFAULT_RECONCILE_DELAYS_MINUTES,
+) {
+  return sortAndDedupeScheduleEntries(
+    delayMinutes.flatMap((delay) => offsetScheduleEntries(entries, delay)),
+  );
 }
 
 function formatScheduleEntries(entries = []) {
@@ -172,10 +195,10 @@ function loadLaunchAgent(plistPath) {
 async function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-video-publication-schedule.mjs [--channels <path>] [--reconcile-delay-minutes 5] [--no-load]',
+      'Usage: node scripts/install-video-publication-schedule.mjs [--channels <path>] [--reconcile-delay-minutes 5,15] [--no-load]',
       '',
       'Writes and loads the publication scheduler plus a lightweight reconciliation LaunchAgent.',
-      'Publication times come from active channel schedule_slots; reconciliation runs five minutes later.',
+      'Publication times come from active channel schedule_slots; reconciliation retries at configured delays.',
       'Use --hours and --minute only when an explicit temporary schedule override is required.',
     ].join('\n'));
     return;
@@ -199,11 +222,14 @@ async function main() {
   if (scheduleEntries.length === 0) {
     throw new Error(`No active publication schedule slots were found in ${channelsPath}.`);
   }
-  const reconcileDelayMinutes = getMinuteArgValue(
+  const reconcileDelayMinutes = getMinuteListArgValue(
     '--reconcile-delay-minutes',
-    DEFAULT_RECONCILE_DELAY_MINUTES,
+    DEFAULT_RECONCILE_DELAYS_MINUTES,
   );
-  const reconcileScheduleEntries = offsetScheduleEntries(scheduleEntries, reconcileDelayMinutes);
+  const reconcileScheduleEntries = buildReconcileScheduleEntries(
+    scheduleEntries,
+    reconcileDelayMinutes,
+  );
   const shouldLoad = !hasFlag('--no-load');
 
   const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
@@ -247,7 +273,7 @@ async function main() {
   process.stdout.write([
     `Installed ${basename(plistPath)}.`,
     `Schedule: ${formatScheduleEntries(scheduleEntries)} local time.`,
-    `Reconciliation (+${reconcileDelayMinutes}m): ${formatScheduleEntries(reconcileScheduleEntries)} local time.`,
+    `Reconciliation (+${reconcileDelayMinutes.join(', +')}m): ${formatScheduleEntries(reconcileScheduleEntries)} local time.`,
     `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
     `Plist: ${plistPath}`,
     `Reconciliation plist: ${reconcilePlistPath}`,
