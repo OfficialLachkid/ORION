@@ -19,6 +19,7 @@ import { executeTask } from '../services/task-router/src/executor.mjs';
 import {
   loadPersistedPendingTasks,
   removePersistedPendingTask,
+  upsertPersistedPendingTask,
 } from '../services/discord-bot/src/pending-task-store.mjs';
 import { searchApprovalMessageInThreads } from '../services/discord-bot/src/live-runtime.mjs';
 import { sendApprovedFollowUps } from './lib/morning-shift/send-approved-followups.mjs';
@@ -32,6 +33,7 @@ async function main() {
     executeTask,
     loadPersistedPendingTasks,
     removePersistedPendingTask,
+    upsertPersistedPendingTask,
     searchApprovalMessageInThreads,
   });
 
@@ -40,6 +42,7 @@ async function main() {
     executeTask,
     loadPersistedPendingTasks,
     removePersistedPendingTask,
+    upsertPersistedPendingTask,
     searchApprovalMessageInThreads,
   });
 

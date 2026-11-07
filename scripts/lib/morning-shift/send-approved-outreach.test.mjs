@@ -148,6 +148,31 @@ test('sendOneOutreachDraft reports send failure without removing the task from t
   assert.ok(!removed, 'send failure must keep the task so it retries next morning');
 });
 
+test('sendOneOutreachDraft keeps sent mail visible while its database receipt is pending', async () => {
+  const removed = [];
+  const upserted = [];
+  let cardUpdated = false;
+  const outcome = await sendOneOutreachDraft(makeTask(), {
+    config: makeConfig(),
+    executeTask: async () => ({
+      outcome: 'completed',
+      executionResult: { report: { databaseReceiptPending: true } },
+    }),
+    removePersistedPendingTask: (_cfg, id) => removed.push(id),
+    upsertPersistedPendingTask: (_cfg, task) => upserted.push(task),
+    deleteApprovalCard: async () => { throw new Error('must not delete'); },
+    markApprovalCardReceiptPending: async () => { cardUpdated = true; return { updated: true }; },
+    discordApi: async () => null,
+    searchApprovalMessageInThreads: async () => null,
+    supabaseFetch: async () => [],
+  });
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.receiptPending, true);
+  assert.equal(cardUpdated, true);
+  assert.deepEqual(removed, []);
+  assert.equal(upserted[0].database_receipt_pending, true);
+});
+
 // ─── sendApprovedOutreach orchestrator ──────────────────────────────
 
 test('sendApprovedOutreach short-circuits with picked=0 when the store is empty', async () => {

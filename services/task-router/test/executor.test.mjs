@@ -535,6 +535,7 @@ test('executeTask creates a Gmail draft and emits a follow-up approval request',
       GMAIL_CLIENT_SECRET: 'client-secret',
       GMAIL_REFRESH_TOKEN: 'refresh-token',
       GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com',
+      OUTBOUND_RECEIPT_JOURNAL_DIR: mkdtempSync(join(tmpdir(), 'orion-receipts-')),
     },
   }, { fetchImpl });
 
@@ -681,6 +682,7 @@ test('executeTask sends an approved Gmail draft', async () => {
       GMAIL_CLIENT_SECRET: 'client-secret',
       GMAIL_REFRESH_TOKEN: 'refresh-token',
       GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com',
+      OUTBOUND_RECEIPT_JOURNAL_DIR: mkdtempSync(join(tmpdir(), 'orion-send-receipts-')),
     },
   }, { fetchImpl });
 
@@ -788,6 +790,9 @@ test('executeTask routes lead-outreach send results to the outreachSent thread',
     if ((init.method || 'GET') === 'GET' && /\/drafts\/[^/]+(\?|$)/u.test(str)) {
       return { ok: true, json: async () => draftRead };
     }
+    if ((init.method || 'GET') === 'GET' && /\/rest\/v1\/leads\?/u.test(str)) {
+      return { ok: true, json: async () => [{ id: 'lead-abc-123', qualification: {} }] };
+    }
     if ((init.method || '').toUpperCase() === 'PATCH' && /\/rest\/v1\/leads\?id=eq\./u.test(str)) {
       stampCalls.push({ url: str, body: init.body });
       return { ok: true, status: 204, text: async () => '', json: async () => ({}) };
@@ -831,6 +836,7 @@ test('executeTask routes lead-outreach send results to the outreachSent thread',
       // wire.
       SUPABASE_URL: 'https://test.supabase.co',
       SUPABASE_SECRET_KEY: 'test-service-key',
+      OUTBOUND_RECEIPT_JOURNAL_DIR: mkdtempSync(join(tmpdir(), 'orion-receipts-')),
     },
   }, { fetchImpl });
 
@@ -840,7 +846,7 @@ test('executeTask routes lead-outreach send results to the outreachSent thread',
   assert.equal(result.outboundEvents[1].metadata.leadBusinessName, 'Loodgieter Jansen');
   assert.equal(result.outboundEvents[1].metadata.leadDomain, 'loodgieterjansen.nl');
   assert.equal(stampCalls.length, 1, 'the executor must PATCH leads.last_contacted_at after a successful outreach send');
-  assert.match(stampCalls[0].url, /\/rest\/v1\/leads\?id=eq\.lead-abc-123$/u);
+  assert.match(stampCalls[0].url, /\/rest\/v1\/leads\?id=eq\.lead-abc-123/u);
   const stampBody = JSON.parse(stampCalls[0].body);
   assert.ok(stampBody.last_contacted_at, 'the stamp body must include last_contacted_at');
   assert.ok(!Number.isNaN(Date.parse(stampBody.last_contacted_at)), 'last_contacted_at must be an ISO timestamp');
@@ -879,7 +885,14 @@ test('executeTask does NOT stamp last_contacted_at for a non-lead gmail send (pr
     gmail_draft: { draftId: 'draft-NOLEAD', to: 'vbjtechservices@gmail.com', subject: 'x', bodyText: 'y', bodyPreview: 'y' },
   }, {
     ...config,
-    env: { ...config.env, GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'sec', GMAIL_REFRESH_TOKEN: 'tok', GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com' },
+    env: {
+      ...config.env,
+      GMAIL_CLIENT_ID: 'id',
+      GMAIL_CLIENT_SECRET: 'sec',
+      GMAIL_REFRESH_TOKEN: 'tok',
+      GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com',
+      OUTBOUND_RECEIPT_JOURNAL_DIR: mkdtempSync(join(tmpdir(), 'orion-receipts-')),
+    },
   }, { fetchImpl });
 
   assert.equal(result.outcome, 'completed');
@@ -906,6 +919,9 @@ test('executeTask completes the send even when stamp last_contacted_at fails (em
     if ((init.method || 'GET') === 'GET' && /\/drafts\/[^/]+(\?|$)/u.test(str)) {
       return { ok: true, json: async () => draftRead };
     }
+    if ((init.method || 'GET') === 'GET' && /\/rest\/v1\/leads\?/u.test(str)) {
+      return { ok: true, json: async () => [{ id: 'lead-stamp-fail-1', qualification: {} }] };
+    }
     if ((init.method || '').toUpperCase() === 'PATCH' && /\/rest\/v1\/leads/u.test(str)) {
       stampAttempted = true;
       return { ok: false, status: 503, text: async () => '{"message":"Supabase unavailable"}', json: async () => ({}) };
@@ -929,6 +945,7 @@ test('executeTask completes the send even when stamp last_contacted_at fails (em
       GMAIL_SENDER_EMAIL: 'vbjtechservices@gmail.com',
       SUPABASE_URL: 'https://test.supabase.co',
       SUPABASE_SECRET_KEY: 'test-service-key',
+      OUTBOUND_RECEIPT_JOURNAL_DIR: mkdtempSync(join(tmpdir(), 'orion-receipts-')),
     },
   }, { fetchImpl });
 

@@ -19,7 +19,11 @@ const DEFAULT_SLEEP_MS = 800;
 
 export function pickApprovedFollowUpSends(tasks) {
   return tasks
-    .filter((t) => t?.source_type === 'lead_follow_up' && t?.runtime_action === 'gmail_send_draft')
+    .filter((t) => (
+      t?.source_type === 'lead_follow_up'
+      && t?.runtime_action === 'gmail_send_draft'
+      && t?.database_receipt_pending !== true
+    ))
     .sort((a, b) => String(a.task_id).localeCompare(String(b.task_id)));
 }
 
@@ -35,15 +39,19 @@ export function followUpPresendRejectionReason(task) {
 }
 
 export function buildDiscordApi(token, fetchImpl, sleep, apiBase = DEFAULT_DISCORD_API) {
-  return async function discordApi(path, method = 'GET') {
+  return async function discordApi(path, method = 'GET', body = undefined) {
     const response = await fetchImpl(`${apiBase}${path}`, {
       method,
-      headers: { Authorization: `Bot ${token}` },
+      headers: {
+        Authorization: `Bot ${token}`,
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
     if (response.status === 429) {
-      const body = await response.json().catch(() => ({}));
-      await sleep(Math.max(1000, Math.ceil(((body.retry_after || 1) * 1000) + 150)));
-      return discordApi(path, method);
+      const rateLimit = await response.json().catch(() => ({}));
+      await sleep(Math.max(1000, Math.ceil(((rateLimit.retry_after || 1) * 1000) + 150)));
+      return discordApi(path, method, body);
     }
     if (!response.ok) {
       throw new Error(`Discord ${method} ${path} → ${response.status}`);
@@ -85,6 +93,34 @@ export async function deleteApprovalCard({ config, taskId, discordApi, searchApp
   }
 }
 
+export function isDatabaseReceiptPending(result) {
+  return result?.executionResult?.report?.databaseReceiptPending === true;
+}
+
+export async function markApprovalCardReceiptPending({
+  config,
+  taskId,
+  discordApi,
+  searchApprovalMessageInThreads,
+}) {
+  const threadIds = approvalThreadIds(config);
+  if (threadIds.length === 0) return { updated: false, reason: 'no_channels_configured' };
+  const target = await searchApprovalMessageInThreads({
+    taskId,
+    threadIds,
+    fetchChannelMessages: (threadId, limit, { beforeId } = {}) => discordApi(
+      `/channels/${threadId}/messages?limit=${limit}${beforeId ? `&before=${beforeId}` : ''}`,
+    ),
+    maxDepth: 1000,
+  });
+  if (!target?.messageId) return { updated: false, reason: 'card_not_found' };
+  await discordApi(`/channels/${target.channelId}/messages/${target.messageId}`, 'PATCH', {
+    content: `✅ **Sent — database receipt pending**\nTask \`${taskId}\` was sent successfully. ORION will reconcile its Supabase receipt automatically.`,
+    components: [],
+  });
+  return { updated: true, channelId: target.channelId, messageId: target.messageId };
+}
+
 // Sends one follow-up: execute the gmail_send_draft task, remove it from the
 // pending-approval store on success, then best-effort delete the Discord
 // card. A send failure leaves the task in the store so it's retried the next
@@ -99,6 +135,29 @@ export async function sendOneFollowUp(task, deps) {
   if (result?.outcome !== 'completed') {
     const message = result?.error?.message || 'executeTask did not complete';
     return { ok: false, skipped: false, taskId: task.task_id, to: task.email_request?.to, error: message };
+  }
+  if (isDatabaseReceiptPending(result)) {
+    deps.upsertPersistedPendingTask(deps.config, {
+      ...task,
+      database_receipt_pending: true,
+      delivery_state: 'sent_receipt_pending',
+      receipt_pending_since: new Date().toISOString(),
+    });
+    const cardResult = await deps.markApprovalCardReceiptPending({
+      config: deps.config,
+      taskId: task.task_id,
+      discordApi: deps.discordApi,
+      searchApprovalMessageInThreads: deps.searchApprovalMessageInThreads,
+    }).catch((error) => ({ updated: false, reason: 'update_failed', error: error.message || String(error) }));
+    return {
+      ok: true,
+      skipped: false,
+      receiptPending: true,
+      taskId: task.task_id,
+      to: task.email_request?.to,
+      cardUpdated: Boolean(cardResult?.updated),
+      cardReason: cardResult?.updated ? null : (cardResult?.reason || null),
+    };
   }
   deps.removePersistedPendingTask(deps.config, task.task_id);
   const cardResult = await deps.deleteApprovalCard({
@@ -123,12 +182,14 @@ export async function sendApprovedFollowUps(options) {
     executeTask,
     loadPersistedPendingTasks,
     removePersistedPendingTask,
+    upsertPersistedPendingTask = () => {},
     searchApprovalMessageInThreads,
     fetchImpl = globalThis.fetch,
     sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
     sleepMs = DEFAULT_SLEEP_MS,
     discordApi: discordApiOverride = null,
     deleteApprovalCard: deleteApprovalCardOverride = null,
+    markApprovalCardReceiptPending: markApprovalCardReceiptPendingOverride = null,
     stdout = process.stdout,
   } = options;
 
@@ -140,6 +201,7 @@ export async function sendApprovedFollowUps(options) {
   const token = config?.env?.DISCORD_BOT_TOKEN || '';
   const discordApi = discordApiOverride || buildDiscordApi(token, fetchImpl, sleep);
   const doDeleteCard = deleteApprovalCardOverride || deleteApprovalCard;
+  const doMarkReceiptPending = markApprovalCardReceiptPendingOverride || markApprovalCardReceiptPending;
 
   const pending = loadPersistedPendingTasks(config);
   const picks = pickApprovedFollowUpSends(pending);
@@ -162,7 +224,9 @@ export async function sendApprovedFollowUps(options) {
         config,
         executeTask,
         removePersistedPendingTask,
+        upsertPersistedPendingTask,
         deleteApprovalCard: doDeleteCard,
+        markApprovalCardReceiptPending: doMarkReceiptPending,
         discordApi,
         searchApprovalMessageInThreads,
       });

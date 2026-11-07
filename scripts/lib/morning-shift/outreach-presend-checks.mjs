@@ -134,9 +134,16 @@ export function checkDrafterLeakage(task) {
 export async function checkSuppressedDomain(task, { supabaseFetch, leadsTable = 'leads' }) {
   const domain = domainOf(task);
   if (!domain) return { ok: true }; // address-shape check will catch this upstream
-  if (typeof supabaseFetch !== 'function') return { ok: true }; // no Supabase → skip rather than block
+  if (typeof supabaseFetch !== 'function') {
+    return { ok: false, reason: 'suppression_check_unavailable' };
+  }
   const path = `${leadsTable}?select=status&status=in.(unsubscribed,bounced)&domain=eq.${encodeURIComponent(domain)}&limit=1`;
-  const rows = await supabaseFetch(path).catch(() => []);
+  let rows;
+  try {
+    rows = await supabaseFetch(path);
+  } catch {
+    return { ok: false, reason: 'suppression_check_unavailable' };
+  }
   if (Array.isArray(rows) && rows.length > 0) {
     return { ok: false, reason: `suppressed_domain:${domain}:${rows[0]?.status || 'suppressed'}` };
   }
@@ -155,13 +162,20 @@ export async function checkPerDomainDailyCap(task, {
 }) {
   const domain = domainOf(task);
   if (!domain) return { ok: true };
-  if (typeof supabaseFetch !== 'function') return { ok: true };
   if (!Number.isFinite(cap) || cap <= 0) return { ok: true };
+  if (typeof supabaseFetch !== 'function') {
+    return { ok: false, reason: 'daily_cap_check_unavailable' };
+  }
   const startOfToday = new Date(nowIso);
   startOfToday.setUTCHours(0, 0, 0, 0);
   const sinceIso = startOfToday.toISOString();
   const path = `${leadsTable}?select=id&domain=eq.${encodeURIComponent(domain)}&last_contacted_at=gte.${encodeURIComponent(sinceIso)}&limit=${cap + 1}`;
-  const rows = await supabaseFetch(path).catch(() => []);
+  let rows;
+  try {
+    rows = await supabaseFetch(path);
+  } catch {
+    return { ok: false, reason: 'daily_cap_check_unavailable' };
+  }
   const count = Array.isArray(rows) ? rows.length : 0;
   if (count >= cap) {
     return { ok: false, reason: `per_domain_cap_hit:${domain}:${count}>=${cap}` };
