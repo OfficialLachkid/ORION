@@ -64,6 +64,8 @@
     "gmail:authorize": "node scripts/gmail-authorize.mjs",
     "gmail:send-test": "node scripts/gmail-send-test.mjs",
     "gmail:reconcile-drafts": "node scripts/run-draft-reconcile.mjs",
+    "gmail:reconcile-outbound-receipts": "node scripts/reconcile-outbound-receipts.mjs",
+    "gmail:bootstrap-outage-receipts": "node scripts/bootstrap-outage-gmail-receipts.mjs",
     "orion:install-daemon-launch-agent": "node scripts/install-orion-daemon-launch-agent.mjs",
     "discord:simulate": "node services/discord-bot/index.mjs",
     "discord:live": "node services/discord-bot/index.mjs --live",

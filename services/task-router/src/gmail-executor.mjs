@@ -1,51 +1,9 @@
 import { createGmailDraft, getGmailDraft, sendGmailDraft, updateGmailDraft } from '../../gmail/src/send.mjs';
 import { ensureOptOutFooter, hasOptOutFooter } from '../../gmail/src/opt-out-footer.mjs';
-import { createSupabaseApiHeaders } from '../../lib/supabase-api-headers.mjs';
-
-// Stamps leads.last_contacted_at = now so the morning-shift's
-// cross-run per-domain cap (outreach-presend-checks.mjs) can see
-// prior sends. Best-effort — the email is already out by the time
-// this runs, so a Supabase hiccup must NOT fail the task. A failure
-// just means tomorrow's sends might duplicate; worst case stays
-// bounded by the in-batch dedup + cap.
-async function stampLeadLastContactedAt(task, config, options) {
-  const leadId = String(task?.lead_id || '').trim();
-  if (!leadId) return; // non-outreach gmail send, nothing to stamp
-  const supabaseUrl = config?.env?.SUPABASE_URL || '';
-  const apiKey = config?.env?.SUPABASE_SECRET_KEY || config?.env?.SUPABASE_PUBLISHABLE_KEY || '';
-  if (!supabaseUrl || !apiKey) {
-    process.stderr.write(
-      `[gmail-executor] stamp last_contacted_at skipped for lead ${leadId}: Supabase config missing\n`,
-    );
-    return;
-  }
-  const leadsTable = config?.env?.LEADGEN_LEADS_TABLE || 'leads';
-  const fetchImpl = options?.fetch || options?.fetchImpl || fetch;
-  const url = new URL(
-    `/rest/v1/${leadsTable}?id=eq.${encodeURIComponent(leadId)}`,
-    supabaseUrl,
-  );
-  try {
-    const response = await fetchImpl(url.toString(), {
-      method: 'PATCH',
-      headers: createSupabaseApiHeaders(apiKey, {
-        'Content-Type': 'application/json',
-        Prefer: 'return=minimal',
-      }),
-      body: JSON.stringify({ last_contacted_at: new Date().toISOString() }),
-    });
-    if (!response.ok) {
-      const bodyText = typeof response.text === 'function' ? await response.text().catch(() => '') : '';
-      process.stderr.write(
-        `[gmail-executor] stamp last_contacted_at failed for lead ${leadId}: HTTP ${response.status}${bodyText ? ` — ${bodyText.slice(0, 200)}` : ''}\n`,
-      );
-    }
-  } catch (error) {
-    process.stderr.write(
-      `[gmail-executor] stamp last_contacted_at threw for lead ${leadId}: ${error?.message || error}\n`,
-    );
-  }
-}
+import {
+  markGmailSendReceiptSent,
+  prepareGmailSendReceipt,
+} from './outbound-receipt-journal.mjs';
 
 function normalizeWhitespace(value) {
   return String(value || '').replace(/\s+/gu, ' ').trim();
@@ -212,15 +170,40 @@ async function executeGmailSendDraftAction(task, config, options = {}) {
     });
   }
 
+  const preparedReceipt = await prepareGmailSendReceipt(task, config);
+  if (preparedReceipt.state === 'sent_receipt_pending' || preparedReceipt.state === 'reconciled') {
+    return {
+      rawStdout: '',
+      report: {
+        state: preparedReceipt.state === 'reconciled' ? 'already_sent' : 'sent_receipt_pending',
+        severity: preparedReceipt.state === 'reconciled' ? 'success' : 'warning',
+        summary: preparedReceipt.state === 'reconciled'
+          ? `Draft to ${to} was already sent and reconciled.`
+          : `Draft to ${to} was already sent; database receipt is pending automatic recovery.`,
+        emailTo: task?.gmail_draft?.to || task?.email_request?.to || '',
+        emailSubject: task?.gmail_draft?.subject || task?.email_request?.subject || '',
+        emailBody: task?.gmail_draft?.bodyText || task?.email_request?.bodyText || '',
+        emailPreview: task?.gmail_draft?.bodyPreview || '',
+        gmailDraftId: draftId,
+        gmailMessageId: preparedReceipt.gmail_message_id || '',
+        gmailThreadId: preparedReceipt.gmail_thread_id || '',
+        alreadySent: true,
+        outboundReceiptState: preparedReceipt.state,
+      },
+    };
+  }
+
   let result;
   try {
     result = await sendGmailDraft(config.env, draftId, options);
   } catch (error) {
     if (isDraftAlreadyGoneError(error)) {
-      // The draft was already sent (likely the operator fired it from the
-      // Gmail UI). Still stamp last_contacted_at — the outreach happened,
-      // and the per-domain cap check needs to see it tomorrow.
-      await stampLeadLastContactedAt(task, config, options);
+      // The draft was already sent (likely the operator fired it from Gmail).
+      // Persist a local receipt so Supabase can be reconciled without risking
+      // a duplicate send.
+      const receipt = await markGmailSendReceiptSent(task, config, {
+        threadId: task?.gmail_draft?.threadId || '',
+      });
       return {
         rawStdout: '',
         report: {
@@ -233,13 +216,14 @@ async function executeGmailSendDraftAction(task, config, options = {}) {
           emailPreview: task?.gmail_draft?.bodyPreview || '',
           gmailDraftId: draftId,
           alreadySent: true,
+          outboundReceiptState: receipt.state,
         },
       };
     }
     throw error;
   }
 
-  await stampLeadLastContactedAt(task, config, options);
+  const receipt = await markGmailSendReceiptSent(task, config, result);
 
   return {
     rawStdout: '',
@@ -254,6 +238,7 @@ async function executeGmailSendDraftAction(task, config, options = {}) {
       gmailDraftId: draftId,
       gmailMessageId: result.messageId,
       gmailThreadId: result.threadId,
+      outboundReceiptState: receipt.state,
     },
   };
 }

@@ -122,8 +122,17 @@ test('checkSuppressedDomain passes when no sibling matches the filter', async ()
   assert.ok((await checkSuppressedDomain(makeTask(), { supabaseFetch })).ok);
 });
 
-test('checkSuppressedDomain falls open (passes) when supabaseFetch is not provided', async () => {
-  assert.ok((await checkSuppressedDomain(makeTask(), {})).ok);
+test('checkSuppressedDomain fails closed when Supabase is unavailable', async () => {
+  assert.deepEqual(await checkSuppressedDomain(makeTask(), {}), {
+    ok: false,
+    reason: 'suppression_check_unavailable',
+  });
+  assert.deepEqual(await checkSuppressedDomain(makeTask(), {
+    supabaseFetch: async () => { throw new Error('quota restricted'); },
+  }), {
+    ok: false,
+    reason: 'suppression_check_unavailable',
+  });
 });
 
 test('checkSuppressedDomain derives the domain from the address when lead_domain is missing', async () => {
@@ -146,6 +155,19 @@ test('checkPerDomainDailyCap rejects when today-count already meets the cap', as
 test('checkPerDomainDailyCap passes when below cap, and when cap<=0 disables the check', async () => {
   assert.ok((await checkPerDomainDailyCap(makeTask(), { supabaseFetch: async () => [] })).ok);
   assert.ok((await checkPerDomainDailyCap(makeTask(), { supabaseFetch: async () => [{ id: 'X' }], cap: 0 })).ok);
+});
+
+test('checkPerDomainDailyCap fails closed when Supabase is unavailable', async () => {
+  assert.deepEqual(await checkPerDomainDailyCap(makeTask(), {}), {
+    ok: false,
+    reason: 'daily_cap_check_unavailable',
+  });
+  assert.deepEqual(await checkPerDomainDailyCap(makeTask(), {
+    supabaseFetch: async () => { throw new Error('quota restricted'); },
+  }), {
+    ok: false,
+    reason: 'daily_cap_check_unavailable',
+  });
 });
 
 // ─── Orchestrator ───────────────────────────────────────────────────

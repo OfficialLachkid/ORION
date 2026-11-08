@@ -201,6 +201,30 @@ test('sendOneFollowUp: executeTask failure LEAVES task in store (so next morning
   assert.deepEqual(removed, []);
 });
 
+test('sendOneFollowUp: sent mail with a pending database receipt keeps and updates the card', async () => {
+  const removed = [];
+  const upserted = [];
+  let cardUpdated = false;
+  const result = await sendOneFollowUp(makeTask(), {
+    config: makeConfig(),
+    executeTask: async () => ({
+      outcome: 'completed',
+      executionResult: { report: { databaseReceiptPending: true } },
+    }),
+    removePersistedPendingTask: (_cfg, id) => removed.push(id),
+    upsertPersistedPendingTask: (_cfg, task) => upserted.push(task),
+    deleteApprovalCard: async () => { throw new Error('must not delete'); },
+    markApprovalCardReceiptPending: async () => { cardUpdated = true; return { updated: true }; },
+    discordApi: async () => null,
+    searchApprovalMessageInThreads: async () => null,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.receiptPending, true);
+  assert.equal(cardUpdated, true);
+  assert.deepEqual(removed, []);
+  assert.equal(upserted[0].database_receipt_pending, true);
+});
+
 test('sendOneFollowUp: card-delete failure does NOT fail the overall send', async () => {
   const removed = [];
   const result = await sendOneFollowUp(makeTask(), {

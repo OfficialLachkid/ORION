@@ -4,6 +4,7 @@ import { executeHealthAction } from '../../task-router/src/executor.mjs';
 import { recordOpsMetric } from '../../lib/metrics-store.mjs';
 import { inspectLocalModelStorage } from '../../lib/local-model-storage.mjs';
 import { buildHealthNotificationDiscordPayload } from './message-formatting.mjs';
+import { recoverOutboundReceipts } from './outbound-receipt-recovery.mjs';
 
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
 
@@ -446,6 +447,13 @@ export function formatHealthMonitorReport(run) {
     );
   }
 
+  if (run.outboundReceiptRecovery) {
+    lines.push(
+      '',
+      `Outbound receipts: ${run.outboundReceiptRecovery.reconciled} reconciled, ${run.outboundReceiptRecovery.pending} pending, ${run.outboundReceiptRecovery.tasksCleaned} task/card records cleaned.`,
+    );
+  }
+
   if (run.notifications.length > 0) {
     lines.push('', '**Notifications**');
     for (const notification of run.notifications) {
@@ -504,6 +512,16 @@ export async function runHealthMonitor(config, options = {}) {
   const { notifications, nextChecksState } = planHealthNotifications(checks, previousState.checks || {});
   const nextState = buildStateSnapshotFromMonitor(nextChecksState);
   const stateFile = saveHealthMonitorState(config, nextState);
+  const outboundReceiptRecovery = options.dryRun
+    ? null
+    : await recoverOutboundReceipts(config, options).catch((error) => ({
+        inspected: 0,
+        reconciled: 0,
+        pending: 0,
+        tasksCleaned: 0,
+        cleanup: [],
+        error: error?.message || String(error),
+      }));
 
   if (!options.dryRun) {
     for (const notification of notifications) {
@@ -523,11 +541,14 @@ export async function runHealthMonitor(config, options = {}) {
   recordOpsMetric(config, 'health_monitor_run_completed', {
     notifications: notifications.length,
     checksEvaluated: checks.length,
+    outboundReceiptsReconciled: outboundReceiptRecovery?.reconciled || 0,
+    outboundReceiptsPending: outboundReceiptRecovery?.pending || 0,
   });
 
   return {
     checks,
     notifications,
     stateFile,
+    outboundReceiptRecovery,
   };
 }

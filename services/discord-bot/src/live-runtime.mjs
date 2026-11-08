@@ -787,7 +787,8 @@ export function isLeadOutreachSendComplete(execution, task) {
     execution
     && execution.outcome === 'completed'
     && String(execution.executionPlan?.action || '') === 'gmail_send_draft'
-    && String(task?.lead_id || '').trim(),
+    && String(task?.lead_id || '').trim()
+    && execution.executionResult?.report?.databaseReceiptPending !== true,
   );
 }
 
@@ -2609,6 +2610,57 @@ export async function runLiveDiscordBot(config) {
       durationMs: executionDurationMs,
     });
     await fanOutOutboundEvents(token, config, execution.outboundEvents, trackedTaskMessages);
+
+    if (
+      execution.executionPlan?.action === 'gmail_send_draft'
+      && execution.executionResult?.report?.databaseReceiptPending === true
+    ) {
+      const receiptPendingTask = {
+        ...task,
+        database_receipt_pending: true,
+        delivery_state: 'sent_receipt_pending',
+        receipt_pending_since: new Date().toISOString(),
+      };
+      pendingTasks.set(task.task_id, receiptPendingTask);
+      upsertPersistedPendingTask(config, receiptPendingTask);
+
+      const pendingTargets = collectApprovalDeleteTargets({ task, trackedMap: trackedTaskMessages });
+      if (pendingTargets.length === 0) {
+        const fallbackTarget = await searchApprovalMessageInThreads({
+          taskId: task.task_id,
+          threadIds: [
+            config?.channelIds?.outreachWaitingApproval,
+            config?.channelIds?.outreachFollowups,
+            config?.channelIds?.outreachAgent,
+          ],
+          fetchChannelMessages: async (threadId, limit, { beforeId } = {}) => sendDiscordApiRequest(
+            token,
+            `/channels/${threadId}/messages?limit=${limit}${beforeId ? `&before=${beforeId}` : ''}`,
+            undefined,
+            'GET',
+          ),
+        });
+        if (fallbackTarget?.messageId) pendingTargets.push(fallbackTarget);
+      }
+      for (const target of pendingTargets) {
+        await sendDiscordApiRequest(
+          token,
+          `/channels/${target.channelId}/messages/${target.messageId}`,
+          {
+            content: `✅ **Sent — database receipt pending**\nTask \`${task.task_id}\` was sent successfully. ORION will reconcile its Supabase receipt automatically.`,
+            components: [],
+          },
+          'PATCH',
+        ).catch((error) => {
+          process.stderr.write(`Could not mark approval card receipt-pending for ${task.task_id}: ${error.message}\n`);
+        });
+      }
+      safeRecordMetric('outbound_receipt_pending', {
+        taskId: task.task_id,
+        leadId: task.lead_id || '',
+        cardsUpdated: pendingTargets.length,
+      });
+    }
 
     if (execution.outcome === 'completed') {
       const writeBackCandidates = buildExecutionWriteBackCandidates(task, execution, config.memoryPromotionRules);

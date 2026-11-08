@@ -19,7 +19,12 @@
 // unchanged — the follow-up SLA is tight and we don't want to add
 // latency or new failure modes to that path.
 
-import { buildDiscordApi, deleteApprovalCard } from './send-approved-followups.mjs';
+import {
+  buildDiscordApi,
+  deleteApprovalCard,
+  isDatabaseReceiptPending,
+  markApprovalCardReceiptPending,
+} from './send-approved-followups.mjs';
 import { runPresendChecks } from './outreach-presend-checks.mjs';
 import { createSupabaseApiHeaders } from '../../../services/lib/supabase-api-headers.mjs';
 
@@ -40,7 +45,11 @@ const DEFAULT_SLEEP_MS = 800;
 
 export function pickApprovedOutreachSends(tasks, { cap = DEFAULT_OUTREACH_DAILY_SEND_CAP } = {}) {
   const sorted = (Array.isArray(tasks) ? tasks : [])
-    .filter((t) => t?.source_type === 'lead_qualification' && t?.runtime_action === 'gmail_send_draft')
+    .filter((t) => (
+      t?.source_type === 'lead_qualification'
+      && t?.runtime_action === 'gmail_send_draft'
+      && t?.database_receipt_pending !== true
+    ))
     .sort((a, b) => String(a.task_id).localeCompare(String(b.task_id)));
   if (!Number.isFinite(cap)) return sorted;
   if (cap <= 0) return [];
@@ -61,6 +70,29 @@ export async function sendOneOutreachDraft(task, deps) {
   if (result?.outcome !== 'completed') {
     const message = result?.error?.message || 'executeTask did not complete';
     return { ok: false, skipped: false, taskId: task.task_id, to: task.email_request?.to, error: message };
+  }
+  if (isDatabaseReceiptPending(result)) {
+    deps.upsertPersistedPendingTask(deps.config, {
+      ...task,
+      database_receipt_pending: true,
+      delivery_state: 'sent_receipt_pending',
+      receipt_pending_since: new Date().toISOString(),
+    });
+    const cardResult = await deps.markApprovalCardReceiptPending({
+      config: deps.config,
+      taskId: task.task_id,
+      discordApi: deps.discordApi,
+      searchApprovalMessageInThreads: deps.searchApprovalMessageInThreads,
+    }).catch((error) => ({ updated: false, reason: 'update_failed', error: error.message || String(error) }));
+    return {
+      ok: true,
+      skipped: false,
+      receiptPending: true,
+      taskId: task.task_id,
+      to: task.email_request?.to,
+      cardUpdated: Boolean(cardResult?.updated),
+      cardReason: cardResult?.updated ? null : (cardResult?.reason || null),
+    };
   }
   deps.removePersistedPendingTask(deps.config, task.task_id);
   const cardResult = await deps.deleteApprovalCard({
@@ -103,6 +135,7 @@ export async function sendApprovedOutreach(options) {
     executeTask,
     loadPersistedPendingTasks,
     removePersistedPendingTask,
+    upsertPersistedPendingTask = () => {},
     searchApprovalMessageInThreads,
     fetchImpl = globalThis.fetch,
     sleep = (ms) => new Promise((r) => setTimeout(r, ms)),
@@ -111,6 +144,7 @@ export async function sendApprovedOutreach(options) {
     perDomainDailyCap,
     discordApi: discordApiOverride = null,
     deleteApprovalCard: deleteApprovalCardOverride = null,
+    markApprovalCardReceiptPending: markApprovalCardReceiptPendingOverride = null,
     supabaseFetch: supabaseFetchOverride = null,
     leadsTable = 'leads',
     nowIso,
@@ -125,6 +159,7 @@ export async function sendApprovedOutreach(options) {
   const token = config?.env?.DISCORD_BOT_TOKEN || '';
   const discordApi = discordApiOverride || buildDiscordApi(token, fetchImpl, sleep);
   const doDeleteCard = deleteApprovalCardOverride || deleteApprovalCard;
+  const doMarkReceiptPending = markApprovalCardReceiptPendingOverride || markApprovalCardReceiptPending;
   const supabaseFetch = supabaseFetchOverride || buildSupabaseFetch(config);
 
   const pending = loadPersistedPendingTasks(config);
@@ -173,7 +208,9 @@ export async function sendApprovedOutreach(options) {
         config,
         executeTask,
         removePersistedPendingTask,
+        upsertPersistedPendingTask,
         deleteApprovalCard: doDeleteCard,
+        markApprovalCardReceiptPending: doMarkReceiptPending,
         discordApi,
         searchApprovalMessageInThreads,
         supabaseFetch,

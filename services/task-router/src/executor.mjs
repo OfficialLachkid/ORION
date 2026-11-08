@@ -6,6 +6,7 @@ import { projectRoot } from '../../lib/runtime-config.mjs';
 import { executeClaudeTask } from '../../claude-runner/src/runner.mjs';
 import { resolveClaudeTasksRoot } from '../../claude-runner/src/payload-store.mjs';
 import { describeExplicitExecutionAction, executeGmailAction } from './gmail-executor.mjs';
+import { reconcileGmailSendReceiptForTask } from './gmail-send-receipts.mjs';
 import { describeExplicitLeadgenAction, executeLeadgenAction } from './leadgen-executor.mjs';
 import {
   describeExplicitDeveloperAgentAction,
@@ -2020,28 +2021,25 @@ export async function executeTask(task, config, options = {}) {
         }),
       };
 
-      // Outreach lifecycle: a qualified lead's draft carries lead_id through
-      // the approval flow — when the approved send completes, close the loop
-      // in the leads table. Best-effort: a Supabase hiccup must not fail the
-      // send report (the email is already gone at this point).
-      if (executionPlan.action === 'gmail_send_draft' && task?.lead_id) {
-        try {
-          const { updateLead, fetchLeadById } = await import('../../../scripts/lib/leadgen-supabase.mjs');
-          // Capture the Gmail thread id so reply detection can later check this
-          // exact thread for a response. Merged into the qualification jsonb
-          // (no dedicated column / no migration). Best-effort fetch-merge so a
-          // Supabase blip never fails the send report — the email is already
-          // gone by this point.
-          const threadId = executionState?.executionResult?.report?.gmailThreadId || '';
-          const patch = { status: 'sent', sent_at: new Date().toISOString() };
-          if (threadId) {
-            const existing = await fetchLeadById(task.lead_id).catch(() => null);
-            const qualification = existing?.qualification && typeof existing.qualification === 'object' ? existing.qualification : {};
-            patch.qualification = { ...qualification, gmail_thread_id: threadId };
-          }
-          await updateLead(task.lead_id, patch);
-        } catch {
-          // Lead-row sync is reconcilable later from ops metrics.
+      // Outreach lifecycle: after Gmail accepts the irreversible send, replay
+      // its durable local receipt into Supabase. An outage leaves the send in
+      // an explicit receipt-pending state rather than pretending it failed or
+      // losing the task/card needed for automatic recovery.
+      if (executionPlan.action === 'gmail_send_draft') {
+        const reconciliation = await reconcileGmailSendReceiptForTask(task, config, {
+          fetchImpl: options.fetchImpl,
+        });
+        const report = executionState.executionResult.report;
+        const receiptPending = reconciliation.status === 'pending';
+        report.databaseReceiptPending = receiptPending;
+        report.outboundReceiptState = reconciliation.receipt?.state
+          || report.outboundReceiptState
+          || '';
+        if (receiptPending) {
+          report.state = 'sent_receipt_pending';
+          report.severity = 'warning';
+          report.summary = `Sent drafted email to ${report.emailTo || 'recipient'}; database receipt is pending automatic recovery.`;
+          report.databaseReceiptError = reconciliation.error || '';
         }
       }
     } else if (
