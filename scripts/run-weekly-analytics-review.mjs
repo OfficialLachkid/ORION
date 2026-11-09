@@ -498,7 +498,7 @@ async function createDiscordThreadFromMessage({ config, channelId, messageId, na
   return response.json();
 }
 
-async function postToThread({ config, threadId, content }) {
+async function postToThread({ config, threadId, content, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }) {
   const token = config?.env?.DISCORD_BOT_TOKEN || '';
   if (!token) throw new Error('Discord thread post requires DISCORD_BOT_TOKEN.');
   // Discord message limit is 2000 chars; chunk if the report is longer.
@@ -514,15 +514,33 @@ async function postToThread({ config, threadId, content }) {
     chunks.push(remaining.slice(0, cut));
     remaining = remaining.slice(cut).trimStart();
   }
-  for (const chunk of chunks) {
-    const response = await fetch(`${DISCORD_API_BASE_URL}/channels/${threadId}/messages`, {
-      method: 'POST',
-      headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: chunk }),
-    });
-    if (!response.ok) {
-      throw new Error(`Discord thread post failed (${response.status}): ${await response.text()}`);
+  // Post chunks sequentially with a small inter-chunk delay + 429 retry.
+  // We've had the 09:15 Monday run hit a 429 with retry_after≈0.3s and
+  // die without posting, losing the summary because state save sits
+  // after the post. Honoring `Retry-After` keeps the summary from
+  // getting dropped on transient rate limits.
+  const INTER_CHUNK_MS = 300;
+  for (const [i, chunk] of chunks.entries()) {
+    let attempt = 0;
+    while (true) {
+      const response = await fetch(`${DISCORD_API_BASE_URL}/channels/${threadId}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: chunk }),
+      });
+      if (response.status === 429 && attempt < 3) {
+        const rateLimit = await response.json().catch(() => ({}));
+        const retryAfterMs = Math.max(1000, Math.ceil(((rateLimit.retry_after || 1) * 1000) + 150));
+        await sleep(retryAfterMs);
+        attempt += 1;
+        continue;
+      }
+      if (!response.ok) {
+        throw new Error(`Discord thread post failed (${response.status}): ${await response.text()}`);
+      }
+      break;
     }
+    if (i < chunks.length - 1) await sleep(INTER_CHUNK_MS);
   }
 }
 
@@ -660,6 +678,7 @@ export const __testables = {
   templateSlugFromMetadata,
   variantKeyFromMetadata,
   buildPerPlatformPerformance,
+  postToThread,
   WEEKLY_REVIEW_PUBLICATION_SELECT,
 };
 
