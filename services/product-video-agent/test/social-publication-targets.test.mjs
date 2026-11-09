@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  FACEBOOK_REEL_PLATFORM,
   INSTAGRAM_REEL_PLATFORM,
   TIKTOK_VIDEO_PLATFORM,
   buildAdditionalPlatformPublicationRows,
@@ -145,6 +146,36 @@ test('Instagram targets normalize as independent plug-and-play account destinati
   assert.equal(row.account_key, 'poke-quizz-instagram');
   assert.equal(row.scheduled_for, '2026-09-08T10:00:00.000Z');
   assert.equal(row.metadata.publisher_target.instagram.access_token_env, 'INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN');
+});
+
+test('Facebook targets normalize as direct-upload Page destinations', () => {
+  const profile = structuredClone(sourceChannelProfile);
+  profile.metadata.publisher.targets.push({
+    platform: 'facebook_reels',
+    account_key: 'poke-quizz-facebook',
+    enabled: true,
+    schedule_mode: 'orion',
+    facebook: {
+      page_id: 'page-123',
+      expected_page_name: 'Poke Quizz',
+      access_token_env: 'FACEBOOK_POKE_QUIZZ_PAGE_ACCESS_TOKEN',
+    },
+  });
+  const target = listEnabledAdditionalPublicationTargets(profile)
+    .find((item) => item.platform === FACEBOOK_REEL_PLATFORM);
+  const row = buildAdditionalPlatformPublicationRows({
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile: profile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+  }).find((item) => item.platform === FACEBOOK_REEL_PLATFORM);
+  assert.equal(target.deliveryProvider, 'facebook_graph');
+  assert.equal(target.facebook.page_id, 'page-123');
+  assert.equal(row.account_key, 'poke-quizz-facebook');
+  assert.equal(
+    row.metadata.publisher_target.facebook.access_token_env,
+    'FACEBOOK_POKE_QUIZZ_PAGE_ACCESS_TOKEN',
+  );
 });
 
 test('buildAdditionalPlatformPublicationRows creates a scheduled TikTok publication row from a YouTube source', () => {
@@ -361,6 +392,54 @@ test('shared approval binds an Instagram delivery to the exact account and MP4',
   assert.equal(approval.creator_username, 'pokequizz');
   assert.equal(approval.video_sha256, 'b'.repeat(64));
   assert.equal(approval.share_to_feed, true);
+});
+
+test('shared approval binds a Facebook delivery to the exact Page and MP4', async () => {
+  const profile = structuredClone(sourceChannelProfile);
+  profile.metadata.publisher.targets = [{
+    platform: 'facebook_reels',
+    account_key: 'poke-quizz-facebook',
+    enabled: true,
+    facebook: {
+      page_id: 'page-123',
+      expected_page_name: 'Poke Quizz',
+      access_token_env: 'FACEBOOK_POKE_QUIZZ_PAGE_ACCESS_TOKEN',
+    },
+  }];
+  let storedRow;
+  await upsertAdditionalPlatformPublicationTargets({
+    store: {
+      async upsertPublication(row) {
+        storedRow = row;
+        return row;
+      },
+    },
+    sourcePublication,
+    videoRow,
+    sourceChannelProfile: profile,
+    scheduledFor: '2026-09-08T10:00:00.000Z',
+    projectRoot: '/workspace',
+    statImpl: async () => ({ size: 4000 }),
+    hashFileImpl: async () => 'c'.repeat(64),
+    approval: {
+      approvedAt: '2026-09-07T12:00:00.000Z',
+      approvedBy: 'Lachkid',
+      approvedById: 'operator-1',
+      reviewTaskId: 'TASK-REVIEW',
+      facebookReels: [{
+        accountKey: 'poke-quizz-facebook',
+        pageId: 'page-123',
+        expectedPageName: 'Poke Quizz',
+        description: 'Guess the Pokemon! #pokemon',
+      }],
+    },
+  });
+  const approval = storedRow.metadata.facebook_reel_approval;
+  assert.equal(approval.approved, true);
+  assert.equal(approval.page_id, 'page-123');
+  assert.equal(approval.expected_page_name, 'Poke Quizz');
+  assert.equal(approval.video_sha256, 'c'.repeat(64));
+  assert.equal(approval.description, 'Guess the Pokemon! #pokemon');
 });
 
 test('upsertAdditionalPlatformPublicationTargets preserves an existing delivery row', async () => {

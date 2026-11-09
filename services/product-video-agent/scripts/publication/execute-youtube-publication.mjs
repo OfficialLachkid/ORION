@@ -112,6 +112,7 @@ function approvalFromReviewTask(reviewTask = {}, publication = {}) {
     ).trim(),
     tiktokDirectPost: review.tiktokDirectPost || null,
     instagramReels: Array.isArray(review.instagramReels) ? review.instagramReels : [],
+    facebookReels: Array.isArray(review.facebookReels) ? review.facebookReels : [],
   };
 }
 

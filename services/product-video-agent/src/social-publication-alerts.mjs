@@ -22,6 +22,7 @@ function platformLabel(platform = '') {
   if (normalized === 'youtube' || normalized === 'youtube_shorts') return 'YouTube';
   if (normalized === 'tiktok' || normalized === 'tiktok_video') return 'TikTok';
   if (normalized === 'instagram' || normalized === 'instagram_reels') return 'Instagram';
+  if (normalized === 'facebook' || normalized === 'facebook_reels') return 'Facebook';
   return normalizeText(platform) || 'Social platform';
 }
 

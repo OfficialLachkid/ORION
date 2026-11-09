@@ -4,7 +4,6 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../../../lib/runtime-config.mjs';
-import { SupabasePublicationStore } from '../../../../src/publication-store.mjs';
 import {
   INSTAGRAM_REEL_PLATFORM,
   listConfiguredPlatformPublicationTargets,
@@ -29,52 +28,22 @@ import {
 } from '../../../../src/social-publication-alerts.mjs';
 import { loadPublicationChannelProfiles } from '../../../../src/publication-channels.mjs';
 import {
+  buildSocialMetadataPatch as buildMetadataPatch,
+  createSocialPublicationStore as createPublicationStore,
+  isSocialPublicationDueAt as isDueAt,
+  limitSocialItems as withLimit,
+  nextSocialStatusPollAt as nextStatusPollAt,
+  normalizeSocialBoolean as normalizeBoolean,
+  normalizeSocialText as normalizeText,
+  normalizeSocialWorkflowState as normalizeWorkflowState,
+} from '../../../../src/social-publication-runtime.mjs';
+import {
   getBooleanOption,
   getStringOption,
   parseArgs,
   printUsage,
   projectRoot,
 } from '../../../../../../scripts/lib/ruflo-wrapper-utils.mjs';
-
-function normalizeText(value) {
-  return String(value || '').trim();
-}
-
-function normalizeBoolean(value) {
-  return ['1', 'true', 'yes', 'on'].includes(normalizeText(value).toLowerCase());
-}
-
-function normalizeWorkflowState(publication = {}) {
-  return normalizeText(publication.metadata?.workflow_state || publication.status).toLowerCase();
-}
-
-function isDueAt(value, asOf) {
-  const timestamp = normalizeText(value);
-  return !timestamp || new Date(timestamp).getTime() <= new Date(asOf).getTime();
-}
-
-function withLimit(items, limit) {
-  const count = Number(limit);
-  return Number.isFinite(count) && count > 0 ? items.slice(0, Math.floor(count)) : items;
-}
-
-function nextStatusPollAt(asOf) {
-  const date = new Date(asOf);
-  return Number.isNaN(date.getTime())
-    ? ''
-    : new Date(date.getTime() + 4 * 60 * 1000).toISOString();
-}
-
-function createPublicationStore(config) {
-  return new SupabasePublicationStore({
-    supabaseUrl: config?.env?.SUPABASE_URL || '',
-    apiKey: config?.env?.SUPABASE_SECRET_KEY || config?.env?.SUPABASE_PUBLISHABLE_KEY || '',
-  });
-}
-
-function buildMetadataPatch(publication, patch = {}) {
-  return { ...(publication.metadata || {}), ...patch };
-}
 
 function resolveStoredTarget(publication = {}) {
   const target = publication.metadata?.publisher_target || {};
