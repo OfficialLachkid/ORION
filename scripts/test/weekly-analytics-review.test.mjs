@@ -17,6 +17,7 @@ const {
   templateSlugFromMetadata,
   variantKeyFromMetadata,
   buildPerPlatformPerformance,
+  postToThread,
   WEEKLY_REVIEW_PUBLICATION_SELECT,
 } = __testables;
 
@@ -454,4 +455,91 @@ test('install-schedule plist uses the Monday post-sweep schedule and exposes Hom
   assert.ok(plist.includes(`<string>${DEFAULT_LAUNCH_AGENT_PATH}</string>`));
   assert.ok(DEFAULT_LAUNCH_AGENT_PATH.includes('/opt/homebrew/bin'));
   assert.ok(plist.includes('/tmp/err.log'));
+});
+
+// postToThread 429 retry — regression: 2026-11-09 Monday run hit a 429
+// with retry_after≈0.3s and died, dropping a 14k-char summary because
+// state save sits after the Discord post. The retry below keeps the
+// summary from getting dropped on transient rate limits.
+test('postToThread retries on 429 honoring retry_after', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  let attempt = 0;
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url, body: JSON.parse(opts.body) });
+    attempt += 1;
+    if (attempt === 1) {
+      return {
+        ok: false,
+        status: 429,
+        json: async () => ({ retry_after: 0.3, global: false }),
+        text: async () => '{"retry_after":0.3}',
+      };
+    }
+    return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+  };
+  const sleeps = [];
+  try {
+    await postToThread({
+      config: { env: { DISCORD_BOT_TOKEN: 'test-token' } },
+      threadId: 'thread-1',
+      content: 'hello world',
+      sleep: async (ms) => { sleeps.push(ms); },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(calls.length, 2, 'expected one retry after 429');
+  assert.equal(calls[0].body.content, 'hello world');
+  assert.equal(calls[1].body.content, 'hello world');
+  assert.ok(sleeps.length >= 1, 'expected sleep before retry');
+  assert.ok(sleeps[0] >= 1000, 'retry sleep honors 1s floor');
+});
+
+test('postToThread chunks messages > 2000 chars and sleeps between', async () => {
+  const originalFetch = globalThis.fetch;
+  const posted = [];
+  globalThis.fetch = async (url, opts) => {
+    posted.push(JSON.parse(opts.body).content);
+    return { ok: true, status: 200, json: async () => ({}), text: async () => '' };
+  };
+  const sleeps = [];
+  const bigContent = `${'a'.repeat(1800)}\n${'b'.repeat(1000)}`;
+  try {
+    await postToThread({
+      config: { env: { DISCORD_BOT_TOKEN: 'test-token' } },
+      threadId: 'thread-1',
+      content: bigContent,
+      sleep: async (ms) => { sleeps.push(ms); },
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  assert.equal(posted.length, 2, 'expected two chunks');
+  assert.equal(sleeps.length, 1, 'expected one inter-chunk sleep');
+  assert.ok(posted[0].length <= 1950);
+  assert.ok(posted[1].length <= 1950);
+});
+
+test('postToThread fails loudly on non-429 errors', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 500,
+    json: async () => ({}),
+    text: async () => 'Internal Server Error',
+  });
+  try {
+    await assert.rejects(
+      postToThread({
+        config: { env: { DISCORD_BOT_TOKEN: 'test-token' } },
+        threadId: 'thread-1',
+        content: 'hi',
+        sleep: async () => {},
+      }),
+      /Discord thread post failed \(500\)/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
