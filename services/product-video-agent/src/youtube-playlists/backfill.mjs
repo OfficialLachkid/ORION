@@ -12,6 +12,52 @@ import {
 export const DEFAULT_PLAYLIST_BACKFILL_LIMIT = 10;
 export const MAX_PLAYLIST_BACKFILL_LIMIT = 25;
 
+function normalizeCursorPart(value = '') {
+  return String(value || '').trim();
+}
+
+export function normalizePlaylistBackfillCursor(cursor = null) {
+  if (!cursor) return null;
+  const publishedAt = normalizeCursorPart(cursor.published_at || cursor.publishedAt);
+  const publicationId = normalizeCursorPart(cursor.publication_id || cursor.publicationId);
+  if (!publishedAt || !publicationId || Number.isNaN(Date.parse(publishedAt))) {
+    throw new Error('Playlist backfill cursor requires a valid published_at and publication_id.');
+  }
+  if (!/^[a-zA-Z0-9_-]+$/u.test(publicationId)) {
+    throw new Error('Playlist backfill cursor contains an invalid publication_id.');
+  }
+  return {
+    published_at: new Date(publishedAt).toISOString(),
+    publication_id: publicationId,
+  };
+}
+
+export function encodePlaylistBackfillCursor(cursor = null) {
+  const normalized = normalizePlaylistBackfillCursor(cursor);
+  return normalized
+    ? Buffer.from(JSON.stringify(normalized), 'utf8').toString('base64url')
+    : '';
+}
+
+export function decodePlaylistBackfillCursor(value = '') {
+  const encoded = normalizeCursorPart(value);
+  if (!encoded) return null;
+  try {
+    return normalizePlaylistBackfillCursor(JSON.parse(
+      Buffer.from(encoded, 'base64url').toString('utf8'),
+    ));
+  } catch (error) {
+    throw new Error(`Invalid playlist backfill cursor: ${error.message}`);
+  }
+}
+
+export function buildPlaylistBackfillCursor(row = {}) {
+  return normalizePlaylistBackfillCursor({
+    published_at: row.published_at,
+    publication_id: row.id,
+  });
+}
+
 function normalizeToken(value = '') {
   return String(value || '').trim().toLowerCase();
 }
@@ -143,6 +189,7 @@ export function planYoutubePlaylistBackfill({ rows = [], channelProfile, limit }
   const assignmentCount = pending.reduce((total, item) => total + item.targets.length, 0);
   return {
     account_key: channelProfile?.account_key || '',
+    configuration_version: config.configurationVersion,
     dry_run: true,
     requested_limit: limit ?? DEFAULT_PLAYLIST_BACKFILL_LIMIT,
     effective_limit: boundedLimit,

@@ -8,12 +8,19 @@ import {
   YOUTUBE_PLAYLIST_CONFIGURATION_VERSION,
 } from '../src/youtube-playlists/classification.mjs';
 import {
+  buildPlaylistBackfillCursor,
+  decodePlaylistBackfillCursor,
+  encodePlaylistBackfillCursor,
   deriveLegacyPlaylistClassification,
   executeYoutubePlaylistBackfill,
   MAX_PLAYLIST_BACKFILL_LIMIT,
   normalizePlaylistBackfillLimit,
   planYoutubePlaylistBackfill,
 } from '../src/youtube-playlists/backfill.mjs';
+import { runYoutubePlaylistBackfill } from '../scripts/publication/backfill-youtube-playlists.mjs';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 function channelProfile(overrides = {}) {
   return {
@@ -22,7 +29,11 @@ function channelProfile(overrides = {}) {
     status: 'active',
     platform: 'youtube_shorts',
     account_key: 'proffmon-youtube',
-    youtube: { channel_id: 'UC-PROFFMON' },
+    youtube: {
+      channel_id: 'UC-PROFFMON',
+      oauth_refresh_token_env: 'YOUTUBE_PROFFMON_REFRESH_TOKEN',
+      oauth_client_secret_path: 'unused-client-secret.json',
+    },
     metadata: {},
     ...overrides,
   };
@@ -122,9 +133,34 @@ test('candidate query is an exact-channel compact projection rather than full me
 
   assert.equal(requestedUrl.searchParams.get('account_key'), 'eq.proffmon-youtube');
   assert.equal(requestedUrl.searchParams.get('limit'), '10');
-  assert.equal(requestedUrl.searchParams.get('order'), 'published_at.desc');
+  assert.equal(requestedUrl.searchParams.get('order'), 'published_at.desc,id.desc');
   assert.doesNotMatch(requestedUrl.searchParams.get('select'), /(^|,)metadata(,|$)/u);
   assert.match(requestedUrl.searchParams.get('select'), /template_id:metadata->>template_id/u);
+});
+
+test('candidate query supports a deterministic keyset cursor', async () => {
+  let requestedUrl = null;
+  const store = new SupabasePublicationStore({
+    supabaseUrl: 'https://example.supabase.co',
+    apiKey: 'service-key',
+    fetchImpl: async (url) => {
+      requestedUrl = new URL(url);
+      return new Response('[]', { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+  const cursor = buildPlaylistBackfillCursor(publicationRow());
+  const encoded = encodePlaylistBackfillCursor(cursor);
+
+  assert.deepEqual(decodePlaylistBackfillCursor(encoded), cursor);
+  await store.fetchYoutubePlaylistBackfillCandidates({
+    accountKey: 'proffmon-youtube',
+    limit: 11,
+    cursor,
+  });
+
+  assert.equal(requestedUrl.searchParams.get('limit'), '11');
+  assert.match(requestedUrl.searchParams.get('or'), /published_at\.lt\./u);
+  assert.match(requestedUrl.searchParams.get('or'), /id\.lt\.publication-1/u);
 });
 
 test('compact reconciliation snapshots preserve a persisted backfill classification', () => {
@@ -202,4 +238,58 @@ test('apply validates schema and persists resumable classification before sequen
     'persist:publication-2:pokemon.find-the-shiny',
     'sync:publication-2',
   ]);
+});
+
+test('all-page apply advances by cursor and writes a completed resumable checkpoint', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'orion-playlist-backfill-'));
+  const checkpointPath = join(root, 'checkpoint.json');
+  const rows = [
+    publicationRow({ id: 'publication-3', published_at: '2026-11-05T14:00:00.000Z' }),
+    publicationRow({ id: 'publication-2', published_at: '2026-11-05T13:00:00.000Z' }),
+    publicationRow({ id: 'publication-1', published_at: '2026-11-05T12:00:00.000Z' }),
+  ];
+  const fetchedCursors = [];
+  const store = {
+    async fetchYoutubePlaylistBackfillCandidates({ limit, cursor }) {
+      fetchedCursors.push(cursor?.publication_id || '');
+      if (!cursor) return rows.slice(0, limit);
+      return rows.filter((row) => row.published_at < cursor.published_at).slice(0, limit);
+    },
+    async verifyYoutubePlaylistAutomationSchema() {},
+    async setYoutubePlaylistBackfillClassification() {},
+  };
+  const result = await runYoutubePlaylistBackfill({
+    channel: 'proffmon-youtube',
+    limit: 2,
+    all: true,
+    maxPages: 10,
+    apply: true,
+    checkpointPath,
+    channelsPath: 'unused.json',
+    asOf: '2026-11-05T15:00:00.000Z',
+  }, {
+    runtimeConfig: null,
+    loadRuntimeConfigImpl: () => ({
+      env: { YOUTUBE_PROFFMON_REFRESH_TOKEN: 'refresh-token' },
+      runtimePaths: { tmpDir: root },
+    }),
+    loadPublicationChannelProfilesImpl: async () => [channelProfile()],
+    findPublicationChannelProfileImpl: (profiles) => profiles[0],
+    loadYoutubeClientCredentialsImpl: async () => ({}),
+    refreshYoutubeAccessTokenImpl: async () => ({ accessToken: 'token' }),
+    syncYoutubePlaylistStateImpl: async () => ({
+      status: 'verified',
+      reason: 'playlist_assignments_verified',
+    }),
+    store,
+  });
+
+  assert.equal(result.completed, true);
+  assert.equal(result.pages_processed, 2);
+  assert.equal(result.rows_examined, 3);
+  assert.deepEqual(fetchedCursors, ['', 'publication-2']);
+  const checkpoint = JSON.parse(readFileSync(checkpointPath, 'utf8'));
+  assert.equal(checkpoint.completed, true);
+  assert.equal(checkpoint.next_cursor, '');
+  assert.equal(checkpoint.totals.rows_examined, 3);
 });

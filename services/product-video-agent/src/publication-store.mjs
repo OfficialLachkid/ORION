@@ -217,7 +217,12 @@ export class SupabasePublicationStore {
     });
   }
 
-  async fetchYoutubePlaylistBackfillCandidates({ accountKey, limit = 10 }) {
+  async fetchYoutubePlaylistBackfillCandidates({ accountKey, limit = 10, cursor = null }) {
+    const publishedAt = String(cursor?.published_at || '').trim();
+    const publicationId = String(cursor?.publication_id || '').trim();
+    const cursorFilter = publishedAt && publicationId
+      ? `(published_at.lt.${publishedAt},and(published_at.eq.${publishedAt},id.lt.${publicationId}))`
+      : '';
     return this.request('video_publications', {
       params: {
         select: [
@@ -247,7 +252,8 @@ export class SupabasePublicationStore {
         status: 'eq.published',
         visibility: 'eq.public',
         external_id: 'not.is.null',
-        order: 'published_at.desc',
+        order: 'published_at.desc,id.desc',
+        or: cursorFilter,
         limit,
       },
       queryClass: 'youtube_playlist_backfill_candidates',
