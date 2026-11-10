@@ -137,8 +137,12 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
   const limit = getStringOption(options, 'limit', '');
   const dryRun = getBooleanOption(options, 'dry-run', false);
   const liveOverride = getBooleanOption(options, 'allow-facebook-live', false);
+  const publishNow = getBooleanOption(options, 'publish-now', false);
   if (liveOverride && !publicationId) {
     throw new Error('--allow-facebook-live requires --publication-id <id>.');
+  }
+  if (publishNow && (!liveOverride || !publicationId)) {
+    throw new Error('--publish-now requires --publication-id <id> and --allow-facebook-live.');
   }
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
   const maxLatenessHours = resolveSocialPublicationMaxLatenessHours(runtimeConfig.env);
@@ -192,7 +196,11 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
     alerts.publications
       .map((publication) => ({
         publication,
-        dueAction: resolveFacebookDueAction(publication, asOf, maxLatenessHours),
+        dueAction: publishNow
+          && publication.id === publicationId
+          && ['queued', 'scheduled'].includes(normalizeSocialWorkflowState(publication))
+          ? 'upload'
+          : resolveFacebookDueAction(publication, asOf, maxLatenessHours),
       }))
       .filter((item) => item.dueAction),
     limit,
@@ -205,7 +213,9 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
         publication_id: publication.id,
         platform: FACEBOOK_REEL_PLATFORM,
         account_key: publication.account_key,
-        action: dueAction === 'continue'
+        action: publishNow && publication.id === publicationId && dueAction === 'upload'
+          ? 'facebook_supervised_publish_now_due'
+          : dueAction === 'continue'
           ? 'facebook_status_due'
           : dueAction === 'expire'
             ? 'facebook_missed_window_due'
@@ -257,6 +267,10 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
           publish_claimed_at: asOf,
           publish_attempted_at: asOf,
           publish_attempt_error: '',
+          ...(publishNow && publication.id === publicationId ? {
+            facebook_supervised_publish_now_at: asOf,
+            facebook_supervised_original_scheduled_for: publication.scheduled_for || '',
+          } : {}),
         }),
       });
       if (!activePublication) {
@@ -427,6 +441,7 @@ async function main() {
       '  --limit <n>               Maximum due publications to process.',
       '  --dry-run                 Report due rows without publishing.',
       '  --allow-facebook-live     Permit one targeted live publication; requires --publication-id.',
+      '  --publish-now             Publish that targeted row before its inherited slot; requires the live override.',
       '  --as-of <ISO>             Deterministic timestamp. Default: now.',
     ]);
     return;
