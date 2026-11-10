@@ -74,6 +74,16 @@ This keeps one Discord approval/reject flow. There is no separate TikTok editori
 
 Automatic approval uses this same path. If a channel's existing policy invokes the normal Publish action automatically, enabled additional targets fan out from that action and inherit the assigned slot. Auto scheduling does not bypass the exact-file approval record or introduce a TikTok-only approval path.
 
+### Missed delivery windows
+
+ORION does not bulk-publish an outage backlog. An Instagram, TikTok, or Facebook child that has not
+started delivery within 24 hours of its inherited slot is changed to `withdrawn`; its original slot,
+expiry time, and `missed_delivery_window` reason remain in metadata. The approved MP4 and source
+publication are preserved, but the stale child is no longer eligible for upload. In-progress remote
+deliveries continue their normal status reconciliation so ORION does not abandon an irreversible
+platform action. The owner-only runtime can change the common threshold with
+`SOCIAL_PUBLICATION_MAX_LATENESS_HOURS`, while the tracked default remains 24 hours.
+
 ### Channel-driven scheduling
 
 - Each source channel owns one `schedule_slots` list. Additional platforms do not repeat those hours in their target configuration.

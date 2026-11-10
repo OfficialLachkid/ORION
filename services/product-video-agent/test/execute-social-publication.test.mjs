@@ -140,6 +140,28 @@ test('executeDueSocialPublications dry-runs due TikTok rows only', async () => {
   ]);
 });
 
+test('executeDueSocialPublications withdraws untouched TikTok rows after the delivery window', async () => {
+  const store = createStore([dueTikTokPublication]);
+  let publishCalls = 0;
+
+  const results = await executeDueSocialPublications({
+    'as-of': '2026-09-08T10:00:01.000Z',
+  }, {
+    runtimeConfig: { env: { BUFFER_TIKTOK_DELIVERY_ENABLED: 'true' } },
+    publicationStore: store,
+    publishTikTokVideo: async () => { publishCalls += 1; },
+  });
+
+  assert.equal(publishCalls, 0);
+  assert.equal(results.at(-1).action, 'tiktok_missed_window_withdrawn');
+  assert.equal(store.current(dueTikTokPublication.id).status, 'withdrawn');
+  assert.equal(store.current(dueTikTokPublication.id).scheduled_for, null);
+  assert.equal(
+    store.current(dueTikTokPublication.id).metadata.delivery_expiry_reason,
+    'missed_delivery_window',
+  );
+});
+
 test('Buffer staging provisioning delegates to the isolated storage adapter', async () => {
   let calls = 0;
   const result = await provisionBufferStaging({}, {

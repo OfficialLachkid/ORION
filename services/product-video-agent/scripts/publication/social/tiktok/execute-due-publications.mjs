@@ -25,6 +25,11 @@ import {
 } from '../../../../src/tiktok-publication-executor.mjs';
 import { TikTokDirectPostValidationError } from '../../../../src/tiktok-publication.mjs';
 import {
+  buildSocialMissedWindowPatch,
+  resolveSocialPublicationMaxLatenessHours,
+  resolveSocialUploadAction,
+} from '../../../../src/social-publication-runtime.mjs';
+import {
   deliverPublicationFailureAlerts,
   deliverSocialPublicationLifecycleAlerts,
   persistAndDeliverPublicationFailureAlert,
@@ -54,7 +59,11 @@ function isDueAt(value, asOf) {
   return new Date(timestamp).getTime() <= new Date(asOf).getTime();
 }
 
-function resolveTikTokDueAction(publication = {}, asOf = new Date().toISOString()) {
+function resolveTikTokDueAction(
+  publication = {},
+  asOf = new Date().toISOString(),
+  maxLatenessHours,
+) {
   if (normalizeText(publication.platform) !== TIKTOK_VIDEO_PLATFORM) {
     return '';
   }
@@ -72,7 +81,7 @@ function resolveTikTokDueAction(publication = {}, asOf = new Date().toISOString(
   if (!['queued', 'scheduled'].includes(state)) {
     return '';
   }
-  return isDueAt(publication.scheduled_for, asOf) ? 'upload' : '';
+  return resolveSocialUploadAction(publication, asOf, maxLatenessHours);
 }
 
 function withLimit(items, limit) {
@@ -302,6 +311,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
     throw new Error('--allow-buffer-live requires --publication-id <id>.');
   }
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
+  const maxLatenessHours = resolveSocialPublicationMaxLatenessHours(runtimeConfig.env);
   const store = dependencies.publicationStore || createPublicationStore(runtimeConfig);
   const publishTikTokVideoImpl = dependencies.publishTikTokVideo || publishTikTokVideo;
   const fetchTikTokPublicationStatusImpl =
@@ -357,7 +367,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
     publications
       .map((publication) => ({
         publication,
-        dueAction: resolveTikTokDueAction(publication, asOf),
+        dueAction: resolveTikTokDueAction(publication, asOf, maxLatenessHours),
       }))
       .filter((item) => item.dueAction),
     limit,
@@ -369,23 +379,45 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
   ];
 
   for (const { publication, dueAction } of duePublications) {
-    const videoRow = publication.video_id
-      ? await store.fetchVideoById(publication.video_id)
-      : null;
-    const target = resolveStoredTarget(publication);
     const deliveryProvider = resolveDeliveryProvider(publication);
     if (dryRun) {
       results.push({
         publication_id: publication.id,
         platform: TIKTOK_VIDEO_PLATFORM,
         account_key: publication.account_key,
-        action: dueAction === 'status' ? 'tiktok_status_due' : 'tiktok_publish_due',
+        action: dueAction === 'status'
+          ? 'tiktok_status_due'
+          : dueAction === 'expire'
+            ? 'tiktok_missed_window_due'
+            : 'tiktok_publish_due',
         workflow_state: normalizeWorkflowState(publication),
         scheduled_for: publication.scheduled_for || '',
         external_id: publication.external_id || '',
       });
       continue;
     }
+    if (dueAction === 'expire') {
+      await store.updatePublication(publication.id, buildSocialMissedWindowPatch(
+        publication,
+        asOf,
+        maxLatenessHours,
+      ));
+      results.push({
+        publication_id: publication.id,
+        platform: TIKTOK_VIDEO_PLATFORM,
+        account_key: publication.account_key,
+        action: 'tiktok_missed_window_withdrawn',
+        workflow_state: 'withdrawn',
+        reason: 'missed_delivery_window',
+        scheduled_for: publication.scheduled_for || '',
+      });
+      continue;
+    }
+
+    const videoRow = publication.video_id
+      ? await store.fetchVideoById(publication.video_id)
+      : null;
+    const target = resolveStoredTarget(publication);
 
     const bufferLiveOverride = publicationId === publication.id
       && getBooleanOption(options, 'allow-buffer-live', false);
