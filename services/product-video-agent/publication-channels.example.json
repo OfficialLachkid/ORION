@@ -207,6 +207,19 @@
                 "access_token_env": "INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN",
                 "share_to_feed": true
               }
+            },
+            {
+              "platform": "facebook_reels",
+              "account_key": "poke-quizz-facebook",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "facebook_graph",
+              "visibility": "public",
+              "facebook": {
+                "page_id": "1352400344631205",
+                "expected_page_name": "Poke Quizz",
+                "access_token_env": "FACEBOOK_POKE_QUIZZ_PAGE_ACCESS_TOKEN"
+              }
             }
           ]
         },
