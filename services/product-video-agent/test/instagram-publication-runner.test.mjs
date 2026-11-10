@@ -402,8 +402,15 @@ test('generic social runner executes every registered platform adapter', async (
       calls.push('instagram');
       return [{ platform: 'instagram_reels' }];
     },
+    executeDueFacebookPublications: async () => {
+      calls.push('facebook');
+      return [{ platform: 'facebook_reels' }];
+    },
   });
 
-  assert.deepEqual(calls, ['tiktok', 'instagram']);
-  assert.deepEqual(results.map((item) => item.platform), ['tiktok_video', 'instagram_reels']);
+  assert.deepEqual(calls, ['tiktok', 'instagram', 'facebook']);
+  assert.deepEqual(
+    results.map((item) => item.platform),
+    ['tiktok_video', 'instagram_reels', 'facebook_reels'],
+  );
 });

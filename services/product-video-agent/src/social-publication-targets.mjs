@@ -5,14 +5,21 @@ import {
   TIKTOK_DIRECT_POST_APPROVAL_VERSION,
 } from './tiktok-publication.mjs';
 import { INSTAGRAM_REEL_APPROVAL_VERSION } from './instagram-publication.mjs';
+import {
+  FACEBOOK_GRAPH_DELIVERY_PROVIDER,
+  FACEBOOK_REEL_PLATFORM,
+} from './facebook-publication.mjs';
+import { addFacebookReelApproval } from './facebook-publication-approval.mjs';
 import { hashFileSha256 } from './tiktok-publication-executor.mjs';
 
 export const YOUTUBE_SHORTS_PLATFORM = 'youtube_shorts';
 export const TIKTOK_VIDEO_PLATFORM = 'tiktok_video';
 export const INSTAGRAM_REEL_PLATFORM = 'instagram_reels';
+export { FACEBOOK_REEL_PLATFORM } from './facebook-publication.mjs';
 export const TIKTOK_DIRECT_DELIVERY_PROVIDER = 'tiktok_direct';
 export const BUFFER_DELIVERY_PROVIDER = 'buffer';
 export const INSTAGRAM_GRAPH_DELIVERY_PROVIDER = 'instagram_graph';
+export { FACEBOOK_GRAPH_DELIVERY_PROVIDER } from './facebook-publication.mjs';
 export const SOCIAL_PUBLICATION_APPROVAL_VERSION = 'social-publication-approval.v1';
 const SOURCE_CANCELLED_STATES = new Set(['deleted', 'revision_requested', 'withdrawn']);
 const CHILD_PENDING_STATES = new Set(['queued', 'scheduled']);
@@ -35,6 +42,9 @@ export function buildStoredSocialPublicationApproval(approval = {}) {
     instagram_reels: Array.isArray(approval.instagramReels)
       ? approval.instagramReels.map((item) => ({ ...item }))
       : [],
+    facebook_reels: Array.isArray(approval.facebookReels)
+      ? approval.facebookReels.map((item) => ({ ...item }))
+      : [],
   };
 }
 
@@ -54,6 +64,9 @@ export function readStoredSocialPublicationApproval(publication = {}) {
     instagramReels: Array.isArray(stored.instagram_reels)
       ? stored.instagram_reels.map((item) => ({ ...item }))
       : [],
+    facebookReels: Array.isArray(stored.facebook_reels)
+      ? stored.facebook_reels.map((item) => ({ ...item }))
+      : [],
   };
 }
 
@@ -68,6 +81,9 @@ function normalizePlatform(value) {
   if (text === 'instagram' || text === 'instagram_reel' || text === INSTAGRAM_REEL_PLATFORM) {
     return INSTAGRAM_REEL_PLATFORM;
   }
+  if (text === 'facebook' || text === 'facebook_reel' || text === FACEBOOK_REEL_PLATFORM) {
+    return FACEBOOK_REEL_PLATFORM;
+  }
   return text;
 }
 
@@ -81,6 +97,9 @@ function normalizeDeliveryProvider(value, platform) {
   const text = normalizeText(value).toLowerCase().replace(/[-\s]+/gu, '_');
   if (platform === INSTAGRAM_REEL_PLATFORM) {
     return text || INSTAGRAM_GRAPH_DELIVERY_PROVIDER;
+  }
+  if (platform === FACEBOOK_REEL_PLATFORM) {
+    return text || FACEBOOK_GRAPH_DELIVERY_PROVIDER;
   }
   if (platform !== TIKTOK_VIDEO_PLATFORM) return text;
   if (text === BUFFER_DELIVERY_PROVIDER) return BUFFER_DELIVERY_PROVIDER;
@@ -137,6 +156,9 @@ export function normalizePlatformPublicationTarget(target = {}, channelProfile =
     instagram: target.instagram && typeof target.instagram === 'object'
       ? { ...target.instagram }
       : {},
+    facebook: target.facebook && typeof target.facebook === 'object'
+      ? { ...target.facebook }
+      : {},
     sourceAccountKey: normalizeText(channelProfile.account_key),
   };
 }
@@ -188,6 +210,7 @@ function serializeTargetForMetadata(target = {}) {
     tiktok: target.tiktok || {},
     buffer: target.buffer || {},
     instagram: target.instagram || {},
+    facebook: target.facebook || {},
     metadata: target.metadata || {},
   };
 }
@@ -503,6 +526,14 @@ export async function upsertAdditionalPlatformPublicationTargets({
       hashFileImpl,
     });
     row = await addInstagramReelApproval({
+      row,
+      target: candidate.metadata.publisher_target,
+      approval,
+      projectRoot,
+      statImpl,
+      hashFileImpl,
+    });
+    row = await addFacebookReelApproval({
       row,
       target: candidate.metadata.publisher_target,
       approval,

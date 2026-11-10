@@ -4,11 +4,13 @@ import { buildOutboundEventDiscordPayload } from '../../../../../../discord-bot/
 import { formatYoutubeAutoCommentStatusLabel } from '../../../../youtube-auto-comments.mjs';
 import {
   BUFFER_DELIVERY_PROVIDER,
+  FACEBOOK_REEL_PLATFORM,
   INSTAGRAM_REEL_PLATFORM,
   TIKTOK_VIDEO_PLATFORM,
   listEnabledAdditionalPublicationTargets,
 } from '../../../../social-publication-targets.mjs';
 import { buildInstagramCaption } from '../../../../instagram-publication.mjs';
+import { buildFacebookReelDescription } from '../../../../facebook-publication.mjs';
 import { buildTikTokCaption } from '../../../../tiktok-publication.mjs';
 import {
   DEFAULT_CHANNEL_SELECTOR,
@@ -331,12 +333,37 @@ function buildDestinationReview(publication = {}, channelProfile = {}) {
     `Share to Feed: ${reel.shareToFeed ? 'yes' : 'no'}`,
     `Caption: ${reel.caption}`,
   ].join('\n')).join('\n\n');
+  const facebookReels = additionalTargets
+    .filter((target) => target.platform === FACEBOOK_REEL_PLATFORM)
+    .map((target) => {
+      const config = target.facebook || {};
+      const reel = {
+        accountKey: target.accountKey,
+        deliveryProvider: target.deliveryProvider,
+        pageId: String(config.page_id || config.pageId || '').trim(),
+        expectedPageName: String(
+          config.expected_page_name || config.expectedPageName || '',
+        ).trim(),
+        description: buildFacebookReelDescription(publication, target),
+      };
+      destinationLabels.push(
+        reel.expectedPageName ? `Facebook ${reel.expectedPageName}` : 'Facebook',
+      );
+      return reel;
+    });
+  const facebookReelsLabel = facebookReels.map((reel) => [
+    `Page: ${reel.expectedPageName || 'not configured'} (${reel.pageId || 'missing id'})`,
+    `Delivery: Facebook Graph API direct upload (${reel.deliveryProvider})`,
+    `Description: ${reel.description}`,
+  ].join('\n')).join('\n\n');
   return {
     destinationsLabel: destinationLabels.join(' + '),
     tiktokDirectPost,
     tiktokDirectPostLabel,
     instagramReels,
     instagramReelsLabel,
+    facebookReels,
+    facebookReelsLabel,
   };
 }
 
@@ -453,6 +480,8 @@ export function buildPokeQuizzPublicationReviewTask({
     tiktokDirectPostLabel: destinationReview.tiktokDirectPostLabel,
     instagramReels: destinationReview.instagramReels,
     instagramReelsLabel: destinationReview.instagramReelsLabel,
+    facebookReels: destinationReview.facebookReels,
+    facebookReelsLabel: destinationReview.facebookReelsLabel,
   };
 
   return {
@@ -606,6 +635,7 @@ export function buildPokeQuizzPublicationReviewEvent(task) {
       destinationsLabel: review.destinationsLabel || '',
       tiktokDirectPostLabel: review.tiktokDirectPostLabel || '',
       instagramReelsLabel: review.instagramReelsLabel || '',
+      facebookReelsLabel: review.facebookReelsLabel || '',
       approveLabel: reviewPresentation.approve_label,
       rejectLabel: reviewPresentation.reject_label,
       deleteLabel: reviewPresentation.delete_label,

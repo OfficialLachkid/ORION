@@ -10,6 +10,7 @@ const ScoreValueSchema = z.number().min(0).max(100);
 export const ShortFormPlatformSchema = z.enum([
   'youtube_shorts',
   'instagram_reels',
+  'facebook_reels',
   'tiktok',
   'tiktok_video',
 ]);
@@ -464,7 +465,14 @@ export const PublicationSchema = z.object({
   publication_id: IdentifierSchema,
   product_id: IdentifierSchema,
   script_job_id: IdentifierSchema,
-  platform: z.enum(['youtube_shorts', 'youtube', 'instagram_reels', 'tiktok', 'tiktok_video']),
+  platform: z.enum([
+    'youtube_shorts',
+    'youtube',
+    'instagram_reels',
+    'facebook_reels',
+    'tiktok',
+    'tiktok_video',
+  ]),
   status: z.enum(['draft', 'awaiting_approval', 'approved', 'published', 'failed', 'blocked']),
   approval_id: IdentifierSchema,
   title: NonEmptyTextSchema,

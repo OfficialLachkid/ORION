@@ -176,6 +176,40 @@ test('Instagram accounts appear in the same shared publication review', () => {
   assert.match(review.instagramReelsLabel, /Share to Feed: yes/u);
 });
 
+test('Facebook Pages appear in the same shared publication review', () => {
+  const facebookChannelProfile = structuredClone(channelProfile);
+  facebookChannelProfile.metadata.publisher.targets.push({
+    platform: 'facebook_reels',
+    account_key: 'poke-quizz-facebook',
+    enabled: true,
+    delivery_provider: 'facebook_graph',
+    facebook: {
+      page_id: 'page-1',
+      expected_page_name: 'Poke Quizz',
+      access_token_env: 'FACEBOOK_POKE_QUIZZ_PAGE_ACCESS_TOKEN',
+    },
+  });
+
+  const task = buildPokeQuizzPublicationReviewTask({
+    publication,
+    video,
+    channelProfile: facebookChannelProfile,
+    reviewThreadId: '1532709429902839810',
+    submittedAt: '2026-07-31T20:45:00.000Z',
+  });
+
+  const review = task.poke_quizz_publication_review;
+  assert.equal(
+    review.destinationsLabel,
+    'YouTube Shorts + TikTok @pokequizz7 + Facebook Poke Quizz',
+  );
+  assert.equal(review.facebookReels.length, 1);
+  assert.equal(review.facebookReels[0].pageId, 'page-1');
+  assert.equal(review.facebookReels[0].expectedPageName, 'Poke Quizz');
+  assert.match(review.facebookReelsLabel, /Facebook Graph API/u);
+  assert.match(review.facebookReelsLabel, /direct upload/u);
+});
+
 test('buildPokeQuizzPublicationReviewTask keeps the same task id when mutable review fields change', () => {
   const firstTask = buildPokeQuizzPublicationReviewTask({
     publication,
