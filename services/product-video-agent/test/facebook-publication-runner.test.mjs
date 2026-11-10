@@ -103,6 +103,37 @@ test('resolveFacebookDueAction advances only due or in-progress rows', () => {
       next_status_poll_at: '2026-11-09T16:04:00.000Z',
     },
   }), '2026-11-09T16:04:00.000Z'), 'continue');
+  assert.equal(
+    resolveFacebookDueAction(publication(), '2026-11-10T16:00:01.000Z'),
+    'expire',
+  );
+});
+
+test('executeDueFacebookPublications withdraws untouched rows after the delivery window', async () => {
+  let stored = publication();
+  let publishCalls = 0;
+  const results = await executeDueFacebookPublications({
+    'as-of': '2026-11-10T16:00:01.000Z',
+  }, {
+    runtimeConfig: { env: { FACEBOOK_DELIVERY_ENABLED: 'true' } },
+    publicationStore: {
+      async fetchPublicationsByPlatform() { return [stored]; },
+      async fetchPublicationById() { return null; },
+      async updatePublication(_id, patch) {
+        stored = { ...stored, ...patch, metadata: patch.metadata };
+        return stored;
+      },
+    },
+    deliverPublicationFailureAlerts: passThroughAlerts,
+    deliverSocialPublicationLifecycleAlerts: passThroughAlerts,
+    publishFacebookReel: async () => { publishCalls += 1; },
+  });
+
+  assert.equal(publishCalls, 0);
+  assert.equal(results.at(-1).action, 'facebook_missed_window_withdrawn');
+  assert.equal(stored.status, 'withdrawn');
+  assert.equal(stored.scheduled_for, null);
+  assert.equal(stored.metadata.delivery_expiry_reason, 'missed_delivery_window');
 });
 
 test('executeDueFacebookPublications blocks unattended upload while the live gate is off', async () => {

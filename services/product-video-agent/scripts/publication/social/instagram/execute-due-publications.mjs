@@ -28,6 +28,7 @@ import {
 } from '../../../../src/social-publication-alerts.mjs';
 import { loadPublicationChannelProfiles } from '../../../../src/publication-channels.mjs';
 import {
+  buildSocialMissedWindowPatch,
   buildSocialMetadataPatch as buildMetadataPatch,
   createSocialPublicationStore as createPublicationStore,
   isSocialPublicationDueAt as isDueAt,
@@ -36,6 +37,8 @@ import {
   normalizeSocialBoolean as normalizeBoolean,
   normalizeSocialText as normalizeText,
   normalizeSocialWorkflowState as normalizeWorkflowState,
+  resolveSocialPublicationMaxLatenessHours,
+  resolveSocialUploadAction,
 } from '../../../../src/social-publication-runtime.mjs';
 import {
   getBooleanOption,
@@ -57,7 +60,11 @@ function resolveStoredTarget(publication = {}) {
   };
 }
 
-export function resolveInstagramDueAction(publication = {}, asOf = new Date().toISOString()) {
+export function resolveInstagramDueAction(
+  publication = {},
+  asOf = new Date().toISOString(),
+  maxLatenessHours,
+) {
   if (normalizeText(publication.platform) !== INSTAGRAM_REEL_PLATFORM) return '';
   const state = normalizeWorkflowState(publication);
   if (state === 'published' && isInstagramAutoCommentDue(publication)) {
@@ -67,7 +74,7 @@ export function resolveInstagramDueAction(publication = {}, asOf = new Date().to
     return isDueAt(publication.metadata?.next_status_poll_at, asOf) ? 'status' : '';
   }
   if (!['queued', 'scheduled'].includes(state)) return '';
-  return isDueAt(publication.scheduled_for, asOf) ? 'upload' : '';
+  return resolveSocialUploadAction(publication, asOf, maxLatenessHours);
 }
 
 export async function diagnoseInstagramAccount(options = {}, dependencies = {}) {
@@ -153,6 +160,7 @@ export async function executeDueInstagramPublications(options = {}, dependencies
     throw new Error('--allow-instagram-live requires --publication-id <id>.');
   }
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
+  const maxLatenessHours = resolveSocialPublicationMaxLatenessHours(runtimeConfig.env);
   const store = dependencies.publicationStore || createPublicationStore(runtimeConfig);
   const publishImpl = dependencies.publishInstagramReel || publishInstagramReel;
   const syncAutoComment = dependencies.syncInstagramAutoCommentState
@@ -219,7 +227,7 @@ export async function executeDueInstagramPublications(options = {}, dependencies
     alerts.publications
       .map((publication) => ({
         publication,
-        dueAction: resolveInstagramDueAction(publication, asOf),
+        dueAction: resolveInstagramDueAction(publication, asOf, maxLatenessHours),
       }))
       .filter((item) => item.dueAction),
     limit,
@@ -295,10 +303,29 @@ export async function executeDueInstagramPublications(options = {}, dependencies
           ? 'instagram_status_due'
           : dueAction === 'comment'
             ? 'instagram_comment_due'
-            : 'instagram_publish_due',
+            : dueAction === 'expire'
+              ? 'instagram_missed_window_due'
+              : 'instagram_publish_due',
         workflow_state: normalizeWorkflowState(publication),
         scheduled_for: publication.scheduled_for || '',
         external_id: publication.external_id || '',
+      });
+      continue;
+    }
+    if (dueAction === 'expire') {
+      await store.updatePublication(publication.id, buildSocialMissedWindowPatch(
+        publication,
+        asOf,
+        maxLatenessHours,
+      ));
+      results.push({
+        publication_id: publication.id,
+        platform: INSTAGRAM_REEL_PLATFORM,
+        account_key: publication.account_key,
+        action: 'instagram_missed_window_withdrawn',
+        workflow_state: 'withdrawn',
+        reason: 'missed_delivery_window',
+        scheduled_for: publication.scheduled_for || '',
       });
       continue;
     }

@@ -113,6 +113,38 @@ test('resolveInstagramDueAction uses the inherited scheduled time and polling ca
     external_id: 'container-1',
     metadata: { workflow_state: 'publishing', next_status_poll_at: '2026-10-09T10:05:00.000Z' },
   }), '2026-10-09T10:05:00.000Z'), 'status');
+  assert.equal(
+    resolveInstagramDueAction(publication(), '2026-10-10T10:00:01.000Z'),
+    'expire',
+  );
+});
+
+test('executeDueInstagramPublications withdraws untouched rows after the delivery window', async () => {
+  let stored = publication();
+  let publishCalls = 0;
+  const results = await executeDueInstagramPublications({
+    'as-of': '2026-10-10T10:00:01.000Z',
+  }, {
+    runtimeConfig: { env: { INSTAGRAM_DELIVERY_ENABLED: 'true' } },
+    publicationStore: {
+      async fetchPublicationsByPlatform() { return [stored]; },
+      async fetchPublicationById() { return null; },
+      async updatePublication(_id, patch) {
+        stored = { ...stored, ...patch, metadata: patch.metadata };
+        return stored;
+      },
+    },
+    deliverPublicationFailureAlerts: passThroughAlerts,
+    deliverSocialPublicationLifecycleAlerts: passThroughAlerts,
+    publishInstagramReel: async () => { publishCalls += 1; },
+  });
+
+  assert.equal(publishCalls, 0);
+  assert.equal(results.at(-1).action, 'instagram_missed_window_withdrawn');
+  assert.equal(stored.status, 'withdrawn');
+  assert.equal(stored.scheduled_for, null);
+  assert.equal(stored.metadata.delivery_expiry_reason, 'missed_delivery_window');
+  assert.equal(stored.metadata.delivery_expired_scheduled_for, '2026-10-09T10:00:00.000Z');
 });
 
 test('executeDueInstagramPublications blocks unattended upload while the live gate is off', async () => {

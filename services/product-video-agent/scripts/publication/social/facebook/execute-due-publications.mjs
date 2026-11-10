@@ -23,6 +23,7 @@ import {
 } from '../../../../src/social-publication-alerts.mjs';
 import { loadPublicationChannelProfiles } from '../../../../src/publication-channels.mjs';
 import {
+  buildSocialMissedWindowPatch,
   buildSocialMetadataPatch,
   createSocialPublicationStore,
   isSocialPublicationDueAt,
@@ -31,6 +32,8 @@ import {
   normalizeSocialBoolean,
   normalizeSocialText,
   normalizeSocialWorkflowState,
+  resolveSocialPublicationMaxLatenessHours,
+  resolveSocialUploadAction,
 } from '../../../../src/social-publication-runtime.mjs';
 import {
   getBooleanOption,
@@ -62,7 +65,11 @@ function isFacebookAuthFailure(error) {
   );
 }
 
-export function resolveFacebookDueAction(publication = {}, asOf = new Date().toISOString()) {
+export function resolveFacebookDueAction(
+  publication = {},
+  asOf = new Date().toISOString(),
+  maxLatenessHours,
+) {
   if (normalizeSocialText(publication.platform) !== FACEBOOK_REEL_PLATFORM) return '';
   const state = normalizeSocialWorkflowState(publication);
   if (state === 'publishing' && normalizeSocialText(publication.external_id)) {
@@ -71,7 +78,7 @@ export function resolveFacebookDueAction(publication = {}, asOf = new Date().toI
       : '';
   }
   if (!['queued', 'scheduled'].includes(state)) return '';
-  return isSocialPublicationDueAt(publication.scheduled_for, asOf) ? 'upload' : '';
+  return resolveSocialUploadAction(publication, asOf, maxLatenessHours);
 }
 
 export async function diagnoseFacebookAccount(options = {}, dependencies = {}) {
@@ -134,6 +141,7 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
     throw new Error('--allow-facebook-live requires --publication-id <id>.');
   }
   const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
+  const maxLatenessHours = resolveSocialPublicationMaxLatenessHours(runtimeConfig.env);
   const store = dependencies.publicationStore
     || createSocialPublicationStore(runtimeConfig, 'facebook-publication');
   const publishImpl = dependencies.publishFacebookReel || publishFacebookReel;
@@ -184,7 +192,7 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
     alerts.publications
       .map((publication) => ({
         publication,
-        dueAction: resolveFacebookDueAction(publication, asOf),
+        dueAction: resolveFacebookDueAction(publication, asOf, maxLatenessHours),
       }))
       .filter((item) => item.dueAction),
     limit,
@@ -197,10 +205,31 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
         publication_id: publication.id,
         platform: FACEBOOK_REEL_PLATFORM,
         account_key: publication.account_key,
-        action: dueAction === 'continue' ? 'facebook_status_due' : 'facebook_publish_due',
+        action: dueAction === 'continue'
+          ? 'facebook_status_due'
+          : dueAction === 'expire'
+            ? 'facebook_missed_window_due'
+            : 'facebook_publish_due',
         workflow_state: normalizeSocialWorkflowState(publication),
         scheduled_for: publication.scheduled_for || '',
         external_id: publication.external_id || '',
+      });
+      continue;
+    }
+    if (dueAction === 'expire') {
+      await store.updatePublication(publication.id, buildSocialMissedWindowPatch(
+        publication,
+        asOf,
+        maxLatenessHours,
+      ));
+      results.push({
+        publication_id: publication.id,
+        platform: FACEBOOK_REEL_PLATFORM,
+        account_key: publication.account_key,
+        action: 'facebook_missed_window_withdrawn',
+        workflow_state: 'withdrawn',
+        reason: 'missed_delivery_window',
+        scheduled_for: publication.scheduled_for || '',
       });
       continue;
     }
