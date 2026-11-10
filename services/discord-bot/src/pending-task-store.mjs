@@ -81,3 +81,10 @@ export function removePersistedPendingTask(config, taskId) {
 export function findPersistedPendingTask(config, taskId) {
   return loadPersistedPendingTasks(config).find((task) => task.task_id === taskId) || null;
 }
+
+export function selectPendingTaskForDecision(inMemoryTask, persistedTask) {
+  // External review refreshers update the durable task while the Discord bot
+  // may still hold an older copy in memory. The persisted record is therefore
+  // authoritative at the irreversible approval boundary.
+  return persistedTask || inMemoryTask || null;
+}

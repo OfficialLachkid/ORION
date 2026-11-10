@@ -154,6 +154,63 @@ test('executeDueFacebookPublications blocks unattended upload while the live gat
   assert.equal(results.at(-1).reason, 'facebook_live_delivery_disabled');
 });
 
+test('targeted supervised publish-now uploads one future row with an audit receipt', async () => {
+  let stored = publication({ scheduled_for: '2026-11-11T07:00:00.000Z' });
+  let publishCalls = 0;
+  const results = await executeDueFacebookPublications({
+    'as-of': '2026-11-10T15:30:00.000Z',
+    'publication-id': stored.id,
+    'allow-facebook-live': true,
+    'publish-now': true,
+  }, {
+    runtimeConfig: { env: { FACEBOOK_DELIVERY_ENABLED: 'false' } },
+    publicationStore: {
+      async fetchPublicationsByPlatform() { return [stored]; },
+      async fetchPublicationById() { return null; },
+      async fetchVideoById() { return { id: 'video-1' }; },
+      async claimPublicationForUpload(_id, patch) {
+        stored = { ...stored, ...patch, metadata: patch.metadata };
+        return stored;
+      },
+      async updatePublication(_id, patch) {
+        stored = { ...stored, ...patch, metadata: patch.metadata || stored.metadata };
+        return stored;
+      },
+    },
+    deliverPublicationFailureAlerts: passThroughAlerts,
+    deliverSocialPublicationLifecycleAlerts: passThroughAlerts,
+    publishFacebookReel: async () => {
+      publishCalls += 1;
+      return {
+        workflowState: 'published',
+        status: 'ready',
+        videoId: 'facebook-video-supervised',
+        externalId: 'facebook-video-supervised',
+        publicUrl: 'https://www.facebook.com/reel/supervised',
+        publishedAt: '2026-11-10T15:31:00.000Z',
+      };
+    },
+  });
+
+  assert.equal(publishCalls, 1);
+  assert.equal(results.at(-1).action, 'facebook_published');
+  assert.equal(stored.metadata.facebook_supervised_publish_now_at, '2026-11-10T15:30:00.000Z');
+  assert.equal(
+    stored.metadata.facebook_supervised_original_scheduled_for,
+    '2026-11-11T07:00:00.000Z',
+  );
+});
+
+test('publish-now fails closed without both exact id and live override', async () => {
+  await assert.rejects(
+    () => executeDueFacebookPublications({
+      'publication-id': 'publication-facebook-1',
+      'publish-now': true,
+    }),
+    /requires --publication-id <id> and --allow-facebook-live/u,
+  );
+});
+
 test('executeDueFacebookPublications persists direct-upload boundaries and final permalink', async () => {
   let stored = publication();
   const patches = [];

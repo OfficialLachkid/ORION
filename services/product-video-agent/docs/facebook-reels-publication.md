@@ -122,6 +122,10 @@ npm run product-video:execute-facebook-publication -- \
   --allow-facebook-live
 ```
 
+If the supervised acceptance must happen before the inherited schedule, add `--publish-now` to
+that exact-id command. The worker records the override time and original schedule on the child
+receipt. This flag cannot operate without both `--publication-id` and `--allow-facebook-live`.
+
 5. Let the ordinary reconciler continue the persisted upload/publish phases.
 6. Verify the Reel on the Page, its public permalink and the stored Supabase receipt.
 7. Verify Instagram did not crosspost a duplicate.

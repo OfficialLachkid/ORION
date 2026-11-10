@@ -8,6 +8,7 @@ import {
   loadPersistedPendingTasks,
   removePersistedPendingTask,
   resolvePendingTaskStorePath,
+  selectPendingTaskForDecision,
   upsertPersistedPendingTask,
 } from '../src/pending-task-store.mjs';
 
@@ -42,4 +43,21 @@ test('pending task store persists and removes approval-gated tasks', () => {
 
   assert.equal(loadPersistedPendingTasks(config).length, 0);
   assert.equal(findPersistedPendingTask(config, 'TASK-STORE-1'), null);
+});
+
+test('persisted task wins when an external refresher replaced an in-memory review', () => {
+  const inMemoryTask = {
+    task_id: 'TASK-STORE-2',
+    destinations: ['youtube'],
+  };
+  const refreshedPersistedTask = {
+    task_id: 'TASK-STORE-2',
+    destinations: ['youtube', 'facebook'],
+  };
+
+  assert.equal(
+    selectPendingTaskForDecision(inMemoryTask, refreshedPersistedTask),
+    refreshedPersistedTask,
+  );
+  assert.equal(selectPendingTaskForDecision(inMemoryTask, null), inMemoryTask);
 });

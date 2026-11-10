@@ -45,6 +45,7 @@ import {
   findPersistedPendingTask,
   loadPersistedPendingTasks,
   removePersistedPendingTask,
+  selectPendingTaskForDecision,
   upsertPersistedPendingTask,
 } from './pending-task-store.mjs';
 import {
@@ -2856,7 +2857,10 @@ export async function runLiveDiscordBot(config) {
       return;
     }
 
-    let pendingTask = pendingTasks.get(decision.taskId) || findPersistedPendingTask(config, decision.taskId);
+    let pendingTask = selectPendingTaskForDecision(
+      pendingTasks.get(decision.taskId),
+      findPersistedPendingTask(config, decision.taskId),
+    );
     if (!pendingTask) {
       pendingTask = await rehydratePokeQuizzReviewTask(decision, config);
       if (pendingTask?.task_id) {
