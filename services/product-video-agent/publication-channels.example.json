@@ -444,6 +444,19 @@
                 "access_token_env": "INSTAGRAM_TRIVAMON_ACCESS_TOKEN",
                 "share_to_feed": true
               }
+            },
+            {
+              "platform": "facebook_reels",
+              "account_key": "trivamon-facebook",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "facebook_graph",
+              "visibility": "public",
+              "facebook": {
+                "page_id": "1507742829080633",
+                "expected_page_name": "TrivaMon",
+                "access_token_env": "FACEBOOK_TRIVAMON_PAGE_ACCESS_TOKEN"
+              }
             }
           ]
         },
