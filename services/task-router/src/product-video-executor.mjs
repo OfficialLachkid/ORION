@@ -325,7 +325,8 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
     || buildPublicationReviewTaskAndPayload;
   let tiktokDirectPost = review.tiktokDirectPost || null;
   let instagramReels = Array.isArray(review.instagramReels) ? review.instagramReels : [];
-  if (!tiktokDirectPost && instagramReels.length === 0) {
+  let facebookReels = Array.isArray(review.facebookReels) ? review.facebookReels : [];
+  if (!tiktokDirectPost && instagramReels.length === 0 && facebookReels.length === 0) {
     try {
       const rebuilt = await rebuildReviewTaskImpl({
         publication, videoRow, channelProfile, channelSelector,
@@ -338,6 +339,9 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
       tiktokDirectPost = reviewPayload.tiktokDirectPost || null;
       instagramReels = Array.isArray(reviewPayload.instagramReels)
         ? reviewPayload.instagramReels
+        : [];
+      facebookReels = Array.isArray(reviewPayload.facebookReels)
+        ? reviewPayload.facebookReels
         : [];
     } catch (error) {
       // Fallback must not break the YouTube publish — log + continue
@@ -356,6 +360,7 @@ async function executePublishPreviewTask(task, config, dependencies = {}) {
     reviewTaskId: task.task_id || '',
     tiktokDirectPost,
     instagramReels,
+    facebookReels,
   };
   const updated = await store.updatePublication(publication.id, {
     status: 'approved',
