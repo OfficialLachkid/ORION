@@ -590,6 +590,11 @@ test('publish approval fans out scheduled publications to configured additional 
           creatorUsername: 'pokequizz7',
           privacyLevel: 'SELF_ONLY',
         },
+        facebookReels: [{
+          accountKey: 'poke-quizz-facebook',
+          pageId: '1352400344631205',
+          expectedPageName: 'Poke Quizz',
+        }],
       },
     },
     { env: {} },
@@ -642,6 +647,8 @@ test('publish approval fans out scheduled publications to configured additional 
   assert.equal(fanOutCalls[0].approval.approvedBy, 'Lachkid');
   assert.equal(fanOutCalls[0].approval.reviewTaskId, 'TASK-ORION-PQ-PUBLISH-FANOUT');
   assert.equal(fanOutCalls[0].approval.tiktokDirectPost.privacyLevel, 'SELF_ONLY');
+  assert.equal(fanOutCalls[0].approval.facebookReels.length, 1);
+  assert.equal(fanOutCalls[0].approval.facebookReels[0].accountKey, 'poke-quizz-facebook');
   assert.deepEqual(result.report.platformPublicationResults, [{
     platform: 'tiktok_video',
     account_key: 'poke-quizz-tiktok',
@@ -654,12 +661,12 @@ test('publish approval fans out scheduled publications to configured additional 
 
 test('publish approval: night-shift auto task (empty per-platform fields) rebuilds them from the publication so fan-out works', async () => {
   // Regression guard for the 2026-10-19 bug: buildNightShiftAutoPublishTask
-  // creates a minimal task payload with no tiktokDirectPost / instagramReels.
+  // creates a minimal task payload with no tiktokDirectPost / instagramReels / facebookReels.
   // Before the fix, that resulted in a stored social_publication_approval
   // with empty per-platform settings, which made addTikTokDirectPostApproval
-  // and addInstagramReelApproval throw during fan-out
+  // addInstagramReelApproval, and addFacebookReelApproval throw during fan-out
   // (reconcileScheduledAdditionalPlatformTargets caught + swallowed, so
-  // zero TikTok/Instagram publication rows got created).
+  // zero TikTok/Instagram/Facebook publication rows got created).
   // Fix: when the task doesn't carry per-platform settings, synthesise
   // them from buildPublicationReviewTaskAndPayload — same source the
   // manual Discord-click flow uses.
@@ -706,6 +713,7 @@ test('publish approval: night-shift auto task (empty per-platform fields) rebuil
         metadata: { publisher: { targets: [
           { platform: 'tiktok_video', account_key: 'trivamon-tiktok', enabled: true },
           { platform: 'instagram_reels', account_key: 'trivamon-instagram', enabled: true },
+          { platform: 'facebook_reels', account_key: 'trivamon-facebook', enabled: true },
         ] } },
       }]),
       findPublicationChannelProfile: (profiles) => profiles[0],
@@ -721,6 +729,7 @@ test('publish approval: night-shift auto task (empty per-platform fields) rebuil
             poke_quizz_publication_review: {
               tiktokDirectPost: { accountKey: 'trivamon-tiktok', creatorUsername: 'trivamon', privacyLevel: 'PUBLIC' },
               instagramReels: [{ accountKey: 'trivamon-instagram', instagramUserId: '17841449539714324', creatorUsername: 'trivamon' }],
+              facebookReels: [{ accountKey: 'trivamon-facebook', pageId: '1507742829080633', expectedPageName: 'TrivaMon' }],
             },
           },
         };
@@ -733,6 +742,7 @@ test('publish approval: night-shift auto task (empty per-platform fields) rebuil
         return [
           { platform: 'tiktok_video', account_key: 'trivamon-tiktok', publication_id: 'publication-target-tt', workflow_state: 'scheduled', scheduled_for: options.scheduledFor },
           { platform: 'instagram_reels', account_key: 'trivamon-instagram', publication_id: 'publication-target-ig', workflow_state: 'scheduled', scheduled_for: options.scheduledFor },
+          { platform: 'facebook_reels', account_key: 'trivamon-facebook', publication_id: 'publication-target-fb', workflow_state: 'scheduled', scheduled_for: options.scheduledFor },
         ];
       },
       queueStatusChannelProfile: { platform: 'youtube_shorts', account_key: 'trivamon-youtube' },
@@ -751,6 +761,8 @@ test('publish approval: night-shift auto task (empty per-platform fields) rebuil
   assert.equal(approval.tiktokDirectPost?.accountKey, 'trivamon-tiktok');
   assert.equal(approval.instagramReels?.length, 1);
   assert.equal(approval.instagramReels[0].accountKey, 'trivamon-instagram');
+  assert.equal(approval.facebookReels?.length, 1);
+  assert.equal(approval.facebookReels[0].accountKey, 'trivamon-facebook');
   assert.equal(approval.approvedBy, 'Night Shift Auto', 'approvedBy reflects the auto path identity');
 });
 
@@ -784,6 +796,7 @@ test('publish approval: manual task (populated per-platform fields) does NOT tri
         channelSelector: 'poke-quizz-youtube',
         tiktokDirectPost: { accountKey: 'poke-quizz-tiktok', creatorUsername: 'pokequizz7', privacyLevel: 'PUBLIC' },
         instagramReels: [{ accountKey: 'poke-quizzz-instagram', creatorUsername: 'pokequizzz', instagramUserId: '17841467563066221' }],
+        facebookReels: [{ accountKey: 'poke-quizz-facebook', pageId: '1352400344631205', expectedPageName: 'Poke Quizz' }],
       },
     },
     { env: {} },
