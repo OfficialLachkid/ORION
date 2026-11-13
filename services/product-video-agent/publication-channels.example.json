@@ -679,6 +679,19 @@
                 "access_token_env": "INSTAGRAM_POKE_GUESS_ACCESS_TOKEN",
                 "share_to_feed": true
               }
+            },
+            {
+              "platform": "facebook_reels",
+              "account_key": "poke-guess-facebook",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "facebook_graph",
+              "visibility": "public",
+              "facebook": {
+                "page_id": "1487751191082577",
+                "expected_page_name": "Poke Guess",
+                "access_token_env": "FACEBOOK_POKE_GUESS_PAGE_ACCESS_TOKEN"
+              }
             }
           ]
         },
