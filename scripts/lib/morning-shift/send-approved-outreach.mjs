@@ -43,6 +43,28 @@ export const DEFAULT_OUTREACH_DAILY_SEND_CAP = 50;
 
 const DEFAULT_SLEEP_MS = 800;
 
+// Resolve the domain for a pending outreach task. Prefers the explicit
+// `lead_domain` field (set by the drafter), falls back to parsing the
+// recipient address so legacy tasks without that field still work.
+export function domainOfTask(task) {
+  const explicit = String(task?.lead_domain || '').trim().toLowerCase();
+  if (explicit) return explicit;
+  const addr = String(task?.email_request?.to || '').trim();
+  const at = addr.lastIndexOf('@');
+  return at === -1 ? '' : addr.slice(at + 1).toLowerCase();
+}
+
+// Pick the next batch of approved outreach drafts to auto-send.
+//
+// 2026-11-13: added per-domain dedup at pick time. The pending-approval
+// backlog is dominated by same-domain siblings (3-6 drafts at
+// electricbrothers.nl, stukadoors-gulmercan.nl, etc.), and the send
+// loop was already collapsing them to one send/morning via its in-batch
+// `sentDomains` guard. That meant cap=50 was consistently sending only
+// ~20 unique-domain emails. Deduping BEFORE the slice gives us up to
+// `cap` real sends per morning instead. Tasks without a resolvable
+// domain (legacy / malformed) are not deduped — they go through as-is
+// and the send-loop guard is still there as defense in depth.
 export function pickApprovedOutreachSends(tasks, { cap = DEFAULT_OUTREACH_DAILY_SEND_CAP } = {}) {
   const sorted = (Array.isArray(tasks) ? tasks : [])
     .filter((t) => (
@@ -51,9 +73,21 @@ export function pickApprovedOutreachSends(tasks, { cap = DEFAULT_OUTREACH_DAILY_
       && t?.database_receipt_pending !== true
     ))
     .sort((a, b) => String(a.task_id).localeCompare(String(b.task_id)));
-  if (!Number.isFinite(cap)) return sorted;
+  const seenDomains = new Set();
+  const deduped = [];
+  for (const task of sorted) {
+    const domain = domainOfTask(task);
+    if (!domain) {
+      deduped.push(task);
+      continue;
+    }
+    if (seenDomains.has(domain)) continue;
+    seenDomains.add(domain);
+    deduped.push(task);
+  }
+  if (!Number.isFinite(cap)) return deduped;
   if (cap <= 0) return [];
-  return sorted.slice(0, cap);
+  return deduped.slice(0, cap);
 }
 
 export async function sendOneOutreachDraft(task, deps) {
@@ -176,25 +210,17 @@ export async function sendApprovedOutreach(options) {
   let cardsDeleted = 0;
   const failures = [];
   const outcomes = [];
-  // In-batch domain dedup (added 2026-10-27 after the first live
-  // morning run blasted 4 cold emails to the same recipient).
-  // Supabase's per-domain cap check only looks at the leads table,
-  // where fresh drafts have `last_contacted_at = null`, so a backlog
-  // with multiple drafts to the same domain slipped past the gate.
-  // We now also track every domain that already got a sent email in
-  // THIS run and short-circuit the rest.
+  // In-batch domain dedup (added 2026-10-27, now defense in depth).
+  // As of 2026-11-13 pickApprovedOutreachSends already dedupes by
+  // domain, so this guard should rarely fire — it stays to catch
+  // legacy tasks without a resolvable domain that reach the send
+  // loop through the fallback path, and any domain collision that
+  // slips in through a non-pick code path.
   const sentDomains = new Set();
-  function domainOf(task) {
-    const explicit = String(task?.lead_domain || '').trim().toLowerCase();
-    if (explicit) return explicit;
-    const addr = String(task?.email_request?.to || '').trim();
-    const at = addr.lastIndexOf('@');
-    return at === -1 ? '' : addr.slice(at + 1).toLowerCase();
-  }
 
   for (const [i, task] of picks.entries()) {
     const marker = `[${i + 1}/${picks.length}] ${task.task_id} → ${task.email_request?.to || '(no-to)'}`;
-    const taskDomain = domainOf(task);
+    const taskDomain = domainOfTask(task);
     if (taskDomain && sentDomains.has(taskDomain)) {
       skipped += 1;
       const outcome = { ok: false, skipped: true, taskId: task.task_id, to: task.email_request?.to, reason: `in_batch_domain_duplicate:${taskDomain}` };

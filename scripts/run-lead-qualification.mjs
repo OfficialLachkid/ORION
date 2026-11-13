@@ -12,6 +12,7 @@ import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.m
 import { recordOpsMetric } from '../services/lib/metrics-store.mjs';
 import { fetchLeadBatch, fetchSuppressedDomains, updateLead } from './lib/leadgen-supabase.mjs';
 import { hasValidEmailTld } from './lib/email-tld-allowlist.mjs';
+import { partitionBatchByDomain } from './lib/qualifier-batch-dedup.mjs';
 import { measurePageSpeed, qualifyLead } from '../services/leadgen-qualifier/src/qualifier.mjs';
 import { executeTask } from '../services/task-router/src/executor.mjs';
 import { upsertPersistedPendingTask } from '../services/discord-bot/src/pending-task-store.mjs';
@@ -246,17 +247,49 @@ async function main() {
     await patchChannelMessage(config, channelId, progressMessageId, { content: body });
   };
 
-  // Suppression gate — one query for the whole batch. If any lead in this
+  // Per-domain in-batch dedup (2026-11-13). The scraper routinely finds
+  // multiple contact emails on a single site (info@, sales@, contact@)
+  // and each lands as its own `status='new'` lead. Without this gate
+  // every one of them would be Claude-drafted and queued for approval,
+  // ballooning the morning-shift pending-approval store and leaning on
+  // the send-side in-batch dedup to collapse them to one send. Keep only
+  // the OLDEST lead per domain in this batch; siblings move to
+  // `status='deferred_same_domain'` and are out of the active rotation
+  // until an operator revives them.
+  const { primaries: dedupedBatch, deferredSiblings } = partitionBatchByDomain(batch);
+  for (const sibling of deferredSiblings) {
+    outcomes.push({
+      lead: sibling.business_name,
+      domain: sibling.domain,
+      sourceUrl: sibling.source_url,
+      decision: 'deferred_same_domain',
+      status: 'deferred_same_domain',
+      reasoning: `Skipped: another new lead at ${sibling.domain} is already being drafted in this batch. Flip status back to 'new' manually if the primary doesn't convert.`,
+      approvalTaskId: null,
+    });
+    if (!dryRun) {
+      await updateLead(sibling.id, {
+        status: 'deferred_same_domain',
+        qualification: {
+          ...(sibling.qualification || {}),
+          deferred_reason: 'same_domain_drafted_in_batch',
+          deferred_at: new Date().toISOString(),
+        },
+      }).catch(() => {});
+    }
+  }
+
+  // Suppression gate — one query for the deduped set. If any lead in this
   // batch shares a domain with an already-'unsubscribed' or 'bounced'
   // sibling, skip it (must, per NL Telecomwet 11.7 + GDPR — once someone
   // said 'stop', we do not contact anyone else at the same organization
   // via the same channel either). Suppression is CHEAPER than a wasted
   // qualifier run and prevents the operator from ever having to eyeball
   // a draft that should never have been generated.
-  const batchDomains = batch.map((l) => String(l.domain || '').toLowerCase()).filter(Boolean);
+  const batchDomains = dedupedBatch.map((l) => String(l.domain || '').toLowerCase()).filter(Boolean);
   const suppressedDomains = await fetchSuppressedDomains(batchDomains).catch(() => new Set());
 
-  for (const lead of batch) {
+  for (const lead of dedupedBatch) {
     await updateProgress({ currentLead: lead.business_name });
 
     const leadDomain = String(lead.domain || '').toLowerCase();
