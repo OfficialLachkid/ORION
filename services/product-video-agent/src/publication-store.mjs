@@ -132,6 +132,28 @@ export class SupabasePublicationStore {
     return rows?.[0] || null;
   }
 
+  async fetchPublicationsByIds(ids = [], options = {}) {
+    const normalizedIds = [...new Set(
+      (Array.isArray(ids) ? ids : [])
+        .map((value) => String(value || '').trim())
+        .filter(Boolean),
+    )];
+    if (normalizedIds.length === 0) return [];
+    const chunkSize = Math.max(1, Number(options.chunkSize) || 100);
+    const rows = [];
+    for (let offset = 0; offset < normalizedIds.length; offset += chunkSize) {
+      const chunk = normalizedIds.slice(offset, offset + chunkSize);
+      rows.push(...await this.request('video_publications', {
+        params: {
+          select: options.select || '*',
+          id: `in.(${chunk.map((value) => `"${value}"`).join(',')})`,
+        },
+        queryClass: options.queryClass || 'video_publications_by_ids',
+      }));
+    }
+    return rows;
+  }
+
   async fetchPublicationsByChannel({
     platform,
     accountKey,

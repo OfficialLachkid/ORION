@@ -126,6 +126,35 @@ test('SupabasePublicationStore supports compact channel publication projections'
   assert.equal(url.searchParams.get('status'), 'not.in.(published,deleted)');
 });
 
+test('SupabasePublicationStore hydrates publication ids in bounded projected batches', async () => {
+  const requestUrls = [];
+  const store = new SupabasePublicationStore({
+    supabaseUrl: 'https://example.supabase.co',
+    apiKey: 'service-key',
+    fetchImpl: async (url) => {
+      requestUrls.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        text: async () => '[]',
+      };
+    },
+  });
+
+  await store.fetchPublicationsByIds(
+    ['publication-1', 'publication-2', 'publication-3'],
+    { select: 'id,status', chunkSize: 2 },
+  );
+
+  assert.equal(requestUrls.length, 2);
+  assert.equal(new URL(requestUrls[0]).searchParams.get('select'), 'id,status');
+  assert.equal(
+    new URL(requestUrls[0]).searchParams.get('id'),
+    'in.("publication-1","publication-2")',
+  );
+  assert.equal(new URL(requestUrls[1]).searchParams.get('id'), 'in.("publication-3")');
+});
+
 test('mergeAnalyticsSnapshotRows deduplicates overlap and prunes stale or unrelated cache rows', () => {
   const rows = mergeAnalyticsSnapshotRows({
     cachedSnapshots: [

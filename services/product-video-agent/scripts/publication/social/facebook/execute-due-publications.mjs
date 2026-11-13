@@ -23,6 +23,14 @@ import {
 } from '../../../../src/social-publication-alerts.mjs';
 import { loadPublicationChannelProfiles } from '../../../../src/publication-channels.mjs';
 import {
+  SOCIAL_RUNTIME_PUBLICATION_SELECT,
+  hydratePublication,
+  hydratePublications,
+  needsFailureAlertHydration,
+  needsLifecycleAlertHydration,
+  normalizeRuntimePublication,
+} from '../../../../src/publication-runtime-snapshot.mjs';
+import {
   buildSocialMissedWindowPatch,
   buildSocialMetadataPatch,
   createSocialPublicationStore,
@@ -158,23 +166,31 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
       platform: FACEBOOK_REEL_PLATFORM,
       accountKey,
       order: 'scheduled_for.asc.nullsfirst,created_at.asc',
+      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
     })
     : await store.fetchPublicationsByPlatform({
       platform: FACEBOOK_REEL_PLATFORM,
       order: 'scheduled_for.asc.nullsfirst,created_at.asc',
+      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
     });
   const selected = publicationId
-    ? fetched.filter((publication) => publication.id === publicationId)
-    : fetched;
+    ? fetched.map(normalizeRuntimePublication)
+      .filter((publication) => publication.id === publicationId)
+    : fetched.map(normalizeRuntimePublication);
   const lifecycle = await reconcileAdditionalPlatformPublicationLifecycles({
     store,
     publications: selected,
     asOf,
     dryRun,
   });
+  const failureAlertPublications = await hydratePublications(
+    store,
+    lifecycle.publications,
+    needsFailureAlertHydration,
+  );
   const failureAlerts = await deliverFailureAlerts({
     store,
-    publications: lifecycle.publications,
+    publications: failureAlertPublications,
     runtimeConfig,
     asOf,
     dryRun,
@@ -182,9 +198,14 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
       ? { sendDiscordMessage: dependencies.sendDiscordMessage }
       : {}),
   });
+  const lifecycleAlertPublications = await hydratePublications(
+    store,
+    failureAlerts.publications,
+    needsLifecycleAlertHydration,
+  );
   const alerts = await deliverAlerts({
     store,
-    publications: failureAlerts.publications,
+    publications: lifecycleAlertPublications,
     runtimeConfig,
     asOf,
     dryRun,
@@ -192,7 +213,7 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
       ? { sendDiscordMessage: dependencies.sendDiscordMessage }
       : {}),
   });
-  const due = limitSocialItems(
+  const dueCandidates = limitSocialItems(
     alerts.publications
       .map((publication) => ({
         publication,
@@ -205,6 +226,10 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
       .filter((item) => item.dueAction),
     limit,
   );
+  const due = await Promise.all(dueCandidates.map(async ({ publication, dueAction }) => ({
+    publication: await hydratePublication(store, publication),
+    dueAction,
+  })));
   const results = [...lifecycle.results, ...failureAlerts.results, ...alerts.results];
 
   for (const { publication, dueAction } of due) {

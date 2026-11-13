@@ -6,6 +6,15 @@ import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../../../lib/runtime-config.mjs';
 import { SupabasePublicationStore } from '../../../../src/publication-store.mjs';
 import {
+  SOCIAL_RUNTIME_PUBLICATION_SELECT,
+  SOCIAL_STAGING_PUBLICATION_SELECT,
+  hydratePublication,
+  hydratePublications,
+  needsFailureAlertHydration,
+  needsLifecycleAlertHydration,
+  normalizeRuntimePublication,
+} from '../../../../src/publication-runtime-snapshot.mjs';
+import {
   BUFFER_DELIVERY_PROVIDER,
   TIKTOK_VIDEO_PLATFORM,
   TIKTOK_DIRECT_DELIVERY_PROVIDER,
@@ -96,6 +105,8 @@ function createPublicationStore(config) {
   return new SupabasePublicationStore({
     supabaseUrl: config?.env?.SUPABASE_URL || '',
     apiKey: config?.env?.SUPABASE_SECRET_KEY || config?.env?.SUPABASE_PUBLISHABLE_KEY || '',
+    egressLedgerDir: config?.runtimePaths?.supabaseEgressLedgerDir,
+    telemetryService: 'tiktok-publication',
   });
 }
 
@@ -289,8 +300,9 @@ export async function cleanupBufferStaging(options = {}, dependencies = {}) {
   const publications = await store.fetchPublicationsByPlatform({
     platform: TIKTOK_VIDEO_PLATFORM,
     order: 'created_at.asc',
+    select: SOCIAL_STAGING_PUBLICATION_SELECT,
   });
-  const protectedPaths = publications
+  const protectedPaths = publications.map(normalizeRuntimePublication)
     .filter((publication) => !normalizeText(publication.metadata?.buffer_staging_removed_at))
     .map((publication) => normalizeText(publication.metadata?.buffer_staging_object_path))
     .filter(Boolean);
@@ -328,23 +340,31 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       platform: TIKTOK_VIDEO_PLATFORM,
       accountKey,
       order: 'scheduled_for.asc.nullsfirst,created_at.asc',
+      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
     })
     : await store.fetchPublicationsByPlatform({
       platform: TIKTOK_VIDEO_PLATFORM,
       order: 'scheduled_for.asc.nullsfirst,created_at.asc',
+      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
     });
   const storedPublications = publicationId
-    ? fetchedPublications.filter((publication) => publication.id === publicationId)
-    : fetchedPublications;
+    ? fetchedPublications.map(normalizeRuntimePublication)
+      .filter((publication) => publication.id === publicationId)
+    : fetchedPublications.map(normalizeRuntimePublication);
   const lifecycleReconciliation = await reconcileAdditionalPlatformPublicationLifecycles({
     store,
     publications: storedPublications,
     asOf,
     dryRun,
   });
+  const failureAlertPublications = await hydratePublications(
+    store,
+    lifecycleReconciliation.publications,
+    needsFailureAlertHydration,
+  );
   const failureAlerts = await deliverFailureAlertsImpl({
     store,
-    publications: lifecycleReconciliation.publications,
+    publications: failureAlertPublications,
     runtimeConfig,
     asOf,
     dryRun,
@@ -352,9 +372,14 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       ? { sendDiscordMessage: dependencies.sendDiscordMessage }
       : {}),
   });
+  const lifecycleAlertPublications = await hydratePublications(
+    store,
+    failureAlerts.publications,
+    needsLifecycleAlertHydration,
+  );
   const lifecycleAlerts = await deliverLifecycleAlertsImpl({
     store,
-    publications: failureAlerts.publications,
+    publications: lifecycleAlertPublications,
     runtimeConfig,
     asOf,
     dryRun,
@@ -363,7 +388,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       : {}),
   });
   const publications = lifecycleAlerts.publications;
-  const duePublications = withLimit(
+  const dueCandidates = withLimit(
     publications
       .map((publication) => ({
         publication,
@@ -372,6 +397,10 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
       .filter((item) => item.dueAction),
     limit,
   );
+  const duePublications = await Promise.all(dueCandidates.map(async ({ publication, dueAction }) => ({
+    publication: await hydratePublication(store, publication),
+    dueAction,
+  })));
   const results = [
     ...lifecycleReconciliation.results,
     ...failureAlerts.results,

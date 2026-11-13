@@ -23,6 +23,12 @@ import {
 import { isManagedPokeQuizzPreviewPath } from '../../../services/product-video-agent/src/poke-quizz-preview-storage.mjs';
 import { SupabasePublicationStore } from '../../../services/product-video-agent/src/publication-store.mjs';
 import {
+  ACTIVE_RUNTIME_EXCLUDED_STATUSES,
+  POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT,
+  hydratePublication,
+  normalizeRuntimePublication,
+} from '../../../services/product-video-agent/src/publication-runtime-snapshot.mjs';
+import {
   deleteYoutubeVideo as deleteYoutubeVideoImpl,
   loadYoutubeClientCredentials as loadYoutubeClientCredentialsImpl,
 } from '../../../services/product-video-agent/src/youtube-publication-executor.mjs';
@@ -122,21 +128,26 @@ export async function reconcilePokeQuizzReviewThreads(
       const publications = await store.fetchPublicationsByChannel({
         platform: channelProfile.platform,
         accountKey: channelProfile.account_key,
+        status: `not.in.(${ACTIVE_RUNTIME_EXCLUDED_STATUSES})`,
+        select: POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT,
       });
       const result = await reconcileReviewMessages({
-        publications,
+        publications: publications.map(normalizeRuntimePublication),
         reviewThreadId,
         checkMessagePresence,
-        withdrawPublication: ({ publication }) => withdrawOrphanedPublication({
-          publication,
-          reviewThreadId,
-          store,
-          deleteYoutubeVideo: async ({ externalId }) => {
-            const clientConfig = await ensureYoutubeClientConfig();
-            return deleteYoutube({ externalId, clientConfig, refreshToken, channelKey });
-          },
-          deleteRenderFile,
-        }),
+        withdrawPublication: async ({ publication }) => {
+          const hydratedPublication = await hydratePublication(store, publication);
+          return withdrawOrphanedPublication({
+            publication: hydratedPublication,
+            reviewThreadId,
+            store,
+            deleteYoutubeVideo: async ({ externalId }) => {
+              const clientConfig = await ensureYoutubeClientConfig();
+              return deleteYoutube({ externalId, clientConfig, refreshToken, channelKey });
+            },
+            deleteRenderFile,
+          });
+        },
       });
 
       summary.processedChannels += 1;
