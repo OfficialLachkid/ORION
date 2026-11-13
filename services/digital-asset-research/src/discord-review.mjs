@@ -27,9 +27,15 @@ function parseCustomId(value) {
 }
 
 async function findOrCreateChannel(options) {
+  // Discord API call — not Supabase, so no egress-ledger attribution here.
+  // A prior change landed `egressLedgerDir: options.config.runtimePaths?.…`
+  // on this call site; `options.config` is never passed in by the caller
+  // (postResearchReview), so every nightly run crashed with
+  // `TypeError: Cannot read properties of undefined (reading 'runtimePaths')`
+  // and no research reached Discord. Supabase-side egress attribution
+  // already lives in research-store.mjs where it belongs.
   const channels = await discordRequest(options.token, `/guilds/${options.guildId}/channels`, {
     fetchImpl: options.fetchImpl,
-    egressLedgerDir: options.config.runtimePaths?.supabaseEgressLedgerDir,
   });
   const category = channels.find((item) => item.type === CATEGORY
     && String(item.name).toLowerCase() === options.categoryName.toLowerCase());

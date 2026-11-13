@@ -78,18 +78,49 @@ export function parseItchBrowseHtml(html, context) {
   return observations;
 }
 
+// itch.io 429 retry: without this, a single rate-limited view aborts the
+// whole nightly research run and still charges Supabase egress on the
+// failure-row write. With it, we honor Retry-After (or a bounded backoff)
+// and keep the run alive. 429-only on purpose — 5xx retries would hammer
+// itch.io and 4xx retries can't succeed.
+const ITCH_RETRY_MAX_ATTEMPTS = 3;
+const ITCH_RETRY_BACKOFF_MS = [2000, 5000];
+const ITCH_RETRY_AFTER_CAP_MS = 60000;
+
+function parseRetryAfterMs(headerValue) {
+  const value = String(headerValue || '').trim();
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(ITCH_RETRY_AFTER_CAP_MS, Math.ceil(seconds * 1000));
+  const asDate = Date.parse(value);
+  if (!Number.isFinite(asDate)) return null;
+  return Math.max(0, Math.min(ITCH_RETRY_AFTER_CAP_MS, asDate - Date.now()));
+}
+
 export async function fetchItchBrowseView(options) {
-  const response = await (options.fetchImpl || fetch)(options.view.url, {
-    headers: {
-      Accept: 'text/html,application/xhtml+xml',
-      'User-Agent': options.userAgent,
-    },
-    redirect: 'follow',
-  });
-  const html = await response.text();
-  if (response.status === 429) {
-    const retryAfter = response.headers.get('retry-after') || 'unspecified';
-    throw new Error(`itch.io research request was rate limited; Retry-After=${retryAfter}. No partial run was stored.`);
+  const fetchImpl = options.fetchImpl || fetch;
+  const sleepImpl = options.sleepImpl || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  let response;
+  let html = '';
+  for (let attempt = 1; attempt <= ITCH_RETRY_MAX_ATTEMPTS; attempt += 1) {
+    response = await fetchImpl(options.view.url, {
+      headers: {
+        Accept: 'text/html,application/xhtml+xml',
+        'User-Agent': options.userAgent,
+      },
+      redirect: 'follow',
+    });
+    html = await response.text();
+    if (response.status !== 429) break;
+    if (attempt === ITCH_RETRY_MAX_ATTEMPTS) {
+      const retryAfter = response.headers.get('retry-after') || 'unspecified';
+      throw new Error(`itch.io research request was rate limited; Retry-After=${retryAfter}. No partial run was stored.`);
+    }
+    const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+    const backoffMs = retryAfterMs != null
+      ? retryAfterMs
+      : ITCH_RETRY_BACKOFF_MS[Math.min(attempt - 1, ITCH_RETRY_BACKOFF_MS.length - 1)];
+    await sleepImpl(backoffMs);
   }
   if (!response.ok) throw new Error(`itch.io research request failed (${response.status}) for ${options.view.id}.`);
   const observations = parseItchBrowseHtml(html, {
