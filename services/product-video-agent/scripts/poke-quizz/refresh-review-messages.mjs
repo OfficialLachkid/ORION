@@ -10,6 +10,12 @@ import {
 } from '../../src/poke-quizz-publication-review.mjs';
 import { findPublicationChannelProfile, loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
+import {
+  ACTIVE_RUNTIME_EXCLUDED_STATUSES,
+  POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT,
+  hydratePublication,
+  normalizeRuntimePublication,
+} from '../../src/publication-runtime-snapshot.mjs';
 import { syncPublicationReviewMessage } from '../../src/publication-review-message-sync.mjs';
 import {
   loadPersistedPendingTasks,
@@ -136,6 +142,8 @@ async function main() {
   const publications = await store.fetchPublicationsByChannel({
     platform: channelProfile.platform,
     accountKey: channelProfile.account_key,
+    status: `not.in.(${ACTIVE_RUNTIME_EXCLUDED_STATUSES})`,
+    select: POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT,
   });
 
   const refreshedTasks = [];
@@ -143,15 +151,17 @@ async function main() {
   let refreshedCount = 0;
   let retriedEdits = 0;
   let inspectedCount = 0;
-  for (const publication of publications) {
-    const reviewThreadId = String(publication?.metadata?.review_thread_id || '').trim();
-    const reviewMessageId = String(publication?.metadata?.review_message_id || '').trim();
+  for (const candidate of publications.map(normalizeRuntimePublication)) {
+    const reviewThreadId = String(candidate?.metadata?.review_thread_id || '').trim();
+    const reviewMessageId = String(candidate?.metadata?.review_message_id || '').trim();
     if (!reviewThreadId || !reviewMessageId) {
       continue;
     }
-    if (pendingOnly && !isActionableReviewPublication(publication)) {
+    if (pendingOnly && !isActionableReviewPublication(candidate)) {
       continue;
     }
+
+    const publication = await hydratePublication(store, candidate);
 
     const videoRow = publication.video_id ? await store.fetchVideoById(publication.video_id) : null;
     if (!videoRow) {

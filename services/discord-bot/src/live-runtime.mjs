@@ -56,6 +56,12 @@ import {
 import { resolvePokeQuizzReviewTaskPaths } from '../../product-video-agent/src/poke-quizz-review-paths.mjs';
 import { SupabasePublicationStore } from '../../product-video-agent/src/publication-store.mjs';
 import {
+  ACTIVE_RUNTIME_EXCLUDED_STATUSES,
+  POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT,
+  hydratePublication,
+  normalizeRuntimePublication,
+} from '../../product-video-agent/src/publication-runtime-snapshot.mjs';
+import {
   loadPublicationChannelProfiles,
   resolvePublicationReviewThreadId,
 } from '../../product-video-agent/src/publication-channels.mjs';
@@ -226,8 +232,13 @@ export async function rehydratePokeQuizzReviewTask(decision, config, dependencie
       const publications = await store.fetchPublicationsByChannel({
         platform: channelProfile.platform,
         accountKey: channelProfile.account_key,
+        status: `not.in.(${ACTIVE_RUNTIME_EXCLUDED_STATUSES})`,
+        select: POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT,
       });
-      const publication = publications.find((item) => matchesPokeQuizzReviewPublication(item, decision));
+      const candidate = publications
+        .map(normalizeRuntimePublication)
+        .find((item) => matchesPokeQuizzReviewPublication(item, decision));
+      const publication = await hydratePublication(store, candidate);
       if (!publication?.video_id) {
         continue;
       }

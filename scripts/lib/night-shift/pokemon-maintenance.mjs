@@ -9,16 +9,15 @@ import {
 import { reconcilePokeQuizzPreviewFallbackStorage } from '../../../services/product-video-agent/src/poke-quizz-preview-storage.mjs';
 import { POKE_QUIZZ_REVIEW_TARGET_COUNT } from '../../../services/product-video-agent/src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../../services/product-video-agent/src/publication-store.mjs';
+import {
+  ACTIVE_RUNTIME_EXCLUDED_STATUSES, POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT, normalizeRuntimePublication,
+} from '../../../services/product-video-agent/src/publication-runtime-snapshot.mjs';
 import { executeProductVideoAction } from '../../../services/task-router/src/product-video-executor.mjs';
 import { loadRuntimeConfig, projectRoot } from '../../../services/lib/runtime-config.mjs';
 import { discoverNightShiftChannelRuntimes } from './pokemon-maintenance-runtime.mjs';
+import { replenishReviewBacklogForRuntime } from './pokemon-maintenance-review-backlog.mjs';
 import {
-  replenishReviewBacklogForRuntime,
-} from './pokemon-maintenance-review-backlog.mjs';
-import {
-  collectChildError, parseLastJsonObject,
-  parseTrailingJsonArray,
-  runProjectNodeScript,
+  collectChildError, parseLastJsonObject, parseTrailingJsonArray, runProjectNodeScript,
 } from './process-utils.mjs';
 import { runNightShiftRelatedVideoRefresh } from './related-video-sweep.mjs';
 
@@ -32,7 +31,6 @@ export { reconcilePokeQuizzReviewThreads } from './pokemon-maintenance-review-th
 
 export const DEFAULT_PUBLICATION_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 export const REVIEW_READY_TARGET_COUNT = POKE_QUIZZ_REVIEW_TARGET_COUNT;
-
 function createPublicationStore(config) {
   return new SupabasePublicationStore({
     supabaseUrl: config.env.SUPABASE_URL,
@@ -260,9 +258,11 @@ async function runNightShiftAutoPublicationAutomation(
   const fetchedPublications = await store.fetchPublicationsByChannel({
     platform: channelProfile.platform,
     accountKey: channelProfile.account_key,
+    status: `not.in.(${ACTIVE_RUNTIME_EXCLUDED_STATUSES})`,
+    select: POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT,
   });
   const plan = planNightShiftAutoPublicationAutomation({
-    publications: fetchedPublications,
+    publications: fetchedPublications.map(normalizeRuntimePublication),
     channelProfile,
     asOf,
     maxScheduledDays: templateRuntime.nightShift.publicationAutomationMaxScheduledDays,

@@ -10,6 +10,11 @@ import {
   syncPokeQuizzQueueStatusMessage,
 } from '../../../services/product-video-agent/src/poke-quizz-queue-status.mjs';
 import { SupabasePublicationStore } from '../../../services/product-video-agent/src/publication-store.mjs';
+import {
+  ACTIVE_RUNTIME_EXCLUDED_STATUSES,
+  POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT,
+  normalizeRuntimePublication,
+} from '../../../services/product-video-agent/src/publication-runtime-snapshot.mjs';
 import { resolveVideoTemplateRuntime } from '../../../services/product-video-agent/src/video-template-context.mjs';
 import { projectRoot } from '../../../services/lib/runtime-config.mjs';
 import { parseLastJsonObject, runProjectNodeScript } from './process-utils.mjs';
@@ -313,18 +318,19 @@ export async function replenishReviewBacklogForRuntime(config, templateRuntime, 
 
   const store = createPublicationStore(config);
   const generationRuntimes = await resolveReviewBacklogGenerationRuntimes(templateRuntime);
-  const fetchQueueStatus = async () => {
-    const publications = await store.fetchPublicationsByChannel({
-      platform: channelProfile.platform,
-      accountKey: channelProfile.account_key,
-    });
-    return computePokeQuizzQueueStatus(publications, channelProfile, asOf);
-  };
   const fetchChannelPublications = async () => (
     store.fetchPublicationsByChannel({
       platform: channelProfile.platform,
       accountKey: channelProfile.account_key,
+      status: `not.in.(${ACTIVE_RUNTIME_EXCLUDED_STATUSES})`,
+      select: POKE_QUIZZ_RUNTIME_PUBLICATION_SELECT,
     })
+      .then((publications) => publications.map(normalizeRuntimePublication))
+  );
+  const fetchQueueStatus = async () => computePokeQuizzQueueStatus(
+    await fetchChannelPublications(),
+    channelProfile,
+    asOf,
   );
 
   const initialQueueStatus = await fetchQueueStatus();
@@ -389,13 +395,19 @@ export async function replenishReviewBacklogForRuntime(config, templateRuntime, 
     reviewReadyCount = (await fetchQueueStatus()).reviewReadyCount;
   }
 
-  const finalQueueStatus = await fetchQueueStatus();
+  const finalPublications = await fetchChannelPublications();
+  const finalQueueStatus = computePokeQuizzQueueStatus(
+    finalPublications,
+    channelProfile,
+    asOf,
+  );
   await syncPokeQuizzQueueStatusMessage({
     runtimeConfig: config,
     store,
     channelProfile,
     channelSelector: templateRuntime.channelSelector,
     asOf,
+    publications: finalPublications,
   });
 
   return {

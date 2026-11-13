@@ -154,6 +154,52 @@ test('executeDueFacebookPublications blocks unattended upload while the live gat
   assert.equal(results.at(-1).reason, 'facebook_live_delivery_disabled');
 });
 
+test('executeDueFacebookPublications scans compact rows and hydrates only the due publication', async () => {
+  const stored = publication();
+  const fetchedIds = [];
+  let candidateSelect = '';
+  const results = await executeDueFacebookPublications({
+    'as-of': '2026-11-09T16:00:00.000Z',
+  }, {
+    runtimeConfig: { env: { FACEBOOK_DELIVERY_ENABLED: 'false' } },
+    publicationStore: {
+      async fetchPublicationsByPlatform(options) {
+        candidateSelect = options.select;
+        return [{
+          id: stored.id,
+          video_id: stored.video_id,
+          platform: stored.platform,
+          account_key: stored.account_key,
+          status: stored.status,
+          scheduled_for: stored.scheduled_for,
+          workflow_state: 'scheduled',
+          source_publication_id: 'source-publication-1',
+        }];
+      },
+      async fetchPublicationsByIds() {
+        return [{
+          id: 'source-publication-1',
+          status: 'scheduled',
+          scheduled_for: stored.scheduled_for,
+          workflow_state: 'scheduled',
+        }];
+      },
+      async fetchPublicationById(id) {
+        fetchedIds.push(id);
+        return stored;
+      },
+      async updatePublication() { throw new Error('must not update'); },
+    },
+    deliverPublicationFailureAlerts: passThroughAlerts,
+    deliverSocialPublicationLifecycleAlerts: passThroughAlerts,
+  });
+
+  assert.ok(candidateSelect.includes('workflow_state:metadata->>workflow_state'));
+  assert.equal(candidateSelect.includes('metadata'), true);
+  assert.deepEqual(fetchedIds, [stored.id]);
+  assert.equal(results.at(-1).action, 'facebook_publish_blocked');
+});
+
 test('targeted supervised publish-now uploads one future row with an audit receipt', async () => {
   let stored = publication({ scheduled_for: '2026-11-11T07:00:00.000Z' });
   let publishCalls = 0;
