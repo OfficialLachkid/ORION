@@ -4,7 +4,42 @@ import { readFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { buildResearchEmbed, recordResearchReviewDecision } from '../src/discord-review.mjs';
+import { buildResearchEmbed, postResearchReview, recordResearchReviewDecision } from '../src/discord-review.mjs';
+
+// Regression: 2026-11-04 → 2026-11-13 the nightly research pipeline
+// crashed with `TypeError: Cannot read properties of undefined
+// (reading 'runtimePaths')` because findOrCreateChannel was reaching
+// into `options.config.runtimePaths`, but postResearchReview never
+// forwarded `config` to it. Guard that the Discord post path only
+// needs token + guildId + discord.{category,channel}_name, no more.
+test('postResearchReview finds the research channel without needing runtimePaths', async () => {
+  const requests = [];
+  const fakeChannelsList = [
+    { id: 'cat-1', type: 4, name: 'orion-research', parent_id: null },
+    { id: 'chan-1', type: 0, name: 'digital-asset-research', parent_id: 'cat-1' },
+  ];
+  const fakeFetch = async (url, init) => {
+    requests.push({ url, method: init?.method || 'GET' });
+    if (String(url).endsWith('/guilds/guild-1/channels') && (init?.method || 'GET') === 'GET') {
+      return { ok: true, status: 200, json: async () => fakeChannelsList, text: async () => '' };
+    }
+    if (String(url).endsWith('/channels/chan-1/messages') && init?.method === 'POST') {
+      return { ok: true, status: 200, json: async () => ({ id: 'msg-1' }), text: async () => '' };
+    }
+    return { ok: false, status: 404, json: async () => ({}), text: async () => 'not found' };
+  };
+  const result = await postResearchReview({
+    runtimeConfig: { env: { DISCORD_BOT_TOKEN: 'tok' }, guildId: 'guild-1' },
+    config: { discord: { category_name: 'ORION-Research', channel_name: 'digital-asset-research' } },
+    report: { snapshot_count: 2, minimum_snapshots: 2, reason: 'ok' },
+    recommendation: null,
+    evidenceHash: 'a'.repeat(64),
+    fetchImpl: fakeFetch,
+  });
+  assert.equal(result.channelId, 'chan-1');
+  assert.equal(result.messageId, 'msg-1');
+  assert.equal(requests.length, 2);
+});
 
 test('labels a quality-gated result as evidence monitoring without approval', () => {
   const embed = buildResearchEmbed({
