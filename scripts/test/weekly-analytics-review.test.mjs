@@ -232,6 +232,7 @@ test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bo
   assert.ok(withoutPrior.includes('per_platform_performance'), 'prompt must reference the per_platform_performance data field');
   assert.ok(/Buffer.{0,40}free tier|do NOT.{0,40}Buffer scope/iu.test(withoutPrior), 'prompt must tell the analyst that TikTok engagement is intentionally absent (Buffer free tier) and must NOT be flagged as a bug');
   assert.ok(/MAY make cautious cross-platform observations|avg_watch_sec_median/u.test(withoutPrior), 'prompt must explicitly allow cross-platform comparisons between YouTube and Instagram');
+  assert.ok(withoutPrior.includes('Facebook Reels'), 'prompt must include Facebook in the cross-platform report');
 
   const withPrior = buildAnalystPrompt(pack, 'Last week I said X and Y happened.');
   assert.ok(withPrior.includes('Previous week\'s summary'));
@@ -258,6 +259,12 @@ test('buildPerPlatformPerformance: rolls up per-platform totals/averages and ski
           // ig3 has no snapshot — must count toward publications, not toward averages
         ]),
       },
+      facebook_reels: {
+        publications: [{ id: 'fb1' }],
+        analyticsByPub: new Map([
+          ['fb1', { metrics: { views: 750, likes: 25, comments: 3, avg_view_duration_sec: 7.2 } }],
+        ]),
+      },
     },
   });
   // YouTube — straight aggregation
@@ -275,6 +282,8 @@ test('buildPerPlatformPerformance: rolls up per-platform totals/averages and ski
   // Median via Math.floor(length/2) index — matches summarizeChannel's convention
   // (consistent with YouTube path), not a true even-length mean.
   assert.equal(perPlatformPerformance.instagram_reels.avg_watch_sec_median, 12.5);
+  assert.equal(perPlatformPerformance.facebook_reels.views_per_video, 750);
+  assert.equal(perPlatformPerformance.facebook_reels.avg_watch_sec_median, 7.2);
 });
 
 test('buildPerPlatformPerformance: refuses on empty / missing input (returns null for null, empty object for empty)', () => {

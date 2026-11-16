@@ -36,6 +36,13 @@ const FACEBOOK_ACCOUNTS = [
     pageName: 'Poke Guess',
     accessTokenEnv: 'FACEBOOK_POKE_GUESS_PAGE_ACCESS_TOKEN',
   },
+  {
+    sourceAccountKey: 'dexguess-youtube',
+    accountKey: 'dexguess-facebook',
+    pageId: '1433881269813053',
+    pageName: 'DexGuess',
+    accessTokenEnv: 'FACEBOOK_DEXGUESS_PAGE_ACCESS_TOKEN',
+  },
 ];
 
 test('configured Facebook Pages map through the shared target registry', async () => {

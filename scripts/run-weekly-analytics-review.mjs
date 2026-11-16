@@ -13,17 +13,21 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 import { createSupabaseApiHeaders } from '../services/lib/supabase-api-headers.mjs';
 import { sendDiscordChannelMessage } from './lib/discord-post.mjs';
 import {
   POKE_CHANNELS_INSTAGRAM,
+  POKE_CHANNELS_FACEBOOK,
   CROSS_PLATFORM_ALLOWLIST,
   fetchPokemonPublicationsForPlatform,
   fetchCrossPlatformActivity,
   buildPerPlatformPerformance,
 } from './lib/per-platform-rollup.mjs';
+import {
+  notifyWeeklyAnalyticsClaudeFailure,
+  runClaudeAnalysis,
+} from './lib/weekly-analytics-claude.mjs';
 
 const STATE_PATH = resolve(projectRoot, 'data', 'analytics', 'weekly-review-state.json');
 const DISCORD_API_BASE_URL = 'https://discord.com/api/v10';
@@ -431,7 +435,7 @@ function buildAnalystPrompt(dataPack, priorSummary = '') {
     'FORMATTING: every concrete number you cite (view count, like count, v/vid, like-rate %, median, delta, hour, etc.) MUST be wrapped in bold with double-asterisks so it stands out at a glance in Discord. Example: "poke-quizz-youtube pulled **2070 v/vid** on **90 videos** (like-rate **1.33%**)." This is non-negotiable — plain numbers get lost in the wall of text.',
     '',
     'Structure your response as:',
-    '0. **Cross-platform posting activity + per-platform performance** — read `cross_platform_activity` AND `per_platform_performance`. In the FIRST paragraph: total posts across platforms this week, split by platform (YouTube Shorts, TikTok via Buffer, Instagram Reels) with channel counts. Bold every count. In the SECOND paragraph: a per-platform performance comparison from `per_platform_performance` — total views, v/vid, median, like-rate for each platform where `videos_with_metrics > 0`. Call out which platform is pulling the most engagement per video. Instagram Reels carries an avg-watch-time signal (`avg_watch_sec_median`) that YouTube Shorts does not — call it out when present. TikTok engagement is intentionally absent from `per_platform_performance` because Buffer\'s free tier does not expose it; TikTok cadence still appears in `cross_platform_activity` and that is the only TikTok signal available — do NOT flag the missing engagement as a bug or a backlog item, and do NOT suggest granting a Buffer scope. You MAY make cautious cross-platform observations between YouTube and Instagram ("pixelated-reveal pulls 2x the views per video on Instagram vs YouTube this week — worth a template-mix tilt test"), but prefix any strong recommendation with the sample sizes so the operator can judge confidence. If both blocks are null/missing, skip this section silently.',
+    '0. **Cross-platform posting activity + per-platform performance** — read `cross_platform_activity` AND `per_platform_performance`. In the FIRST paragraph: total posts across platforms this week, split by platform (YouTube Shorts, TikTok via Buffer, Instagram Reels, Facebook Reels) with channel counts. Bold every count. In the SECOND paragraph: a per-platform performance comparison from `per_platform_performance` — total views, v/vid, median, like-rate for each platform where `videos_with_metrics > 0`. Call out which platform is pulling the most engagement per video. Instagram and Facebook Reels carry avg-watch-time signals (`avg_watch_sec_median`) that YouTube Shorts does not — call them out when present. TikTok engagement is intentionally absent from `per_platform_performance` because Buffer\'s free tier does not expose it; TikTok cadence still appears in `cross_platform_activity` and that is the only TikTok signal available — do NOT flag the missing engagement as a bug or a backlog item, and do NOT suggest granting a Buffer scope. You MAY make cautious cross-platform observations between YouTube, Instagram, and Facebook, but prefix any strong recommendation with the sample sizes so the operator can judge confidence. If both blocks are null/missing, skip this section silently.',
     '1. **This week in numbers (YouTube Shorts deep-dive)** — 2-3 sentences on YouTube totals + which channel/template stood out. Bold every number. This is the deepest-signal platform (full analytics capture); the other sections cover cross-platform at a lighter grain.',
     '2. **What is working** — 2-4 bullets identifying the templates or channels moving up, with the specific v/vid or like-rate numbers as evidence.',
     '3. **What is not working** — 2-4 bullets on underperformers or drops relative to peers. Do NOT recommend killing a channel or template with fewer than 20 videos in the window (undersampled).',
@@ -457,29 +461,6 @@ function buildAnalystPrompt(dataPack, priorSummary = '') {
   lines.push(JSON.stringify(dataPack, null, 2));
   lines.push('```');
   return lines.join('\n');
-}
-
-function runClaudeAnalysis(prompt, config) {
-  return new Promise((resolvePromise, rejectPromise) => {
-    const command = config?.env?.CLAUDE_COMMAND || 'claude';
-    const model = config?.env?.CLAUDE_MODEL || 'sonnet';
-    const child = spawn(command, ['-p', prompt, '--model', model], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: projectRoot,
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
-    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
-    child.once('error', (error) => rejectPromise(error));
-    child.once('close', (code) => {
-      if (code !== 0) {
-        rejectPromise(new Error(`claude -p exited ${code}. stderr: ${stderr.trim().slice(0, 500) || '(empty)'}`));
-        return;
-      }
-      resolvePromise(stdout.trim());
-    });
-  });
 }
 
 // ─── Discord thread management ─────────────────────────────────────
@@ -606,10 +587,15 @@ export async function runWeeklyAnalyticsReview({ config = loadRuntimeConfig(), n
       supabaseFetchBound, sinceIso, 'instagram_reels', POKE_CHANNELS_INSTAGRAM,
     ).catch(() => []);
     const instagramAnalytics = await fetchLatestAnalyticsByPub(config, instagramPubs.map((p) => p.id)).catch(() => new Map());
+    const facebookPubs = await fetchPokemonPublicationsForPlatform(
+      supabaseFetchBound, sinceIso, 'facebook_reels', POKE_CHANNELS_FACEBOOK,
+    ).catch(() => []);
+    const facebookAnalytics = await fetchLatestAnalyticsByPub(config, facebookPubs.map((p) => p.id)).catch(() => new Map());
     perPlatformPerformance = buildPerPlatformPerformance({
       platforms: {
         youtube_shorts: { publications, analyticsByPub },
         instagram_reels: { publications: instagramPubs, analyticsByPub: instagramAnalytics },
+        facebook_reels: { publications: facebookPubs, analyticsByPub: facebookAnalytics },
       },
     });
     const summaryLine = Object.entries(perPlatformPerformance || {})
@@ -628,7 +614,13 @@ export async function runWeeklyAnalyticsReview({ config = loadRuntimeConfig(), n
   const state = await loadState();
   const prompt = buildAnalystPrompt(dataPack, state.last_summary || '');
   process.stdout.write(`[weekly-analytics-review] prompt ${prompt.length} chars → claude -p\n`);
-  const summary = await runClaudeAnalysis(prompt, config);
+  let summary;
+  try {
+    summary = await runClaudeAnalysis(prompt, config);
+  } catch (error) {
+    await notifyWeeklyAnalyticsClaudeFailure(config, error).catch(() => null);
+    throw error;
+  }
   process.stdout.write(`[weekly-analytics-review] summary ${summary.length} chars\n`);
 
   // Ensure the review thread exists, otherwise create it.

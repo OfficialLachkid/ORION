@@ -149,11 +149,12 @@ target fan-out, lifecycle queue, retry handling, Discord review and publication 
 
 ## Analytics and comments
 
-The publication receipt intentionally stores a stable Facebook video id and permalink. Those are
-the keys a later analytics adapter will use to write snapshots into the existing `video_analytics`
-table. Add `read_insights` before enabling that collector. Because Meta changes insight metric
-availability, the adapter must probe supported metrics and retain raw responses instead of failing
-the entire sweep when one metric is unavailable.
+The publication receipt stores a stable Facebook video id and permalink. The shared social
+analytics engine uses those keys to collect due Reel insight snapshots into the existing
+`video_analytics` table. It requires `read_insights` and `pages_manage_engagement`. Metric failures
+are isolated recursively: an unavailable Meta metric is recorded in the raw payload without losing
+the supported metrics from that Reel. Candidate reads remain compact, snapshots follow the existing
+age-based cadence, and the Mac-side state prevents unnecessary Supabase history reads.
 
 Facebook comments should be a separate capability, like Instagram comments. If implemented, add
 `pages_manage_engagement`, persist the remote comment id and reconcile an uncertain response before
