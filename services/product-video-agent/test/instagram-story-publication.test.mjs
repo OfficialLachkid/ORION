@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   INSTAGRAM_STORY_PLATFORM,
   INSTAGRAM_STORY_POLICY_AUTO_PUBLISH,
   INSTAGRAM_STORY_POLICY_DISABLED,
-  INSTAGRAM_STORY_POLICY_REQUIRES_APPROVAL,
   buildInstagramStoryPublicationRow,
   resolveInstagramStoryPolicy,
   upsertInstagramStoryPublicationTarget,
@@ -33,7 +33,7 @@ const reelPublication = {
         expected_username: 'pokequizz',
         access_token_env: 'INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN',
         story: {
-          policy: 'requires_approval',
+          enabled: true,
           template_key: 'video_promotion',
           recipe_version: 'story-recipe.v1',
           delay_seconds: 120,
@@ -61,7 +61,23 @@ test('Instagram Story policy rejects unknown publication authorization modes', (
   );
 });
 
-test('requires-approval Story planning creates a deterministic waiting child row', () => {
+test('Poke Quizz is the only enabled Story canary in the channel registry', async () => {
+  const registry = JSON.parse(await readFile(new URL(
+    '../publication-channels.example.json',
+    import.meta.url,
+  ), 'utf8'));
+  const instagramTargets = registry.channels.flatMap((channel) => (
+    channel.metadata?.publisher?.targets || []
+  )).filter((configuredTarget) => configuredTarget.platform === 'instagram_reels');
+  const enabledStories = instagramTargets.filter((configuredTarget) => (
+    configuredTarget.instagram?.story?.enabled === true
+  ));
+
+  assert.equal(enabledStories.length, 1);
+  assert.equal(enabledStories[0].account_key, 'poke-quizzz-instagram');
+});
+
+test('account-enabled Story planning creates a deterministic waiting child row', () => {
   const first = buildInstagramStoryPublicationRow({
     sourcePublication: reelPublication,
     target: reelPublication.metadata.publisher_target,
@@ -78,9 +94,8 @@ test('requires-approval Story planning creates a deterministic waiting child row
   assert.equal(first.status, 'queued');
   assert.equal(first.metadata.workflow_state, 'waiting_source_publication');
   assert.equal(first.metadata.source_instagram_publication_id, reelPublication.id);
-  assert.equal(first.metadata.instagram_story.policy, INSTAGRAM_STORY_POLICY_REQUIRES_APPROVAL);
-  assert.equal(first.metadata.instagram_story.approval_required, true);
-  assert.equal(first.metadata.instagram_story.authorization, 'story_asset_approval');
+  assert.equal(first.metadata.instagram_story.policy, INSTAGRAM_STORY_POLICY_AUTO_PUBLISH);
+  assert.equal(first.metadata.instagram_story.authorization, 'account_policy');
   assert.equal(first.metadata.instagram_story.delay_seconds, 120);
 });
 
@@ -93,7 +108,6 @@ test('auto-publish Story planning records explicit account-policy authorization'
   });
 
   assert.equal(row.metadata.instagram_story.policy, INSTAGRAM_STORY_POLICY_AUTO_PUBLISH);
-  assert.equal(row.metadata.instagram_story.approval_required, false);
   assert.equal(row.metadata.instagram_story.authorization, 'account_policy');
 });
 
@@ -175,7 +189,7 @@ test('Instagram target fan-out creates one durable dependent Story plan when ena
   assert.equal(results.length, 1);
   assert.equal(rows.size, 2);
   assert.equal(results[0].platform, 'instagram_reels');
-  assert.equal(results[0].dependent_story_policy, INSTAGRAM_STORY_POLICY_REQUIRES_APPROVAL);
+  assert.equal(results[0].dependent_story_policy, INSTAGRAM_STORY_POLICY_AUTO_PUBLISH);
   const story = rows.get(results[0].dependent_story_publication_id);
   assert.equal(story.platform, INSTAGRAM_STORY_PLATFORM);
   assert.equal(story.metadata.source_instagram_publication_id, results[0].publication_id);

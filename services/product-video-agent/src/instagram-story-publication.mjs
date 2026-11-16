@@ -4,12 +4,10 @@ export const INSTAGRAM_STORY_PLATFORM = 'instagram_story';
 export const INSTAGRAM_STORY_RECIPE_VERSION = 'instagram-story-promotion.v1';
 export const INSTAGRAM_STORY_DEFAULT_TEMPLATE = 'video_promotion';
 export const INSTAGRAM_STORY_POLICY_DISABLED = 'disabled';
-export const INSTAGRAM_STORY_POLICY_REQUIRES_APPROVAL = 'requires_approval';
 export const INSTAGRAM_STORY_POLICY_AUTO_PUBLISH = 'auto_publish';
 
 const SUPPORTED_POLICIES = new Set([
   INSTAGRAM_STORY_POLICY_DISABLED,
-  INSTAGRAM_STORY_POLICY_REQUIRES_APPROVAL,
   INSTAGRAM_STORY_POLICY_AUTO_PUBLISH,
 ]);
 
@@ -41,16 +39,20 @@ export function resolveInstagramStoryPolicy(target = {}) {
   const explicitPolicy = normalizePolicy(
     configured.policy || configured.publish_policy || configured.publishPolicy,
   );
+  if (explicitPolicy && !SUPPORTED_POLICIES.has(explicitPolicy)) {
+    throw new Error(`Unsupported Instagram Story publication policy: ${explicitPolicy}.`);
+  }
   const policy = configured.enabled === false
     ? INSTAGRAM_STORY_POLICY_DISABLED
-    : explicitPolicy || INSTAGRAM_STORY_POLICY_DISABLED;
+    : configured.enabled === true
+      ? INSTAGRAM_STORY_POLICY_AUTO_PUBLISH
+      : explicitPolicy || INSTAGRAM_STORY_POLICY_DISABLED;
   if (!SUPPORTED_POLICIES.has(policy)) {
     throw new Error(`Unsupported Instagram Story publication policy: ${policy}.`);
   }
   return {
     policy,
     enabled: policy !== INSTAGRAM_STORY_POLICY_DISABLED,
-    requiresApproval: policy === INSTAGRAM_STORY_POLICY_REQUIRES_APPROVAL,
     autoPublish: policy === INSTAGRAM_STORY_POLICY_AUTO_PUBLISH,
     templateKey: normalizeText(
       configured.template_key || configured.templateKey || INSTAGRAM_STORY_DEFAULT_TEMPLATE,
@@ -90,7 +92,16 @@ export function buildInstagramStoryPublicationRow({
   if (!accountKey) {
     throw new Error('Instagram Story planning requires an Instagram account key.');
   }
-  const publisherTarget = sourcePublication.metadata?.publisher_target || target;
+  const storedTarget = sourcePublication.metadata?.publisher_target || {};
+  const publisherTarget = {
+    ...storedTarget,
+    ...target,
+    account_key: accountKey,
+    instagram: {
+      ...(storedTarget.instagram || {}),
+      ...(target.instagram || {}),
+    },
+  };
   return {
     id: buildInstagramStoryPublicationId({
       sourcePublication,
@@ -127,8 +138,7 @@ export function buildInstagramStoryPublicationRow({
         template_key: policy.templateKey,
         recipe_version: policy.recipeVersion,
         delay_seconds: policy.delaySeconds,
-        approval_required: policy.requiresApproval,
-        authorization: policy.autoPublish ? 'account_policy' : 'story_asset_approval',
+        authorization: 'account_policy',
       },
       created_from_source_at: asOf,
     },

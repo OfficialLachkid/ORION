@@ -142,21 +142,45 @@ export async function cleanupInstagramStaging(options = {}, dependencies = {}) {
   const store = dependencies.publicationStore || createPublicationStore(runtimeConfig);
   const stagingClient = dependencies.stagingClient
     || createInstagramStagingClient(runtimeConfig.env || {});
-  const publications = await store.fetchPublicationsByPlatform({
-    platform: INSTAGRAM_REEL_PLATFORM,
-    order: 'created_at.asc',
-    select: SOCIAL_STAGING_PUBLICATION_SELECT,
-  });
+  const publications = (await Promise.all([
+    store.fetchPublicationsByPlatform({
+      platform: INSTAGRAM_REEL_PLATFORM,
+      order: 'created_at.asc',
+      select: SOCIAL_STAGING_PUBLICATION_SELECT,
+    }),
+    store.fetchPublicationsByPlatform({
+      platform: 'instagram_story',
+      order: 'created_at.asc',
+      select: SOCIAL_STAGING_PUBLICATION_SELECT,
+    }),
+  ])).flat();
   const protectedPaths = publications.map(normalizeRuntimePublication)
-    .filter((publication) => !normalizeText(publication.metadata?.instagram_staging_removed_at))
-    .map((publication) => normalizeText(publication.metadata?.instagram_staging_object_path))
+    .flatMap((publication) => [
+      !normalizeText(publication.metadata?.instagram_staging_removed_at)
+        ? normalizeText(publication.metadata?.instagram_staging_object_path)
+        : '',
+      !normalizeText(publication.metadata?.instagram_story_staging_removed_at)
+        ? normalizeText(publication.metadata?.instagram_story_staging_object_path)
+        : '',
+    ])
     .filter(Boolean);
   const cutoff = new Date(new Date(asOf).getTime() - maxAgeHours * 60 * 60 * 1000);
-  return stagingClient.cleanupStaleObjects({
-    prefix: 'instagram',
-    olderThan: cutoff.toISOString(),
-    protectedPaths,
-  });
+  const [reels, stories] = await Promise.all([
+    stagingClient.cleanupStaleObjects({
+      prefix: 'instagram',
+      olderThan: cutoff.toISOString(),
+      protectedPaths,
+    }),
+    stagingClient.cleanupStaleObjects({
+      prefix: 'instagram-story',
+      olderThan: cutoff.toISOString(),
+      protectedPaths,
+    }),
+  ]);
+  return {
+    removedPaths: [...(reels.removedPaths || []), ...(stories.removedPaths || [])],
+    scannedCount: Number(reels.scannedCount || 0) + Number(stories.scannedCount || 0),
+  };
 }
 
 export async function executeDueInstagramPublications(options = {}, dependencies = {}) {
