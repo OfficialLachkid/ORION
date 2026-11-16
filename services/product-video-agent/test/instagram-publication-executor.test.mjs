@@ -99,6 +99,57 @@ test('InstagramGraphClient creates, checks, publishes, and resolves a Reel', asy
   assert.doesNotMatch(requests[0].url, /secret-token/u);
 });
 
+test('InstagramGraphClient creates and publishes an API-compatible image Story', async () => {
+  const requests = [];
+  const client = new InstagramGraphClient({
+    accessToken: 'secret-token',
+    apiVersion: 'v25.0',
+    fetchImpl: async (url, options) => {
+      requests.push({ url: String(url), options });
+      if (String(url).endsWith('/ig-user-1/media')) return graphResponse({ id: 'story-container-1' });
+      return graphResponse({ id: 'story-media-1' });
+    },
+  });
+
+  const created = await client.createStoryContainer({
+    instagramUserId: 'ig-user-1',
+    imageUrl: 'https://storage.example/story.jpg',
+  });
+  const published = await client.publishStory({
+    instagramUserId: 'ig-user-1',
+    containerId: created.containerId,
+  });
+  const createBody = new URLSearchParams(requests[0].options.body);
+
+  assert.equal(created.containerId, 'story-container-1');
+  assert.equal(published.mediaId, 'story-media-1');
+  assert.equal(createBody.get('media_type'), 'STORIES');
+  assert.equal(createBody.get('image_url'), 'https://storage.example/story.jpg');
+  assert.equal(createBody.has('share_to_feed'), false);
+  assert.equal(createBody.has('caption'), false);
+  assert.equal(
+    new URLSearchParams(requests[1].options.body).get('creation_id'),
+    'story-container-1',
+  );
+});
+
+test('InstagramGraphClient rejects an ambiguous Story media source', async () => {
+  const client = new InstagramGraphClient({
+    accessToken: 'secret-token',
+    apiVersion: 'v25.0',
+    fetchImpl: async () => graphResponse({ id: 'unexpected' }),
+  });
+
+  await assert.rejects(
+    () => client.createStoryContainer({
+      instagramUserId: 'ig-user-1',
+      imageUrl: 'https://storage.example/story.jpg',
+      videoUrl: 'https://storage.example/story.mp4',
+    }),
+    /exactly one public image or video URL/u,
+  );
+});
+
 test('InstagramGraphClient resolves the authenticated professional account identity', async () => {
   const client = new InstagramGraphClient({
     accessToken: 'secret-token',

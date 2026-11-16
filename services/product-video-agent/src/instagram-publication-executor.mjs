@@ -15,6 +15,13 @@ import {
 } from './publication-render-path.mjs';
 
 export const DEFAULT_INSTAGRAM_GRAPH_ENDPOINT = 'https://graph.instagram.com';
+export const INSTAGRAM_MEDIA_TYPE_REELS = 'REELS';
+export const INSTAGRAM_MEDIA_TYPE_STORIES = 'STORIES';
+
+const SUPPORTED_INSTAGRAM_PUBLISHING_MEDIA_TYPES = new Set([
+  INSTAGRAM_MEDIA_TYPE_REELS,
+  INSTAGRAM_MEDIA_TYPE_STORIES,
+]);
 
 export class InstagramGraphApiError extends Error {
   constructor(message, details = {}) {
@@ -114,24 +121,78 @@ export class InstagramGraphClient {
     return payload || {};
   }
 
-  async createReelContainer({ instagramUserId, videoUrl, caption, shareToFeed }) {
-    const payload = await this.request(`${instagramUserId}/media`, {
-      method: 'POST',
-      body: {
-        media_type: 'REELS',
-        video_url: videoUrl,
+  async createMediaContainer({
+    instagramUserId,
+    mediaType,
+    videoUrl = '',
+    imageUrl = '',
+    caption = '',
+    shareToFeed = false,
+  }) {
+    const normalizedMediaType = normalizeText(mediaType).toUpperCase();
+    if (!SUPPORTED_INSTAGRAM_PUBLISHING_MEDIA_TYPES.has(normalizedMediaType)) {
+      throw new InstagramPublicationValidationError(
+        `Unsupported Instagram publishing media type: ${normalizedMediaType || 'missing'}.`,
+        { code: 'instagram_media_type_unsupported' },
+      );
+    }
+    const normalizedVideoUrl = normalizeText(videoUrl);
+    const normalizedImageUrl = normalizeText(imageUrl);
+    if (normalizedMediaType === INSTAGRAM_MEDIA_TYPE_REELS && !normalizedVideoUrl) {
+      throw new InstagramPublicationValidationError(
+        'Instagram Reels require a public video URL.',
+        { code: 'instagram_video_url_required' },
+      );
+    }
+    if (
+      normalizedMediaType === INSTAGRAM_MEDIA_TYPE_STORIES
+      && Boolean(normalizedVideoUrl) === Boolean(normalizedImageUrl)
+    ) {
+      throw new InstagramPublicationValidationError(
+        'Instagram Stories require exactly one public image or video URL.',
+        { code: 'instagram_story_media_url_required' },
+      );
+    }
+    const body = {
+      media_type: normalizedMediaType,
+      ...(normalizedVideoUrl ? { video_url: normalizedVideoUrl } : {}),
+      ...(normalizedImageUrl ? { image_url: normalizedImageUrl } : {}),
+      ...(normalizedMediaType === INSTAGRAM_MEDIA_TYPE_REELS ? {
         caption,
         share_to_feed: shareToFeed ? 'true' : 'false',
-      },
+      } : {}),
+    };
+    const payload = await this.request(`${instagramUserId}/media`, {
+      method: 'POST',
+      body,
     });
     const containerId = normalizeText(payload.id);
     if (!containerId) {
-      throw new InstagramGraphApiError('Instagram did not return a Reel container id.', {
+      throw new InstagramGraphApiError('Instagram did not return a media container id.', {
         code: 'instagram_container_id_missing',
         payload,
       });
     }
     return { containerId, payload };
+  }
+
+  async createReelContainer({ instagramUserId, videoUrl, caption, shareToFeed }) {
+    return this.createMediaContainer({
+      instagramUserId,
+      mediaType: INSTAGRAM_MEDIA_TYPE_REELS,
+      videoUrl,
+      caption,
+      shareToFeed,
+    });
+  }
+
+  async createStoryContainer({ instagramUserId, videoUrl = '', imageUrl = '' }) {
+    return this.createMediaContainer({
+      instagramUserId,
+      mediaType: INSTAGRAM_MEDIA_TYPE_STORIES,
+      videoUrl,
+      imageUrl,
+    });
   }
 
   async fetchContainerStatus(containerId) {
@@ -146,7 +207,7 @@ export class InstagramGraphClient {
     };
   }
 
-  async publishReel({ instagramUserId, containerId }) {
+  async publishMedia({ instagramUserId, containerId }) {
     const payload = await this.request(`${instagramUserId}/media_publish`, {
       method: 'POST',
       body: { creation_id: containerId },
@@ -159,6 +220,14 @@ export class InstagramGraphClient {
       });
     }
     return { mediaId, payload };
+  }
+
+  async publishReel({ instagramUserId, containerId }) {
+    return this.publishMedia({ instagramUserId, containerId });
+  }
+
+  async publishStory({ instagramUserId, containerId }) {
+    return this.publishMedia({ instagramUserId, containerId });
   }
 
   async fetchMedia(mediaId) {
