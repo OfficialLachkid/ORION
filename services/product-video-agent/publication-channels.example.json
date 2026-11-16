@@ -896,6 +896,19 @@
                 "access_token_env": "INSTAGRAM_DEXGUESS_ACCESS_TOKEN",
                 "share_to_feed": true
               }
+            },
+            {
+              "platform": "facebook_reels",
+              "account_key": "dexguess-facebook",
+              "enabled": true,
+              "schedule_mode": "orion",
+              "delivery_provider": "facebook_graph",
+              "visibility": "public",
+              "facebook": {
+                "page_id": "1433881269813053",
+                "expected_page_name": "DexGuess",
+                "access_token_env": "FACEBOOK_DEXGUESS_PAGE_ACCESS_TOKEN"
+              }
             }
           ]
         },

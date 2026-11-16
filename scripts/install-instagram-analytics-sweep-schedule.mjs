@@ -7,7 +7,7 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-// Weekly Instagram Reels analytics sweep, fired Sunday night so
+// Weekly Instagram + Facebook Reels analytics sweep, fired Sunday night so
 // Monday morning's weekly review reads fresh snapshots. Weekly is
 // enough for the current review (which only reads the latest
 // snapshot per reel). If a retention-curve use case shows up later,
@@ -26,7 +26,9 @@ export const DEFAULT_LAUNCH_AGENT_PATH = [
   '/sbin',
 ].join(':');
 export const PLIST_LABEL = 'io.vbj.orion.instagram-analytics-sweep';
-export const SWEEP_SCRIPT_RELATIVE_PATH = 'services/product-video-agent/scripts/analytics/run-instagram-analytics-sweep.mjs';
+// Preserve the established label so this deployment replaces the old job
+// instead of leaving a second LaunchAgent behind.
+export const SWEEP_SCRIPT_RELATIVE_PATH = 'services/product-video-agent/scripts/analytics/run-social-analytics-sweeps.mjs';
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -121,7 +123,7 @@ function uninstallLaunchAgent(plistPath) {
     // Already unloaded — safe to continue.
   }
   unlinkSync(plistPath);
-  process.stdout.write(`Uninstalled ${basename(plistPath)}. Instagram analytics sweep will no longer fire on the fixed schedule.\n`);
+  process.stdout.write(`Uninstalled ${basename(plistPath)}. Social analytics sweeps will no longer fire on the fixed schedule.\n`);
 }
 
 function main() {
@@ -131,7 +133,7 @@ function main() {
       '       node scripts/install-instagram-analytics-sweep-schedule.mjs --uninstall',
       '',
       'Writes ~/Library/LaunchAgents/io.vbj.orion.instagram-analytics-sweep.plist and loads it by default.',
-      'Each run calls run-instagram-analytics-sweep.mjs over the last 14 days (its default window) and',
+      'Each run calls the shared Instagram + Facebook sweeps over the last 14 days and',
       'upserts the resulting per-reel snapshots into Supabase video_analytics so the Monday 09:15 weekly',
       'review reads fresh engagement data.',
       '',
@@ -146,7 +148,7 @@ function main() {
   }
 
   if (process.platform !== 'darwin') {
-    throw new Error('Instagram analytics sweep LaunchAgent installation is supported only on macOS.');
+    throw new Error('Social analytics sweep LaunchAgent installation is supported only on macOS.');
   }
 
   const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
@@ -162,13 +164,13 @@ function main() {
   const hour = getNumberArgValue('--hour', DEFAULT_HOUR, 23);
   const minute = getNumberArgValue('--minute', DEFAULT_MINUTE, 59);
   const shouldLoad = !hasFlag('--no-load');
-  const stdoutPath = resolve(config.runtimePaths.logDir, 'instagram-analytics-sweep.stdout.log');
-  const stderrPath = resolve(config.runtimePaths.logDir, 'instagram-analytics-sweep.stderr.log');
+  const stdoutPath = resolve(config.runtimePaths.logDir, 'social-analytics-sweep.stdout.log');
+  const stderrPath = resolve(config.runtimePaths.logDir, 'social-analytics-sweep.stderr.log');
   const scriptPath = resolve(projectRoot, SWEEP_SCRIPT_RELATIVE_PATH);
   const nodePath = process.execPath;
 
   if (!existsSync(scriptPath)) {
-    throw new Error(`Sweep script not found at ${scriptPath}. Did the Instagram adapter get deleted?`);
+    throw new Error(`Sweep script not found at ${scriptPath}. Did the shared analytics runner get deleted?`);
   }
 
   ensureDirectory(launchAgentsDir);

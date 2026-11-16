@@ -14,6 +14,13 @@ export const POKE_CHANNELS_INSTAGRAM = new Set([
   'proffmon-instagram',
 ]);
 
+export const POKE_CHANNELS_FACEBOOK = new Set([
+  'poke-quizz-facebook',
+  'poke-guess-facebook',
+  'dexguess-facebook',
+  'trivamon-facebook',
+]);
+
 // Platform allowlist for the cross-platform activity rollup
 // (publishing cadence only; engagement is per-platform below).
 // Includes `tiktok_video` so TikTok cadence still surfaces — ORION
@@ -24,13 +31,20 @@ export const POKE_CHANNELS_INSTAGRAM = new Set([
 // so only publishing metadata (status + external_link) is
 // available, which the cadence rollup already derives from
 // `video_publications` without any Buffer calls.
-export const CROSS_PLATFORM_ALLOWLIST = Object.freeze(['youtube_shorts', 'tiktok_video', 'instagram_reels']);
+export const CROSS_PLATFORM_ALLOWLIST = Object.freeze([
+  'youtube_shorts',
+  'tiktok_video',
+  'instagram_reels',
+  'facebook_reels',
+]);
 export const CROSS_PLATFORM_LABELS = Object.freeze({
   youtube_shorts: 'YouTube Shorts',
   tiktok_video: 'TikTok (via Buffer)',
   instagram_reels: 'Instagram Reels',
+  facebook_reels: 'Facebook Reels',
 });
 export const CROSS_PLATFORM_ANALYTICS_STATUS = Object.freeze({
+  facebook_reels: 'full - plays, reach, reactions, comments, shares, avg watch time',
   youtube_shorts: 'full — views, likes, geo, traffic sources',
   tiktok_video: 'cadence only — Buffer free tier does not expose engagement metrics; no sweep runs',
   instagram_reels: 'full — views, reach, likes, saves, shares, avg watch time',
@@ -39,10 +53,10 @@ export const CROSS_PLATFORM_ANALYTICS_STATUS = Object.freeze({
 // Fetch non-YouTube pokemon publications in the window. Separate from
 // the main YouTube fetcher because the YouTube deep-dive drives most
 // of the review (per-channel/template/slot analysis), while
-// Instagram + TikTok feed only the per-platform summary block.
+// Instagram + Facebook + TikTok feed only the per-platform summary block.
 export async function fetchPokemonPublicationsForPlatform(supabaseFetch, sinceIso, platform, allowlist) {
   const rows = await supabaseFetch(
-    `video_publications?platform=eq.${encodeURIComponent(platform)}&status=eq.published&external_id=not.is.null&select=id,account_key,external_id,title,published_at,metadata&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at.asc&limit=2000`,
+    `video_publications?platform=eq.${encodeURIComponent(platform)}&status=eq.published&external_id=not.is.null&select=id,account_key,external_id,title,published_at&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at.asc&limit=2000`,
   );
   return (Array.isArray(rows) ? rows : []).filter((row) => allowlist.has(row.account_key));
 }
