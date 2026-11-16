@@ -1,141 +1,132 @@
 #!/usr/bin/env node
-// run-instagram-analytics-sweep.mjs
-//
-// Fetch per-media insights for Instagram Reels publications and write
-// them to the shared `video_analytics` table so the weekly review can
-// pick them up alongside YouTube. Minimal — no digest posting, no
-// retry orchestration, no state file (yet). Intended for:
-//
-//   1. Manual on-demand runs: `node .../run-instagram-analytics-sweep.mjs`
-//   2. A future LaunchAgent that just invokes this directly on a cron.
-//
-// The YouTube sweep (run-video-analytics-sweep.mjs) has 1000+ lines of
-// digest + retry + state logic that we deliberately did NOT port here;
-// if Instagram analytics prove useful we can promote this to the
-// richer harness in a follow-up.
-//
-// Scope filter: only publications with `platform=instagram_reels` and
-// `status=published`. Only the most recent N by default (default 100)
-// since Instagram Graph has rate limits and we re-run frequently.
-//
-// Usage:
-//   node services/product-video-agent/scripts/analytics/run-instagram-analytics-sweep.mjs
-//   node .../run-instagram-analytics-sweep.mjs --limit 200
-//   node .../run-instagram-analytics-sweep.mjs --since-days 7
-//   node .../run-instagram-analytics-sweep.mjs --account-key poke-quizzz-instagram
+
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { loadRuntimeConfig, projectRoot } from '../../../lib/runtime-config.mjs';
-import { createSupabaseApiHeaders } from '../../../lib/supabase-api-headers.mjs';
-import { recordSupabaseEgress } from '../../../lib/supabase-egress-ledger.mjs';
+import { fetchInstagramPublicationMetrics } from '../../src/analytics/instagram-adapter.mjs';
+import { runSocialAnalyticsSweep } from '../../src/analytics/social-analytics-engine.mjs';
 import { loadPublicationChannelProfiles } from '../../src/publication-channels.mjs';
 import { SupabasePublicationStore } from '../../src/publication-store.mjs';
-import {
-  fetchInstagramPublicationMetrics,
-  findInstagramTargetAcrossProfiles,
-} from '../../src/analytics/instagram-adapter.mjs';
+import { listEnabledAdditionalPublicationTargets } from '../../src/social-publication-targets.mjs';
 
 const DEFAULT_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
+const DEFAULT_STATE_PATH = 'data/runtime/product-video-agent/social-analytics-state.json';
 const DEFAULT_LIMIT = 100;
 const DEFAULT_SINCE_DAYS = 14;
-const SLEEP_MS = 300;
 
-function parseArgs(argv) {
-  const args = { limit: DEFAULT_LIMIT, sinceDays: DEFAULT_SINCE_DAYS, accountKey: '' };
-  for (let i = 0; i < argv.length; i += 1) {
-    const a = argv[i];
-    if (a === '--limit') { args.limit = Number(argv[i + 1] || DEFAULT_LIMIT); i += 1; }
-    else if (a === '--since-days') { args.sinceDays = Number(argv[i + 1] || DEFAULT_SINCE_DAYS); i += 1; }
-    else if (a === '--account-key') { args.accountKey = String(argv[i + 1] || ''); i += 1; }
+export function parseInstagramAnalyticsSweepArgs(argv = []) {
+  const args = {
+    limit: DEFAULT_LIMIT,
+    sinceDays: DEFAULT_SINCE_DAYS,
+    accountKey: '',
+    statePath: resolve(projectRoot, DEFAULT_STATE_PATH),
+    force: false,
+  };
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    if (value === '--limit') {
+      args.limit = Number(argv[index + 1] || DEFAULT_LIMIT);
+      index += 1;
+    } else if (value === '--since-days') {
+      args.sinceDays = Number(argv[index + 1] || DEFAULT_SINCE_DAYS);
+      index += 1;
+    } else if (value === '--account-key') {
+      args.accountKey = String(argv[index + 1] || '').trim();
+      index += 1;
+    } else if (value === '--state-path') {
+      args.statePath = resolve(String(argv[index + 1] || DEFAULT_STATE_PATH));
+      index += 1;
+    } else if (value === '--force') {
+      args.force = true;
+    }
   }
   return args;
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export function listEnabledInstagramAnalyticsTargets(profiles = []) {
+  const byAccountKey = new Map();
+  for (const profile of profiles) {
+    for (const target of listEnabledAdditionalPublicationTargets(profile)) {
+      if (target.platform === 'instagram_reels') {
+        byAccountKey.set(target.accountKey, target);
+      }
+    }
+  }
+  return [...byAccountKey.values()];
+}
 
-async function supabaseFetch(config, path) {
-  const url = String(config.env.SUPABASE_URL || '').replace(/\/$/, '');
-  const key = config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY;
-  const response = await fetch(`${url}/rest/v1/${path}`, {
-    headers: createSupabaseApiHeaders(key),
+export async function runInstagramAnalyticsSweep(argsInput = {}, dependencies = {}) {
+  const args = {
+    limit: DEFAULT_LIMIT,
+    sinceDays: DEFAULT_SINCE_DAYS,
+    accountKey: '',
+    statePath: resolve(projectRoot, DEFAULT_STATE_PATH),
+    force: false,
+    ...argsInput,
+  };
+  const runtimeConfig = dependencies.runtimeConfig || loadRuntimeConfig();
+  const loadProfiles = dependencies.loadPublicationChannelProfiles || loadPublicationChannelProfiles;
+  const profiles = dependencies.profiles || await loadProfiles(DEFAULT_CHANNELS_PATH, { projectRoot });
+  const store = dependencies.store || new SupabasePublicationStore({
+    supabaseUrl: runtimeConfig.env.SUPABASE_URL,
+    apiKey: runtimeConfig.env.SUPABASE_SECRET_KEY || runtimeConfig.env.SUPABASE_PUBLISHABLE_KEY,
+    egressLedgerDir: runtimeConfig.runtimePaths?.supabaseEgressLedgerDir,
+    telemetryService: 'social_analytics_instagram',
   });
-  if (!response.ok) throw new Error(`Supabase ${path} → ${response.status}: ${(await response.text()).slice(0, 400)}`);
-  const body = await response.json();
-  await recordSupabaseEgress({
-    ledgerDir: config.runtimePaths?.supabaseEgressLedgerDir,
-    service: 'instagram_analytics',
-    resource: 'video_publications',
-    queryClass: 'published_instagram_publications',
-    method: 'GET',
-    response,
-    responseText: JSON.stringify(body),
-    body,
+  const targets = listEnabledInstagramAnalyticsTargets(profiles);
+
+  return runSocialAnalyticsSweep({
+    platform: 'instagram_reels',
+    targets,
+    store,
+    statePath: args.statePath,
+    accountKey: args.accountKey,
+    limitPerAccount: args.limit,
+    sinceDays: args.sinceDays,
+    force: args.force,
+    sleepMs: dependencies.sleepMs,
+    retrySleep: dependencies.retrySleep,
+    sleep: dependencies.sleep,
+    capturedAt: dependencies.capturedAt,
+    captureMetrics: ({ publication, target, capturedAt }) => (
+      (dependencies.fetchInstagramPublicationMetrics || fetchInstagramPublicationMetrics)({
+        publication,
+        target,
+        runtimeEnv: runtimeConfig.env,
+        capturedAt,
+        fetchImpl: dependencies.fetchImpl,
+      })
+    ),
+    onRetry: ({ attempt, delayMs, error }) => {
+      dependencies.logger?.warn?.(
+        `[instagram-analytics] retry ${attempt} in ${delayMs}ms: ${error?.message || error}`,
+      );
+    },
+    onProgress: ({ processed, due, captured, failed }) => {
+      dependencies.logger?.log?.(
+        `[instagram-analytics] ${processed}/${due} captured=${captured} failed=${failed}`,
+      );
+    },
   });
-  return body;
 }
 
 async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  const config = loadRuntimeConfig();
-  const profiles = await loadPublicationChannelProfiles(DEFAULT_CHANNELS_PATH, { projectRoot });
-  const store = new SupabasePublicationStore({
-    supabaseUrl: config.env.SUPABASE_URL,
-    apiKey: config.env.SUPABASE_SECRET_KEY || config.env.SUPABASE_PUBLISHABLE_KEY,
-    egressLedgerDir: config.runtimePaths?.supabaseEgressLedgerDir,
-    telemetryService: 'instagram_analytics',
-  });
-
-  const sinceIso = new Date(Date.now() - args.sinceDays * 24 * 60 * 60 * 1000).toISOString();
-  const scopeFilter = args.accountKey
-    ? `&account_key=eq.${encodeURIComponent(args.accountKey)}`
-    : '';
-  const path = `video_publications?platform=eq.instagram_reels&status=eq.published&external_id=not.is.null&select=id,account_key,external_id,title,published_at,metadata&published_at=gte.${encodeURIComponent(sinceIso)}&order=published_at.desc&limit=${args.limit}${scopeFilter}`;
-  const publications = await supabaseFetch(config, path);
-  console.log(`[instagram-analytics] window: ≥${sinceIso}  limit=${args.limit}  → ${publications.length} publications`);
-
-  let captured = 0;
-  let failed = 0;
-  const failures = [];
-  const asOf = new Date().toISOString();
-
-  for (const [i, publication] of publications.entries()) {
-    const target = findInstagramTargetAcrossProfiles(profiles, publication.account_key);
-    if (!target) {
-      failed += 1;
-      failures.push({ id: publication.id, reason: `no publisher target for account_key=${publication.account_key}` });
-      continue;
-    }
-    try {
-      const snapshot = await fetchInstagramPublicationMetrics({
-        publication,
-        target,
-        runtimeEnv: config.env,
-        capturedAt: asOf,
-      });
-      await store.upsertVideoAnalyticsSnapshot({
-        publication_id: publication.id,
-        captured_at: asOf,
-        metrics: snapshot.metrics,
-        raw_payload: snapshot.raw_payload,
-      });
-      captured += 1;
-      if ((i + 1) % 10 === 0 || i === publications.length - 1) {
-        console.log(`  progress: captured=${captured}  failed=${failed}  (${i + 1}/${publications.length})`);
-      }
-    } catch (error) {
-      failed += 1;
-      failures.push({ id: publication.id, external_id: publication.external_id, reason: error.message || String(error) });
-    }
-    await sleep(SLEEP_MS);
+  const result = await runInstagramAnalyticsSweep(
+    parseInstagramAnalyticsSweepArgs(process.argv.slice(2)),
+    { logger: console },
+  );
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (result.retry_recommended) {
+    process.exitCode = 1;
   }
-
-  console.log(JSON.stringify({
-    captured,
-    failed,
-    total: publications.length,
-    sinceIso,
-    accountKey: args.accountKey || null,
-    failures: failures.slice(0, 20),
-  }, null, 2));
 }
 
-main().catch((error) => { console.error(error); process.exitCode = 1; });
+const isMainModule = process.argv[1]
+  && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
+if (isMainModule) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

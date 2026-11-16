@@ -99,6 +99,7 @@ test('SupabasePublicationStore applies the analytics lookback filter and compact
 
 test('SupabasePublicationStore supports compact channel publication projections', async () => {
   let requestUrl = '';
+  let recordedQueryClass = '';
   const store = new SupabasePublicationStore({
     supabaseUrl: 'https://example.supabase.co',
     apiKey: 'service-key',
@@ -111,12 +112,19 @@ test('SupabasePublicationStore supports compact channel publication projections'
       };
     },
   });
+  const originalRequest = store.request.bind(store);
+  store.request = async (table, options) => {
+    recordedQueryClass = options.queryClass;
+    return originalRequest(table, options);
+  };
 
   await store.fetchPublicationsByChannel({
     platform: 'youtube_shorts',
     accountKey: 'poke-quizz-youtube',
     select: 'id,status,workflow_state:metadata->>workflow_state',
     status: 'not.in.(published,deleted)',
+    publishedAfter: '2026-11-01T00:00:00.000Z',
+    queryClass: 'analytics_candidates',
   });
 
   const url = new URL(requestUrl);
@@ -124,6 +132,37 @@ test('SupabasePublicationStore supports compact channel publication projections'
   assert.equal(url.searchParams.get('platform'), 'eq.youtube_shorts');
   assert.equal(url.searchParams.get('account_key'), 'eq.poke-quizz-youtube');
   assert.equal(url.searchParams.get('status'), 'not.in.(published,deleted)');
+  assert.equal(url.searchParams.get('published_at'), 'gte.2026-11-01T00:00:00.000Z');
+  assert.equal(recordedQueryClass, 'analytics_candidates');
+});
+
+test('SupabasePublicationStore can write analytics snapshots without returning large rows', async () => {
+  let requestInit = null;
+  const store = new SupabasePublicationStore({
+    supabaseUrl: 'https://example.supabase.co',
+    apiKey: 'service-key',
+    fetchImpl: async (_url, init) => {
+      requestInit = init;
+      return {
+        ok: true,
+        status: 204,
+        text: async () => '',
+      };
+    },
+  });
+
+  const result = await store.upsertVideoAnalyticsSnapshot({
+    publication_id: 'publication-1',
+    captured_at: '2026-11-14T09:00:00.000Z',
+    metrics: { views: 10 },
+    raw_payload: { source: 'test' },
+  }, { returnRepresentation: false });
+
+  assert.equal(result, null);
+  assert.equal(
+    requestInit.headers.Prefer,
+    'resolution=merge-duplicates,return=minimal',
+  );
 });
 
 test('SupabasePublicationStore hydrates publication ids in bounded projected batches', async () => {

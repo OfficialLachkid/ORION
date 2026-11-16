@@ -161,6 +161,8 @@ export class SupabasePublicationStore {
     limit = null,
     select = '*',
     status = '',
+    queryClass = '',
+    publishedAfter = '',
   }) {
     return this.request('video_publications', {
       params: {
@@ -168,9 +170,11 @@ export class SupabasePublicationStore {
         platform: `eq.${platform}`,
         account_key: `eq.${accountKey}`,
         status,
+        published_at: publishedAfter ? `gte.${publishedAfter}` : '',
         order,
         limit,
       },
+      queryClass: queryClass || 'video_publications_by_channel',
     });
   }
 
@@ -422,14 +426,16 @@ export class SupabasePublicationStore {
     });
   }
 
-  async upsertVideoAnalyticsSnapshot(snapshotRow) {
+  async upsertVideoAnalyticsSnapshot(snapshotRow, options = {}) {
+    const returnRepresentation = options.returnRepresentation !== false;
     const rows = await this.request('video_analytics', {
       method: 'POST',
       params: {
         on_conflict: 'publication_id,captured_at',
       },
-      prefer: 'resolution=merge-duplicates,return=representation',
+      prefer: `resolution=merge-duplicates,return=${returnRepresentation ? 'representation' : 'minimal'}`,
       body: [snapshotRow],
+      queryClass: options.queryClass || 'video_analytics_snapshot_upsert',
     });
     return rows?.[0] || null;
   }
