@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { executeDueSocialPublications as executeDueTikTokPublications } from './tiktok/execute-due-publications.mjs';
 import { executeDueInstagramPublications } from './instagram/execute-due-publications.mjs';
+import { executeDueInstagramStories } from './instagram/execute-due-stories.mjs';
 import { executeDueFacebookPublications } from './facebook/execute-due-publications.mjs';
 import { parseArgs, printUsage } from '../../../../../scripts/lib/ruflo-wrapper-utils.mjs';
 
@@ -15,6 +16,8 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
     || executeDueTikTokPublications;
   const executeInstagram = dependencies.executeDueInstagramPublications
     || executeDueInstagramPublications;
+  const executeInstagramStories = dependencies.executeDueInstagramStories
+    || executeDueInstagramStories;
   const executeFacebook = dependencies.executeDueFacebookPublications
     || executeDueFacebookPublications;
   const results = [];
@@ -23,6 +26,7 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
   for (const [platform, execute] of [
     ['tiktok_video', executeTikTok],
     ['instagram_reels', executeInstagram],
+    ['instagram_story', executeInstagramStories],
     ['facebook_reels', executeFacebook],
   ]) {
     try {

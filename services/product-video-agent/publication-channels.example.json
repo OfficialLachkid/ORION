@@ -205,7 +205,13 @@
                 "user_id": "17841467563066221",
                 "expected_username": "pokequizzz",
                 "access_token_env": "INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN",
-                "share_to_feed": true
+                "share_to_feed": true,
+                "story": {
+                  "enabled": true,
+                  "template_key": "video_promotion",
+                  "recipe_version": "instagram-story-promotion.v1",
+                  "delay_seconds": 0
+                }
               }
             },
             {

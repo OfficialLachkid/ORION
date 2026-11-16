@@ -105,6 +105,7 @@ export const SOCIAL_RUNTIME_PUBLICATION_SELECT = [
   'publication_failure_alert_status:metadata->>publication_failure_alert_status',
   'publication_failure_alert_fingerprint:metadata->>publication_failure_alert_fingerprint',
   'instagram_auto_comment:metadata->instagram_auto_comment',
+  'instagram_story:metadata->instagram_story',
   'buffer_create_uncertain:metadata->buffer_create_uncertain',
   'buffer_staging_public_url:metadata->>buffer_staging_public_url',
   'buffer_status:metadata->>buffer_status',
@@ -118,6 +119,8 @@ export const SOCIAL_STAGING_PUBLICATION_SELECT = [
   'buffer_staging_removed_at:metadata->>buffer_staging_removed_at',
   'instagram_staging_object_path:metadata->>instagram_staging_object_path',
   'instagram_staging_removed_at:metadata->>instagram_staging_removed_at',
+  'instagram_story_staging_object_path:metadata->>instagram_story_staging_object_path',
+  'instagram_story_staging_removed_at:metadata->>instagram_story_staging_removed_at',
 ].join(',');
 
 export const SOCIAL_SOURCE_PUBLICATION_SELECT = [
@@ -143,6 +146,7 @@ const PROJECTED_METADATA_FIELDS = Object.freeze([
   'publication_failure_alert_status',
   'publication_failure_alert_fingerprint',
   'instagram_auto_comment',
+  'instagram_story',
   'buffer_create_uncertain',
   'buffer_staging_public_url',
   'buffer_staging_object_path',
@@ -152,6 +156,8 @@ const PROJECTED_METADATA_FIELDS = Object.freeze([
   'tiktok_direct_post_approval',
   'instagram_staging_object_path',
   'instagram_staging_removed_at',
+  'instagram_story_staging_object_path',
+  'instagram_story_staging_removed_at',
 ]);
 
 export function isReconciliationStatus(status = '') {

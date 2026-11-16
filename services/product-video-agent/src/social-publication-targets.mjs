@@ -6,6 +6,9 @@ import {
 } from './tiktok-publication.mjs';
 import { INSTAGRAM_REEL_APPROVAL_VERSION } from './instagram-publication.mjs';
 import {
+  upsertInstagramStoryPublicationTarget,
+} from './instagram-story-publication.mjs';
+import {
   FACEBOOK_GRAPH_DELIVERY_PROVIDER,
   FACEBOOK_REEL_PLATFORM,
 } from './facebook-publication.mjs';
@@ -18,6 +21,7 @@ export {
 export const YOUTUBE_SHORTS_PLATFORM = 'youtube_shorts';
 export const TIKTOK_VIDEO_PLATFORM = 'tiktok_video';
 export const INSTAGRAM_REEL_PLATFORM = 'instagram_reels';
+export { INSTAGRAM_STORY_PLATFORM } from './instagram-story-publication.mjs';
 export { FACEBOOK_REEL_PLATFORM } from './facebook-publication.mjs';
 export const TIKTOK_DIRECT_DELIVERY_PROVIDER = 'tiktok_direct';
 export const BUFFER_DELIVERY_PROVIDER = 'buffer';
@@ -217,6 +221,26 @@ function serializeTargetForMetadata(target = {}) {
 
 function normalizeWorkflowState(publication = {}) {
   return normalizeText(publication.metadata?.workflow_state || publication.status).toLowerCase();
+}
+
+async function planDependentInstagramStory({ store, sourcePublication, target, asOf }) {
+  if (sourcePublication?.platform !== INSTAGRAM_REEL_PLATFORM) return null;
+  try {
+    return await upsertInstagramStoryPublicationTarget({
+      store,
+      sourcePublication,
+      target,
+      asOf,
+    });
+  } catch (error) {
+    return {
+      publicationId: '',
+      workflowState: 'planning_failed',
+      policy: '',
+      preserved: false,
+      error: error?.message || String(error),
+    };
+  }
 }
 
 function requireTikTokApprovalIdentity(target = {}, reviewedSettings = {}) {
@@ -505,6 +529,12 @@ export async function upsertAdditionalPlatformPublicationTargets({
           },
         }) || existing
         : existing;
+      const storyTarget = await planDependentInstagramStory({
+        store,
+        sourcePublication: synchronized,
+        target: candidate.metadata.publisher_target,
+        asOf,
+      });
       results.push({
         platform: synchronized.platform || candidate.platform,
         account_key: synchronized.account_key || candidate.account_key,
@@ -513,6 +543,12 @@ export async function upsertAdditionalPlatformPublicationTargets({
         scheduled_for: synchronized.scheduled_for || '',
         preserved: true,
         schedule_synchronized: shouldSyncPendingSchedule,
+        ...(storyTarget ? {
+          dependent_story_publication_id: storyTarget.publicationId,
+          dependent_story_workflow_state: storyTarget.workflowState,
+          dependent_story_policy: storyTarget.policy,
+          dependent_story_error: storyTarget.error || '',
+        } : {}),
       });
       continue;
     }
@@ -542,6 +578,12 @@ export async function upsertAdditionalPlatformPublicationTargets({
       hashFileImpl,
     });
     const stored = await store.upsertPublication(row);
+    const storyTarget = await planDependentInstagramStory({
+      store,
+      sourcePublication: stored || row,
+      target: row.metadata.publisher_target,
+      asOf,
+    });
     results.push({
       platform: row.platform,
       account_key: row.account_key,
@@ -549,6 +591,12 @@ export async function upsertAdditionalPlatformPublicationTargets({
       workflow_state: stored?.metadata?.workflow_state || row.metadata.workflow_state,
       scheduled_for: stored?.scheduled_for || row.scheduled_for || '',
       preserved: false,
+      ...(storyTarget ? {
+        dependent_story_publication_id: storyTarget.publicationId,
+        dependent_story_workflow_state: storyTarget.workflowState,
+        dependent_story_policy: storyTarget.policy,
+        dependent_story_error: storyTarget.error || '',
+      } : {}),
     });
   }
   return results;

@@ -184,6 +184,7 @@ export class SupabasePublicationStore {
     limit = null,
     select = '*',
     status = '',
+    queryClass = '',
   }) {
     return this.request('video_publications', {
       params: {
@@ -193,6 +194,7 @@ export class SupabasePublicationStore {
         order,
         limit,
       },
+      queryClass: queryClass || 'video_publications_by_platform',
     });
   }
 
