@@ -122,6 +122,64 @@ test('Story renderer creates a deterministic branded teaser beside the approved 
   }
 });
 
+test('Story renderer applies a persisted v2 framed variant with the verified account avatar', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'orion-story-v2-'));
+  const sourcePath = join(root, 'approved.mp4');
+  await writeFile(sourcePath, 'approved-source');
+  const source = sourcePublication({
+    metadata: {
+      workflow_state: 'published',
+      instagram_media_id: 'reel-media-1',
+      instagram_reel_approval: {
+        render_path: sourcePath,
+        video_sha256: 'source-sha',
+        creator_username: 'pokequizzz',
+      },
+    },
+  });
+  const publication = storyPublication({
+    metadata: {
+      ...storyPublication().metadata,
+      instagram_story: {
+        policy: 'auto_publish',
+        recipe_version: 'instagram-story-promotion.v2',
+        variant_key: 'framed_card',
+        delay_seconds: 0,
+      },
+    },
+  });
+  const commands = [];
+  const fakeSharp = () => ({
+    png() { return this; },
+    async toFile(path) { await writeFile(path, 'visual-input'); },
+  });
+  try {
+    const rendered = await renderInstagramStoryVideo({
+      publication,
+      sourcePublication: source,
+      target,
+      projectRoot: root,
+      sharpImpl: fakeSharp,
+      resolveAvatar: async () => ({ image: Buffer.from('avatar'), source: 'instagram_graph' }),
+      hashFileImpl: async (path) => (path === sourcePath ? 'source-sha' : 'story-sha'),
+      runProcess: async ({ args }) => {
+        commands.push(args);
+        await writeFile(args.at(-1), 'story-video');
+        return { code: 0, stdout: '', stderr: '' };
+      },
+    });
+
+    assert.equal(rendered.variantKey, 'framed_card');
+    assert.equal(rendered.avatarSource, 'instagram_graph');
+    assert.match(rendered.outputPath, /framed_card/u);
+    assert.equal(commands.length, 1);
+    assert.ok(commands[0].some((argument) => argument.includes('alphaextract')));
+    assert.equal(commands[0].filter((argument) => argument === '-i').length, 3);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('Story preparation inherits authorization from account policy and published Reel receipt', async () => {
   let renderCalls = 0;
   const prepared = await prepareInstagramStoryPublication({
