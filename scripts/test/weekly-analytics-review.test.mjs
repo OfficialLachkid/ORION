@@ -445,7 +445,11 @@ test('buildAnalystPrompt tells the analyst how to read per_template_variant (pil
   assert.match(prompt, /stat-clash/u, 'prompt must name stat-clash as the pilot template so the analyst knows the pilot scope');
 });
 
-test('install-schedule plist uses the Monday post-sweep schedule and exposes Homebrew tools', () => {
+test('install-schedule plist defaults to the Tuesday 09:15 slot and exposes Homebrew tools', () => {
+  // Default moved from Monday 09:15 (Weekday=1) to Tuesday 09:15
+  // (Weekday=2) on 2026-11-17. Monday competed with the night-shift
+  // 07:00 Claude-heavy fallback inside a single 5-hour rolling window;
+  // Tuesday gets its own fresh window.
   const plist = buildWeeklyAnalyticsReviewPlistContent({
     nodePath: '/usr/local/bin/node',
     scriptPath: '/repo/scripts/run-weekly-analytics-review.mjs',
@@ -456,9 +460,12 @@ test('install-schedule plist uses the Monday post-sweep schedule and exposes Hom
     hour: DEFAULT_HOUR,
     minute: DEFAULT_MINUTE,
   });
+  assert.equal(DEFAULT_WEEKDAY, 2, 'default weekday is Tuesday (2)');
+  assert.equal(DEFAULT_HOUR, 9);
+  assert.equal(DEFAULT_MINUTE, 15);
   assert.ok(plist.includes(`<string>${PLIST_LABEL}</string>`));
   assert.ok(plist.includes('<string>/repo/scripts/run-weekly-analytics-review.mjs</string>'));
-  assert.ok(plist.includes('<key>Weekday</key>\n    <integer>1</integer>'));
+  assert.ok(plist.includes('<key>Weekday</key>\n    <integer>2</integer>'));
   assert.ok(plist.includes('<key>Hour</key>\n    <integer>9</integer>'));
   assert.ok(plist.includes('<key>Minute</key>\n    <integer>15</integer>'));
   assert.ok(plist.includes(`<string>${DEFAULT_LAUNCH_AGENT_PATH}</string>`));

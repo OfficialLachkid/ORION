@@ -7,9 +7,14 @@ import { basename, dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
 
-// Run shortly after Monday's 09:00 analytics sweep so the review includes
-// the freshest weekly snapshots without competing with the collector.
-export const DEFAULT_WEEKDAY = 1; // 1 = Monday under macOS launchd (same as JS Date)
+// Run Tuesday mornings — the Monday 09:15 slot competed for Claude credits
+// with the night-shift 07:00 fallback (which runs full lead qualification
+// after the 01:30 night-shift misses the ~02:00 weekly Claude reset).
+// Both the 01:30 night-shift and the 09:15 review failed the week of
+// 2026-11-16 for the same reason: Monday is packed with Claude-heavy jobs
+// inside a single 5-hour rolling window. Tuesday moves the review into
+// its own window with fresh credits.
+export const DEFAULT_WEEKDAY = 2; // 2 = Tuesday under macOS launchd (same as JS Date)
 export const DEFAULT_HOUR = 9;
 export const DEFAULT_MINUTE = 15;
 export const DEFAULT_LAUNCH_AGENT_PATH = [
@@ -131,7 +136,7 @@ function main() {
       'the resulting summary to a Discord thread in the ORION analytics channel. The operator',
       'reads the summary and applies changes manually — the script does NOT open PRs.',
       '',
-      '--weekday N picks the launchd weekday (0 = Sunday, 6 = Saturday). Default: 1 (Monday).',
+      '--weekday N picks the launchd weekday (0 = Sunday, 6 = Saturday). Default: 2 (Tuesday).',
       '--hour + --minute pick the launchd fire time (macOS local time). Defaults: 09:15.',
       '',
       '--uninstall unloads and removes the plist.',
