@@ -60,6 +60,19 @@ Planning the dependent row before the external Reel write prevents a restart bet
 publication and Story dispatch from losing the Story. Story planning or delivery remains isolated
 from the Reel result.
 
+## Continuation cadence
+
+The normal publication worker creates the Story child and starts delivery after its source Reel is
+verified. Meta may still be processing the Story container when that worker finishes. A dedicated
+LaunchAgent therefore runs the lightweight Story executor 20 minutes after each publication slot
+belonging to an active Story-enabled profile. It resumes persisted containers instead of creating
+duplicates.
+
+This continuation does not start the complete YouTube or social publication scheduler and does not
+load a model. It reads only active Story rows plus their compact source receipts. Profiles without
+Story publishing enabled add no wake times; newly enabled profiles inherit their own schedule slots
+when the publication LaunchAgents are installed again.
+
 ## Variant rotation and account identity
 
 The version 2 recipe set contains five reusable layouts: the original presentation, branded
@@ -91,8 +104,13 @@ the complete video on the account profile.
 
 ## Rollout state
 
-Poke Quizz remains the only enabled canary while the version 2 rotation is validated. TrivaMon,
+Poke Quizz and TrivaMon are the enabled canaries while the version 2 rotation is validated.
 Poke Guess, DexGuess, and ProffMon remain disabled until rollout is explicitly expanded. Enabling a
 later or newly connected Instagram account requires only the same declarative
 `instagram.story.enabled` setting; it automatically inherits the reusable recipe registry and its
 own identity-verified profile image without channel-specific executor code.
+
+When an account is enabled after its Reels have already been approved or scheduled, run a targeted
+idempotent reconciliation for those future Instagram publication rows after deployment. New Story
+children are then created from the current account policy without changing the existing Reel
+schedule or producing duplicate Stories. Newly planned videos inherit the policy automatically.

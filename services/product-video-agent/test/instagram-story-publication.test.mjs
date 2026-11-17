@@ -61,7 +61,7 @@ test('Instagram Story policy rejects unknown publication authorization modes', (
   );
 });
 
-test('Poke Quizz is the only enabled Story canary in the channel registry', async () => {
+test('Poke Quizz and TrivaMon are the enabled Story canaries in the channel registry', async () => {
   const registry = JSON.parse(await readFile(new URL(
     '../publication-channels.example.json',
     import.meta.url,
@@ -73,8 +73,15 @@ test('Poke Quizz is the only enabled Story canary in the channel registry', asyn
     configuredTarget.instagram?.story?.enabled === true
   ));
 
-  assert.equal(enabledStories.length, 1);
-  assert.equal(enabledStories[0].account_key, 'poke-quizzz-instagram');
+  assert.deepEqual(
+    enabledStories.map((target) => target.account_key).sort(),
+    ['poke-quizzz-instagram', 'trivamon-instagram'],
+  );
+  for (const target of enabledStories) {
+    assert.equal(target.instagram.story.recipe_version, 'instagram-story-promotion.v2');
+    assert.equal(target.instagram.story.variant_keys.length, 5);
+    assert.equal(target.instagram.story.avatar_cache_ttl_hours, 168);
+  }
 });
 
 test('account-enabled Story planning creates a deterministic waiting child row', () => {

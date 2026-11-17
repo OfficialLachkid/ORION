@@ -43,6 +43,13 @@ const FACEBOOK_ACCOUNTS = [
     pageName: 'DexGuess',
     accessTokenEnv: 'FACEBOOK_DEXGUESS_PAGE_ACCESS_TOKEN',
   },
+  {
+    sourceAccountKey: 'proffmon-youtube',
+    accountKey: 'proffmon-facebook',
+    pageId: '1537120129481522',
+    pageName: 'ProffMon',
+    accessTokenEnv: 'FACEBOOK_PROFFMON_PAGE_ACCESS_TOKEN',
+  },
 ];
 
 test('configured Facebook Pages map through the shared target registry', async () => {

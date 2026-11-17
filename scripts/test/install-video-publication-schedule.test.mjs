@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_RECONCILE_DELAY_MINUTES,
   DEFAULT_RECONCILE_DELAYS_MINUTES,
+  DEFAULT_STORY_CONTINUATION_DELAY_MINUTES,
   PLIST_LABEL,
   RECONCILE_PLIST_LABEL,
+  STORY_CONTINUATION_PLIST_LABEL,
   buildReconcileScheduleEntries,
   buildPlistContent,
   collectActivePublicationScheduleEntries,
+  collectActiveStoryContinuationScheduleEntries,
   offsetScheduleEntries,
 } from '../install-video-publication-schedule.mjs';
 
@@ -109,4 +112,49 @@ test('scheduler wake times are derived from all active channel slots and handle 
     { hour: 8, minute: 35 },
     { hour: 9, minute: 50 },
   ]);
+});
+
+test('Story continuation runs only after slots belonging to active Story-enabled profiles', () => {
+  const storyTarget = (enabled) => ({
+    platform: 'instagram_reels',
+    enabled: true,
+    instagram: { story: { enabled } },
+  });
+  const profiles = [
+    {
+      status: 'active',
+      schedule_slots: [{ hour: 8, minute: 0 }, { hour: 23, minute: 50 }],
+      metadata: { publisher: { targets: [storyTarget(true)] } },
+    },
+    {
+      status: 'active',
+      schedule_slots: [{ hour: 9, minute: 0 }],
+      metadata: { publisher: { targets: [storyTarget(false)] } },
+    },
+    {
+      status: 'paused',
+      schedule_slots: [{ hour: 10, minute: 0 }],
+      metadata: { publisher: { targets: [storyTarget(true)] } },
+    },
+  ];
+
+  assert.deepEqual(collectActiveStoryContinuationScheduleEntries(profiles), [
+    { hour: 0, minute: 10 },
+    { hour: 8, minute: DEFAULT_STORY_CONTINUATION_DELAY_MINUTES },
+  ]);
+});
+
+test('Story continuation plist invokes only the lightweight Story executor', () => {
+  const storyScriptPath = '/Users/Agent/Workspace/ORION/services/product-video-agent/scripts/publication/social/instagram/execute-due-stories.mjs';
+  const plist = buildPlistContent({
+    ...plistOptions,
+    label: STORY_CONTINUATION_PLIST_LABEL,
+    scriptPath: storyScriptPath,
+    scheduleEntries: [{ hour: 12, minute: 20 }],
+  });
+
+  assert.match(plist, new RegExp(`<string>${STORY_CONTINUATION_PLIST_LABEL}</string>`));
+  assert.match(plist, new RegExp(`<string>${storyScriptPath}</string>`));
+  assert.doesNotMatch(plist, /run-video-publication-scheduler/);
+  assert.doesNotMatch(plist, /--reconcile-only/);
 });
