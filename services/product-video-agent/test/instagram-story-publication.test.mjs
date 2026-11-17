@@ -97,6 +97,15 @@ test('account-enabled Story planning creates a deterministic waiting child row',
   assert.equal(first.metadata.instagram_story.policy, INSTAGRAM_STORY_POLICY_AUTO_PUBLISH);
   assert.equal(first.metadata.instagram_story.authorization, 'account_policy');
   assert.equal(first.metadata.instagram_story.delay_seconds, 120);
+  assert.ok([
+    'current',
+    'branded_fullscreen',
+    'framed_card',
+    'minimal',
+    'hybrid',
+  ].includes(first.metadata.instagram_story.variant_key));
+  assert.equal(first.metadata.instagram_story.variant_set_version, 'instagram-story-variants.v1');
+  assert.equal(first.metadata.instagram_story.enabled_variant_keys.length, 5);
 });
 
 test('auto-publish Story planning records explicit account-policy authorization', () => {

@@ -7,6 +7,17 @@ import { runLocalProcess } from './process-runner.mjs';
 import { resolveFfmpegExecutable } from './runtime-executables.mjs';
 import { resolveAvailablePublicationRender } from './publication-render-path.mjs';
 import { InstagramPublicationValidationError } from './instagram-publication.mjs';
+import {
+  avatarImageDataUri,
+  resolveInstagramStoryAvatar,
+} from './instagram-story-avatar.mjs';
+import {
+  INSTAGRAM_STORY_LEGACY_RECIPE_VERSION,
+  INSTAGRAM_STORY_VARIANT_SET_VERSION,
+  buildLegacyInstagramStoryRecipe,
+  buildInstagramStoryRecipe,
+  resolveInstagramStoryVariant,
+} from './instagram-story-recipes.mjs';
 
 export const INSTAGRAM_STORY_WIDTH = 1080;
 export const INSTAGRAM_STORY_HEIGHT = 1920;
@@ -14,15 +25,6 @@ export const INSTAGRAM_STORY_DEFAULT_DURATION_SECONDS = 8;
 
 function normalizeText(value) {
   return String(value || '').trim();
-}
-
-function xmlEscape(value) {
-  return normalizeText(value)
-    .replace(/&/gu, '&amp;')
-    .replace(/</gu, '&lt;')
-    .replace(/>/gu, '&gt;')
-    .replace(/"/gu, '&quot;')
-    .replace(/'/gu, '&apos;');
 }
 
 function safeSegment(value, fallback = 'story') {
@@ -38,28 +40,35 @@ function resolveDurationSeconds(publication = {}) {
   return Math.max(3, Math.min(Math.floor(configured), 15));
 }
 
-function buildOverlaySvg({ username }) {
-  const account = xmlEscape(normalizeText(username).replace(/^@/u, '') || 'our profile');
-  return Buffer.from(`
-    <svg width="${INSTAGRAM_STORY_WIDTH}" height="${INSTAGRAM_STORY_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#050914" stop-opacity="0.78"/>
-          <stop offset="1" stop-color="#050914" stop-opacity="0"/>
-        </linearGradient>
-        <linearGradient id="bottom" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#050914" stop-opacity="0"/>
-          <stop offset="1" stop-color="#050914" stop-opacity="0.9"/>
-        </linearGradient>
-      </defs>
-      <rect width="1080" height="360" fill="url(#top)"/>
-      <rect y="1420" width="1080" height="500" fill="url(#bottom)"/>
-      <rect x="358" y="108" width="364" height="94" rx="47" fill="#121C33" fill-opacity="0.92" stroke="#3FE4FF" stroke-width="4"/>
-      <text x="540" y="170" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="44" font-weight="800" fill="#FFFFFF" letter-spacing="4">NEW VIDEO</text>
-      <text x="540" y="1660" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="62" font-weight="800" fill="#FFFFFF">WATCH THE FULL VIDEO</text>
-      <text x="540" y="1748" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="48" font-weight="700" fill="#3FE4FF">@${account}</text>
-    </svg>
-  `);
+function framedMaskSvg() {
+  return Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="850" height="1330"><rect width="850" height="1330" rx="56" fill="#fff"/></svg>');
+}
+
+function progressFilter(recipe, durationSeconds, inputLabel) {
+  if (!recipe.progressBar) return `[${inputLabel}]format=yuv420p[v]`;
+  return `[${inputLabel}]drawbox=x=${recipe.progressBarX}:y=${recipe.progressBarY}:w='min(${recipe.progressBarWidth},${recipe.progressBarWidth}*t/${durationSeconds})':h=${recipe.progressBarHeight}:color=${recipe.progressBarColor}:t=fill,format=yuv420p[v]`;
+}
+
+function buildFilterComplex(recipe, durationSeconds) {
+  if (recipe.presentation === 'framed') {
+    return [
+      '[0:v]split=2[bgsrc][fgsrc]',
+      '[bgsrc]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:5,eq=brightness=-0.32:saturation=0.72,setsar=1[bg]',
+      '[fgsrc]scale=850:1330:force_original_aspect_ratio=increase,crop=850:1330,format=rgba[fg]',
+      '[2:v]format=rgba,alphaextract[mask]',
+      '[fg][mask]alphamerge[rounded]',
+      '[bg][rounded]overlay=115:290[stage]',
+      '[1:v]scale=1080:1920,format=rgba[brand]',
+      '[stage][brand]overlay=0:0:format=auto[composed]',
+      progressFilter(recipe, durationSeconds, 'composed'),
+    ].join(';');
+  }
+  return [
+    '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[base]',
+    '[1:v]scale=1080:1920,format=rgba[brand]',
+    '[base][brand]overlay=0:0:format=auto[composed]',
+    progressFilter(recipe, durationSeconds, 'composed'),
+  ].join(';');
 }
 
 function resolveSourceApproval(sourcePublication = {}) {
@@ -85,6 +94,7 @@ export async function renderInstagramStoryVideo({
   hashFileImpl = hashFileSha256,
   runProcess = runLocalProcess,
   sharpImpl = sharp,
+  resolveAvatar = resolveInstagramStoryAvatar,
 }) {
   const { approval, renderPath: configuredPath, sourceSha256 } = resolveSourceApproval(
     sourcePublication,
@@ -109,10 +119,18 @@ export async function renderInstagramStoryVideo({
       { code: 'instagram_story_recipe_missing' },
     );
   }
+  const persistedVariantKey = normalizeText(publication.metadata?.instagram_story?.variant_key);
+  const legacyRecipe = recipeVersion === INSTAGRAM_STORY_LEGACY_RECIPE_VERSION
+    && !persistedVariantKey;
+  const variantKey = legacyRecipe
+    ? 'legacy_v1'
+    : resolveInstagramStoryVariant({ publication, sourcePublication, target });
   const outputDirectory = join(dirname(renderPath), 'instagram-stories');
   const outputPath = join(
     outputDirectory,
-    `${safeSegment(publication.id)}--${safeSegment(recipeVersion)}.mp4`,
+    legacyRecipe
+      ? `${safeSegment(publication.id)}--${safeSegment(recipeVersion)}.mp4`
+      : `${safeSegment(publication.id)}--${safeSegment(recipeVersion)}--${safeSegment(variantKey)}.mp4`,
   );
   await mkdir(outputDirectory, { recursive: true });
 
@@ -124,6 +142,11 @@ export async function renderInstagramStoryVideo({
         videoSha256: await hashFileImpl(outputPath),
         sourceVideoSha256: actualSourceSha256,
         durationSeconds: resolveDurationSeconds(publication),
+        variantKey,
+        variantSetVersion: legacyRecipe
+          ? INSTAGRAM_STORY_LEGACY_RECIPE_VERSION
+          : INSTAGRAM_STORY_VARIANT_SET_VERSION,
+        avatarSource: legacyRecipe ? 'legacy_recipe' : 'cached_render',
         reused: true,
       };
     }
@@ -133,6 +156,7 @@ export async function renderInstagramStoryVideo({
 
   const suffix = randomUUID();
   const overlayPath = join(outputDirectory, `.story-overlay-${suffix}.png`);
+  const maskPath = join(outputDirectory, `.story-mask-${suffix}.png`);
   const temporaryOutputPath = join(outputDirectory, `.story-render-${suffix}.mp4`);
   const username = normalizeText(
     target.instagram?.expected_username
@@ -144,19 +168,39 @@ export async function renderInstagramStoryVideo({
     { executable: 'auto' },
     { environment: runtimeEnv },
   );
+  const avatar = legacyRecipe
+    ? null
+    : await resolveAvatar({ target, runtimeEnv, projectRoot });
+  const recipe = legacyRecipe
+    ? buildLegacyInstagramStoryRecipe({ username })
+    : buildInstagramStoryRecipe({
+      variantKey,
+      username,
+      title: publication.title || sourcePublication.title,
+      avatarDataUri: avatarImageDataUri(avatar.image),
+      target,
+    });
 
   try {
-    await sharpImpl(buildOverlaySvg({ username })).png().toFile(overlayPath);
+    await sharpImpl(recipe.overlaySvg).png().toFile(overlayPath);
+    if (recipe.presentation === 'framed') {
+      await sharpImpl(framedMaskSvg()).png().toFile(maskPath);
+    }
+    const visualInputs = [
+      '-i', renderPath,
+      '-loop', '1', '-framerate', '30', '-i', overlayPath,
+      ...(recipe.presentation === 'framed'
+        ? ['-loop', '1', '-framerate', '30', '-i', maskPath]
+        : []),
+    ];
     await runProcess({
       executable: ffmpegExecutable,
       cwd: projectRoot,
       timeoutMs: 300_000,
       args: [
         '-hide_banner', '-loglevel', 'error', '-y',
-        '-i', renderPath,
-        '-loop', '1', '-framerate', '30', '-i', overlayPath,
-        '-filter_complex',
-        '[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[base];[1:v]scale=1080:1920[brand];[base][brand]overlay=0:0:format=auto,format=yuv420p[v]',
+        ...visualInputs,
+        '-filter_complex', buildFilterComplex(recipe, durationSeconds),
         '-map', '[v]', '-map', '0:a?',
         '-t', String(durationSeconds),
         '-c:v', 'libx264', '-preset', 'medium', '-crf', '20',
@@ -169,6 +213,7 @@ export async function renderInstagramStoryVideo({
   } finally {
     await Promise.all([
       rm(overlayPath, { force: true }),
+      rm(maskPath, { force: true }),
       rm(temporaryOutputPath, { force: true }),
     ]);
   }
@@ -178,6 +223,9 @@ export async function renderInstagramStoryVideo({
     videoSha256: await hashFileImpl(outputPath),
     sourceVideoSha256: actualSourceSha256,
     durationSeconds,
+    variantKey,
+    variantSetVersion: recipe.variantSetVersion,
+    avatarSource: avatar?.source || 'legacy_recipe',
     reused: false,
   };
 }

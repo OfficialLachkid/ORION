@@ -1,8 +1,13 @@
 import { createStableId } from './ids.mjs';
+import {
+  INSTAGRAM_STORY_VARIANT_SET_VERSION,
+  resolveInstagramStoryVariant,
+  resolveInstagramStoryVariantKeys,
+} from './instagram-story-recipes.mjs';
 
 export const INSTAGRAM_STORY_PLATFORM = 'instagram_story';
-export const INSTAGRAM_STORY_RECIPE_VERSION = 'instagram-story-promotion.v1';
-export const INSTAGRAM_STORY_DEFAULT_TEMPLATE = 'video_promotion';
+export const INSTAGRAM_STORY_RECIPE_VERSION = 'instagram-story-promotion.v2';
+export const INSTAGRAM_STORY_DEFAULT_TEMPLATE = 'variant_rotation';
 export const INSTAGRAM_STORY_POLICY_DISABLED = 'disabled';
 export const INSTAGRAM_STORY_POLICY_AUTO_PUBLISH = 'auto_publish';
 
@@ -60,6 +65,7 @@ export function resolveInstagramStoryPolicy(target = {}) {
     recipeVersion: normalizeText(
       configured.recipe_version || configured.recipeVersion || INSTAGRAM_STORY_RECIPE_VERSION,
     ),
+    variantKeys: resolveInstagramStoryVariantKeys(target),
     delaySeconds: normalizeDelaySeconds(
       configured.delay_seconds ?? configured.delaySeconds,
     ),
@@ -102,6 +108,14 @@ export function buildInstagramStoryPublicationRow({
       ...(target.instagram || {}),
     },
   };
+  const variantKey = resolveInstagramStoryVariant({
+    publication: {
+      account_key: accountKey,
+      scheduled_for: sourcePublication.scheduled_for,
+    },
+    sourcePublication,
+    target: publisherTarget,
+  });
   return {
     id: buildInstagramStoryPublicationId({
       sourcePublication,
@@ -137,6 +151,9 @@ export function buildInstagramStoryPublicationRow({
         policy: policy.policy,
         template_key: policy.templateKey,
         recipe_version: policy.recipeVersion,
+        variant_key: variantKey,
+        variant_set_version: INSTAGRAM_STORY_VARIANT_SET_VERSION,
+        enabled_variant_keys: policy.variantKeys,
         delay_seconds: policy.delaySeconds,
         authorization: 'account_policy',
       },

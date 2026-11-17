@@ -268,6 +268,9 @@ export async function executeDueInstagramStories(options = {}, dependencies = {}
               story_asset_sha256: asset.videoSha256,
               story_asset_source_sha256: asset.sourceVideoSha256,
               story_asset_duration_seconds: asset.durationSeconds,
+              story_asset_variant_key: asset.variantKey,
+              story_asset_variant_set_version: asset.variantSetVersion,
+              story_asset_avatar_source: asset.avatarSource,
               story_asset_rendered_at: asset.renderedAt || asOf,
             }),
           }) || activePublication;

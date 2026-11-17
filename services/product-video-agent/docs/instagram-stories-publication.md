@@ -16,8 +16,24 @@ Every Instagram target is disabled by default. A target may opt in through its e
     "access_token_env": "<TOKEN_ENV>",
     "story": {
       "enabled": true,
-      "template_key": "video_promotion",
-      "recipe_version": "instagram-story-promotion.v1",
+      "template_key": "variant_rotation",
+      "recipe_version": "instagram-story-promotion.v2",
+      "display_name": "Poke Quizz",
+      "variant_keys": [
+        "current",
+        "branded_fullscreen",
+        "framed_card",
+        "minimal",
+        "hybrid"
+      ],
+      "theme": {
+        "primary": "#FFCB05",
+        "secondary": "#1756B8",
+        "accent": "#E3350D",
+        "surface": "#071B3A",
+        "text": "#FFFFFF"
+      },
+      "avatar_cache_ttl_hours": 168,
       "delay_seconds": 0
     }
   }
@@ -44,6 +60,25 @@ Planning the dependent row before the external Reel write prevents a restart bet
 publication and Story dispatch from losing the Story. Story planning or delivery remains isolated
 from the Reel result.
 
+## Variant rotation and account identity
+
+The version 2 recipe set contains five reusable layouts: the original presentation, branded
+full-screen, framed card, minimal, and hybrid. Selection is pseudo-randomized from stable account,
+publication, video, and schedule identifiers, so the sequence looks shuffled without using mutable
+runtime randomness. The chosen `variant_key` is stored on the durable Story child. Retries and
+restart recovery therefore reproduce the same media rather than selecting a different layout.
+
+Every recipe uses the configured Instagram account's own profile image. The renderer requests
+`profile_picture_url` only after matching both the returned publishing user id and username to the
+target. It normalizes and caches that image locally for seven days by default. The seven-day value is
+a refresh interval, not an expiry: daily Stories reuse the cached PNG, and the first render after the
+interval attempts to refresh it. A stale cache remains usable during a temporary Meta outage; when
+no verified cache exists, a neutral profile silhouette is used. Hardcoded channel initials are never
+rendered, and profile icons do not need to be duplicated in the repository.
+
+The default registry supplies all five variants to newly enabled accounts. Per-account configuration
+may restrict the list or override the color theme without adding channel-specific executor code.
+
 ## API flow
 
 The shared Graph client supports both `REELS` and `STORIES` containers. A Story container accepts
@@ -56,6 +91,8 @@ the complete video on the account profile.
 
 ## Rollout state
 
-Poke Quizz is the only enabled canary. TrivaMon, Poke Guess, DexGuess, and ProffMon remain disabled
-until that canary succeeds. Enabling a later or newly connected Instagram account requires only the
-same declarative `instagram.story.enabled` setting; no channel-specific executor code is required.
+Poke Quizz remains the only enabled canary while the version 2 rotation is validated. TrivaMon,
+Poke Guess, DexGuess, and ProffMon remain disabled until rollout is explicitly expanded. Enabling a
+later or newly connected Instagram account requires only the same declarative
+`instagram.story.enabled` setting; it automatically inherits the reusable recipe registry and its
+own identity-verified profile image without channel-specific executor code.

@@ -208,8 +208,24 @@
                 "share_to_feed": true,
                 "story": {
                   "enabled": true,
-                  "template_key": "video_promotion",
-                  "recipe_version": "instagram-story-promotion.v1",
+                  "template_key": "variant_rotation",
+                  "recipe_version": "instagram-story-promotion.v2",
+                  "display_name": "Poke Quizz",
+                  "variant_keys": [
+                    "current",
+                    "branded_fullscreen",
+                    "framed_card",
+                    "minimal",
+                    "hybrid"
+                  ],
+                  "theme": {
+                    "primary": "#FFCB05",
+                    "secondary": "#1756B8",
+                    "accent": "#E3350D",
+                    "surface": "#071B3A",
+                    "text": "#FFFFFF"
+                  },
+                  "avatar_cache_ttl_hours": 168,
                   "delay_seconds": 0
                 }
               }
