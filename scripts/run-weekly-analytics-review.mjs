@@ -627,7 +627,7 @@ export async function runWeeklyAnalyticsReview({ config = loadRuntimeConfig(), n
   let threadId = state.thread_id;
   if (!threadId) {
     const anchor = await sendDiscordChannelMessage(config, analyticsChannelId, {
-      content: '**ORION Weekly Analytics Review** — automated weekly digest of pokemon Shorts performance across the 5 channels. New summary posts here every Monday.',
+      content: '**ORION Weekly Analytics Review** — automated weekly digest of pokemon Shorts performance across the 5 channels. New summary posts here every Tuesday.',
     });
     if (!anchor.posted || !anchor.messageId) {
       throw new Error('Could not create weekly analytics anchor message.');
