@@ -15,6 +15,8 @@ test('normalizeRuntimePublication reconstructs compact operational metadata', ()
     workflow_state: 'publishing',
     next_status_poll_at: '2026-11-13T12:15:00.000Z',
     source_lifecycle_action_required: true,
+    source_instagram_publication_id: 'publication-reel-1',
+    instagram_media_id: 'instagram-media-1',
     source_lifecycle_alert_status: 'pending',
     publication_failure_alert_required: false,
     instagram_auto_comment: { status: 'pending' },
@@ -24,6 +26,8 @@ test('normalizeRuntimePublication reconstructs compact operational metadata', ()
   assert.equal(publication.metadata.workflow_state, 'publishing');
   assert.equal(publication.metadata.next_status_poll_at, '2026-11-13T12:15:00.000Z');
   assert.equal(publication.metadata.source_lifecycle_action_required, true);
+  assert.equal(publication.metadata.source_instagram_publication_id, 'publication-reel-1');
+  assert.equal(publication.metadata.instagram_media_id, 'instagram-media-1');
   assert.deepEqual(publication.metadata.instagram_auto_comment, { status: 'pending' });
   assert.equal(needsLifecycleAlertHydration(publication), true);
   assert.equal(needsFailureAlertHydration(publication), false);
