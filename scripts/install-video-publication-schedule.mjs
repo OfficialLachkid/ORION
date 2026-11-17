@@ -7,13 +7,16 @@ import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import { loadRuntimeConfig, projectRoot } from '../services/lib/runtime-config.mjs';
+import { resolveInstagramStoryPolicy } from '../services/product-video-agent/src/instagram-story-publication.mjs';
 import { loadPublicationChannelProfiles } from '../services/product-video-agent/src/publication-channels.mjs';
 
 export const PLIST_LABEL = 'io.vbj.orion.video-publication-scheduler';
 export const RECONCILE_PLIST_LABEL = 'io.vbj.orion.video-publication-reconciler';
+export const STORY_CONTINUATION_PLIST_LABEL = 'io.vbj.orion.instagram-story-continuation';
 export const DEFAULT_SCHEDULE_MINUTE = 0;
 export const DEFAULT_RECONCILE_DELAY_MINUTES = 5;
 export const DEFAULT_RECONCILE_DELAYS_MINUTES = [5, 15];
+export const DEFAULT_STORY_CONTINUATION_DELAY_MINUTES = 20;
 
 function getArgValue(flag) {
   const index = process.argv.indexOf(flag);
@@ -102,6 +105,28 @@ export function collectActivePublicationScheduleEntries(profiles = []) {
       .filter((profile) => profile.status === 'active')
       .flatMap((profile) => profile.schedule_slots || []),
   );
+}
+
+function profileHasEnabledInstagramStory(profile = {}) {
+  const targets = profile.metadata?.publisher?.targets;
+  if (!Array.isArray(targets)) return false;
+  return targets.some((target) => (
+    target?.enabled !== false
+    && target?.platform === 'instagram_reels'
+    && resolveInstagramStoryPolicy(target).enabled
+  ));
+}
+
+export function collectActiveStoryContinuationScheduleEntries(
+  profiles = [],
+  delayMinutes = DEFAULT_STORY_CONTINUATION_DELAY_MINUTES,
+) {
+  const storySourceEntries = sortAndDedupeScheduleEntries(
+    profiles
+      .filter((profile) => profile.status === 'active' && profileHasEnabledInstagramStory(profile))
+      .flatMap((profile) => profile.schedule_slots || []),
+  );
+  return offsetScheduleEntries(storySourceEntries, delayMinutes);
 }
 
 export function offsetScheduleEntries(entries = [], offsetMinutes = DEFAULT_RECONCILE_DELAY_MINUTES) {
@@ -195,10 +220,11 @@ function loadLaunchAgent(plistPath) {
 async function main() {
   if (hasFlag('--help')) {
     process.stdout.write([
-      'Usage: node scripts/install-video-publication-schedule.mjs [--channels <path>] [--reconcile-delay-minutes 5,15] [--no-load]',
+      'Usage: node scripts/install-video-publication-schedule.mjs [--channels <path>] [--reconcile-delay-minutes 5,15] [--story-continuation-delay-minutes 20] [--no-load]',
       '',
-      'Writes and loads the publication scheduler plus a lightweight reconciliation LaunchAgent.',
+      'Writes and loads the publication scheduler plus lightweight reconciliation and Story continuation LaunchAgents.',
       'Publication times come from active channel schedule_slots; reconciliation retries at configured delays.',
+      'Story continuation runs only for active profiles with Instagram Story publishing enabled.',
       'Use --hours and --minute only when an explicit temporary schedule override is required.',
     ].join('\n'));
     return;
@@ -230,16 +256,48 @@ async function main() {
     scheduleEntries,
     reconcileDelayMinutes,
   );
+  const storyContinuationDelayMinutes = getMinuteArgValue(
+    '--story-continuation-delay-minutes',
+    DEFAULT_STORY_CONTINUATION_DELAY_MINUTES,
+  );
+  const storyContinuationScheduleEntries = overrideHours.length > 0
+    ? offsetScheduleEntries(scheduleEntries, storyContinuationDelayMinutes)
+    : collectActiveStoryContinuationScheduleEntries(
+      configuredProfiles,
+      storyContinuationDelayMinutes,
+    );
   const shouldLoad = !hasFlag('--no-load');
 
   const launchAgentsDir = resolve(homedir(), 'Library', 'LaunchAgents');
   const plistPath = resolve(launchAgentsDir, `${PLIST_LABEL}.plist`);
   const reconcilePlistPath = resolve(launchAgentsDir, `${RECONCILE_PLIST_LABEL}.plist`);
+  const storyContinuationPlistPath = resolve(
+    launchAgentsDir,
+    `${STORY_CONTINUATION_PLIST_LABEL}.plist`,
+  );
   const stdoutPath = resolve(config.runtimePaths.logDir, 'video-publication.schedule.stdout.log');
   const stderrPath = resolve(config.runtimePaths.logDir, 'video-publication.schedule.stderr.log');
   const reconcileStdoutPath = resolve(config.runtimePaths.logDir, 'video-publication.reconcile.stdout.log');
   const reconcileStderrPath = resolve(config.runtimePaths.logDir, 'video-publication.reconcile.stderr.log');
+  const storyContinuationStdoutPath = resolve(
+    config.runtimePaths.logDir,
+    'instagram-story.continuation.stdout.log',
+  );
+  const storyContinuationStderrPath = resolve(
+    config.runtimePaths.logDir,
+    'instagram-story.continuation.stderr.log',
+  );
   const scriptPath = resolve(projectRoot, 'services', 'product-video-agent', 'scripts', 'run-video-publication-scheduler.mjs');
+  const storyContinuationScriptPath = resolve(
+    projectRoot,
+    'services',
+    'product-video-agent',
+    'scripts',
+    'publication',
+    'social',
+    'instagram',
+    'execute-due-stories.mjs',
+  );
   const nodePath = process.execPath;
 
   ensureDirectory(launchAgentsDir);
@@ -264,24 +322,50 @@ async function main() {
     scheduleEntries: reconcileScheduleEntries,
     reconcileOnly: true,
   }), 'utf8');
+  if (storyContinuationScheduleEntries.length > 0) {
+    writeFileSync(storyContinuationPlistPath, buildPlistContent({
+      label: STORY_CONTINUATION_PLIST_LABEL,
+      nodePath,
+      scriptPath: storyContinuationScriptPath,
+      workingDirectory: projectRoot,
+      stdoutPath: storyContinuationStdoutPath,
+      stderrPath: storyContinuationStderrPath,
+      scheduleEntries: storyContinuationScheduleEntries,
+    }), 'utf8');
+  }
 
   if (shouldLoad) {
     loadLaunchAgent(plistPath);
     loadLaunchAgent(reconcilePlistPath);
+    if (storyContinuationScheduleEntries.length > 0) {
+      loadLaunchAgent(storyContinuationPlistPath);
+    }
   }
 
   process.stdout.write([
     `Installed ${basename(plistPath)}.`,
     `Schedule: ${formatScheduleEntries(scheduleEntries)} local time.`,
     `Reconciliation (+${reconcileDelayMinutes.join(', +')}m): ${formatScheduleEntries(reconcileScheduleEntries)} local time.`,
+    storyContinuationScheduleEntries.length > 0
+      ? `Story continuation (+${storyContinuationDelayMinutes}m): ${formatScheduleEntries(storyContinuationScheduleEntries)} local time.`
+      : 'Story continuation: disabled because no active profile has Instagram Story publishing enabled.',
     `Load state: ${shouldLoad ? 'loaded' : 'written only'}.`,
     `Plist: ${plistPath}`,
     `Reconciliation plist: ${reconcilePlistPath}`,
+    storyContinuationScheduleEntries.length > 0
+      ? `Story continuation plist: ${storyContinuationPlistPath}`
+      : '',
     `Stdout: ${stdoutPath}`,
     `Stderr: ${stderrPath}`,
     `Reconciliation stdout: ${reconcileStdoutPath}`,
     `Reconciliation stderr: ${reconcileStderrPath}`,
-  ].join('\n'));
+    storyContinuationScheduleEntries.length > 0
+      ? `Story continuation stdout: ${storyContinuationStdoutPath}`
+      : '',
+    storyContinuationScheduleEntries.length > 0
+      ? `Story continuation stderr: ${storyContinuationStderrPath}`
+      : '',
+  ].filter(Boolean).join('\n'));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
