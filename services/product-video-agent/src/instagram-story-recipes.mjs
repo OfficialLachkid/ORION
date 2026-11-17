@@ -79,20 +79,6 @@ function stableOffset(value, modulo) {
   return digest.readUInt32BE(0) % modulo;
 }
 
-function resolveRotationAnchor(publication = {}, sourcePublication = {}) {
-  const candidates = [
-    sourcePublication.scheduled_for,
-    publication.scheduled_for,
-    sourcePublication.published_at,
-    sourcePublication.metadata?.created_at,
-  ];
-  for (const candidate of candidates) {
-    const timestamp = Date.parse(normalizeText(candidate));
-    if (Number.isFinite(timestamp)) return Math.floor(timestamp / 3_600_000);
-  }
-  return null;
-}
-
 export function resolveInstagramStoryVariant({
   publication = {},
   sourcePublication = {},
@@ -109,13 +95,24 @@ export function resolveInstagramStoryVariant({
   const accountKey = normalizeText(
     target.account_key || target.accountKey || publication.account_key || sourcePublication.account_key,
   );
-  const accountOffset = stableOffset(accountKey || 'instagram-story', variants.length);
-  const anchor = resolveRotationAnchor(publication, sourcePublication);
-  if (anchor !== null) return variants[(accountOffset + anchor) % variants.length];
-  const publicationSeed = normalizeText(
+  const publicationIdentity = normalizeText(
     sourcePublication.id || publication.metadata?.source_instagram_publication_id || publication.id,
   );
-  return variants[(accountOffset + stableOffset(publicationSeed, variants.length)) % variants.length];
+  const videoIdentity = normalizeText(sourcePublication.video_id || publication.video_id);
+  const scheduleIdentity = normalizeText(
+    sourcePublication.scheduled_for
+      || publication.scheduled_for
+      || sourcePublication.published_at
+      || sourcePublication.metadata?.created_at,
+  );
+  const seed = [
+    accountKey || 'instagram-story',
+    publicationIdentity || 'unknown-publication',
+    videoIdentity || 'unknown-video',
+    scheduleIdentity || 'unknown-schedule',
+    INSTAGRAM_STORY_VARIANT_SET_VERSION,
+  ].join('|');
+  return variants[stableOffset(seed, variants.length)];
 }
 
 export function resolveInstagramStoryTheme(target = {}) {

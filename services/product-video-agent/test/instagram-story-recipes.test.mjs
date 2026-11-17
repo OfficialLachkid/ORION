@@ -36,21 +36,29 @@ test('Story recipes expose all five reusable variants by default', () => {
   ]);
 });
 
-test('Story variant rotation is deterministic and covers every recipe across five hours', () => {
+test('Story variant rotation looks shuffled while remaining deterministic for retries', () => {
   const variants = new Set();
-  for (let hour = 0; hour < 5; hour += 1) {
-    const scheduledFor = new Date(Date.UTC(2026, 10, 17, 8 + hour)).toISOString();
+  const sequence = [];
+  for (let index = 0; index < 100; index += 1) {
+    const scheduledFor = new Date(Date.UTC(2026, 10, 17 + index, 8)).toISOString();
     const args = {
       publication: { account_key: target.account_key },
-      sourcePublication: { id: `source-${hour}`, scheduled_for: scheduledFor },
+      sourcePublication: {
+        id: `source-${index}`,
+        video_id: `video-${index}`,
+        scheduled_for: scheduledFor,
+      },
       target,
     };
     const first = resolveInstagramStoryVariant(args);
     const second = resolveInstagramStoryVariant(args);
     assert.equal(first, second);
     variants.add(first);
+    sequence.push(first);
   }
   assert.deepEqual(new Set(INSTAGRAM_STORY_DEFAULT_VARIANTS), variants);
+  assert.ok(sequence.some((variant, index) => index > 0 && variant === sequence[index - 1]));
+  assert.ok(sequence.some((variant, index) => index > 0 && variant !== sequence[index - 1]));
 });
 
 test('Story variant selection honors the persisted immutable recipe choice', () => {

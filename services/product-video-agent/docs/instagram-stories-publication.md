@@ -63,15 +63,18 @@ from the Reel result.
 ## Variant rotation and account identity
 
 The version 2 recipe set contains five reusable layouts: the original presentation, branded
-full-screen, framed card, minimal, and hybrid. Selection is deterministic for the account and source
-publication time, and the chosen `variant_key` is stored on the durable Story child. Retries and
+full-screen, framed card, minimal, and hybrid. Selection is pseudo-randomized from stable account,
+publication, video, and schedule identifiers, so the sequence looks shuffled without using mutable
+runtime randomness. The chosen `variant_key` is stored on the durable Story child. Retries and
 restart recovery therefore reproduce the same media rather than selecting a different layout.
 
 Every recipe uses the configured Instagram account's own profile image. The renderer requests
 `profile_picture_url` only after matching both the returned publishing user id and username to the
-target. It normalizes and caches that image locally for seven days by default. A stale cache remains
-usable during a temporary Meta outage; when no verified cache exists, a neutral profile silhouette
-is used. Hardcoded channel initials are never rendered.
+target. It normalizes and caches that image locally for seven days by default. The seven-day value is
+a refresh interval, not an expiry: daily Stories reuse the cached PNG, and the first render after the
+interval attempts to refresh it. A stale cache remains usable during a temporary Meta outage; when
+no verified cache exists, a neutral profile silhouette is used. Hardcoded channel initials are never
+rendered, and profile icons do not need to be duplicated in the repository.
 
 The default registry supplies all five variants to newly enabled accounts. Per-account configuration
 may restrict the list or override the color theme without adding channel-specific executor code.
