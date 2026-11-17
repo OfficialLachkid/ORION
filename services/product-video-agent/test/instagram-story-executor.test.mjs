@@ -226,6 +226,12 @@ test('Story publishing resumes a finished container without creating a duplicate
 test('Story due action waits for the Reel receipt and publishes immediately afterward', () => {
   assert.equal(resolveInstagramStoryDueAction(
     storyPublication(),
+    null,
+    '2026-11-16T11:01:00.000Z',
+    24,
+  ), '');
+  assert.equal(resolveInstagramStoryDueAction(
+    storyPublication(),
     sourcePublication({ status: 'publishing', metadata: { workflow_state: 'publishing' } }),
     '2026-11-16T11:01:00.000Z',
     24,
@@ -236,6 +242,67 @@ test('Story due action waits for the Reel receipt and publishes immediately afte
     '2026-11-16T11:01:00.000Z',
     24,
   ), 'upload');
+});
+
+test('Story runner skips a missing source without blocking a valid Story', async () => {
+  const missingSourceStory = storyPublication({
+    id: 'publication-story-missing-source',
+    metadata: {
+      ...storyPublication().metadata,
+      source_instagram_publication_id: 'publication-reel-missing',
+    },
+  });
+  let validStory = storyPublication({ id: 'publication-story-valid' });
+  const source = sourcePublication();
+  let publishCalls = 0;
+  const merge = (row, patch) => ({
+    ...row,
+    ...patch,
+    metadata: patch.metadata || row.metadata,
+  });
+
+  const results = await executeDueInstagramStories({
+    'as-of': '2026-11-16T11:01:00.000Z',
+  }, {
+    runtimeConfig: {
+      env: {
+        INSTAGRAM_DELIVERY_ENABLED: 'true',
+        INSTAGRAM_GRAPH_API_VERSION: 'v25.0',
+        INSTAGRAM_POKE_QUIZZ_ACCESS_TOKEN: 'secret',
+      },
+    },
+    publicationStore: {
+      async fetchPublicationsByPlatform() { return [missingSourceStory, validStory]; },
+      async fetchPublicationsByIds() { return [source]; },
+      async fetchPublicationById(id) { return id === source.id ? source : validStory; },
+      async updatePublication(id, patch) {
+        assert.equal(id, validStory.id);
+        validStory = merge(validStory, patch);
+        return validStory;
+      },
+      async claimPublicationForUpload(id, patch) {
+        assert.equal(id, validStory.id);
+        validStory = merge(validStory, patch);
+        return validStory;
+      },
+    },
+    publishInstagramStory: async () => {
+      publishCalls += 1;
+      return {
+        workflowState: 'published',
+        status: 'published',
+        externalId: 'story-media-valid',
+        mediaId: 'story-media-valid',
+        publicUrl: 'https://instagram/story/valid',
+        publishedAt: '2026-11-16T11:01:00.000Z',
+        stagingRemoved: true,
+      };
+    },
+  });
+
+  assert.equal(publishCalls, 1);
+  assert.equal(validStory.status, 'published');
+  assert.ok(results.some((result) => result.action === 'instagram_story_published'));
 });
 
 test('Story runner automatically publishes the enabled child after its source Reel', async () => {

@@ -47,7 +47,7 @@ const STORY_SOURCE_SELECT = [
 ].join(',');
 
 function sourceState(publication = {}) {
-  return normalizeText(publication.metadata?.workflow_state || publication.status).toLowerCase();
+  return normalizeText(publication?.metadata?.workflow_state || publication?.status).toLowerCase();
 }
 
 function storyDelaySeconds(publication = {}) {
