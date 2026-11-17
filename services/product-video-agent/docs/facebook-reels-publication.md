@@ -1,6 +1,6 @@
 # Facebook Page Reels publication
 
-Last updated: 2026-11-09
+Last updated: 2026-11-17
 
 ## Decision
 
@@ -70,6 +70,7 @@ FACEBOOK_GRAPH_API_VERSION=<CURRENT_SUPPORTED_VERSION_SHOWN_BY_META>
 FACEBOOK_GRAPH_ENDPOINT=https://graph.facebook.com
 FACEBOOK_DELIVERY_ENABLED=false
 FACEBOOK_POKE_QUIZZ_PAGE_ACCESS_TOKEN=<PAGE_ACCESS_TOKEN>
+FACEBOOK_PROFFMON_PAGE_ACCESS_TOKEN=<PAGE_ACCESS_TOKEN>
 ```
 
 Keep `FACEBOOK_DELIVERY_ENABLED=false` through configuration and diagnostics. The tracked
@@ -146,6 +147,17 @@ For each additional Page:
 
 No Supabase migration, new scheduler or provider-specific channel code is required. The existing
 target fan-out, lifecycle queue, retry handling, Discord review and publication store are shared.
+
+## Facebook Page Stories
+
+Do not model Facebook Page Stories as an explicit ORION destination unless Meta publishes a
+supported creation endpoint. In Graph API v27.0, the documented Page publishing surfaces cover
+feeds, photos, videos and Reels, while read-only probes of `/{page-id}/video_stories` and
+`/{page-id}/photo_stories` return `(#100) Tried accessing nonexisting field`.
+
+Meta's account-level Instagram-to-Facebook Story sharing may reuse an Instagram Story outside
+ORION, but it has no independent ORION receipt, retry state or delivery verification. Treat that as
+optional crossposting, not equivalent to the explicit Facebook Reel publisher.
 
 ## Analytics and comments
 
