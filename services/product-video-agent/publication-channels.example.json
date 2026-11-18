@@ -211,13 +211,6 @@
                   "template_key": "variant_rotation",
                   "recipe_version": "instagram-story-promotion.v2",
                   "display_name": "Poke Quizz",
-                  "variant_keys": [
-                    "current",
-                    "branded_fullscreen",
-                    "framed_card",
-                    "minimal",
-                    "hybrid"
-                  ],
                   "theme": {
                     "primary": "#FFCB05",
                     "secondary": "#1756B8",
@@ -470,13 +463,6 @@
                   "template_key": "variant_rotation",
                   "recipe_version": "instagram-story-promotion.v2",
                   "display_name": "TrivaMon",
-                  "variant_keys": [
-                    "current",
-                    "branded_fullscreen",
-                    "framed_card",
-                    "minimal",
-                    "hybrid"
-                  ],
                   "theme": {
                     "primary": "#FFCB05",
                     "secondary": "#1756B8",

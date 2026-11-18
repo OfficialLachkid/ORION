@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   INSTAGRAM_STORY_DEFAULT_VARIANTS,
+  INSTAGRAM_STORY_VARIANT_REGISTRY,
   INSTAGRAM_STORY_VARIANT_FRAMED_CARD,
   buildInstagramStoryRecipe,
   resolveInstagramStoryVariant,
+  resolveInstagramStoryVariantAssignment,
   resolveInstagramStoryVariantKeys,
 } from '../src/instagram-story-recipes.mjs';
 
@@ -34,31 +36,57 @@ test('Story recipes expose all five reusable variants by default', () => {
     'minimal',
     'hybrid',
   ]);
+  assert.deepEqual(
+    INSTAGRAM_STORY_DEFAULT_VARIANTS,
+    INSTAGRAM_STORY_VARIANT_REGISTRY.map(({ key }) => key),
+  );
 });
 
-test('Story variant rotation looks shuffled while remaining deterministic for retries', () => {
-  const variants = new Set();
+function buildRotationSequence(length) {
   const sequence = [];
-  for (let index = 0; index < 100; index += 1) {
-    const scheduledFor = new Date(Date.UTC(2026, 10, 17 + index, 8)).toISOString();
-    const args = {
+  let rotationState = {};
+  for (let index = 0; index < length; index += 1) {
+    const assignment = resolveInstagramStoryVariantAssignment({
       publication: { account_key: target.account_key },
-      sourcePublication: {
-        id: `source-${index}`,
-        video_id: `video-${index}`,
-        scheduled_for: scheduledFor,
-      },
+      sourcePublication: { id: `source-${index}`, video_id: `video-${index}` },
       target,
+      rotationState,
+    });
+    sequence.push(assignment);
+    rotationState = {
+      previousVariantKey: assignment.variantKey,
+      poolSignature: assignment.poolSignature,
+      cycle: assignment.cycle,
+      position: assignment.position,
+      order: assignment.order,
     };
-    const first = resolveInstagramStoryVariant(args);
-    const second = resolveInstagramStoryVariant(args);
-    assert.equal(first, second);
-    variants.add(first);
-    sequence.push(first);
   }
-  assert.deepEqual(new Set(INSTAGRAM_STORY_DEFAULT_VARIANTS), variants);
-  assert.ok(sequence.some((variant, index) => index > 0 && variant === sequence[index - 1]));
-  assert.ok(sequence.some((variant, index) => index > 0 && variant !== sequence[index - 1]));
+  return sequence;
+}
+
+test('Story shuffle bags use every registered variant before repeating', () => {
+  const first = buildRotationSequence(15);
+  const second = buildRotationSequence(15);
+  assert.deepEqual(first, second);
+  for (let offset = 0; offset < first.length; offset += 5) {
+    assert.deepEqual(
+      new Set(first.slice(offset, offset + 5).map(({ variantKey }) => variantKey)),
+      new Set(INSTAGRAM_STORY_DEFAULT_VARIANTS),
+    );
+  }
+  for (let index = 1; index < first.length; index += 1) {
+    assert.notEqual(first[index].variantKey, first[index - 1].variantKey);
+  }
+  assert.deepEqual(first.map(({ cycle }) => cycle), [
+    0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1,
+    2, 2, 2, 2, 2,
+  ]);
+  assert.deepEqual(first.map(({ position }) => position), [
+    0, 1, 2, 3, 4,
+    0, 1, 2, 3, 4,
+    0, 1, 2, 3, 4,
+  ]);
 });
 
 test('Story variant selection honors the persisted immutable recipe choice', () => {

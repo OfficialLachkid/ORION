@@ -8,15 +8,40 @@ export const INSTAGRAM_STORY_VARIANT_BRANDED_FULLSCREEN = 'branded_fullscreen';
 export const INSTAGRAM_STORY_VARIANT_FRAMED_CARD = 'framed_card';
 export const INSTAGRAM_STORY_VARIANT_MINIMAL = 'minimal';
 export const INSTAGRAM_STORY_VARIANT_HYBRID = 'hybrid';
-export const INSTAGRAM_STORY_DEFAULT_VARIANTS = Object.freeze([
-  INSTAGRAM_STORY_VARIANT_CURRENT,
-  INSTAGRAM_STORY_VARIANT_BRANDED_FULLSCREEN,
-  INSTAGRAM_STORY_VARIANT_FRAMED_CARD,
-  INSTAGRAM_STORY_VARIANT_MINIMAL,
-  INSTAGRAM_STORY_VARIANT_HYBRID,
+export const INSTAGRAM_STORY_VARIANT_REGISTRY = Object.freeze([
+  Object.freeze({ key: INSTAGRAM_STORY_VARIANT_CURRENT, build: currentRecipe }),
+  Object.freeze({
+    key: INSTAGRAM_STORY_VARIANT_BRANDED_FULLSCREEN,
+    build: brandedFullscreenRecipe,
+  }),
+  Object.freeze({
+    key: INSTAGRAM_STORY_VARIANT_FRAMED_CARD,
+    build: framedCardRecipe,
+    presentation: 'framed',
+  }),
+  Object.freeze({
+    key: INSTAGRAM_STORY_VARIANT_MINIMAL,
+    build: minimalRecipe,
+    progressBar: true,
+  }),
+  Object.freeze({
+    key: INSTAGRAM_STORY_VARIANT_HYBRID,
+    build: hybridRecipe,
+    progressBar: true,
+    progressBarX: 70,
+    progressBarY: 1828,
+    progressBarWidth: 940,
+    progressBarHeight: 18,
+  }),
 ]);
+export const INSTAGRAM_STORY_DEFAULT_VARIANTS = Object.freeze(
+  INSTAGRAM_STORY_VARIANT_REGISTRY.map(({ key }) => key),
+);
 
-const SUPPORTED_VARIANTS = new Set(INSTAGRAM_STORY_DEFAULT_VARIANTS);
+const VARIANT_DEFINITIONS = new Map(
+  INSTAGRAM_STORY_VARIANT_REGISTRY.map((definition) => [definition.key, definition]),
+);
+const SUPPORTED_VARIANTS = new Set(VARIANT_DEFINITIONS.keys());
 const DEFAULT_THEME = Object.freeze({
   primary: '#3FE4FF',
   secondary: '#1756B8',
@@ -74,45 +99,118 @@ export function resolveInstagramStoryVariantKeys(target = {}) {
   return variants;
 }
 
-function stableOffset(value, modulo) {
-  const digest = createHash('sha256').update(normalizeText(value)).digest();
-  return digest.readUInt32BE(0) % modulo;
+export function resolveInstagramStoryVariantPoolSignature(target = {}) {
+  const variants = resolveInstagramStoryVariantKeys(target);
+  const digest = createHash('sha256').update(variants.join('|')).digest('hex').slice(0, 12);
+  return `${INSTAGRAM_STORY_VARIANT_SET_VERSION}.${digest}`;
+}
+
+function normalizeRotationInteger(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function normalizeRotationOrder(value, variants) {
+  if (!Array.isArray(value)) return [];
+  const normalized = [...new Set(value.map(normalizeVariant).filter(Boolean))];
+  return normalized.length === variants.length
+    && normalized.every((variant) => variants.includes(variant))
+    ? normalized
+    : [];
+}
+
+function shuffledVariantOrder({ accountKey, cycle, poolSignature, variants }) {
+  return [...variants].sort((left, right) => {
+    const leftHash = createHash('sha256')
+      .update(`${accountKey}|${poolSignature}|${cycle}|${left}`)
+      .digest('hex');
+    const rightHash = createHash('sha256')
+      .update(`${accountKey}|${poolSignature}|${cycle}|${right}`)
+      .digest('hex');
+    return leftHash.localeCompare(rightHash) || left.localeCompare(right);
+  });
+}
+
+function avoidCycleBoundaryRepeat(order, previousVariantKey) {
+  if (order.length < 2 || order[0] !== previousVariantKey) return order;
+  return [order[1], order[0], ...order.slice(2)];
+}
+
+export function resolveInstagramStoryVariantAssignment({
+  publication = {},
+  sourcePublication = {},
+  target = {},
+  rotationState = {},
+} = {}) {
+  const variants = resolveInstagramStoryVariantKeys(target);
+  const persistedStory = publication.metadata?.instagram_story || {};
+  const persisted = normalizeVariant(persistedStory.variant_key);
+  if (persisted) {
+    if (!variants.includes(persisted)) {
+      throw new Error(`Persisted Instagram Story variant ${persisted} is not enabled.`);
+    }
+    return {
+      variantKey: persisted,
+      cycle: normalizeRotationInteger(persistedStory.rotation_cycle),
+      position: normalizeRotationInteger(persistedStory.rotation_position),
+      order: normalizeRotationOrder(persistedStory.rotation_order, variants),
+      poolSignature: normalizeText(persistedStory.variant_pool_signature)
+        || resolveInstagramStoryVariantPoolSignature(target),
+    };
+  }
+
+  const accountKey = normalizeText(
+    target.account_key || target.accountKey || publication.account_key || sourcePublication.account_key,
+  ) || 'instagram-story';
+  const poolSignature = resolveInstagramStoryVariantPoolSignature(target);
+  const statePoolSignature = normalizeText(
+    rotationState.poolSignature || rotationState.variant_pool_signature,
+  );
+  const previousVariantKey = normalizeVariant(
+    rotationState.previousVariantKey || rotationState.variant_key,
+  );
+  const samePool = statePoolSignature === poolSignature;
+  const previousOrder = samePool
+    ? normalizeRotationOrder(rotationState.order || rotationState.rotation_order, variants)
+    : [];
+  const previousCycle = samePool
+    ? normalizeRotationInteger(rotationState.cycle ?? rotationState.rotation_cycle)
+    : 0;
+  const previousPosition = samePool
+    ? normalizeRotationInteger(rotationState.position ?? rotationState.rotation_position, -1)
+    : -1;
+  const continuesCycle = previousOrder.length === variants.length
+    && previousPosition >= 0
+    && previousPosition < variants.length - 1;
+  const cycle = continuesCycle ? previousCycle : samePool ? previousCycle + 1 : 0;
+  const position = continuesCycle ? previousPosition + 1 : 0;
+  const order = continuesCycle
+    ? previousOrder
+    : avoidCycleBoundaryRepeat(
+      shuffledVariantOrder({ accountKey, cycle, poolSignature, variants }),
+      previousVariantKey,
+    );
+  return {
+    variantKey: order[position],
+    cycle,
+    position,
+    order,
+    poolSignature,
+  };
 }
 
 export function resolveInstagramStoryVariant({
   publication = {},
   sourcePublication = {},
   target = {},
+  rotationState = {},
 } = {}) {
-  const variants = resolveInstagramStoryVariantKeys(target);
-  const persisted = normalizeVariant(publication.metadata?.instagram_story?.variant_key);
-  if (persisted) {
-    if (!variants.includes(persisted)) {
-      throw new Error(`Persisted Instagram Story variant ${persisted} is not enabled.`);
-    }
-    return persisted;
-  }
-  const accountKey = normalizeText(
-    target.account_key || target.accountKey || publication.account_key || sourcePublication.account_key,
-  );
-  const publicationIdentity = normalizeText(
-    sourcePublication.id || publication.metadata?.source_instagram_publication_id || publication.id,
-  );
-  const videoIdentity = normalizeText(sourcePublication.video_id || publication.video_id);
-  const scheduleIdentity = normalizeText(
-    sourcePublication.scheduled_for
-      || publication.scheduled_for
-      || sourcePublication.published_at
-      || sourcePublication.metadata?.created_at,
-  );
-  const seed = [
-    accountKey || 'instagram-story',
-    publicationIdentity || 'unknown-publication',
-    videoIdentity || 'unknown-video',
-    scheduleIdentity || 'unknown-schedule',
-    INSTAGRAM_STORY_VARIANT_SET_VERSION,
-  ].join('|');
-  return variants[stableOffset(seed, variants.length)];
+  return resolveInstagramStoryVariantAssignment({
+    publication,
+    sourcePublication,
+    target,
+    rotationState,
+  }).variantKey;
 }
 
 export function resolveInstagramStoryTheme(target = {}) {
@@ -330,24 +428,17 @@ export function buildInstagramStoryRecipe({
     title: normalizeText(title) || 'New video',
     theme,
   };
-  const builders = {
-    [INSTAGRAM_STORY_VARIANT_CURRENT]: currentRecipe,
-    [INSTAGRAM_STORY_VARIANT_BRANDED_FULLSCREEN]: brandedFullscreenRecipe,
-    [INSTAGRAM_STORY_VARIANT_FRAMED_CARD]: framedCardRecipe,
-    [INSTAGRAM_STORY_VARIANT_MINIMAL]: minimalRecipe,
-    [INSTAGRAM_STORY_VARIANT_HYBRID]: hybridRecipe,
-  };
+  const definition = VARIANT_DEFINITIONS.get(normalizedVariant);
   return {
     variantKey: normalizedVariant,
     variantSetVersion: INSTAGRAM_STORY_VARIANT_SET_VERSION,
-    presentation: normalizedVariant === INSTAGRAM_STORY_VARIANT_FRAMED_CARD ? 'framed' : 'fullscreen',
-    progressBar: [INSTAGRAM_STORY_VARIANT_MINIMAL, INSTAGRAM_STORY_VARIANT_HYBRID]
-      .includes(normalizedVariant),
-    progressBarX: normalizedVariant === INSTAGRAM_STORY_VARIANT_HYBRID ? 70 : 0,
-    progressBarY: normalizedVariant === INSTAGRAM_STORY_VARIANT_HYBRID ? 1828 : 1898,
-    progressBarWidth: normalizedVariant === INSTAGRAM_STORY_VARIANT_HYBRID ? 940 : 1080,
-    progressBarHeight: normalizedVariant === INSTAGRAM_STORY_VARIANT_HYBRID ? 18 : 22,
+    presentation: definition.presentation || 'fullscreen',
+    progressBar: definition.progressBar === true,
+    progressBarX: definition.progressBarX ?? 0,
+    progressBarY: definition.progressBarY ?? 1898,
+    progressBarWidth: definition.progressBarWidth ?? 1080,
+    progressBarHeight: definition.progressBarHeight ?? 22,
     progressBarColor: theme.primary,
-    overlaySvg: builders[normalizedVariant](context),
+    overlaySvg: definition.build(context),
   };
 }
