@@ -707,7 +707,22 @@
                 "user_id": "17841468340101871",
                 "expected_username": "pokeguesss",
                 "access_token_env": "INSTAGRAM_POKE_GUESS_ACCESS_TOKEN",
-                "share_to_feed": true
+                "share_to_feed": true,
+                "story": {
+                  "enabled": true,
+                  "template_key": "variant_rotation",
+                  "recipe_version": "instagram-story-promotion.v2",
+                  "display_name": "Poke Guess",
+                  "theme": {
+                    "primary": "#FFCB05",
+                    "secondary": "#1756B8",
+                    "accent": "#E3350D",
+                    "surface": "#140B0B",
+                    "text": "#FFFFFF"
+                  },
+                  "avatar_cache_ttl_hours": 168,
+                  "delay_seconds": 0
+                }
               }
             },
             {
@@ -924,7 +939,22 @@
                 "user_id": "17841435584465471",
                 "expected_username": "dexguesss",
                 "access_token_env": "INSTAGRAM_DEXGUESS_ACCESS_TOKEN",
-                "share_to_feed": true
+                "share_to_feed": true,
+                "story": {
+                  "enabled": true,
+                  "template_key": "variant_rotation",
+                  "recipe_version": "instagram-story-promotion.v2",
+                  "display_name": "DexGuess",
+                  "theme": {
+                    "primary": "#E3350D",
+                    "secondary": "#FFFFFF",
+                    "accent": "#FFCB05",
+                    "surface": "#090909",
+                    "text": "#FFFFFF"
+                  },
+                  "avatar_cache_ttl_hours": 168,
+                  "delay_seconds": 0
+                }
               }
             },
             {
@@ -1140,7 +1170,22 @@
                 "user_id": "17841460825848023",
                 "expected_username": "proffmon",
                 "access_token_env": "INSTAGRAM_PROFFMON_ACCESS_TOKEN",
-                "share_to_feed": true
+                "share_to_feed": true,
+                "story": {
+                  "enabled": true,
+                  "template_key": "variant_rotation",
+                  "recipe_version": "instagram-story-promotion.v2",
+                  "display_name": "ProffMon",
+                  "theme": {
+                    "primary": "#3FE4FF",
+                    "secondary": "#1756B8",
+                    "accent": "#78C850",
+                    "surface": "#071B3A",
+                    "text": "#FFFFFF"
+                  },
+                  "avatar_cache_ttl_hours": 168,
+                  "delay_seconds": 0
+                }
               }
             },
             {
