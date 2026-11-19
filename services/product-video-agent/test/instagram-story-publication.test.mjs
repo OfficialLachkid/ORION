@@ -10,6 +10,7 @@ import {
   upsertInstagramStoryPublicationTarget,
 } from '../src/instagram-story-publication.mjs';
 import { upsertAdditionalPlatformPublicationTargets } from '../src/social-publication-targets.mjs';
+import { INSTAGRAM_STORY_DEFAULT_VARIANTS } from '../src/instagram-story-recipes.mjs';
 
 const reelPublication = {
   id: 'publication-instagram-reel-1',
@@ -110,18 +111,20 @@ test('account-enabled Story planning creates a deterministic waiting child row',
   assert.equal(first.metadata.instagram_story.policy, INSTAGRAM_STORY_POLICY_AUTO_PUBLISH);
   assert.equal(first.metadata.instagram_story.authorization, 'account_policy');
   assert.equal(first.metadata.instagram_story.delay_seconds, 120);
-  assert.ok([
-    'current',
-    'branded_fullscreen',
-    'framed_card',
-    'minimal',
-    'hybrid',
-  ].includes(first.metadata.instagram_story.variant_key));
+  assert.ok(INSTAGRAM_STORY_DEFAULT_VARIANTS.includes(
+    first.metadata.instagram_story.variant_key,
+  ));
   assert.equal(first.metadata.instagram_story.variant_set_version, 'instagram-story-variants.v1');
-  assert.equal(first.metadata.instagram_story.enabled_variant_keys.length, 5);
+  assert.equal(
+    first.metadata.instagram_story.enabled_variant_keys.length,
+    INSTAGRAM_STORY_DEFAULT_VARIANTS.length,
+  );
   assert.equal(first.metadata.instagram_story.rotation_cycle, 0);
   assert.equal(first.metadata.instagram_story.rotation_position, 0);
-  assert.equal(first.metadata.instagram_story.rotation_order.length, 5);
+  assert.equal(
+    first.metadata.instagram_story.rotation_order.length,
+    INSTAGRAM_STORY_DEFAULT_VARIANTS.length,
+  );
   assert.match(first.metadata.instagram_story.variant_pool_signature, /^instagram-story-variants\.v1\./u);
 });
 
@@ -179,7 +182,8 @@ test('Story target planning serializes concurrent work into complete shuffle bag
       return row;
     },
   };
-  const sources = Array.from({ length: 10 }, (_, index) => ({
+  const poolSize = INSTAGRAM_STORY_DEFAULT_VARIANTS.length;
+  const sources = Array.from({ length: poolSize * 2 }, (_, index) => ({
     ...reelPublication,
     id: `publication-instagram-reel-${index}`,
     video_id: `video-${index}`,
@@ -192,15 +196,15 @@ test('Story target planning serializes concurrent work into complete shuffle bag
   })));
 
   const variants = orderedRows.map((row) => row.metadata.instagram_story.variant_key);
-  assert.equal(orderedRows.length, 10);
-  assert.equal(new Set(variants.slice(0, 5)).size, 5);
-  assert.equal(new Set(variants.slice(5, 10)).size, 5);
+  assert.equal(orderedRows.length, poolSize * 2);
+  assert.equal(new Set(variants.slice(0, poolSize)).size, poolSize);
+  assert.equal(new Set(variants.slice(poolSize, poolSize * 2)).size, poolSize);
   for (let index = 1; index < variants.length; index += 1) {
     assert.notEqual(variants[index], variants[index - 1]);
   }
   assert.deepEqual(
     orderedRows.map((row) => row.metadata.instagram_story.rotation_position),
-    [0, 1, 2, 3, 4, 0, 1, 2, 3, 4],
+    Array.from({ length: poolSize * 2 }, (_, index) => index % poolSize),
   );
 });
 

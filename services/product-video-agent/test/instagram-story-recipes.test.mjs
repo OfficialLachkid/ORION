@@ -27,7 +27,7 @@ const target = {
   },
 };
 
-test('Story recipes expose all five reusable variants by default', () => {
+test('Story recipes expose every registered reusable variant by default', () => {
   assert.deepEqual(resolveInstagramStoryVariantKeys(target), INSTAGRAM_STORY_DEFAULT_VARIANTS);
   assert.deepEqual(INSTAGRAM_STORY_DEFAULT_VARIANTS, [
     'current',
@@ -35,6 +35,9 @@ test('Story recipes expose all five reusable variants by default', () => {
     'framed_card',
     'minimal',
     'hybrid',
+    'glass_spotlight',
+    'editorial_gallery',
+    'broadcast_elite',
   ]);
   assert.deepEqual(
     INSTAGRAM_STORY_DEFAULT_VARIANTS,
@@ -65,28 +68,28 @@ function buildRotationSequence(length) {
 }
 
 test('Story shuffle bags use every registered variant before repeating', () => {
-  const first = buildRotationSequence(15);
-  const second = buildRotationSequence(15);
+  const poolSize = INSTAGRAM_STORY_DEFAULT_VARIANTS.length;
+  const sequenceLength = poolSize * 3;
+  const first = buildRotationSequence(sequenceLength);
+  const second = buildRotationSequence(sequenceLength);
   assert.deepEqual(first, second);
-  for (let offset = 0; offset < first.length; offset += 5) {
+  for (let offset = 0; offset < first.length; offset += poolSize) {
     assert.deepEqual(
-      new Set(first.slice(offset, offset + 5).map(({ variantKey }) => variantKey)),
+      new Set(first.slice(offset, offset + poolSize).map(({ variantKey }) => variantKey)),
       new Set(INSTAGRAM_STORY_DEFAULT_VARIANTS),
     );
   }
   for (let index = 1; index < first.length; index += 1) {
     assert.notEqual(first[index].variantKey, first[index - 1].variantKey);
   }
-  assert.deepEqual(first.map(({ cycle }) => cycle), [
-    0, 0, 0, 0, 0,
-    1, 1, 1, 1, 1,
-    2, 2, 2, 2, 2,
-  ]);
-  assert.deepEqual(first.map(({ position }) => position), [
-    0, 1, 2, 3, 4,
-    0, 1, 2, 3, 4,
-    0, 1, 2, 3, 4,
-  ]);
+  assert.deepEqual(
+    first.map(({ cycle }) => cycle),
+    Array.from({ length: sequenceLength }, (_, index) => Math.floor(index / poolSize)),
+  );
+  assert.deepEqual(
+    first.map(({ position }) => position),
+    Array.from({ length: sequenceLength }, (_, index) => index % poolSize),
+  );
 });
 
 test('Story variant selection honors the persisted immutable recipe choice', () => {
@@ -114,6 +117,7 @@ test('every Story recipe embeds the channel avatar and contains no hardcoded ini
     const svg = recipe.overlaySvg.toString('utf8');
     assert.match(svg, /data:image\/png;base64,YXZhdGFy/u);
     assert.doesNotMatch(svg, />PQ</u);
+    assert.doesNotMatch(svg, /premium/iu);
     assert.equal(recipe.variantKey, variantKey);
   }
 });
