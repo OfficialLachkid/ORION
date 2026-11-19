@@ -68,13 +68,16 @@ when the publication LaunchAgents are installed again.
 
 ## Variant rotation and account identity
 
-The version 2 recipe set currently contains five reusable layouts: the original presentation,
-branded full-screen, framed card, minimal, and hybrid. Each account advances through a deterministic
-shuffle bag. Every registered layout is used exactly once before the next cycle, and a new cycle is
-adjusted when necessary so it cannot start with the layout that ended the previous cycle. The chosen
-`variant_key`, pool signature, cycle, position, and cycle order are stored on the durable Story child.
-Retries and restart recovery therefore reproduce the same media rather than selecting a different
-layout.
+The version 2 recipe set currently contains eight reusable layouts: the original presentation,
+branded full-screen, framed card, minimal, hybrid, glass spotlight, editorial gallery, and broadcast
+elite. Each account advances through a deterministic shuffle bag. Every registered layout is used
+exactly once before the next cycle, and a new cycle is adjusted when necessary so it cannot start
+with the layout that ended the previous cycle. The chosen `variant_key`, pool signature, cycle,
+position, and cycle order are stored on the durable Story child. Retries and restart recovery
+therefore reproduce the same media rather than selecting a different layout.
+
+Layout names are internal operational identifiers, not audience-facing marketing copy. Rendered
+Stories use direct labels such as `NEW VIDEO` and never describe the Story or template as premium.
 
 Every recipe uses the configured Instagram account's own profile image. The renderer requests
 `profile_picture_url` only after matching both the returned publishing user id and username to the

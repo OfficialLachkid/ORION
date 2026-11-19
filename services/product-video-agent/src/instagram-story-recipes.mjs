@@ -8,6 +8,9 @@ export const INSTAGRAM_STORY_VARIANT_BRANDED_FULLSCREEN = 'branded_fullscreen';
 export const INSTAGRAM_STORY_VARIANT_FRAMED_CARD = 'framed_card';
 export const INSTAGRAM_STORY_VARIANT_MINIMAL = 'minimal';
 export const INSTAGRAM_STORY_VARIANT_HYBRID = 'hybrid';
+export const INSTAGRAM_STORY_VARIANT_GLASS_SPOTLIGHT = 'glass_spotlight';
+export const INSTAGRAM_STORY_VARIANT_EDITORIAL_GALLERY = 'editorial_gallery';
+export const INSTAGRAM_STORY_VARIANT_BROADCAST_ELITE = 'broadcast_elite';
 export const INSTAGRAM_STORY_VARIANT_REGISTRY = Object.freeze([
   Object.freeze({ key: INSTAGRAM_STORY_VARIANT_CURRENT, build: currentRecipe }),
   Object.freeze({
@@ -32,6 +35,34 @@ export const INSTAGRAM_STORY_VARIANT_REGISTRY = Object.freeze([
     progressBarY: 1828,
     progressBarWidth: 940,
     progressBarHeight: 18,
+  }),
+  Object.freeze({
+    key: INSTAGRAM_STORY_VARIANT_GLASS_SPOTLIGHT,
+    build: glassSpotlightRecipe,
+    progressBar: true,
+    progressBarX: 70,
+    progressBarY: 1850,
+    progressBarWidth: 940,
+    progressBarHeight: 12,
+  }),
+  Object.freeze({
+    key: INSTAGRAM_STORY_VARIANT_EDITORIAL_GALLERY,
+    build: editorialGalleryRecipe,
+    presentation: 'framed',
+    progressBar: true,
+    progressBarX: 115,
+    progressBarY: 1818,
+    progressBarWidth: 850,
+    progressBarHeight: 10,
+  }),
+  Object.freeze({
+    key: INSTAGRAM_STORY_VARIANT_BROADCAST_ELITE,
+    build: broadcastEliteRecipe,
+    progressBar: true,
+    progressBarX: 48,
+    progressBarY: 1862,
+    progressBarWidth: 984,
+    progressBarHeight: 12,
   }),
 ]);
 export const INSTAGRAM_STORY_DEFAULT_VARIANTS = Object.freeze(
@@ -406,6 +437,128 @@ function hybridRecipe(context) {
       ${text('›', 919, 1744, 58, { anchor: 'middle', fill: theme.text, weight: 700 })}
     </g>
     <rect x="70" y="1828" width="940" height="18" rx="9" fill="${theme.text}" fill-opacity="0.20"/>
+  `);
+}
+
+function glassSpotlightRecipe(context) {
+  const { avatarDataUri, displayName, username, theme, title } = context;
+  const headline = splitHeadline(title);
+  return wrapSvg(`
+    <defs>
+      <linearGradient id="glassSpotlightStroke" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="${theme.primary}"/>
+        <stop offset="0.52" stop-color="${theme.text}" stop-opacity="0.34"/>
+        <stop offset="1" stop-color="${theme.secondary}"/>
+      </linearGradient>
+      <radialGradient id="glassSpotlightGlow" cx="0.1" cy="0" r="1">
+        <stop offset="0" stop-color="${theme.primary}" stop-opacity="0.28"/>
+        <stop offset="1" stop-color="${theme.primary}" stop-opacity="0"/>
+      </radialGradient>
+      <filter id="glassSpotlightAccentGlow" x="-40%" y="-40%" width="180%" height="180%">
+        <feGaussianBlur stdDeviation="14" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <rect width="1080" height="380" fill="url(#topShade)"/>
+    <rect y="1260" width="1080" height="660" fill="url(#bottomShade)"/>
+    <rect width="1080" height="1920" fill="url(#glassSpotlightGlow)"/>
+    <rect x="28" y="28" width="1024" height="1864" rx="76" fill="none" stroke="url(#glassSpotlightStroke)" stroke-width="3" stroke-opacity="0.82"/>
+    <g filter="url(#shadow)">
+      <rect x="54" y="58" width="972" height="154" rx="58" fill="${theme.surface}" fill-opacity="0.72" stroke="url(#glassSpotlightStroke)" stroke-width="3"/>
+      ${avatarBadge({ x: 72, y: 76, size: 118, avatarDataUri, theme })}
+      ${text(displayName.toUpperCase(), 218, 128, 38, { fill: theme.text, weight: 900, spacing: 1 })}
+      ${text(`@${username}  /  NEW VIDEO`, 220, 173, 21, { fill: theme.primary, weight: 800, spacing: 2 })}
+      <rect x="838" y="98" width="150" height="72" rx="36" fill="${theme.text}" fill-opacity="0.11" stroke="${theme.text}" stroke-opacity="0.32" stroke-width="2"/>
+      ${text('NEW', 913, 144, 24, { anchor: 'middle', fill: theme.text, weight: 900, spacing: 4 })}
+    </g>
+    <g filter="url(#shadow)">
+      <rect x="54" y="1430" width="972" height="360" rx="66" fill="${theme.surface}" fill-opacity="0.78" stroke="url(#glassSpotlightStroke)" stroke-width="3"/>
+      <rect x="92" y="1474" width="82" height="8" rx="4" fill="${theme.primary}" filter="url(#glassSpotlightAccentGlow)"/>
+      ${text(headline[0], 92, 1572, 60, { fill: theme.text, weight: 900 })}
+      ${headline[1] ? text(headline[1], 92, 1640, 60, { fill: theme.primary, weight: 900 }) : ''}
+      <rect x="92" y="1690" width="896" height="72" rx="36" fill="${theme.text}" fill-opacity="0.10" stroke="${theme.text}" stroke-opacity="0.24" stroke-width="2"/>
+      ${text('WATCH THE FULL VIDEO ON PROFILE', 132, 1736, 24, { fill: theme.text, weight: 800, spacing: 1 })}
+      <circle cx="944" cy="1726" r="24" fill="${theme.primary}"/>
+      ${text('>', 945, 1735, 30, { anchor: 'middle', fill: theme.surface, weight: 900 })}
+    </g>
+  `);
+}
+
+function editorialGalleryRecipe(context) {
+  const { avatarDataUri, displayName, username, theme, title } = context;
+  const headline = splitHeadline(title);
+  return wrapSvg(`
+    <defs>
+      <linearGradient id="editorialRule" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="${theme.primary}"/>
+        <stop offset="1" stop-color="${theme.secondary}"/>
+      </linearGradient>
+    </defs>
+    <rect width="1080" height="1920" fill="${theme.surface}" fill-opacity="0.25"/>
+    <rect x="30" y="30" width="1020" height="1860" rx="74" fill="none" stroke="${theme.text}" stroke-opacity="0.18" stroke-width="2"/>
+    <g filter="url(#shadow)">
+      ${avatarBadge({ x: 68, y: 62, size: 126, avatarDataUri, theme })}
+      ${text('NEW VIDEO', 228, 104, 20, { fill: theme.primary, weight: 900, spacing: 4 })}
+      ${text(displayName.toUpperCase(), 228, 158, 46, { fill: theme.text, weight: 900, spacing: 1 })}
+      ${text(`@${username}`, 988, 135, 25, { anchor: 'end', fill: theme.text, weight: 700, opacity: 0.72 })}
+    </g>
+    <rect x="68" y="238" width="944" height="6" rx="3" fill="url(#editorialRule)"/>
+    <rect x="102" y="268" width="876" height="1374" rx="72" fill="none" stroke="${theme.text}" stroke-opacity="0.42" stroke-width="2"/>
+    <rect x="114" y="280" width="852" height="1350" rx="60" fill="none" stroke="${theme.primary}" stroke-width="5"/>
+    <g transform="translate(54 1290) rotate(-90)">
+      ${text('NEW RELEASE  /  WATCH ON PROFILE', 0, 0, 18, { fill: theme.text, weight: 800, spacing: 4, opacity: 0.62 })}
+    </g>
+    <g filter="url(#shadow)">
+      <rect x="68" y="1658" width="944" height="196" rx="52" fill="${theme.surface}" fill-opacity="0.94" stroke="${theme.text}" stroke-opacity="0.20" stroke-width="2"/>
+      ${text(headline[0], 104, 1727, 42, { fill: theme.text, weight: 900 })}
+      ${headline[1] ? text(headline[1], 104, 1777, 42, { fill: theme.primary, weight: 900 }) : ''}
+      <rect x="780" y="1698" width="184" height="96" rx="48" fill="${theme.primary}"/>
+      ${text('WATCH', 872, 1758, 25, { anchor: 'middle', fill: theme.surface, weight: 900, spacing: 2 })}
+    </g>
+  `);
+}
+
+function broadcastEliteRecipe(context) {
+  const { avatarDataUri, displayName, username, theme, title } = context;
+  const headline = splitHeadline(title);
+  return wrapSvg(`
+    <defs>
+      <linearGradient id="broadcastBar" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="${theme.surface}" stop-opacity="0.98"/>
+        <stop offset="0.72" stop-color="${theme.surface}" stop-opacity="0.84"/>
+        <stop offset="1" stop-color="${theme.secondary}" stop-opacity="0.76"/>
+      </linearGradient>
+      <filter id="broadcastGlow" x="-80%" y="-80%" width="260%" height="260%">
+        <feGaussianBlur stdDeviation="10" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <rect width="1080" height="330" fill="url(#topShade)"/>
+    <rect y="1260" width="1080" height="660" fill="url(#bottomShade)"/>
+    <path d="M48 178V62Q48 48 62 48H196" fill="none" stroke="${theme.primary}" stroke-width="7"/>
+    <path d="M884 48H1018Q1032 48 1032 62V178" fill="none" stroke="${theme.primary}" stroke-width="7"/>
+    <path d="M48 1710V1848Q48 1862 62 1862H196" fill="none" stroke="${theme.primary}" stroke-width="7"/>
+    <path d="M884 1862H1018Q1032 1862 1032 1848V1710" fill="none" stroke="${theme.primary}" stroke-width="7"/>
+    <g filter="url(#shadow)">
+      <rect x="72" y="72" width="660" height="128" rx="28" fill="url(#broadcastBar)"/>
+      ${avatarBadge({ x: 88, y: 82, size: 108, avatarDataUri, theme })}
+      ${text(displayName.toUpperCase(), 226, 127, 37, { fill: theme.text, weight: 900, spacing: 1 })}
+      ${text(`@${username}  /  FEATURED VIDEO`, 228, 169, 20, { fill: theme.primary, weight: 800, spacing: 2 })}
+      <rect x="756" y="72" width="252" height="128" rx="28" fill="${theme.accent}"/>
+      ${text('NEW DROP', 882, 130, 29, { anchor: 'middle', fill: theme.text, weight: 900, spacing: 3 })}
+      ${text('WATCH NOW', 882, 169, 18, { anchor: 'middle', fill: theme.text, weight: 800, spacing: 2, opacity: 0.82 })}
+    </g>
+    <g filter="url(#shadow)">
+      <path d="M48 1450H856L1032 1546V1802H48Z" fill="url(#broadcastBar)" stroke="${theme.text}" stroke-opacity="0.18" stroke-width="2"/>
+      <rect x="48" y="1450" width="18" height="352" fill="${theme.primary}" filter="url(#broadcastGlow)"/>
+      ${text('FEATURED', 94, 1512, 19, { fill: theme.primary, weight: 900, spacing: 5 })}
+      ${text(headline[0], 94, 1600, 58, { fill: theme.text, weight: 900 })}
+      ${headline[1] ? text(headline[1], 94, 1666, 58, { fill: theme.primary, weight: 900 }) : ''}
+      <rect x="94" y="1710" width="512" height="62" rx="31" fill="${theme.text}" fill-opacity="0.09" stroke="${theme.text}" stroke-opacity="0.22" stroke-width="2"/>
+      ${text('FULL VIDEO ON PROFILE', 134, 1750, 22, { fill: theme.text, weight: 800, spacing: 2 })}
+      <circle cx="955" cy="1714" r="42" fill="${theme.primary}" filter="url(#broadcastGlow)"/>
+      ${text('>', 956, 1728, 42, { anchor: 'middle', fill: theme.surface, weight: 900 })}
+    </g>
   `);
 }
 
