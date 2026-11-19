@@ -79,7 +79,7 @@ test('Poke Quizz and TrivaMon are the enabled Story canaries in the channel regi
   );
   for (const target of enabledStories) {
     assert.equal(target.instagram.story.recipe_version, 'instagram-story-promotion.v2');
-    assert.equal(target.instagram.story.variant_keys.length, 5);
+    assert.equal(target.instagram.story.variant_keys, undefined);
     assert.equal(target.instagram.story.avatar_cache_ttl_hours, 168);
   }
 });
@@ -113,6 +113,10 @@ test('account-enabled Story planning creates a deterministic waiting child row',
   ].includes(first.metadata.instagram_story.variant_key));
   assert.equal(first.metadata.instagram_story.variant_set_version, 'instagram-story-variants.v1');
   assert.equal(first.metadata.instagram_story.enabled_variant_keys.length, 5);
+  assert.equal(first.metadata.instagram_story.rotation_cycle, 0);
+  assert.equal(first.metadata.instagram_story.rotation_position, 0);
+  assert.equal(first.metadata.instagram_story.rotation_order.length, 5);
+  assert.match(first.metadata.instagram_story.variant_pool_signature, /^instagram-story-variants\.v1\./u);
 });
 
 test('auto-publish Story planning records explicit account-policy authorization', () => {
@@ -146,6 +150,52 @@ test('Story target upsert preserves an existing deterministic child', async () =
   assert.equal(writes, 0);
   assert.equal(result.preserved, true);
   assert.equal(result.publicationId, existing.id);
+});
+
+test('Story target planning serializes concurrent work into complete shuffle bags', async () => {
+  const rows = new Map();
+  const orderedRows = [];
+  const store = {
+    async fetchPublicationById(id) {
+      return rows.get(id) || null;
+    },
+    async fetchPublicationsByChannel(options) {
+      assert.equal(options.select, 'id,story_rotation:metadata->instagram_story');
+      const latest = orderedRows.at(-1);
+      return latest ? [{
+        id: latest.id,
+        story_rotation: latest.metadata.instagram_story,
+      }] : [];
+    },
+    async upsertPublication(row) {
+      rows.set(row.id, row);
+      orderedRows.push(row);
+      return row;
+    },
+  };
+  const sources = Array.from({ length: 10 }, (_, index) => ({
+    ...reelPublication,
+    id: `publication-instagram-reel-${index}`,
+    video_id: `video-${index}`,
+  }));
+
+  await Promise.all(sources.map((sourcePublication) => upsertInstagramStoryPublicationTarget({
+    store,
+    sourcePublication,
+    target: reelPublication.metadata.publisher_target,
+  })));
+
+  const variants = orderedRows.map((row) => row.metadata.instagram_story.variant_key);
+  assert.equal(orderedRows.length, 10);
+  assert.equal(new Set(variants.slice(0, 5)).size, 5);
+  assert.equal(new Set(variants.slice(5, 10)).size, 5);
+  for (let index = 1; index < variants.length; index += 1) {
+    assert.notEqual(variants[index], variants[index - 1]);
+  }
+  assert.deepEqual(
+    orderedRows.map((row) => row.metadata.instagram_story.rotation_position),
+    [0, 1, 2, 3, 4, 0, 1, 2, 3, 4],
+  );
 });
 
 test('Instagram target fan-out creates one durable dependent Story plan when enabled', async () => {

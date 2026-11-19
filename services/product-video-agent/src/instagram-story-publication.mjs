@@ -1,7 +1,9 @@
 import { createStableId } from './ids.mjs';
 import {
+  INSTAGRAM_STORY_LEGACY_RECIPE_VERSION,
+  INSTAGRAM_STORY_VARIANT_CURRENT,
   INSTAGRAM_STORY_VARIANT_SET_VERSION,
-  resolveInstagramStoryVariant,
+  resolveInstagramStoryVariantAssignment,
   resolveInstagramStoryVariantKeys,
 } from './instagram-story-recipes.mjs';
 
@@ -15,6 +17,7 @@ const SUPPORTED_POLICIES = new Set([
   INSTAGRAM_STORY_POLICY_DISABLED,
   INSTAGRAM_STORY_POLICY_AUTO_PUBLISH,
 ]);
+const accountRotationQueues = new Map();
 
 function normalizeText(value) {
   return String(value || '').trim();
@@ -85,6 +88,7 @@ export function buildInstagramStoryPublicationId({ sourcePublication, target, re
 export function buildInstagramStoryPublicationRow({
   sourcePublication,
   target = {},
+  rotationState = {},
   asOf = new Date().toISOString(),
 }) {
   if (!sourcePublication?.id || !sourcePublication?.video_id) {
@@ -108,13 +112,14 @@ export function buildInstagramStoryPublicationRow({
       ...(target.instagram || {}),
     },
   };
-  const variantKey = resolveInstagramStoryVariant({
+  const variantAssignment = resolveInstagramStoryVariantAssignment({
     publication: {
       account_key: accountKey,
       scheduled_for: sourcePublication.scheduled_for,
     },
     sourcePublication,
     target: publisherTarget,
+    rotationState,
   });
   return {
     id: buildInstagramStoryPublicationId({
@@ -151,9 +156,13 @@ export function buildInstagramStoryPublicationRow({
         policy: policy.policy,
         template_key: policy.templateKey,
         recipe_version: policy.recipeVersion,
-        variant_key: variantKey,
+        variant_key: variantAssignment.variantKey,
         variant_set_version: INSTAGRAM_STORY_VARIANT_SET_VERSION,
         enabled_variant_keys: policy.variantKeys,
+        variant_pool_signature: variantAssignment.poolSignature,
+        rotation_cycle: variantAssignment.cycle,
+        rotation_position: variantAssignment.position,
+        rotation_order: variantAssignment.order,
         delay_seconds: policy.delaySeconds,
         authorization: 'account_policy',
       },
@@ -162,33 +171,93 @@ export function buildInstagramStoryPublicationRow({
   };
 }
 
+async function fetchLatestInstagramStoryRotationState({ store, accountKey }) {
+  if (typeof store?.fetchPublicationsByChannel !== 'function') return {};
+  const [latest] = await store.fetchPublicationsByChannel({
+    platform: INSTAGRAM_STORY_PLATFORM,
+    accountKey,
+    order: 'created_at.desc',
+    limit: 1,
+    select: 'id,story_rotation:metadata->instagram_story',
+    queryClass: 'instagram_story_latest_rotation_state',
+  });
+  const story = latest?.story_rotation || latest?.metadata?.instagram_story || {};
+  return {
+    previousVariantKey: story.variant_key
+      || (story.recipe_version === INSTAGRAM_STORY_LEGACY_RECIPE_VERSION
+        ? INSTAGRAM_STORY_VARIANT_CURRENT
+        : ''),
+    poolSignature: story.variant_pool_signature,
+    cycle: story.rotation_cycle,
+    position: story.rotation_position,
+    order: story.rotation_order,
+  };
+}
+
+async function serializeInstagramStoryRotation(accountKey, task) {
+  const previous = accountRotationQueues.get(accountKey) || Promise.resolve();
+  const current = previous.catch(() => {}).then(task);
+  accountRotationQueues.set(accountKey, current);
+  try {
+    return await current;
+  } finally {
+    if (accountRotationQueues.get(accountKey) === current) {
+      accountRotationQueues.delete(accountKey);
+    }
+  }
+}
+
 export async function upsertInstagramStoryPublicationTarget({
   store,
   sourcePublication,
   target = {},
   asOf = new Date().toISOString(),
 }) {
-  const candidate = buildInstagramStoryPublicationRow({ sourcePublication, target, asOf });
-  if (!candidate) return null;
   if (!store?.upsertPublication) {
     throw new Error('Instagram Story planning requires publication upsert support.');
   }
-  const existing = typeof store.fetchPublicationById === 'function'
-    ? await store.fetchPublicationById(candidate.id)
-    : null;
-  if (existing) {
-    return {
-      publicationId: existing.id,
-      workflowState: existing.metadata?.workflow_state || existing.status || '',
-      policy: existing.metadata?.instagram_story?.policy || '',
-      preserved: true,
-    };
+  const policy = resolveInstagramStoryPolicy(target);
+  if (!policy.enabled) return null;
+  if (!sourcePublication?.id || !sourcePublication?.video_id) {
+    throw new Error('Instagram Story planning requires a source Instagram publication and video id.');
   }
-  const stored = await store.upsertPublication(candidate);
-  return {
-    publicationId: stored?.id || candidate.id,
-    workflowState: stored?.metadata?.workflow_state || candidate.metadata.workflow_state,
-    policy: candidate.metadata.instagram_story.policy,
-    preserved: false,
-  };
+  const accountKey = normalizeText(
+    target.accountKey || target.account_key || sourcePublication.account_key,
+  );
+  if (!accountKey) {
+    throw new Error('Instagram Story planning requires an Instagram account key.');
+  }
+  const publicationId = buildInstagramStoryPublicationId({
+    sourcePublication,
+    target: { ...target, accountKey },
+    recipeVersion: policy.recipeVersion,
+  });
+
+  return serializeInstagramStoryRotation(accountKey, async () => {
+    const existing = typeof store.fetchPublicationById === 'function'
+      ? await store.fetchPublicationById(publicationId)
+      : null;
+    if (existing) {
+      return {
+        publicationId: existing.id,
+        workflowState: existing.metadata?.workflow_state || existing.status || '',
+        policy: existing.metadata?.instagram_story?.policy || '',
+        preserved: true,
+      };
+    }
+    const rotationState = await fetchLatestInstagramStoryRotationState({ store, accountKey });
+    const candidate = buildInstagramStoryPublicationRow({
+      sourcePublication,
+      target,
+      rotationState,
+      asOf,
+    });
+    const stored = await store.upsertPublication(candidate);
+    return {
+      publicationId: stored?.id || candidate.id,
+      workflowState: stored?.metadata?.workflow_state || candidate.metadata.workflow_state,
+      policy: candidate.metadata.instagram_story.policy,
+      preserved: false,
+    };
+  });
 }

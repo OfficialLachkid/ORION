@@ -19,13 +19,6 @@ Every Instagram target is disabled by default. A target may opt in through its e
       "template_key": "variant_rotation",
       "recipe_version": "instagram-story-promotion.v2",
       "display_name": "Poke Quizz",
-      "variant_keys": [
-        "current",
-        "branded_fullscreen",
-        "framed_card",
-        "minimal",
-        "hybrid"
-      ],
       "theme": {
         "primary": "#FFCB05",
         "secondary": "#1756B8",
@@ -75,11 +68,13 @@ when the publication LaunchAgents are installed again.
 
 ## Variant rotation and account identity
 
-The version 2 recipe set contains five reusable layouts: the original presentation, branded
-full-screen, framed card, minimal, and hybrid. Selection is pseudo-randomized from stable account,
-publication, video, and schedule identifiers, so the sequence looks shuffled without using mutable
-runtime randomness. The chosen `variant_key` is stored on the durable Story child. Retries and
-restart recovery therefore reproduce the same media rather than selecting a different layout.
+The version 2 recipe set currently contains five reusable layouts: the original presentation,
+branded full-screen, framed card, minimal, and hybrid. Each account advances through a deterministic
+shuffle bag. Every registered layout is used exactly once before the next cycle, and a new cycle is
+adjusted when necessary so it cannot start with the layout that ended the previous cycle. The chosen
+`variant_key`, pool signature, cycle, position, and cycle order are stored on the durable Story child.
+Retries and restart recovery therefore reproduce the same media rather than selecting a different
+layout.
 
 Every recipe uses the configured Instagram account's own profile image. The renderer requests
 `profile_picture_url` only after matching both the returned publishing user id and username to the
@@ -89,8 +84,11 @@ interval attempts to refresh it. A stale cache remains usable during a temporary
 no verified cache exists, a neutral profile silhouette is used. Hardcoded channel initials are never
 rendered, and profile icons do not need to be duplicated in the repository.
 
-The default registry supplies all five variants to newly enabled accounts. Per-account configuration
-may restrict the list or override the color theme without adding channel-specific executor code.
+The default pool is derived directly from the renderer registry. Adding a renderer definition to
+that registry automatically makes the template available to every account that inherits the default
+pool; there is no second allowlist or per-channel edit. Per-account `variant_keys` may deliberately
+restrict the pool, but should be omitted for accounts that should inherit future templates. Color
+themes remain account-specific without adding channel-specific executor code.
 
 ## API flow
 
