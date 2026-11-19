@@ -102,11 +102,11 @@ the complete video on the account profile.
 
 ## Rollout state
 
-Poke Quizz and TrivaMon are the enabled canaries while the version 2 rotation is validated.
-Poke Guess, DexGuess, and ProffMon remain disabled until rollout is explicitly expanded. Enabling a
-later or newly connected Instagram account requires only the same declarative
-`instagram.story.enabled` setting; it automatically inherits the reusable recipe registry and its
-own identity-verified profile image without channel-specific executor code.
+Poke Quizz and TrivaMon completed the canary period successfully. Stories are now enabled for all
+five owned Instagram accounts: Poke Quizz, TrivaMon, Poke Guess, DexGuess, and ProffMon. A later or
+newly connected Instagram account requires only the same declarative `instagram.story.enabled`
+setting; it automatically inherits the reusable recipe registry and its own identity-verified
+profile image without channel-specific executor code.
 
 When an account is enabled after its Reels have already been approved or scheduled, run a targeted
 idempotent reconciliation for those future Instagram publication rows after deployment. New Story

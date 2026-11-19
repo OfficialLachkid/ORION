@@ -61,7 +61,7 @@ test('Instagram Story policy rejects unknown publication authorization modes', (
   );
 });
 
-test('Poke Quizz and TrivaMon are the enabled Story canaries in the channel registry', async () => {
+test('every owned Instagram account has the shared Story policy enabled', async () => {
   const registry = JSON.parse(await readFile(new URL(
     '../publication-channels.example.json',
     import.meta.url,
@@ -75,7 +75,13 @@ test('Poke Quizz and TrivaMon are the enabled Story canaries in the channel regi
 
   assert.deepEqual(
     enabledStories.map((target) => target.account_key).sort(),
-    ['poke-quizzz-instagram', 'trivamon-instagram'],
+    [
+      'dexguess-instagram',
+      'poke-guess-instagram',
+      'poke-quizzz-instagram',
+      'proffmon-instagram',
+      'trivamon-instagram',
+    ],
   );
   for (const target of enabledStories) {
     assert.equal(target.instagram.story.recipe_version, 'instagram-story-promotion.v2');
