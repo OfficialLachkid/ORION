@@ -350,7 +350,7 @@ function currentRecipe(context) {
       ${text('NEW VIDEO', 430, 148, 38, { fill: theme.text, weight: 900, spacing: 3 })}
       ${text(displayName.toUpperCase(), 430, 184, 23, { fill: theme.primary, weight: 800, spacing: 1 })}
     </g>
-    ${text('WATCH THE FULL VIDEO', 540, 1658, 60, { anchor: 'middle', fill: theme.text, weight: 900 })}
+    ${text('FULL VIDEO ON OUR PROFILE', 540, 1658, 54, { anchor: 'middle', fill: theme.text, weight: 900 })}
     ${text(`@${username}`, 540, 1745, 44, { anchor: 'middle', fill: theme.primary, weight: 800 })}
   `);
 }
@@ -373,8 +373,8 @@ function brandedFullscreenRecipe(context) {
     ${text(headline[0], 56, 1552, 74, { fill: theme.text, weight: 900 })}
     ${headline[1] ? text(headline[1], 56, 1638, 74, { fill: theme.primary, weight: 900 }) : ''}
     <rect x="56" y="1710" width="968" height="112" rx="56" fill="${theme.text}" fill-opacity="0.96"/>
-    ${text('WATCH THE FULL VIDEO', 108, 1781, 34, { fill: theme.surface, weight: 900 })}
-    ${text(`@${username}  ›`, 972, 1781, 29, { anchor: 'end', fill: theme.secondary, weight: 800 })}
+    ${text('FULL VIDEO ON OUR PROFILE', 108, 1781, 32, { fill: theme.surface, weight: 900 })}
+    ${text(`@${username}`, 972, 1781, 29, { anchor: 'end', fill: theme.secondary, weight: 800 })}
   `);
 }
 
@@ -391,7 +391,7 @@ function framedCardRecipe(context) {
     </g>
     <rect x="105" y="280" width="870" height="1350" rx="68" fill="none" stroke="${theme.primary}" stroke-width="10" filter="url(#shadow)"/>
     <rect x="145" y="1668" width="790" height="120" rx="60" fill="${theme.accent}" filter="url(#shadow)"/>
-    ${text('WATCH THE FULL VIDEO', 540, 1743, 34, { anchor: 'middle', fill: theme.text, weight: 900, spacing: 1 })}
+    ${text('FULL VIDEO ON OUR PROFILE', 540, 1743, 32, { anchor: 'middle', fill: theme.text, weight: 900, spacing: 1 })}
     ${text(`@${username}`, 540, 1842, 29, { anchor: 'middle', fill: theme.primary, weight: 800, spacing: 2 })}
   `);
 }
@@ -408,8 +408,8 @@ function minimalRecipe(context) {
     </g>
     <g filter="url(#shadow)">
       <rect x="46" y="1690" width="988" height="116" rx="58" fill="#050A14" fill-opacity="0.84" stroke="${theme.text}" stroke-opacity="0.20" stroke-width="2"/>
-      ${text('Watch the full video', 102, 1762, 36, { fill: theme.text, weight: 800 })}
-      ${text(`@${username}  ›`, 976, 1762, 30, { anchor: 'end', fill: theme.primary, weight: 800 })}
+      ${text('Full video on our profile', 102, 1762, 34, { fill: theme.text, weight: 800 })}
+      ${text(`@${username}`, 976, 1762, 30, { anchor: 'end', fill: theme.primary, weight: 800 })}
     </g>
     <rect x="0" y="1898" width="1080" height="22" fill="${theme.text}" fill-opacity="0.18"/>
   `);
@@ -428,13 +428,12 @@ function hybridRecipe(context) {
       ${text(displayName.toUpperCase(), 210, 125, 39, { fill: theme.primary, weight: 900, spacing: 1 })}
       ${text(`@${username}  •  NEW VIDEO`, 212, 169, 23, { fill: theme.text, weight: 700, spacing: 1, opacity: 0.84 })}
       <rect x="820" y="94" width="166" height="78" rx="39" fill="${theme.accent}"/>
-      ${text('WATCH', 903, 144, 25, { anchor: 'middle', fill: theme.text, weight: 900, spacing: 1 })}
+      ${text('NEW', 903, 144, 25, { anchor: 'middle', fill: theme.text, weight: 900, spacing: 2 })}
     </g>
     <g filter="url(#shadow)">
       <rect x="70" y="1660" width="940" height="130" rx="65" fill="#050A14" fill-opacity="0.88" stroke="${theme.text}" stroke-opacity="0.22" stroke-width="2"/>
-      ${text('WATCH THE FULL VIDEO', 126, 1742, 38, { fill: theme.text, weight: 900, spacing: 1 })}
-      <circle cx="916" cy="1725" r="42" fill="${theme.accent}"/>
-      ${text('›', 919, 1744, 58, { anchor: 'middle', fill: theme.text, weight: 700 })}
+      ${text('FULL VIDEO ON OUR PROFILE', 126, 1742, 34, { fill: theme.text, weight: 900, spacing: 1 })}
+      ${text(`@${username}`, 956, 1742, 27, { anchor: 'end', fill: theme.primary, weight: 800 })}
     </g>
     <rect x="70" y="1828" width="940" height="18" rx="9" fill="${theme.text}" fill-opacity="0.20"/>
   `);
@@ -477,9 +476,8 @@ function glassSpotlightRecipe(context) {
       ${text(headline[0], 92, 1572, 60, { fill: theme.text, weight: 900 })}
       ${headline[1] ? text(headline[1], 92, 1640, 60, { fill: theme.primary, weight: 900 }) : ''}
       <rect x="92" y="1690" width="896" height="72" rx="36" fill="${theme.text}" fill-opacity="0.10" stroke="${theme.text}" stroke-opacity="0.24" stroke-width="2"/>
-      ${text('WATCH THE FULL VIDEO ON PROFILE', 132, 1736, 24, { fill: theme.text, weight: 800, spacing: 1 })}
-      <circle cx="944" cy="1726" r="24" fill="${theme.primary}"/>
-      ${text('>', 945, 1735, 30, { anchor: 'middle', fill: theme.surface, weight: 900 })}
+      ${text('FULL VIDEO ON OUR PROFILE', 132, 1736, 24, { fill: theme.text, weight: 800, spacing: 1 })}
+      ${text(`@${username}`, 952, 1736, 24, { anchor: 'end', fill: theme.primary, weight: 800 })}
     </g>
   `);
 }
@@ -506,14 +504,14 @@ function editorialGalleryRecipe(context) {
     <rect x="102" y="268" width="876" height="1374" rx="72" fill="none" stroke="${theme.text}" stroke-opacity="0.42" stroke-width="2"/>
     <rect x="114" y="280" width="852" height="1350" rx="60" fill="none" stroke="${theme.primary}" stroke-width="5"/>
     <g transform="translate(54 1290) rotate(-90)">
-      ${text('NEW RELEASE  /  WATCH ON PROFILE', 0, 0, 18, { fill: theme.text, weight: 800, spacing: 4, opacity: 0.62 })}
+      ${text('NEW RELEASE  /  FULL VIDEO ON PROFILE', 0, 0, 18, { fill: theme.text, weight: 800, spacing: 3, opacity: 0.62 })}
     </g>
     <g filter="url(#shadow)">
       <rect x="68" y="1658" width="944" height="196" rx="52" fill="${theme.surface}" fill-opacity="0.94" stroke="${theme.text}" stroke-opacity="0.20" stroke-width="2"/>
       ${text(headline[0], 104, 1727, 42, { fill: theme.text, weight: 900 })}
       ${headline[1] ? text(headline[1], 104, 1777, 42, { fill: theme.primary, weight: 900 }) : ''}
-      <rect x="780" y="1698" width="184" height="96" rx="48" fill="${theme.primary}"/>
-      ${text('WATCH', 872, 1758, 25, { anchor: 'middle', fill: theme.surface, weight: 900, spacing: 2 })}
+      <rect x="742" y="1698" width="222" height="96" rx="48" fill="${theme.primary}"/>
+      ${text(`@${username}`, 853, 1758, 23, { anchor: 'middle', fill: theme.surface, weight: 900, spacing: 1 })}
     </g>
   `);
 }
@@ -546,7 +544,7 @@ function broadcastEliteRecipe(context) {
       ${text(`@${username}  /  FEATURED VIDEO`, 228, 169, 20, { fill: theme.primary, weight: 800, spacing: 2 })}
       <rect x="756" y="72" width="252" height="128" rx="28" fill="${theme.accent}"/>
       ${text('NEW DROP', 882, 130, 29, { anchor: 'middle', fill: theme.text, weight: 900, spacing: 3 })}
-      ${text('WATCH NOW', 882, 169, 18, { anchor: 'middle', fill: theme.text, weight: 800, spacing: 2, opacity: 0.82 })}
+      ${text('ON PROFILE', 882, 169, 18, { anchor: 'middle', fill: theme.text, weight: 800, spacing: 2, opacity: 0.82 })}
     </g>
     <g filter="url(#shadow)">
       <path d="M48 1450H856L1032 1546V1802H48Z" fill="url(#broadcastBar)" stroke="${theme.text}" stroke-opacity="0.18" stroke-width="2"/>
@@ -556,8 +554,7 @@ function broadcastEliteRecipe(context) {
       ${headline[1] ? text(headline[1], 94, 1666, 58, { fill: theme.primary, weight: 900 }) : ''}
       <rect x="94" y="1710" width="512" height="62" rx="31" fill="${theme.text}" fill-opacity="0.09" stroke="${theme.text}" stroke-opacity="0.22" stroke-width="2"/>
       ${text('FULL VIDEO ON PROFILE', 134, 1750, 22, { fill: theme.text, weight: 800, spacing: 2 })}
-      <circle cx="955" cy="1714" r="42" fill="${theme.primary}" filter="url(#broadcastGlow)"/>
-      ${text('>', 956, 1728, 42, { anchor: 'middle', fill: theme.surface, weight: 900 })}
+      ${text(`@${username}`, 986, 1750, 25, { anchor: 'end', fill: theme.primary, weight: 900 })}
     </g>
   `);
 }

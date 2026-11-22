@@ -104,7 +104,7 @@ test('Story variant selection honors the persisted immutable recipe choice', () 
   assert.equal(variant, INSTAGRAM_STORY_VARIANT_FRAMED_CARD);
 });
 
-test('every Story recipe embeds the channel avatar and contains no hardcoded initials', () => {
+test('every Story recipe embeds channel identity and uses an honest profile destination', () => {
   const avatarDataUri = 'data:image/png;base64,YXZhdGFy';
   for (const variantKey of INSTAGRAM_STORY_DEFAULT_VARIANTS) {
     const recipe = buildInstagramStoryRecipe({
@@ -118,6 +118,8 @@ test('every Story recipe embeds the channel avatar and contains no hardcoded ini
     assert.match(svg, /data:image\/png;base64,YXZhdGFy/u);
     assert.doesNotMatch(svg, />PQ</u);
     assert.doesNotMatch(svg, /premium/iu);
+    assert.match(svg, /profile/iu);
+    assert.doesNotMatch(svg, /\b(?:watch|click|tap)\b/iu);
     assert.equal(recipe.variantKey, variantKey);
   }
 });

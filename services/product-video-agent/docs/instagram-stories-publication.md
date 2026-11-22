@@ -99,9 +99,12 @@ The shared Graph client supports both `REELS` and `STORIES` containers. A Story 
 exactly one public `image_url` or `video_url`, uses the existing bounded processing checks, and is
 published through the same `media_publish` endpoint.
 
-Native Reel-preview stickers, link stickers, and other interactive Story features are not assumed
-to be available through the publishing API. The Story therefore contains a branded call to watch
-the complete video on the account profile.
+Meta's supported [IG User media-edge parameters](https://developers.facebook.com/docs/graph-api/reference/shadow-ig-user/)
+do not expose native Reel-preview stickers, link stickers, or another interactive destination.
+Burned-in SVG/video text is visual content and cannot be tapped. Every active layout therefore
+presents the honest navigational message `FULL VIDEO ON OUR PROFILE`, includes the account handle,
+and avoids fake `watch`, `click`, `tap`, arrow, or button cues. A native tappable Reel share would
+require a manual Instagram action unless Meta adds a supported publishing parameter later.
 
 ## Rollout state
 
