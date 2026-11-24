@@ -28,6 +28,60 @@ function compactEvidence(row, previous) {
   };
 }
 
+const GENERIC_CONCEPT_WORDS = new Set([
+  'asset', 'assets', 'game', 'games', 'pack', 'packs', 'pixel', 'pixels',
+  'sprite', 'sprites', 'art', 'with', 'from', 'your', 'free', 'paid',
+]);
+
+function conceptTokens(value) {
+  return [...new Set((String(value || '').toLowerCase().match(/[a-z0-9]+/gu) || [])
+    .filter((word) => word.length >= 4 && !GENERIC_CONCEPT_WORDS.has(word))
+    .map((word) => (word.endsWith('s') && word.length > 5 ? word.slice(0, -1) : word)))];
+}
+
+function clusterScore(rows) {
+  const creators = new Set(rows.map((row) => row.creator).filter(Boolean)).size;
+  const persisted = rows.filter((row) => row.previous_rank !== null).length;
+  const demandRows = rows.filter((row) => row.signal === 'marketplace_rank_proxy').length;
+  const rankScore = rows.reduce((total, row) => total + Math.max(0, 101 - row.current_rank), 0);
+  return (creators * 10_000) + (persisted * 1_000) + (demandRows * 100) + rankScore;
+}
+
+export function selectCoherentEvidenceCluster(report, maximumRows = 12) {
+  if (report.status !== 'eligible_for_local_analysis') return null;
+  const clusters = new Map();
+  for (const row of report.evidence || []) {
+    for (const token of conceptTokens(row.title)) {
+      if (!clusters.has(token)) clusters.set(token, []);
+      clusters.get(token).push(row);
+    }
+  }
+  const candidates = [...clusters.entries()]
+    .map(([concept, rows]) => ({
+      concept,
+      rows,
+      creatorCount: new Set(rows.map((row) => row.creator).filter(Boolean)).size,
+    }))
+    .filter((cluster) => cluster.rows.length >= 2 && cluster.creatorCount >= 2)
+    .sort((left, right) => clusterScore(right.rows) - clusterScore(left.rows)
+      || left.concept.localeCompare(right.concept));
+  if (!candidates.length) return null;
+  const selected = candidates[0];
+  return {
+    ...report,
+    evidence: selected.rows
+      .sort((left, right) => Number(right.previous_rank !== null) - Number(left.previous_rank !== null)
+        || left.current_rank - right.current_rank)
+      .slice(0, maximumRows),
+    evidence_cluster: {
+      concept: selected.concept,
+      listing_count: selected.rows.length,
+      creator_count: selected.creatorCount,
+      source_evidence_count: report.evidence.length,
+    },
+  };
+}
+
 export function buildEvidenceReport(observations, minimumSnapshots = 2) {
   const runs = byRun(observations);
   if (runs.length < minimumSnapshots) {

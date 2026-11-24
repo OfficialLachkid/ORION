@@ -42,7 +42,7 @@ async function main() {
       '  --config <path>         Default: services/digital-asset-research/config.example.json',
       '  --archive-root <path>   Store raw evidence on the T7 or another local archive.',
       '  --runtime-env <path>    Existing ORION runtime .env.',
-      '  --post-to-discord       Post the baseline or recommendation to Discord.',
+      '  --post-to-discord       Post an approval-ready recommendation to Discord.',
       '  --workflow-simulation   Explicit acknowledgement required for simulation commands.',
       '  --fixture <id>          Required fixture id for simulate-pack.',
       '  --scheduled             Require scheduling to be enabled in the research config.',

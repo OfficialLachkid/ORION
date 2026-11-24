@@ -125,6 +125,10 @@ export async function postResearchReview(options) {
     fetchImpl: options.fetchImpl,
   });
   const recommendation = options.recommendation || null;
+  const operatorUserIds = recommendation
+    ? (options.runtimeConfig?.operatorUserIds || []).map(String).filter(Boolean)
+    : [];
+  const content = operatorUserIds.map((userId) => `<@${userId}>`).join(' ');
   const components = recommendation ? [{
     type: 1,
     components: [
@@ -140,10 +144,36 @@ export async function postResearchReview(options) {
   }] : [];
   const message = await discordRequest(token, `/channels/${channel.id}/messages`, {
     method: 'POST',
-    body: { embeds: [buildResearchEmbed(options.report, recommendation)], components },
+    body: {
+      ...(content ? { content } : {}),
+      embeds: [buildResearchEmbed(options.report, recommendation)],
+      components,
+      allowed_mentions: { parse: [], users: operatorUserIds },
+    },
     fetchImpl: options.fetchImpl,
   });
   return { channelId: channel.id, messageId: message.id };
+}
+
+export async function postResearchFailureAlert(options) {
+  const token = options.runtimeConfig?.env?.DISCORD_BOT_TOKEN;
+  const channelId = options.runtimeConfig?.channelIds?.alerts;
+  if (!token || !channelId) return { posted: false, reason: 'alerts_channel_missing' };
+  const message = await discordRequest(token, `/channels/${channelId}/messages`, {
+    method: 'POST',
+    body: {
+      embeds: [{
+        title: 'Digital-asset research failed',
+        color: 0xed4245,
+        description: clean(options.error?.message || options.error, 2000),
+        fields: [{ name: 'Run', value: clean(options.runId, 100), inline: true }],
+        footer: { text: 'Monitoring results remain local; this alert represents an execution failure.' },
+      }],
+      allowed_mentions: { parse: [] },
+    },
+    fetchImpl: options.fetchImpl,
+  });
+  return { posted: true, channelId, messageId: message.id };
 }
 
 export function isResearchReviewInteraction(interaction) {
