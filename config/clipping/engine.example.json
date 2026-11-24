@@ -1,0 +1,124 @@
+{
+  "schema_version": "1.0",
+  "enabled": false,
+  "archive_root": "/Volumes/T7/ORION/clipping",
+  "scratch_root": "data/runtime/clipping",
+  "budgets": {
+    "max_candidates_per_run": 25,
+    "max_runs_per_day": 2,
+    "max_in_flight_inference_jobs": 1,
+    "supabase_egress_target_mb_per_month": 2,
+    "supabase_egress_review_mb_per_month": 5
+  },
+  "models": {
+    "qualification": {
+      "provider": "ollama",
+      "endpoint": "http://127.0.0.1:11434",
+      "model": "llama3.1:8b",
+      "keep_alive": "15m",
+      "require_smoke_test": true
+    }
+  },
+  "marketplaces": [
+    {
+      "key": "manual-authorized-import",
+      "label": "Manual / authorized import",
+      "discovery": {
+        "mode": "manual",
+        "authorization": "operator_provided"
+      },
+      "submission": {
+        "mode": "manual",
+        "authorization": "operator_provided"
+      }
+    },
+    {
+      "key": "content-rewards",
+      "label": "Content Rewards",
+      "discovery": {
+        "mode": "manual",
+        "authorization": "unverified"
+      },
+      "submission": {
+        "mode": "manual",
+        "authorization": "unverified"
+      }
+    },
+    {
+      "key": "vyro",
+      "label": "Vyro",
+      "discovery": {
+        "mode": "prohibited",
+        "authorization": "prohibited_by_terms"
+      },
+      "submission": {
+        "mode": "manual",
+        "authorization": "unverified"
+      }
+    },
+    {
+      "key": "clipping-net",
+      "label": "CLIPPING",
+      "discovery": {
+        "mode": "prohibited",
+        "authorization": "prohibited_by_terms"
+      },
+      "submission": {
+        "mode": "manual",
+        "authorization": "unverified"
+      }
+    }
+  ],
+  "channel_profiles": [
+    {
+      "key": "gaming-pilot",
+      "category": "gaming",
+      "platform": "youtube_shorts",
+      "account_key": "unassigned",
+      "enabled": false
+    },
+    {
+      "key": "podcast-fixture",
+      "category": "podcasts",
+      "platform": "youtube_shorts",
+      "account_key": "test-only",
+      "enabled": false
+    }
+  ],
+  "search_profiles": [
+    {
+      "key": "gaming-gta-vi-pilot",
+      "channel_profile_key": "gaming-pilot",
+      "enabled": false,
+      "topic": {
+        "label": "Grand Theft Auto VI",
+        "include_terms": ["GTA VI", "GTA 6", "Grand Theft Auto VI"],
+        "exclude_terms": ["leak", "pre-release", "ending", "final mission", "cheat", "mod menu"]
+      },
+      "rights": {
+        "commercial_use_required": true,
+        "campaign_source_license_required": true,
+        "underlying_ip_permission_required": true,
+        "licensed_music_must_be_absent": true,
+        "unknown_rights_action": "block"
+      }
+    },
+    {
+      "key": "podcast-proof-profile",
+      "channel_profile_key": "podcast-fixture",
+      "enabled": false,
+      "topic": {
+        "label": "General podcasts",
+        "include_terms": ["podcast", "interview"],
+        "exclude_terms": []
+      },
+      "rights": {
+        "commercial_use_required": true,
+        "campaign_source_license_required": true,
+        "underlying_ip_permission_required": false,
+        "licensed_music_must_be_absent": true,
+        "unknown_rights_action": "block"
+      }
+    }
+  ]
+}

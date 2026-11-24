@@ -97,6 +97,8 @@
     "ecommerce:discovery": "node scripts/run-ecommerce-discovery.mjs",
     "ecommerce:discovery:validate": "node scripts/run-ecommerce-discovery.mjs --validate-only",
     "ecommerce:install-discovery-schedule": "node scripts/install-ecommerce-discovery-schedule.mjs",
+    "clipping:validate": "node services/clipping-engine/index.mjs validate",
+    "clipping:test": "node --test services/clipping-engine/test/*.test.mjs",
     "github:open-pr": "node scripts/open-github-pr.mjs",
     "supabase:check": "node scripts/check-supabase-connection.mjs",
     "supabase:merge-bridge": "node scripts/supabase-merge-bridge.mjs",
