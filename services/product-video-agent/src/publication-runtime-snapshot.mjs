@@ -114,6 +114,88 @@ export const SOCIAL_RUNTIME_PUBLICATION_SELECT = [
   'tiktok_direct_post_approval:metadata->tiktok_direct_post_approval',
 ].join(',');
 
+// Small enough to scan frequently. Complete metadata is fetched only after a
+// row is selected for delivery, recovery, or alert handling.
+export const SOCIAL_RUNTIME_CANDIDATE_SELECT = [
+  'id',
+  'video_id',
+  'platform',
+  'account_key',
+  'status',
+  'external_id',
+  'scheduled_for',
+  'created_at',
+  'workflow_state:metadata->>workflow_state',
+  'next_status_poll_at:metadata->>next_status_poll_at',
+  'source_publication_id:metadata->>source_publication_id',
+  'source_lifecycle_action_required:metadata->source_lifecycle_action_required',
+  'source_lifecycle_alert_status:metadata->>source_lifecycle_alert_status',
+  'source_lifecycle_reason:metadata->>source_lifecycle_reason',
+  'source_lifecycle_resolved_at:metadata->>source_lifecycle_resolved_at',
+  'publication_failure_alert_required:metadata->publication_failure_alert_required',
+  'publication_failure_alert_status:metadata->>publication_failure_alert_status',
+  'publication_failure_alert_fingerprint:metadata->>publication_failure_alert_fingerprint',
+  'instagram_auto_comment_status:metadata->instagram_auto_comment->>status',
+  'buffer_create_uncertain:metadata->buffer_create_uncertain',
+  'buffer_staging_public_url:metadata->>buffer_staging_public_url',
+  'buffer_delivery_provider:metadata->publisher_target->>delivery_provider',
+  'tiktok_delivery_provider:metadata->tiktok_direct_post_approval->>delivery_provider',
+].join(',');
+
+export const SOCIAL_LIFECYCLE_CANDIDATE_SELECT = [
+  'id',
+  'platform',
+  'account_key',
+  'status',
+  'external_id',
+  'scheduled_for',
+  'created_at',
+  'workflow_state:metadata->>workflow_state',
+  'source_publication_id:metadata->>source_publication_id',
+  'source_lifecycle_action_required:metadata->source_lifecycle_action_required',
+  'source_lifecycle_alert_status:metadata->>source_lifecycle_alert_status',
+  'source_lifecycle_reason:metadata->>source_lifecycle_reason',
+  'source_lifecycle_resolved_at:metadata->>source_lifecycle_resolved_at',
+].join(',');
+
+export const SOCIAL_ALERT_CANDIDATE_SELECT = [
+  'id',
+  'platform',
+  'account_key',
+  'status',
+  'created_at',
+  'workflow_state:metadata->>workflow_state',
+  'publication_failure_alert_required:metadata->publication_failure_alert_required',
+  'publication_failure_alert_status:metadata->>publication_failure_alert_status',
+  'publication_failure_alert_fingerprint:metadata->>publication_failure_alert_fingerprint',
+].join(',');
+
+export const SOCIAL_COMMENT_CANDIDATE_SELECT = [
+  SOCIAL_LIFECYCLE_CANDIDATE_SELECT,
+  'instagram_auto_comment_status:metadata->instagram_auto_comment->>status',
+].join(',');
+
+export const RELATED_VIDEO_RUNTIME_PUBLICATION_SELECT = [
+  'id',
+  'video_id',
+  'platform',
+  'account_key',
+  'status',
+  'title',
+  'hashtags',
+  'public_url',
+  'external_id',
+  'uploaded_at',
+  'published_at',
+  'created_at',
+  'workflow_state:metadata->>workflow_state',
+  'youtube_live_published_at:metadata->>youtube_live_published_at',
+  'template_id:metadata->>template_id',
+  'type_pair:metadata->type_pair',
+  'selected_subjects:metadata->selected_subjects',
+  'related_video:metadata->related_video',
+].join(',');
+
 export const SOCIAL_STAGING_PUBLICATION_SELECT = [
   'id',
   'buffer_staging_object_path:metadata->>buffer_staging_object_path',
@@ -146,6 +228,8 @@ const PROJECTED_METADATA_FIELDS = Object.freeze([
   'instagram_media_id',
   'source_lifecycle_action_required',
   'source_lifecycle_alert_status',
+  'source_lifecycle_reason',
+  'source_lifecycle_resolved_at',
   'publication_failure_alert_required',
   'publication_failure_alert_status',
   'publication_failure_alert_fingerprint',
@@ -158,6 +242,10 @@ const PROJECTED_METADATA_FIELDS = Object.freeze([
   'buffer_status',
   'publisher_target',
   'tiktok_direct_post_approval',
+  'youtube_live_published_at',
+  'type_pair',
+  'selected_subjects',
+  'related_video',
   'instagram_staging_object_path',
   'instagram_staging_removed_at',
   'instagram_story_staging_object_path',
@@ -182,6 +270,20 @@ export function normalizeRuntimePublication(publication = {}) {
     metadata.youtube_auto_comment = {
       status: publication.youtube_auto_comment_status || '',
       comment_id: publication.youtube_auto_comment_comment_id || '',
+    };
+  }
+  if (publication.instagram_auto_comment_status) {
+    metadata.instagram_auto_comment = {
+      ...(metadata.instagram_auto_comment || {}),
+      status: publication.instagram_auto_comment_status,
+    };
+  }
+  const deliveryProvider = publication.buffer_delivery_provider
+    || publication.tiktok_delivery_provider;
+  if (deliveryProvider) {
+    metadata.publisher_target = {
+      ...(metadata.publisher_target || {}),
+      delivery_provider: deliveryProvider,
     };
   }
   if (publication.content_surface) metadata.content_surface = publication.content_surface;

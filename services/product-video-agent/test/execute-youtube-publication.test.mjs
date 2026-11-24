@@ -1252,3 +1252,118 @@ test('refreshRelatedVideoAssignments bails out on YouTube quotaExceeded and skip
   assert.equal(refreshed.results[0].related_video_capability_status, 'youtube_api_quota_exhausted');
   assert.equal(refreshed.results[0].related_video_apply_status, 'skipped_quota');
 });
+
+test('refreshRelatedVideoAssignments stops after the first logged-out Studio result', async () => {
+  const publishedCandidate = {
+    id: 'pub-login-target',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-login-target',
+    public_url: 'https://youtube.com/shorts/yt-login-target',
+    published_at: '2026-08-01T08:00:00.000Z',
+    title: 'Existing published pick',
+    metadata: { workflow_state: 'published', template_id: 'pokemon-type-challenge-v1' },
+  };
+  const publications = [1, 2, 3].map((number) => ({
+    id: `pub-login-${number}`,
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'scheduled',
+    external_id: `yt-login-${number}`,
+    metadata: {
+      workflow_state: 'scheduled',
+      template_id: 'pokemon-type-challenge-v1',
+    },
+  }));
+  const store = createStore(publications[0]);
+  let applyCalls = 0;
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [...publications, publishedCandidate],
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-11-24T09:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async () => {
+      applyCalls += 1;
+      return {
+        capability: { status: 'login_required' },
+        applyStatus: 'login_required',
+        appliedAt: '',
+        lastAttemptedAt: '2026-11-24T09:00:00.000Z',
+        lastError: 'The configured YouTube Studio profile is not logged in.',
+        studioEditUrl: 'https://studio.youtube.com/video/yt-login-1/edit',
+      };
+    },
+  });
+
+  assert.equal(applyCalls, 1);
+  assert.equal(refreshed.results.length, 1);
+  assert.equal(refreshed.results[0].related_video_capability_status, 'login_required');
+  assert.equal(refreshed.results[0].related_video_apply_status, 'login_required');
+});
+
+test('related-video sweep limit prioritizes current scheduled work over published recovery', async () => {
+  const publishedTarget = {
+    id: 'pub-priority-target',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-priority-target',
+    public_url: 'https://youtube.com/shorts/yt-priority-target',
+    published_at: '2026-08-01T08:00:00.000Z',
+    title: 'Existing target',
+    metadata: { workflow_state: 'published', related_video: { apply_status: 'applied' } },
+  };
+  const publishedRecovery = {
+    id: 'pub-priority-recovery',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'published',
+    external_id: 'yt-priority-recovery',
+    public_url: 'https://youtube.com/shorts/yt-priority-recovery',
+    published_at: '2026-08-02T08:00:00.000Z',
+    metadata: { workflow_state: 'published', related_video: { apply_status: 'login_required' } },
+  };
+  const scheduled = {
+    id: 'pub-priority-scheduled',
+    platform: 'youtube_shorts',
+    account_key: 'poke-quizz-youtube',
+    status: 'scheduled',
+    external_id: 'yt-priority-scheduled',
+    metadata: { workflow_state: 'scheduled' },
+  };
+  const store = createStore(scheduled);
+  const processedIds = [];
+
+  const refreshed = await refreshRelatedVideoAssignments({
+    publications: [publishedRecovery, publishedTarget, scheduled],
+    includePublished: true,
+    limit: 1,
+    store,
+    runtimeConfig: { env: {} },
+    channelProfile,
+    channelSelector: 'poke-quizz-youtube',
+    asOf: '2026-11-24T09:00:00.000Z',
+    dryRun: false,
+    applyScheduled: true,
+    applyYoutubeRelatedVideoSelectionImpl: async ({ publication }) => {
+      processedIds.push(publication.id);
+      return {
+        capability: { status: 'configured' },
+        applyStatus: 'applied',
+        appliedAt: '2026-11-24T09:00:00.000Z',
+        lastAttemptedAt: '2026-11-24T09:00:00.000Z',
+        lastError: '',
+        studioEditUrl: '',
+      };
+    },
+  });
+
+  assert.deepEqual(processedIds, [scheduled.id]);
+  assert.equal(refreshed.results.length, 1);
+});

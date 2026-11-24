@@ -2,6 +2,7 @@ import { collectChildError, parseTrailingJsonArray } from './process-utils.mjs';
 
 const DEFAULT_PUBLICATION_CHANNELS_PATH = 'services/product-video-agent/publication-channels.example.json';
 const DEFAULT_SWEEP_TIMEOUT_MS = 45 * 60 * 1000;
+const DEFAULT_RELATED_VIDEO_SWEEP_LIMIT = 10;
 
 // Run --refresh-related-videos --include-published for a single channel.
 // Guarded to only touch rows whose apply_status !== 'applied' (via the
@@ -22,6 +23,8 @@ export function runNightShiftRelatedVideoRefresh({
   runNodeScript,
   channelsPath = DEFAULT_PUBLICATION_CHANNELS_PATH,
   timeoutMs = DEFAULT_SWEEP_TIMEOUT_MS,
+  limit = Number(profile?.metadata?.related_video?.sweep_limit)
+    || DEFAULT_RELATED_VIDEO_SWEEP_LIMIT,
   onLoginRequired = null,
 } = {}) {
   const child = runNodeScript(
@@ -31,6 +34,7 @@ export function runNightShiftRelatedVideoRefresh({
       '--channels', channelsPath,
       '--refresh-related-videos',
       '--include-published',
+      '--limit', String(Math.max(1, Math.floor(Number(limit) || DEFAULT_RELATED_VIDEO_SWEEP_LIMIT))),
       '--as-of', asOf,
     ],
     { timeoutMs },

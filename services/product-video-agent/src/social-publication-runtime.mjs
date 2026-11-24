@@ -1,4 +1,10 @@
 import { SupabasePublicationStore } from './publication-store.mjs';
+import {
+  SOCIAL_ALERT_CANDIDATE_SELECT,
+  SOCIAL_COMMENT_CANDIDATE_SELECT,
+  SOCIAL_LIFECYCLE_CANDIDATE_SELECT,
+  SOCIAL_RUNTIME_CANDIDATE_SELECT,
+} from './publication-runtime-snapshot.mjs';
 
 export const DEFAULT_SOCIAL_PUBLICATION_MAX_LATENESS_HOURS = 24;
 
@@ -101,6 +107,40 @@ export function createSocialPublicationStore(config, telemetryService = '') {
     egressLedgerDir: config?.runtimePaths?.supabaseEgressLedgerDir,
     telemetryService: telemetryService || undefined,
   });
+}
+
+export async function loadSocialPublicationCandidates({
+  store,
+  platform,
+  accountKey = '',
+  publicationId = '',
+  includePublishedComments = false,
+}) {
+  if (publicationId && typeof store?.fetchPublicationById === 'function') {
+    const publication = await store.fetchPublicationById(publicationId);
+    return publication && normalizeSocialText(publication.platform) === normalizeSocialText(platform)
+      ? [publication]
+      : [];
+  }
+  if (typeof store?.fetchSocialPublicationCandidates === 'function') {
+    return store.fetchSocialPublicationCandidates({
+      platform,
+      accountKey,
+      select: SOCIAL_RUNTIME_CANDIDATE_SELECT,
+      lifecycleSelect: SOCIAL_LIFECYCLE_CANDIDATE_SELECT,
+      alertSelect: SOCIAL_ALERT_CANDIDATE_SELECT,
+      commentSelect: SOCIAL_COMMENT_CANDIDATE_SELECT,
+      includePublishedComments,
+    });
+  }
+  const options = {
+    platform,
+    order: 'scheduled_for.asc.nullsfirst,created_at.asc',
+    select: SOCIAL_RUNTIME_CANDIDATE_SELECT,
+  };
+  return accountKey && typeof store?.fetchPublicationsByChannel === 'function'
+    ? store.fetchPublicationsByChannel({ ...options, accountKey })
+    : store.fetchPublicationsByPlatform(options);
 }
 
 export function buildSocialMetadataPatch(publication, patch = {}) {

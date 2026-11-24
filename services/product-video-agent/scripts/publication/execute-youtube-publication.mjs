@@ -23,6 +23,7 @@ import {
   hydratePublication,
   loadPublicationSnapshot,
   normalizeRuntimePublication,
+  RELATED_VIDEO_RUNTIME_PUBLICATION_SELECT,
   RECONCILIATION_RUNTIME_PUBLICATION_SELECT,
   RECONCILIATION_RUNTIME_STATUSES,
 } from '../../src/publication-runtime-snapshot.mjs';
@@ -538,6 +539,7 @@ export async function refreshRelatedVideoAssignments({
   focusPublicationIds = null,
   includePublished = false,
   force = false,
+  limit = null,
   store,
   runtimeConfig,
   channelProfile,
@@ -566,7 +568,7 @@ export async function refreshRelatedVideoAssignments({
   const focusSet = Array.isArray(focusPublicationIds) && focusPublicationIds.length > 0
     ? new Set(focusPublicationIds.map((id) => String(id || '').trim()).filter(Boolean))
     : null;
-  const candidates = refreshedPublications.filter((publication) => {
+  const candidates = withLimit(refreshedPublications.filter((publication) => {
     if (!isRelatedVideoRefreshCandidate(publication, { includePublished })) return false;
     if (focusSet && !focusSet.has(String(publication.id || '').trim())) return false;
     // For published, only backfill when the target was never actually applied
@@ -574,7 +576,11 @@ export async function refreshRelatedVideoAssignments({
     // be seeing. See isPublishedBackfillNeeded().
     if (normalizeWorkflowState(publication) === 'published' && !force && !isPublishedBackfillNeeded(publication)) return false;
     return true;
-  });
+  }).sort((left, right) => {
+    const leftPublished = normalizeWorkflowState(left) === 'published' ? 1 : 0;
+    const rightPublished = normalizeWorkflowState(right) === 'published' ? 1 : 0;
+    return leftPublished - rightPublished;
+  }), limit);
 
   // Quota-exhausted state carries across the whole run: once the YouTube API
   // has returned quotaExceeded, every subsequent call in this run will fail
@@ -584,8 +590,9 @@ export async function refreshRelatedVideoAssignments({
   // fails. Observed 2026-08-25: trivamon returned 0/56 applied after the
   // poke-guess backfill exhausted the daily quota.
   let quotaExhausted = false;
-  for (const publication of candidates) {
+  for (const candidatePublication of candidates) {
     if (quotaExhausted) break;
+    const publication = await hydratePublication(store, candidatePublication);
     const videoRow = publication.video_id
       ? await store.fetchVideoById(publication.video_id)
       : null;
@@ -765,6 +772,13 @@ export async function refreshRelatedVideoAssignments({
       related_video_apply_status: applyStatus || updatedPublication?.metadata?.related_video?.apply_status || '',
       ...(diagnosticPayload ? { diagnostics: diagnosticPayload } : {}),
     });
+    // One logged-out Studio profile invalidates every remaining attempt for
+    // this channel. Persist the first receipt, then defer the untouched rows
+    // to the next sweep after reauthentication instead of opening hundreds of
+    // identical browser sessions.
+    if (applyStatus === 'login_required' || capabilityStatus === 'login_required') {
+      break;
+    }
   }
 
   return {
@@ -1538,10 +1552,14 @@ async function main() {
       ));
     }
     if (refreshRelatedVideosOnly) {
-      return store.fetchPublicationsByChannel({
+      const rows = await store.fetchPublicationsByChannel({
         platform: channelProfile.platform,
         accountKey: channelProfile.account_key,
+        status: 'not.in.(withdrawn,deleted,failed,blocked)',
+        select: RELATED_VIDEO_RUNTIME_PUBLICATION_SELECT,
+        queryClass: 'youtube_related_video_candidates',
       });
+      return rows.map(normalizeRuntimePublication);
     }
     const [activeRows, reconciliationRows] = await Promise.all([
       store.fetchPublicationsByChannel({
@@ -1580,6 +1598,7 @@ async function main() {
       focusPublicationIds: publicationId ? [publicationId] : null,
       includePublished: includePublishedInRefresh,
       force: forceRefresh,
+      limit: getStringOption(options, 'limit', ''),
       store,
       runtimeConfig,
       channelProfile,

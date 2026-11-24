@@ -51,3 +51,14 @@ test('hydratePublication fetches only compact candidates and preserves complete 
   assert.equal(await hydratePublication(store, complete), complete);
   assert.deepEqual(fetchedIds, ['publication-compact']);
 });
+
+test('normalizeRuntimePublication reconstructs an Instagram comment candidate status', () => {
+  const publication = normalizeRuntimePublication({
+    id: 'publication-instagram-comment',
+    status: 'published',
+    workflow_state: 'published',
+    instagram_auto_comment_status: 'uncertain',
+  });
+
+  assert.deepEqual(publication.metadata.instagram_auto_comment, { status: 'uncertain' });
+});

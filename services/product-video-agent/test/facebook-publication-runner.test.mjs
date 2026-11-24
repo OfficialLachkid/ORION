@@ -212,7 +212,7 @@ test('targeted supervised publish-now uploads one future row with an audit recei
     runtimeConfig: { env: { FACEBOOK_DELIVERY_ENABLED: 'false' } },
     publicationStore: {
       async fetchPublicationsByPlatform() { return [stored]; },
-      async fetchPublicationById() { return null; },
+      async fetchPublicationById(id) { return id === stored.id ? stored : null; },
       async fetchVideoById() { return { id: 'video-1' }; },
       async claimPublicationForUpload(_id, patch) {
         stored = { ...stored, ...patch, metadata: patch.metadata };
