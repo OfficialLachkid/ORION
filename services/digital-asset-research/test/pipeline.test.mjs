@@ -46,6 +46,12 @@ test('resumes analysis from stored observations without collecting another snaps
   ), 'utf8'));
   const observations = [
     {
+      run_id: 'run-2', observation_id: '31111111-1111-4111-8111-111111111111',
+      view_id: 'newest-pixel-art', signal: 'supply_activity',
+      listing_url: 'https://other.itch.io/magic-effects', title: 'Magic Effects', creator: 'Other',
+      price_text: '$3.99', observed_at: '2026-10-17T15:00:00.000Z', rank: 4,
+    },
+    {
       run_id: 'run-2', observation_id: '21111111-1111-4111-8111-111111111111',
       view_id: 'top-sellers-pixel-art', signal: 'marketplace_rank_proxy',
       listing_url: 'https://maker.itch.io/effects', title: 'Effects', creator: 'Maker',
@@ -88,6 +94,12 @@ test('keeps mature evidence in monitoring when the local model fails quality gat
   ), 'utf8'));
   const observations = [
     {
+      run_id: 'run-2', observation_id: '31111111-1111-4111-8111-111111111111',
+      view_id: 'newest-pixel-art', signal: 'supply_activity',
+      listing_url: 'https://other.itch.io/magic-effects', title: 'Magic Effects', creator: 'Other',
+      price_text: '$3.99', observed_at: '2026-10-17T15:00:00.000Z', rank: 4,
+    },
+    {
       run_id: 'run-2', observation_id: '21111111-1111-4111-8111-111111111111',
       view_id: 'top-sellers-pixel-art', signal: 'marketplace_rank_proxy',
       listing_url: 'https://maker.itch.io/effects', title: 'Effects', creator: 'Maker',
@@ -100,12 +112,14 @@ test('keeps mature evidence in monitoring when the local model fails quality gat
       price_text: '$4.99', observed_at: '2026-10-16T15:00:00.000Z', rank: 5,
     },
   ];
-  let posted;
+  let posted = false;
+  let persisted;
   const result = await analyzeResearchHistory({
     config,
     store: { async listRecentObservations() { return observations; } },
     existingProducts: [],
     postToDiscord: true,
+    scheduled: true,
     generateRecommendation: async () => {
       throw new ResearchRecommendationQualityError('No coherent evidence.');
     },
@@ -113,13 +127,19 @@ test('keeps mature evidence in monitoring when the local model fails quality gat
       posted = value;
       return { channelId: 'channel-1', messageId: 'message-1' };
     },
+    persistAnalysisState: async (value) => {
+      persisted = value;
+      return { path: '/tmp/latest.json' };
+    },
   });
 
   assert.equal(result.recommendation, null);
   assert.equal(result.report.status, 'monitoring');
   assert.match(result.report.analysis_issue, /No coherent evidence/iu);
   assert.match(result.analysisIssue, /No coherent evidence/iu);
-  assert.equal(posted.recommendation, null);
+  assert.equal(posted, false);
+  assert.match(persisted.analysisIssue, /No coherent evidence/iu);
+  assert.equal(persisted.report.evidence_cluster.concept, 'effect');
 });
 
 test('magic workflow simulation is clearly labelled and uses stored evidence without model inference', async () => {

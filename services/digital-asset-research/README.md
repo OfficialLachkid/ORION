@@ -13,7 +13,9 @@ The initial adapter reads two public itch.io asset views from the same marketpla
 
 The adapter does not claim competitor sales, revenue, purchase, or download counts. Raw HTML is retained on the T7 for auditability; Supabase stores compact observations and decisions. Requests are sequential, identify ORION with a user agent, fail closed on HTTP 429, and never access paths disallowed by itch.io's published robots policy.
 
-The first snapshot is baseline-only. Discord receives a monitoring card without approval buttons. At least two snapshots are required before the local model can produce an evidence-backed recommendation.
+The first snapshot is baseline-only and remains local. Ordinary monitoring and repeated quality-gate results do not create Discord messages. At least two snapshots are required before the local model can produce an evidence-backed recommendation.
+
+Before inference, ORION deterministically selects one coherent title-concept cluster supported by at least two different creators. Mixed marketplace rows are not handed to the model as if they supported one product. Scheduled analysis writes the exact quality-gate result, evidence fingerprint, duplicate count, and selected cluster under `research/analysis` on the T7. A changed result receives an immutable receipt; a duplicate only updates `latest.json`.
 
 ## Setup
 
@@ -41,7 +43,7 @@ npm run digital-assets:research:analyze -- \
 The `analyze` command never requests marketplace pages. It reuses the timestamped evidence already
 stored in Supabase and on the T7.
 
-The bot finds or creates `#asset-research` under the existing `DIGITAL ASSETS` category. A recommendation offers `Approve & Queue Generation`, `Keep Monitoring`, and `Reject`. Approval records the decision in Supabase, writes an exact `product-opportunity.json` handoff, and creates an idempotent job under `research/generation-jobs` on the T7. The Discord bot launches the worker outside the interaction callback so generation cannot cause a Discord timeout.
+The bot finds or creates `#asset-research` under the existing `DIGITAL ASSETS` category. Only an approval-ready recommendation is posted and it explicitly mentions the configured operator. Genuine collection or analysis failures go to `#alerts`; a quality-gate rejection is monitoring, not a system failure. A recommendation offers `Approve & Queue Generation`, `Keep Monitoring`, and `Reject`. Approval records the decision in Supabase, writes an exact `product-opportunity.json` handoff, and creates an idempotent job under `research/generation-jobs` on the T7. The Discord bot launches the worker outside the interaction callback so generation cannot cause a Discord timeout.
 
 The worker runs this bounded chain:
 

@@ -4,7 +4,12 @@ import { readFile } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { buildResearchEmbed, postResearchReview, recordResearchReviewDecision } from '../src/discord-review.mjs';
+import {
+  buildResearchEmbed,
+  postResearchFailureAlert,
+  postResearchReview,
+  recordResearchReviewDecision,
+} from '../src/discord-review.mjs';
 
 // Regression: 2026-11-04 → 2026-11-13 the nightly research pipeline
 // crashed with `TypeError: Cannot read properties of undefined
@@ -19,7 +24,11 @@ test('postResearchReview finds the research channel without needing runtimePaths
     { id: 'chan-1', type: 0, name: 'digital-asset-research', parent_id: 'cat-1' },
   ];
   const fakeFetch = async (url, init) => {
-    requests.push({ url, method: init?.method || 'GET' });
+    requests.push({
+      url,
+      method: init?.method || 'GET',
+      body: init?.body ? JSON.parse(init.body) : null,
+    });
     if (String(url).endsWith('/guilds/guild-1/channels') && (init?.method || 'GET') === 'GET') {
       return { ok: true, status: 200, json: async () => fakeChannelsList, text: async () => '' };
     }
@@ -39,6 +48,55 @@ test('postResearchReview finds the research channel without needing runtimePaths
   assert.equal(result.channelId, 'chan-1');
   assert.equal(result.messageId, 'msg-1');
   assert.equal(requests.length, 2);
+  assert.deepEqual(requests[1].body.allowed_mentions, { parse: [], users: [] });
+});
+
+test('recommendation approval card explicitly mentions configured operators', async () => {
+  const requests = [];
+  const fakeFetch = async (url, init) => {
+    requests.push({ url, body: init?.body ? JSON.parse(init.body) : null });
+    if (String(url).endsWith('/guilds/guild-1/channels')) {
+      return { ok: true, status: 200, json: async () => [
+        { id: 'cat-1', type: 4, name: 'digital assets', parent_id: null },
+        { id: 'chan-1', type: 0, name: 'asset-research', parent_id: 'cat-1' },
+      ], text: async () => '' };
+    }
+    return { ok: true, status: 200, json: async () => ({ id: 'msg-1' }), text: async () => '' };
+  };
+  await postResearchReview({
+    runtimeConfig: {
+      env: { DISCORD_BOT_TOKEN: 'tok' }, guildId: 'guild-1', operatorUserIds: ['operator-1'],
+    },
+    config: { discord: { category_name: 'DIGITAL ASSETS', channel_name: 'asset-research' } },
+    report: { snapshot_count: 2 },
+    recommendation: {
+      recommendation_id: 'effects-pack', action: 'new_product', existing_product_slug: null,
+      title: 'Effects Pack', summary: 'Evidence-backed effects.', confidence: 50,
+      evidence_ids: ['one', 'two'], rationale: ['Two creators support the effect concept.'],
+    },
+    evidenceHash: 'a'.repeat(64),
+    fetchImpl: fakeFetch,
+  });
+  assert.equal(requests[1].body.content, '<@operator-1>');
+  assert.deepEqual(requests[1].body.allowed_mentions, { parse: [], users: ['operator-1'] });
+  assert.equal(requests[1].body.components[0].components.length, 3);
+});
+
+test('genuine research failures post only to the configured alerts channel', async () => {
+  let request;
+  const result = await postResearchFailureAlert({
+    runtimeConfig: { env: { DISCORD_BOT_TOKEN: 'tok' }, channelIds: { alerts: 'alerts-1' } },
+    runId: 'run-1',
+    error: new Error('Marketplace request failed.'),
+    fetchImpl: async (url, init) => {
+      request = { url, body: JSON.parse(init.body) };
+      return { ok: true, status: 200, json: async () => ({ id: 'alert-1' }), text: async () => '' };
+    },
+  });
+  assert.equal(result.posted, true);
+  assert.match(String(request.url), /channels\/alerts-1\/messages$/u);
+  assert.match(request.body.embeds[0].description, /Marketplace request failed/iu);
+  assert.deepEqual(request.body.allowed_mentions, { parse: [] });
 });
 
 test('labels a quality-gated result as evidence monitoring without approval', () => {

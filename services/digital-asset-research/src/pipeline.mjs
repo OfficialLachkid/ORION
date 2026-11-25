@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, resolve } from 'node:path';
-import { buildEvidenceReport } from './analyzer.mjs';
-import { postResearchReview, researchEvidenceHash } from './discord-review.mjs';
+import { buildEvidenceReport, selectCoherentEvidenceCluster } from './analyzer.mjs';
+import { persistResearchAnalysisState } from './analysis-state.mjs';
+import {
+  postResearchFailureAlert,
+  postResearchReview,
+  researchEvidenceHash,
+} from './discord-review.mjs';
 import { fetchItchBrowseView } from './itch-browse-adapter.mjs';
 import {
   generateResearchRecommendation,
@@ -96,38 +101,59 @@ export async function analyzeResearchHistory(options) {
   let discord = null;
   let analysisIssue = null;
   if (report.status === 'eligible_for_local_analysis') {
-    const existingProducts = options.existingProducts || await loadExistingProductCatalog(
-      options.runtimeConfig?.env?.DIGITAL_ASSET_ARCHIVE_ROOT,
-    );
-    try {
-      recommendation = await (options.generateRecommendation || generateResearchRecommendation)({
-        report,
-        model: config.model,
-        existingProducts,
-        fetchImpl: options.fetchImpl,
-      });
-      evidenceHash = researchEvidenceHash(report, recommendation);
-      await store.insertRecommendation({
-        recommendation_id: recommendation.recommendation_id,
-        source_id: config.source.id,
-        evidence_hash: evidenceHash,
-        status: 'awaiting_review',
-        recommendation,
-        evidence_observation_ids: recommendation.evidence_ids,
-        created_at: observedAt,
-      });
-    } catch (error) {
-      if (!(error instanceof ResearchRecommendationQualityError)) throw error;
-      analysisIssue = error.message;
+    const clusteredReport = selectCoherentEvidenceCluster(report);
+    if (!clusteredReport) {
+      analysisIssue = 'No coherent marketplace cluster contained at least two listings from distinct creators.';
       report = {
         ...report,
         status: 'monitoring',
-        reason: 'Two snapshots were compared, but no recommendation passed ORION evidence-quality gates. Research remains in monitoring and no generation was started.',
-        analysis_issue: String(error.message || error).slice(0, 900),
+        reason: 'Comparable snapshots were retained, but no coherent product cluster passed the pre-analysis evidence gate.',
+        analysis_issue: analysisIssue,
       };
+    } else {
+      report = clusteredReport;
+      const existingProducts = options.existingProducts || await loadExistingProductCatalog(
+        options.runtimeConfig?.env?.DIGITAL_ASSET_ARCHIVE_ROOT,
+      );
+      try {
+        recommendation = await (options.generateRecommendation || generateResearchRecommendation)({
+          report,
+          model: config.model,
+          existingProducts,
+          fetchImpl: options.fetchImpl,
+        });
+        evidenceHash = researchEvidenceHash(report, recommendation);
+        await store.insertRecommendation({
+          recommendation_id: recommendation.recommendation_id,
+          source_id: config.source.id,
+          evidence_hash: evidenceHash,
+          status: 'awaiting_review',
+          recommendation,
+          evidence_observation_ids: recommendation.evidence_ids,
+          created_at: observedAt,
+        });
+      } catch (error) {
+        if (!(error instanceof ResearchRecommendationQualityError)) throw error;
+        analysisIssue = error.message;
+        report = {
+          ...report,
+          status: 'monitoring',
+          reason: 'Coherent evidence was analyzed, but no recommendation passed ORION evidence-quality gates. Research remains in monitoring and no generation was started.',
+          analysis_issue: String(error.message || error).slice(0, 900),
+        };
+      }
     }
   }
-  if (options.postToDiscord) {
+  const analysisState = options.scheduled
+    ? await (options.persistAnalysisState || persistResearchAnalysisState)({
+      archiveRoot: config.archive_root,
+      observedAt,
+      report,
+      analysisIssue,
+      recommendation,
+    })
+    : null;
+  if (options.postToDiscord && recommendation) {
     discord = await (options.postReview || postResearchReview)({
       runtimeConfig: options.runtimeConfig,
       config,
@@ -143,7 +169,7 @@ export async function analyzeResearchHistory(options) {
       });
     }
   }
-  return { report, recommendation, evidenceHash, discord, analysisIssue };
+  return { report, recommendation, evidenceHash, discord, analysisIssue, analysisState };
 }
 
 function selectSimulationEvidence(observations, fixture) {
@@ -439,6 +465,14 @@ export async function runResearchCollection(options) {
       completed_at: new Date().toISOString(),
       error: String(error.message || error).slice(0, 2000),
     }).catch(() => {});
+    if (options.scheduled) {
+      await (options.postFailureAlert || postResearchFailureAlert)({
+        runtimeConfig: options.runtimeConfig,
+        runId,
+        error,
+        fetchImpl: options.fetchImpl,
+      }).catch(() => {});
+    }
     throw error;
   }
 }
