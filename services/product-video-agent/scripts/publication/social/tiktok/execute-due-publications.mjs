@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 import { loadRuntimeConfig } from '../../../../../lib/runtime-config.mjs';
 import { SupabasePublicationStore } from '../../../../src/publication-store.mjs';
 import {
-  SOCIAL_RUNTIME_PUBLICATION_SELECT,
   SOCIAL_STAGING_PUBLICATION_SELECT,
   hydratePublication,
   hydratePublications,
@@ -37,6 +36,7 @@ import {
   buildSocialMissedWindowPatch,
   resolveSocialPublicationMaxLatenessHours,
   resolveSocialUploadAction,
+  loadSocialPublicationCandidates,
 } from '../../../../src/social-publication-runtime.mjs';
 import {
   deliverPublicationFailureAlerts,
@@ -335,22 +335,13 @@ export async function executeDueSocialPublications(options = {}, dependencies = 
     || deliverPublicationFailureAlerts;
   const deliverLifecycleAlertsImpl = dependencies.deliverSocialPublicationLifecycleAlerts
     || deliverSocialPublicationLifecycleAlerts;
-  const fetchedPublications = accountKey
-    ? await store.fetchPublicationsByChannel({
-      platform: TIKTOK_VIDEO_PLATFORM,
-      accountKey,
-      order: 'scheduled_for.asc.nullsfirst,created_at.asc',
-      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
-    })
-    : await store.fetchPublicationsByPlatform({
-      platform: TIKTOK_VIDEO_PLATFORM,
-      order: 'scheduled_for.asc.nullsfirst,created_at.asc',
-      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
-    });
-  const storedPublications = publicationId
-    ? fetchedPublications.map(normalizeRuntimePublication)
-      .filter((publication) => publication.id === publicationId)
-    : fetchedPublications.map(normalizeRuntimePublication);
+  const fetchedPublications = await loadSocialPublicationCandidates({
+    store,
+    platform: TIKTOK_VIDEO_PLATFORM,
+    accountKey,
+    publicationId,
+  });
+  const storedPublications = fetchedPublications.map(normalizeRuntimePublication);
   const lifecycleReconciliation = await reconcileAdditionalPlatformPublicationLifecycles({
     store,
     publications: storedPublications,

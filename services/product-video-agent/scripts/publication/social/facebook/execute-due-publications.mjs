@@ -23,7 +23,6 @@ import {
 } from '../../../../src/social-publication-alerts.mjs';
 import { loadPublicationChannelProfiles } from '../../../../src/publication-channels.mjs';
 import {
-  SOCIAL_RUNTIME_PUBLICATION_SELECT,
   hydratePublication,
   hydratePublications,
   needsFailureAlertHydration,
@@ -36,6 +35,7 @@ import {
   createSocialPublicationStore,
   isSocialPublicationDueAt,
   limitSocialItems,
+  loadSocialPublicationCandidates,
   nextSocialStatusPollAt,
   normalizeSocialBoolean,
   normalizeSocialText,
@@ -161,22 +161,13 @@ export async function executeDueFacebookPublications(options = {}, dependencies 
     || deliverSocialPublicationLifecycleAlerts;
   const deliverFailureAlerts = dependencies.deliverPublicationFailureAlerts
     || deliverPublicationFailureAlerts;
-  const fetched = accountKey
-    ? await store.fetchPublicationsByChannel({
-      platform: FACEBOOK_REEL_PLATFORM,
-      accountKey,
-      order: 'scheduled_for.asc.nullsfirst,created_at.asc',
-      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
-    })
-    : await store.fetchPublicationsByPlatform({
-      platform: FACEBOOK_REEL_PLATFORM,
-      order: 'scheduled_for.asc.nullsfirst,created_at.asc',
-      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
-    });
-  const selected = publicationId
-    ? fetched.map(normalizeRuntimePublication)
-      .filter((publication) => publication.id === publicationId)
-    : fetched.map(normalizeRuntimePublication);
+  const fetched = await loadSocialPublicationCandidates({
+    store,
+    platform: FACEBOOK_REEL_PLATFORM,
+    accountKey,
+    publicationId,
+  });
+  const selected = fetched.map(normalizeRuntimePublication);
   const lifecycle = await reconcileAdditionalPlatformPublicationLifecycles({
     store,
     publications: selected,

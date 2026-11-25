@@ -198,6 +198,69 @@ export class SupabasePublicationStore {
     });
   }
 
+  async fetchSocialPublicationCandidates({
+    platform,
+    accountKey = '',
+    select = '*',
+    lifecycleSelect = select,
+    alertSelect = select,
+    commentSelect = select,
+    includePublishedComments = false,
+  }) {
+    const baseParams = {
+      select,
+      platform: `eq.${platform}`,
+      account_key: accountKey ? `eq.${accountKey}` : '',
+      order: 'scheduled_for.asc.nullsfirst,created_at.asc',
+    };
+    const query = (queryClass, params) => this.request('video_publications', {
+      params: { ...baseParams, ...params },
+      queryClass,
+    });
+    const requests = [
+      query('social_publication_active_candidates', {
+        status: 'not.in.(published,withdrawn,deleted,failed,blocked)',
+      }),
+      // Delivered rows remain lifecycle candidates because cancelling their
+      // source later can require a manual remote-removal alert. Only IDs and
+      // compact operational fields cross the network here.
+      query('social_publication_delivered_lifecycle_candidates', {
+        select: lifecycleSelect,
+        status: 'in.(published,withdrawn,deleted,failed,blocked)',
+        external_id: 'not.is.null',
+        'metadata->>source_publication_id': 'not.is.null',
+      }),
+      query('social_publication_failure_alert_candidates', {
+        select: alertSelect,
+        'metadata->publication_failure_alert_required': 'eq.true',
+      }),
+      query('social_publication_lifecycle_alert_candidates', {
+        select: lifecycleSelect,
+        'metadata->source_lifecycle_action_required': 'eq.true',
+      }),
+    ];
+    if (includePublishedComments) {
+      requests.push(query('social_publication_comment_candidates', {
+        select: commentSelect,
+        status: 'eq.published',
+        'metadata->instagram_auto_comment->>status': 'in.(pending,posting,uncertain)',
+      }));
+    }
+
+    const rows = (await Promise.all(requests)).flat();
+    const uniqueRows = new Map();
+    for (const row of rows) {
+      if (!row?.id) continue;
+      uniqueRows.set(row.id, { ...(uniqueRows.get(row.id) || {}), ...row });
+    }
+    return [...uniqueRows.values()].sort((left, right) => {
+      const leftScheduled = left?.scheduled_for ? new Date(left.scheduled_for).getTime() : -Infinity;
+      const rightScheduled = right?.scheduled_for ? new Date(right.scheduled_for).getTime() : -Infinity;
+      if (leftScheduled !== rightScheduled) return leftScheduled - rightScheduled;
+      return new Date(left?.created_at || 0).getTime() - new Date(right?.created_at || 0).getTime();
+    });
+  }
+
   async updatePublication(id, patch) {
     const rows = await this.request('video_publications', {
       method: 'PATCH',

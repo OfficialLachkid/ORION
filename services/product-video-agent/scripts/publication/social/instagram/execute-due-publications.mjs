@@ -28,7 +28,6 @@ import {
 } from '../../../../src/social-publication-alerts.mjs';
 import { loadPublicationChannelProfiles } from '../../../../src/publication-channels.mjs';
 import {
-  SOCIAL_RUNTIME_PUBLICATION_SELECT,
   SOCIAL_STAGING_PUBLICATION_SELECT,
   hydratePublication,
   hydratePublications,
@@ -42,6 +41,7 @@ import {
   createSocialPublicationStore as createPublicationStore,
   isSocialPublicationDueAt as isDueAt,
   limitSocialItems as withLimit,
+  loadSocialPublicationCandidates,
   nextSocialStatusPollAt as nextStatusPollAt,
   normalizeSocialBoolean as normalizeBoolean,
   normalizeSocialText as normalizeText,
@@ -218,22 +218,14 @@ export async function executeDueInstagramPublications(options = {}, dependencies
   const sourceProfilesByAccountKey = new Map(
     sourceProfiles.map((profile) => [normalizeText(profile.account_key), profile]),
   );
-  const fetched = accountKey
-    ? await store.fetchPublicationsByChannel({
-      platform: INSTAGRAM_REEL_PLATFORM,
-      accountKey,
-      order: 'scheduled_for.asc.nullsfirst,created_at.asc',
-      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
-    })
-    : await store.fetchPublicationsByPlatform({
-      platform: INSTAGRAM_REEL_PLATFORM,
-      order: 'scheduled_for.asc.nullsfirst,created_at.asc',
-      select: SOCIAL_RUNTIME_PUBLICATION_SELECT,
-    });
-  const selected = publicationId
-    ? fetched.map(normalizeRuntimePublication)
-      .filter((publication) => publication.id === publicationId)
-    : fetched.map(normalizeRuntimePublication);
+  const fetched = await loadSocialPublicationCandidates({
+    store,
+    platform: INSTAGRAM_REEL_PLATFORM,
+    accountKey,
+    publicationId,
+    includePublishedComments: commentingEnabled,
+  });
+  const selected = fetched.map(normalizeRuntimePublication);
   const lifecycle = await reconcileAdditionalPlatformPublicationLifecycles({
     store,
     publications: selected,
