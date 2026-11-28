@@ -215,12 +215,11 @@ test('buildAnalystPrompt embeds JSON data pack + prior summary + scheduling + bo
   assert.ok(withoutPrior.includes('Scheduling signal'), 'prompt must include a scheduling section');
   assert.ok(withoutPrior.includes('publish_hour_rollup'), 'prompt must reference the publish-hour data field');
   assert.ok(withoutPrior.includes('instrumentation_gaps'), 'prompt must ask analyst to acknowledge missing signals');
-  assert.ok(withoutPrior.includes('08:00/12:00/14:00'), 'prompt must state the 14:00 CEST slot for proffmon (control)');
+  assert.ok(withoutPrior.includes('08:00/12:00/14:00'), 'prompt must state the 08:00/12:00/14:00 CEST default (proffmon control + poke-quizz after revert)');
   assert.ok(withoutPrior.includes('08:00/12:00/18:00'), 'prompt must state the 18:00 CEST slot for the poke-guess/dexguess experiment');
-  assert.ok(withoutPrior.includes('08:00/11:00/12:00'), 'prompt must state poke-quizz\'s 11:00 CEST slot for the winner-adjacency test');
   assert.ok(withoutPrior.includes('08:00/12:00/18:00/22:00'), 'prompt must state trivamon\'s 4/day schedule with the new 22:00 CEST slot');
   assert.ok(/intentional/iu.test(withoutPrior), 'prompt must tell the analyst to treat per-channel slot differences as intentional, not drift');
-  assert.ok(/winner-adjacency|magic hour|noon-audience-window/iu.test(withoutPrior), 'prompt must name the poke-quizz experiment so the analyst knows what signal to look for');
+  assert.ok(/concluded|winner-adjacency/iu.test(withoutPrior), 'prompt must acknowledge the earlier poke-quizz winner-adjacency test concluded so the analyst does not re-flag it');
   assert.ok(/4\/day|more at-bats|per-video floor/iu.test(withoutPrior), 'prompt must name the trivamon cadence experiment and the dilution guardrail');
   // Geo + traffic-source section landed with the adapter enrichment
   assert.ok(withoutPrior.includes('Audience mix'), 'prompt must include the geo + traffic section');
